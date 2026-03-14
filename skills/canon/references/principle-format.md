@@ -85,4 +85,4 @@ The markdown body after frontmatter follows this fixed structure:
 
 **Truly universal principles** (naming, simplicity, single responsibility, information hiding) can stay unconstrained — but there should be fewer than 15 of these. If you have more, some are probably scoped more narrowly than you think.
 
-The MCP matcher sorts by specificity — principles with constraints rank higher than unconstrained ones. Max 10 principles per context.
+The MCP matcher sorts by severity first (rules, then strong-opinions, then conventions), with a specificity tie-breaker — principles with scope constraints (layers, file patterns) rank higher than unconstrained ones at the same severity. Max 10 principles per context.

@@ -62,7 +62,15 @@ export function matchPrinciples(principles, filters) {
         }
         return true;
     })
-        .sort((a, b) => (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9));
+        .sort((a, b) => {
+        // Primary: severity (rule > strong-opinion > convention)
+        const sevDiff = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
+        if (sevDiff !== 0)
+            return sevDiff;
+        // Tie-breaker: specificity — principles with constraints rank higher
+        const specificity = (p) => (p.scope.layers.length > 0 ? 1 : 0) + (p.scope.file_patterns.length > 0 ? 1 : 0);
+        return specificity(b) - specificity(a);
+    });
 }
 export async function loadPrinciplesFromDir(dir) {
     try {
