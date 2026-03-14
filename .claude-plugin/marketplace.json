@@ -1,0 +1,14 @@
+{
+  "name": "canon-marketplace",
+  "owner": {
+    "name": "Michelle",
+    "url": "https://github.com/micherra"
+  },
+  "plugins": [
+    {
+      "name": "canon",
+      "source": ".",
+      "description": "Engineering principles as code — enforce, track, and learn."
+    }
+  ]
+}
