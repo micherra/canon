@@ -3,7 +3,6 @@ id: agent-assume-hostile-input
 title: Assume Hostile Input
 severity: rule
 scope:
-  languages: []
   layers: []
 tags:
   - agent-behavior

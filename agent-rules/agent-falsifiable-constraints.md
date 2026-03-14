@@ -3,7 +3,6 @@ id: agent-falsifiable-constraints
 title: Principles Must Be Falsifiable
 severity: rule
 scope:
-  languages: []
   layers: []
   file_patterns:
     - ".canon/principles/**"

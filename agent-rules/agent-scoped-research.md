@@ -3,7 +3,6 @@ id: agent-scoped-research
 title: Research One Dimension Deeply
 severity: rule
 scope:
-  languages: []
   layers: []
   file_patterns:
     - ".canon/plans/*/research/**"
