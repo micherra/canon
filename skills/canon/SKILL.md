@@ -22,18 +22,12 @@ Scan both principle directories for `.md` files:
 1. **Project-local** (takes precedence): `.canon/principles/` in the current project root
 2. **Plugin-shipped** (fallback): `${CLAUDE_PLUGIN_ROOT}/principles/`
 
-For each principle file, read the YAML frontmatter to extract: `id`, `title`, `severity`, `scope.languages`, `scope.layers`, `scope.file_patterns`, and `tags`. Do NOT load full bodies yet — this keeps token cost low.
-
-You can also use the principle matcher script for programmatic filtering:
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh [--language LANG] [--layer LAYER] [--file FILE_PATH] [--severity-filter LEVEL]
-```
+For each principle file, read the YAML frontmatter to extract: `id`, `title`, `severity`, `scope.layers`, `scope.file_patterns`, and `tags`. Do NOT load full bodies yet — this keeps token cost low.
 
 ### Step 2: Match Principles to Current Context
 
 Filter principles based on what you're working on:
 
-- **Language**: Match `scope.languages` against the language of files being edited. Empty = matches all.
 - **Layer**: Match `scope.layers` against the architectural layer inferred from file paths:
   - `*/api/*`, `*/routes/*`, `*/controllers/*` → `api`
   - `*/components/*`, `*/pages/*`, `*/views/*` → `ui`
@@ -108,7 +102,7 @@ Canon exposes these tools via its MCP server for agents to use during normal wor
 
 | Tool | Purpose |
 |------|---------|
-| `get_principles` | Get principles relevant to a file/language/layer context. |
+| `get_principles` | Get principles relevant to a file/layer context. |
 | `list_principles` | Browse the full principle index with filters. |
 | `review_code` | Get matched principles for a code snippet to evaluate. |
 | `report_decision` | Log an intentional deviation with justification and category. |

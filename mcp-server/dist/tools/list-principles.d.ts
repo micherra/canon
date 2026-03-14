@@ -10,7 +10,6 @@ export interface ListPrinciplesOutput {
         severity: string;
         tags: string[];
         scope: {
-            languages: string[];
             layers: string[];
         };
     }>;

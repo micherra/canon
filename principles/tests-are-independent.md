@@ -3,7 +3,6 @@ id: tests-are-independent
 title: Tests Must Be Independent
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.test.*"

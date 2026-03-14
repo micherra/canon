@@ -3,7 +3,6 @@ id: no-dead-abstractions
 title: No Dead Abstractions
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
 tags:
   - simplicity

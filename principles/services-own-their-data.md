@@ -3,7 +3,6 @@ id: services-own-their-data
 title: Each Service Owns Its Data Store Exclusively
 severity: strong-opinion
 scope:
-  languages: []
   layers:
     - domain
     - data

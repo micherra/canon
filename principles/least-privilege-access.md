@@ -3,7 +3,6 @@ id: least-privilege-access
 title: Grant Only the Minimum Access Required
 severity: rule
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.tf"

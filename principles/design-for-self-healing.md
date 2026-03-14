@@ -3,7 +3,6 @@ id: design-for-self-healing
 title: Design for Automatic Recovery
 severity: convention
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.tf"

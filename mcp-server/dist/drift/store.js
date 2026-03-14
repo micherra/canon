@@ -9,16 +9,20 @@ async function readJsonl(filePath) {
         return [];
     }
     const results = [];
-    for (const line of content.split("\n")) {
-        if (line.trim() === "")
+    const lines = content.split("\n");
+    let skipped = 0;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim() === "")
             continue;
         try {
-            results.push(JSON.parse(line));
+            results.push(JSON.parse(lines[i]));
         }
         catch {
-            // Skip malformed lines rather than losing all data
-            continue;
+            skipped++;
         }
+    }
+    if (skipped > 0) {
+        console.error(`[canon] Warning: skipped ${skipped} malformed line(s) in ${filePath}`);
     }
     return results;
 }

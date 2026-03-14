@@ -3,7 +3,6 @@ id: infrastructure-tested-like-code
 title: Validate Infrastructure Definitions Before Deployment
 severity: convention
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.tf"

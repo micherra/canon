@@ -3,7 +3,6 @@ id: architectural-fitness-functions
 title: Enforce Architecture with Automated Tests
 severity: convention
 scope:
-  languages: []
   layers:
     - infra
   file_patterns:

@@ -3,7 +3,6 @@ id: version-public-apis
 title: Version Public-Facing APIs from Day One
 severity: convention
 scope:
-  languages: []
   layers:
     - api
 tags:

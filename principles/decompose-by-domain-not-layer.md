@@ -3,7 +3,6 @@ id: decompose-by-domain-not-layer
 title: Decompose by Business Domain, Not Technical Layer
 severity: strong-opinion
 scope:
-  languages: []
   layers:
     - domain
 tags:

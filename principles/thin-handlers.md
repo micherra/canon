@@ -3,7 +3,6 @@ id: thin-handlers
 title: Handlers Are Thin Orchestrators
 severity: strong-opinion
 scope:
-  languages: []
   layers:
     - api
   file_patterns:

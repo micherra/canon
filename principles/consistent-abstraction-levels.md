@@ -3,7 +3,6 @@ id: consistent-abstraction-levels
 title: Each Function Operates at One Abstraction Level
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
 tags:
   - readability

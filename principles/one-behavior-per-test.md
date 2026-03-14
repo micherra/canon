@@ -3,7 +3,6 @@ id: one-behavior-per-test
 title: One Behavior Per Test
 severity: convention
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.test.*"

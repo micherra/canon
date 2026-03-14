@@ -3,7 +3,6 @@ id: tests-are-deterministic
 title: Tests Must Be Deterministic
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.test.*"

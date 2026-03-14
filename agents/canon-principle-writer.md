@@ -55,7 +55,6 @@ Ask the user clarifying questions. You need to extract:
    - Ask: "What problems have you seen when this principle isn't followed?"
 
 3. **The scope** — Where does this apply?
-   - Ask: "Which languages does this apply to? (or all?)"
    - Ask: "Which architectural layers? (api, ui, domain, data, infra, shared, or all?)"
    - Ask: "Any specific file patterns? (e.g., `**/api/**`)"
 
@@ -94,12 +93,10 @@ Save to `.canon/principles/{id}.md` in the user's project. Create the directory 
 
 ### Step 6: Validate
 
-Verify the principle file is valid:
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh .canon/principles/
-```
-
-Check that the new principle appears in the output with correct metadata.
+Re-read the saved file and verify:
+- The YAML frontmatter parses correctly (id, title, severity, scope, tags all present)
+- The severity is one of: `rule`, `strong-opinion`, `convention`
+- The body has the required sections (summary paragraph, `## Rationale`, `## Examples`)
 
 ### Step 7: Offer to test
 

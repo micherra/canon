@@ -3,7 +3,6 @@ id: prefer-async-between-services
 title: Prefer Asynchronous Communication Between Services
 severity: convention
 scope:
-  languages: []
   layers:
     - domain
     - infra

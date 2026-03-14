@@ -25,7 +25,6 @@ server.tool(
   "Returns Canon principles relevant to the current coding context. Call before generating code.",
   {
     file_path: z.string().optional().describe("Path of the file being worked on"),
-    language: z.string().optional().describe("Programming language (e.g., typescript, python)"),
     layers: z.array(z.string()).optional().describe("Architectural layers (e.g., api, domain, data)"),
     task_description: z.string().optional().describe("Brief description of the task"),
   },

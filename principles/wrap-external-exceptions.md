@@ -3,9 +3,6 @@ id: wrap-external-exceptions
 title: Wrap External Exceptions at the Boundary
 severity: strong-opinion
 scope:
-  languages:
-    - typescript
-    - python
   layers:
     - domain
     - data

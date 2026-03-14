@@ -3,7 +3,6 @@ id: law-of-demeter
 title: Talk to Neighbors, Not Strangers
 severity: convention
 scope:
-  languages: []
   layers: []
 tags:
   - coupling

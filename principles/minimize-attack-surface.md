@@ -3,7 +3,6 @@ id: minimize-attack-surface
 title: Minimize the Attack Surface
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.tf"

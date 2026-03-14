@@ -3,7 +3,6 @@ id: test-data-belongs-in-the-test
 title: Test Data Belongs in the Test
 severity: convention
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.test.*"

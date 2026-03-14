@@ -3,7 +3,6 @@ id: validate-at-trust-boundaries
 title: Validate Data at Every Trust Boundary
 severity: rule
 scope:
-  languages: []
   layers: []
 tags:
   - security

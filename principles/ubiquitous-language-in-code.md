@@ -3,7 +3,6 @@ id: ubiquitous-language-in-code
 title: Code Uses the Domain's Ubiquitous Language
 severity: convention
 scope:
-  languages: []
   layers:
     - domain
 tags:

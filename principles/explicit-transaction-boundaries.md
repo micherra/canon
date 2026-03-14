@@ -3,7 +3,6 @@ id: explicit-transaction-boundaries
 title: Define Transaction Boundaries Explicitly
 severity: strong-opinion
 scope:
-  languages: []
   layers:
     - domain
     - data

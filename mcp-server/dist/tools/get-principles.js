@@ -3,7 +3,6 @@ export async function getPrinciples(input, projectDir, pluginDir) {
     const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
     const matched = matchPrinciples(allPrinciples, {
         file_path: input.file_path,
-        language: input.language,
         layers: input.layers,
     });
     // Limit to top 10, prioritized by severity (already sorted by matchPrinciples)

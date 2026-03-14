@@ -1,7 +1,7 @@
 ---
 description: Scan codebase for principle coverage and produce a prioritized remediation plan
 argument-hint: [directory] [--top N] [--severity rule|strong-opinion|convention] [--fix]
-allowed-tools: [Bash, Read, Glob, Grep, Agent]
+allowed-tools: [Read, Glob, Grep, Agent]
 ---
 
 Scan a directory for Canon principle applicability across all source files. Identifies which principles apply most broadly, finds hotspot directories, and produces a prioritized remediation plan. Optionally spawns canon-refactorer on the top violations.
@@ -18,30 +18,25 @@ From ${ARGUMENTS}, extract:
 
 ### Step 2: Discover source files
 
-Find all source files in the target directory:
-
-```bash
-find ${DIRECTORY} -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.py" -o -name "*.java" -o -name "*.go" -o -name "*.rs" -o -name "*.rb" -o -name "*.tf" -o -name "*.sql" \) -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/dist/*" -not -path "*/build/*" -not -path "*/.canon/*" | sort
-```
+Glob for source files in the target directory: `**/*.{ts,tsx,js,jsx,py,java,go,rs,rb,tf,sql}`. Exclude `node_modules/`, `.git/`, `dist/`, `build/`, `.canon/`.
 
 If the file count exceeds 500, warn the user and suggest narrowing the scan to a subdirectory.
 
-### Step 3: Run principle-matcher on each file
+### Step 3: Match principles to each file
 
-For each source file, run the principle matcher:
+First, read all principle files from `.canon/principles/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/`). Extract frontmatter for each: `id`, `severity`, `scope.layers`, `scope.file_patterns`.
 
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh --file "FILE_PATH" --severity-filter "${SEVERITY}" --format json [PRINCIPLES_DIR]
-```
-
-Check `.canon/principles/` first, fall back to `${CLAUDE_PLUGIN_ROOT}/principles/`.
+For each source file, determine which principles apply by:
+1. Inferring the architectural layer from the file path
+2. Matching `scope.layers` (empty = universal) and `scope.file_patterns` (empty = matches all)
+3. Filtering by the `--severity` minimum if provided
 
 Collect results into mappings:
 - `file → [matched principles]`
 - `principle → [matched files]`
 - `directory → [matched principles by severity]`
 
-Process files in batches (20-50 at a time) and show progress to the user (e.g., "Scanning... 50/200 files").
+Show progress to the user (e.g., "Scanning... 50/200 files").
 
 ### Step 4: Analyze results
 

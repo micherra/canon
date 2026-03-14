@@ -3,7 +3,6 @@ id: idempotent-operations
 title: Retryable Operations Must Be Idempotent
 severity: strong-opinion
 scope:
-  languages: []
   layers:
     - api
     - domain

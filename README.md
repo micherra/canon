@@ -2,6 +2,34 @@
 
 Engineering principles as code. Canon gives Claude Code a structured set of principles that are loaded before code generation, enforced during review, and refined through a data-driven learning loop.
 
+> **Note:** Canon is a work in progress. The core enforcement loop, learning system, and MCP tools are functional, but rough edges remain. Principle coverage is opinionated and likely needs tuning for your stack. Expect breaking changes as the plugin format and MCP protocol evolve. Feedback and contributions welcome — open an issue or PR.
+
+## Installation
+
+Canon is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins). Install it directly from GitHub:
+
+```bash
+# Install the plugin
+claude plugin add micherra/canon
+
+# Then initialize in your project
+/canon:init
+```
+
+Or clone and install locally:
+
+```bash
+git clone https://github.com/micherra/canon.git
+claude plugin add ./canon
+```
+
+After installing, Canon's slash commands, agents, hooks, and MCP tools are available in any Claude Code session within your project.
+
+### Requirements
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
+- Node.js 18+ (for the MCP server)
+
 ## Quick Start
 
 ```bash
@@ -21,7 +49,7 @@ Canon operates on a three-tier severity model:
 | **strong-opinion** (28) | Default path | Warns. Deviations require justification via `report_decision`. |
 | **convention** (15) | Stylistic preference | Noted in reports. Tracked for drift. |
 
-When you write code, Canon automatically loads principles matched to your file's language, architectural layer, and path patterns. Agents self-review against them before presenting output.
+When you write code, Canon automatically loads principles matched to your file's architectural layer and path patterns. Agents self-review against them before presenting output.
 
 ## Commands
 
@@ -81,7 +109,7 @@ Canon exposes 7 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
-| `get_principles` | Get principles relevant to a file/language/layer context |
+| `get_principles` | Get principles relevant to a file/layer context |
 | `list_principles` | Browse the full principle index with filters |
 | `review_code` | Get matched principles for a code snippet to evaluate |
 | `report_decision` | Log an intentional deviation with justification and category |
@@ -108,10 +136,9 @@ Canon uses 10 specialist agents, each with a focused role:
 
 ## Hooks
 
-Canon includes 4 automation hooks:
+Canon includes 3 automation hooks:
 
-- **Pre-commit check** — Blocks commits with rule-severity violations
-- **Post-write advisory** — Surfaces relevant principles after writing code
+- **Pre-commit secrets check** — Blocks commits containing hardcoded secrets (API keys, private keys, connection strings)
 - **Learn nudge** — Suggests `/canon:learn` after 10+ reviews accumulate
 - **Skill activation** — Ensures Canon loads before code generation tasks
 
@@ -123,8 +150,7 @@ canon/
 ├── commands/canon/      13 slash commands
 ├── agents/              10 specialist agents
 ├── agent-rules/         9 agent behavior guidelines
-├── hooks/               4 automation hooks
-├── lib/                 Principle matcher utility
+├── hooks/               3 automation hooks
 ├── mcp-server/          TypeScript MCP server (7 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
@@ -144,13 +170,12 @@ id: validate-at-trust-boundaries
 title: Validate at Trust Boundaries
 severity: rule
 scope:
-  languages: []
   layers: [api]
 tags: [security, validation]
 ---
 ```
 
-Principles are matched to your code by language, layer (inferred from file path), and file patterns. Rules are loaded first, then strong-opinions, then conventions — max 10 per context.
+Principles are matched to your code by architectural layer (inferred from file path) and file patterns. Rules are loaded first, then strong-opinions, then conventions — max 10 per context.
 
 ## Data Files
 
@@ -167,3 +192,31 @@ All Canon data lives in `.canon/` in your project root:
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
 | `plans/*/` | Build artifacts per task | `/canon:build` |
+
+## Roadmap
+
+Canon is under active development. Here's what's working and what's next:
+
+**Working now:**
+- Principle matching by architectural layer and file patterns
+- Full build pipeline with 10 specialist agents
+- Review enforcement with three-tier severity
+- Drift tracking and compliance analytics
+- Learning loop with six analysis dimensions
+- 7 MCP tools for agent integration
+- 3 automation hooks (secrets detection, learn nudge, skill activation)
+
+**Coming soon:**
+- Interactive `--apply` mode for learning suggestions
+- Principle dependency graph (e.g., "if you adopt X, also consider Y")
+- Per-team principle overrides for monorepos
+- CI integration (run Canon reviews in GitHub Actions)
+- Shareable principle packs (import curated sets for React, Go, etc.)
+
+**Known limitations:**
+- Principle matching relies on file path heuristics for architectural layer detection — may need tuning for non-standard project structures
+- The MCP server must be rebuilt (`npm run build` in `mcp-server/`) after editing TypeScript source
+- Learning suggestions require sufficient data (10+ reviews) to be meaningful
+- Hook scripts assume bash — Windows support is untested
+
+If you run into issues or have ideas, [open an issue](https://github.com/micherra/canon/issues).

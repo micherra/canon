@@ -3,7 +3,6 @@ id: immutable-infrastructure
 title: Infrastructure Components Are Immutable After Deployment
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.tf"

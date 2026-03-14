@@ -3,7 +3,6 @@ id: command-query-separation
 title: Commands and Queries Don't Mix
 severity: strong-opinion
 scope:
-  languages: []
   layers:
     - domain
     - data

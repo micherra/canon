@@ -13,7 +13,6 @@ export async function listPrinciples(input, projectDir, pluginDir) {
             severity: p.severity,
             tags: p.tags,
             scope: {
-                languages: p.scope.languages,
                 layers: p.scope.layers,
             },
         })),

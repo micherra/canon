@@ -1,5 +1,4 @@
 export interface PrincipleScope {
-    languages: string[];
     layers: string[];
     file_patterns: string[];
 }

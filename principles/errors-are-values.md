@@ -3,9 +3,6 @@ id: errors-are-values
 title: Errors Are Values, Not Surprises
 severity: strong-opinion
 scope:
-  languages:
-    - typescript
-    - python
   layers:
     - domain
     - api

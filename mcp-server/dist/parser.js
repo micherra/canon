@@ -92,7 +92,6 @@ export function parsePrinciple(content, filePath) {
         title: frontmatter.title || "",
         severity: frontmatter.severity || "convention",
         scope: {
-            languages: scope.languages || [],
             layers: scope.layers || [],
             file_patterns: scope.file_patterns || [],
         },

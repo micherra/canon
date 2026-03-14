@@ -1,18 +1,6 @@
 import { readdir } from "fs/promises";
 import { join } from "path";
 import { loadPrincipleFile } from "./parser.js";
-const EXTENSION_TO_LANGUAGE = {
-    ".ts": "typescript",
-    ".tsx": "typescript",
-    ".js": "javascript",
-    ".jsx": "javascript",
-    ".py": "python",
-    ".java": "java",
-    ".go": "go",
-    ".rs": "rust",
-    ".rb": "ruby",
-    ".tf": "terraform",
-};
 const PATH_TO_LAYER = [
     [/\/(api|routes|controllers)\//, "api"],
     [/\/(components|pages|views)\//, "ui"],
@@ -26,10 +14,6 @@ const SEVERITY_RANK = {
     "strong-opinion": 2,
     convention: 3,
 };
-export function inferLanguage(filePath) {
-    const ext = filePath.match(/\.\w+$/)?.[0];
-    return ext ? EXTENSION_TO_LANGUAGE[ext] : undefined;
-}
 export function inferLayer(filePath) {
     for (const [pattern, layer] of PATH_TO_LAYER) {
         if (pattern.test(filePath))
@@ -51,18 +35,12 @@ function severityPassesFilter(severity, filter) {
     return (SEVERITY_RANK[severity] ?? 9) <= (SEVERITY_RANK[filter] ?? 9);
 }
 export function matchPrinciples(principles, filters) {
-    const language = filters.language || (filters.file_path ? inferLanguage(filters.file_path) : undefined);
     const layers = filters.layers || (filters.file_path ? [inferLayer(filters.file_path)].filter(Boolean) : []);
     return principles
         .filter((p) => {
         // Severity filter
         if (!severityPassesFilter(p.severity, filters.severity_filter))
             return false;
-        // Language filter
-        if (language && p.scope.languages.length > 0) {
-            if (!p.scope.languages.includes(language))
-                return false;
-        }
         // Layer filter
         if (layers.length > 0 && p.scope.layers.length > 0) {
             if (!layers.some((l) => p.scope.layers.includes(l)))

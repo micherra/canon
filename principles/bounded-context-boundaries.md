@@ -3,7 +3,6 @@ id: bounded-context-boundaries
 title: Enforce Bounded Context Boundaries in Code
 severity: strong-opinion
 scope:
-  languages: []
   layers:
     - domain
 tags:

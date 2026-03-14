@@ -3,7 +3,6 @@ id: normalize-first-denormalize-intentionally
 title: Normalize First, Denormalize With Justification
 severity: convention
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/migrations/**"

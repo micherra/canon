@@ -1,8 +1,8 @@
 #!/bin/bash
 # Canon Pre-Commit Check Hook
 # Runs as a PreToolUse hook on Bash commands.
-# Checks if the command is a git commit, and if so, reminds the agent
-# to verify staged files against rule-severity Canon principles.
+# Checks if the command is a git commit, and if so, scans staged files
+# for hardcoded secrets. Blocks the commit if any are found.
 #
 # Input: JSON on stdin with the tool call details
 # Output: JSON with optional system message
@@ -15,7 +15,6 @@ set -euo pipefail
 INPUT=$(cat)
 
 # Extract the command being run from the tool input
-# The input JSON has a structure like: {"tool_name": "Bash", "tool_input": {"command": "..."}}
 COMMAND=$(echo "$INPUT" | grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"command"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
 
 # If we couldn't extract a command, pass through
@@ -28,41 +27,13 @@ if ! echo "$COMMAND" | grep -qE '\bgit\b.*\bcommit\b'; then
   exit 0
 fi
 
-# --- It's a git commit — check staged files against principles ---
-
-# Find the principles directory
-PRINCIPLES_DIR=""
-if [[ -d ".canon/principles" ]]; then
-  PRINCIPLES_DIR=".canon/principles"
-elif [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -d "${CLAUDE_PLUGIN_ROOT}/principles" ]]; then
-  PRINCIPLES_DIR="${CLAUDE_PLUGIN_ROOT}/principles"
-fi
-
-if [[ -z "$PRINCIPLES_DIR" ]]; then
-  exit 0
-fi
-
 # Get staged files
 STAGED_FILES=$(git diff --cached --name-only 2>/dev/null || true)
 if [[ -z "$STAGED_FILES" ]]; then
   exit 0
 fi
 
-# Find the matcher script
-MATCHER=""
-if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh" ]]; then
-  MATCHER="${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh"
-elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/../lib/principle-matcher.sh" ]]; then
-  MATCHER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/lib/principle-matcher.sh"
-fi
-
-if [[ -z "$MATCHER" ]]; then
-  exit 0
-fi
-
-# --- Automated enforcement: detect secrets in staged files ---
-# secrets-never-in-code is the one rule that CAN be pattern-matched.
-# If secrets are detected, block the commit (exit 2).
+# --- Detect secrets in staged files ---
 
 SECRET_VIOLATIONS=""
 while IFS= read -r file; do
@@ -91,7 +62,6 @@ while IFS= read -r file; do
   fi
 
   # High-entropy strings assigned to variables with secret-like names
-  # Matches: password = "...", secret_key = "...", api_key: "..." etc. with values >= 16 chars
   if echo "$CONTENT" | grep -qEi '(password|secret|api_key|apikey|secret_key|access_key|private_key|auth_token)[[:space:]]*[:=][[:space:]]*"[^"]{16,}"'; then
     HITS="${HITS}  - Hardcoded credential in variable assignment\n"
   fi
@@ -126,37 +96,5 @@ EOF
   exit 2
 fi
 
-# --- Advisory: remind about other applicable rule-severity principles ---
-APPLICABLE_RULES=""
-while IFS= read -r file; do
-  if [[ -n "$file" ]]; then
-    RULES=$(bash "$MATCHER" --file "$file" --severity-filter rule --format text "$PRINCIPLES_DIR" 2>/dev/null || true)
-    if [[ -n "$RULES" ]]; then
-      APPLICABLE_RULES="${APPLICABLE_RULES}${RULES}"$'\n'
-    fi
-  fi
-done <<< "$STAGED_FILES"
-
-# Deduplicate
-APPLICABLE_RULES=$(echo "$APPLICABLE_RULES" | sort -u | grep -v '^$' || true)
-
-if [[ -z "$APPLICABLE_RULES" ]]; then
-  exit 0
-fi
-
-# Count rules
-RULE_COUNT=$(echo "$APPLICABLE_RULES" | wc -l | tr -d ' ')
-
-# Output a reminder message for non-automatable rules
-cat <<EOF
-CANON PRE-COMMIT CHECK: ${RULE_COUNT} rule-severity principle(s) apply to the staged files.
-Verify compliance before committing:
-
-${APPLICABLE_RULES}
-
-Review the staged changes against these principles. If any rule is violated,
-fix the violation before committing. Use /canon:review --staged for a detailed check.
-EOF
-
-# Exit 0 — automated checks passed, advisory only for non-automatable rules
+# No secrets found — allow the commit
 exit 0

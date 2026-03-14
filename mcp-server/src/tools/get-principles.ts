@@ -3,7 +3,6 @@ import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
 
 export interface GetPrinciplesInput {
   file_path?: string;
-  language?: string;
   layers?: string[];
   task_description?: string;
 }
@@ -28,7 +27,6 @@ export async function getPrinciples(
 
   const matched = matchPrinciples(allPrinciples, {
     file_path: input.file_path,
-    language: input.language,
     layers: input.layers,
   });
 

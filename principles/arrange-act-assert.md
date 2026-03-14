@@ -3,7 +3,6 @@ id: arrange-act-assert
 title: Structure Tests as Arrange-Act-Assert
 severity: convention
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.test.*"

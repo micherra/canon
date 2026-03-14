@@ -18,7 +18,6 @@ const server = new McpServer({
 // Tool: get_principles
 server.tool("get_principles", "Returns Canon principles relevant to the current coding context. Call before generating code.", {
     file_path: z.string().optional().describe("Path of the file being worked on"),
-    language: z.string().optional().describe("Programming language (e.g., typescript, python)"),
     layers: z.array(z.string()).optional().describe("Architectural layers (e.g., api, domain, data)"),
     task_description: z.string().optional().describe("Brief description of the task"),
 }, async (input) => {
@@ -79,7 +78,7 @@ server.tool("get_compliance", "Returns compliance stats for a specific Canon pri
 // Tool: report_pattern
 server.tool("report_pattern", "Logs an observed codebase pattern for the learner to validate. Patterns are stored and analyzed during /canon:learn runs.", {
     pattern: z.string().describe("Description of the observed pattern"),
-    file_paths: z.array(z.string()).describe("File paths where the pattern was observed"),
+    file_paths: z.array(z.string()).min(1).describe("File paths where the pattern was observed (at least one required)"),
     context: z.string().optional().describe("Additional context about the pattern"),
 }, async (input) => {
     const result = await reportPattern(input, projectDir);

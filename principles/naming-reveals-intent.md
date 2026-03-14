@@ -3,7 +3,6 @@ id: naming-reveals-intent
 title: Names Should Reveal Intent, Not Implementation
 severity: convention
 scope:
-  languages: []
   layers: []
 tags:
   - naming

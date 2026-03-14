@@ -3,7 +3,6 @@ id: fail-closed-by-default
 title: Fail Closed by Default
 severity: rule
 scope:
-  languages: []
   layers:
     - api
     - infra

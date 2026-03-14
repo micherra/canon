@@ -40,16 +40,16 @@ export function analyzeDrift(reviews, decisions, allPrincipleIds, options) {
             principleMap.set(h, stats);
         }
     }
-    // Count intentional deviations from decisions
-    const intentionalPrinciples = new Set();
+    // Count intentional deviations from decisions and adjust unintentional count
     for (const d of filteredDecisions) {
         const stats = principleMap.get(d.principle_id) || initStats(d.principle_id);
         stats.intentional_deviations++;
+        // Each intentional deviation accounts for one violation that was previously counted as unintentional
+        if (stats.unintentional_violations > 0) {
+            stats.unintentional_violations--;
+        }
         principleMap.set(d.principle_id, stats);
-        intentionalPrinciples.add(d.principle_id);
     }
-    // Adjust unintentional count: if there are intentional deviations, some violations may be intentional
-    // (This is approximate — we match by principle_id, not individual instances)
     // Compute compliance rates
     for (const stats of principleMap.values()) {
         const total = stats.times_honored + stats.total_violations;

@@ -3,7 +3,6 @@ id: no-hidden-side-effects
 title: No Hidden Side Effects
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
 tags:
   - side-effects

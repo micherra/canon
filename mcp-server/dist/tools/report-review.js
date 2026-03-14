@@ -1,6 +1,9 @@
 import { DriftStore } from "../drift/store.js";
 import { randomBytes } from "crypto";
 export async function reportReview(input, projectDir) {
+    // Remove any principle from honored if it also appears in violations
+    const violatedIds = new Set(input.violations.map((v) => v.principle_id));
+    const cleanHonored = input.honored.filter((id) => !violatedIds.has(id));
     const reviewId = `rev_${formatDate()}_${randomBytes(2).toString("hex")}`;
     const timestamp = new Date().toISOString();
     const verdict = input.verdict ?? deriveVerdict(input);
@@ -10,7 +13,7 @@ export async function reportReview(input, projectDir) {
         verdict,
         files: input.files,
         violations: input.violations,
-        honored: input.honored,
+        honored: cleanHonored,
         score: input.score,
     };
     const store = new DriftStore(projectDir);

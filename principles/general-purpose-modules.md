@@ -3,7 +3,6 @@ id: general-purpose-modules
 title: Somewhat General-Purpose Interfaces
 severity: convention
 scope:
-  languages: []
   layers:
     - domain
     - shared

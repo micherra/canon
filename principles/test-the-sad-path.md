@@ -3,7 +3,6 @@ id: test-the-sad-path
 title: Test the Sad Path First
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
   file_patterns:
     - "**/*.test.*"

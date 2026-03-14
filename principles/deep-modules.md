@@ -3,7 +3,6 @@ id: deep-modules
 title: Deep Modules, Simple Interfaces
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
 tags:
   - complexity

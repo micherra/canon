@@ -1,6 +1,5 @@
 export interface GetPrinciplesInput {
     file_path?: string;
-    language?: string;
     layers?: string[];
     task_description?: string;
 }

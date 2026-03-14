@@ -3,7 +3,6 @@ id: information-hiding
 title: Each Module Hides a Design Decision
 severity: strong-opinion
 scope:
-  languages: []
   layers: []
 tags:
   - encapsulation
