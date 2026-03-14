@@ -68,13 +68,7 @@ git diff --cached  # For staged changes
 
 ### Step 2: Resolve matched principles
 
-For each file in the diff, determine which principles apply:
-
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh --file "FILE_PATH" [PRINCIPLES_DIR]
-```
-
-Check `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`.
+For each file in the diff, use the `get_principles` MCP tool with the file path to get matched principles. Or glob `.canon/principles/` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/`), read frontmatter, and match by architectural layer (inferred from file path) and file patterns.
 
 Read the full body of each matched principle (max 10, prioritized: rules > strong-opinions > conventions).
 
@@ -154,4 +148,4 @@ The build orchestrator reads this verdict to decide whether to gate the pipeline
 
 ## Recording Reviews
 
-Do NOT write to `reviews.jsonl` directly. The orchestrator (`/canon:review` or `/canon:build`) is responsible for logging review results via the `report_review` MCP tool after you return your report. Your job is to produce the structured report — the orchestrator handles persistence.
+Do NOT write to `reviews.jsonl` directly. The orchestrator (`/canon:review` or `/canon:build`) is responsible for logging review results via the `report` MCP tool (type=review) after you return your report. Your job is to produce the structured report — the orchestrator handles persistence.

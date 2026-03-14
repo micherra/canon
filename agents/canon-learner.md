@@ -82,7 +82,7 @@ Run each requested dimension. Collect suggestions into a unified list.
 
 ### Pre-validated observations
 
-Before scanning, check for `.canon/patterns.jsonl`. This file contains pattern observations logged by agents via the `report_pattern` MCP tool during normal work. Each line is:
+Before scanning, check for `.canon/patterns.jsonl`. This file contains pattern observations logged by agents via the `report` MCP tool (type=pattern) during normal work. Each line is:
 
 ```json
 {"pattern_id":"pat_...","timestamp":"...","pattern":"...","file_paths":["..."],"context":"..."}

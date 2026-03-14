@@ -80,7 +80,12 @@ export function matchPrinciples(
 
       return true;
     })
-    .sort((a, b) => (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9));
+    .sort((a, b) => {
+      const sevDiff = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
+      if (sevDiff !== 0) return sevDiff;
+      // Tie-breaker: more specific scope (more file patterns) ranks first
+      return b.scope.file_patterns.length - a.scope.file_patterns.length;
+    });
 }
 
 export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {

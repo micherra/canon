@@ -3,7 +3,6 @@ id: agent-evidence-over-intuition
 title: Suggestions Require Quantified Evidence
 severity: rule
 scope:
-  languages: []
   layers: []
   file_patterns:
     - ".canon/LEARNING-REPORT.md"

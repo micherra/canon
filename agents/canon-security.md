@@ -50,11 +50,7 @@ Read the files to scan. This will be:
 
 ### Step 2: Load security principles
 
-Read any Canon principles tagged with "security":
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh --format json [PRINCIPLES_DIR]
-```
-Filter results for principles with "security" in their tags.
+Use the `list_principles` MCP tool to get all principles, then filter for those tagged "security". Or glob `.canon/principles/` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/`), read frontmatter, and keep principles with "security" in their tags.
 
 ### Step 3: Scan for vulnerabilities
 

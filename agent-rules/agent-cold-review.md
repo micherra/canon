@@ -3,7 +3,6 @@ id: agent-cold-review
 title: Cold Review, Two Stages
 severity: rule
 scope:
-  languages: []
   layers: []
 tags:
   - agent-behavior

@@ -25,39 +25,22 @@ Multiple flags can be combined: `--drift --decisions --apply`
 
 ### Step 2: Check for data
 
-Check what data sources are available:
+Check what data sources are available. Use Glob and Read to count lines in:
+- `.canon/reviews.jsonl` — review count
+- `.canon/decisions.jsonl` — decision count
+- `.canon/patterns.jsonl` — agent-reported patterns
+- `.canon/learning.jsonl` — previous learning runs
+- `.canon/plans/*/CONVENTIONS.md` — task convention files
+- `.canon/CONVENTIONS.md` — project conventions
+- `.canon/principles/` or `${CLAUDE_PLUGIN_ROOT}/principles/` — principle index
 
-```bash
-# Drift data
-wc -l .canon/reviews.jsonl 2>/dev/null
-wc -l .canon/decisions.jsonl 2>/dev/null
+Also glob for source files: `**/*.{ts,tsx,js,jsx,py,go,rs}` (excluding `node_modules/`, `.git/`, `.canon/`, `dist/`, `build/`).
 
-# Task conventions
-ls .canon/plans/*/CONVENTIONS.md 2>/dev/null | wc -l
+**Early exit**: If `reviews.jsonl` has fewer than 10 lines AND the user didn't pass `--patterns`, `--graduation`, or `--staleness` (which only need the codebase), tell the user:
 
-# Project conventions
-cat .canon/CONVENTIONS.md 2>/dev/null
+"Not enough data yet — Canon needs at least 10 code reviews to generate meaningful learning suggestions. You have {N} so far. Run `/canon:review` on a few more files, then come back."
 
-# Learning history
-wc -l .canon/learning.jsonl 2>/dev/null
-
-# Principle index
-ls .canon/principles/*.md 2>/dev/null || ls ${CLAUDE_PLUGIN_ROOT}/principles/*.md 2>/dev/null
-
-# Agent-reported patterns
-wc -l .canon/patterns.jsonl 2>/dev/null
-
-# Source file count (for pattern inference)
-find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.py" -o -name "*.go" -o -name "*.rs" \) -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/.canon/*" -not -path "*/dist/*" -not -path "*/build/*" 2>/dev/null | wc -l
-```
-
-Record counts for:
-- Reviews in `reviews.jsonl`
-- Decisions in `decisions.jsonl`
-- Task convention files
-- Previous learning runs in `learning.jsonl`
-- Agent-reported patterns in `patterns.jsonl`
-- Source files in the project
+Stop here. Do not spawn the learner.
 
 **Data requirements by dimension:**
 
@@ -69,9 +52,6 @@ Record counts for:
 | decisions | >= 3 decisions for any single principle |
 | graduation | >= 1 convention in CONVENTIONS.md + >= 5 source files |
 | staleness | >= 1 convention in CONVENTIONS.md + >= 5 source files |
-
-If NO data sources exist at all for the requested dimensions, tell the user:
-"No learning data found yet. Canon learns from usage — run `/canon:review` to review code, use `report_decision` to log intentional deviations, and run `/canon:build` to generate task conventions. Come back after a few review cycles."
 
 If the user only asked for `--patterns`, `--graduation`, or `--staleness`, the codebase itself is sufficient — proceed even without drift data.
 
@@ -107,7 +87,7 @@ If `--apply` was NOT passed, show action hints after the report:
 - Add a convention: `/canon:conventions --add "..."`
 - Edit a principle's severity: Edit `.canon/principles/{id}.md` frontmatter
 - Create a new principle: `/canon:new-principle {topic}`
-- Log a decision: Use the `report_decision` MCP tool
+- Log a decision: Use the `report` MCP tool (type=decision)
 
 **To re-run specific dimensions:**
 `/canon:learn --drift` | `--patterns` | `--conventions` | `--decisions` | `--graduation` | `--staleness`
