@@ -70,7 +70,7 @@ Before committing, explicitly declare compliance for each loaded Canon principle
 
 For each principle, evaluate your implementation and declare one of:
 - **✓ COMPLIANT**: The implementation honors this principle. State how in one line.
-- **⚠ JUSTIFIED_DEVIATION**: The implementation intentionally deviates. State why. (Use `report_decision` via the Canon MCP tool if available.)
+- **⚠ JUSTIFIED_DEVIATION**: The implementation intentionally deviates. State why. (Use the `report` MCP tool with type=decision if available.)
 - **✗ VIOLATION_FOUND → FIXED**: You found a violation during review and fixed it. State what was wrong and what you changed.
 
 If a `rule`-severity principle is violated and cannot be fixed, report status `BLOCKED` — do NOT commit with a known rule violation.

@@ -116,7 +116,7 @@ function generateRecommendations(report: DriftReport): string[] {
   // Low intentional ratio
   if (report.intentional_ratio < 30 && report.most_violated.length > 0) {
     recs.push(
-      `Only ${report.intentional_ratio}% of deviations are intentional. Encourage using \`report_decision\` to log justified deviations.`
+      `Only ${report.intentional_ratio}% of deviations are intentional. Encourage using the \`report\` tool (type=decision) to log justified deviations.`
     );
   }
 

@@ -87,23 +87,16 @@ Each researcher gets: task description, their dimension, CLAUDE.md path, and the
 
 Wait for all researchers to complete. Read their summary outputs (not full findings).
 
-### Phase 2: ARCHITECT (Medium + Large)
+### Phase 2: ARCHITECT & PLAN (Medium + Large)
 
 Spawn canon-architect agent:
-"Design the technical approach for: {task}. Read research findings from .canon/plans/{slug}/research/. Load relevant Canon principles. Save design to .canon/plans/{slug}/DESIGN.md"
+"Design the technical approach for: {task}. Read research findings from .canon/plans/{slug}/research/. Load relevant Canon principles. Save design to .canon/plans/{slug}/DESIGN.md. Then break the design into atomic task plans — save plans to .canon/plans/{slug}/{task-id}-PLAN.md and index to .canon/plans/{slug}/INDEX.md"
 
-The architect gets: task description, research file paths, Canon principle directory paths.
+The architect gets: task description, research file paths, Canon principle directory paths, project conventions path.
 
 If the architect's design has **open questions for user**, present them and wait for answers. Pass answers back to the architect if needed.
 
-**If --plan-only**: After the architect finishes, present the design to the user and stop.
-
-### Phase 3: PLAN (Medium + Large)
-
-Spawn canon-planner agent:
-"Break the approved design into atomic task plans. Read design from .canon/plans/{slug}/DESIGN.md. Save plans to .canon/plans/{slug}/{task-id}-PLAN.md and index to .canon/plans/{slug}/INDEX.md"
-
-The planner gets: design file path, Canon principle directory paths.
+**If --plan-only**: After the architect finishes, present the design and plan index to the user and stop.
 
 Read the INDEX.md to understand the wave structure.
 
@@ -155,7 +148,7 @@ Read the review verdict from REVIEW.md:
 
 ### Phase 8: LOG (all tiers)
 
-Log the review results for drift tracking using the `report_review` MCP tool. Extract from `.canon/plans/{slug}/REVIEW.md`:
+Log the review results for drift tracking using the `report` MCP tool (type=review). Extract from `.canon/plans/{slug}/REVIEW.md`:
 - `files`: The list of files that were reviewed
 - `violations`: Each violation's `principle_id` and `severity`
 - `honored`: IDs of principles that were honored

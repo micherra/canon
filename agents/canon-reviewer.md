@@ -148,4 +148,4 @@ The build orchestrator reads this verdict to decide whether to gate the pipeline
 
 ## Recording Reviews
 
-Do NOT write to `reviews.jsonl` directly. The orchestrator (`/canon:review` or `/canon:build`) is responsible for logging review results via the `report_review` MCP tool after you return your report. Your job is to produce the structured report — the orchestrator handles persistence.
+Do NOT write to `reviews.jsonl` directly. The orchestrator (`/canon:review` or `/canon:build`) is responsible for logging review results via the `report` MCP tool (type=review) after you return your report. Your job is to produce the structured report — the orchestrator handles persistence.

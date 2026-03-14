@@ -46,7 +46,7 @@ Canon operates on a three-tier severity model:
 | Severity | Meaning | Enforcement |
 |----------|---------|-------------|
 | **rule** (4) | Hard constraint | Blocks commits. Reviewer verdict: BLOCKING. |
-| **strong-opinion** (28) | Default path | Warns. Deviations require justification via `report_decision`. |
+| **strong-opinion** (28) | Default path | Warns. Deviations require justification via `report` tool. |
 | **convention** (15) | Stylistic preference | Noted in reports. Tracked for drift. |
 
 When you write code, Canon automatically loads principles matched to your file's architectural layer and path patterns. Agents self-review against them before presenting output.
@@ -56,7 +56,7 @@ When you write code, Canon automatically loads principles matched to your file's
 | Command | What it does |
 |---------|-------------|
 | `/canon:init` | Set up Canon in your project |
-| `/canon:build` | Full pipeline: research → architect → plan → implement → test → security → review |
+| `/canon:build` | Full pipeline: research → architect & plan → implement → test → security → review |
 | `/canon:review` | Review code changes against principles |
 | `/canon:status` | Health dashboard — principle counts, review stats, actionable suggestions |
 | `/canon:drift` | Compliance trends and analytics from review history |
@@ -75,8 +75,8 @@ When you write code, Canon automatically loads principles matched to your file's
 
 ```
 Small (1-3 files)     →  implement → review → log
-Medium (4-10 files)   →  architect → plan → implement → test → review → log
-Large (10+ files)     →  research → architect → plan → implement → test → security → review → log
+Medium (4-10 files)   →  architect & plan → implement → test → review → log
+Large (10+ files)     →  research → architect & plan → implement → test → security → review → log
 ```
 
 Each phase is handled by a specialized agent. The orchestrator stays thin — it spawns agents, passes context, and manages the workflow.
@@ -105,27 +105,24 @@ Use `--apply` to walk through suggestions interactively.
 
 ## MCP Tools
 
-Canon exposes 7 tools via its MCP server for agents to use during normal work:
+Canon exposes 5 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
 | `get_principles` | Get principles relevant to a file/layer context |
 | `list_principles` | Browse the full principle index with filters |
 | `review_code` | Get matched principles for a code snippet to evaluate |
-| `report_decision` | Log an intentional deviation with justification and category |
-| `report_review` | Log a review result for drift tracking |
 | `get_compliance` | Query compliance stats and trend for a specific principle |
-| `report_pattern` | Log an observed codebase pattern for the learner to validate |
+| `report` | Log a decision, pattern, or review result for drift tracking and the learning loop |
 
 ## Agents
 
-Canon uses 10 specialist agents, each with a focused role:
+Canon uses 9 specialist agents, each with a focused role:
 
 | Agent | Role |
 |-------|------|
 | `canon-researcher` | Investigate codebase, architecture, domain, and risk |
-| `canon-architect` | Design approach, extract task conventions |
-| `canon-planner` | Break design into atomic implementation tasks |
+| `canon-architect` | Design approach, extract task conventions, break into task plans |
 | `canon-implementor` | Write code against plans and principles |
 | `canon-tester` | Generate integration tests |
 | `canon-security` | Scan for vulnerabilities |
@@ -148,10 +145,10 @@ Canon includes 3 automation hooks:
 canon/
 ├── principles/          47 engineering principles (rule / strong-opinion / convention)
 ├── commands/canon/      13 slash commands
-├── agents/              10 specialist agents
-├── agent-rules/         9 agent behavior guidelines
+├── agents/              9 specialist agents
+├── agent-rules/         8 agent behavior guidelines
 ├── hooks/               3 automation hooks
-├── mcp-server/          TypeScript MCP server (7 tools)
+├── mcp-server/          TypeScript MCP server (5 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
 │       ├── matcher.ts   Principle matching logic
@@ -186,9 +183,9 @@ All Canon data lives in `.canon/` in your project root:
 | `principles/*.md` | Principle definitions | `/canon:init`, `/canon:new-principle` |
 | `CONVENTIONS.md` | Project conventions | `/canon:conventions`, `/canon:learn --apply` |
 | `config.json` | Project configuration | `/canon:init` |
-| `reviews.jsonl` | Review results | `report_review` MCP tool |
-| `decisions.jsonl` | Intentional deviations | `report_decision` MCP tool |
-| `patterns.jsonl` | Observed patterns | `report_pattern` MCP tool |
+| `reviews.jsonl` | Review results | `report` MCP tool (type=review) |
+| `decisions.jsonl` | Intentional deviations | `report` MCP tool (type=decision) |
+| `patterns.jsonl` | Observed patterns | `report` MCP tool (type=pattern) |
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
 | `plans/*/` | Build artifacts per task | `/canon:build` |
@@ -199,11 +196,11 @@ Canon is under active development. Here's what's working and what's next:
 
 **Working now:**
 - Principle matching by architectural layer and file patterns
-- Full build pipeline with 10 specialist agents
+- Full build pipeline with 9 specialist agents
 - Review enforcement with three-tier severity
 - Drift tracking and compliance analytics
 - Learning loop with six analysis dimensions
-- 7 MCP tools for agent integration
+- 5 MCP tools for agent integration
 - 3 automation hooks (secrets detection, learn nudge, skill activation)
 
 **Coming soon:**
@@ -215,7 +212,7 @@ Canon is under active development. Here's what's working and what's next:
 
 **Known limitations:**
 - Principle matching relies on file path heuristics for architectural layer detection — may need tuning for non-standard project structures
-- The MCP server must be rebuilt (`npm run build` in `mcp-server/`) after editing TypeScript source
+- The MCP server runs via `tsx` from TypeScript source — no build step needed during development
 - Learning suggestions require sufficient data (10+ reviews) to be meaningful
 - Hook scripts assume bash — Windows support is untested
 

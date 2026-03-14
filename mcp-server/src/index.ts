@@ -6,10 +6,8 @@ import { z } from "zod";
 import { getPrinciples } from "./tools/get-principles.js";
 import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
-import { reportDecision } from "./tools/report-decision.js";
 import { getCompliance } from "./tools/get-compliance.js";
-import { reportPattern } from "./tools/report-pattern.js";
-import { reportReview } from "./tools/report-review.js";
+import { report } from "./tools/report.js";
 
 const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
 const pluginDir = process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname;
@@ -73,27 +71,6 @@ server.tool(
   }
 );
 
-// Tool: report_decision
-server.tool(
-  "report_decision",
-  "Logs an intentional deviation from a Canon principle. Creates a decision trail for drift analytics.",
-  {
-    principle_id: z.string().describe("ID of the principle being deviated from"),
-    file_path: z.string().describe("Path of the file where the deviation occurs"),
-    justification: z.string().describe("Why the deviation is intentional and justified"),
-    category: z
-      .enum(["performance", "legacy-constraint", "scope-mismatch", "intentional-tradeoff", "external-requirement", "other"])
-      .optional()
-      .describe("Deviation category for clustering in learning reports"),
-  },
-  async (input) => {
-    const result = await reportDecision(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
 // Tool: get_compliance
 server.tool(
   "get_compliance",
@@ -109,52 +86,68 @@ server.tool(
   }
 );
 
-// Tool: report_pattern
+// Tool: report (unified — decisions, patterns, and reviews)
 server.tool(
-  "report_pattern",
-  "Logs an observed codebase pattern for the learner to validate. Patterns are stored and analyzed during /canon:learn runs.",
+  "report",
+  "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
   {
-    pattern: z.string().describe("Description of the observed pattern"),
-    file_paths: z.array(z.string()).min(1).describe("File paths where the pattern was observed (at least one required)"),
-    context: z.string().optional().describe("Additional context about the pattern"),
-  },
-  async (input) => {
-    const result = await reportPattern(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
-// Tool: report_review
-server.tool(
-  "report_review",
-  "Logs a code review result for drift tracking. Call after completing a Canon review to feed the learning loop.",
-  {
-    files: z.array(z.string()).describe("File paths that were reviewed"),
-    violations: z
-      .array(
-        z.object({
-          principle_id: z.string().describe("ID of the violated principle"),
-          severity: z.string().describe("Severity: rule, strong-opinion, or convention"),
-        })
-      )
-      .describe("Principle violations found during review"),
-    honored: z.array(z.string()).describe("IDs of principles that were honored"),
-    score: z
+    type: z.enum(["decision", "pattern", "review"]).describe("Type of report"),
+    decision: z
       .object({
-        rules: z.object({ passed: z.number(), total: z.number() }),
-        opinions: z.object({ passed: z.number(), total: z.number() }),
-        conventions: z.object({ passed: z.number(), total: z.number() }),
+        principle_id: z.string().describe("ID of the principle being deviated from"),
+        file_path: z.string().describe("Path of the file where the deviation occurs"),
+        justification: z.string().describe("Why the deviation is intentional and justified"),
+        category: z
+          .enum(["performance", "legacy-constraint", "scope-mismatch", "intentional-tradeoff", "external-requirement", "other"])
+          .optional()
+          .describe("Deviation category for clustering"),
       })
-      .describe("Pass/total counts by severity tier"),
-    verdict: z
-      .enum(["BLOCKING", "WARNING", "CLEAN"])
       .optional()
-      .describe("Review verdict. Auto-derived from violations if not provided."),
+      .describe("Required when type=decision"),
+    pattern: z
+      .object({
+        pattern: z.string().describe("Description of the observed pattern"),
+        file_paths: z.array(z.string()).min(1).describe("File paths where the pattern was observed"),
+        context: z.string().optional().describe("Additional context"),
+      })
+      .optional()
+      .describe("Required when type=pattern"),
+    review: z
+      .object({
+        files: z.array(z.string()).describe("File paths that were reviewed"),
+        violations: z
+          .array(
+            z.object({
+              principle_id: z.string(),
+              severity: z.string(),
+            })
+          )
+          .describe("Principle violations found"),
+        honored: z.array(z.string()).describe("IDs of principles honored"),
+        score: z.object({
+          rules: z.object({ passed: z.number(), total: z.number() }),
+          opinions: z.object({ passed: z.number(), total: z.number() }),
+          conventions: z.object({ passed: z.number(), total: z.number() }),
+        }),
+        verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).optional(),
+      })
+      .optional()
+      .describe("Required when type=review"),
   },
   async (input) => {
-    const result = await reportReview(input, projectDir);
+    const { type } = input;
+    let reportInput;
+    if (type === "decision") {
+      if (!input.decision) throw new Error("decision field required when type=decision");
+      reportInput = { type: "decision" as const, data: input.decision };
+    } else if (type === "pattern") {
+      if (!input.pattern) throw new Error("pattern field required when type=pattern");
+      reportInput = { type: "pattern" as const, data: input.pattern };
+    } else {
+      if (!input.review) throw new Error("review field required when type=review");
+      reportInput = { type: "review" as const, data: input.review };
+    }
+    const result = await report(reportInput, projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

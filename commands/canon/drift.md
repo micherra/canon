@@ -11,11 +11,11 @@ Display drift analytics for Canon principle adherence over time. Shows violation
 ### Step 1: Check for data
 
 Look for drift data files:
-- `.canon/decisions.jsonl` — intentional deviations logged via `report_decision`
+- `.canon/decisions.jsonl` — intentional deviations logged via the `report` tool
 - `.canon/reviews.jsonl` — review results logged by the reviewer agent
 
 If neither file exists, tell the user:
-"No drift data found. Drift tracking requires using `/canon:review` to review code and the MCP `report_decision` tool to log intentional deviations. Run some reviews first, then come back here."
+"No drift data found. Drift tracking requires using `/canon:review` to review code and the `report` MCP tool (type=decision) to log intentional deviations. Run some reviews first, then come back here."
 
 ### Step 2: Parse arguments
 

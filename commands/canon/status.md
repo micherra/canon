@@ -53,5 +53,5 @@ Based on the data, include relevant suggestions:
 - If **0 reviews**: "Run `/canon:review` on some code to start building drift data."
 - If **10+ reviews since last learn** (or never learned): "You have enough review data for learning. Run `/canon:learn` to discover patterns and refine principles."
 - If **0 conventions**: "No project conventions yet. Run `/canon:conventions --add \"...\"` to document patterns, or `/canon:learn --patterns` to auto-discover them."
-- If **0 decisions but 5+ reviews with violations**: "Consider using `report_decision` to log intentional deviations — this helps Canon distinguish violations from tradeoffs."
+- If **0 decisions but 5+ reviews with violations**: "Consider using the `report` tool (type=decision) to log intentional deviations — this helps Canon distinguish violations from tradeoffs."
 - If **no config**: "No `.canon/config.json` found. Run `/canon:init` to generate default config."

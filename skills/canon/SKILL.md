@@ -64,7 +64,7 @@ After generating code, self-review against each loaded principle before presenti
 | Level | Meaning | Enforcement |
 |-------|---------|-------------|
 | `rule` | Hard constraint | **Enforced.** Pre-commit hook blocks on detectable violations (e.g., secrets). Reviewer verdict is BLOCKING. Implementor must fix or report BLOCKED. |
-| `strong-opinion` | Default path | Follow unless you have a specific, justified reason. Reviewer verdict is WARNING. Deviations must use `report_decision`. |
+| `strong-opinion` | Default path | Follow unless you have a specific, justified reason. Reviewer verdict is WARNING. Deviations must use the `report` tool. |
 | `convention` | Stylistic preference | Note violations but don't block. Reviewer includes in report for drift tracking. |
 
 ## Commands
@@ -74,7 +74,7 @@ After generating code, self-review against each loaded principle before presenti
 | `/canon:init` | Initialize Canon in your project. Sets up `.canon/principles/`, config, and CLAUDE.md integration. |
 | `/canon:list` | Browse and filter principles by `--severity`, `--tag`, or `--layer`. |
 | `/canon:check` | Quick inline check — load principles relevant to a specific file. |
-| `/canon:build` | Full principle-driven development pipeline: research → architect → plan → implement → test → security → review. |
+| `/canon:build` | Full principle-driven development pipeline: research → architect & plan → implement → test → security → review. |
 | `/canon:review` | Review code changes against principles. Accepts `--staged`, `HEAD~N`, `main..HEAD`, or file paths. |
 | `/canon:conventions` | View and manage project conventions. `--show`, `--add "..."`, `--remove N`. |
 | `/canon:drift` | Show compliance trends and drift analytics from review history. |
@@ -105,10 +105,8 @@ Canon exposes these tools via its MCP server for agents to use during normal wor
 | `get_principles` | Get principles relevant to a file/layer context. |
 | `list_principles` | Browse the full principle index with filters. |
 | `review_code` | Get matched principles for a code snippet to evaluate. |
-| `report_decision` | Log an intentional deviation with justification and category. |
-| `report_review` | Log a review result for drift tracking. |
 | `get_compliance` | Query compliance stats and trend for a specific principle. Returns `found: false` if the principle doesn't exist. |
-| `report_pattern` | Log an observed codebase pattern for the learner to validate. Requires at least one file path. |
+| `report` | Log a decision (intentional deviation), pattern (observed codebase convention), or review result. Pass `type: "decision"`, `"pattern"`, or `"review"` with the corresponding data. |
 
 ## Principle Format Reference
 
