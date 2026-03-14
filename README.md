@@ -189,31 +189,3 @@ All Canon data lives in `.canon/` in your project root:
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
 | `plans/*/` | Build artifacts per task | `/canon:build` |
-
-## Roadmap
-
-Canon is under active development. Here's what's working and what's next:
-
-**Working now:**
-- Principle matching by architectural layer and file patterns
-- Full build pipeline with 9 specialist agents
-- Review enforcement with three-tier severity
-- Drift tracking and compliance analytics
-- Learning loop with six analysis dimensions
-- 5 MCP tools for agent integration
-- 3 automation hooks (secrets detection, learn nudge, skill activation)
-
-**Coming soon:**
-- Interactive `--apply` mode for learning suggestions
-- Principle dependency graph (e.g., "if you adopt X, also consider Y")
-- Per-team principle overrides for monorepos
-- CI integration (run Canon reviews in GitHub Actions)
-- Shareable principle packs (import curated sets for React, Go, etc.)
-
-**Known limitations:**
-- Principle matching relies on file path heuristics for architectural layer detection — may need tuning for non-standard project structures
-- The MCP server runs via `tsx` from TypeScript source — no build step needed during development
-- Learning suggestions require sufficient data (10+ reviews) to be meaningful
-- Hook scripts assume bash — Windows support is untested
-
-If you run into issues or have ideas, [open an issue](https://github.com/micherra/canon/issues).
