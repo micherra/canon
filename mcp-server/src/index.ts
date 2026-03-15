@@ -7,7 +7,8 @@ import { getPrinciples } from "./tools/get-principles.js";
 import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
-import { report, reportInputSchema } from "./tools/report.js";
+import { report } from "./tools/report.js";
+import { reportInputSchema } from "./schema.js";
 
 const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
 const pluginDir = process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname;

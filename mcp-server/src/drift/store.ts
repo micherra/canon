@@ -1,41 +1,8 @@
 import { readFile, appendFile, mkdir } from "fs/promises";
 import { join } from "path";
+import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
 
-export interface DecisionEntry {
-  decision_id: string;
-  timestamp: string;
-  principle_id: string;
-  file_path: string;
-  justification: string;
-  category?: string;
-}
-
-export interface PatternEntry {
-  pattern_id: string;
-  timestamp: string;
-  pattern: string;
-  file_paths: string[];
-  context: string;
-}
-
-export interface ReviewViolation {
-  principle_id: string;
-  severity: string;
-}
-
-export interface ReviewEntry {
-  review_id: string;
-  timestamp: string;
-  verdict: "BLOCKING" | "WARNING" | "CLEAN";
-  files: string[];
-  violations: ReviewViolation[];
-  honored: string[];
-  score: {
-    rules: { passed: number; total: number };
-    opinions: { passed: number; total: number };
-    conventions: { passed: number; total: number };
-  };
-}
+export type { DecisionEntry, PatternEntry, ReviewEntry, ReviewViolation } from "../schema.js";
 
 async function readJsonl<T>(filePath: string): Promise<T[]> {
   let content: string;
