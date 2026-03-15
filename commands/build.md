@@ -8,6 +8,13 @@ Full Canon development workflow. Takes a task description and orchestrates resea
 
 You are a **thin orchestrator**. You spawn agents, pass context between them, and manage the workflow. You never do heavy work yourself. Stay under 30-40% context usage.
 
+## Rate Limit Handling
+
+All agent spawns in this pipeline may encounter API rate limits. When any agent spawn fails with a rate limit error (e.g. "Rate limit reached", HTTP 429, or "overloaded"):
+- Retry up to 3 times with exponential backoff: wait 4s, 8s, 16s between attempts.
+- If spawning multiple agents in parallel and some succeed while others are rate-limited, keep the successful results and only retry the failed ones.
+- If all retries for a given agent fail, inform the user and pause the pipeline. Do NOT skip the phase — wait for the user to confirm retry or abort.
+
 ## Orchestrator Rules
 
 - Read paths and metadata only. Never load file contents into your own context.

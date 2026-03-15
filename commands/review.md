@@ -41,6 +41,8 @@ Launch the canon-reviewer agent as a sub-agent. Provide it with:
 - The list of affected files
 - A brief description: "Review the following code changes against Canon principles"
 
+**Rate limit handling**: If the agent spawn fails with a rate limit error (e.g. "Rate limit reached", HTTP 429, or "overloaded"), retry up to 3 times with exponential backoff. Wait 4 seconds before the first retry, 8 seconds before the second, and 16 seconds before the third. If all retries fail, inform the user of the rate limit and suggest trying again later.
+
 The reviewer will:
 1. Match principles to the affected files
 2. Perform Stage 1: Principle Compliance review
