@@ -104,15 +104,10 @@ async function loadMdFilesFromDir(dir: string): Promise<Principle[]> {
 }
 
 export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
-  // Load .md files from the directory itself
-  const topLevel = await loadMdFilesFromDir(dir);
-
-  // Also load from severity subdirectories (rules/, strong-opinions/, conventions/)
-  const subResults = await Promise.all(
+  const results = await Promise.all(
     SEVERITY_SUBDIRS.map((sub) => loadMdFilesFromDir(join(dir, sub)))
   );
-
-  return [...topLevel, ...subResults.flat()];
+  return results.flat();
 }
 
 export async function loadAllPrinciples(
