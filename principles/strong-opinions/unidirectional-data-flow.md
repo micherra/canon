@@ -26,7 +26,7 @@ Every major frontend framework converges on unidirectional data flow as the defa
 
 *Frontend Architecture for Design Systems* argues that predictable component behavior is the foundation of a composable design system. A `<DatePicker>` that secretly mutates a form state object above it can't be used outside that specific form. A `<DatePicker>` that calls `onChange(selectedDate)` works anywhere.
 
-AI-generated code frequently violates this principle by passing mutable objects as props and modifying them in place, or by using refs to reach into parent components. The code works in the immediate context but creates invisible coupling that breaks when the component is reused elsewhere.
+AI-generated code frequently violates this principle by passing mutable objects as props and modifying them in place, or by using refs to reach into parent components. The code works in the immediate context but creates invisible coupling that breaks when the component is reused elsewhere. This is one of the most common LLM-generated antipatterns: the shortest path to "working" code is a shared mutable object, and the LLM takes it every time.
 
 ## Examples
 

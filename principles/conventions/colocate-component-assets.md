@@ -9,6 +9,7 @@ scope:
     - "src/components/**"
     - "src/ui/**"
     - "packages/**"
+    - "apps/**"
 tags:
   - ui
   - components
@@ -21,6 +22,8 @@ Keep everything a component needs — its implementation, styles, tests, stories
 ## Rationale
 
 *Frontend Architecture for Design Systems* emphasizes that a design system's sustainability depends on how easily components can be added, modified, and removed. When a component's styles live in `styles/components/button.scss`, its tests in `tests/components/button.test.tsx`, and its stories in `stories/components/button.stories.tsx`, deleting the component means hunting through three directories. Worse, orphaned files accumulate — the style file outlives the component because nobody realized it existed.
+
+AI-generated code almost never proposes colocated structures — it produces flat directories or scatters files across parallel trees by default, because training data contains both patterns and the flat layout requires fewer directory-creation decisions. Left unchecked, this creates the scattered layout that makes cleanup painful.
 
 Colocation also reduces the cognitive overhead of working on a component. Opening one folder reveals everything: the implementation, how it's styled, how it's tested, and how it's documented. No context-switching between directory trees.
 
@@ -75,3 +78,5 @@ One folder per component. Delete the folder, and every artifact goes with it. Ad
 ## Exceptions
 
 Truly shared type definitions that multiple components import (e.g., `Theme`, `DesignTokens`) belong in a shared location, not duplicated inside each component folder. Global styles (resets, token definitions) are cross-cutting by nature and live at the project root, not inside a component. End-to-end tests that exercise multi-component flows belong in a top-level `e2e/` directory since they don't map to a single component.
+
+**Related:** `single-source-of-component-styles` enforces that a component's styles come from one file — colocation ensures that file lives next to the component. `component-single-responsibility` ensures each colocated folder maps to one coherent purpose.

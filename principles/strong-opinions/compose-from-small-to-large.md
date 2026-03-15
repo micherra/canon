@@ -118,4 +118,4 @@ function SettingsPage() {
 
 Prototypes and one-off internal tools where speed outweighs reusability can be built top-down. Highly unique, page-specific layouts that genuinely won't repeat (a marketing landing page with a bespoke hero section) don't need to be decomposed into atoms. The principle applies most strongly to product UI where components recur across features.
 
-**Related:** `component-single-responsibility` ensures each composed piece has one job. `design-tokens-as-style-contract` provides the visual consistency that makes small components look cohesive when composed together.
+**Related:** `component-single-responsibility` ensures each composed piece has one job. `props-are-the-component-contract` ensures each piece has a minimal, stable API that makes composition frictionless. `design-tokens-as-style-contract` provides the visual consistency that makes small components look cohesive when composed together.

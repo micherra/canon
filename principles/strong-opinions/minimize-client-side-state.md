@@ -12,6 +12,7 @@ scope:
     - "**/*.svelte"
 tags:
   - ui
+  - components
   - state-management
   - complexity
   - patterns
