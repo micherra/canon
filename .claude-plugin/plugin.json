@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Encodes engineering principles as structured markdown files, loads them into agent context before code generation, enforces them via hooks at commit time, and provides review agents that evaluate code against matched principles.",
   "author": {
-    "name": "Michelle"
+    "name": "micherra"
   },
   "license": "MIT",
   "keywords": [
