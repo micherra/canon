@@ -74,6 +74,16 @@ describe("matchPrinciples", () => {
     expect(result[0].id).toBe("active");
   });
 
+  it("includes archived principles when include_archived is true", () => {
+    const principles = [
+      makePrinciple({ id: "active" }),
+      makePrinciple({ id: "archived", archived: true }),
+    ];
+    const result = matchPrinciples(principles, { include_archived: true });
+    expect(result).toHaveLength(2);
+    expect(result.map((p) => p.id)).toContain("archived");
+  });
+
   it("filters by layer", () => {
     const principles = [
       makePrinciple({ id: "api-only", scope: { layers: ["api"], file_patterns: [] } }),
