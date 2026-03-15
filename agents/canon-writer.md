@@ -123,9 +123,9 @@ Generate a kebab-case `id` from the title. For agent-rules, prefix with `agent-`
 
 ### Step 5: Check for conflicts
 
-Load all existing entries:
-- Principles: `.canon/principles/**/*.md` and `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`
-- Agent-rules: `.canon/agent-rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/agent-rules/*.md`
+Use the `list_principles` MCP tool to load the index of all existing entries (metadata only — id, title, severity, tags, scope). This avoids loading full bodies into context.
+
+For agent-rules, also glob `.canon/agent-rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/agent-rules/*.md` and read only their frontmatter.
 
 Check for:
 

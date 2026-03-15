@@ -57,9 +57,11 @@ Read the implementation summaries provided by the orchestrator. Understand:
 
 Read the actual files from the filesystem. Also read every test file the implementors wrote. Work from what's actually in the codebase, not what was planned.
 
-### Step 3: Read applied Canon principles
+### Step 3: Load applied Canon principles
 
-Read the full body of each principle that was applied during implementation.
+Use the `get_principles` MCP tool with the file paths of the implemented files to load relevant principles. Use `summary_only: true` for the initial load — you need the constraint statements to know what to test against, not the full rationale.
+
+If you need to understand a specific principle's examples (e.g., to design test cases for `errors-are-values`), call `get_principles` again for that principle's file path without `summary_only`.
 
 ### Step 4: Detect test framework
 
