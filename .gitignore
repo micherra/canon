@@ -4,3 +4,12 @@ dist/
 .DS_Store
 .claude/settings.local.json
 .claude/plans/
+
+# Canon local data (generated per-project)
+.canon/reviews.jsonl
+.canon/decisions.jsonl
+.canon/patterns.jsonl
+.canon/learning.jsonl
+.canon/*.archive.jsonl
+.canon/LEARNING-REPORT.md
+.canon/plans/
