@@ -24,9 +24,11 @@ export async function getCompliance(
   pluginDir: string
 ): Promise<GetComplianceOutput> {
   const store = new DriftStore(projectDir);
+
+  // Load principles (cached) and filter JSONL reads to this principle only
   const [reviews, decisions, principles] = await Promise.all([
-    store.getReviews(),
-    store.getDecisions(),
+    store.getReviews(input.principle_id),
+    store.getDecisions(input.principle_id),
     loadAllPrinciples(projectDir, pluginDir),
   ]);
 
@@ -57,7 +59,7 @@ export async function getCompliance(
 
   // If principle wasn't in most_violated, check if it was honored
   if (!stats) {
-    // Count times honored across all reviews
+    // Count times honored — already filtered to this principle
     const honored = reviews.filter((r) =>
       r.honored.includes(input.principle_id)
     ).length;
@@ -68,9 +70,7 @@ export async function getCompliance(
       compliance_rate: 100,
       total_violations: 0,
       unintentional_violations: 0,
-      intentional_deviations: decisions.filter(
-        (d) => d.principle_id === input.principle_id
-      ).length,
+      intentional_deviations: decisions.length,
       times_honored: honored,
       total_reviews: report.total_reviews,
       trend: report.trend,

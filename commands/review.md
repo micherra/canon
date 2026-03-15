@@ -34,22 +34,27 @@ Extract the list of files from the diff:
 git diff --cached --name-only        # or appropriate variant
 ```
 
-### Step 3: Spawn the canon-reviewer agent
+### Step 3: Pre-load principles
+
+Before spawning the reviewer, call the `review_code` MCP tool for each affected file to get matched principles. Deduplicate by principle ID. This avoids the reviewer redundantly re-loading principles from disk.
+
+### Step 4: Spawn the canon-reviewer agent
 
 Launch the canon-reviewer agent as a sub-agent. Provide it with:
 - The diff content
 - The list of affected files
-- A brief description: "Review the following code changes against Canon principles"
+- The pre-loaded matched principles (full body) from Step 3
+- A brief description: "Review the following code changes against Canon principles. Matched principles are provided below — do not re-load them."
 
 **Rate limit handling**: If the agent spawn fails with a rate limit error (e.g. "Rate limit reached", HTTP 429, or "overloaded"), retry up to 3 times with exponential backoff. Wait 4 seconds before the first retry, 8 seconds before the second, and 16 seconds before the third. If all retries fail, inform the user of the rate limit and suggest trying again later.
 
 The reviewer will:
-1. Match principles to the affected files
+1. Use the pre-loaded principles (already matched to affected files)
 2. Perform Stage 1: Principle Compliance review
 3. Perform Stage 2: Principle-Informed Code Quality review
 4. Return a structured report
 
-### Step 4: Log the review
+### Step 5: Log the review
 
 After the reviewer returns its report, log the results for drift tracking using the `report` MCP tool (type=review). Pass:
 - `files`: The list of affected files from Step 2
@@ -60,7 +65,7 @@ After the reviewer returns its report, log the results for drift tracking using 
 
 This ensures standalone reviews feed drift data, not just `/canon:build` runs.
 
-### Step 5: Present the report
+### Step 6: Present the report
 
 Display the reviewer's report to the user. The report includes:
 - Violations with principle references, severity, and fix suggestions

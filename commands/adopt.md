@@ -123,7 +123,8 @@ Save the report to `.canon/adoption-report.md`. Tell the user where it was saved
 If `--fix` was passed, spawn canon-refactorer on each Tier 1 file with its specific violations.
 
 For each file in Tier 1 (up to `--top N`), spawn a canon-refactorer agent:
-- Pass the file path, the applicable rule-severity principle IDs, and a description of the expected violation
+- Pass the file path, the applicable rule-severity principle IDs, the full principle body text, and a description of the expected violation
+- Include the matched principle bodies directly so refactorers do NOT need to re-load principles from disk
 - Each refactorer gets one file — this follows fresh context
 
 Report the refactorer results as they complete.
