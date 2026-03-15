@@ -12,8 +12,10 @@ export interface ListPrinciplesOutput {
     title: string;
     severity: string;
     tags: string[];
+    archived: boolean;
     scope: {
       layers: string[];
+      file_patterns: string[];
     };
   }>;
   total: number;
@@ -38,8 +40,10 @@ export async function listPrinciples(
       title: p.title,
       severity: p.severity,
       tags: p.tags,
+      archived: p.archived,
       scope: {
         layers: p.scope.layers,
+        file_patterns: p.scope.file_patterns,
       },
     })),
     total: matched.length,

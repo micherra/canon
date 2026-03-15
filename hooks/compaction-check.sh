@@ -38,14 +38,14 @@ if [[ -f "$NUDGE_FILE" ]]; then
   exit 0
 fi
 
-WARNINGS=""
+WARNINGS=()
 
 # Check .jsonl file sizes
 for JSONL_FILE in .canon/reviews.jsonl .canon/decisions.jsonl .canon/patterns.jsonl; do
   if [[ -f "$JSONL_FILE" ]]; then
     LINE_COUNT=$(wc -l < "$JSONL_FILE" | tr -d ' ')
     if [[ $LINE_COUNT -gt 500 ]]; then
-      WARNINGS="${WARNINGS}  - ${JSONL_FILE}: ${LINE_COUNT} entries (expected max 500 — rotation may not be running)\n"
+      WARNINGS+=("  - ${JSONL_FILE}: ${LINE_COUNT} entries (expected max 500 — rotation may not be running)")
     fi
   fi
 done
@@ -55,21 +55,19 @@ CONVENTIONS_FILE=".canon/CONVENTIONS.md"
 if [[ -f "$CONVENTIONS_FILE" ]]; then
   CONVENTION_COUNT=$(grep -c '^- \*\*' "$CONVENTIONS_FILE" 2>/dev/null || echo "0")
   if [[ $CONVENTION_COUNT -gt 20 ]]; then
-    WARNINGS="${WARNINGS}  - CONVENTIONS.md: ${CONVENTION_COUNT} conventions — consider consolidating similar entries\n"
+    WARNINGS+=("  - CONVENTIONS.md: ${CONVENTION_COUNT} conventions — consider consolidating similar entries")
   fi
 fi
 
-if [[ -z "$WARNINGS" ]]; then
+if [[ ${#WARNINGS[@]} -eq 0 ]]; then
   exit 0
 fi
 
 # Mark as nudged for this session
 touch "$NUDGE_FILE"
 
-cat <<EOF
-CANON: Context management warning — some files are getting large:
-${WARNINGS}
-Run /canon:doctor for a full health check.
-EOF
+echo "CANON: Context management warning — some files are getting large:"
+printf '%s\n' "${WARNINGS[@]}"
+echo "Run /canon:doctor for a full health check."
 
 exit 0

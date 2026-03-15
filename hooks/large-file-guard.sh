@@ -50,11 +50,17 @@ fi
 # For Write calls, estimate new size from the content field
 NEW_CONTENT=$(echo "$INPUT" | grep -o '"content"[[:space:]]*:[[:space:]]*"' || true)
 if [[ -n "$NEW_CONTENT" ]]; then
-  # Count newlines in the content value as a rough line estimate
-  CONTENT_LINES=$(echo "$INPUT" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"//p' | grep -o '\\n' | wc -l | tr -d ' ')
-  if [[ $CONTENT_LINES -gt $MAX_LINES ]]; then
+  # Count newlines in content value; actual lines = newline_count + 1
+  NEWLINE_COUNT=0
+  if command -v jq &>/dev/null; then
+    NEWLINE_COUNT=$(echo "$INPUT" | jq -r '.content // empty' 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+  else
+    NEWLINE_COUNT=$(echo "$INPUT" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"//p' | grep -o '\\n' | wc -l | tr -d ' ' || echo "0")
+    NEWLINE_COUNT=$((NEWLINE_COUNT + 1))
+  fi
+  if [[ $NEWLINE_COUNT -gt $MAX_LINES ]]; then
     cat <<EOF
-CANON WARNING: Writing ~${CONTENT_LINES} lines to ${FILE_PATH} (threshold: ${MAX_LINES}). Consider splitting this file into smaller, focused modules. Large files are harder to review, test, and maintain.
+CANON WARNING: Writing ~${NEWLINE_COUNT} lines to ${FILE_PATH} (threshold: ${MAX_LINES}). Consider splitting this file into smaller, focused modules. Large files are harder to review, test, and maintain.
 EOF
     exit 0
   fi

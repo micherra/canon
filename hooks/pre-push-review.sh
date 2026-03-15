@@ -42,8 +42,8 @@ if [[ -n "$UPSTREAM" ]]; then
   # Count commits being pushed
   UNPUSHED=$(git rev-list "$UPSTREAM"..HEAD --count 2>/dev/null || echo "0")
 else
-  # No upstream — all commits on this branch are being pushed
-  UNPUSHED=$(git rev-list HEAD --count 2>/dev/null || echo "0")
+  # No upstream — count commits not reachable from any remote branch
+  UNPUSHED=$(git rev-list HEAD --count --not --remotes 2>/dev/null || echo "0")
 fi
 
 if [[ "$UNPUSHED" == "0" ]]; then
@@ -65,7 +65,7 @@ fi
 if [[ -n "$UPSTREAM" ]]; then
   OLDEST_UNPUSHED_TS=$(git log "$UPSTREAM"..HEAD --format="%aI" --reverse 2>/dev/null | head -1 || echo "")
 else
-  OLDEST_UNPUSHED_TS=$(git log HEAD --format="%aI" --reverse 2>/dev/null | head -1 || echo "")
+  OLDEST_UNPUSHED_TS=$(git log HEAD --not --remotes --format="%aI" --reverse 2>/dev/null | head -1 || echo "")
 fi
 
 if [[ -z "$OLDEST_UNPUSHED_TS" ]]; then
