@@ -22,6 +22,10 @@ export async function report(
       return recordPattern(input, store);
     case "review":
       return recordReview(input, store);
+    default: {
+      const _exhaustive: never = input;
+      throw new Error(`Unknown report type`);
+    }
   }
 }
 

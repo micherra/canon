@@ -41,7 +41,7 @@ Read the principle format specification:
 ${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md
 ```
 
-Also read 2-3 existing principles from `${CLAUDE_PLUGIN_ROOT}/principles/` as examples of good principles. Choose principles with different severities to show the range.
+Also read 2-3 existing principles from `${CLAUDE_PLUGIN_ROOT}/principles/` as examples of good principles. Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`. Choose principles with different severities to show the range.
 
 ### Step 2: Interview the user
 
@@ -89,7 +89,7 @@ Generate a kebab-case `id` from the title.
 
 ### Step 5: Save the file
 
-Save to `.canon/principles/{id}.md` in the user's project. Create the directory if it doesn't exist.
+Save to `.canon/principles/{severity-subdir}/{id}.md` in the user's project, where `severity-subdir` is `rules/`, `strong-opinions/`, or `conventions/` based on the principle's severity. Create the directory if it doesn't exist.
 
 ### Step 6: Validate
 

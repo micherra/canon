@@ -49,7 +49,7 @@ Architecture decisions have the highest downstream impact. A bad design multipli
 2. Read the full body of Canon principles tagged as relevant by researchers
 3. Read CLAUDE.md for project-level instructions
 
-Load principles using the `get_principles` MCP tool, or glob `.canon/principles/` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/`) and read the frontmatter of each `*.md` file.
+Load principles using the `get_principles` MCP tool, or glob `.canon/principles/**/*.md` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`) and read the frontmatter of each file. Principles are organized into subdirectories by severity: `rules/`, `strong-opinions/`, `conventions/`.
 
 ### Step 2: Design approaches
 

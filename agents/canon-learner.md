@@ -63,7 +63,7 @@ You receive from the orchestrator:
 
 Load the current state of Canon in this project:
 
-1. Build the principle index — read YAML frontmatter of all `.canon/principles/*.md` (or `${CLAUDE_PLUGIN_ROOT}/principles/*.md`). Record each principle's id, severity, scope, and tags.
+1. Build the principle index — read YAML frontmatter of all `.canon/principles/**/*.md` (or `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`). Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`. Record each principle's id, severity, scope, and tags.
 2. Read `.canon/CONVENTIONS.md` if it exists — these are the project's current conventions.
 3. Read `.canon/learning.jsonl` if it exists — these are previous suggestions. Check for:
    - **Suppressed suggestions**: entries with `"action": "dismissed"` — do NOT re-suggest these

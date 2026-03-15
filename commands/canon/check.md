@@ -18,7 +18,7 @@ If no arguments provided, try to infer context from:
 
 ### Step 2: Find matching principles
 
-Read all principle files from `.canon/principles/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/`).
+Read all principle files from `.canon/principles/` and its subdirectories `rules/`, `strong-opinions/`, `conventions/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/` and its subdirectories).
 
 For the target file, infer the architectural layer from its path:
 - `*/api/*`, `*/routes/*`, `*/controllers/*` → `api`

@@ -2,6 +2,8 @@ import { readdir } from "fs/promises";
 import { join } from "path";
 import { type Principle, loadPrincipleFile } from "./parser.js";
 
+const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
+
 export interface MatchFilters {
   layers?: string[];
   file_path?: string;
@@ -88,7 +90,7 @@ export function matchPrinciples(
     });
 }
 
-export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
+async function loadMdFilesFromDir(dir: string): Promise<Principle[]> {
   try {
     const files = await readdir(dir);
     const mdFiles = files.filter((f) => f.endsWith(".md"));
@@ -99,6 +101,13 @@ export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
   } catch {
     return [];
   }
+}
+
+export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
+  const results = await Promise.all(
+    SEVERITY_SUBDIRS.map((sub) => loadMdFilesFromDir(join(dir, sub)))
+  );
+  return results.flat();
 }
 
 export async function loadAllPrinciples(

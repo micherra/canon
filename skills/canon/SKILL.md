@@ -22,6 +22,8 @@ Scan both principle directories for `.md` files:
 1. **Project-local** (takes precedence): `.canon/principles/` in the current project root
 2. **Plugin-shipped** (fallback): `${CLAUDE_PLUGIN_ROOT}/principles/`
 
+Principles are organized into severity subdirectories: `rules/`, `strong-opinions/`, and `conventions/`. Scan all three subdirectories (and the parent directory for backward compatibility).
+
 For each principle file, read the YAML frontmatter to extract: `id`, `title`, `severity`, `scope.layers`, `scope.file_patterns`, and `tags`. Do NOT load full bodies yet — this keeps token cost low.
 
 ### Step 2: Match Principles to Current Context

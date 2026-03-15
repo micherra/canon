@@ -143,7 +143,10 @@ Canon includes 3 automation hooks:
 
 ```
 canon/
-├── principles/          47 engineering principles (rule / strong-opinion / convention)
+├── principles/          47 engineering principles organized by severity
+│   ├── rules/           Hard constraints (4 principles)
+│   ├── strong-opinions/ Default path (28 principles)
+│   └── conventions/     Stylistic preferences (15 principles)
 ├── commands/canon/      13 slash commands
 ├── agents/              9 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
@@ -180,7 +183,7 @@ All Canon data lives in `.canon/` in your project root:
 
 | File | Purpose | Written by |
 |------|---------|-----------|
-| `principles/*.md` | Principle definitions | `/canon:init`, `/canon:new-principle` |
+| `principles/{rules,strong-opinions,conventions}/*.md` | Principle definitions | `/canon:init`, `/canon:new-principle` |
 | `CONVENTIONS.md` | Project conventions | `/canon:conventions`, `/canon:learn --apply` |
 | `config.json` | Project configuration | `/canon:init` |
 | `reviews.jsonl` | Review results | `report` MCP tool (type=review) |

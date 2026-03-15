@@ -1,4 +1,4 @@
-import { type DecisionEntry, type ReviewEntry } from "./store.js";
+import type { DecisionEntry, ReviewEntry } from "../schema.js";
 
 export interface PrincipleStats {
   principle_id: string;
