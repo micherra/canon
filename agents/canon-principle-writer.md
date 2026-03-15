@@ -41,7 +41,7 @@ Read the principle format specification:
 ${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md
 ```
 
-Also read 2-3 existing principles from `${CLAUDE_PLUGIN_ROOT}/principles/` as examples of good principles. Choose principles with different severities to show the range.
+Also read 2-3 existing principles from `${CLAUDE_PLUGIN_ROOT}/principles/` as examples of good principles. Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`. Choose principles with different severities to show the range.
 
 ### Step 2: Interview the user
 
@@ -55,7 +55,6 @@ Ask the user clarifying questions. You need to extract:
    - Ask: "What problems have you seen when this principle isn't followed?"
 
 3. **The scope** — Where does this apply?
-   - Ask: "Which languages does this apply to? (or all?)"
    - Ask: "Which architectural layers? (api, ui, domain, data, infra, shared, or all?)"
    - Ask: "Any specific file patterns? (e.g., `**/api/**`)"
 
@@ -90,16 +89,14 @@ Generate a kebab-case `id` from the title.
 
 ### Step 5: Save the file
 
-Save to `.canon/principles/{id}.md` in the user's project. Create the directory if it doesn't exist.
+Save to `.canon/principles/{severity-subdir}/{id}.md` in the user's project, where `severity-subdir` is `rules/`, `strong-opinions/`, or `conventions/` based on the principle's severity. Create the directory if it doesn't exist.
 
 ### Step 6: Validate
 
-Verify the principle file is valid:
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh .canon/principles/
-```
-
-Check that the new principle appears in the output with correct metadata.
+Re-read the saved file and verify:
+- The YAML frontmatter parses correctly (id, title, severity, scope, tags all present)
+- The severity is one of: `rule`, `strong-opinion`, `convention`
+- The body has the required sections (summary paragraph, `## Rationale`, `## Examples`)
 
 ### Step 7: Offer to test
 

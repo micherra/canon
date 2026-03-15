@@ -13,7 +13,6 @@ export interface ListPrinciplesOutput {
     severity: string;
     tags: string[];
     scope: {
-      languages: string[];
       layers: string[];
     };
   }>;
@@ -40,7 +39,6 @@ export async function listPrinciples(
       severity: p.severity,
       tags: p.tags,
       scope: {
-        languages: p.scope.languages,
         layers: p.scope.layers,
       },
     })),

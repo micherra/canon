@@ -11,17 +11,19 @@ Initialize Canon engineering principles in the current project. This sets up the
 ### Step 1: Create the Canon directory structure
 
 ```bash
-mkdir -p .canon/principles
+mkdir -p .canon/principles/rules .canon/principles/strong-opinions .canon/principles/conventions
 ```
 
 ### Step 2: Copy starter principles
 
-If the user passed `--empty` as an argument, skip this step and just create an empty `.canon/principles/` directory.
+If the user passed `--empty` as an argument, skip this step and just create an empty `.canon/principles/` directory structure.
 
-Otherwise (default behavior), copy all principle files from the plugin's starter set:
+Otherwise (default behavior), copy all principle files from the plugin's starter set, preserving the severity subdirectory structure:
 
 ```bash
-cp ${CLAUDE_PLUGIN_ROOT}/principles/*.md .canon/principles/
+cp ${CLAUDE_PLUGIN_ROOT}/principles/rules/*.md .canon/principles/rules/
+cp ${CLAUDE_PLUGIN_ROOT}/principles/strong-opinions/*.md .canon/principles/strong-opinions/
+cp ${CLAUDE_PLUGIN_ROOT}/principles/conventions/*.md .canon/principles/conventions/
 ```
 
 ### Step 3: Create default config

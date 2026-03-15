@@ -1,33 +1,7 @@
 import { readFile, appendFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { dirname, join } from "path";
+import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
 
-export interface DecisionEntry {
-  decision_id: string;
-  timestamp: string;
-  principle_id: string;
-  file_path: string;
-  justification: string;
-  category?: string;
-}
-
-export interface ReviewViolation {
-  principle_id: string;
-  severity: string;
-}
-
-export interface ReviewEntry {
-  review_id: string;
-  timestamp: string;
-  verdict: "BLOCKING" | "WARNING" | "CLEAN";
-  files: string[];
-  violations: ReviewViolation[];
-  honored: string[];
-  score: {
-    rules: { passed: number; total: number };
-    opinions: { passed: number; total: number };
-    conventions: { passed: number; total: number };
-  };
-}
 
 async function readJsonl<T>(filePath: string): Promise<T[]> {
   let content: string;
@@ -55,22 +29,29 @@ async function readJsonl<T>(filePath: string): Promise<T[]> {
 }
 
 async function appendJsonl<T>(filePath: string, entry: T): Promise<void> {
-  const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+  const dir = dirname(filePath);
   await mkdir(dir, { recursive: true });
   await appendFile(filePath, JSON.stringify(entry) + "\n", "utf-8");
 }
 
 export class DriftStore {
   private decisionsPath: string;
+  private patternsPath: string;
   private reviewsPath: string;
 
   constructor(projectDir: string) {
-    this.decisionsPath = join(projectDir, ".canon", "decisions.jsonl");
-    this.reviewsPath = join(projectDir, ".canon", "reviews.jsonl");
+    const canonDir = join(projectDir, ".canon");
+    this.decisionsPath = join(canonDir, "decisions.jsonl");
+    this.patternsPath = join(canonDir, "patterns.jsonl");
+    this.reviewsPath = join(canonDir, "reviews.jsonl");
   }
 
   async getDecisions(): Promise<DecisionEntry[]> {
     return readJsonl<DecisionEntry>(this.decisionsPath);
+  }
+
+  async getPatterns(): Promise<PatternEntry[]> {
+    return readJsonl<PatternEntry>(this.patternsPath);
   }
 
   async getReviews(): Promise<ReviewEntry[]> {
@@ -79,6 +60,10 @@ export class DriftStore {
 
   async appendDecision(entry: DecisionEntry): Promise<void> {
     await appendJsonl(this.decisionsPath, entry);
+  }
+
+  async appendPattern(entry: PatternEntry): Promise<void> {
+    await appendJsonl(this.patternsPath, entry);
   }
 
   async appendReview(entry: ReviewEntry): Promise<void> {

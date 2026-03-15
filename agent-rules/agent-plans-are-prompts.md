@@ -3,7 +3,6 @@ id: agent-plans-are-prompts
 title: Plans Are Prompts, Not Documents
 severity: rule
 scope:
-  languages: []
   layers: []
   file_patterns:
     - ".canon/plans/**/*-PLAN.md"

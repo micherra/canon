@@ -22,18 +22,14 @@ Scan both principle directories for `.md` files:
 1. **Project-local** (takes precedence): `.canon/principles/` in the current project root
 2. **Plugin-shipped** (fallback): `${CLAUDE_PLUGIN_ROOT}/principles/`
 
-For each principle file, read the YAML frontmatter to extract: `id`, `title`, `severity`, `scope.languages`, `scope.layers`, `scope.file_patterns`, and `tags`. Do NOT load full bodies yet — this keeps token cost low.
+Principles are organized into severity subdirectories: `rules/`, `strong-opinions/`, and `conventions/`. Scan all three subdirectories (and the parent directory for backward compatibility).
 
-You can also use the principle matcher script for programmatic filtering:
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh [--language LANG] [--layer LAYER] [--file FILE_PATH] [--severity-filter LEVEL]
-```
+For each principle file, read the YAML frontmatter to extract: `id`, `title`, `severity`, `scope.layers`, `scope.file_patterns`, and `tags`. Do NOT load full bodies yet — this keeps token cost low.
 
 ### Step 2: Match Principles to Current Context
 
 Filter principles based on what you're working on:
 
-- **Language**: Match `scope.languages` against the language of files being edited. Empty = matches all.
 - **Layer**: Match `scope.layers` against the architectural layer inferred from file paths:
   - `*/api/*`, `*/routes/*`, `*/controllers/*` → `api`
   - `*/components/*`, `*/pages/*`, `*/views/*` → `ui`
@@ -70,7 +66,7 @@ After generating code, self-review against each loaded principle before presenti
 | Level | Meaning | Enforcement |
 |-------|---------|-------------|
 | `rule` | Hard constraint | **Enforced.** Pre-commit hook blocks on detectable violations (e.g., secrets). Reviewer verdict is BLOCKING. Implementor must fix or report BLOCKED. |
-| `strong-opinion` | Default path | Follow unless you have a specific, justified reason. Reviewer verdict is WARNING. Deviations must use `report_decision`. |
+| `strong-opinion` | Default path | Follow unless you have a specific, justified reason. Reviewer verdict is WARNING. Deviations must use the `report` tool. |
 | `convention` | Stylistic preference | Note violations but don't block. Reviewer includes in report for drift tracking. |
 
 ## Commands
@@ -80,7 +76,7 @@ After generating code, self-review against each loaded principle before presenti
 | `/canon:init` | Initialize Canon in your project. Sets up `.canon/principles/`, config, and CLAUDE.md integration. |
 | `/canon:list` | Browse and filter principles by `--severity`, `--tag`, or `--layer`. |
 | `/canon:check` | Quick inline check — load principles relevant to a specific file. |
-| `/canon:build` | Full principle-driven development pipeline: research → architect → plan → implement → test → security → review. |
+| `/canon:build` | Full principle-driven development pipeline: research → architect & plan → implement → test → security → review. |
 | `/canon:review` | Review code changes against principles. Accepts `--staged`, `HEAD~N`, `main..HEAD`, or file paths. |
 | `/canon:conventions` | View and manage project conventions. `--show`, `--add "..."`, `--remove N`. |
 | `/canon:drift` | Show compliance trends and drift analytics from review history. |
@@ -108,13 +104,11 @@ Canon exposes these tools via its MCP server for agents to use during normal wor
 
 | Tool | Purpose |
 |------|---------|
-| `get_principles` | Get principles relevant to a file/language/layer context. |
+| `get_principles` | Get principles relevant to a file/layer context. |
 | `list_principles` | Browse the full principle index with filters. |
 | `review_code` | Get matched principles for a code snippet to evaluate. |
-| `report_decision` | Log an intentional deviation with justification and category. |
-| `report_review` | Log a review result for drift tracking. |
 | `get_compliance` | Query compliance stats and trend for a specific principle. Returns `found: false` if the principle doesn't exist. |
-| `report_pattern` | Log an observed codebase pattern for the learner to validate. Requires at least one file path. |
+| `report` | Log a decision (intentional deviation), pattern (observed codebase convention), or review result. Pass `type: "decision"`, `"pattern"`, or `"review"` with the corresponding data. |
 
 ## Principle Format Reference
 

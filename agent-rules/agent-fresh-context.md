@@ -3,7 +3,6 @@ id: agent-fresh-context
 title: Fresh Context, Atomic Commits
 severity: rule
 scope:
-  languages: []
   layers: []
 tags:
   - agent-behavior

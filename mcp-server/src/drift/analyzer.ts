@@ -1,4 +1,5 @@
-import { type DecisionEntry, type ReviewEntry } from "./store.js";
+import { dirname } from "path";
+import type { DecisionEntry, ReviewEntry } from "../schema.js";
 
 export interface PrincipleStats {
   principle_id: string;
@@ -120,7 +121,7 @@ export function analyzeDrift(
   for (const review of filteredReviews) {
     if (review.violations.length === 0) continue;
     for (const file of review.files) {
-      const dir = file.substring(0, file.lastIndexOf("/")) || file;
+      const dir = dirname(file);
       const stats = dirMap.get(dir) || { directory: dir, total_violations: 0, review_count: 0 };
       stats.total_violations += review.violations.length;
       stats.review_count++;

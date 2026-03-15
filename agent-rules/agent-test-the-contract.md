@@ -3,7 +3,6 @@ id: agent-test-the-contract
 title: Test the Contract, Not the Implementation
 severity: convention
 scope:
-  languages: []
   layers: []
 tags:
   - agent-behavior

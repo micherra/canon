@@ -10,9 +10,6 @@ id: string            # Unique slug, kebab-case (e.g., "thin-handlers")
 title: string         # Human-readable name (e.g., "Handlers Are Thin Orchestrators")
 severity: string      # "rule" | "strong-opinion" | "convention"
 scope:
-  languages:          # Which languages this applies to (empty = all)
-    - typescript
-    - python
   layers:             # Architectural layers (empty = all)
     - api             # HTTP handlers, route definitions, middleware
     - ui              # Components, views, client-side logic
@@ -38,7 +35,6 @@ tags:                 # Freeform tags for cross-cutting concerns
 
 ## Optional Fields
 
-- `scope.languages` — Empty array or omitted means "applies to all languages"
 - `scope.layers` — Empty array or omitted means "applies to all layers"
 - `scope.file_patterns` — Globs for targeted matching. Empty means "applies everywhere"
 - `tags` — Freeform classification tags
@@ -89,4 +85,4 @@ The markdown body after frontmatter follows this fixed structure:
 
 **Truly universal principles** (naming, simplicity, single responsibility, information hiding) can stay unconstrained — but there should be fewer than 15 of these. If you have more, some are probably scoped more narrowly than you think.
 
-The matcher supports `--max N` to cap results and sorts by specificity — principles with constraints rank higher than unconstrained ones.
+The MCP matcher sorts by severity (rules first, then strong-opinions, then conventions). The `get_principles` tool caps results at 10 to keep context concise; `review_code` returns all matches so no principles are skipped during review.

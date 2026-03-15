@@ -3,7 +3,6 @@ id: agent-design-before-code
 title: Design Before Code
 severity: rule
 scope:
-  languages: []
   layers: []
   file_patterns:
     - ".canon/plans/*/DESIGN.md"

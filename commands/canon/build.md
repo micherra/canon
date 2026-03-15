@@ -53,14 +53,13 @@ Before running the pipeline, classify the task into a tier. This determines whic
 | Phase | Small | Medium | Large |
 |-------|-------|--------|-------|
 | **1. Research** | Skip | Skip | ✓ (2-4 researchers) |
-| **2. Architect** | Skip | ✓ | ✓ (Opus) |
-| **3. Plan** | Skip (single implicit task) | ✓ | ✓ |
-| **4. Implement** | ✓ (1 implementor, no waves) | ✓ (waves) | ✓ (waves + integration gates) |
-| **5. Test** | Skip (implementor tests suffice) | ✓ | ✓ |
-| **6. Security** | Skip | Skip | ✓ |
-| **7. Review** | ✓ | ✓ | ✓ |
-| **8. Log** | ✓ | ✓ | ✓ |
-| **9. Summary** | Brief | Standard | Full |
+| **2. Architect & Plan** | Skip (single implicit task) | ✓ | ✓ (Opus) |
+| **3. Implement** | ✓ (1 implementor, no waves) | ✓ (waves) | ✓ (waves + integration gates) |
+| **4. Test** | Skip (implementor tests suffice) | ✓ | ✓ |
+| **5. Security** | Skip | Skip | ✓ |
+| **6. Review** | ✓ | ✓ | ✓ |
+| **7. Log** | ✓ | ✓ | ✓ |
+| **8. Summary** | Brief | Standard | Full |
 
 **Small tasks** (1-3 files, obvious approach): Implement → Review → Log. One implementor, no architect, no planner. The orchestrator writes a minimal implicit plan directly: "Modify these files, apply these principles, run tests." This is the fast path for "add a field," "fix a bug," "rename a function."
 
@@ -70,7 +69,7 @@ Before running the pipeline, classify the task into a tier. This determines whic
 
 Announce the tier to the user: "Classified as **{tier}** — running {phases}. Override with `--tier large` if you want the full pipeline."
 
-Any `--skip-*` flag applies on top of the tier. `--skip-tests` on a large task skips Phase 5 but keeps everything else.
+Any `--skip-*` flag applies on top of the tier. `--skip-tests` on a large task skips Phase 4 but keeps everything else.
 
 ## Pipeline
 
@@ -87,27 +86,20 @@ Each researcher gets: task description, their dimension, CLAUDE.md path, and the
 
 Wait for all researchers to complete. Read their summary outputs (not full findings).
 
-### Phase 2: ARCHITECT (Medium + Large)
+### Phase 2: ARCHITECT & PLAN (Medium + Large)
 
 Spawn canon-architect agent:
-"Design the technical approach for: {task}. Read research findings from .canon/plans/{slug}/research/. Load relevant Canon principles. Save design to .canon/plans/{slug}/DESIGN.md"
+"Design the technical approach for: {task}. Read research findings from .canon/plans/{slug}/research/. Load relevant Canon principles. Save design to .canon/plans/{slug}/DESIGN.md. Then break the design into atomic task plans — save plans to .canon/plans/{slug}/{task-id}-PLAN.md and index to .canon/plans/{slug}/INDEX.md"
 
-The architect gets: task description, research file paths, Canon principle directory paths.
+The architect gets: task description, research file paths, Canon principle directory paths, project conventions path.
 
 If the architect's design has **open questions for user**, present them and wait for answers. Pass answers back to the architect if needed.
 
-**If --plan-only**: After the architect finishes, present the design to the user and stop.
-
-### Phase 3: PLAN (Medium + Large)
-
-Spawn canon-planner agent:
-"Break the approved design into atomic task plans. Read design from .canon/plans/{slug}/DESIGN.md. Save plans to .canon/plans/{slug}/{task-id}-PLAN.md and index to .canon/plans/{slug}/INDEX.md"
-
-The planner gets: design file path, Canon principle directory paths.
+**If --plan-only**: After the architect finishes, present the design and plan index to the user and stop.
 
 Read the INDEX.md to understand the wave structure.
 
-### Phase 4: IMPLEMENT (all tiers — parallel within waves for Medium/Large, single task for Small)
+### Phase 3: IMPLEMENT (all tiers — parallel within waves for Medium/Large, single task for Small)
 
 For each wave (starting from --wave N if specified, else wave 1):
 
@@ -129,21 +121,21 @@ For each wave (starting from --wave N if specified, else wave 1):
    - If tests fail: surface failures to the user as a blocker. Do NOT start the next wave until failures are resolved. The failing tests may indicate cross-task integration issues within this wave.
 6. If integration gate passes, proceed to next wave
 
-### Phase 5: TEST (Medium + Large, skippable with --skip-tests)
+### Phase 4: TEST (Medium + Large, skippable with --skip-tests)
 
 Spawn canon-tester agent:
 "Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Read task summaries from .canon/plans/{slug}/*-SUMMARY.md. Read implementor test files. Save test report to .canon/plans/{slug}/TEST-REPORT.md"
 
 If tester reports IMPLEMENTATION_ISSUE, surface to user.
 
-### Phase 6: SECURITY (Large only, skippable with --skip-security)
+### Phase 5: SECURITY (Large only, skippable with --skip-security)
 
 Spawn canon-security agent:
 "Scan implemented code for security vulnerabilities. Read task summaries from .canon/plans/{slug}/*-SUMMARY.md for file list. Save assessment to .canon/plans/{slug}/SECURITY.md"
 
 If any **critical** findings, surface to user as a blocker.
 
-### Phase 7: REVIEW (all tiers)
+### Phase 6: REVIEW (all tiers)
 
 Spawn canon-reviewer agent:
 "Review all code changes from this build. Use git diff to see changes. Save review to .canon/plans/{slug}/REVIEW.md"
@@ -153,16 +145,16 @@ Read the review verdict from REVIEW.md:
 - **WARNING**: Strong-opinion violations found. Surface to the user with fix suggestions. The build can proceed, but note the violations in the final summary.
 - **CLEAN**: No violations. Proceed.
 
-### Phase 8: LOG (all tiers)
+### Phase 7: LOG (all tiers)
 
-Log the review results for drift tracking using the `report_review` MCP tool. Extract from `.canon/plans/{slug}/REVIEW.md`:
+Log the review results for drift tracking using the `report` MCP tool (type=review). Extract from `.canon/plans/{slug}/REVIEW.md`:
 - `files`: The list of files that were reviewed
 - `violations`: Each violation's `principle_id` and `severity`
 - `honored`: IDs of principles that were honored
 - `score`: The pass/total counts for rules, opinions, and conventions
 - `verdict`: The verdict from the review header (`BLOCKING`, `WARNING`, or `CLEAN`)
 
-### Phase 9: SUMMARY (all tiers)
+### Phase 8: SUMMARY (all tiers)
 
 Present a final summary to the user:
 - What was built

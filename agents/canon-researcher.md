@@ -102,9 +102,4 @@ You do NOT receive other researchers' findings. Stay focused on your assigned di
 
 ## Loading Canon Principles
 
-Use the principle matcher to get the index:
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh --format text [PRINCIPLES_DIR]
-```
-
-Check `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`.
+Use the `list_principles` MCP tool to get the full index. Or glob `.canon/principles/**/*.md` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`) and read the frontmatter of each file. Principles are organized into subdirectories by severity: `rules/`, `strong-opinions/`, `conventions/`.

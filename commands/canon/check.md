@@ -1,7 +1,7 @@
 ---
 description: Quick inline check of principles relevant to current context
 argument-hint: [file-path]
-allowed-tools: [Bash, Read, Glob, Grep]
+allowed-tools: [Read, Glob]
 ---
 
 Quick inline check — loads principles relevant to the specified file (or current context) and displays them. No review, no diff analysis. Just "here are the principles that apply to what you're working on."
@@ -16,26 +16,30 @@ If no arguments provided, try to infer context from:
 1. The most recently discussed or edited file in the conversation
 2. If nothing available, show all `rule` severity principles
 
-### Step 2: Load matching principles
+### Step 2: Find matching principles
 
-Use the principle matcher:
+Read all principle files from `.canon/principles/` and its subdirectories `rules/`, `strong-opinions/`, `conventions/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/` and its subdirectories).
 
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/principle-matcher.sh --file "FILE_PATH" [PRINCIPLES_DIR]
-```
+For the target file, infer the architectural layer from its path:
+- `*/api/*`, `*/routes/*`, `*/controllers/*` → `api`
+- `*/components/*`, `*/pages/*`, `*/views/*` → `ui`
+- `*/services/*`, `*/domain/*`, `*/models/*` → `domain`
+- `*/db/*`, `*/data/*`, `*/repositories/*`, `*/prisma/*` → `data`
+- `*/infra/*`, `*/deploy/*`, `*/terraform/*`, `*/docker/*` → `infra`
+- `*/utils/*`, `*/lib/*`, `*/shared/*`, `*/types/*` → `shared`
 
-This will auto-infer language and layer from the file path.
+A principle matches if:
+- Its `scope.layers` is empty (universal), OR includes the inferred layer
+- Its `scope.file_patterns` is empty, OR one of them glob-matches the file path
 
-Check `.canon/principles/` first, fall back to `${CLAUDE_PLUGIN_ROOT}/principles/`.
+### Step 3: Display matched principle summaries
 
-### Step 3: Load and display matched principle summaries
-
-For each matched principle, read the file and extract:
+For each matched principle, show:
 - The **id** and **title** from frontmatter
 - The **severity** from frontmatter
 - The **first paragraph** after frontmatter (the summary/constraint statement)
 
-Display as:
+Sort by severity (rules first) and display as:
 
 ```
 ## Principles for [file-path]

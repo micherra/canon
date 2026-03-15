@@ -6,10 +6,9 @@ import { z } from "zod";
 import { getPrinciples } from "./tools/get-principles.js";
 import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
-import { reportDecision } from "./tools/report-decision.js";
 import { getCompliance } from "./tools/get-compliance.js";
-import { reportPattern } from "./tools/report-pattern.js";
-import { reportReview } from "./tools/report-review.js";
+import { report } from "./tools/report.js";
+import { reportInputSchema } from "./schema.js";
 
 const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
 const pluginDir = process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname;
@@ -25,7 +24,6 @@ server.tool(
   "Returns Canon principles relevant to the current coding context. Call before generating code.",
   {
     file_path: z.string().optional().describe("Path of the file being worked on"),
-    language: z.string().optional().describe("Programming language (e.g., typescript, python)"),
     layers: z.array(z.string()).optional().describe("Architectural layers (e.g., api, domain, data)"),
     task_description: z.string().optional().describe("Brief description of the task"),
   },
@@ -74,27 +72,6 @@ server.tool(
   }
 );
 
-// Tool: report_decision
-server.tool(
-  "report_decision",
-  "Logs an intentional deviation from a Canon principle. Creates a decision trail for drift analytics.",
-  {
-    principle_id: z.string().describe("ID of the principle being deviated from"),
-    file_path: z.string().describe("Path of the file where the deviation occurs"),
-    justification: z.string().describe("Why the deviation is intentional and justified"),
-    category: z
-      .enum(["performance", "legacy-constraint", "scope-mismatch", "intentional-tradeoff", "external-requirement", "other"])
-      .optional()
-      .describe("Deviation category for clustering in learning reports"),
-  },
-  async (input) => {
-    const result = await reportDecision(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
 // Tool: get_compliance
 server.tool(
   "get_compliance",
@@ -110,52 +87,16 @@ server.tool(
   }
 );
 
-// Tool: report_pattern
-server.tool(
-  "report_pattern",
-  "Logs an observed codebase pattern for the learner to validate. Patterns are stored and analyzed during /canon:learn runs.",
+// Tool: report (unified — decisions, patterns, and reviews)
+server.registerTool(
+  "report",
   {
-    pattern: z.string().describe("Description of the observed pattern"),
-    file_paths: z.array(z.string()).min(1).describe("File paths where the pattern was observed (at least one required)"),
-    context: z.string().optional().describe("Additional context about the pattern"),
+    description:
+      "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
+    inputSchema: reportInputSchema,
   },
   async (input) => {
-    const result = await reportPattern(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
-// Tool: report_review
-server.tool(
-  "report_review",
-  "Logs a code review result for drift tracking. Call after completing a Canon review to feed the learning loop.",
-  {
-    files: z.array(z.string()).describe("File paths that were reviewed"),
-    violations: z
-      .array(
-        z.object({
-          principle_id: z.string().describe("ID of the violated principle"),
-          severity: z.string().describe("Severity: rule, strong-opinion, or convention"),
-        })
-      )
-      .describe("Principle violations found during review"),
-    honored: z.array(z.string()).describe("IDs of principles that were honored"),
-    score: z
-      .object({
-        rules: z.object({ passed: z.number(), total: z.number() }),
-        opinions: z.object({ passed: z.number(), total: z.number() }),
-        conventions: z.object({ passed: z.number(), total: z.number() }),
-      })
-      .describe("Pass/total counts by severity tier"),
-    verdict: z
-      .enum(["BLOCKING", "WARNING", "CLEAN"])
-      .optional()
-      .describe("Review verdict. Auto-derived from violations if not provided."),
-  },
-  async (input) => {
-    const result = await reportReview(input, projectDir);
+    const result = await report(input, projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

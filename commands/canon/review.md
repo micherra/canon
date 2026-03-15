@@ -49,7 +49,7 @@ The reviewer will:
 
 ### Step 4: Log the review
 
-After the reviewer returns its report, log the results for drift tracking using the `report_review` MCP tool. Pass:
+After the reviewer returns its report, log the results for drift tracking using the `report` MCP tool (type=review). Pass:
 - `files`: The list of affected files from Step 2
 - `violations`: The violations array from the reviewer's report (each with `principle_id` and `severity`)
 - `honored`: The honored principle IDs from the reviewer's report

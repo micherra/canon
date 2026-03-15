@@ -1,7 +1,6 @@
 import { readFile } from "fs/promises";
 
 export interface PrincipleScope {
-  languages: string[];
   layers: string[];
   file_patterns: string[];
 }
@@ -120,7 +119,6 @@ export function parsePrinciple(content: string, filePath: string): Principle {
     title: (frontmatter.title as string) || "",
     severity: (frontmatter.severity as Principle["severity"]) || "convention",
     scope: {
-      languages: (scope.languages as string[]) || [],
       layers: (scope.layers as string[]) || [],
       file_patterns: (scope.file_patterns as string[]) || [],
     },

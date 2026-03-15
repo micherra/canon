@@ -2,26 +2,14 @@ import { readdir } from "fs/promises";
 import { join } from "path";
 import { type Principle, loadPrincipleFile } from "./parser.js";
 
+const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
+
 export interface MatchFilters {
-  language?: string;
   layers?: string[];
   file_path?: string;
   severity_filter?: "rule" | "strong-opinion" | "convention";
   tags?: string[];
 }
-
-const EXTENSION_TO_LANGUAGE: Record<string, string> = {
-  ".ts": "typescript",
-  ".tsx": "typescript",
-  ".js": "javascript",
-  ".jsx": "javascript",
-  ".py": "python",
-  ".java": "java",
-  ".go": "go",
-  ".rs": "rust",
-  ".rb": "ruby",
-  ".tf": "terraform",
-};
 
 const PATH_TO_LAYER: Array<[RegExp, string]> = [
   [/\/(api|routes|controllers)\//, "api"],
@@ -37,11 +25,6 @@ const SEVERITY_RANK: Record<string, number> = {
   "strong-opinion": 2,
   convention: 3,
 };
-
-export function inferLanguage(filePath: string): string | undefined {
-  const ext = filePath.match(/\.\w+$/)?.[0];
-  return ext ? EXTENSION_TO_LANGUAGE[ext] : undefined;
-}
 
 export function inferLayer(filePath: string): string | undefined {
   for (const [pattern, layer] of PATH_TO_LAYER) {
@@ -71,18 +54,12 @@ export function matchPrinciples(
   principles: Principle[],
   filters: MatchFilters
 ): Principle[] {
-  const language = filters.language || (filters.file_path ? inferLanguage(filters.file_path) : undefined);
   const layers = filters.layers || (filters.file_path ? [inferLayer(filters.file_path)].filter(Boolean) as string[] : []);
 
   return principles
     .filter((p) => {
       // Severity filter
       if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
-
-      // Language filter
-      if (language && p.scope.languages.length > 0) {
-        if (!p.scope.languages.includes(language)) return false;
-      }
 
       // Layer filter
       if (layers.length > 0 && p.scope.layers.length > 0) {
@@ -105,10 +82,15 @@ export function matchPrinciples(
 
       return true;
     })
-    .sort((a, b) => (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9));
+    .sort((a, b) => {
+      const sevDiff = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
+      if (sevDiff !== 0) return sevDiff;
+      // Tie-breaker: more specific scope (more file patterns) ranks first
+      return b.scope.file_patterns.length - a.scope.file_patterns.length;
+    });
 }
 
-export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
+async function loadMdFilesFromDir(dir: string): Promise<Principle[]> {
   try {
     const files = await readdir(dir);
     const mdFiles = files.filter((f) => f.endsWith(".md"));
@@ -119,6 +101,13 @@ export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
   } catch {
     return [];
   }
+}
+
+export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
+  const results = await Promise.all(
+    SEVERITY_SUBDIRS.map((sub) => loadMdFilesFromDir(join(dir, sub)))
+  );
+  return results.flat();
 }
 
 export async function loadAllPrinciples(

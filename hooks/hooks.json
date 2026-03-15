@@ -1,5 +1,5 @@
 {
-  "description": "Canon principle enforcement hooks — skill reinforcement on every prompt, pre-commit principle checking, post-write principle advisory, and learn nudge after accumulated reviews",
+  "description": "Canon hooks — skill activation on every prompt, pre-commit secrets detection, and learn nudge after accumulated reviews",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -24,26 +24,6 @@
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-write-check.sh",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-write-check.sh",
-            "timeout": 10
-          }
-        ]
-      },
       {
         "matcher": "Bash",
         "hooks": [
