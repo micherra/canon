@@ -1,5 +1,5 @@
 import { readFile, appendFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { dirname, join } from "path";
 import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
 
 
@@ -29,7 +29,7 @@ async function readJsonl<T>(filePath: string): Promise<T[]> {
 }
 
 async function appendJsonl<T>(filePath: string, entry: T): Promise<void> {
-  const dir = filePath.substring(0, filePath.lastIndexOf("/"));
+  const dir = dirname(filePath);
   await mkdir(dir, { recursive: true });
   await appendFile(filePath, JSON.stringify(entry) + "\n", "utf-8");
 }
