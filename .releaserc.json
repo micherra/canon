@@ -3,29 +3,6 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    [
-      "@semantic-release/changelog",
-      {
-        "changelogFile": "CHANGELOG.md"
-      }
-    ],
-    [
-      "@semantic-release/exec",
-      {
-        "prepareCmd": "node -e \"const f='.claude-plugin/plugin.json';const p=JSON.parse(require('fs').readFileSync(f));p.version='${nextRelease.version}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\\n')\" && node -e \"const f='mcp-server/package.json';const p=JSON.parse(require('fs').readFileSync(f));p.version='${nextRelease.version}';require('fs').writeFileSync(f,JSON.stringify(p,null,2)+'\\n')\""
-      }
-    ],
-    [
-      "@semantic-release/git",
-      {
-        "assets": [
-          "CHANGELOG.md",
-          ".claude-plugin/plugin.json",
-          "mcp-server/package.json"
-        ],
-        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
-      }
-    ],
     "@semantic-release/github"
   ]
 }
