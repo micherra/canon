@@ -146,7 +146,7 @@ Canon includes 6 automation hooks:
 - **Large file guard** — Warns before writing or editing files that exceed a line threshold (default 500, configurable via `max_file_lines` in `.canon/config.json`)
 - **Compaction check** — Warns when `.jsonl` data files or `CONVENTIONS.md` grow past thresholds
 - **Learn nudge** — Suggests `/canon:learn` after 10+ reviews accumulate
-- **Skill activation** — Ensures Canon loads before code generation tasks
+- **Principle loading** — Ensures Canon principles are loaded before code generation tasks
 
 ## Project Structure
 

@@ -53,7 +53,7 @@ Check if `CLAUDE.md` exists in the project root. If it does, check whether it al
 
 ## Canon Engineering Principles
 
-This project uses Canon for engineering principles. Before writing or modifying code, activate the canon skill to load relevant principles. Principles are in `.canon/principles/`. Run `/canon:list` to browse them.
+This project uses Canon for engineering principles. Before writing or modifying code, load relevant principles via the `get_principles` MCP tool. Principles are in `.canon/principles/`. Run `/canon:list` to browse them.
 ```
 
 If `CLAUDE.md` doesn't exist, create it with just the Canon section above.
