@@ -185,7 +185,7 @@ If built-in (lives in plugin directory, not `.canon/`), warn:
 
 ### Step 2: Determine changes
 
-If specific flags were passed (e.g. `--severity strong-opinion`, `--add-tag testing`), apply directly. Otherwise ask what to modify:
+If specific flags were passed (e.g. `--severity strong-opinion`, `--add-tag testing`, `--archive`, `--unarchive`), apply directly. Otherwise ask what to modify:
 
 1. **Severity** — "Change enforcement level? Currently: `{severity}`"
 2. **Scope (layers)** — "Change architectural layers? Currently: `{layers}`"
@@ -193,6 +193,11 @@ If specific flags were passed (e.g. `--severity strong-opinion`, `--add-tag test
 4. **Tags** — "Add or remove tags? Currently: `{tags}`"
 5. **Title** — "Change the title? Currently: `{title}`"
 6. **Body** — "Edit the rationale, examples, or exceptions?"
+7. **Archive** — "Archive or unarchive? Currently: `{archived}`"
+
+**`--archive`**: Set `archived: true` in frontmatter. The principle stays on disk but is skipped by the matcher — it won't appear in reviews, get_principles, or review_code results. Confirm: "Archived `{id}` — it will no longer be loaded during reviews. Use `--unarchive` to re-enable."
+
+**`--unarchive`**: Remove or set `archived: false` in frontmatter. Confirm: "Unarchived `{id}` — it will be active in reviews again."
 
 Multiple changes are fine in one session.
 
