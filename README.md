@@ -138,8 +138,8 @@ Canon uses 10 specialist agents, each with a focused role:
 Canon includes 5 automation hooks:
 
 - **Pre-commit secrets check** — Blocks commits containing hardcoded secrets (API keys, private keys, connection strings)
+- **Pre-push review guard** — Warns before pushing if no Canon review covers the unpushed commits
 - **Large file guard** — Warns before writing or editing files that exceed a line threshold (default 500, configurable via `max_file_lines` in `.canon/config.json`)
-- **Post-commit review reminder** — Nudges you to run `/canon:review` after committing if no recent review was logged
 - **Learn nudge** — Suggests `/canon:learn` after 10+ reviews accumulate
 - **Skill activation** — Ensures Canon loads before code generation tasks
 
