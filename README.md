@@ -119,7 +119,7 @@ Canon exposes 5 tools via its MCP server for agents to use during normal work:
 
 ## Agents
 
-Canon uses 11 specialist agents, each with a focused role:
+Canon uses 9 specialist agents, each with a focused role:
 
 | Agent | Role |
 |-------|------|
@@ -131,9 +131,7 @@ Canon uses 11 specialist agents, each with a focused role:
 | `canon-reviewer` | Two-stage review: compliance + code quality |
 | `canon-refactorer` | Fix violations and improve code |
 | `canon-learner` | Analyze patterns and suggest principle refinements |
-| `canon-principle-writer` | Author new principles via guided interview |
-| `canon-agent-rule-writer` | Author new agent-rules via guided interview |
-| `canon-principle-editor` | Edit existing principles — change severity, scope, or body |
+| `canon-writer` | Create and edit principles, conventions, and agent-rules |
 
 ## Hooks
 
@@ -154,7 +152,7 @@ canon/
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
 ├── commands/canon/      15 slash commands
-├── agents/              11 specialist agents
+├── agents/              9 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
 ├── hooks/               5 automation hooks
 ├── mcp-server/          TypeScript MCP server (5 tools)

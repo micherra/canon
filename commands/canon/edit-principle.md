@@ -4,25 +4,25 @@ argument-hint: <principle-id> [--severity rule|strong-opinion|convention] [--add
 allowed-tools: [Read, Write, Edit, Bash, Glob, Agent]
 ---
 
-Edit an existing Canon principle or agent-rule using the canon-principle-editor agent. The agent will load the current state, walk through changes, check for conflicts, and save the result.
+Edit an existing Canon principle or agent-rule using the canon-writer agent in **edit** mode.
 
 ## Instructions
 
-### Step 1: Spawn the principle editor
+### Step 1: Spawn the writer
 
-Launch the canon-principle-editor agent with the principle ID from ${ARGUMENTS}:
+Launch the canon-writer agent:
 
-"The user wants to edit a Canon principle or agent-rule: ${ARGUMENTS}"
+"Mode: edit. The user wants to edit a Canon principle or agent-rule: ${ARGUMENTS}"
 
-If no arguments, ask the user which principle they want to edit. Suggest running `/canon:list` to browse available principles.
+If no arguments, ask the user which principle they want to edit. Suggest running `/canon:list` to browse available entries.
 
 ### Step 2: Let the agent work
 
-The canon-principle-editor will:
-1. Load and display the current principle
+The canon-writer will:
+1. Load and display the current entry
 2. Ask what the user wants to change (or apply flags directly)
 3. Handle severity changes including file moves
-4. Check for conflicts with other principles
+4. Check for conflicts with other entries
 5. Save the updated file
 6. Validate the result
 
