@@ -67,6 +67,7 @@ When you write code, Canon automatically loads principles matched to your file's
 | `/canon:conventions` | View and manage project conventions |
 | `/canon:adopt` | Scan for coverage gaps and produce a remediation plan |
 | `/canon:new-principle` | Author a new principle via guided interview |
+| `/canon:new-agent-rule` | Author a new agent-rule via guided interview |
 | `/canon:security` | Standalone security scan |
 
 ## The Build Pipeline
@@ -117,7 +118,7 @@ Canon exposes 5 tools via its MCP server for agents to use during normal work:
 
 ## Agents
 
-Canon uses 9 specialist agents, each with a focused role:
+Canon uses 10 specialist agents, each with a focused role:
 
 | Agent | Role |
 |-------|------|
@@ -130,6 +131,7 @@ Canon uses 9 specialist agents, each with a focused role:
 | `canon-refactorer` | Fix violations and improve code |
 | `canon-learner` | Analyze patterns and suggest principle refinements |
 | `canon-principle-writer` | Author new principles via guided interview |
+| `canon-agent-rule-writer` | Author new agent-rules via guided interview |
 
 ## Hooks
 
@@ -147,8 +149,8 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/canon/      13 slash commands
-├── agents/              9 specialist agents
+├── commands/canon/      14 slash commands
+├── agents/              10 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
 ├── hooks/               3 automation hooks
 ├── mcp-server/          TypeScript MCP server (5 tools)
@@ -212,13 +214,17 @@ When you edit a file, Canon infers its architectural layer from the path and sel
 Place your file in the appropriate directory under `.canon/` (for project-local) or contribute directly to the Canon plugin:
 
 ```
-.canon/principles/
-├── rules/              # Hard constraints — block commits
-├── strong-opinions/    # Default path — warn on deviation
-└── conventions/        # Stylistic preferences — tracked for drift
+.canon/
+├── principles/
+│   ├── rules/              # Hard constraints — block commits
+│   ├── strong-opinions/    # Default path — warn on deviation
+│   └── conventions/        # Stylistic preferences — tracked for drift
+└── agent-rules/            # Behavioral constraints for Canon agents
 ```
 
-Run `/canon:new-principle` for a guided walkthrough, or create the markdown file directly.
+Use the guided commands or create files directly:
+- `/canon:new-principle` — walks you through authoring a new principle
+- `/canon:new-agent-rule` — walks you through authoring a new agent-rule
 
 ## Data Files
 
