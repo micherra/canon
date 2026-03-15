@@ -55,7 +55,7 @@ If fewer than 10 reviews exist, show all of them. If no reviews exist, show "No 
 Below the table, show a trend summary:
 - "Last 10 reviews: N CLEAN, N WARNING, N BLOCKING"
 - If all recent reviews are CLEAN: "All clear — principles are holding."
-- If BLOCKING count > 0: "N blocking reviews — run `/canon:drift` for details."
+- If BLOCKING count > 0: "N blocking reviews — run `/canon:learn --drift` for recommendations."
 
 ### Drift Data
 Reviews: N (last: YYYY-MM-DD or "none")

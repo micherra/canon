@@ -59,10 +59,8 @@ When you write code, Canon automatically loads principles matched to your file's
 | `/canon:build` | Full pipeline: research → architect & plan → implement → test → security → review |
 | `/canon:review` | Review code changes against principles |
 | `/canon:status` | Health dashboard — principle counts, review scorecard, actionable suggestions |
-| `/canon:drift` | Compliance trends and analytics from review history |
 | `/canon:learn` | Analyze data to suggest principle and convention improvements |
 | `/canon:list` | Browse and filter principles |
-| `/canon:check` | Quick inline principle check for a file |
 | `/canon:explain` | Deep-dive on a principle with real codebase examples |
 | `/canon:adopt` | Scan for coverage gaps and produce a remediation plan |
 | `/canon:new-principle` | Author a new principle via guided interview |
@@ -150,7 +148,7 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/canon/      14 slash commands
+├── commands/canon/      12 slash commands
 ├── agents/              9 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
 ├── hooks/               5 automation hooks

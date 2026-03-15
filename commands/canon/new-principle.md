@@ -32,4 +32,4 @@ After the agent completes, confirm to the user:
 - The principle file was created at `.canon/principles/{severity-subdir}/{id}.md`
 - Show the principle's id, title, and severity
 - Suggest running `/canon:list` to see it in the index
-- Note that compliance will be tracked automatically: "This principle will be evaluated during code reviews (`/canon:review`, `/canon:build`) and tracked in drift reports (`/canon:drift`). Run `/canon:learn --drift` after 10+ reviews to see data-driven severity recommendations."
+- Note that compliance will be tracked automatically: "This principle will be evaluated during code reviews (`/canon:review`, `/canon:build`). Run `/canon:learn --drift` after 10+ reviews to see data-driven severity recommendations."
