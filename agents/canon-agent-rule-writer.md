@@ -99,13 +99,27 @@ Produce the complete agent-rule file with:
 
 Generate a kebab-case `id` from the title, prefixed with `agent-`.
 
-### Step 5: Save the file
+### Step 5: Check for conflicts
+
+Before saving, load all existing agent-rules from `.canon/agent-rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/agent-rules/*.md`, plus principles from `.canon/principles/**/*.md` and `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`. Check for:
+
+1. **ID collision**: Does another agent-rule already use this `id`? If so, warn that saving will override it.
+
+2. **Contradictory rules for the same agent**: Find agent-rules that target the same agent (matching tags). Read their titles and first paragraphs. If any appear to give contradictory guidance, flag them:
+   "This agent-rule may conflict with `{other-id}` ({other-title}) — both target the `{agent}` agent. Please review them together."
+
+3. **Duplicate coverage**: If another agent-rule has very similar tags and scope, flag it as a potential duplicate:
+   "This looks similar to `{other-id}` ({other-title}). Consider extending that rule instead of creating a new one."
+
+Present any findings to the user and ask whether to proceed, adjust, or cancel.
+
+### Step 6: Save the file
 
 Save to `${CLAUDE_PLUGIN_ROOT}/agent-rules/{id}.md`. Create the directory if it doesn't exist.
 
 For project-local agent-rules, save to `.canon/agent-rules/{id}.md` instead (ask the user which location they prefer).
 
-### Step 6: Validate
+### Step 7: Validate
 
 Re-read the saved file and verify:
 - The YAML frontmatter parses correctly (id, title, severity, scope, tags all present)
@@ -114,7 +128,7 @@ Re-read the saved file and verify:
 - The severity is one of: `rule`, `strong-opinion`, `convention`
 - The body has the required sections (summary paragraph, `## Rationale`, `## Examples`)
 
-### Step 7: Offer to test
+### Step 8: Offer to test
 
 Ask the user: "Want me to test this? I can run a build or review and verify the agent respects this rule."
 

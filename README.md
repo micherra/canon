@@ -55,10 +55,10 @@ When you write code, Canon automatically loads principles matched to your file's
 
 | Command | What it does |
 |---------|-------------|
-| `/canon:init` | Set up Canon in your project |
+| `/canon:init` | Set up Canon in your project — auto-detects codebase conventions |
 | `/canon:build` | Full pipeline: research → architect & plan → implement → test → security → review |
 | `/canon:review` | Review code changes against principles |
-| `/canon:status` | Health dashboard — principle counts, review stats, actionable suggestions |
+| `/canon:status` | Health dashboard — principle counts, review scorecard, actionable suggestions |
 | `/canon:drift` | Compliance trends and analytics from review history |
 | `/canon:learn` | Analyze data to suggest principle and convention improvements |
 | `/canon:list` | Browse and filter principles |
@@ -68,6 +68,7 @@ When you write code, Canon automatically loads principles matched to your file's
 | `/canon:adopt` | Scan for coverage gaps and produce a remediation plan |
 | `/canon:new-principle` | Author a new principle via guided interview |
 | `/canon:new-agent-rule` | Author a new agent-rule via guided interview |
+| `/canon:edit-principle` | Edit an existing principle — change severity, scope, tags, or body |
 | `/canon:security` | Standalone security scan |
 
 ## The Build Pipeline
@@ -118,7 +119,7 @@ Canon exposes 5 tools via its MCP server for agents to use during normal work:
 
 ## Agents
 
-Canon uses 10 specialist agents, each with a focused role:
+Canon uses 11 specialist agents, each with a focused role:
 
 | Agent | Role |
 |-------|------|
@@ -132,6 +133,7 @@ Canon uses 10 specialist agents, each with a focused role:
 | `canon-learner` | Analyze patterns and suggest principle refinements |
 | `canon-principle-writer` | Author new principles via guided interview |
 | `canon-agent-rule-writer` | Author new agent-rules via guided interview |
+| `canon-principle-editor` | Edit existing principles — change severity, scope, or body |
 
 ## Hooks
 
@@ -151,8 +153,8 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/canon/      14 slash commands
-├── agents/              10 specialist agents
+├── commands/canon/      15 slash commands
+├── agents/              11 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
 ├── hooks/               5 automation hooks
 ├── mcp-server/          TypeScript MCP server (5 tools)

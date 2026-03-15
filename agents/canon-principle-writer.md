@@ -87,18 +87,34 @@ Produce the complete principle file with:
 
 Generate a kebab-case `id` from the title.
 
-### Step 5: Save the file
+### Step 5: Check for conflicts
+
+Before saving, load all existing principles from `.canon/principles/**/*.md` and `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`, plus agent-rules from `.canon/agent-rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/agent-rules/*.md`. Check for:
+
+1. **ID collision**: Does another principle already use this `id`? If so, warn that saving will override it.
+
+2. **Scope overlap with contradictory advice**: Find principles with overlapping `scope.layers` or `scope.file_patterns`. Read their titles and first paragraphs. If any appear to give contradictory guidance on the same topic, flag them:
+   "This principle may conflict with `{other-id}` ({other-title}) — both apply to `{overlapping scope}`. Please review them together."
+
+3. **Duplicate coverage**: If another principle has the same tags AND very similar scope, flag it as a potential duplicate:
+   "This looks similar to `{other-id}` ({other-title}). Consider extending that principle instead of creating a new one."
+
+4. **Severity inconsistency**: If a `convention`-severity principle overlaps in scope with a `rule`-severity principle on a related topic, flag the gap — the user may want to align severities.
+
+Present any findings to the user and ask whether to proceed, adjust, or cancel.
+
+### Step 6: Save the file
 
 Save to `.canon/principles/{severity-subdir}/{id}.md` in the user's project, where `severity-subdir` is `rules/`, `strong-opinions/`, or `conventions/` based on the principle's severity. Create the directory if it doesn't exist.
 
-### Step 6: Validate
+### Step 7: Validate
 
 Re-read the saved file and verify:
 - The YAML frontmatter parses correctly (id, title, severity, scope, tags all present)
 - The severity is one of: `rule`, `strong-opinion`, `convention`
 - The body has the required sections (summary paragraph, `## Rationale`, `## Examples`)
 
-### Step 7: Offer to test
+### Step 8: Offer to test
 
 Ask the user: "Want me to test this? I can generate code that violates it and verify the review agent catches the violation."
 

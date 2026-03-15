@@ -58,9 +58,57 @@ This project uses Canon for engineering principles. Before writing or modifying 
 
 If `CLAUDE.md` doesn't exist, create it with just the Canon section above.
 
-### Step 5: Generate starter project conventions
+### Step 5: Auto-detect project conventions
 
-Create `.canon/CONVENTIONS.md` with a starter template:
+Scan the existing codebase to infer conventions and pre-populate `.canon/CONVENTIONS.md`. This gives new projects a useful starting point instead of a blank template.
+
+#### 5a: Detect language and framework
+
+Look for telltale files to identify the stack:
+- `package.json` → Node.js (check for React, Next.js, Express, etc. in dependencies)
+- `requirements.txt` / `pyproject.toml` / `setup.py` → Python (check for Django, Flask, FastAPI, etc.)
+- `go.mod` → Go
+- `Cargo.toml` → Rust
+- `*.csproj` / `*.sln` → .NET
+- `Gemfile` → Ruby
+
+#### 5b: Scan for naming patterns
+
+Sample 10-20 source files across the project and detect:
+- **Naming convention**: camelCase vs snake_case vs PascalCase for functions/variables
+- **File naming**: kebab-case vs camelCase vs PascalCase for filenames
+- **Export style**: default exports vs named exports (JS/TS)
+
+#### 5c: Scan for structural patterns
+
+Look for recurring patterns:
+- **Error handling**: Do files use try/catch, Result types, error codes, or `.catch()`?
+- **Testing framework**: Jest, Vitest, pytest, Go testing, etc. (check devDependencies or test files)
+- **Import style**: Relative vs absolute imports, barrel files (index.ts re-exports)
+- **Validation**: Zod, Joi, class-validator, Pydantic, etc.
+- **ORM/data layer**: Prisma, Drizzle, SQLAlchemy, GORM, etc.
+- **API style**: REST routes, GraphQL, tRPC, gRPC
+
+#### 5d: Write CONVENTIONS.md
+
+Create `.canon/CONVENTIONS.md` with detected conventions:
+
+```markdown
+## Project Conventions
+
+> Project-specific patterns and decisions. Auto-detected by `/canon:init` and refined as the project evolves.
+> Implementor agents read this file alongside Canon principles.
+
+{detected conventions as bullets, e.g.:}
+- **Naming**: camelCase for functions and variables, PascalCase for types and components
+- **File naming**: kebab-case for files and directories
+- **Error handling**: try/catch with custom error classes
+- **Testing**: Vitest with inline test data
+- **Validation**: Zod schemas at API boundaries
+- **Data layer**: Prisma ORM with repository pattern
+```
+
+If no conventions could be detected (empty project or unrecognizable stack), fall back to the blank template:
 
 ```markdown
 ## Project Conventions
