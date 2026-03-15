@@ -155,8 +155,11 @@ canon/
 │   └── src/
 │       ├── index.ts     Server + tool registration
 │       ├── matcher.ts   Principle matching logic
+│       ├── parser.ts    Principle parsing and frontmatter extraction
+│       ├── schema.ts    Zod input validation schemas
 │       ├── tools/       Individual tool implementations
-│       └── drift/       Store, analyzer, reporter
+│       ├── drift/       Store, analyzer, reporter
+│       └── __tests__/   Tests
 └── skills/canon/        Skill definition + references
 ```
 
