@@ -73,14 +73,28 @@ if [[ -z "$OLDEST_UNPUSHED_TS" ]]; then
 fi
 
 # Convert timestamps to epoch for comparison — handle both GNU and BSD date
+# Input: ISO-8601 like 2026-03-15T10:30:00Z, 2026-03-15T10:30:00.123Z,
+#         2026-03-15T10:30:00+05:00, 2026-03-15T10:30:00.123+05:00
 to_epoch() {
   local ts="$1"
+  # GNU date handles ISO-8601 natively
   if date -d "$ts" +%s >/dev/null 2>&1; then
     date -d "$ts" +%s
-  elif date -jf "%Y-%m-%dT%H:%M:%S" "${ts%%[.+-]*}" +%s >/dev/null 2>&1; then
-    date -jf "%Y-%m-%dT%H:%M:%S" "${ts%%[.+-]*}" +%s
   else
-    echo "0"
+    # BSD date (macOS): strip fractional seconds and timezone suffix,
+    # keeping YYYY-MM-DDTHH:MM:SS intact.
+    # Remove trailing Z
+    local clean="${ts%Z}"
+    # Remove fractional seconds (.123, .123456, etc.)
+    clean=$(echo "$clean" | sed 's/\.[0-9]*//')
+    # Remove timezone offset (+HH:MM or -HH:MM) at the end — but only
+    # a trailing offset (5 chars from end: ±HH:MM), not date hyphens.
+    clean=$(echo "$clean" | sed 's/[+-][0-9][0-9]:[0-9][0-9]$//')
+    if date -jf "%Y-%m-%dT%H:%M:%S" "$clean" +%s >/dev/null 2>&1; then
+      date -jf "%Y-%m-%dT%H:%M:%S" "$clean" +%s
+    else
+      echo "0"
+    fi
   fi
 }
 
