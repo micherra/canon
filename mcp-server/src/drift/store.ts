@@ -1,4 +1,4 @@
-import { readFile, writeFile, appendFile, mkdir, rename } from "fs/promises";
+import { readFile, writeFile, appendFile, mkdir } from "fs/promises";
 import { dirname, join } from "path";
 import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
 
