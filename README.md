@@ -66,6 +66,8 @@ When you write code, Canon automatically loads principles matched to your file's
 | `/canon:new-principle` | Author a new principle via guided interview |
 | `/canon:new-agent-rule` | Author a new agent-rule via guided interview |
 | `/canon:edit-principle` | Edit an existing principle — change severity, scope, tags, or body |
+| `/canon:test-principle` | Verify a principle is detected during review by generating a violation |
+| `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
 | `/canon:security` | Standalone security scan |
 
 ## The Build Pipeline
@@ -148,7 +150,7 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/canon/      12 slash commands
+├── commands/canon/      14 slash commands
 ├── agents/              9 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
 ├── hooks/               5 automation hooks
