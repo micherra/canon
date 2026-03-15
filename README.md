@@ -156,7 +156,7 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/canon/      15 slash commands
+├── commands/            15 slash commands
 ├── agents/              9 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
 ├── hooks/               6 automation hooks
