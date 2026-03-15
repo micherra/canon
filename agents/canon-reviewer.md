@@ -70,7 +70,7 @@ git diff --cached  # For staged changes
 
 If the orchestrator already provided matched principles in your prompt context, use those directly — do NOT re-load them. This avoids redundant file I/O since the orchestrator already called `get_principles` or `review_code`.
 
-Only if principles were NOT provided: use the `review_code` MCP tool with the file path to get matched principles. Avoid globbing principle files directly when the MCP tool is available.
+Only if principles were NOT provided: use the `get_principles` MCP tool with the file path to get matched principles. Avoid globbing principle files directly when the MCP tool is available.
 
 Cap at max 10 principles, prioritized: rules > strong-opinions > conventions.
 

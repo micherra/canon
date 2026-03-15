@@ -13,19 +13,28 @@ Review code changes against Canon engineering principles using the canon-reviewe
 
 Parse ${ARGUMENTS} to determine what to review:
 
-- **No arguments** or `--staged`: Review staged changes (`git diff --cached`)
-- **`HEAD~N`**: Review last N commits (`git diff HEAD~N`)
-- **`main..HEAD`** or `branch..HEAD`: Review branch diff
-- **File path(s)**: Review specific files (read them directly)
+- **Explicit argument provided** — use it directly:
+  - `--staged`: Review staged changes (`git diff --cached`)
+  - `HEAD~N`: Review last N commits (`git diff HEAD~N`)
+  - `main..HEAD` or `branch..HEAD`: Review branch diff
+  - File path(s): Review specific files (read them directly)
 
-Get the diff:
+- **No arguments** — detect what's available and ask the user:
+  1. Run `git diff --cached --stat` and `git diff --stat` to check for staged and unstaged changes
+  2. Based on what exists, ask the user to pick:
+     - **Staged changes** (if any staged files exist)
+     - **Working changes** (unstaged modifications)
+     - **All uncommitted changes** (staged + unstaged combined via `git diff HEAD`)
+     - **Branch diff vs main** (if on a non-main branch)
+  3. Only show options that actually have changes. If nothing has changed anywhere, tell the user there are no changes to review.
+
+Get the diff using the appropriate command for the chosen scope:
 ```bash
-git diff --cached                    # staged
-git diff HEAD~3                      # last 3 commits
+git diff --cached                    # staged only
+git diff                             # unstaged only
+git diff HEAD                        # all uncommitted (staged + unstaged)
 git diff main..HEAD                  # branch diff
 ```
-
-If the diff is empty, tell the user there are no changes to review.
 
 ### Step 2: Identify affected files
 
@@ -36,7 +45,7 @@ git diff --cached --name-only        # or appropriate variant
 
 ### Step 3: Pre-load principles
 
-Before spawning the reviewer, call the `review_code` MCP tool for each affected file to get matched principles. Deduplicate by principle ID. This avoids the reviewer redundantly re-loading principles from disk.
+Before spawning the reviewer, call the `get_principles` MCP tool with each affected file path to get matched principles. Deduplicate by principle ID. This avoids the reviewer redundantly re-loading principles from disk.
 
 ### Step 4: Spawn the canon-reviewer agent
 

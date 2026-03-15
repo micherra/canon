@@ -2,6 +2,7 @@
 description: Scan codebase for principle coverage and produce a prioritized remediation plan
 argument-hint: [directory] [--top N] [--severity rule|strong-opinion|convention] [--fix]
 allowed-tools: [Read, Glob, Grep, Agent]
+model: sonnet
 ---
 
 Scan a directory for Canon principle applicability across all source files. Identifies which principles apply most broadly, finds hotspot directories, and produces a prioritized remediation plan. Optionally spawns canon-refactorer on the top violations.

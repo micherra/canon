@@ -2,6 +2,7 @@
 description: Security scan using Canon principles
 argument-hint: [file-path | --staged | --full]
 allowed-tools: [Read, Glob, Grep, Bash, Agent]
+model: sonnet
 ---
 
 Standalone security scan using the canon-security agent. Can be run independently outside the build workflow.

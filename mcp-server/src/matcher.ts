@@ -123,21 +123,32 @@ export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
 }
 
 // --- Principle cache: avoids re-reading all principle files on every tool call ---
-// Invalidated when any principle directory's mtime changes.
+// Invalidated when any .md file's mtime changes (or files are added/removed).
 
 interface PrincipleCache {
   principles: Principle[];
-  mtimeKey: string; // concatenated dir mtimes for invalidation
+  mtimeKey: string; // concatenated file mtimes for invalidation
 }
 
 let principleCache: PrincipleCache | null = null;
 
-async function getDirMtime(dir: string): Promise<number> {
+async function getFileMtimes(dir: string): Promise<string[]> {
   try {
-    const s = await stat(dir);
-    return s.mtimeMs;
+    const files = await readdir(dir);
+    const mdFiles = files.filter((f) => f.endsWith(".md")).sort();
+    const stats = await Promise.all(
+      mdFiles.map(async (f) => {
+        try {
+          const s = await stat(join(dir, f));
+          return `${f}:${s.mtimeMs}`;
+        } catch {
+          return `${f}:0`;
+        }
+      })
+    );
+    return stats;
   } catch {
-    return 0;
+    return [];
   }
 }
 
@@ -146,8 +157,8 @@ async function computeMtimeKey(projectDir: string, pluginDir: string): Promise<s
     join(projectDir, ".canon", "principles", sub),
     join(pluginDir, "principles", sub),
   ]);
-  const mtimes = await Promise.all(dirs.map(getDirMtime));
-  return mtimes.join(",");
+  const allMtimes = await Promise.all(dirs.map(getFileMtimes));
+  return allMtimes.flat().join(",");
 }
 
 export async function loadAllPrinciples(

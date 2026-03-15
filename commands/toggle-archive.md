@@ -2,6 +2,7 @@
 description: Archive or unarchive a Canon principle or agent-rule
 argument-hint: <principle-id>
 allowed-tools: [Read, Edit, Glob]
+model: haiku
 ---
 
 Toggle the `archived` flag on a Canon principle or agent-rule. Archived entries stay on disk but are skipped by the matcher — they won't appear in reviews, `get_principles`, or `review_code` results.

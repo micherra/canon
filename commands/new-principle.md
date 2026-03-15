@@ -2,6 +2,7 @@
 description: Author a new Canon engineering principle interactively
 argument-hint: [principle description or topic]
 allowed-tools: [Read, Write, Bash, Glob, Agent]
+model: sonnet
 ---
 
 Create a new Canon engineering principle using the canon-writer agent in **new-principle** mode.

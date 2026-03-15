@@ -1,16 +1,6 @@
 {
-  "description": "Canon hooks — conditional principle loading on prompt, pre-commit secrets detection, pre-push review guard, large file guard, learn nudge, and compaction check",
+  "description": "Canon hooks — pre-commit secrets detection, pre-push review guard, large file guard, learn nudge, and compaction check",
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "[Canon] If you are about to write or modify code and have NOT yet loaded Canon principles for the current task, load them via get_principles. If principles are already loaded for this task, or the user is just asking a question / requesting a review / continuing a conversation, skip principle loading and proceed directly. Do NOT load principles redundantly — avoid unnecessary API calls."
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

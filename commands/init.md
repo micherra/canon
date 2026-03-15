@@ -2,6 +2,7 @@
 description: Initialize Canon principles in your project
 argument-hint: [--starter|--empty]
 allowed-tools: [Bash, Read, Write, Glob, Edit]
+model: haiku
 ---
 
 Initialize Canon engineering principles in the current project. This sets up the `.canon/principles/` directory and integrates with CLAUDE.md.

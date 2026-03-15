@@ -25,7 +25,7 @@ export async function getCompliance(
 ): Promise<GetComplianceOutput> {
   const store = new DriftStore(projectDir);
 
-  // Load principles (cached) and filter JSONL reads to this principle only
+  // Load principles (cached) and filter parsed JSONL entries to this principle only
   const [reviews, decisions, principles] = await Promise.all([
     store.getReviews(input.principle_id),
     store.getDecisions(input.principle_id),

@@ -2,6 +2,7 @@
 description: Quick health dashboard for Canon in the current project
 argument-hint:
 allowed-tools: [Bash, Read, Glob, Grep]
+model: haiku
 ---
 
 Show a one-glance overview of Canon's state in the current project.
