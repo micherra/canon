@@ -64,7 +64,6 @@ When you write code, Canon automatically loads principles matched to your file's
 | `/canon:list` | Browse and filter principles |
 | `/canon:check` | Quick inline principle check for a file |
 | `/canon:explain` | Deep-dive on a principle with real codebase examples |
-| `/canon:conventions` | View and manage project conventions |
 | `/canon:adopt` | Scan for coverage gaps and produce a remediation plan |
 | `/canon:new-principle` | Author a new principle via guided interview |
 | `/canon:new-agent-rule` | Author a new agent-rule via guided interview |
@@ -151,7 +150,7 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/canon/      15 slash commands
+├── commands/canon/      14 slash commands
 ├── agents/              9 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
 ├── hooks/               5 automation hooks
@@ -235,7 +234,7 @@ All Canon data lives in `.canon/` in your project root:
 | File | Purpose | Written by |
 |------|---------|-----------|
 | `principles/{rules,strong-opinions,conventions}/*.md` | Principle definitions | `/canon:init`, `/canon:new-principle` |
-| `CONVENTIONS.md` | Project conventions | `/canon:conventions`, `/canon:learn --apply` |
+| `CONVENTIONS.md` | Project conventions | `/canon:init` (auto-detected), `/canon:learn --apply`, or edit directly |
 | `config.json` | Project configuration | `/canon:init` |
 | `reviews.jsonl` | Review results | `report` MCP tool (type=review) |
 | `decisions.jsonl` | Intentional deviations | `report` MCP tool (type=decision) |

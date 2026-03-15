@@ -122,7 +122,7 @@ If no conventions could be detected (empty project or unrecognizable stack), fal
 <!-- - **Testing**: Vitest with inline test data -->
 ```
 
-This file is the persistent, project-level conventions layer. It gets read by implementor and refactorer agents. Update it with `/canon:conventions --add "..."` as patterns emerge.
+This file is the persistent, project-level conventions layer. It gets read by implementor and refactorer agents. Edit `.canon/CONVENTIONS.md` directly as patterns emerge.
 
 ### Step 6: Report what was done
 
@@ -132,6 +132,6 @@ Tell the user:
 - That CLAUDE.md was updated/created
 - Suggest running `/canon:status` to verify the setup
 - Suggest running `/canon:list` to browse the principles
-- Suggest running `/canon:conventions --add "..."` to add project conventions
+- Suggest editing `.canon/CONVENTIONS.md` directly to add project conventions
 - Suggest running `/canon:learn` after accumulating 10+ reviews to discover patterns and refine principles
 - Suggest adding `.canon/` to git tracking if not already tracked

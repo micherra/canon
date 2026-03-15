@@ -84,8 +84,8 @@ If `--apply` was NOT passed, show action hints after the report:
 **To act on suggestions interactively:** `/canon:learn --apply`
 
 **Manual actions:**
-- Add a convention: `/canon:conventions --add "..."`
-- Edit a principle's severity: Find and edit `.canon/principles/{rules,strong-opinions,conventions}/{id}.md` frontmatter
+- Add a convention: Edit `.canon/CONVENTIONS.md` directly
+- Edit a principle's severity: `/canon:edit-principle {id} --severity {level}`
 - Create a new principle: `/canon:new-principle {topic}`
 - Log a decision: Use the `report` MCP tool (type=decision)
 
@@ -114,8 +114,8 @@ Execute the suggestion:
 
 | Suggestion type | Action |
 |----------------|--------|
-| New convention | Run the equivalent of `/canon:conventions --add "{text}"` — append to `.canon/CONVENTIONS.md` |
-| Severity promotion/demotion | Edit the principle's YAML frontmatter `severity:` field in `.canon/principles/{rules,strong-opinions,conventions}/{id}.md` and move to the appropriate subdirectory |
+| New convention | Append to `.canon/CONVENTIONS.md` |
+| Severity promotion/demotion | Run `/canon:edit-principle {id} --severity {level}` or edit the principle's YAML frontmatter and move to the appropriate subdirectory |
 | Task convention promotion | Append to `.canon/CONVENTIONS.md` |
 | Principle revision (add exception) | Read the principle file, append an exception to its Exceptions section |
 | Convention graduation | Tell the user to run `/canon:new-principle {topic}` — this requires interactive authoring, don't attempt inline |
