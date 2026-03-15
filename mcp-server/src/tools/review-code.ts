@@ -51,9 +51,12 @@ export async function reviewCode(
   });
 
   // Cap matched principles to prevent unbounded context consumption.
-  // Rules are always included (safety-critical), then fill remaining budget
-  // with strong-opinions and conventions. Already sorted by severity.
-  const capped = matched.slice(0, maxReviewPrinciples);
+  // Rules are always included (safety-critical — they block commits),
+  // then fill remaining budget with strong-opinions and conventions.
+  const rules = matched.filter((p) => p.severity === "rule");
+  const nonRules = matched.filter((p) => p.severity !== "rule");
+  const budgetForNonRules = Math.max(0, maxReviewPrinciples - rules.length);
+  const capped = [...rules, ...nonRules.slice(0, budgetForNonRules)];
 
   const principlesToEvaluate: PrincipleForReview[] = capped.map((p) => ({
     principle_id: p.id,
@@ -62,12 +65,13 @@ export async function reviewCode(
     body: p.body,
   }));
 
-  const ruleCount = capped.filter((p) => p.severity === "rule").length;
+  const ruleCount = rules.length;
   const opinionCount = capped.filter((p) => p.severity === "strong-opinion").length;
   const conventionCount = capped.filter((p) => p.severity === "convention").length;
 
-  const truncated = matched.length > maxReviewPrinciples
-    ? ` (${matched.length - maxReviewPrinciples} lower-priority principles omitted)`
+  const omitted = matched.length - capped.length;
+  const truncated = omitted > 0
+    ? ` (${omitted} lower-priority principles omitted)`
     : "";
   const summary = `${capped.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}. Evaluate each against the code below.`;
 
