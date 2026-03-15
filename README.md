@@ -165,17 +165,20 @@ canon/
 
 ## Principles
 
-Each principle is a markdown file with YAML frontmatter:
+Each principle is a markdown file with YAML frontmatter following this format:
 
 ```yaml
 ---
-id: validate-at-trust-boundaries
-title: Validate at Trust Boundaries
-severity: rule
+id: <kebab-case-identifier>
+title: <Human-Readable Title>
+severity: rule | strong-opinion | convention
 scope:
-  layers: [api]
-tags: [security, validation]
+  layers: [api, infra, data, ui, ...]     # architectural layers (optional)
+  file_patterns: ["**/*.tf", "src/**"]     # glob patterns (optional)
+tags: [security, reliability, ...]
 ---
+
+Principle body goes here — rationale, examples, and anti-patterns.
 ```
 
 Principles are matched to your code by architectural layer (inferred from file path) and file patterns. Rules are loaded first, then strong-opinions, then conventions — max 10 per context.
