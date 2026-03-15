@@ -7,7 +7,7 @@ import { getPrinciples } from "./tools/get-principles.js";
 import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
-import { report } from "./tools/report.js";
+import { report, reportInputSchema } from "./tools/report.js";
 
 const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
 const pluginDir = process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname;
@@ -87,67 +87,15 @@ server.tool(
 );
 
 // Tool: report (unified — decisions, patterns, and reviews)
-server.tool(
+server.registerTool(
   "report",
-  "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
   {
-    type: z.enum(["decision", "pattern", "review"]).describe("Type of report"),
-    decision: z
-      .object({
-        principle_id: z.string().describe("ID of the principle being deviated from"),
-        file_path: z.string().describe("Path of the file where the deviation occurs"),
-        justification: z.string().describe("Why the deviation is intentional and justified"),
-        category: z
-          .enum(["performance", "legacy-constraint", "scope-mismatch", "intentional-tradeoff", "external-requirement", "other"])
-          .optional()
-          .describe("Deviation category for clustering"),
-      })
-      .optional()
-      .describe("Required when type=decision"),
-    pattern: z
-      .object({
-        pattern: z.string().describe("Description of the observed pattern"),
-        file_paths: z.array(z.string()).min(1).describe("File paths where the pattern was observed"),
-        context: z.string().optional().describe("Additional context"),
-      })
-      .optional()
-      .describe("Required when type=pattern"),
-    review: z
-      .object({
-        files: z.array(z.string()).describe("File paths that were reviewed"),
-        violations: z
-          .array(
-            z.object({
-              principle_id: z.string(),
-              severity: z.string(),
-            })
-          )
-          .describe("Principle violations found"),
-        honored: z.array(z.string()).describe("IDs of principles honored"),
-        score: z.object({
-          rules: z.object({ passed: z.number(), total: z.number() }),
-          opinions: z.object({ passed: z.number(), total: z.number() }),
-          conventions: z.object({ passed: z.number(), total: z.number() }),
-        }),
-        verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).optional(),
-      })
-      .optional()
-      .describe("Required when type=review"),
+    description:
+      "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
+    inputSchema: reportInputSchema,
   },
   async (input) => {
-    const { type } = input;
-    let reportInput;
-    if (type === "decision") {
-      if (!input.decision) throw new Error("decision field required when type=decision");
-      reportInput = { type: "decision" as const, data: input.decision };
-    } else if (type === "pattern") {
-      if (!input.pattern) throw new Error("pattern field required when type=pattern");
-      reportInput = { type: "pattern" as const, data: input.pattern };
-    } else {
-      if (!input.review) throw new Error("review field required when type=review");
-      reportInput = { type: "review" as const, data: input.review };
-    }
-    const result = await report(reportInput, projectDir);
+    const result = await report(input, projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

@@ -2,51 +2,61 @@ import { DriftStore, DecisionEntry, ReviewEntry } from "../drift/store.js";
 import { appendFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { randomBytes } from "crypto";
+import { z } from "zod";
 
 // --- Decision ---
 
-export interface ReportDecisionData {
-  principle_id: string;
-  file_path: string;
-  justification: string;
-  category?: string;
-}
+const decisionSchema = z.object({
+  type: z.literal("decision"),
+  principle_id: z.string().describe("ID of the principle being deviated from"),
+  file_path: z.string().describe("Path of the file where the deviation occurs"),
+  justification: z.string().describe("Why the deviation is intentional and justified"),
+  category: z
+    .enum(["performance", "legacy-constraint", "scope-mismatch", "intentional-tradeoff", "external-requirement", "other"])
+    .optional()
+    .describe("Deviation category for clustering"),
+});
 
 // --- Pattern ---
 
-export interface ReportPatternData {
-  pattern: string;
-  file_paths: string[];
-  context?: string;
-}
+const patternSchema = z.object({
+  type: z.literal("pattern"),
+  pattern: z.string().describe("Description of the observed pattern"),
+  file_paths: z.array(z.string()).min(1).describe("File paths where the pattern was observed"),
+  context: z.string().optional().describe("Additional context"),
+});
 
 // --- Review ---
 
-export interface ReviewViolationInput {
-  principle_id: string;
-  severity: string;
-}
+const reviewSchema = z.object({
+  type: z.literal("review"),
+  files: z.array(z.string()).describe("File paths that were reviewed"),
+  violations: z
+    .array(
+      z.object({
+        principle_id: z.string(),
+        severity: z.string(),
+      })
+    )
+    .describe("Principle violations found"),
+  honored: z.array(z.string()).describe("IDs of principles honored"),
+  score: z.object({
+    rules: z.object({ passed: z.number(), total: z.number() }),
+    opinions: z.object({ passed: z.number(), total: z.number() }),
+    conventions: z.object({ passed: z.number(), total: z.number() }),
+  }),
+  verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).optional(),
+});
 
-export interface ReviewScoreInput {
-  rules: { passed: number; total: number };
-  opinions: { passed: number; total: number };
-  conventions: { passed: number; total: number };
-}
+// --- Unified input schema & types ---
 
-export interface ReportReviewData {
-  files: string[];
-  violations: ReviewViolationInput[];
-  honored: string[];
-  score: ReviewScoreInput;
-  verdict?: "BLOCKING" | "WARNING" | "CLEAN";
-}
+export const reportInputSchema = z.discriminatedUnion("type", [
+  decisionSchema,
+  patternSchema,
+  reviewSchema,
+]);
 
-// --- Unified input/output ---
-
-export type ReportInput =
-  | { type: "decision"; data: ReportDecisionData }
-  | { type: "pattern"; data: ReportPatternData }
-  | { type: "review"; data: ReportReviewData };
+export type ReportInput = z.infer<typeof reportInputSchema>;
 
 export interface ReportOutput {
   recorded: boolean;
@@ -60,16 +70,16 @@ export async function report(
 ): Promise<ReportOutput> {
   switch (input.type) {
     case "decision":
-      return reportDecision(input.data, projectDir);
+      return reportDecision(input, projectDir);
     case "pattern":
-      return reportPattern(input.data, projectDir);
+      return reportPattern(input, projectDir);
     case "review":
-      return reportReview(input.data, projectDir);
+      return reportReview(input, projectDir);
   }
 }
 
 async function reportDecision(
-  data: ReportDecisionData,
+  data: Extract<ReportInput, { type: "decision" }>,
   projectDir: string
 ): Promise<ReportOutput> {
   const id = `dec_${formatDate()}_${randomBytes(2).toString("hex")}`;
@@ -94,17 +104,9 @@ async function reportDecision(
 }
 
 async function reportPattern(
-  data: ReportPatternData,
+  data: Extract<ReportInput, { type: "pattern" }>,
   projectDir: string
 ): Promise<ReportOutput> {
-  if (data.file_paths.length === 0) {
-    return {
-      recorded: false,
-      id: "",
-      note: "At least one file path is required to record a pattern observation.",
-    };
-  }
-
   const id = `pat_${formatDate()}_${randomBytes(2).toString("hex")}`;
 
   const entry = {
@@ -127,7 +129,7 @@ async function reportPattern(
 }
 
 async function reportReview(
-  data: ReportReviewData,
+  data: Extract<ReportInput, { type: "review" }>,
   projectDir: string
 ): Promise<ReportOutput> {
   const violatedIds = new Set(data.violations.map((v) => v.principle_id));
@@ -157,7 +159,7 @@ async function reportReview(
   };
 }
 
-function deriveVerdict(data: ReportReviewData): "BLOCKING" | "WARNING" | "CLEAN" {
+function deriveVerdict(data: Extract<ReportInput, { type: "review" }>): "BLOCKING" | "WARNING" | "CLEAN" {
   if (data.violations.some((v) => v.severity === "rule")) return "BLOCKING";
   if (data.violations.some((v) => v.severity === "strong-opinion")) return "WARNING";
   return "CLEAN";
