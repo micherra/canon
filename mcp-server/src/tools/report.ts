@@ -4,59 +4,42 @@ import { join } from "path";
 import { randomBytes } from "crypto";
 import { z } from "zod";
 
-// --- Variant schemas for discriminated validation ---
+// --- Discriminated union: each variant carries only its own fields ---
 
-const decisionSchema = z.object({
-  principle_id: z.string(),
-  file_path: z.string(),
-  justification: z.string(),
-  category: z.enum(["performance", "legacy-constraint", "scope-mismatch", "intentional-tradeoff", "external-requirement", "other"]).optional(),
-});
-
-const patternSchema = z.object({
-  pattern: z.string(),
-  file_paths: z.array(z.string()).min(1),
-  context: z.string().optional(),
-});
-
-const reviewSchema = z.object({
-  files: z.array(z.string()),
-  violations: z.array(z.object({ principle_id: z.string(), severity: z.string() })),
-  honored: z.array(z.string()),
-  score: z.object({
-    rules: z.object({ passed: z.number(), total: z.number() }),
-    opinions: z.object({ passed: z.number(), total: z.number() }),
-    conventions: z.object({ passed: z.number(), total: z.number() }),
+export const reportInputSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("decision"),
+    principle_id: z.string().describe("ID of the principle being deviated from"),
+    file_path: z.string().describe("Path of the file where the deviation occurs"),
+    justification: z.string().describe("Why the deviation is intentional and justified"),
+    category: z
+      .enum(["performance", "legacy-constraint", "scope-mismatch", "intentional-tradeoff", "external-requirement", "other"])
+      .optional()
+      .describe("Deviation category for clustering"),
   }),
-  verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).optional(),
-});
+  z.object({
+    type: z.literal("pattern"),
+    pattern: z.string().describe("Description of the observed pattern"),
+    file_paths: z.array(z.string()).min(1).describe("File paths where the pattern was observed"),
+    context: z.string().optional().describe("Additional context"),
+  }),
+  z.object({
+    type: z.literal("review"),
+    files: z.array(z.string()).describe("File paths that were reviewed"),
+    violations: z
+      .array(z.object({ principle_id: z.string(), severity: z.string() }))
+      .describe("Principle violations found"),
+    honored: z.array(z.string()).describe("IDs of principles honored"),
+    score: z.object({
+      rules: z.object({ passed: z.number(), total: z.number() }),
+      opinions: z.object({ passed: z.number(), total: z.number() }),
+      conventions: z.object({ passed: z.number(), total: z.number() }),
+    }),
+    verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).optional(),
+  }),
+]);
 
-// --- Raw shape for server.tool (visible to clients as JSON Schema) ---
-
-export const reportToolShape = {
-  type: z.enum(["decision", "pattern", "review"]).describe("Type of report"),
-  decision: decisionSchema.optional().describe("Required when type=decision: deviation details"),
-  pattern: patternSchema.optional().describe("Required when type=pattern: observed pattern details"),
-  review: reviewSchema.optional().describe("Required when type=review: code review results"),
-} as const;
-
-// --- Discriminated validation applied after parsing ---
-
-const reportBaseSchema = z.object(reportToolShape);
-
-export const reportInputSchema = reportBaseSchema.superRefine((val, ctx) => {
-  if (val.type === "decision" && !val.decision) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["decision"], message: "decision field is required when type=decision" });
-  }
-  if (val.type === "pattern" && !val.pattern) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["pattern"], message: "pattern field is required when type=pattern" });
-  }
-  if (val.type === "review" && !val.review) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["review"], message: "review field is required when type=review" });
-  }
-});
-
-export type ReportInput = z.infer<typeof reportBaseSchema>;
+export type ReportInput = z.infer<typeof reportInputSchema>;
 
 export interface ReportOutput {
   recorded: boolean;
@@ -64,26 +47,22 @@ export interface ReportOutput {
   note: string;
 }
 
-type DecisionData = z.infer<typeof decisionSchema>;
-type PatternData = z.infer<typeof patternSchema>;
-type ReviewData = z.infer<typeof reviewSchema>;
-
 export async function report(
   input: ReportInput,
   projectDir: string
 ): Promise<ReportOutput> {
   switch (input.type) {
     case "decision":
-      return reportDecision(input.decision!, projectDir);
+      return reportDecision(input, projectDir);
     case "pattern":
-      return reportPattern(input.pattern!, projectDir);
+      return reportPattern(input, projectDir);
     case "review":
-      return reportReview(input.review!, projectDir);
+      return reportReview(input, projectDir);
   }
 }
 
 async function reportDecision(
-  data: DecisionData,
+  data: Extract<ReportInput, { type: "decision" }>,
   projectDir: string
 ): Promise<ReportOutput> {
   const id = `dec_${formatDate()}_${randomBytes(2).toString("hex")}`;
@@ -108,7 +87,7 @@ async function reportDecision(
 }
 
 async function reportPattern(
-  data: PatternData,
+  data: Extract<ReportInput, { type: "pattern" }>,
   projectDir: string
 ): Promise<ReportOutput> {
   const id = `pat_${formatDate()}_${randomBytes(2).toString("hex")}`;
@@ -133,7 +112,7 @@ async function reportPattern(
 }
 
 async function reportReview(
-  data: ReviewData,
+  data: Extract<ReportInput, { type: "review" }>,
   projectDir: string
 ): Promise<ReportOutput> {
   const violatedIds = new Set(data.violations.map((v) => v.principle_id));
@@ -163,7 +142,7 @@ async function reportReview(
   };
 }
 
-function deriveVerdict(data: ReviewData): "BLOCKING" | "WARNING" | "CLEAN" {
+function deriveVerdict(data: Extract<ReportInput, { type: "review" }>): "BLOCKING" | "WARNING" | "CLEAN" {
   if (data.violations.some((v) => v.severity === "rule")) return "BLOCKING";
   if (data.violations.some((v) => v.severity === "strong-opinion")) return "WARNING";
   return "CLEAN";

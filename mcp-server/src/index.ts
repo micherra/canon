@@ -7,7 +7,7 @@ import { getPrinciples } from "./tools/get-principles.js";
 import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
-import { report, reportInputSchema, reportToolShape } from "./tools/report.js";
+import { report, reportInputSchema } from "./tools/report.js";
 
 const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
 const pluginDir = process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname;
@@ -87,13 +87,15 @@ server.tool(
 );
 
 // Tool: report (unified — decisions, patterns, and reviews)
-server.tool(
+server.registerTool(
   "report",
-  "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
-  reportToolShape,
+  {
+    description:
+      "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
+    inputSchema: reportInputSchema,
+  },
   async (input) => {
-    const validated = reportInputSchema.parse(input);
-    const result = await report(validated, projectDir);
+    const result = await report(input, projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };
