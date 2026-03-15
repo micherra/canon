@@ -165,23 +165,49 @@ canon/
 
 ## Principles
 
-Each principle is a markdown file with YAML frontmatter following this format:
+Each principle is a markdown file with YAML frontmatter. Here's the anatomy of a principle:
 
 ```yaml
 ---
-id: <kebab-case-identifier>
-title: <Human-Readable Title>
-severity: rule | strong-opinion | convention
+id: validate-at-trust-boundaries
+title: Validate at Trust Boundaries
+severity: rule
 scope:
-  layers: [api, infra, data, ui, ...]     # architectural layers (optional)
-  file_patterns: ["**/*.tf", "src/**"]     # glob patterns (optional)
-tags: [security, reliability, ...]
+  layers: [api]
+  file_patterns: ["src/routes/**", "**/*.controller.ts"]
+tags: [security, validation]
 ---
 
 Principle body goes here — rationale, examples, and anti-patterns.
 ```
 
-Principles are matched to your code by architectural layer (inferred from file path) and file patterns. Rules are loaded first, then strong-opinions, then conventions — max 10 per context.
+### Field reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes | Unique kebab-case identifier. Used for deduplication — a project-local principle with the same `id` overrides the built-in one. |
+| `title` | yes | Human-readable name shown in review output and dashboards. |
+| `severity` | yes | One of `rule`, `strong-opinion`, or `convention`. Controls enforcement level (see severity table above). |
+| `scope.layers` | no | Architectural layers this principle applies to. Recognized layers: `api`, `ui`, `domain`, `data`, `infra`, `shared`. Canon infers layers from file paths (e.g. `src/routes/` → `api`, `src/components/` → `ui`). An empty list means the principle applies to all layers. |
+| `scope.file_patterns` | no | Glob patterns to match specific files (e.g. `"**/*.tf"`, `"src/db/**"`). When set, the principle only activates for matching paths. |
+| `tags` | no | Freeform labels for filtering and grouping (e.g. `security`, `testing`, `performance`). Used by `/canon:list` and the `list_principles` MCP tool. |
+
+### How matching works
+
+When you edit a file, Canon infers its architectural layer from the path and selects principles whose `scope.layers` and `scope.file_patterns` match. Principles are loaded in severity order — rules first, then strong-opinions, then conventions — capped at 10 per context. A principle with no `layers` and no `file_patterns` matches everything.
+
+### Adding your own
+
+Place your principle file in the appropriate severity directory under `.canon/principles/`:
+
+```
+.canon/principles/
+├── rules/              # Hard constraints — block commits
+├── strong-opinions/    # Default path — warn on deviation
+└── conventions/        # Stylistic preferences — tracked for drift
+```
+
+Run `/canon:new-principle` for a guided walkthrough, or create the markdown file directly.
 
 ## Data Files
 
