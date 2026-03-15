@@ -46,8 +46,6 @@ Launch the canon-reviewer agent as a sub-agent. Provide it with:
 - The pre-loaded matched principles (full body) from Step 3
 - A brief description: "Review the following code changes against Canon principles. Matched principles are provided below — do not re-load them."
 
-**Rate limit handling**: Follow the retry policy from `/canon:build` — retry up to 3 times with exponential backoff (4s, 8s, 16s). If all retries fail, inform the user and suggest trying again later.
-
 The reviewer will:
 1. Use the pre-loaded principles (already matched to affected files)
 2. Perform Stage 1: Principle Compliance review

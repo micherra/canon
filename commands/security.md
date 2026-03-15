@@ -31,8 +31,6 @@ Launch the canon-security agent as a sub-agent with the file list.
 
 "Scan the following files for security vulnerabilities: {file list}. Apply Canon security principles. Produce a security assessment."
 
-**Rate limit handling**: Follow the retry policy from `/canon:build` — retry up to 3 times with exponential backoff (4s, 8s, 16s). If all retries fail, inform the user and suggest trying again later.
-
 ### Step 3: Present results
 
 Display the security assessment to the user. Highlight critical and high severity findings prominently.
