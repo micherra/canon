@@ -183,7 +183,7 @@ All Canon data lives in `.canon/` in your project root:
 
 | File | Purpose | Written by |
 |------|---------|-----------|
-| `principles/*.md` | Principle definitions | `/canon:init`, `/canon:new-principle` |
+| `principles/{rules,strong-opinions,conventions}/*.md` | Principle definitions | `/canon:init`, `/canon:new-principle` |
 | `CONVENTIONS.md` | Project conventions | `/canon:conventions`, `/canon:learn --apply` |
 | `config.json` | Project configuration | `/canon:init` |
 | `reviews.jsonl` | Review results | `report` MCP tool (type=review) |

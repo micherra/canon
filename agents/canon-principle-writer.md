@@ -89,7 +89,7 @@ Generate a kebab-case `id` from the title.
 
 ### Step 5: Save the file
 
-Save to `.canon/principles/{id}.md` in the user's project. Create the directory if it doesn't exist.
+Save to `.canon/principles/{severity-subdir}/{id}.md` in the user's project, where `severity-subdir` is `rules/`, `strong-opinions/`, or `conventions/` based on the principle's severity. Create the directory if it doesn't exist.
 
 ### Step 6: Validate
 
