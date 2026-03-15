@@ -30,6 +30,7 @@ export function parseFrontmatter(content: string): {
 
   let currentKey = "";
   let currentParent = "";
+  let topLevelKey = "";
   const lines = yamlStr.split("\n");
 
   for (const line of lines) {
@@ -41,6 +42,7 @@ export function parseFrontmatter(content: string): {
     if (topMatch) {
       const [, key, value] = topMatch;
       currentKey = key;
+      topLevelKey = key;
       currentParent = "";
 
       if (value.trim() === "") {
@@ -59,7 +61,7 @@ export function parseFrontmatter(content: string): {
     const nestedMatch = line.match(/^  (\w[\w-]*):\s*(.*)$/);
     if (nestedMatch) {
       const [, key, value] = nestedMatch;
-      currentParent = currentKey;
+      currentParent = topLevelKey;
       currentKey = key;
 
       if (typeof frontmatter[currentParent] !== "object" || Array.isArray(frontmatter[currentParent])) {
