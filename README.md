@@ -6,21 +6,25 @@ Engineering principles as code. Canon gives Claude Code a structured set of prin
 
 ## Installation
 
-Canon is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins). Install it directly from GitHub:
+Canon is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins). Install it from GitHub:
 
 ```bash
+# Add the marketplace
+/plugin marketplace add micherra/canon
+
 # Install the plugin
-claude plugin add micherra/canon
+/plugin install canon@micherra-canon
 
 # Then initialize in your project
 /canon:init
 ```
 
-Or clone and install locally:
+Or add from a local clone:
 
 ```bash
 git clone https://github.com/micherra/canon.git
-claude plugin add ./canon
+/plugin marketplace add ./canon
+/plugin install canon@canon
 ```
 
 After installing, Canon's slash commands, agents, hooks, and MCP tools are available in any Claude Code session within your project.
