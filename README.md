@@ -163,9 +163,9 @@ canon/
 └── skills/canon/        Skill definition + references
 ```
 
-## Principles
+## The Canon Template
 
-Each principle is a markdown file with YAML frontmatter. Here's the anatomy of a principle:
+Principles, rules, and agent-rules all share the same markdown-with-YAML-frontmatter format. This is Canon's core building block — understanding it lets you extend Canon for your own projects and workflows.
 
 ```yaml
 ---
@@ -178,27 +178,38 @@ scope:
 tags: [security, validation]
 ---
 
-Principle body goes here — rationale, examples, and anti-patterns.
+Body goes here — rationale, examples, and anti-patterns.
 ```
 
 ### Field reference
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | yes | Unique kebab-case identifier. Used for deduplication — a project-local principle with the same `id` overrides the built-in one. |
+| `id` | yes | Unique kebab-case identifier. Used for deduplication — a project-local entry with the same `id` overrides the built-in one. |
 | `title` | yes | Human-readable name shown in review output and dashboards. |
 | `severity` | yes | One of `rule`, `strong-opinion`, or `convention`. Controls enforcement level (see severity table above). |
-| `scope.layers` | no | Architectural layers this principle applies to. Recognized layers: `api`, `ui`, `domain`, `data`, `infra`, `shared`. Canon infers layers from file paths (e.g. `src/routes/` → `api`, `src/components/` → `ui`). An empty list means the principle applies to all layers. |
-| `scope.file_patterns` | no | Glob patterns to match specific files (e.g. `"**/*.tf"`, `"src/db/**"`). When set, the principle only activates for matching paths. |
-| `tags` | no | Freeform labels for filtering and grouping (e.g. `security`, `testing`, `performance`). Used by `/canon:list` and the `list_principles` MCP tool. |
+| `scope.layers` | no | Architectural layers this entry applies to. Recognized layers: `api`, `ui`, `domain`, `data`, `infra`, `shared`. Canon infers layers from file paths (e.g. `src/routes/` → `api`, `src/components/` → `ui`). An empty list means it applies to all layers. |
+| `scope.file_patterns` | no | Glob patterns to match specific files (e.g. `"**/*.tf"`, `"src/db/**"`). When set, the entry only activates for matching paths. |
+| `tags` | no | Freeform labels for filtering and grouping (e.g. `security`, `testing`, `agent-behavior`). Used by `/canon:list` and the `list_principles` MCP tool. |
+
+### Where the template is used
+
+| Location | What lives there | Examples |
+|----------|-----------------|----------|
+| `principles/rules/` | Hard constraints that block commits | `secrets-never-in-code`, `fail-closed-by-default` |
+| `principles/strong-opinions/` | Default paths that warn on deviation | `prefer-composition`, `explicit-error-handling` |
+| `principles/conventions/` | Stylistic preferences tracked for drift | `consistent-naming`, `file-length-limit` |
+| `agent-rules/` | Behavioral guidelines for Canon's agents | `agent-cold-review`, `agent-design-before-code` |
+
+Agent-rules use the same frontmatter fields but target agent behavior rather than application code. For example, `agent-cold-review` ensures the reviewer agent evaluates code without seeing prior feedback.
 
 ### How matching works
 
-When you edit a file, Canon infers its architectural layer from the path and selects principles whose `scope.layers` and `scope.file_patterns` match. Principles are loaded in severity order — rules first, then strong-opinions, then conventions — capped at 10 per context. A principle with no `layers` and no `file_patterns` matches everything.
+When you edit a file, Canon infers its architectural layer from the path and selects entries whose `scope.layers` and `scope.file_patterns` match. Entries are loaded in severity order — rules first, then strong-opinions, then conventions — capped at 10 per context. An entry with no `layers` and no `file_patterns` matches everything.
 
 ### Adding your own
 
-Place your principle file in the appropriate severity directory under `.canon/principles/`:
+Place your file in the appropriate directory under `.canon/` (for project-local) or contribute directly to the Canon plugin:
 
 ```
 .canon/principles/
