@@ -24,7 +24,7 @@ If the file count exceeds 500, warn the user and suggest narrowing the scan to a
 
 ### Step 3: Match principles to each file
 
-First, read all principle files from `.canon/principles/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/`). Extract frontmatter for each: `id`, `severity`, `scope.layers`, `scope.file_patterns`.
+First, read all principle files from `.canon/principles/` and its subdirectories `rules/`, `strong-opinions/`, `conventions/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/` and its subdirectories). Extract frontmatter for each: `id`, `severity`, `scope.layers`, `scope.file_patterns`.
 
 For each source file, determine which principles apply by:
 1. Inferring the architectural layer from the file path

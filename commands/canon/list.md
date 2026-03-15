@@ -14,7 +14,7 @@ Check both principle directories:
 1. **Project-local**: `.canon/principles/` (takes precedence)
 2. **Plugin-shipped**: `${CLAUDE_PLUGIN_ROOT}/principles/` (fallback)
 
-If `.canon/principles/` exists, use it. Otherwise fall back to the plugin directory.
+If `.canon/principles/` exists, use it (scanning subdirectories `rules/`, `strong-opinions/`, `conventions/`). Otherwise fall back to the plugin directory.
 
 ### Step 2: Read all principle files
 

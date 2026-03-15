@@ -12,11 +12,11 @@ Load a Canon principle by ID and illustrate it with real examples from the user'
 
 Extract the principle ID from ${ARGUMENTS}. The argument should be a kebab-case principle ID like `thin-handlers` or `errors-are-values`.
 
-If no argument is provided, glob for `*.md` files in `.canon/principles/` (or `${CLAUDE_PLUGIN_ROOT}/principles/`), read their frontmatter, and list the available principle IDs for the user to choose from.
+If no argument is provided, glob for `**/*.md` files in `.canon/principles/` (or `${CLAUDE_PLUGIN_ROOT}/principles/`), including subdirectories (`rules/`, `strong-opinions/`, `conventions/`), read their frontmatter, and list the available principle IDs for the user to choose from.
 
 ### Step 2: Find and load the principle
 
-Look for `{PRINCIPLE_ID}.md` in `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`.
+Look for `{PRINCIPLE_ID}.md` in `.canon/principles/` and its subdirectories (`rules/`, `strong-opinions/`, `conventions/`) first, then `${CLAUDE_PLUGIN_ROOT}/principles/` and its subdirectories.
 
 If not found, tell the user:
 "No principle found with ID '${PRINCIPLE_ID}'. Run `/canon:list` to see available principles."

@@ -32,7 +32,7 @@ Check what data sources are available. Use Glob and Read to count lines in:
 - `.canon/learning.jsonl` — previous learning runs
 - `.canon/plans/*/CONVENTIONS.md` — task convention files
 - `.canon/CONVENTIONS.md` — project conventions
-- `.canon/principles/` or `${CLAUDE_PLUGIN_ROOT}/principles/` — principle index
+- `.canon/principles/` (including subdirectories `rules/`, `strong-opinions/`, `conventions/`) or `${CLAUDE_PLUGIN_ROOT}/principles/` — principle index
 
 Also glob for source files: `**/*.{ts,tsx,js,jsx,py,go,rs}` (excluding `node_modules/`, `.git/`, `.canon/`, `dist/`, `build/`).
 
@@ -85,7 +85,7 @@ If `--apply` was NOT passed, show action hints after the report:
 
 **Manual actions:**
 - Add a convention: `/canon:conventions --add "..."`
-- Edit a principle's severity: Edit `.canon/principles/{id}.md` frontmatter
+- Edit a principle's severity: Find and edit `.canon/principles/{rules,strong-opinions,conventions}/{id}.md` frontmatter
 - Create a new principle: `/canon:new-principle {topic}`
 - Log a decision: Use the `report` MCP tool (type=decision)
 
@@ -115,7 +115,7 @@ Execute the suggestion:
 | Suggestion type | Action |
 |----------------|--------|
 | New convention | Run the equivalent of `/canon:conventions --add "{text}"` — append to `.canon/CONVENTIONS.md` |
-| Severity promotion/demotion | Edit the principle's YAML frontmatter `severity:` field in `.canon/principles/{id}.md` |
+| Severity promotion/demotion | Edit the principle's YAML frontmatter `severity:` field in `.canon/principles/{rules,strong-opinions,conventions}/{id}.md` and move to the appropriate subdirectory |
 | Task convention promotion | Append to `.canon/CONVENTIONS.md` |
 | Principle revision (add exception) | Read the principle file, append an exception to its Exceptions section |
 | Convention graduation | Tell the user to run `/canon:new-principle {topic}` — this requires interactive authoring, don't attempt inline |

@@ -17,7 +17,7 @@ Look for `.canon/principles/` directory. If it doesn't exist, tell the user:
 
 Collect the following in parallel:
 
-1. **Principles**: Count `.canon/principles/*.md` files. For each, read the YAML frontmatter `severity:` field. Tally by severity (rule / strong-opinion / convention).
+1. **Principles**: Count `.canon/principles/**/*.md` files (scanning subdirectories `rules/`, `strong-opinions/`, `conventions/`). For each, read the YAML frontmatter `severity:` field. Tally by severity (rule / strong-opinion / convention).
 2. **Reviews**: Count lines in `.canon/reviews.jsonl` (if exists). Read the last entry's timestamp.
 3. **Decisions**: Count lines in `.canon/decisions.jsonl` (if exists). Read the last entry's timestamp.
 4. **Patterns**: Count lines in `.canon/patterns.jsonl` (if exists).
