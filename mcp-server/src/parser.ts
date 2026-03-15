@@ -11,6 +11,7 @@ export interface Principle {
   severity: "rule" | "strong-opinion" | "convention";
   scope: PrincipleScope;
   tags: string[];
+  archived: boolean;
   body: string;
   filePath: string;
 }
@@ -123,6 +124,7 @@ export function parsePrinciple(content: string, filePath: string): Principle {
       file_patterns: (scope.file_patterns as string[]) || [],
     },
     tags: (frontmatter.tags as string[]) || [],
+    archived: frontmatter.archived === "true" || frontmatter.archived === true,
     body,
     filePath,
   };

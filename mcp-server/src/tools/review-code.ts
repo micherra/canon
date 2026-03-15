@@ -32,21 +32,27 @@ export async function reviewCode(
     file_path: input.file_path,
   });
 
-  // Return matched principles with full bodies for the calling agent to evaluate.
-  // This tool is a data provider — the actual review (determining violations vs.
-  // compliance) is performed by the LLM agent, not programmatically.
-  const principlesToEvaluate: PrincipleForReview[] = matched.map((p) => ({
+  // Cap matched principles to prevent unbounded context consumption.
+  // Rules are always included (safety-critical), then fill remaining budget
+  // with strong-opinions and conventions. Already sorted by severity.
+  const MAX_REVIEW_PRINCIPLES = 15;
+  const capped = matched.slice(0, MAX_REVIEW_PRINCIPLES);
+
+  const principlesToEvaluate: PrincipleForReview[] = capped.map((p) => ({
     principle_id: p.id,
     principle_title: p.title,
     severity: p.severity,
     body: p.body,
   }));
 
-  const ruleCount = matched.filter((p) => p.severity === "rule").length;
-  const opinionCount = matched.filter((p) => p.severity === "strong-opinion").length;
-  const conventionCount = matched.filter((p) => p.severity === "convention").length;
+  const ruleCount = capped.filter((p) => p.severity === "rule").length;
+  const opinionCount = capped.filter((p) => p.severity === "strong-opinion").length;
+  const conventionCount = capped.filter((p) => p.severity === "convention").length;
 
-  const summary = `${matched.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions). Evaluate each against the code below.`;
+  const truncated = matched.length > MAX_REVIEW_PRINCIPLES
+    ? ` (${matched.length - MAX_REVIEW_PRINCIPLES} lower-priority principles omitted)`
+    : "";
+  const summary = `${capped.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}. Evaluate each against the code below.`;
 
   return {
     summary,

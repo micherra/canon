@@ -1,5 +1,5 @@
 {
-  "description": "Canon hooks — skill activation on every prompt, pre-commit secrets detection, pre-push review guard, large file guard, and learn nudge after accumulated reviews",
+  "description": "Canon hooks — skill activation on every prompt, pre-commit secrets detection, pre-push review guard, large file guard, learn nudge, and compaction check",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -45,6 +45,11 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/learn-nudge.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/compaction-check.sh",
             "timeout": 5
           }
         ]

@@ -134,11 +134,12 @@ Canon uses 9 specialist agents, each with a focused role:
 
 ## Hooks
 
-Canon includes 5 automation hooks:
+Canon includes 6 automation hooks:
 
 - **Pre-commit secrets check** — Blocks commits containing hardcoded secrets (API keys, private keys, connection strings)
 - **Pre-push review guard** — Warns before pushing if no Canon review covers the unpushed commits
 - **Large file guard** — Warns before writing or editing files that exceed a line threshold (default 500, configurable via `max_file_lines` in `.canon/config.json`)
+- **Compaction check** — Warns when `.jsonl` data files or `CONVENTIONS.md` grow past thresholds
 - **Learn nudge** — Suggests `/canon:learn` after 10+ reviews accumulate
 - **Skill activation** — Ensures Canon loads before code generation tasks
 
@@ -153,7 +154,7 @@ canon/
 ├── commands/canon/      14 slash commands
 ├── agents/              9 specialist agents
 ├── agent-rules/         8 agent behavior guidelines
-├── hooks/               5 automation hooks
+├── hooks/               6 automation hooks
 ├── mcp-server/          TypeScript MCP server (5 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
@@ -194,6 +195,7 @@ Body goes here — rationale, examples, and anti-patterns.
 | `scope.layers` | no | Architectural layers this entry applies to. Recognized layers: `api`, `ui`, `domain`, `data`, `infra`, `shared`. Canon infers layers from file paths (e.g. `src/routes/` → `api`, `src/components/` → `ui`). An empty list means it applies to all layers. |
 | `scope.file_patterns` | no | Glob patterns to match specific files (e.g. `"**/*.tf"`, `"src/db/**"`). When set, the entry only activates for matching paths. |
 | `tags` | no | Freeform labels for filtering and grouping (e.g. `security`, `testing`, `agent-behavior`). Used by `/canon:list` and the `list_principles` MCP tool. |
+| `archived` | no | Set to `true` to disable this entry without deleting it. Archived entries are skipped by the matcher and won't appear in reviews. |
 
 ### Where the template is used
 
@@ -226,6 +228,33 @@ Place your file in the appropriate directory under `.canon/` (for project-local)
 Use the guided commands or create files directly:
 - `/canon:new-principle` — walks you through authoring a new principle
 - `/canon:new-agent-rule` — walks you through authoring a new agent-rule
+
+## Context Management
+
+As your project grows — more principles, more reviews, more conventions — Canon manages context consumption to prevent rot:
+
+| Mechanism | What it does |
+|-----------|-------------|
+| **Principle cap** | `get_principles` returns at most `max_principles_per_review` entries (default 10, configurable in `.canon/config.json`). Rules are always prioritized. |
+| **Review cap** | `review_code` caps at 15 matched principles, sorted by severity. Lower-priority principles are noted but omitted. |
+| **Summary-only mode** | `get_principles` accepts `summary_only: true` to return just the first paragraph (~60% less context) instead of full rationale/examples. |
+| **Data rotation** | `.jsonl` files auto-rotate at 500 entries — older entries move to `*.archive.jsonl`, keeping the active file lean. |
+| **Principle archiving** | Add `archived: true` to a principle's frontmatter to disable it without deleting. Archived principles are skipped by the matcher. |
+| **Compaction hook** | Warns after commits if data files or `CONVENTIONS.md` have grown past thresholds. |
+
+### Configuration
+
+In `.canon/config.json`:
+
+```json
+{
+  "review": {
+    "max_principles_per_review": 10
+  }
+}
+```
+
+Run `/canon:doctor` to check for context bloat issues.
 
 ## Data Files
 

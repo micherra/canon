@@ -58,6 +58,9 @@ export function matchPrinciples(
 
   return principles
     .filter((p) => {
+      // Skip archived principles
+      if (p.archived) return false;
+
       // Severity filter
       if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
 

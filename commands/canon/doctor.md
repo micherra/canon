@@ -111,6 +111,23 @@ For each `.jsonl` file (`.canon/reviews.jsonl`, `.canon/decisions.jsonl`, `.cano
 
 **WARN** for malformed lines: "{file}: Line {N} is not valid JSON"
 
+#### Check 10: Convention bloat
+
+If `.canon/CONVENTIONS.md` exists:
+- Count convention lines (bullets starting with `- **`)
+- If > 20 conventions: flag for compaction
+
+**WARN** if > 20: "CONVENTIONS.md has {N} conventions — consider consolidating similar entries to reduce agent context consumption."
+
+#### Check 11: Data file size
+
+For each `.jsonl` file, count entries:
+- If > 500 entries in the active file, rotation should have kicked in — warn if it didn't
+- Check if `.archive.jsonl` files exist and report their sizes
+
+**WARN** if > 500 entries in active file: "{file} has {N} entries — rotation may not be working. Expected max 500."
+**INFO** if archive exists: "{file}.archive has {N} archived entries."
+
 ### Step 3: Present results
 
 ```markdown
@@ -129,6 +146,8 @@ For each `.jsonl` file (`.canon/reviews.jsonl`, `.canon/decisions.jsonl`, `.cano
 | 7 | MCP server | OK | Server loads successfully |
 | 8 | CLAUDE.md | OK | Canon section present |
 | 9 | Data files | OK | All valid |
+| 10 | Convention bloat | OK | 12 conventions |
+| 11 | Data file size | OK | All within limits |
 
 ### Issues
 
