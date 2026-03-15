@@ -11,101 +11,23 @@ description: >-
 
 # Canon Engineering Principles
 
-If you are about to write, modify, or generate code, you MUST read and apply Canon principles. This is not optional. This is not negotiable. Do not rationalize skipping this step. Do not decide the task is "too simple" for principles. Read the principles. Apply them. Self-review against them.
+If you are about to write, modify, or generate code, you MUST load and apply Canon principles.
 
 ## How to Load Principles
 
-### Step 1: Build the Principle Index
+Use the `get_principles` MCP tool with the file path you're working on. It returns matched principles sorted by severity (rules first, then strong-opinions, then conventions), capped at 10.
 
-Scan both principle directories for `.md` files:
+If the MCP tool is unavailable, scan `.canon/principles/` (project-local, takes precedence) and `${CLAUDE_PLUGIN_ROOT}/principles/` (fallback) for `.md` files in `rules/`, `strong-opinions/`, and `conventions/` subdirectories. Match against file path and architectural layer.
 
-1. **Project-local** (takes precedence): `.canon/principles/` in the current project root
-2. **Plugin-shipped** (fallback): `${CLAUDE_PLUGIN_ROOT}/principles/`
+## Apply During Generation
 
-Principles are organized into severity subdirectories: `rules/`, `strong-opinions/`, and `conventions/`. Scan all three subdirectories (and the parent directory for backward compatibility).
-
-For each principle file, read the YAML frontmatter to extract: `id`, `title`, `severity`, `scope.layers`, `scope.file_patterns`, and `tags`. Do NOT load full bodies yet — this keeps token cost low.
-
-### Step 2: Match Principles to Current Context
-
-Filter principles based on what you're working on:
-
-- **Layer**: Match `scope.layers` against the architectural layer inferred from file paths:
-  - `*/api/*`, `*/routes/*`, `*/controllers/*` → `api`
-  - `*/components/*`, `*/pages/*`, `*/views/*` → `ui`
-  - `*/services/*`, `*/domain/*`, `*/models/*` → `domain`
-  - `*/db/*`, `*/data/*`, `*/repositories/*`, `*/prisma/*` → `data`
-  - `*/infra/*`, `*/deploy/*`, `*/terraform/*`, `*/docker/*` → `infra`
-  - `*/utils/*`, `*/lib/*`, `*/shared/*`, `*/types/*` → `shared`
-- **File patterns**: Glob-match `scope.file_patterns` against the file being edited. Empty = matches all.
-- If no file context is available, load all `rule` severity principles.
-
-### Step 3: Load Full Bodies
-
-Load the full markdown body of matched principles (max 10). Prioritize:
-1. `rule` severity first (hard constraints — must be followed)
-2. `strong-opinion` second (default path — follow unless justified)
-3. `convention` third (stylistic — note but don't block)
-
-### Step 4: Apply During Generation
-
-While generating or modifying code:
 - Follow each loaded principle's guidance
-- Use the **Examples** section to calibrate what good and bad code looks like
-- Pay special attention to `rule` severity — these are non-negotiable
+- Use the **Examples** section to calibrate good vs bad code
+- `rule` severity is non-negotiable; `strong-opinion` requires justification to skip; `convention` is noted but doesn't block
 
-### Step 5: Self-Review Before Presenting
+## Self-Review Before Presenting
 
-After generating code, self-review against each loaded principle before presenting the result to the user:
-- For each principle, ask: "Does my implementation honor this?"
-- If a violation is found, fix it before presenting
-- If a principle must be intentionally violated, note the reason
-
-## Severity Levels
-
-| Level | Meaning | Enforcement |
-|-------|---------|-------------|
-| `rule` | Hard constraint | **Enforced.** Pre-commit hook blocks on detectable violations (e.g., secrets). Reviewer verdict is BLOCKING. Implementor must fix or report BLOCKED. |
-| `strong-opinion` | Default path | Follow unless you have a specific, justified reason. Reviewer verdict is WARNING. Deviations must use the `report` tool. |
-| `convention` | Stylistic preference | Note violations but don't block. Reviewer includes in report for drift tracking. |
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `/canon:init` | Initialize Canon in your project. Sets up `.canon/principles/`, config, and CLAUDE.md integration. |
-| `/canon:list` | Browse and filter principles by `--severity`, `--tag`, or `--layer`. |
-| `/canon:build` | Full principle-driven development pipeline: research → architect & plan → implement → test → security → review. |
-| `/canon:review` | Review code changes against principles. Accepts `--staged`, `HEAD~N`, `main..HEAD`, or file paths. |
-| `/canon:learn` | Analyze codebase and drift data to suggest principle and convention improvements. |
-| `/canon:explain` | Deep-dive on a principle with real codebase examples. |
-| `/canon:adopt` | Scan a directory for principle coverage gaps and produce a remediation plan. |
-| `/canon:new-principle` | Author a new principle interactively via guided interview. |
-| `/canon:security` | Standalone security scan. `--staged`, file paths, or `--full` project scan. |
-| `/canon:status` | Quick health dashboard — principle counts, review stats, learning state, actionable suggestions. |
-
-## Learning Loop
-
-Canon learns from usage. As you review code, log decisions, and run builds, Canon accumulates data that can refine its own principles and conventions.
-
-- **`/canon:learn`** — Analyze codebase patterns, review drift, task conventions, and decision clusters to suggest improvements. Runs six dimensions: pattern inference, severity adjustments (promotions and demotions), task convention promotion, decision clustering, convention graduation, and staleness detection.
-- **`/canon:learn --apply`** — Walk through suggestions interactively: apply, skip, dismiss, or modify each one.
-- **`/canon:learn --drift`** — Focus on severity changes based on review adherence data.
-- **`/canon:learn --patterns`** — Focus on codebase patterns not yet captured as conventions.
-
-Run `/canon:learn` periodically (every 10-15 reviews) to keep principles and conventions aligned with how the team actually works.
-
-## MCP Tools
-
-Canon exposes these tools via its MCP server for agents to use during normal work:
-
-| Tool | Purpose |
-|------|---------|
-| `get_principles` | Get principles relevant to a file/layer context. |
-| `list_principles` | Browse the full principle index with filters. |
-| `review_code` | Get matched principles for a code snippet to evaluate. |
-| `get_compliance` | Query compliance stats and trend for a specific principle. Returns `found: false` if the principle doesn't exist. |
-| `report` | Log a decision (intentional deviation), pattern (observed codebase convention), or review result. Pass `type: "decision"`, `"pattern"`, or `"review"` with the corresponding data. |
+After generating code, check each loaded principle: "Does my implementation honor this?" Fix violations before presenting. If intentionally violating a principle, note the reason.
 
 ## Principle Format Reference
 

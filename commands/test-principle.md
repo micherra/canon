@@ -2,6 +2,7 @@
 description: Test that a principle is correctly detected during review
 argument-hint: <principle-id>
 allowed-tools: [Read, Write, Bash, Glob, Grep, Agent]
+model: sonnet
 ---
 
 Generate code that intentionally violates a principle, run the reviewer against it, and verify the violation is caught. This validates that custom or modified principles actually work in the review pipeline.

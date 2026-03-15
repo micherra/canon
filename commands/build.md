@@ -2,6 +2,7 @@
 description: Full principle-driven development workflow from research to review
 argument-hint: <task description> [--skip-research] [--skip-tests] [--skip-security] [--plan-only] [--review-only] [--wave N]
 allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Agent]
+model: opus
 ---
 
 Full Canon development workflow. Takes a task description and orchestrates research → architect → plan → implement → test → security → review. **The pipeline dynamically scales to the task** — small changes skip heavy phases, large features use the full pipeline.

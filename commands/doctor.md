@@ -2,6 +2,7 @@
 description: Diagnose Canon setup issues and validate configuration
 argument-hint: [--fix]
 allowed-tools: [Bash, Read, Glob, Grep]
+model: haiku
 ---
 
 Check the health of your Canon installation. Finds broken frontmatter, missing config, duplicate IDs, scope issues, MCP server problems, and other misconfigurations. Optionally fixes simple issues automatically.

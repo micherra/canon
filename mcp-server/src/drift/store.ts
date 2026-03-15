@@ -5,7 +5,7 @@ import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
 // Maximum entries to keep in active .jsonl files before rotating
 const MAX_ENTRIES = 500;
 
-async function readJsonl<T>(filePath: string): Promise<T[]> {
+async function readJsonl<T>(filePath: string, filter?: (entry: T) => boolean): Promise<T[]> {
   let content: string;
   try {
     content = await readFile(filePath, "utf-8");
@@ -19,7 +19,10 @@ async function readJsonl<T>(filePath: string): Promise<T[]> {
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].trim() === "") continue;
     try {
-      results.push(JSON.parse(lines[i]) as T);
+      const entry = JSON.parse(lines[i]) as T;
+      if (!filter || filter(entry)) {
+        results.push(entry);
+      }
     } catch {
       skipped++;
     }
@@ -82,16 +85,24 @@ export class DriftStore {
     this.reviewsPath = join(canonDir, "reviews.jsonl");
   }
 
-  async getDecisions(): Promise<DecisionEntry[]> {
-    return readJsonl<DecisionEntry>(this.decisionsPath);
+  async getDecisions(principleId?: string): Promise<DecisionEntry[]> {
+    const filter = principleId
+      ? (d: DecisionEntry) => d.principle_id === principleId
+      : undefined;
+    return readJsonl<DecisionEntry>(this.decisionsPath, filter);
   }
 
   async getPatterns(): Promise<PatternEntry[]> {
     return readJsonl<PatternEntry>(this.patternsPath);
   }
 
-  async getReviews(): Promise<ReviewEntry[]> {
-    return readJsonl<ReviewEntry>(this.reviewsPath);
+  async getReviews(principleId?: string): Promise<ReviewEntry[]> {
+    const filter = principleId
+      ? (r: ReviewEntry) =>
+          r.violations.some((v) => v.principle_id === principleId) ||
+          r.honored.includes(principleId)
+      : undefined;
+    return readJsonl<ReviewEntry>(this.reviewsPath, filter);
   }
 
   async appendDecision(entry: DecisionEntry): Promise<void> {

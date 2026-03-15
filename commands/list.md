@@ -2,6 +2,7 @@
 description: Browse and filter Canon engineering principles
 argument-hint: [--severity rule|strong-opinion|convention] [--tag TAG] [--layer LAYER]
 allowed-tools: [Read, Glob]
+model: haiku
 ---
 
 List all Canon engineering principles in a formatted table, with optional filtering.

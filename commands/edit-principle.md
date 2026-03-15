@@ -2,6 +2,7 @@
 description: Edit an existing Canon principle or agent-rule interactively
 argument-hint: <principle-id> [--severity rule|strong-opinion|convention] [--add-tag TAG] [--remove-tag TAG] [--archive] [--unarchive]
 allowed-tools: [Read, Write, Edit, Bash, Glob, Agent]
+model: sonnet
 ---
 
 Edit an existing Canon principle or agent-rule using the canon-writer agent in **edit** mode.

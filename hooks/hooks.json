@@ -1,16 +1,6 @@
 {
-  "description": "Canon hooks — skill activation on every prompt, pre-commit secrets detection, pre-push review guard, large file guard, learn nudge, and compaction check",
+  "description": "Canon hooks — pre-commit secrets detection, pre-push review guard, large file guard, learn nudge, and compaction check",
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "[Canon] Before writing or modifying code, activate the canon skill and load relevant principles. If you have already loaded principles for this task, proceed. If not, load them now."
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

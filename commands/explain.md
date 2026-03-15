@@ -2,6 +2,7 @@
 description: Explain a Canon principle with real examples from your codebase
 argument-hint: <principle-id>
 allowed-tools: [Read, Glob, Grep]
+model: haiku
 ---
 
 Load a Canon principle by ID and illustrate it with real examples from the user's codebase. Shows where the principle is honored and where it may be violated. Does NOT modify any files — this is a read-only educational command.

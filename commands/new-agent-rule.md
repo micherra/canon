@@ -2,6 +2,7 @@
 description: Author a new Canon agent-rule interactively
 argument-hint: [agent-rule description or topic]
 allowed-tools: [Read, Write, Bash, Glob, Agent]
+model: sonnet
 ---
 
 Create a new Canon agent-rule using the canon-writer agent in **new-agent-rule** mode.

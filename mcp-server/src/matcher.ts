@@ -1,4 +1,4 @@
-import { readdir } from "fs/promises";
+import { readdir, stat } from "fs/promises";
 import { join } from "path";
 import { type Principle, loadPrincipleFile } from "./parser.js";
 
@@ -34,13 +34,21 @@ export function inferLayer(filePath: string): string | undefined {
   return undefined;
 }
 
+// Cache compiled glob regexes to avoid recompilation on every match
+const globRegexCache = new Map<string, RegExp>();
+
 function globToRegex(pattern: string): RegExp {
+  const cached = globRegexCache.get(pattern);
+  if (cached) return cached;
+
   const regex = pattern
     .replace(/\./g, "\\.")
     .replace(/\*\*/g, "{{DOUBLESTAR}}")
     .replace(/\*/g, "[^/]*")
     .replace(/\{\{DOUBLESTAR\}\}/g, ".*");
-  return new RegExp(`(^|/)${regex}$`);
+  const compiled = new RegExp(`(^|/)${regex}$`);
+  globRegexCache.set(pattern, compiled);
+  return compiled;
 }
 
 function severityPassesFilter(
@@ -114,10 +122,55 @@ export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
   return results.flat();
 }
 
+// --- Principle cache: avoids re-reading all principle files on every tool call ---
+// Invalidated when any .md file's mtime changes (or files are added/removed).
+
+interface PrincipleCache {
+  principles: Principle[];
+  mtimeKey: string; // concatenated file mtimes for invalidation
+}
+
+let principleCache: PrincipleCache | null = null;
+
+async function getFileMtimes(dir: string): Promise<string[]> {
+  try {
+    const files = await readdir(dir);
+    const mdFiles = files.filter((f) => f.endsWith(".md")).sort();
+    const stats = await Promise.all(
+      mdFiles.map(async (f) => {
+        try {
+          const s = await stat(join(dir, f));
+          return `${f}:${s.mtimeMs}`;
+        } catch {
+          return `${f}:0`;
+        }
+      })
+    );
+    return stats;
+  } catch {
+    return [];
+  }
+}
+
+async function computeMtimeKey(projectDir: string, pluginDir: string): Promise<string> {
+  const dirs = SEVERITY_SUBDIRS.flatMap((sub) => [
+    join(projectDir, ".canon", "principles", sub),
+    join(pluginDir, "principles", sub),
+  ]);
+  const allMtimes = await Promise.all(dirs.map(getFileMtimes));
+  return allMtimes.flat().join(",");
+}
+
 export async function loadAllPrinciples(
   projectDir: string,
   pluginDir: string
 ): Promise<Principle[]> {
+  const mtimeKey = await computeMtimeKey(projectDir, pluginDir);
+
+  if (principleCache && principleCache.mtimeKey === mtimeKey) {
+    return principleCache.principles;
+  }
+
   const projectPrinciples = await loadPrinciplesFromDir(
     join(projectDir, ".canon", "principles")
   );
@@ -132,5 +185,13 @@ export async function loadAllPrinciples(
     ...pluginPrinciples.filter((p) => !seenIds.has(p.id)),
   ];
 
+  // Pre-compile all glob regexes while we're loading
+  for (const p of merged) {
+    for (const pattern of p.scope.file_patterns) {
+      globToRegex(pattern);
+    }
+  }
+
+  principleCache = { principles: merged, mtimeKey };
   return merged;
 }

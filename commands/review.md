@@ -13,19 +13,28 @@ Review code changes against Canon engineering principles using the canon-reviewe
 
 Parse ${ARGUMENTS} to determine what to review:
 
-- **No arguments** or `--staged`: Review staged changes (`git diff --cached`)
-- **`HEAD~N`**: Review last N commits (`git diff HEAD~N`)
-- **`main..HEAD`** or `branch..HEAD`: Review branch diff
-- **File path(s)**: Review specific files (read them directly)
+- **Explicit argument provided** — use it directly:
+  - `--staged`: Review staged changes (`git diff --cached`)
+  - `HEAD~N`: Review last N commits (`git diff HEAD~N`)
+  - `main..HEAD` or `branch..HEAD`: Review branch diff
+  - File path(s): Review specific files (read them directly)
 
-Get the diff:
+- **No arguments** — detect what's available and ask the user:
+  1. Run `git diff --cached --stat` and `git diff --stat` to check for staged and unstaged changes
+  2. Based on what exists, ask the user to pick:
+     - **Staged changes** (if any staged files exist)
+     - **Working changes** (unstaged modifications)
+     - **All uncommitted changes** (staged + unstaged combined via `git diff HEAD`)
+     - **Branch diff vs main** (if on a non-main branch)
+  3. Only show options that actually have changes. If nothing has changed anywhere, tell the user there are no changes to review.
+
+Get the diff using the appropriate command for the chosen scope:
 ```bash
-git diff --cached                    # staged
-git diff HEAD~3                      # last 3 commits
+git diff --cached                    # staged only
+git diff                             # unstaged only
+git diff HEAD                        # all uncommitted (staged + unstaged)
 git diff main..HEAD                  # branch diff
 ```
-
-If the diff is empty, tell the user there are no changes to review.
 
 ### Step 2: Identify affected files
 
@@ -34,20 +43,25 @@ Extract the list of files from the diff:
 git diff --cached --name-only        # or appropriate variant
 ```
 
-### Step 3: Spawn the canon-reviewer agent
+### Step 3: Pre-load principles
+
+Before spawning the reviewer, call the `get_principles` MCP tool with each affected file path to get matched principles. Deduplicate by principle ID. This avoids the reviewer redundantly re-loading principles from disk.
+
+### Step 4: Spawn the canon-reviewer agent
 
 Launch the canon-reviewer agent as a sub-agent. Provide it with:
 - The diff content
 - The list of affected files
-- A brief description: "Review the following code changes against Canon principles"
+- The pre-loaded matched principles (full body) from Step 3
+- A brief description: "Review the following code changes against Canon principles. Matched principles are provided below — do not re-load them."
 
 The reviewer will:
-1. Match principles to the affected files
+1. Use the pre-loaded principles (already matched to affected files)
 2. Perform Stage 1: Principle Compliance review
 3. Perform Stage 2: Principle-Informed Code Quality review
 4. Return a structured report
 
-### Step 4: Log the review
+### Step 5: Log the review
 
 After the reviewer returns its report, log the results for drift tracking using the `report` MCP tool (type=review). Pass:
 - `files`: The list of affected files from Step 2
@@ -58,7 +72,7 @@ After the reviewer returns its report, log the results for drift tracking using 
 
 This ensures standalone reviews feed drift data, not just `/canon:build` runs.
 
-### Step 5: Present the report
+### Step 6: Present the report
 
 Display the reviewer's report to the user. The report includes:
 - Violations with principle references, severity, and fix suggestions

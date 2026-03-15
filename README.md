@@ -34,6 +34,33 @@ After installing, Canon's slash commands, agents, hooks, and MCP tools are avail
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 - Node.js 18+ (for the MCP server)
 
+### Claude Max users
+
+Opus 4.6 uses a 1M context window which requires **extra usage** on Claude Max. If you see `"Extra usage is required for long context requests"`:
+
+1. Enable extra usage in your Claude account settings
+2. Set a monthly spend limit (e.g. $5)
+3. Buy extra usage balance — even a few dollars is enough for testing
+
+Canon commands specify the right model tier for each task (haiku for simple ops, sonnet for code work, opus for architecture), so extra usage costs are minimized.
+
+If you don't want to enable extra usage, launch with Sonnet instead:
+
+```bash
+claude --model sonnet
+```
+
+We also recommend enabling tool search to reduce context usage from MCP tools:
+
+```json
+// ~/.claude/settings.json
+{
+  "env": {
+    "ENABLE_TOOL_SEARCH": "true"
+  }
+}
+```
+
 ## Quick Start
 
 ```bash
@@ -146,7 +173,7 @@ Canon includes 6 automation hooks:
 - **Large file guard** — Warns before writing or editing files that exceed a line threshold (default 500, configurable via `max_file_lines` in `.canon/config.json`)
 - **Compaction check** — Warns when `.jsonl` data files or `CONVENTIONS.md` grow past thresholds
 - **Learn nudge** — Suggests `/canon:learn` after 10+ reviews accumulate
-- **Skill activation** — Ensures Canon loads before code generation tasks
+- **Principle loading** — Ensures Canon principles are loaded before code generation tasks
 
 ## Project Structure
 
