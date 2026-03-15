@@ -1,5 +1,5 @@
 {
-  "description": "Canon hooks — skill activation on every prompt, pre-commit secrets detection, pre-push review guard, large file guard, learn nudge, and compaction check",
+  "description": "Canon hooks — conditional principle loading on prompt, pre-commit secrets detection, pre-push review guard, large file guard, learn nudge, and compaction check",
   "hooks": {
     "UserPromptSubmit": [
       {
