@@ -237,7 +237,7 @@ As your project grows — more principles, more reviews, more conventions — Ca
 | Mechanism | What it does |
 |-----------|-------------|
 | **Principle cap** | `get_principles` returns at most `max_principles_per_review` entries (default 10, configurable in `.canon/config.json`). Rules are always prioritized. |
-| **Review cap** | `review_code` caps at 15 matched principles, sorted by severity. Lower-priority principles are noted but omitted. |
+| **Review cap** | `review_code` always includes every matched rule (they block commits and are never dropped), then fills remaining budget with strong-opinions and conventions up to `max_review_principles` (default 15, configurable). Total may exceed the cap when many rules match. |
 | **Summary-only mode** | `get_principles` accepts `summary_only: true` to return just the first paragraph (~60% less context) instead of full rationale/examples. |
 | **Data rotation** | `.jsonl` files auto-rotate at 500 entries — older entries move to `*.archive.jsonl`, keeping the active file lean. |
 | **Principle archiving** | Add `archived: true` to a principle's frontmatter to disable it without deleting. Archived principles are skipped by the matcher. |
