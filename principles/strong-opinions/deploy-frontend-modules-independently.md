@@ -32,16 +32,10 @@ The practical test from *Modern Front-End Architecture*: can Team A deploy to pr
 
 **Bad — build-time coupling prevents independent deployment:**
 
-```jsonc
-// package.json — Module A directly imports Module B
-{
-  "dependencies": {
-    "@company/module-b": "^2.3.0"  // pinned to a specific version range
-  }
-}
-```
-
 ```typescript
+// package.json — Module A directly imports Module B
+// { "dependencies": { "@company/module-b": "^2.3.0" } }
+
 // Module A imports Module B's internals
 import { CartContext } from "@company/module-b/src/context/CartContext";
 import { formatPrice } from "@company/module-b/src/utils/currency";

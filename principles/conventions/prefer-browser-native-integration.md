@@ -79,3 +79,5 @@ Zero shared code. Module A could be React, Module B could be Vue — neither car
 ## Exceptions
 
 Within a single module or team-owned micro frontend, framework-native state management (React Context, Vuex/Pinia, NgRx) is the right tool — the isolation boundary is between modules, not within them. High-frequency communication (60fps drag coordination, streaming data updates) may justify a shared library optimized for performance over the general-purpose event system. In these cases, document the coupling explicitly and version the shared contract.
+
+**Related:** `isolate-frontend-runtime-state` explains why shared runtime state is the failure mode that this communication pattern prevents.

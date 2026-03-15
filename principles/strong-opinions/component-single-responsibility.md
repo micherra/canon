@@ -107,3 +107,5 @@ Each component renders one thing. Data-fetching lives in hooks. The profile page
 ## Exceptions
 
 Leaf components that combine a small amount of local state with rendering (a `<Toggle>` managing its own open/closed state) are fine — the state is intrinsic to the component's single purpose. Prototype or throwaway UI where speed matters more than maintainability can bend this rule, but convert to single-responsibility components before the prototype becomes production code.
+
+**Related:** `functions-do-one-thing` applies the same single-responsibility constraint at the function level; this principle applies it at the UI component level.

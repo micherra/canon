@@ -63,6 +63,12 @@ function ProductPage() {
   );
 }
 
+interface ModuleBoundaryProps {
+  name: string;
+  fallback: ReactNode;
+  children: ReactNode;
+}
+
 function ModuleBoundary({ name, fallback, children }: ModuleBoundaryProps) {
   return (
     <ErrorBoundary

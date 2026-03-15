@@ -78,3 +78,5 @@ Each module owns its state. The event contract is narrow (userId + displayName),
 ## Exceptions
 
 A thin, read-only shared context — like a current locale, feature flags, or authenticated user ID provided by the application shell — is acceptable when it's injected at the top level and treated as immutable by consumers. The key distinction: the shell provides configuration, not mutable application state. Within a single micro frontend or team-owned module, shared state management (Redux, Zustand, Pinia) is perfectly fine — the isolation boundary is between modules, not within them.
+
+**Related:** `prefer-browser-native-integration` describes the specific browser-native mechanisms to use when implementing this isolation pattern.

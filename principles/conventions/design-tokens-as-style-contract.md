@@ -85,4 +85,4 @@ A theme change updates the token definitions in one file. Dark mode swaps `--col
 
 ## Exceptions
 
-One-off values for pixel-precise alignment (a `2px` nudge for optical centering), animation keyframe values, and truly unique layout dimensions that don't map to any design scale are fine as hardcoded values. The test: if this value changed, should other elements change too? If yes, it should be a token.
+Values with no semantic meaning that would never appear in a design token scale — single-use pixel adjustments for optical alignment, animation keyframe percentages, and truly unique layout dimensions — are fine as hardcoded values. The test: does this value belong to a system-wide scale (color, spacing, typography, radius, shadow)? If yes, it should be a token. If it's a one-off magic number with no design-system equivalent, hardcode it.
