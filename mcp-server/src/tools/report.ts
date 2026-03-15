@@ -1,52 +1,7 @@
-import { DriftStore, DecisionEntry, ReviewEntry } from "../drift/store.js";
-import { appendFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { DriftStore } from "../drift/store.js";
 import { randomBytes } from "crypto";
-
-// --- Decision ---
-
-export interface ReportDecisionData {
-  principle_id: string;
-  file_path: string;
-  justification: string;
-  category?: string;
-}
-
-// --- Pattern ---
-
-export interface ReportPatternData {
-  pattern: string;
-  file_paths: string[];
-  context?: string;
-}
-
-// --- Review ---
-
-export interface ReviewViolationInput {
-  principle_id: string;
-  severity: string;
-}
-
-export interface ReviewScoreInput {
-  rules: { passed: number; total: number };
-  opinions: { passed: number; total: number };
-  conventions: { passed: number; total: number };
-}
-
-export interface ReportReviewData {
-  files: string[];
-  violations: ReviewViolationInput[];
-  honored: string[];
-  score: ReviewScoreInput;
-  verdict?: "BLOCKING" | "WARNING" | "CLEAN";
-}
-
-// --- Unified input/output ---
-
-export type ReportInput =
-  | { type: "decision"; data: ReportDecisionData }
-  | { type: "pattern"; data: ReportPatternData }
-  | { type: "review"; data: ReportReviewData };
+import type { ReportInput, DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
+export { reportInputSchema, type ReportInput } from "../schema.js";
 
 export interface ReportOutput {
   recorded: boolean;
@@ -58,32 +13,33 @@ export async function report(
   input: ReportInput,
   projectDir: string
 ): Promise<ReportOutput> {
+  const store = new DriftStore(projectDir);
+
   switch (input.type) {
     case "decision":
-      return reportDecision(input.data, projectDir);
+      return recordDecision(input, store);
     case "pattern":
-      return reportPattern(input.data, projectDir);
+      return recordPattern(input, store);
     case "review":
-      return reportReview(input.data, projectDir);
+      return recordReview(input, store);
   }
 }
 
-async function reportDecision(
-  data: ReportDecisionData,
-  projectDir: string
+async function recordDecision(
+  decision: Extract<ReportInput, { type: "decision" }>,
+  store: DriftStore
 ): Promise<ReportOutput> {
-  const id = `dec_${formatDate()}_${randomBytes(2).toString("hex")}`;
+  const id = generateId("dec");
 
   const entry: DecisionEntry = {
     decision_id: id,
     timestamp: new Date().toISOString(),
-    principle_id: data.principle_id,
-    file_path: data.file_path,
-    justification: data.justification,
-    ...(data.category ? { category: data.category } : {}),
+    principle_id: decision.principle_id,
+    file_path: decision.file_path,
+    justification: decision.justification,
+    ...(decision.category ? { category: decision.category } : {}),
   };
 
-  const store = new DriftStore(projectDir);
   await store.appendDecision(entry);
 
   return {
@@ -93,31 +49,21 @@ async function reportDecision(
   };
 }
 
-async function reportPattern(
-  data: ReportPatternData,
-  projectDir: string
+async function recordPattern(
+  pattern: Extract<ReportInput, { type: "pattern" }>,
+  store: DriftStore
 ): Promise<ReportOutput> {
-  if (data.file_paths.length === 0) {
-    return {
-      recorded: false,
-      id: "",
-      note: "At least one file path is required to record a pattern observation.",
-    };
-  }
+  const id = generateId("pat");
 
-  const id = `pat_${formatDate()}_${randomBytes(2).toString("hex")}`;
-
-  const entry = {
+  const entry: PatternEntry = {
     pattern_id: id,
     timestamp: new Date().toISOString(),
-    pattern: data.pattern,
-    file_paths: data.file_paths,
-    context: data.context ?? "",
+    pattern: pattern.pattern,
+    file_paths: pattern.file_paths,
+    context: pattern.context ?? "",
   };
 
-  const filePath = join(projectDir, ".canon", "patterns.jsonl");
-  await mkdir(join(projectDir, ".canon"), { recursive: true });
-  await appendFile(filePath, JSON.stringify(entry) + "\n", "utf-8");
+  await store.appendPattern(entry);
 
   return {
     recorded: true,
@@ -126,28 +72,24 @@ async function reportPattern(
   };
 }
 
-async function reportReview(
-  data: ReportReviewData,
-  projectDir: string
+async function recordReview(
+  review: Extract<ReportInput, { type: "review" }>,
+  store: DriftStore
 ): Promise<ReportOutput> {
-  const violatedIds = new Set(data.violations.map((v) => v.principle_id));
-  const cleanHonored = data.honored.filter((id) => !violatedIds.has(id));
-
-  const id = `rev_${formatDate()}_${randomBytes(2).toString("hex")}`;
-
-  const verdict = data.verdict ?? deriveVerdict(data);
+  const violatedIds = new Set(review.violations.map((v) => v.principle_id));
+  const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));
+  const id = generateId("rev");
 
   const entry: ReviewEntry = {
     review_id: id,
     timestamp: new Date().toISOString(),
-    verdict,
-    files: data.files,
-    violations: data.violations,
+    verdict: review.verdict ?? deriveVerdict(review.violations),
+    files: review.files,
+    violations: review.violations,
     honored: cleanHonored,
-    score: data.score,
+    score: review.score,
   };
 
-  const store = new DriftStore(projectDir);
   await store.appendReview(entry);
 
   return {
@@ -157,16 +99,16 @@ async function reportReview(
   };
 }
 
-function deriveVerdict(data: ReportReviewData): "BLOCKING" | "WARNING" | "CLEAN" {
-  if (data.violations.some((v) => v.severity === "rule")) return "BLOCKING";
-  if (data.violations.some((v) => v.severity === "strong-opinion")) return "WARNING";
+function deriveVerdict(violations: { severity: string }[]): "BLOCKING" | "WARNING" | "CLEAN" {
+  if (violations.some((v) => v.severity === "rule")) return "BLOCKING";
+  if (violations.some((v) => v.severity === "strong-opinion")) return "WARNING";
   return "CLEAN";
 }
 
-function formatDate(): string {
+function generateId(prefix: string): string {
   const now = new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
-  return `${y}${m}${d}`;
+  return `${prefix}_${y}${m}${d}_${randomBytes(2).toString("hex")}`;
 }
