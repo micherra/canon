@@ -211,7 +211,7 @@ Agent-rules use the same frontmatter fields but target agent behavior rather tha
 
 ### How matching works
 
-When you edit a file, Canon infers its architectural layer from the path and selects entries whose `scope.layers` and `scope.file_patterns` match. Entries are loaded in severity order — rules first, then strong-opinions, then conventions — capped at 10 per context. An entry with no `layers` and no `file_patterns` matches everything.
+When you edit a file, Canon infers its architectural layer from the path and selects entries whose `scope.layers` and `scope.file_patterns` match. Entries are loaded in severity order — rules first, then strong-opinions, then conventions — capped at `max_principles_per_review` per context (default 10, configurable in `.canon/config.json`). An entry with no `layers` and no `file_patterns` matches everything.
 
 ### Adding your own
 
