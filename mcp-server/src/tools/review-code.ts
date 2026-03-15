@@ -30,7 +30,9 @@ async function loadMaxReviewPrinciples(projectDir: string): Promise<number> {
     const configPath = join(projectDir, ".canon", "config.json");
     const raw = await readFile(configPath, "utf-8");
     const config = JSON.parse(raw);
-    return config?.review?.max_review_principles ?? DEFAULT_MAX_REVIEW_PRINCIPLES;
+    const value = Number(config?.review?.max_review_principles);
+    if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_REVIEW_PRINCIPLES;
+    return Math.floor(value);
   } catch {
     return DEFAULT_MAX_REVIEW_PRINCIPLES;
   }
