@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "[Canon] Before writing or modifying code, activate the canon skill and load relevant principles. If you have already loaded principles for this task, proceed. If not, load them now."
+            "prompt": "[Canon] If you are about to write or modify code and have NOT yet loaded Canon principles for the current task, load them via get_principles. If principles are already loaded for this task, or the user is just asking a question / requesting a review / continuing a conversation, skip principle loading and proceed directly. Do NOT activate skills or load principles redundantly — avoid unnecessary API calls."
           }
         ]
       }
