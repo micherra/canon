@@ -88,3 +88,5 @@ Recommendations failing shows a placeholder. The product details, reviews, and a
 ## Exceptions
 
 Modules that are genuinely critical to the page's core purpose — the `AddToCart` button on a product page, the message composer in a chat app — may warrant failing the whole page rather than showing a broken partial experience. In these cases, the error boundary should be at the page level, not the module level. The principle applies to auxiliary and composable modules, not to the page's primary interactive element.
+
+**Related:** `deploy-frontend-modules-independently` describes the deployment model that makes failure isolation necessary. `isolate-frontend-runtime-state` explains why modules must not share state, which is the precondition for isolated failure.

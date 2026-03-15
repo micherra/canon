@@ -82,3 +82,5 @@ Each extracted function has a clear, singular purpose and can be tested independ
 ## Exceptions
 
 Pure data transformation pipelines (map/filter/reduce chains) can be longer without being "multi-purpose" — they're doing one thing (transforming data) through multiple steps. Also, configuration/setup functions that initialize many related settings are doing one thing (configuration) even though they touch many values.
+
+**Related:** `component-single-responsibility` applies the same single-purpose constraint at the UI component level.

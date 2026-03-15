@@ -65,8 +65,9 @@ function OrderSummary() {
 }
 ```
 
+The shared contract is a minimal props interface:
+
 ```typescript
-// Shared contract is minimal — just the props interface
 interface CartWidgetProps {
   onTotalChange: (total: number) => void;
 }
@@ -77,3 +78,5 @@ Module B can deploy a completely new internal implementation. As long as it hono
 ## Exceptions
 
 Early-stage products with one team don't need micro frontends — a well-structured monolith with clear module boundaries is simpler and sufficient. Shared design-system libraries that version semantically and publish as packages are an acceptable build-time dependency, since they change infrequently and are consumed as a stable interface, not coupled internals. The overhead of independent deployment infrastructure (separate CI pipelines, module federation, runtime loading) must be justified by team scale — typically three or more teams working on the same product.
+
+**Related:** `resilient-frontend-composition` explains why independently deployed modules need error boundaries — deployment independence makes runtime failures between modules routine, not exceptional.
