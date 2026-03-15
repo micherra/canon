@@ -68,7 +68,7 @@ git diff --cached  # For staged changes
 
 ### Step 2: Resolve matched principles
 
-For each file in the diff, use the `get_principles` MCP tool with the file path to get matched principles. Or glob `.canon/principles/` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/`), read frontmatter, and match by architectural layer (inferred from file path) and file patterns.
+For each file in the diff, use the `get_principles` MCP tool with the file path to get matched principles. Or glob `.canon/principles/**/*.md` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`), read frontmatter, and match by architectural layer (inferred from file path) and file patterns.
 
 Read the full body of each matched principle (max 10, prioritized: rules > strong-opinions > conventions).
 

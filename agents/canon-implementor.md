@@ -45,7 +45,7 @@ The plan file is your primary instruction. Read it carefully. It contains:
 
 Read the full body of each Canon principle listed in the plan's `principles` frontmatter. These are the principles you must honor during implementation.
 
-Load from `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`.
+Load from `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`. Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`.
 
 ### Step 3: Read CLAUDE.md
 

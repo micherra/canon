@@ -102,4 +102,4 @@ You do NOT receive other researchers' findings. Stay focused on your assigned di
 
 ## Loading Canon Principles
 
-Use the `list_principles` MCP tool to get the full index. Or glob `.canon/principles/` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/`) and read the frontmatter of each `*.md` file.
+Use the `list_principles` MCP tool to get the full index. Or glob `.canon/principles/**/*.md` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`) and read the frontmatter of each file. Principles are organized into subdirectories by severity: `rules/`, `strong-opinions/`, `conventions/`.

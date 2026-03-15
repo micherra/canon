@@ -2,7 +2,6 @@ import { readFile, appendFile, mkdir } from "fs/promises";
 import { join } from "path";
 import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
 
-export type { DecisionEntry, PatternEntry, ReviewEntry, ReviewViolation } from "../schema.js";
 
 async function readJsonl<T>(filePath: string): Promise<T[]> {
   let content: string;

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, readFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -37,7 +37,9 @@ describe("reportInputSchema", () => {
     };
     const parsed = reportInputSchema.parse(input);
     expect(parsed.type).toBe("pattern");
-    expect((parsed as any).file_paths).toEqual(["src/a.ts"]);
+    if (parsed.type === "pattern") {
+      expect(parsed.file_paths).toEqual(["src/a.ts"]);
+    }
   });
 
   it("parses a valid review input", () => {
@@ -83,8 +85,12 @@ describe("reportInputSchema", () => {
 describe("report()", () => {
   let tmpDir: string;
 
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
+  });
+
   afterEach(async () => {
-    if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { recursive: true, force: true });
   });
 
   async function readJsonl<T>(filePath: string): Promise<T[]> {
@@ -96,7 +102,6 @@ describe("report()", () => {
   }
 
   it("records a decision and writes to decisions.jsonl", async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
     const result = await report(
       {
         type: "decision",
@@ -117,7 +122,6 @@ describe("report()", () => {
   });
 
   it("records a pattern and writes to patterns.jsonl", async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
     const result = await report(
       {
         type: "pattern",
@@ -137,7 +141,6 @@ describe("report()", () => {
   });
 
   it("records a review with derived BLOCKING verdict (rule violation)", async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
     const result = await report(
       {
         type: "review",
@@ -162,7 +165,6 @@ describe("report()", () => {
   });
 
   it("derives WARNING verdict for strong-opinion violation", async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
     const result = await report(
       {
         type: "review",
@@ -183,7 +185,6 @@ describe("report()", () => {
   });
 
   it("derives CLEAN verdict when no violations", async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
     await report(
       {
         type: "review",
@@ -204,7 +205,6 @@ describe("report()", () => {
   });
 
   it("uses explicit verdict when provided instead of deriving", async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
     await report(
       {
         type: "review",

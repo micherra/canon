@@ -143,7 +143,10 @@ Canon includes 3 automation hooks:
 
 ```
 canon/
-├── principles/          47 engineering principles (rule / strong-opinion / convention)
+├── principles/          47 engineering principles organized by severity
+│   ├── rules/           Hard constraints (4 principles)
+│   ├── strong-opinions/ Default path (28 principles)
+│   └── conventions/     Stylistic preferences (15 principles)
 ├── commands/canon/      13 slash commands
 ├── agents/              9 specialist agents
 ├── agent-rules/         8 agent behavior guidelines

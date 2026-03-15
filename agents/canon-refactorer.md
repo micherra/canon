@@ -64,7 +64,7 @@ If you receive multiple violations, group them only if they are in the same file
 
 ### Step 2: Load the violated principle
 
-Read the full principle body. Check `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`.
+Read the full principle body. Check `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`. Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`.
 
 Pay special attention to:
 - The **Summary** constraint — this is what you must satisfy

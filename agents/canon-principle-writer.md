@@ -41,7 +41,7 @@ Read the principle format specification:
 ${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md
 ```
 
-Also read 2-3 existing principles from `${CLAUDE_PLUGIN_ROOT}/principles/` as examples of good principles. Choose principles with different severities to show the range.
+Also read 2-3 existing principles from `${CLAUDE_PLUGIN_ROOT}/principles/` as examples of good principles. Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`. Choose principles with different severities to show the range.
 
 ### Step 2: Interview the user
 
