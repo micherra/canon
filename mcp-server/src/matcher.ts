@@ -150,11 +150,6 @@ async function computeMtimeKey(projectDir: string, pluginDir: string): Promise<s
   return mtimes.join(",");
 }
 
-/** Clear the principle cache. Useful after principle files are modified. */
-export function invalidatePrincipleCache(): void {
-  principleCache = null;
-}
-
 export async function loadAllPrinciples(
   projectDir: string,
   pluginDir: string
