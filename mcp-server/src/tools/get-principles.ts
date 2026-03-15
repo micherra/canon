@@ -1,3 +1,5 @@
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { type Principle } from "../parser.js";
 import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
 
@@ -5,6 +7,7 @@ export interface GetPrinciplesInput {
   file_path?: string;
   layers?: string[];
   task_description?: string;
+  summary_only?: boolean;
 }
 
 export interface GetPrinciplesOutput {
@@ -18,27 +21,52 @@ export interface GetPrinciplesOutput {
   total_in_canon: number;
 }
 
+const DEFAULT_MAX_PRINCIPLES = 10;
+
+async function loadMaxPrinciples(projectDir: string): Promise<number> {
+  try {
+    const configPath = join(projectDir, ".canon", "config.json");
+    const raw = await readFile(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    const value = Number(config?.review?.max_principles_per_review);
+    if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_PRINCIPLES;
+    return Math.floor(value);
+  } catch {
+    return DEFAULT_MAX_PRINCIPLES;
+  }
+}
+
+/**
+ * Extract just the first paragraph (summary) from a principle body.
+ * This is the falsifiable constraint statement — enough for code generation
+ * context without loading full rationale, examples, and exceptions.
+ */
+function extractSummary(body: string): string {
+  const paragraphs = body.split(/\n\n/);
+  return paragraphs[0]?.trim() || body;
+}
+
 export async function getPrinciples(
   input: GetPrinciplesInput,
   projectDir: string,
   pluginDir: string
 ): Promise<GetPrinciplesOutput> {
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
+  const maxPrinciples = await loadMaxPrinciples(projectDir);
 
   const matched = matchPrinciples(allPrinciples, {
     file_path: input.file_path,
     layers: input.layers,
   });
 
-  // Limit to top 10, prioritized by severity (already sorted by matchPrinciples)
-  const top = matched.slice(0, 10);
+  const top = matched.slice(0, maxPrinciples);
 
   return {
     principles: top.map((p) => ({
       id: p.id,
       title: p.title,
       severity: p.severity,
-      body: p.body,
+      body: input.summary_only ? extractSummary(p.body) : p.body,
     })),
     total_matched: matched.length,
     total_in_canon: allPrinciples.length,

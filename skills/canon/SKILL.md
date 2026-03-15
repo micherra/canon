@@ -75,11 +75,8 @@ After generating code, self-review against each loaded principle before presenti
 |---------|-------------|
 | `/canon:init` | Initialize Canon in your project. Sets up `.canon/principles/`, config, and CLAUDE.md integration. |
 | `/canon:list` | Browse and filter principles by `--severity`, `--tag`, or `--layer`. |
-| `/canon:check` | Quick inline check — load principles relevant to a specific file. |
 | `/canon:build` | Full principle-driven development pipeline: research → architect & plan → implement → test → security → review. |
 | `/canon:review` | Review code changes against principles. Accepts `--staged`, `HEAD~N`, `main..HEAD`, or file paths. |
-| `/canon:conventions` | View and manage project conventions. `--show`, `--add "..."`, `--remove N`. |
-| `/canon:drift` | Show compliance trends and drift analytics from review history. |
 | `/canon:learn` | Analyze codebase and drift data to suggest principle and convention improvements. |
 | `/canon:explain` | Deep-dive on a principle with real codebase examples. |
 | `/canon:adopt` | Scan a directory for principle coverage gaps and produce a remediation plan. |

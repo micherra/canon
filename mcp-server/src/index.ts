@@ -26,6 +26,7 @@ server.tool(
     file_path: z.string().optional().describe("Path of the file being worked on"),
     layers: z.array(z.string()).optional().describe("Architectural layers (e.g., api, domain, data)"),
     task_description: z.string().optional().describe("Brief description of the task"),
+    summary_only: z.boolean().optional().describe("Return only the summary paragraph instead of full body — reduces context usage by ~60%"),
   },
   async (input) => {
     const result = await getPrinciples(input, projectDir, pluginDir);
@@ -46,6 +47,7 @@ server.tool(
       .describe("Filter by severity level"),
     filter_tags: z.array(z.string()).optional().describe("Filter by tags"),
     filter_layers: z.array(z.string()).optional().describe("Filter by architectural layers"),
+    include_archived: z.boolean().optional().describe("Include archived principles in results (default: false)"),
   },
   async (input) => {
     const result = await listPrinciples(input, projectDir, pluginDir);

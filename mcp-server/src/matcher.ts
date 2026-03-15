@@ -9,6 +9,7 @@ export interface MatchFilters {
   file_path?: string;
   severity_filter?: "rule" | "strong-opinion" | "convention";
   tags?: string[];
+  include_archived?: boolean;
 }
 
 const PATH_TO_LAYER: Array<[RegExp, string]> = [
@@ -58,6 +59,9 @@ export function matchPrinciples(
 
   return principles
     .filter((p) => {
+      // Skip archived principles unless explicitly included
+      if (p.archived && !filters.include_archived) return false;
+
       // Severity filter
       if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
 

@@ -41,11 +41,13 @@ The plan file is your primary instruction. Read it carefully. It contains:
 - Verification steps
 - Done criteria
 
-### Step 2: Read Canon principles
+### Step 2: Load Canon principles
 
-Read the full body of each Canon principle listed in the plan's `principles` frontmatter. These are the principles you must honor during implementation.
+Load principles using the `get_principles` MCP tool with the file path of each file you'll modify. This respects the project's principle cap and filters out archived principles.
 
-Load from `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`. Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`.
+For implementation context, use `summary_only: true` — you need the constraint statement, not the full rationale and examples. If you hit a principle you don't understand, call `get_principles` again without `summary_only` for that specific principle's full body.
+
+If the plan's `principles` frontmatter lists specific principle IDs, those are the ones you must honor. The MCP tool will match them based on your file paths.
 
 ### Step 3: Read CLAUDE.md
 

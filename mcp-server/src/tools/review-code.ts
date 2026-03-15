@@ -1,3 +1,5 @@
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
 
 export interface ReviewCodeInput {
@@ -21,32 +23,57 @@ export interface ReviewCodeOutput {
   context?: string;
 }
 
+const DEFAULT_MAX_REVIEW_PRINCIPLES = 15;
+
+async function loadMaxReviewPrinciples(projectDir: string): Promise<number> {
+  try {
+    const configPath = join(projectDir, ".canon", "config.json");
+    const raw = await readFile(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    const value = Number(config?.review?.max_review_principles);
+    if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_REVIEW_PRINCIPLES;
+    return Math.floor(value);
+  } catch {
+    return DEFAULT_MAX_REVIEW_PRINCIPLES;
+  }
+}
+
 export async function reviewCode(
   input: ReviewCodeInput,
   projectDir: string,
   pluginDir: string
 ): Promise<ReviewCodeOutput> {
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
+  const maxReviewPrinciples = await loadMaxReviewPrinciples(projectDir);
 
   const matched = matchPrinciples(allPrinciples, {
     file_path: input.file_path,
   });
 
-  // Return matched principles with full bodies for the calling agent to evaluate.
-  // This tool is a data provider — the actual review (determining violations vs.
-  // compliance) is performed by the LLM agent, not programmatically.
-  const principlesToEvaluate: PrincipleForReview[] = matched.map((p) => ({
+  // Cap matched principles to prevent unbounded context consumption.
+  // Rules are always included (safety-critical — they block commits),
+  // then fill remaining budget with strong-opinions and conventions.
+  const rules = matched.filter((p) => p.severity === "rule");
+  const nonRules = matched.filter((p) => p.severity !== "rule");
+  const budgetForNonRules = Math.max(0, maxReviewPrinciples - rules.length);
+  const capped = [...rules, ...nonRules.slice(0, budgetForNonRules)];
+
+  const principlesToEvaluate: PrincipleForReview[] = capped.map((p) => ({
     principle_id: p.id,
     principle_title: p.title,
     severity: p.severity,
     body: p.body,
   }));
 
-  const ruleCount = matched.filter((p) => p.severity === "rule").length;
-  const opinionCount = matched.filter((p) => p.severity === "strong-opinion").length;
-  const conventionCount = matched.filter((p) => p.severity === "convention").length;
+  const ruleCount = rules.length;
+  const opinionCount = capped.filter((p) => p.severity === "strong-opinion").length;
+  const conventionCount = capped.filter((p) => p.severity === "convention").length;
 
-  const summary = `${matched.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions). Evaluate each against the code below.`;
+  const omitted = matched.length - capped.length;
+  const truncated = omitted > 0
+    ? ` (${omitted} lower-priority principles omitted)`
+    : "";
+  const summary = `${capped.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}. Evaluate each against the code below.`;
 
   return {
     summary,

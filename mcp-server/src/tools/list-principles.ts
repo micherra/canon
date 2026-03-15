@@ -4,6 +4,7 @@ export interface ListPrinciplesInput {
   filter_severity?: "rule" | "strong-opinion" | "convention";
   filter_tags?: string[];
   filter_layers?: string[];
+  include_archived?: boolean;
 }
 
 export interface ListPrinciplesOutput {
@@ -12,8 +13,10 @@ export interface ListPrinciplesOutput {
     title: string;
     severity: string;
     tags: string[];
+    archived: boolean;
     scope: {
       layers: string[];
+      file_patterns: string[];
     };
   }>;
   total: number;
@@ -30,6 +33,7 @@ export async function listPrinciples(
     severity_filter: input.filter_severity,
     tags: input.filter_tags,
     layers: input.filter_layers,
+    include_archived: input.include_archived,
   });
 
   return {
@@ -38,8 +42,10 @@ export async function listPrinciples(
       title: p.title,
       severity: p.severity,
       tags: p.tags,
+      archived: p.archived,
       scope: {
         layers: p.scope.layers,
+        file_patterns: p.scope.file_patterns,
       },
     })),
     total: matched.length,

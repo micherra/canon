@@ -64,7 +64,9 @@ If you receive multiple violations, group them only if they are in the same file
 
 ### Step 2: Load the violated principle
 
-Read the full principle body. Check `.canon/principles/` first, then `${CLAUDE_PLUGIN_ROOT}/principles/`. Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`.
+Use the `get_principles` MCP tool with the violation's file path to load the relevant principle with its full body. Do NOT use `summary_only` here — you need the full examples to understand the target pattern.
+
+If the MCP tool is unavailable, fall back to reading from `.canon/principles/` then `${CLAUDE_PLUGIN_ROOT}/principles/`.
 
 Pay special attention to:
 - The **Summary** constraint — this is what you must satisfy

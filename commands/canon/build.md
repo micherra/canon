@@ -105,7 +105,7 @@ For each wave (starting from --wave N if specified, else wave 1):
 
 1. Read INDEX.md to get tasks in this wave
 2. For each task in the wave, spawn a canon-implementor agent in parallel:
-   "Execute the task plan at .canon/plans/{slug}/{task-id}-PLAN.md. Read project conventions at .canon/CONVENTIONS.md if it exists. Read task conventions at .canon/plans/{slug}/CONVENTIONS.md if it exists. Read CLAUDE.md. Commit atomically. Save summary to .canon/plans/{slug}/{task-id}-SUMMARY.md"
+   "Execute the task plan at .canon/plans/{slug}/{task-id}-PLAN.md. Load principles via the get_principles MCP tool with summary_only: true for each file you modify — do NOT read principle files from disk directly. Read project conventions at .canon/CONVENTIONS.md if it exists. Read task conventions at .canon/plans/{slug}/CONVENTIONS.md if it exists. Read CLAUDE.md. Commit atomically. Save summary to .canon/plans/{slug}/{task-id}-SUMMARY.md"
 3. Wait for all implementors in the wave to complete
 4. Read their summary statuses:
    - **DONE**: Proceed
@@ -124,7 +124,7 @@ For each wave (starting from --wave N if specified, else wave 1):
 ### Phase 4: TEST (Medium + Large, skippable with --skip-tests)
 
 Spawn canon-tester agent:
-"Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Read task summaries from .canon/plans/{slug}/*-SUMMARY.md. Read implementor test files. Save test report to .canon/plans/{slug}/TEST-REPORT.md"
+"Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true — do NOT read principle files from disk directly. Read task summaries from .canon/plans/{slug}/*-SUMMARY.md. Read implementor test files. Save test report to .canon/plans/{slug}/TEST-REPORT.md"
 
 If tester reports IMPLEMENTATION_ISSUE, surface to user.
 
