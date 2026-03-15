@@ -27,7 +27,12 @@ if ! echo "$INPUT" | grep -q "git commit"; then
 fi
 
 # Session dedup — only nudge once per session, scoped to this project
-PROJECT_HASH=$(echo -n "$(pwd)" | md5 | head -c 8)
+# Cross-platform hash: try md5sum (Linux), fall back to md5 (macOS)
+if command -v md5sum &>/dev/null; then
+  PROJECT_HASH=$(echo -n "$(pwd)" | md5sum | head -c 8)
+else
+  PROJECT_HASH=$(echo -n "$(pwd)" | md5 | head -c 8)
+fi
 NUDGE_FILE="/tmp/canon-compaction-nudged-${PROJECT_HASH}"
 if [[ -f "$NUDGE_FILE" ]]; then
   exit 0

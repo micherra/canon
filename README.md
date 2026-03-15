@@ -250,10 +250,16 @@ In `.canon/config.json`:
 ```json
 {
   "review": {
-    "max_principles_per_review": 10
+    "max_principles_per_review": 10,
+    "max_review_principles": 15
   }
 }
 ```
+
+| Key | Default | What it controls |
+|-----|---------|-----------------|
+| `review.max_principles_per_review` | 10 | Cap for `get_principles` (used during code generation) |
+| `review.max_review_principles` | 15 | Cap for `review_code` (used during reviews) |
 
 Run `/canon:doctor` to check for context bloat issues.
 
