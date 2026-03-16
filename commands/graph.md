@@ -44,13 +44,10 @@ Layers:
 Top Hotspots:
   src/api/orders.ts — 5 violations (thin-handlers, validate-at-trust-boundaries)
   ...
-
-View: Run /canon:dashboard to deploy and serve the Canon UI
 ```
 
-If `--open` is provided, first deploy and serve the dashboard:
-1. Call the `deploy_dashboard` MCP tool
-2. Start a local server: `cd .canon && python3 -m http.server 8080 &`
-3. Open: `open http://localhost:8080/dashboard/ || xdg-open http://localhost:8080/dashboard/`
+If `--open` is provided, deploy the full dashboard and open it:
+1. Call the `deploy_dashboard` MCP tool (generates `.canon/dashboard.html` with data embedded)
+2. Open: `open .canon/dashboard.html || xdg-open .canon/dashboard.html`
 
 If `--violations-only` is provided, mention that the UI can be filtered to show only files with violations.

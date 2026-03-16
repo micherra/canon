@@ -18,15 +18,15 @@ Call the `get_orchestration_data` MCP tool. If `--task` is provided, pass it as 
 Show the pipeline stages as a horizontal flow:
 
 ```
-Pipeline: research → architect → plan → implement → test → security → review
-          ✓ done     ✓ done     ● run   ○ pending   ○       ○         ○
+Pipeline: research -> architect -> plan -> implement -> test -> security -> review
+          done       done         run     pending      ...    ...         ...
 ```
 
 Use these indicators:
-- `✓` completed (green)
-- `●` running (blue)
-- `✗` blocked (red)
-- `○` pending (gray)
+- done = completed
+- run = running
+- BLOCKED = blocked
+- ... = pending
 
 List agents under each active/completed stage.
 
@@ -47,6 +47,5 @@ Show the last 10 events with timestamp, type, agent, and status.
 Save orchestration data to `.canon/orchestration-data.json`.
 
 If `--open` is provided:
-1. Call the `deploy_dashboard` MCP tool
-2. Start a local server: `cd .canon && python3 -m http.server 8080 &`
-3. Open: `open http://localhost:8080/dashboard/#orchestration || xdg-open http://localhost:8080/dashboard/#orchestration`
+1. Call the `deploy_dashboard` MCP tool (generates `.canon/dashboard.html`)
+2. Open: `open .canon/dashboard.html || xdg-open .canon/dashboard.html`

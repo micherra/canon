@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Canon Dashboard</title>
+  <script src="https://d3js.org/d3.v7.min.js" defer></script>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --bg-surface: #16213e;
+      --bg-card: #0f3460;
+      --text: #e0e0e0;
+      --text-muted: #8e8e9e;
+      --text-bright: #ffffff;
+      --accent: #4A90D9;
+      --border: #2a2a4a;
+      --danger: #e74c3c;
+      --warning: #f39c12;
+      --success: #27ae60;
+      --info: #3498db;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 220px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .sidebar-header {
+      padding: 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-title { font-size: 20px; font-weight: 700; color: var(--text-bright); }
+    .sidebar-subtitle { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .sidebar-nav { flex: 1; padding: 8px 0; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      padding: 10px 16px; border: none; background: none;
+      color: var(--text); cursor: pointer; font-family: inherit;
+      font-size: 13px; text-align: left; transition: background 0.15s;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.05); }
+    .nav-item.active { background: var(--bg-card); color: var(--text-bright); border-left: 3px solid var(--accent); }
+    .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+    .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); }
+    .sidebar-version { font-size: 11px; color: var(--text-muted); }
+
+    /* Main content */
+    .main-content { flex: 1; overflow-y: auto; padding: 24px; }
+    .view-header { margin-bottom: 20px; }
+    .view-header h2 { font-size: 18px; color: var(--text-bright); margin-bottom: 12px; }
+
+    /* Filters */
+    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 12px; font-size: 12px;
+      background: var(--bg-card); cursor: pointer;
+    }
+    .chip input { width: 12px; height: 12px; }
+    .chip-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .search-input {
+      background: var(--bg-card); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 12px; border-radius: 6px;
+      font-family: inherit; font-size: 13px; width: 240px;
+    }
+    .search-input:focus { outline: none; border-color: var(--accent); }
+
+    /* Buttons */
+    .btn {
+      background: var(--accent); color: white; border: none;
+      padding: 6px 16px; border-radius: 6px; cursor: pointer;
+      font-family: inherit; font-size: 13px;
+    }
+    .btn:hover { opacity: 0.9; }
+
+    /* Badges */
+    .verdict-badge, .severity-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 600; color: white; text-transform: uppercase;
+    }
+    .tag {
+      display: inline-block; padding: 2px 6px; border-radius: 3px;
+      font-size: 10px; background: var(--bg); color: var(--text-muted); margin-right: 4px;
+    }
+
+    /* Tables */
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th, .data-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+    .data-table th { color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+    .violation-row { background: rgba(231, 76, 60, 0.1); }
+    .layer-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+    /* Graph layout */
+    .graph-layout { display: flex; gap: 16px; height: calc(100vh - 160px); }
+    .graph-canvas { flex: 1; background: var(--bg-surface); border-radius: 8px; overflow: hidden; }
+    .graph-canvas svg { width: 100%; height: 100%; }
+    .detail-panel { width: 280px; background: var(--bg-surface); border-radius: 8px; padding: 16px; overflow-y: auto; }
+    .detail-field { margin: 12px 0; }
+    .detail-field label { display: block; font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+    .detail-placeholder { color: var(--text-muted); font-style: italic; }
+
+    /* Principle cards */
+    .principle-list { display: flex; flex-direction: column; gap: 8px; }
+    .principle-card {
+      background: var(--bg-surface); border-radius: 8px;
+      padding: 12px 16px; cursor: pointer; transition: background 0.15s;
+    }
+    .principle-card:hover { background: var(--bg-card); }
+    .principle-header { display: flex; align-items: center; gap: 8px; }
+    .principle-title { color: var(--text-muted); font-size: 13px; }
+    .principle-meta { margin-top: 6px; display: flex; gap: 6px; align-items: center; }
+    .compliance { font-size: 11px; color: var(--success); }
+    .principle-body { margin-top: 8px; font-size: 13px; line-height: 1.5; }
+    .principle-body.collapsed { display: none; }
+
+    /* Try-it panel */
+    .try-it-panel { margin-top: 24px; background: var(--bg-surface); border-radius: 8px; padding: 16px; }
+    .try-it-panel h3 { margin-bottom: 8px; font-size: 14px; }
+    .try-it-panel textarea {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); padding: 8px; border-radius: 6px;
+      font-family: inherit; font-size: 12px; resize: vertical;
+    }
+    .try-it-panel .btn { margin-top: 8px; }
+
+    /* PR Review */
+    .pr-input-bar { display: flex; gap: 8px; }
+    .pr-content { margin-top: 16px; }
+    .review-summary { background: var(--bg-surface); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .verdict-large { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
+    .score-grid { display: flex; gap: 24px; }
+    .score-item label { display: block; font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+    .score-item span { font-size: 18px; font-weight: 600; }
+    .violations-section, .honored-section, .files-section { margin-top: 16px; }
+    .violations-section h3, .honored-section h3, .files-section h3 { font-size: 14px; margin-bottom: 8px; }
+    .violation-item {
+      background: var(--bg-surface); border-radius: 6px;
+      padding: 10px 12px; margin-bottom: 6px;
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }
+    .violation-item p { width: 100%; font-size: 13px; color: var(--text-muted); }
+    .suggestion { color: var(--info) !important; }
+    .honored-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .honored-chip { background: rgba(39, 174, 96, 0.2); color: var(--success); padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+    .file-list { list-style: none; }
+    .file-list li { padding: 4px 0; font-size: 13px; color: var(--text-muted); }
+
+    /* Pipeline */
+    .pipeline-stages { display: flex; align-items: flex-start; gap: 4px; overflow-x: auto; padding: 16px 0; }
+    .pipeline-stage { background: var(--bg-surface); border-radius: 8px; padding: 12px; min-width: 100px; text-align: center; }
+    .stage-indicator { width: 24px; height: 24px; border-radius: 50%; margin: 0 auto 8px; background: var(--text-muted); }
+    .stage-indicator.completed { background: var(--success); }
+    .stage-indicator.running { background: var(--info); animation: pulse 1.5s infinite; }
+    .stage-indicator.blocked { background: var(--danger); }
+    .stage-label { font-size: 12px; font-weight: 600; text-transform: capitalize; }
+    .pipeline-arrow { color: var(--text-muted); font-size: 20px; padding-top: 12px; }
+    .stage-agents { margin-top: 6px; }
+    .agent-chip { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: var(--bg); margin: 2px; display: inline-block; }
+    .agent-chip.completed { color: var(--success); }
+    .agent-chip.running { color: var(--info); }
+    .agent-chip.blocked { color: var(--danger); }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    /* Ralph loop */
+    .ralph-loop-view h3 { font-size: 14px; margin: 16px 0 8px; }
+    .loop-iterations { display: flex; gap: 12px; }
+    .loop-iter { background: var(--bg-surface); border-radius: 8px; padding: 12px; text-align: center; min-width: 100px; }
+    .iter-number { font-size: 16px; font-weight: 700; }
+    .iter-verdict { font-size: 13px; font-weight: 600; }
+    .iter-stats { font-size: 11px; color: var(--text-muted); }
+
+    /* Event timeline */
+    .event-timeline h3 { font-size: 14px; margin: 16px 0 8px; }
+    .timeline-list { max-height: 300px; overflow-y: auto; }
+    .timeline-event { display: flex; gap: 8px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
+    .event-time { color: var(--text-muted); min-width: 70px; }
+    .event-type { font-weight: 600; min-width: 110px; }
+    .event-agent { color: var(--accent); }
+    .event-phase { color: var(--text-muted); }
+    .event-status.completed { color: var(--success); }
+    .event-status.running { color: var(--info); }
+    .event-status.blocked { color: var(--danger); }
+
+    /* Flow cards */
+    .flow-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+    .flow-card { background: var(--bg-surface); border-radius: 8px; padding: 14px; }
+    .flow-name { font-weight: 700; font-size: 15px; color: var(--text-bright); }
+    .flow-desc { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .flow-meta { margin-top: 8px; font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; }
+    .loop-badge { background: var(--accent); color: white; padding: 1px 6px; border-radius: 3px; }
+    .flow-execution { margin-top: 24px; }
+    .exec-status { font-size: 20px; font-weight: 700; }
+    .exec-steps { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+    .exec-step { background: var(--bg-surface); border-radius: 6px; padding: 8px 12px; display: flex; gap: 6px; align-items: center; }
+    .step-id { font-weight: 600; }
+    .exec-meta { font-size: 12px; color: var(--text-muted); }
+
+    /* Utility */
+    .empty-state { color: var(--text-muted); font-style: italic; padding: 40px; text-align: center; }
+    .empty-state code { background: var(--bg-card); padding: 2px 6px; border-radius: 3px; }
+    .loading { color: var(--text-muted); }
+    .text-danger { color: var(--danger); }
+    .text-info { color: var(--info); }
+    .text-muted { color: var(--text-muted); }
+    .truncated { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
+    .help-text { font-size: 12px; color: var(--text-muted); margin-top: 12px; }
+    .graph-fallback { padding: 16px; }
+    .graph-fallback h3 { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main-content" id="main-content"></main>
+
+  <!-- DATA INJECTION — deploy_dashboard replaces these with actual JSON -->
+  <script id="canon-graph-data" type="application/json">__CANON_GRAPH_DATA__</script>
+  <script id="canon-principles-data" type="application/json">__CANON_PRINCIPLES_DATA__</script>
+  <script id="canon-orchestration-data" type="application/json">__CANON_ORCHESTRATION_DATA__</script>
+  <script id="canon-flow-data" type="application/json">__CANON_FLOW_DATA__</script>
+  <script id="canon-pr-reviews" type="application/json">__CANON_PR_REVIEWS__</script>
+
+  <script>
+    // ── Theme constants ──
+    const LAYER_COLORS = { api:'#4A90D9', ui:'#50C878', domain:'#9B59B6', data:'#E67E22', infra:'#7F8C8D', shared:'#1ABC9C', unknown:'#BDC3C7' };
+    const VERDICT_COLORS = { CLEAN:'#27ae60', WARNING:'#f39c12', BLOCKING:'#e74c3c' };
+    const STATUS_COLORS = { pending:'#7f8c8d', running:'#3498db', completed:'#27ae60', blocked:'#e74c3c', skipped:'#95a5a6' };
+    const SEVERITY_COLORS = { rule:'#e74c3c', 'strong-opinion':'#f39c12', convention:'#3498db' };
+
+    // ── Data loader (reads embedded JSON) ──
+    function loadEmbeddedData(id) {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      try {
+        const text = el.textContent.trim();
+        if (text.startsWith('__')) return null; // placeholder, not injected
+        return JSON.parse(text);
+      } catch { return null; }
+    }
+
+    const DATA = {
+      graph: loadEmbeddedData('canon-graph-data'),
+      principles: loadEmbeddedData('canon-principles-data'),
+      orchestration: loadEmbeddedData('canon-orchestration-data'),
+      flows: loadEmbeddedData('canon-flow-data'),
+      prReviews: loadEmbeddedData('canon-pr-reviews'),
+    };
+
+    // ── Filter helpers ──
+    function createLayerFilters(container, layers, onChange) {
+      container.innerHTML = layers.map(layer => `
+        <label class="chip">
+          <input type="checkbox" checked data-layer="${layer}">
+          <span class="chip-dot" style="background: ${LAYER_COLORS[layer] || LAYER_COLORS.unknown}"></span>
+          ${layer}
+        </label>
+      `).join('');
+      container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const active = Array.from(container.querySelectorAll('input:checked')).map(el => el.dataset.layer);
+          onChange(active);
+        });
+      });
+    }
+
+    function createSearchFilter(container, placeholder, onSearch) {
+      container.innerHTML = `<input type="text" class="search-input" placeholder="${placeholder}">`;
+      const input = container.querySelector('.search-input');
+      let timeout;
+      input.addEventListener('input', () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => onSearch(input.value), 200);
+      });
+    }
+
+    function severityBadge(severity) {
+      return `<span class="severity-badge" style="background: ${SEVERITY_COLORS[severity] || '#7f8c8d'}">${severity}</span>`;
+    }
+
+    function verdictBadge(verdict) {
+      return `<span class="verdict-badge" style="background: ${VERDICT_COLORS[verdict] || '#7f8c8d'}">${verdict}</span>`;
+    }
+
+    // ── Sidebar ──
+    const NAV_ITEMS = [
+      { id: 'graph', label: 'Codebase Graph', icon: '\u25C9' },
+      { id: 'principles', label: 'Principles', icon: '\u25C6' },
+      { id: 'pr-review', label: 'PR Review', icon: '\u2398' },
+      { id: 'orchestration', label: 'Orchestration', icon: '\u2699' },
+      { id: 'flow-status', label: 'Flows', icon: '\u25B6' },
+    ];
+
+    function initSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.innerHTML = `
+        <div class="sidebar-header">
+          <h1 class="sidebar-title">Canon</h1>
+          <span class="sidebar-subtitle">Dashboard</span>
+        </div>
+        <nav class="sidebar-nav">
+          ${NAV_ITEMS.map(item => `
+            <button class="nav-item" data-view="${item.id}">
+              <span class="nav-icon">${item.icon}</span>
+              <span class="nav-label">${item.label}</span>
+            </button>
+          `).join('')}
+        </nav>
+        <div class="sidebar-footer"><span class="sidebar-version">v2.0</span></div>
+      `;
+      const buttons = sidebar.querySelectorAll('.nav-item');
+      buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          buttons.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          loadView(btn.dataset.view);
+        });
+      });
+      if (buttons.length > 0) buttons[0].classList.add('active');
+    }
+
+    // ── View router ──
+    let currentCleanup = null;
+    const VIEWS = { graph: renderGraph, principles: renderPrinciples, 'pr-review': renderPrReview, orchestration: renderOrchestration, 'flow-status': renderFlows };
+
+    function loadView(viewId) {
+      if (currentCleanup) { currentCleanup(); currentCleanup = null; }
+      const main = document.getElementById('main-content');
+      main.innerHTML = '';
+      const fn = VIEWS[viewId];
+      if (fn) fn(main);
+      else main.innerHTML = '<p class="empty-state">Unknown view</p>';
+    }
+
+    // ── Graph view ──
+    function renderGraph(container) {
+      container.innerHTML = `
+        <div class="view-header">
+          <h2>Codebase Graph</h2>
+          <div id="graph-filters" class="filter-bar"></div>
+          <div id="graph-search" class="filter-bar"></div>
+        </div>
+        <div class="graph-layout">
+          <div id="graph-canvas" class="graph-canvas"></div>
+          <div id="graph-detail" class="detail-panel">
+            <p class="detail-placeholder">Click a node to see details</p>
+          </div>
+        </div>
+      `;
+
+      const data = DATA.graph;
+      if (!data) {
+        container.querySelector('.graph-canvas').innerHTML = '<p class="empty-state">No graph data. Run <code>/canon:graph</code> to generate.</p>';
+        return;
+      }
+
+      const canvas = container.querySelector('#graph-canvas');
+      const detail = container.querySelector('#graph-detail');
+      let activeLayers = [...new Set(data.nodes.map(n => n.layer))];
+      let searchQuery = '';
+
+      createLayerFilters(container.querySelector('#graph-filters'), activeLayers, (layers) => { activeLayers = layers; doRender(); });
+      createSearchFilter(container.querySelector('#graph-search'), 'Search files...', (q) => { searchQuery = q; doRender(); });
+
+      function doRender() {
+        const filtered = data.nodes.filter(n => activeLayers.includes(n.layer) && (!searchQuery || n.id.toLowerCase().includes(searchQuery.toLowerCase())));
+        const filteredIds = new Set(filtered.map(n => n.id));
+        const filteredEdges = data.edges.filter(e => filteredIds.has(e.source?.id || e.source) && filteredIds.has(e.target?.id || e.target));
+        renderD3Graph(canvas, detail, filtered, filteredEdges);
+      }
+      doRender();
+    }
+
+    function renderD3Graph(canvas, detail, nodes, edges) {
+      if (typeof d3 === 'undefined') {
+        canvas.innerHTML = `
+          <div class="graph-fallback">
+            <h3>Graph Data Summary</h3>
+            <p>${nodes.length} files, ${edges.length} dependencies</p>
+            <table class="data-table">
+              <thead><tr><th>File</th><th>Layer</th><th>Violations</th></tr></thead>
+              <tbody>
+                ${nodes.slice(0, 50).map(n => `
+                  <tr class="${n.violation_count > 0 ? 'violation-row' : ''}">
+                    <td>${n.id}</td>
+                    <td><span class="layer-dot" style="background:${n.color}"></span>${n.layer}</td>
+                    <td>${n.violation_count || '-'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            ${nodes.length > 50 ? `<p class="truncated">...and ${nodes.length - 50} more</p>` : ''}
+          </div>
+        `;
+        return;
+      }
+
+      canvas.innerHTML = '';
+      const width = canvas.clientWidth || 800;
+      const height = canvas.clientHeight || 600;
+
+      // Deep copy nodes/edges so D3 doesn't mutate originals
+      const nodesCopy = nodes.map(n => ({...n}));
+      const edgesCopy = edges.map(e => ({ source: e.source?.id || e.source, target: e.target?.id || e.target }));
+
+      const svg = d3.select(canvas).append('svg').attr('width', width).attr('height', height).attr('viewBox', [0, 0, width, height]);
+      const g = svg.append('g');
+      svg.call(d3.zoom().on('zoom', (event) => g.attr('transform', event.transform)));
+
+      const simulation = d3.forceSimulation(nodesCopy)
+        .force('link', d3.forceLink(edgesCopy).id(d => d.id).distance(80))
+        .force('charge', d3.forceManyBody().strength(-200))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(20));
+
+      const link = g.selectAll('.link').data(edgesCopy).join('line').attr('stroke', '#555').attr('stroke-opacity', 0.3);
+      const node = g.selectAll('.node').data(nodesCopy).join('circle')
+        .attr('r', d => 6 + Math.min((d.violation_count || 0) * 2, 14))
+        .attr('fill', d => d.color || LAYER_COLORS[d.layer] || LAYER_COLORS.unknown)
+        .attr('stroke', d => (d.violation_count || 0) > 0 ? VERDICT_COLORS.BLOCKING : '#333')
+        .attr('stroke-width', d => (d.violation_count || 0) > 0 ? 2 : 1)
+        .on('click', (event, d) => showGraphDetail(detail, d))
+        .call(d3.drag()
+          .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+          .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+        );
+
+      node.append('title').text(d => d.id);
+      simulation.on('tick', () => {
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        node.attr('cx', d => d.x).attr('cy', d => d.y);
+      });
+    }
+
+    function showGraphDetail(panel, node) {
+      panel.innerHTML = `
+        <h3>${node.id}</h3>
+        <div class="detail-field"><label>Layer</label><span class="layer-dot" style="background:${node.color || LAYER_COLORS[node.layer] || '#ccc'}"></span> ${node.layer}</div>
+        <div class="detail-field"><label>Violations</label><span class="${(node.violation_count || 0) > 0 ? 'text-danger' : ''}">${node.violation_count || 0}</span></div>
+        <div class="detail-field"><label>Last Verdict</label>${node.last_verdict ? verdictBadge(node.last_verdict) : '<span class="text-muted">No review</span>'}</div>
+        <div class="detail-field"><label>Changed</label>${node.changed ? '<span class="text-info">Yes</span>' : '<span class="text-muted">No</span>'}</div>
+      `;
+    }
+
+    // ── Principles view ──
+    function renderPrinciples(container) {
+      container.innerHTML = `
+        <div class="view-header">
+          <h2>Principle Explorer</h2>
+          <div id="principle-search" class="filter-bar"></div>
+          <div class="filter-bar">
+            <label class="chip"><input type="checkbox" checked data-sev="rule"> Rules</label>
+            <label class="chip"><input type="checkbox" checked data-sev="strong-opinion"> Strong Opinions</label>
+            <label class="chip"><input type="checkbox" checked data-sev="convention"> Conventions</label>
+          </div>
+        </div>
+        <div id="principle-list" class="principle-list"></div>
+        <div id="try-it" class="try-it-panel">
+          <h3>Try It</h3>
+          <textarea id="try-code" placeholder="Paste code here to see which principles apply..." rows="6"></textarea>
+          <button id="try-btn" class="btn">Check Principles</button>
+          <div id="try-result"></div>
+        </div>
+      `;
+
+      const data = DATA.principles;
+      const list = container.querySelector('#principle-list');
+      if (!data || !data.principles) {
+        list.innerHTML = '<p class="empty-state">No principles data. Run <code>/canon:dashboard</code> to generate.</p>';
+        return;
+      }
+
+      let searchQuery = '';
+      let activeSeverities = new Set(['rule', 'strong-opinion', 'convention']);
+
+      createSearchFilter(container.querySelector('#principle-search'), 'Search principles...', (q) => { searchQuery = q; doRender(); });
+      container.querySelectorAll('[data-sev]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          if (cb.checked) activeSeverities.add(cb.dataset.sev);
+          else activeSeverities.delete(cb.dataset.sev);
+          doRender();
+        });
+      });
+
+      function doRender() {
+        const filtered = data.principles.filter(p =>
+          activeSeverities.has(p.severity) &&
+          (!searchQuery || p.id.includes(searchQuery) || (p.title || '').toLowerCase().includes(searchQuery.toLowerCase()))
+        );
+        list.innerHTML = filtered.map(p => `
+          <div class="principle-card" data-id="${p.id}">
+            <div class="principle-header">
+              ${severityBadge(p.severity)}
+              <strong>${p.id}</strong>
+              <span class="principle-title">${p.title || ''}</span>
+            </div>
+            <div class="principle-meta">
+              ${p.tags ? p.tags.map(t => `<span class="tag">${t}</span>`).join('') : ''}
+              ${p.compliance_rate !== undefined ? `<span class="compliance">${p.compliance_rate}% compliant</span>` : ''}
+            </div>
+            <div class="principle-body collapsed" id="body-${p.id}">${p.body || '<em>No body available</em>'}</div>
+          </div>
+        `).join('');
+
+        list.querySelectorAll('.principle-card').forEach(card => {
+          card.addEventListener('click', () => card.querySelector('.principle-body').classList.toggle('collapsed'));
+        });
+      }
+      doRender();
+    }
+
+    // ── PR Review view ──
+    function renderPrReview(container) {
+      container.innerHTML = `
+        <div class="view-header">
+          <h2>PR Review</h2>
+          <div class="pr-input-bar">
+            <input type="text" id="pr-number" placeholder="PR # or branch" class="search-input">
+            <button id="load-pr" class="btn">Load Review</button>
+          </div>
+        </div>
+        <div id="pr-content" class="pr-content">
+          <p class="empty-state">Enter a PR number or branch name, then click Load Review.<br>Review data is generated by <code>/canon:pr-review</code>.</p>
+        </div>
+      `;
+
+      const content = container.querySelector('#pr-content');
+      const prReviews = DATA.prReviews || {};
+
+      container.querySelector('#load-pr').addEventListener('click', () => {
+        const value = container.querySelector('#pr-number').value.trim();
+        if (!value) return;
+        const reviewData = prReviews[value];
+        if (reviewData) {
+          showPrReview(content, reviewData);
+        } else {
+          content.innerHTML = `<p class="empty-state">No review data for "${value}".<br>Run <code>/canon:pr-review ${value}</code> to generate.</p>`;
+        }
+      });
+
+      // If there's only one review, show it automatically
+      const keys = Object.keys(prReviews);
+      if (keys.length === 1) {
+        container.querySelector('#pr-number').value = keys[0];
+        showPrReview(content, prReviews[keys[0]]);
+      }
+    }
+
+    function showPrReview(container, data) {
+      const verdict = data.verdict || 'CLEAN';
+      container.innerHTML = `
+        <div class="review-summary">
+          <div class="verdict-large" style="color: ${VERDICT_COLORS[verdict]}">${verdict}</div>
+          <div class="score-grid">
+            <div class="score-item"><label>Rules</label><span>${data.score?.rules?.passed || 0}/${data.score?.rules?.total || 0}</span></div>
+            <div class="score-item"><label>Opinions</label><span>${data.score?.opinions?.passed || 0}/${data.score?.opinions?.total || 0}</span></div>
+            <div class="score-item"><label>Conventions</label><span>${data.score?.conventions?.passed || 0}/${data.score?.conventions?.total || 0}</span></div>
+          </div>
+        </div>
+        ${(data.violations || []).length > 0 ? `
+          <div class="violations-section"><h3>Violations</h3>
+            ${data.violations.map(v => `
+              <div class="violation-item">
+                ${severityBadge(v.severity)}
+                <strong>${v.principle_id}</strong>
+                ${v.file ? `<code>${v.file}</code>` : ''}
+                ${v.detail ? `<p>${v.detail}</p>` : ''}
+                ${v.suggestion ? `<p class="suggestion">Fix: ${v.suggestion}</p>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        ${(data.honored || []).length > 0 ? `
+          <div class="honored-section"><h3>Honored Principles</h3>
+            <div class="honored-list">${data.honored.map(id => `<span class="honored-chip">${id}</span>`).join('')}</div>
+          </div>
+        ` : ''}
+        ${(data.files || []).length > 0 ? `
+          <div class="files-section"><h3>Files Reviewed</h3>
+            <ul class="file-list">${data.files.map(f => `<li>${f}</li>`).join('')}</ul>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    // ── Orchestration view ──
+    const PIPELINE_PHASES = ['research', 'architect', 'plan', 'implement', 'test', 'security', 'review'];
+    let orchInterval = null;
+
+    function renderOrchestration(container) {
+      container.innerHTML = `
+        <div class="view-header">
+          <h2>Orchestration</h2>
+          <div class="filter-bar">
+            <label class="chip"><input type="checkbox" id="live-toggle"> Live (2s refresh)</label>
+          </div>
+        </div>
+        <div id="pipeline-view"></div>
+        <div id="ralph-loop-view" class="ralph-loop-view"></div>
+        <div id="event-timeline" class="event-timeline"></div>
+      `;
+
+      // Live toggle is available but only useful when data is dynamically loaded
+      // In self-contained mode, data is static, so live refresh just re-renders same data
+      renderOrchData(container);
+
+      currentCleanup = () => { if (orchInterval) { clearInterval(orchInterval); orchInterval = null; } };
+    }
+
+    function renderOrchData(container) {
+      const data = DATA.orchestration;
+      const pipeline = container.querySelector('#pipeline-view');
+      const loopView = container.querySelector('#ralph-loop-view');
+      const timeline = container.querySelector('#event-timeline');
+
+      if (!data) {
+        pipeline.innerHTML = '<p class="empty-state">No orchestration data. Run <code>/canon:ralph</code> or <code>/canon:flow</code> to generate.</p>';
+        return;
+      }
+
+      if (data.pipeline) {
+        pipeline.innerHTML = `<div class="pipeline-stages">
+          ${PIPELINE_PHASES.map(phase => {
+            const s = (data.pipeline || []).find(x => x.phase === phase);
+            const status = s?.status || 'pending';
+            return `
+              <div class="pipeline-stage">
+                <div class="stage-indicator ${status}"></div>
+                <div class="stage-label">${phase}</div>
+                ${s?.agents ? `<div class="stage-agents">${s.agents.map(a => `<div class="agent-chip ${a.status}">${a.name.replace('canon-', '')}</div>`).join('')}</div>` : ''}
+              </div>
+            `;
+          }).join('<div class="pipeline-arrow">\u2192</div>')}
+        </div>`;
+      }
+
+      if (data.ralph_loop) {
+        const loop = data.ralph_loop;
+        loopView.innerHTML = `
+          <h3>Ralph Loop \u2014 Iteration ${loop.current_iteration}/${loop.max_iterations}</h3>
+          <div class="loop-iterations">
+            ${(loop.history || []).map(h => `
+              <div class="loop-iter">
+                <div class="iter-number">#${h.iteration}</div>
+                <div class="iter-verdict" style="color: ${VERDICT_COLORS[h.verdict] || '#7f8c8d'}">${h.verdict}</div>
+                <div class="iter-stats">${h.violations_count} violations, ${h.violations_fixed} fixed</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else { loopView.innerHTML = ''; }
+
+      if (data.events?.length > 0) {
+        const recent = data.events.slice(-20).reverse();
+        timeline.innerHTML = `<h3>Event Timeline</h3><div class="timeline-list">
+          ${recent.map(e => `
+            <div class="timeline-event">
+              <span class="event-time">${new Date(e.timestamp).toLocaleTimeString()}</span>
+              <span class="event-type">${e.event_type}</span>
+              ${e.agent_name ? `<span class="event-agent">${e.agent_name}</span>` : ''}
+              ${e.phase ? `<span class="event-phase">${e.phase}</span>` : ''}
+              ${e.status ? `<span class="event-status ${e.status}">${e.status}</span>` : ''}
+            </div>
+          `).join('')}
+        </div>`;
+      }
+    }
+
+    // ── Flow status view ──
+    function renderFlows(container) {
+      container.innerHTML = `
+        <div class="view-header"><h2>Flows</h2></div>
+        <div id="flow-list"></div>
+        <div id="flow-execution" class="flow-execution"></div>
+      `;
+
+      const listEl = container.querySelector('#flow-list');
+      const execEl = container.querySelector('#flow-execution');
+      const flowData = DATA.flows;
+
+      if (flowData?.flows) {
+        listEl.innerHTML = `<h3>Available Flows</h3><div class="flow-cards">
+          ${flowData.flows.map(f => `
+            <div class="flow-card">
+              <div class="flow-name">${f.name}</div>
+              <div class="flow-desc">${f.description}</div>
+              <div class="flow-meta">
+                <span>${f.step_count} steps</span>
+                ${f.has_loops ? '<span class="loop-badge">has loops</span>' : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>`;
+      } else {
+        listEl.innerHTML = `<h3>Available Flows</h3><div class="flow-cards">
+          <div class="flow-card"><div class="flow-name">ralph</div><div class="flow-desc">Build-review-fix loop until CLEAN</div><div class="flow-meta"><span>3 steps</span><span class="loop-badge">has loops</span></div></div>
+          <div class="flow-card"><div class="flow-name">quick-fix</div><div class="flow-desc">Fast path for small fixes</div><div class="flow-meta"><span>2 steps</span></div></div>
+          <div class="flow-card"><div class="flow-name">deep-build</div><div class="flow-desc">Full research-to-review pipeline</div><div class="flow-meta"><span>6 steps</span></div></div>
+          <div class="flow-card"><div class="flow-name">review-only</div><div class="flow-desc">Review current changes</div><div class="flow-meta"><span>1 step</span></div></div>
+          <div class="flow-card"><div class="flow-name">security-audit</div><div class="flow-desc">Security scan + review</div><div class="flow-meta"><span>2 steps</span></div></div>
+        </div><p class="help-text">Run <code>/canon:flow &lt;name&gt; &lt;task&gt;</code> to execute a flow.</p>`;
+      }
+
+      if (flowData?.execution) {
+        const ex = flowData.execution;
+        execEl.innerHTML = `
+          <h3>Last Execution: ${ex.flow_name}</h3>
+          <div class="exec-status" style="color: ${STATUS_COLORS[ex.status === 'success' ? 'completed' : 'blocked']}">${ex.status}</div>
+          <div class="exec-steps">
+            ${(ex.step_results || []).map(s => `
+              <div class="exec-step">
+                <span class="step-id">${s.step_id}</span>
+                <span style="color: ${STATUS_COLORS[s.status]}">${s.status}</span>
+                ${s.verdict ? `<span>${s.verdict}</span>` : ''}
+              </div>
+            `).join('')}
+          </div>
+          <div class="exec-meta">Steps: ${ex.steps_completed}/${ex.total_steps}${ex.started_at ? ` | Started: ${new Date(ex.started_at).toLocaleString()}` : ''}</div>
+        `;
+      }
+    }
+
+    // ── Init ──
+    initSidebar();
+    const hash = window.location.hash.replace('#', '');
+    loadView(VIEWS[hash] ? hash : 'graph');
+  </script>
+</body>
+</html>
