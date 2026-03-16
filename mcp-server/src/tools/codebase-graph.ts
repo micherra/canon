@@ -34,6 +34,7 @@ export interface GraphEdge {
 
 export interface CodebaseGraphInput {
   root_dir?: string;
+  source_dirs?: string[];
   include_extensions?: string[];
   exclude_dirs?: string[];
   diff_base?: string;
@@ -48,6 +49,20 @@ export interface CodebaseGraphOutput {
   generated_at: string;
 }
 
+/** Read source_dirs from .canon/config.json if it exists */
+async function loadSourceDirs(projectDir: string): Promise<string[] | null> {
+  try {
+    const raw = await readFile(join(projectDir, ".canon", "config.json"), "utf-8");
+    const config = JSON.parse(raw);
+    if (Array.isArray(config.source_dirs) && config.source_dirs.length > 0) {
+      return config.source_dirs;
+    }
+  } catch {
+    // no config or invalid
+  }
+  return null;
+}
+
 export async function codebaseGraph(
   input: CodebaseGraphInput,
   projectDir: string,
@@ -55,11 +70,48 @@ export async function codebaseGraph(
 ): Promise<CodebaseGraphOutput> {
   const rootDir = input.root_dir || projectDir;
 
-  // Scan files
-  const filePaths = await scanSourceFiles(rootDir, {
-    includeExtensions: input.include_extensions,
-    excludeDirs: input.exclude_dirs,
-  });
+  // Determine which directories to scan:
+  // 1. Explicit source_dirs from tool input takes priority
+  // 2. Then source_dirs from .canon/config.json
+  // 3. If neither exists, scan nothing (return empty) — user must configure source_dirs
+  // Exception: if root_dir is explicitly passed, scan that dir directly
+  const explicitSourceDirs = input.source_dirs;
+  const configSourceDirs = await loadSourceDirs(projectDir);
+  const sourceDirs = explicitSourceDirs || configSourceDirs;
+
+  let filePaths: string[];
+
+  if (input.root_dir) {
+    // Explicit root_dir passed — scan it directly (e.g. user passed ".")
+    filePaths = await scanSourceFiles(rootDir, {
+      includeExtensions: input.include_extensions,
+      excludeDirs: input.exclude_dirs,
+    });
+  } else if (sourceDirs && sourceDirs.length > 0) {
+    // Scan each source_dir and merge results with paths relative to projectDir
+    const allFiles: string[] = [];
+    for (const dir of sourceDirs) {
+      const absDir = join(projectDir, dir);
+      const files = await scanSourceFiles(absDir, {
+        includeExtensions: input.include_extensions,
+        excludeDirs: input.exclude_dirs,
+      });
+      // Prefix relative paths with the source dir
+      for (const f of files) {
+        allFiles.push(join(dir, f));
+      }
+    }
+    filePaths = allFiles.sort();
+  } else {
+    // No source_dirs configured — return empty with a hint
+    return {
+      nodes: [],
+      edges: [],
+      layers: [],
+      hotspots: [],
+      generated_at: new Date().toISOString(),
+    };
+  }
 
   const fileSet = new Set(filePaths);
   const changedSet = new Set(input.changed_files || []);
@@ -91,7 +143,7 @@ export async function codebaseGraph(
   const layerCounts = new Map<string, number>();
 
   for (const filePath of filePaths) {
-    const layer = inferLayer(filePath);
+    const layer = inferLayer(filePath) || "unknown";
     layerCounts.set(layer, (layerCounts.get(layer) || 0) + 1);
 
     const violations = fileViolations.get(filePath);
@@ -108,17 +160,17 @@ export async function codebaseGraph(
       extension: ext,
       violation_count: violationCount,
       last_verdict: fileVerdicts.get(filePath) || null,
-      compliance_score: null, // computed per-principle, not per-file
+      compliance_score: null,
       changed: changedSet.has(filePath),
     });
   }
 
-  // Build edges
+  // Build edges — read files relative to projectDir (not rootDir) since paths are project-relative
   const edges: GraphEdge[] = [];
 
   for (const filePath of filePaths) {
     try {
-      const content = await readFile(join(rootDir, filePath), "utf-8");
+      const content = await readFile(join(projectDir, filePath), "utf-8");
       const imports = extractImports(content, filePath);
 
       for (const imp of imports) {

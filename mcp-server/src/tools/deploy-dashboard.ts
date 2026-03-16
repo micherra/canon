@@ -43,7 +43,7 @@ export async function deployDashboard(
   projectDir: string,
   pluginDir: string,
 ): Promise<DeployDashboardOutput> {
-  const templatePath = join(pluginDir, "ui", "dashboard.html");
+  const templatePath = join(pluginDir, ".canon", "dashboard-template.html");
   const outputPath = join(projectDir, ".canon", "dashboard.html");
 
   // Read the template

@@ -29,7 +29,7 @@ describe("codebaseGraph", () => {
       `export class OrderService {}`
     );
 
-    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+    const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     expect(result.nodes).toHaveLength(2);
     expect(result.nodes.find((n) => n.id.includes("api"))).toBeDefined();
@@ -44,7 +44,7 @@ describe("codebaseGraph", () => {
     );
     await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
-    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+    const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     expect(result.edges.length).toBeGreaterThanOrEqual(1);
     const edge = result.edges.find(
@@ -59,7 +59,7 @@ describe("codebaseGraph", () => {
     await writeFile(join(tmpDir, "src", "api", "b.ts"), `export const b = 2;`);
     await writeFile(join(tmpDir, "src", "utils", "c.ts"), `export const c = 3;`);
 
-    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+    const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     expect(result.layers.length).toBeGreaterThanOrEqual(1);
     const apiLayer = result.layers.find((l) => l.name === "api");
@@ -73,7 +73,7 @@ describe("codebaseGraph", () => {
     await writeFile(join(tmpDir, "src", "api", "orders.ts"), `export const x = 1;`);
 
     const result = await codebaseGraph(
-      { changed_files: ["src/api/orders.ts"] },
+      { source_dirs: ["src"], changed_files: ["src/api/orders.ts"] },
       tmpDir,
       "/nonexistent"
     );
@@ -82,7 +82,7 @@ describe("codebaseGraph", () => {
     expect(changedNode?.changed).toBe(true);
   });
 
-  it("returns empty graph for empty directory", async () => {
+  it("returns empty graph when no source_dirs configured", async () => {
     const emptyDir = await mkdtemp(join(tmpdir(), "canon-empty-"));
     await mkdir(join(emptyDir, ".canon"), { recursive: true });
 
@@ -91,6 +91,25 @@ describe("codebaseGraph", () => {
     expect(result.edges).toHaveLength(0);
 
     await rm(emptyDir, { recursive: true, force: true });
+  });
+
+  it("reads source_dirs from .canon/config.json", async () => {
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ source_dirs: ["src"] })
+    );
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
+
+    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes[0].id).toBe("src/api/handler.ts");
+  });
+
+  it("scans root when root_dir explicitly passed", async () => {
+    await writeFile(join(tmpDir, "src", "api", "a.ts"), `export const a = 1;`);
+
+    const result = await codebaseGraph({ root_dir: tmpDir }, tmpDir, "/nonexistent");
+    expect(result.nodes.length).toBeGreaterThanOrEqual(1);
   });
 });
 
