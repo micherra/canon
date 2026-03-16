@@ -61,3 +61,89 @@ export type ReviewEntry = Omit<ReviewInput, "type" | "verdict"> & {
 };
 
 export type ReviewViolation = ReviewEntry["violations"][number];
+
+// --- Ralph Loop entry: logged when a ralph loop completes ---
+
+export type RalphIterationResult = {
+  iteration: number;
+  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  violations_count: number;
+  violations_fixed: number;
+  cannot_fix: number;
+};
+
+export type RalphLoopEntry = {
+  loop_id: string;
+  task_slug: string;
+  timestamp: string;
+  iterations: RalphIterationResult[];
+  final_verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  converged: boolean;
+  team: string[];
+};
+
+// --- Orchestration events: emitted during flow/ralph execution ---
+
+export type OrchestrationEventType =
+  | "flow_start"
+  | "flow_end"
+  | "phase_start"
+  | "phase_end"
+  | "agent_spawn"
+  | "agent_complete"
+  | "agent_blocked"
+  | "loop_iteration"
+  | "loop_end"
+  | "verdict";
+
+export type OrchestrationEvent = {
+  event_id: string;
+  timestamp: string;
+  event_type: OrchestrationEventType;
+  task_slug?: string;
+  agent_name?: string;
+  phase?: string;
+  status?: string;
+  iteration?: number;
+  details?: Record<string, unknown>;
+};
+
+// --- PR Review entry: tracks per-PR review history ---
+
+export type PrReviewEntry = {
+  pr_review_id: string;
+  timestamp: string;
+  pr_number?: number;
+  branch?: string;
+  last_reviewed_sha?: string;
+  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  files: string[];
+  violations: ReviewViolation[];
+  honored: string[];
+  score: ReviewEntry["score"];
+};
+
+// --- Flow types ---
+
+export type FlowStepDefinition = {
+  id: string;
+  agent?: string;
+  command?: string;
+  input?: string;
+  parallel?: string[];
+  parallel_per?: string;
+  wave?: boolean;
+  loop_until?: string;
+  on_violation?: FlowStepDefinition[];
+  on_failure?: FlowStepDefinition[];
+  goto?: string;
+  max_iterations?: number;
+  passthrough_flags?: boolean;
+};
+
+export type FlowDefinition = {
+  name: string;
+  description: string;
+  max_iterations?: number;
+  steps: FlowStepDefinition[];
+};

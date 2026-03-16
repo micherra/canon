@@ -8,6 +8,11 @@ import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
 import { report } from "./tools/report.js";
+import { logRalph } from "./tools/log-ralph.js";
+import { listFlowsTool, validateFlowTool } from "./tools/flow-tools.js";
+import { getPrReviewData } from "./tools/pr-review-data.js";
+import { codebaseGraph } from "./tools/codebase-graph.js";
+import { getOrchestrationData } from "./tools/orchestration-status.js";
 import { reportInputSchema } from "./schema.js";
 
 const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
@@ -99,6 +104,115 @@ server.registerTool(
   },
   async (input) => {
     const result = await report(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: list_flows
+server.tool(
+  "list_flows",
+  "List all available Canon flow definitions. Flows are predefined agent pipeline patterns.",
+  {},
+  async () => {
+    const result = await listFlowsTool(projectDir, pluginDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: validate_flow
+server.tool(
+  "validate_flow",
+  "Validate a Canon flow definition for structural correctness. Returns errors and warnings.",
+  {
+    flow_name: z.string().describe("Name of the flow to validate (without .yaml extension)"),
+  },
+  async (input) => {
+    const result = await validateFlowTool(input, projectDir, pluginDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: log_ralph
+server.tool(
+  "log_ralph",
+  "Log the completion of a Ralph loop — records iteration results, convergence status, and team composition for drift tracking.",
+  {
+    task_slug: z.string().describe("Slug of the task that was built"),
+    iterations: z
+      .array(
+        z.object({
+          iteration: z.number(),
+          verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]),
+          violations_count: z.number(),
+          violations_fixed: z.number(),
+          cannot_fix: z.number(),
+        })
+      )
+      .describe("Results for each iteration of the loop"),
+    final_verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).describe("Final verdict after all iterations"),
+    converged: z.boolean().describe("Whether the loop achieved CLEAN verdict"),
+    team: z.array(z.string()).describe("Agent names used in the loop"),
+  },
+  async (input) => {
+    const result = await logRalph(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: get_pr_review_data
+server.tool(
+  "get_pr_review_data",
+  "Get PR review data — file list, layer grouping, and diff command for a pull request or branch review.",
+  {
+    pr_number: z.number().optional().describe("GitHub PR number"),
+    branch: z.string().optional().describe("Branch name to review"),
+    diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
+    incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
+  },
+  async (input) => {
+    const result = await getPrReviewData(input, projectDir, pluginDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: codebase_graph
+server.tool(
+  "codebase_graph",
+  "Generate a dependency graph of the codebase with Canon compliance overlay. Returns nodes (files), edges (imports), layers, and hotspots.",
+  {
+    root_dir: z.string().optional().describe("Root directory to scan (default: project root)"),
+    include_extensions: z.array(z.string()).optional().describe("File extensions to include (default: ts, js, py, go, rs)"),
+    exclude_dirs: z.array(z.string()).optional().describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
+    diff_base: z.string().optional().describe("Git ref to diff against — marks changed files in the graph"),
+    changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
+  },
+  async (input) => {
+    const result = await codebaseGraph(input, projectDir, pluginDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: get_orchestration_data
+server.tool(
+  "get_orchestration_data",
+  "Get orchestration pipeline status, Ralph loop state, and event timeline. Returns data for the Canon dashboard orchestration view.",
+  {
+    task_slug: z.string().optional().describe("Filter events by task slug"),
+  },
+  async (input) => {
+    const result = await getOrchestrationData(input, projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };
