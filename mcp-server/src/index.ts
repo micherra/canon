@@ -16,8 +16,12 @@ import { getOrchestrationData } from "./tools/orchestration-status.js";
 import { deployDashboard } from "./tools/deploy-dashboard.js";
 import { reportInputSchema } from "./schema.js";
 
-const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
-const pluginDir = process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname;
+import { resolve } from "path";
+
+// Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
+// Falls back to cwd which is typically set by Claude Code to the user's project root.
+const projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
+const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname);
 
 const server = new McpServer({
   name: "canon",

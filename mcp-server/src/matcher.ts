@@ -13,12 +13,12 @@ export interface MatchFilters {
 }
 
 const PATH_TO_LAYER: Array<[RegExp, string]> = [
-  [/\/(api|routes|controllers)\//, "api"],
-  [/\/(components|pages|views)\//, "ui"],
-  [/\/(services|domain|models)\//, "domain"],
-  [/\/(db|data|repositories|prisma)\//, "data"],
-  [/\/(infra|deploy|terraform|docker)\//, "infra"],
-  [/\/(utils|lib|shared|types)\//, "shared"],
+  [/(^|\/)(api|routes|controllers)(\/|$)/, "api"],
+  [/(^|\/)(components|pages|views)(\/|$)/, "ui"],
+  [/(^|\/)(services|domain|models)(\/|$)/, "domain"],
+  [/(^|\/)(db|data|repositories|prisma)(\/|$)/, "data"],
+  [/(^|\/)(infra|deploy|terraform|docker)(\/|$)/, "infra"],
+  [/(^|\/)(utils|lib|shared|types)(\/|$)/, "shared"],
 ];
 
 const SEVERITY_RANK: Record<string, number> = {
