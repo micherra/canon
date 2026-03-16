@@ -13,6 +13,7 @@ import { listFlowsTool, validateFlowTool } from "./tools/flow-tools.js";
 import { getPrReviewData } from "./tools/pr-review-data.js";
 import { codebaseGraph } from "./tools/codebase-graph.js";
 import { getOrchestrationData } from "./tools/orchestration-status.js";
+import { deployDashboard } from "./tools/deploy-dashboard.js";
 import { reportInputSchema } from "./schema.js";
 
 const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
@@ -213,6 +214,19 @@ server.tool(
   },
   async (input) => {
     const result = await getOrchestrationData(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: deploy_dashboard
+server.tool(
+  "deploy_dashboard",
+  "Deploy the Canon dashboard UI to the project's .canon/dashboard/ directory. Copies HTML, JS, and CSS files so the dashboard can load data from .canon/ via relative paths.",
+  {},
+  async () => {
+    const result = await deployDashboard(projectDir, pluginDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

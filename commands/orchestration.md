@@ -47,6 +47,6 @@ Show the last 10 events with timestamp, type, agent, and status.
 Save orchestration data to `.canon/orchestration-data.json`.
 
 If `--open` is provided:
-```bash
-open ui/index.html#orchestration || xdg-open ui/index.html#orchestration || echo "Open ui/index.html in your browser"
-```
+1. Call the `deploy_dashboard` MCP tool
+2. Start a local server: `cd .canon && python3 -m http.server 8080 &`
+3. Open: `open http://localhost:8080/dashboard/#orchestration || xdg-open http://localhost:8080/dashboard/#orchestration`

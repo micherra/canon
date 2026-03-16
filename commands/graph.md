@@ -45,13 +45,12 @@ Top Hotspots:
   src/api/orders.ts — 5 violations (thin-handlers, validate-at-trust-boundaries)
   ...
 
-View: Open ui/graph.html in a browser (data at .canon/graph-data.json)
+View: Run /canon:dashboard to deploy and serve the Canon UI
 ```
 
-If `--open` is provided, try to open the viewer:
-```bash
-# Try common browser commands
-open ui/graph.html || xdg-open ui/graph.html || echo "Open ui/graph.html in your browser"
-```
+If `--open` is provided, first deploy and serve the dashboard:
+1. Call the `deploy_dashboard` MCP tool
+2. Start a local server: `cd .canon && python3 -m http.server 8080 &`
+3. Open: `open http://localhost:8080/dashboard/ || xdg-open http://localhost:8080/dashboard/`
 
 If `--violations-only` is provided, mention that the UI can be filtered to show only files with violations.

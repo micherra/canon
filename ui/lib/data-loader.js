@@ -1,6 +1,16 @@
 /** Canon Dashboard Data Loader — loads JSON from .canon/ directory */
 
-const DATA_BASE = '../.canon';
+// Resolve data base path: check for window.CANON_DATA_BASE (set by dashboard command),
+// URL query param ?data=..., or default to ../.canon (works when served from .canon/dashboard/)
+const DATA_BASE = (() => {
+  if (typeof window !== 'undefined' && window.CANON_DATA_BASE) return window.CANON_DATA_BASE;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('data')) return params.get('data');
+  } catch { /* ignore */ }
+  // Default: when served from .canon/dashboard/, data is at .canon/ (one level up)
+  return '..';
+})();
 
 export async function loadJSON(filename) {
   try {
