@@ -39,7 +39,18 @@ export async function deployDashboard(
 
   // Gather data from .canon/ directory
   const canonDir = join(projectDir, ".canon");
-  const graphData = await readJsonSafe(join(canonDir, "graph-data.json"));
+  const graphData = await readJsonSafe(join(canonDir, "graph-data.json")) as Record<string, unknown> | null;
+  const summaries = await readJsonSafe(join(canonDir, "summaries.json")) as Record<string, string> | null;
+
+  // Merge summaries into graph nodes
+  if (graphData && summaries && Array.isArray(graphData.nodes)) {
+    for (const node of graphData.nodes as Array<Record<string, unknown>>) {
+      const id = node.id as string;
+      if (summaries[id]) {
+        node.summary = summaries[id];
+      }
+    }
+  }
 
   // Gather PR review data (collect all available reviews into a map)
   const prReviews: Record<string, unknown> = {};

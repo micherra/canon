@@ -13,6 +13,9 @@ import { listFlowsTool, validateFlowTool } from "./tools/flow-tools.js";
 import { getPrReviewData } from "./tools/pr-review-data.js";
 import { codebaseGraph } from "./tools/codebase-graph.js";
 import { deployDashboard } from "./tools/deploy-dashboard.js";
+import { getFileContext } from "./tools/get-file-context.js";
+import { storeSummaries } from "./tools/store-summaries.js";
+import { askCodebase } from "./tools/ask-codebase.js";
 import { reportInputSchema } from "./schema.js";
 
 import { resolve } from "path";
@@ -216,6 +219,56 @@ server.tool(
   {},
   async () => {
     const result = await deployDashboard(projectDir, pluginDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: get_file_context
+server.tool(
+  "get_file_context",
+  "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data. Use this to understand a file before generating a summary.",
+  {
+    file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
+  },
+  async (input) => {
+    const result = await getFileContext(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: store_summaries
+server.tool(
+  "store_summaries",
+  "Store file summaries to .canon/summaries.json. Merges with existing summaries so you can generate them incrementally.",
+  {
+    summaries: z.array(z.object({
+      file_path: z.string().describe("Project-relative file path"),
+      summary: z.string().describe("Rich contextual summary of the file's role"),
+    })).describe("Array of file summaries to store"),
+  },
+  async (input) => {
+    const result = await storeSummaries(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: ask_codebase
+server.tool(
+  "ask_codebase",
+  "Query the codebase graph for architectural insights. Returns structured data about dependencies, layers, cycles, hotspots, and file summaries. Claude reasons over the data to answer user questions conversationally.",
+  {
+    question: z.string().describe("Natural language question about the codebase architecture"),
+    file_path: z.string().optional().describe("Focus analysis on a specific file"),
+    layer: z.string().optional().describe("Focus analysis on a specific layer"),
+  },
+  async (input) => {
+    const result = await askCodebase(input, projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

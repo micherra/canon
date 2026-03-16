@@ -4,6 +4,7 @@ import { scanSourceFiles } from "../graph/scanner.js";
 import { extractImports, resolveImport } from "../graph/import-parser.js";
 import { inferLayer } from "../matcher.js";
 import { DriftStore } from "../drift/store.js";
+import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
 
 export const LAYER_COLORS: Record<string, string> = {
   api: "#4A90D9",
@@ -46,6 +47,7 @@ export interface CodebaseGraphOutput {
   edges: GraphEdge[];
   layers: Array<{ name: string; color: string; file_count: number }>;
   hotspots: Array<{ path: string; violation_count: number; top_violations: string[] }>;
+  insights: CodebaseInsights;
   generated_at: string;
 }
 
@@ -109,6 +111,7 @@ export async function codebaseGraph(
       edges: [],
       layers: [],
       hotspots: [],
+      insights: generateInsights([], []),
       generated_at: new Date().toISOString(),
     };
   }
@@ -215,11 +218,17 @@ export async function codebaseGraph(
       };
     });
 
+  // Generate structural insights
+  const edgesForInsights = edges.map((e) => ({ source: e.source, target: e.target }));
+  const nodesForInsights = nodes.map((n) => ({ id: n.id, layer: n.layer }));
+  const insights = generateInsights(nodesForInsights, edgesForInsights);
+
   return {
     nodes,
     edges,
     layers,
     hotspots,
+    insights,
     generated_at: new Date().toISOString(),
   };
 }
