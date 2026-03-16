@@ -12,7 +12,6 @@ import { logRalph } from "./tools/log-ralph.js";
 import { listFlowsTool, validateFlowTool } from "./tools/flow-tools.js";
 import { getPrReviewData } from "./tools/pr-review-data.js";
 import { codebaseGraph } from "./tools/codebase-graph.js";
-import { getOrchestrationData } from "./tools/orchestration-status.js";
 import { deployDashboard } from "./tools/deploy-dashboard.js";
 import { reportInputSchema } from "./schema.js";
 
@@ -204,21 +203,6 @@ server.tool(
   },
   async (input) => {
     const result = await codebaseGraph(input, projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
-// Tool: get_orchestration_data
-server.tool(
-  "get_orchestration_data",
-  "Get orchestration pipeline status, Ralph loop state, and event timeline. Returns data for the Canon dashboard orchestration view.",
-  {
-    task_slug: z.string().optional().describe("Filter events by task slug"),
-  },
-  async (input) => {
-    const result = await getOrchestrationData(input, projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

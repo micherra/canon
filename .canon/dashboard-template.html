@@ -113,30 +113,6 @@
     .detail-field label { display: block; font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
     .detail-placeholder { color: var(--text-muted); font-style: italic; }
 
-    /* Principle cards */
-    .principle-list { display: flex; flex-direction: column; gap: 8px; }
-    .principle-card {
-      background: var(--bg-surface); border-radius: 8px;
-      padding: 12px 16px; cursor: pointer; transition: background 0.15s;
-    }
-    .principle-card:hover { background: var(--bg-card); }
-    .principle-header { display: flex; align-items: center; gap: 8px; }
-    .principle-title { color: var(--text-muted); font-size: 13px; }
-    .principle-meta { margin-top: 6px; display: flex; gap: 6px; align-items: center; }
-    .compliance { font-size: 11px; color: var(--success); }
-    .principle-body { margin-top: 8px; font-size: 13px; line-height: 1.5; }
-    .principle-body.collapsed { display: none; }
-
-    /* Try-it panel */
-    .try-it-panel { margin-top: 24px; background: var(--bg-surface); border-radius: 8px; padding: 16px; }
-    .try-it-panel h3 { margin-bottom: 8px; font-size: 14px; }
-    .try-it-panel textarea {
-      width: 100%; background: var(--bg); border: 1px solid var(--border);
-      color: var(--text); padding: 8px; border-radius: 6px;
-      font-family: inherit; font-size: 12px; resize: vertical;
-    }
-    .try-it-panel .btn { margin-top: 8px; }
-
     /* PR Review */
     .pr-input-bar { display: flex; gap: 8px; }
     .pr-content { margin-top: 16px; }
@@ -159,57 +135,6 @@
     .file-list { list-style: none; }
     .file-list li { padding: 4px 0; font-size: 13px; color: var(--text-muted); }
 
-    /* Pipeline */
-    .pipeline-stages { display: flex; align-items: flex-start; gap: 4px; overflow-x: auto; padding: 16px 0; }
-    .pipeline-stage { background: var(--bg-surface); border-radius: 8px; padding: 12px; min-width: 100px; text-align: center; }
-    .stage-indicator { width: 24px; height: 24px; border-radius: 50%; margin: 0 auto 8px; background: var(--text-muted); }
-    .stage-indicator.completed { background: var(--success); }
-    .stage-indicator.running { background: var(--info); animation: pulse 1.5s infinite; }
-    .stage-indicator.blocked { background: var(--danger); }
-    .stage-label { font-size: 12px; font-weight: 600; text-transform: capitalize; }
-    .pipeline-arrow { color: var(--text-muted); font-size: 20px; padding-top: 12px; }
-    .stage-agents { margin-top: 6px; }
-    .agent-chip { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: var(--bg); margin: 2px; display: inline-block; }
-    .agent-chip.completed { color: var(--success); }
-    .agent-chip.running { color: var(--info); }
-    .agent-chip.blocked { color: var(--danger); }
-
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-
-    /* Ralph loop */
-    .ralph-loop-view h3 { font-size: 14px; margin: 16px 0 8px; }
-    .loop-iterations { display: flex; gap: 12px; }
-    .loop-iter { background: var(--bg-surface); border-radius: 8px; padding: 12px; text-align: center; min-width: 100px; }
-    .iter-number { font-size: 16px; font-weight: 700; }
-    .iter-verdict { font-size: 13px; font-weight: 600; }
-    .iter-stats { font-size: 11px; color: var(--text-muted); }
-
-    /* Event timeline */
-    .event-timeline h3 { font-size: 14px; margin: 16px 0 8px; }
-    .timeline-list { max-height: 300px; overflow-y: auto; }
-    .timeline-event { display: flex; gap: 8px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
-    .event-time { color: var(--text-muted); min-width: 70px; }
-    .event-type { font-weight: 600; min-width: 110px; }
-    .event-agent { color: var(--accent); }
-    .event-phase { color: var(--text-muted); }
-    .event-status.completed { color: var(--success); }
-    .event-status.running { color: var(--info); }
-    .event-status.blocked { color: var(--danger); }
-
-    /* Flow cards */
-    .flow-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-    .flow-card { background: var(--bg-surface); border-radius: 8px; padding: 14px; }
-    .flow-name { font-weight: 700; font-size: 15px; color: var(--text-bright); }
-    .flow-desc { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-    .flow-meta { margin-top: 8px; font-size: 11px; color: var(--text-muted); display: flex; gap: 8px; }
-    .loop-badge { background: var(--accent); color: white; padding: 1px 6px; border-radius: 3px; }
-    .flow-execution { margin-top: 24px; }
-    .exec-status { font-size: 20px; font-weight: 700; }
-    .exec-steps { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
-    .exec-step { background: var(--bg-surface); border-radius: 6px; padding: 8px 12px; display: flex; gap: 6px; align-items: center; }
-    .step-id { font-weight: 600; }
-    .exec-meta { font-size: 12px; color: var(--text-muted); }
-
     /* Utility */
     .empty-state { color: var(--text-muted); font-style: italic; padding: 40px; text-align: center; }
     .empty-state code { background: var(--bg-card); padding: 2px 6px; border-radius: 3px; }
@@ -218,7 +143,6 @@
     .text-info { color: var(--info); }
     .text-muted { color: var(--text-muted); }
     .truncated { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
-    .help-text { font-size: 12px; color: var(--text-muted); margin-top: 12px; }
     .graph-fallback { padding: 16px; }
     .graph-fallback h3 { margin-bottom: 8px; }
   </style>
@@ -229,16 +153,12 @@
 
   <!-- DATA INJECTION — deploy_dashboard replaces these with actual JSON -->
   <script id="canon-graph-data" type="application/json">__CANON_GRAPH_DATA__</script>
-  <script id="canon-principles-data" type="application/json">__CANON_PRINCIPLES_DATA__</script>
-  <script id="canon-orchestration-data" type="application/json">__CANON_ORCHESTRATION_DATA__</script>
-  <script id="canon-flow-data" type="application/json">__CANON_FLOW_DATA__</script>
   <script id="canon-pr-reviews" type="application/json">__CANON_PR_REVIEWS__</script>
 
   <script>
     // ── Theme constants ──
     const LAYER_COLORS = { api:'#4A90D9', ui:'#50C878', domain:'#9B59B6', data:'#E67E22', infra:'#7F8C8D', shared:'#1ABC9C', unknown:'#BDC3C7' };
     const VERDICT_COLORS = { CLEAN:'#27ae60', WARNING:'#f39c12', BLOCKING:'#e74c3c' };
-    const STATUS_COLORS = { pending:'#7f8c8d', running:'#3498db', completed:'#27ae60', blocked:'#e74c3c', skipped:'#95a5a6' };
     const SEVERITY_COLORS = { rule:'#e74c3c', 'strong-opinion':'#f39c12', convention:'#3498db' };
 
     // ── Data loader (reads embedded JSON) ──
@@ -254,9 +174,6 @@
 
     const DATA = {
       graph: loadEmbeddedData('canon-graph-data'),
-      principles: loadEmbeddedData('canon-principles-data'),
-      orchestration: loadEmbeddedData('canon-orchestration-data'),
-      flows: loadEmbeddedData('canon-flow-data'),
       prReviews: loadEmbeddedData('canon-pr-reviews'),
     };
 
@@ -298,10 +215,7 @@
     // ── Sidebar ──
     const NAV_ITEMS = [
       { id: 'graph', label: 'Codebase Graph', icon: '\u25C9' },
-      { id: 'principles', label: 'Principles', icon: '\u25C6' },
       { id: 'pr-review', label: 'PR Review', icon: '\u2398' },
-      { id: 'orchestration', label: 'Orchestration', icon: '\u2699' },
-      { id: 'flow-status', label: 'Flows', icon: '\u25B6' },
     ];
 
     function initSidebar() {
@@ -333,11 +247,9 @@
     }
 
     // ── View router ──
-    let currentCleanup = null;
-    const VIEWS = { graph: renderGraph, principles: renderPrinciples, 'pr-review': renderPrReview, orchestration: renderOrchestration, 'flow-status': renderFlows };
+    const VIEWS = { graph: renderGraph, 'pr-review': renderPrReview };
 
     function loadView(viewId) {
-      if (currentCleanup) { currentCleanup(); currentCleanup = null; }
       const main = document.getElementById('main-content');
       main.innerHTML = '';
       const fn = VIEWS[viewId];
@@ -412,7 +324,6 @@
       const width = canvas.clientWidth || 800;
       const height = canvas.clientHeight || 600;
 
-      // Deep copy nodes/edges so D3 doesn't mutate originals
       const nodesCopy = nodes.map(n => ({...n}));
       const edgesCopy = edges.map(e => ({ source: e.source?.id || e.source, target: e.target?.id || e.target }));
 
@@ -454,73 +365,6 @@
         <div class="detail-field"><label>Last Verdict</label>${node.last_verdict ? verdictBadge(node.last_verdict) : '<span class="text-muted">No review</span>'}</div>
         <div class="detail-field"><label>Changed</label>${node.changed ? '<span class="text-info">Yes</span>' : '<span class="text-muted">No</span>'}</div>
       `;
-    }
-
-    // ── Principles view ──
-    function renderPrinciples(container) {
-      container.innerHTML = `
-        <div class="view-header">
-          <h2>Principle Explorer</h2>
-          <div id="principle-search" class="filter-bar"></div>
-          <div class="filter-bar">
-            <label class="chip"><input type="checkbox" checked data-sev="rule"> Rules</label>
-            <label class="chip"><input type="checkbox" checked data-sev="strong-opinion"> Strong Opinions</label>
-            <label class="chip"><input type="checkbox" checked data-sev="convention"> Conventions</label>
-          </div>
-        </div>
-        <div id="principle-list" class="principle-list"></div>
-        <div id="try-it" class="try-it-panel">
-          <h3>Try It</h3>
-          <textarea id="try-code" placeholder="Paste code here to see which principles apply..." rows="6"></textarea>
-          <button id="try-btn" class="btn">Check Principles</button>
-          <div id="try-result"></div>
-        </div>
-      `;
-
-      const data = DATA.principles;
-      const list = container.querySelector('#principle-list');
-      if (!data || !data.principles) {
-        list.innerHTML = '<p class="empty-state">No principles data. Run <code>/canon:dashboard</code> to generate.</p>';
-        return;
-      }
-
-      let searchQuery = '';
-      let activeSeverities = new Set(['rule', 'strong-opinion', 'convention']);
-
-      createSearchFilter(container.querySelector('#principle-search'), 'Search principles...', (q) => { searchQuery = q; doRender(); });
-      container.querySelectorAll('[data-sev]').forEach(cb => {
-        cb.addEventListener('change', () => {
-          if (cb.checked) activeSeverities.add(cb.dataset.sev);
-          else activeSeverities.delete(cb.dataset.sev);
-          doRender();
-        });
-      });
-
-      function doRender() {
-        const filtered = data.principles.filter(p =>
-          activeSeverities.has(p.severity) &&
-          (!searchQuery || p.id.includes(searchQuery) || (p.title || '').toLowerCase().includes(searchQuery.toLowerCase()))
-        );
-        list.innerHTML = filtered.map(p => `
-          <div class="principle-card" data-id="${p.id}">
-            <div class="principle-header">
-              ${severityBadge(p.severity)}
-              <strong>${p.id}</strong>
-              <span class="principle-title">${p.title || ''}</span>
-            </div>
-            <div class="principle-meta">
-              ${p.tags ? p.tags.map(t => `<span class="tag">${t}</span>`).join('') : ''}
-              ${p.compliance_rate !== undefined ? `<span class="compliance">${p.compliance_rate}% compliant</span>` : ''}
-            </div>
-            <div class="principle-body collapsed" id="body-${p.id}">${p.body || '<em>No body available</em>'}</div>
-          </div>
-        `).join('');
-
-        list.querySelectorAll('.principle-card').forEach(card => {
-          card.addEventListener('click', () => card.querySelector('.principle-body').classList.toggle('collapsed'));
-        });
-      }
-      doRender();
     }
 
     // ── PR Review view ──
@@ -595,143 +439,6 @@
           </div>
         ` : ''}
       `;
-    }
-
-    // ── Orchestration view ──
-    const PIPELINE_PHASES = ['research', 'architect', 'plan', 'implement', 'test', 'security', 'review'];
-    let orchInterval = null;
-
-    function renderOrchestration(container) {
-      container.innerHTML = `
-        <div class="view-header">
-          <h2>Orchestration</h2>
-          <div class="filter-bar">
-            <label class="chip"><input type="checkbox" id="live-toggle"> Live (2s refresh)</label>
-          </div>
-        </div>
-        <div id="pipeline-view"></div>
-        <div id="ralph-loop-view" class="ralph-loop-view"></div>
-        <div id="event-timeline" class="event-timeline"></div>
-      `;
-
-      // Live toggle is available but only useful when data is dynamically loaded
-      // In self-contained mode, data is static, so live refresh just re-renders same data
-      renderOrchData(container);
-
-      currentCleanup = () => { if (orchInterval) { clearInterval(orchInterval); orchInterval = null; } };
-    }
-
-    function renderOrchData(container) {
-      const data = DATA.orchestration;
-      const pipeline = container.querySelector('#pipeline-view');
-      const loopView = container.querySelector('#ralph-loop-view');
-      const timeline = container.querySelector('#event-timeline');
-
-      if (!data) {
-        pipeline.innerHTML = '<p class="empty-state">No orchestration data. Run <code>/canon:ralph</code> or <code>/canon:flow</code> to generate.</p>';
-        return;
-      }
-
-      if (data.pipeline) {
-        pipeline.innerHTML = `<div class="pipeline-stages">
-          ${PIPELINE_PHASES.map(phase => {
-            const s = (data.pipeline || []).find(x => x.phase === phase);
-            const status = s?.status || 'pending';
-            return `
-              <div class="pipeline-stage">
-                <div class="stage-indicator ${status}"></div>
-                <div class="stage-label">${phase}</div>
-                ${s?.agents ? `<div class="stage-agents">${s.agents.map(a => `<div class="agent-chip ${a.status}">${a.name.replace('canon-', '')}</div>`).join('')}</div>` : ''}
-              </div>
-            `;
-          }).join('<div class="pipeline-arrow">\u2192</div>')}
-        </div>`;
-      }
-
-      if (data.ralph_loop) {
-        const loop = data.ralph_loop;
-        loopView.innerHTML = `
-          <h3>Ralph Loop \u2014 Iteration ${loop.current_iteration}/${loop.max_iterations}</h3>
-          <div class="loop-iterations">
-            ${(loop.history || []).map(h => `
-              <div class="loop-iter">
-                <div class="iter-number">#${h.iteration}</div>
-                <div class="iter-verdict" style="color: ${VERDICT_COLORS[h.verdict] || '#7f8c8d'}">${h.verdict}</div>
-                <div class="iter-stats">${h.violations_count} violations, ${h.violations_fixed} fixed</div>
-              </div>
-            `).join('')}
-          </div>
-        `;
-      } else { loopView.innerHTML = ''; }
-
-      if (data.events?.length > 0) {
-        const recent = data.events.slice(-20).reverse();
-        timeline.innerHTML = `<h3>Event Timeline</h3><div class="timeline-list">
-          ${recent.map(e => `
-            <div class="timeline-event">
-              <span class="event-time">${new Date(e.timestamp).toLocaleTimeString()}</span>
-              <span class="event-type">${e.event_type}</span>
-              ${e.agent_name ? `<span class="event-agent">${e.agent_name}</span>` : ''}
-              ${e.phase ? `<span class="event-phase">${e.phase}</span>` : ''}
-              ${e.status ? `<span class="event-status ${e.status}">${e.status}</span>` : ''}
-            </div>
-          `).join('')}
-        </div>`;
-      }
-    }
-
-    // ── Flow status view ──
-    function renderFlows(container) {
-      container.innerHTML = `
-        <div class="view-header"><h2>Flows</h2></div>
-        <div id="flow-list"></div>
-        <div id="flow-execution" class="flow-execution"></div>
-      `;
-
-      const listEl = container.querySelector('#flow-list');
-      const execEl = container.querySelector('#flow-execution');
-      const flowData = DATA.flows;
-
-      if (flowData?.flows) {
-        listEl.innerHTML = `<h3>Available Flows</h3><div class="flow-cards">
-          ${flowData.flows.map(f => `
-            <div class="flow-card">
-              <div class="flow-name">${f.name}</div>
-              <div class="flow-desc">${f.description}</div>
-              <div class="flow-meta">
-                <span>${f.step_count} steps</span>
-                ${f.has_loops ? '<span class="loop-badge">has loops</span>' : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>`;
-      } else {
-        listEl.innerHTML = `<h3>Available Flows</h3><div class="flow-cards">
-          <div class="flow-card"><div class="flow-name">ralph</div><div class="flow-desc">Build-review-fix loop until CLEAN</div><div class="flow-meta"><span>3 steps</span><span class="loop-badge">has loops</span></div></div>
-          <div class="flow-card"><div class="flow-name">quick-fix</div><div class="flow-desc">Fast path for small fixes</div><div class="flow-meta"><span>2 steps</span></div></div>
-          <div class="flow-card"><div class="flow-name">deep-build</div><div class="flow-desc">Full research-to-review pipeline</div><div class="flow-meta"><span>6 steps</span></div></div>
-          <div class="flow-card"><div class="flow-name">review-only</div><div class="flow-desc">Review current changes</div><div class="flow-meta"><span>1 step</span></div></div>
-          <div class="flow-card"><div class="flow-name">security-audit</div><div class="flow-desc">Security scan + review</div><div class="flow-meta"><span>2 steps</span></div></div>
-        </div><p class="help-text">Run <code>/canon:flow &lt;name&gt; &lt;task&gt;</code> to execute a flow.</p>`;
-      }
-
-      if (flowData?.execution) {
-        const ex = flowData.execution;
-        execEl.innerHTML = `
-          <h3>Last Execution: ${ex.flow_name}</h3>
-          <div class="exec-status" style="color: ${STATUS_COLORS[ex.status === 'success' ? 'completed' : 'blocked']}">${ex.status}</div>
-          <div class="exec-steps">
-            ${(ex.step_results || []).map(s => `
-              <div class="exec-step">
-                <span class="step-id">${s.step_id}</span>
-                <span style="color: ${STATUS_COLORS[s.status]}">${s.status}</span>
-                ${s.verdict ? `<span>${s.verdict}</span>` : ''}
-              </div>
-            `).join('')}
-          </div>
-          <div class="exec-meta">Steps: ${ex.steps_completed}/${ex.total_steps}${ex.started_at ? ` | Started: ${new Date(ex.started_at).toLocaleString()}` : ''}</div>
-        `;
-      }
     }
 
     // ── Init ──

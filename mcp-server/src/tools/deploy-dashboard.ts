@@ -2,8 +2,6 @@
 
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
-import { EventStore } from "../drift/event-store.js";
-import { RalphStore } from "../drift/ralph-store.js";
 
 interface DeployDashboardOutput {
   deployed: boolean;
@@ -17,25 +15,6 @@ async function readJsonSafe(path: string): Promise<unknown> {
     return JSON.parse(content);
   } catch {
     return null;
-  }
-}
-
-async function readJsonlSafe(path: string): Promise<unknown[]> {
-  try {
-    const content = await readFile(path, "utf-8");
-    return content
-      .split("\n")
-      .filter((l) => l.trim())
-      .map((l) => {
-        try {
-          return JSON.parse(l);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
-  } catch {
-    return [];
   }
 }
 
@@ -61,13 +40,6 @@ export async function deployDashboard(
   // Gather data from .canon/ directory
   const canonDir = join(projectDir, ".canon");
   const graphData = await readJsonSafe(join(canonDir, "graph-data.json"));
-  const principlesData = await readJsonSafe(
-    join(canonDir, "principles-data.json"),
-  );
-  const orchestrationData = await readJsonSafe(
-    join(canonDir, "orchestration-data.json"),
-  );
-  const flowData = await readJsonSafe(join(canonDir, "flow-list.json"));
 
   // Gather PR review data (collect all available reviews into a map)
   const prReviews: Record<string, unknown> = {};
@@ -92,12 +64,6 @@ export async function deployDashboard(
   // Inject data into template by replacing placeholder strings
   const html = template
     .replace("__CANON_GRAPH_DATA__", JSON.stringify(graphData))
-    .replace("__CANON_PRINCIPLES_DATA__", JSON.stringify(principlesData))
-    .replace(
-      "__CANON_ORCHESTRATION_DATA__",
-      JSON.stringify(orchestrationData),
-    )
-    .replace("__CANON_FLOW_DATA__", JSON.stringify(flowData))
     .replace("__CANON_PR_REVIEWS__", JSON.stringify(prReviews));
 
   // Write the self-contained HTML
