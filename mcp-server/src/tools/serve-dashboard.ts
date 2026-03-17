@@ -1,38 +1,44 @@
-/** Lightweight HTTP server for the Canon dashboard.
- * Serves the static dashboard HTML and provides live API endpoints
- * for ask_codebase and file content access. */
+/** Canon dashboard — deploys the HTML and serves it with live API endpoints. */
 
 import { createServer, type Server } from "http";
 import { readFile } from "fs/promises";
 import { join, normalize } from "path";
+import { deployDashboard } from "./deploy-dashboard.js";
 import { askCodebase } from "./ask-codebase.js";
 import { getFileContext } from "./get-file-context.js";
 
 let activeServer: Server | null = null;
 
 export interface ServeDashboardOutput {
+  deployed: boolean;
+  dashboard_path: string;
   url: string;
   port: number;
   message: string;
+  unsummarized_files: string[];
 }
 
 export async function serveDashboard(
   projectDir: string,
+  pluginDir: string,
 ): Promise<ServeDashboardOutput> {
-  // If already running, return existing URL
+  // Deploy first — generates fresh graph and builds the HTML
+  const deployResult = await deployDashboard(projectDir, pluginDir);
+
+  // If already running, return existing URL + deploy info
   if (activeServer?.listening) {
     const addr = activeServer.address();
     if (addr && typeof addr === "object") {
       return {
+        ...deployResult,
         url: `http://localhost:${addr.port}`,
         port: addr.port,
-        message: `Dashboard already serving at http://localhost:${addr.port}`,
+        message: `${deployResult.message} Dashboard serving at http://localhost:${addr.port}`,
       };
     }
   }
 
-  const canonDir = join(projectDir, ".canon");
-  const dashboardPath = join(canonDir, "dashboard.html");
+  const dashboardPath = join(projectDir, ".canon", "dashboard.html");
 
   const server = createServer(async (req, res) => {
     // CORS for local dev
@@ -105,9 +111,10 @@ export async function serveDashboard(
   activeServer = server;
 
   return {
+    ...deployResult,
     url: `http://localhost:${port}`,
     port,
-    message: `Dashboard serving at http://localhost:${port} — open in your browser. The chat panel can now query your codebase live.`,
+    message: `${deployResult.message} Serving at http://localhost:${port} with live API.`,
   };
 }
 

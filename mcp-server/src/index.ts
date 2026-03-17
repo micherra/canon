@@ -11,7 +11,6 @@ import { report } from "./tools/report.js";
 import { logRalph } from "./tools/log-ralph.js";
 import { getPrReviewData } from "./tools/pr-review-data.js";
 import { codebaseGraph } from "./tools/codebase-graph.js";
-import { deployDashboard } from "./tools/deploy-dashboard.js";
 import { getFileContext } from "./tools/get-file-context.js";
 import { storeSummaries } from "./tools/store-summaries.js";
 import { askCodebase } from "./tools/ask-codebase.js";
@@ -184,13 +183,13 @@ server.tool(
   }
 );
 
-// Tool: deploy_dashboard
+// Tool: deploy_dashboard (alias for serve_dashboard)
 server.tool(
   "deploy_dashboard",
-  "Deploy the Canon dashboard. Generates a fresh codebase graph, builds the HTML, and returns unsummarized_files. IMPORTANT: If unsummarized_files is non-empty, you MUST read each file with get_file_context, generate a one-sentence summary of the file's role, then call store_summaries with all summaries. After storing, call deploy_dashboard again to embed the summaries.",
+  "Deploy and serve the Canon dashboard with live codebase access. Generates a fresh graph, builds the HTML, starts a local HTTP server, and returns the URL. IMPORTANT: If unsummarized_files is non-empty, you MUST read each file with get_file_context, generate a one-sentence summary of the file's role, then call store_summaries with all summaries. After storing, call deploy_dashboard again to embed the summaries.",
   {},
   async () => {
-    const result = await deployDashboard(projectDir, pluginDir);
+    const result = await serveDashboard(projectDir, pluginDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };
@@ -250,10 +249,10 @@ server.tool(
 // Tool: serve_dashboard
 server.tool(
   "serve_dashboard",
-  "Start a local HTTP server for the Canon dashboard with live API access. Unlike deploy_dashboard (static HTML), this enables the Ask Codebase chat to query your codebase in real time — file contents, dependency analysis, and architectural insights. Run deploy_dashboard first to generate the dashboard HTML, then serve_dashboard to enable live features.",
+  "Deploy and serve the Canon dashboard with live codebase access. Same as deploy_dashboard — generates a fresh graph, builds the HTML, starts a local HTTP server with live Ask Codebase API.",
   {},
   async () => {
-    const result = await serveDashboard(projectDir);
+    const result = await serveDashboard(projectDir, pluginDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };
