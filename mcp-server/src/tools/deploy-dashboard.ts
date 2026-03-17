@@ -55,13 +55,15 @@ export async function deployDashboard(
   // Generate fresh graph data by running the codebase graph scanner
   const canonDir = join(projectDir, ".canon");
   let graphData: Record<string, unknown> | null = null;
+  let graphError: string | null = null;
   try {
     const freshGraph = await codebaseGraph({}, projectDir, pluginDir);
     graphData = freshGraph as unknown as Record<string, unknown>;
     // Persist so other tools (ask_codebase) can also use fresh data
     await mkdir(canonDir, { recursive: true });
     await writeFile(join(canonDir, "graph-data.json"), JSON.stringify(freshGraph, null, 2), "utf-8");
-  } catch {
+  } catch (err) {
+    graphError = String(err);
     // Fall back to cached graph data on disk
     graphData = await readJsonSafe(join(canonDir, "graph-data.json")) as Record<string, unknown> | null;
   }
@@ -125,14 +127,24 @@ export async function deployDashboard(
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, html, "utf-8");
 
-  const summaryNote = unsummarizedFiles.length > 0
-    ? ` ${unsummarizedFiles.length} files need summaries — read each file and call store_summaries to enrich the dashboard.`
-    : "";
+  const nodeCount = Array.isArray(graphData?.nodes) ? (graphData.nodes as unknown[]).length : 0;
+  const edgeCount = Array.isArray(graphData?.edges) ? (graphData.edges as unknown[]).length : 0;
+
+  const parts: string[] = [
+    `Dashboard deployed to ${outputPath} — open directly in any browser (no server needed).`,
+    `Graph: ${nodeCount} nodes, ${edgeCount} edges.`,
+  ];
+  if (graphError) {
+    parts.push(`Graph generation error (used cached data): ${graphError}`);
+  }
+  if (unsummarizedFiles.length > 0) {
+    parts.push(`${unsummarizedFiles.length} files need summaries — read each file and call store_summaries to enrich the dashboard.`);
+  }
 
   return {
     deployed: true,
     dashboard_path: outputPath,
-    message: `Dashboard deployed to ${outputPath} — open directly in any browser (no server needed).${summaryNote}`,
+    message: parts.join(" "),
     unsummarized_files: unsummarizedFiles,
   };
 }
