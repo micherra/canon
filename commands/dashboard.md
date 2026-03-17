@@ -1,104 +1,59 @@
 ---
-description: "Canon dashboard — generate graph, summarize files, deploy UI, or serve live. Subcommands: graph | summarize | ui | serve (default: full pipeline)"
-argument-hint: "[graph|summarize|ui|serve] [--diff-base main] [--skip-summaries] [--open]"
+description: Generate the Canon dashboard — graph, summaries, and live UI
+argument-hint: "[--diff-base main] [--skip-summaries]"
 allowed-tools: [Bash, Read, Glob, Write]
 model: sonnet
 ---
 
-Canon dashboard with subcommands. Parse the first positional argument to determine the mode:
+Generate the codebase graph, file summaries, deploy the dashboard HTML, and open it. One command does everything.
 
-- **No subcommand** → run the full pipeline (graph → summarize → ui)
-- **`graph`** → generate the dependency graph only
-- **`summarize`** → generate file summaries only (graph must exist)
-- **`ui`** → deploy the HTML dashboard and open it (graph must exist)
-- **`serve`** → deploy + start a live HTTP server with API endpoints
+## Instructions
 
-## Subcommand: `graph`
+### Step 1: Generate graph data
 
-Generate the codebase dependency graph with Canon compliance overlay.
+Call the `codebase_graph` MCP tool to scan the codebase and generate the dependency graph with compliance overlay and structural insights.
 
-1. If `--diff-base` is provided, get changed files:
+If `--diff-base` is provided, get changed files first:
 ```bash
 git diff {diff_base}..HEAD --name-only
 ```
 Pass these as `changed_files` to the tool.
 
-2. Call the `codebase_graph` MCP tool. This scans source files, resolves imports, infers layers, and attaches compliance data.
+### Step 2: Generate file summaries
 
-3. Print the summary:
-```
-Canon Graph Generated:
-  {N} nodes, {M} edges across {L} layers
-  Insights: {C} cycles, {V} layer violations, {O} orphans
-  Hotspots: {list top 3 hotspot files}
-  Saved to .canon/graph-data.json
-```
+Unless `--skip-summaries` is provided, generate summaries for all files in the graph that don't already have one in `.canon/summaries.json`.
 
-## Subcommand: `summarize`
+For each file (in batches of 10):
 
-Generate rich file summaries for all graph nodes missing a summary.
+1. Call `get_file_context` with the file path to get its source code, graph context (imports, dependents, exports, layer), and compliance data.
 
-1. Check that `.canon/graph-data.json` exists. If not, tell the user to run `/canon:dashboard graph` first.
+2. Write a rich, contextual summary that explains:
+   - What the file does and its responsibility in the system
+   - How it fits in the architecture (layer, relationships)
+   - What it exports and what depends on it
+   - Any concerns (violations, high coupling)
 
-2. Call `deploy_dashboard` to get the `unsummarized_files` list (this also refreshes graph data).
+   The summary should read like documentation written by someone who deeply understands the project.
 
-3. For each unsummarized file (in batches of 10):
-   a. Call `get_file_context` with the file path to get source, graph context, and compliance data.
-   b. Write a rich, contextual summary that explains:
-      - What the file does and its responsibility
-      - How it fits in the architecture (layer, relationships)
-      - What it exports and what depends on it
-      - Any concerns (violations, high coupling)
-   c. Call `store_summaries` with the batch.
+3. Call `store_summaries` with the batch.
 
-4. Print progress: "Summarized {N}/{T} files..."
+Show progress: "Summarized {N}/{T} files..."
 
-## Subcommand: `ui`
+### Step 3: Deploy and serve dashboard
 
-Deploy the self-contained HTML dashboard and open it.
+Call the `deploy_dashboard` MCP tool. This reads graph data and summaries from `.canon/`, embeds them into a self-contained HTML file at `.canon/dashboard.html`, starts a local HTTP server with live API endpoints (`/api/ask`, `/api/file`, `/api/branch`), and returns the URL.
 
-1. Call the `deploy_dashboard` MCP tool. This reads graph data and summaries from `.canon/`, embeds them into `.canon/dashboard.html`.
+### Step 4: Present summary and open
 
-2. If there are unsummarized files, mention it:
-   `{N} files still need summaries — run /canon:dashboard summarize to enrich.`
-
-3. Open in browser:
-```bash
-open .canon/dashboard.html || xdg-open .canon/dashboard.html || echo "Open .canon/dashboard.html in your browser"
-```
-
-## Subcommand: `serve`
-
-Deploy and start a live HTTP server with API endpoints for interactive querying.
-
-1. Call the `deploy_dashboard` MCP tool to generate the dashboard HTML.
-
-2. If there are unsummarized files, mention it:
-   `{N} files still need summaries — run /canon:dashboard summarize to enrich.`
-
-3. Print the URL:
-```
-Canon Dashboard serving at {url}
-  Live API: /api/ask, /api/file, /api/branch
-  Open: {url}
-```
-
-## No subcommand (full pipeline)
-
-Run the complete pipeline: graph → summarize → ui.
-
-1. **Graph**: Run the `graph` subcommand logic above.
-
-2. **Summarize**: Unless `--skip-summaries` is passed, run the `summarize` subcommand logic above.
-
-3. **UI**: Run the `ui` subcommand logic above.
-
-4. Print final summary:
 ```
 Canon Dashboard Ready:
   Graph: {N} nodes, {M} edges across {L} layers
   Insights: {C} cycles, {V} layer violations, {O} orphans
   Summaries: {S} files summarized
+  Serving at: {url}
+```
 
-Open: .canon/dashboard.html
+Open in browser:
+```bash
+open {url} || xdg-open {url} || echo "Open {url} in your browser"
 ```
