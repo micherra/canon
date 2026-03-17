@@ -193,7 +193,7 @@ export async function askCodebase(
           focus: "file_summary",
           data: {
             file: mentionedFile,
-            summary: summaries[mentionedFile] || "No summary available. Run /canon:summarize to generate.",
+            summary: summaries[mentionedFile] || "No summary available. Run /canon:dashboard to generate.",
             layer: graph.nodes.find((n) => n.id === mentionedFile)?.layer || "unknown",
           },
           relevant_files: [mentionedFile],

@@ -9,7 +9,6 @@ import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
 import { report } from "./tools/report.js";
 import { logRalph } from "./tools/log-ralph.js";
-import { listFlowsTool, validateFlowTool } from "./tools/flow-tools.js";
 import { getPrReviewData } from "./tools/pr-review-data.js";
 import { codebaseGraph } from "./tools/codebase-graph.js";
 import { deployDashboard } from "./tools/deploy-dashboard.js";
@@ -111,34 +110,6 @@ server.registerTool(
   },
   async (input) => {
     const result = await report(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
-// Tool: list_flows
-server.tool(
-  "list_flows",
-  "List all available Canon flow definitions. Flows are predefined agent pipeline patterns.",
-  {},
-  async () => {
-    const result = await listFlowsTool(projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
-// Tool: validate_flow
-server.tool(
-  "validate_flow",
-  "Validate a Canon flow definition for structural correctness. Returns errors and warnings.",
-  {
-    flow_name: z.string().describe("Name of the flow to validate (without .yaml extension)"),
-  },
-  async (input) => {
-    const result = await validateFlowTool(input, projectDir, pluginDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

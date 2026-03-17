@@ -305,7 +305,7 @@
 
       const data = DATA.graph;
       if (!data) {
-        container.querySelector('.graph-canvas').innerHTML = '<p class="empty-state">No graph data. Run <code>/canon:graph</code> to generate.</p>';
+        container.querySelector('.graph-canvas').innerHTML = '<p class="empty-state">No graph data. Run <code>/canon:dashboard</code> to generate.</p>';
         return;
       }
 
@@ -401,7 +401,7 @@
         <div class="detail-field"><label>Violations</label><span class="${(node.violation_count || 0) > 0 ? 'text-danger' : ''}">${node.violation_count || 0}</span></div>
         <div class="detail-field"><label>Last Verdict</label>${node.last_verdict ? verdictBadge(node.last_verdict) : '<span class="text-muted">No review</span>'}</div>
         <div class="detail-field"><label>Changed</label>${node.changed ? '<span class="text-info">Yes</span>' : '<span class="text-muted">No</span>'}</div>
-        ${node.summary ? `<div class="detail-field"><label>Summary</label><div class="file-summary">${node.summary}</div></div>` : '<div class="detail-field"><label>Summary</label><span class="text-muted">Run <code>/canon:summarize</code> to generate</span></div>'}
+        ${node.summary ? `<div class="detail-field"><label>Summary</label><div class="file-summary">${node.summary}</div></div>` : '<div class="detail-field"><label>Summary</label><span class="text-muted">Run <code>/canon:dashboard</code> to generate</span></div>'}
       `;
     }
 
