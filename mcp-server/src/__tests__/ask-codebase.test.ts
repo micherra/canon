@@ -129,7 +129,7 @@ describe("askCodebase", () => {
       { question: "what depends on helper.ts?" },
       tmpDir,
     );
-    expect(result.focus).toBe("dependencies");
+    expect(result.focus).toBe("file_detail");
     expect((result.data as { file: string }).file).toBe("src/utils/helper.ts");
   });
 });
