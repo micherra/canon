@@ -1,17 +1,17 @@
 ---
-description: Generate all Canon dashboard data and open the unified UI
-argument-hint: [--open] [--diff-base main]
+description: Generate all Canon dashboard data including file summaries and open the UI
+argument-hint: [--open] [--diff-base main] [--skip-summaries]
 allowed-tools: [Bash, Read, Glob, Write]
-model: haiku
+model: sonnet
 ---
 
-Generate data for all Canon dashboard views and open a self-contained HTML dashboard.
+Generate data for all Canon dashboard views — codebase graph, insights, file summaries — and open a self-contained HTML dashboard.
 
 ## Instructions
 
 ### Step 1: Generate graph data
 
-Call the `codebase_graph` MCP tool to scan the codebase and generate the dependency graph with compliance overlay.
+Call the `codebase_graph` MCP tool to scan the codebase and generate the dependency graph with compliance overlay and structural insights.
 
 If `--diff-base` is provided, get changed files first:
 ```bash
@@ -21,37 +21,37 @@ Pass these as `changed_files` to the tool.
 
 Save the result to `.canon/graph-data.json`.
 
-### Step 2: Generate principles data
+### Step 2: Generate file summaries
 
-Call the `list_principles` MCP tool to get all principles. Then call `get_compliance` to get compliance stats.
+Unless `--skip-summaries` is provided, generate summaries for all files in the graph that don't already have one in `.canon/summaries.json`.
 
-Merge the results into a single object:
-```json
-{
-  "principles": [ /* list_principles output with compliance_rate added */ ],
-  "generated_at": "ISO timestamp"
-}
-```
+For each file (in batches of 10):
 
-Save to `.canon/principles-data.json`.
+1. Call `get_file_context` with the file path to get its source code, graph context (imports, dependents, exports, layer), and compliance data.
 
-### Step 3: Generate orchestration data
+2. Write a rich, contextual summary that explains:
+   - What the file does and its responsibility in the system
+   - How it fits in the architecture (layer, relationships)
+   - What it exports and what depends on it
+   - Any concerns (violations, high coupling)
 
-Call the `get_orchestration_data` MCP tool to get pipeline status, Ralph loop state, and event timeline.
+   The summary should read like documentation written by someone who deeply understands the project.
 
-Save the result to `.canon/orchestration-data.json`.
+3. Call `store_summaries` with the batch.
 
-### Step 4: Deploy dashboard
+Show progress: "Summarized {N}/{T} files..."
 
-Call the `deploy_dashboard` MCP tool. This reads the data files from `.canon/`, embeds them into a self-contained HTML file, and writes it to `.canon/dashboard.html`. No web server needed — it opens directly in any browser.
+### Step 3: Deploy dashboard
 
-### Step 5: Present summary and open
+Call the `deploy_dashboard` MCP tool. This reads graph data and summaries from `.canon/`, embeds them into a self-contained HTML file, and writes it to `.canon/dashboard.html`.
+
+### Step 4: Present summary and open
 
 ```
 Canon Dashboard Ready:
-  Graph: {N} nodes, {M} edges
-  Principles: {P} loaded
-  Orchestration: {E} events
+  Graph: {N} nodes, {M} edges across {L} layers
+  Insights: {C} cycles, {V} layer violations, {O} orphans
+  Summaries: {S} files summarized
 
 Open: .canon/dashboard.html
 ```
