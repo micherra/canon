@@ -187,28 +187,6 @@
     .ask-suggestion { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted); padding: 2px 8px; border-radius: 10px; font-size: 10px; cursor: pointer; font-family: inherit; }
     .ask-suggestion:hover { border-color: var(--accent); color: var(--text); }
 
-    /* PR Review */
-    .pr-input-bar { display: flex; gap: 8px; }
-    .pr-content { margin-top: 16px; }
-    .review-summary { background: var(--bg-surface); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
-    .verdict-large { font-size: 28px; font-weight: 700; margin-bottom: 12px; }
-    .score-grid { display: flex; gap: 24px; }
-    .score-item label { display: block; font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
-    .score-item span { font-size: 18px; font-weight: 600; }
-    .violations-section, .honored-section, .files-section { margin-top: 16px; }
-    .violations-section h3, .honored-section h3, .files-section h3 { font-size: 14px; margin-bottom: 8px; }
-    .violation-item {
-      background: var(--bg-surface); border-radius: 6px;
-      padding: 10px 12px; margin-bottom: 6px;
-      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-    }
-    .violation-item p { width: 100%; font-size: 13px; color: var(--text-muted); }
-    .suggestion { color: var(--info) !important; }
-    .honored-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .honored-chip { background: rgba(39, 174, 96, 0.2); color: var(--success); padding: 3px 8px; border-radius: 4px; font-size: 12px; }
-    .file-list { list-style: none; }
-    .file-list li { padding: 4px 0; font-size: 13px; color: var(--text-muted); }
-
     /* PR Review filter overlay on graph */
     .pr-filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
     .pr-filter-bar select {
@@ -225,6 +203,13 @@
     .pr-review-banner .score-inline span { color: var(--text); font-weight: 600; }
     .pr-review-banner .clear-filter { background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 11px; margin-left: auto; }
     .pr-review-banner .clear-filter:hover { border-color: var(--accent); color: var(--text); }
+    .violation-item {
+      background: var(--bg-surface); border-radius: 6px;
+      padding: 10px 12px; margin-bottom: 6px;
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    }
+    .violation-item p { width: 100%; font-size: 13px; color: var(--text-muted); }
+    .suggestion { color: var(--info) !important; }
 
     /* Utility */
     .empty-state { color: var(--text-muted); font-style: italic; padding: 40px; text-align: center; }
@@ -245,7 +230,6 @@
   <!-- DATA INJECTION — deploy_dashboard replaces these with actual JSON -->
   <script id="canon-graph-data" type="application/json">__CANON_GRAPH_DATA__</script>
   <script id="canon-pr-reviews" type="application/json">__CANON_PR_REVIEWS__</script>
-
   <script>
     // ── Theme constants ──
     const LAYER_COLORS = { api:'#4A90D9', ui:'#50C878', domain:'#9B59B6', data:'#E67E22', infra:'#7F8C8D', shared:'#1ABC9C', unknown:'#BDC3C7' };
@@ -328,7 +312,6 @@
     // ── Sidebar ──
     const NAV_ITEMS = [
       { id: 'graph', label: 'Codebase Graph', icon: '\u25C9' },
-      { id: 'pr-review', label: 'PR Review', icon: '\u2398' },
     ];
 
     function initSidebar() {
@@ -360,7 +343,7 @@
     }
 
     // ── View router ──
-    const VIEWS = { graph: renderGraph, 'pr-review': renderPrReview };
+    const VIEWS = { graph: renderGraph };
 
     function loadView(viewId) {
       const main = document.getElementById('main-content');
@@ -418,8 +401,8 @@
       const detail = container.querySelector('#graph-detail');
       let activeLayers = [...new Set(data.nodes.map(n => n.layer))];
       let searchQuery = '';
-      let activePrReview = null; // currently selected PR review data
-      let prReviewFiles = null;  // Set of file paths from active review
+      let activePrReview = null;
+      let prReviewFiles = null;
 
       createLayerFilters(container.querySelector('#graph-filters'), activeLayers, (layers) => {
         activeLayers = layers;
@@ -566,13 +549,11 @@
         const hasSearch = q.length >= 2;
         const hasPrFilter = prReviewFiles !== null;
 
-        // Build a map of file -> violation severity for the active review
         const prViolationMap = new Map();
         if (hasPrFilter && activePrReview) {
           for (const v of (activePrReview.violations || [])) {
             if (v.file) {
               const existing = prViolationMap.get(v.file);
-              // Keep the highest severity: rule > strong-opinion > convention
               const rank = { rule: 3, 'strong-opinion': 2, convention: 1 };
               if (!existing || (rank[v.severity] || 0) > (rank[existing] || 0)) {
                 prViolationMap.set(v.file, v.severity);
@@ -649,7 +630,6 @@
           });
       }
 
-      // Override click handler to show PR review details when filter active
       function onNodeClick(d) {
         showGraphDetail(detail, d);
         if (activePrReview && prReviewFiles && prReviewFiles.has(d.id)) {
@@ -993,90 +973,6 @@
         if (basename && basename.length > 3 && q.includes(basename.replace(/\.[^.]+$/, ''))) return node.id;
       }
       return null;
-    }
-
-    // ── PR Review view ──
-    function renderPrReview(container) {
-      container.innerHTML = `
-        <div class="view-header">
-          <h2>PR Review</h2>
-          <div class="pr-input-bar">
-            <input type="text" id="pr-number" placeholder="PR # or branch" class="search-input">
-            <button id="load-pr" class="btn">Load Review</button>
-          </div>
-        </div>
-        <div id="pr-content" class="pr-content">
-          <p class="empty-state">Enter a PR number or branch name, then click Load Review.<br>Review data is generated by <code>/canon:pr-review</code>.</p>
-        </div>
-      `;
-
-      const content = container.querySelector('#pr-content');
-      const prInput = container.querySelector('#pr-number');
-      const prReviews = DATA.prReviews || {};
-
-      function loadReview(value) {
-        if (!value) return;
-        prInput.value = value;
-        const reviewData = prReviews[value];
-        if (reviewData) {
-          showPrReview(content, reviewData);
-        } else {
-          content.innerHTML = `<p class="empty-state">No review data for "${value}".<br>Run <code>/canon:pr-review ${value}</code> to generate.</p>`;
-        }
-      }
-
-      container.querySelector('#load-pr').addEventListener('click', () => loadReview(prInput.value.trim()));
-
-      // Auto-load: try current branch from live API, then embedded keys
-      const keys = Object.keys(prReviews);
-      fetch('/api/branch').then(r => r.json()).then(data => {
-        if (data.branch && prReviews[data.branch]) {
-          loadReview(data.branch);
-        } else if (keys.length === 1) {
-          loadReview(keys[0]);
-        } else if (data.branch) {
-          prInput.value = data.branch;
-        }
-      }).catch(() => {
-        if (keys.length === 1) loadReview(keys[0]);
-      });
-    }
-
-    function showPrReview(container, data) {
-      const verdict = data.verdict || 'CLEAN';
-      container.innerHTML = `
-        <div class="review-summary">
-          <div class="verdict-large" style="color: ${VERDICT_COLORS[verdict]}">${verdict}</div>
-          <div class="score-grid">
-            <div class="score-item"><label>Rules</label><span>${data.score?.rules?.passed || 0}/${data.score?.rules?.total || 0}</span></div>
-            <div class="score-item"><label>Opinions</label><span>${data.score?.opinions?.passed || 0}/${data.score?.opinions?.total || 0}</span></div>
-            <div class="score-item"><label>Conventions</label><span>${data.score?.conventions?.passed || 0}/${data.score?.conventions?.total || 0}</span></div>
-          </div>
-        </div>
-        ${(data.violations || []).length > 0 ? `
-          <div class="violations-section"><h3>Violations</h3>
-            ${data.violations.map(v => `
-              <div class="violation-item">
-                ${severityBadge(v.severity)}
-                <strong>${v.principle_id}</strong>
-                ${v.file ? `<code>${v.file}</code>` : ''}
-                ${v.detail ? `<p>${v.detail}</p>` : ''}
-                ${v.suggestion ? `<p class="suggestion">Fix: ${v.suggestion}</p>` : ''}
-              </div>
-            `).join('')}
-          </div>
-        ` : ''}
-        ${(data.honored || []).length > 0 ? `
-          <div class="honored-section"><h3>Honored Principles</h3>
-            <div class="honored-list">${data.honored.map(id => `<span class="honored-chip">${id}</span>`).join('')}</div>
-          </div>
-        ` : ''}
-        ${(data.files || []).length > 0 ? `
-          <div class="files-section"><h3>Files Reviewed</h3>
-            <ul class="file-list">${data.files.map(f => `<li>${f}</li>`).join('')}</ul>
-          </div>
-        ` : ''}
-      `;
     }
 
     // ── Init — DOMContentLoaded fires AFTER all defer scripts (d3) have loaded ──
