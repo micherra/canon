@@ -5,7 +5,6 @@ import { execFile, spawn } from "child_process";
 import { readFile } from "fs/promises";
 import { join, normalize } from "path";
 import { deployDashboard } from "./deploy-dashboard.js";
-import { askCodebase } from "./ask-codebase.js";
 import { getFileContext } from "./get-file-context.js";
 
 let activeServer: Server | null = null;

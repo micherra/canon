@@ -1131,7 +1131,7 @@
           sendBtn.disabled = true;
           input.disabled = true;
           try {
-            // Send last 10 exchanges for context (keep payload reasonable)
+            // Send last 20 messages for conversation context
             const history = chatHistory.slice(-20);
             const resp = await fetch('/api/ask', {
               method: 'POST',
