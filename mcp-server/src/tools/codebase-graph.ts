@@ -105,15 +105,11 @@ export async function codebaseGraph(
     }
     filePaths = allFiles.sort();
   } else {
-    // No source_dirs configured — return empty with a hint
-    return {
-      nodes: [],
-      edges: [],
-      layers: [],
-      hotspots: [],
-      insights: generateInsights([], []),
-      generated_at: new Date().toISOString(),
-    };
+    // No source_dirs configured — fall back to scanning the project root
+    filePaths = await scanSourceFiles(projectDir, {
+      includeExtensions: input.include_extensions,
+      excludeDirs: input.exclude_dirs,
+    });
   }
 
   const fileSet = new Set(filePaths);
