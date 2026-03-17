@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractImports, resolveImport } from "../graph/import-parser.js";
+import { extractImports, resolveImport, parseTsconfigPaths } from "../graph/import-parser.js";
 
 describe("extractImports — JS/TS", () => {
   it("extracts ES module imports", () => {
@@ -115,5 +115,71 @@ describe("resolveImport", () => {
   it("returns null for unresolvable imports", () => {
     const result = resolveImport("./nonexistent", "src/main.ts", allFiles);
     expect(result).toBeNull();
+  });
+
+  it("resolves path alias imports", () => {
+    const aliases = [{ prefix: "@/", target: "src/" }];
+    const result = resolveImport("@/utils/helper", "src/app/page.ts", allFiles, aliases);
+    expect(result).toBe("src/utils/helper.ts");
+  });
+
+  it("resolves path alias to index file", () => {
+    const result = resolveImport("@/bar", "src/app/page.ts", allFiles, [
+      { prefix: "@/", target: "src/" },
+    ]);
+    expect(result).toBe("src/bar/index.ts");
+  });
+
+  it("resolves path alias with tsx extension", () => {
+    const result = resolveImport("@/baz", "src/app/page.ts", allFiles, [
+      { prefix: "@/", target: "src/" },
+    ]);
+    expect(result).toBe("src/baz.tsx");
+  });
+
+  it("returns null for unmatched alias prefix", () => {
+    const result = resolveImport("~/foo", "src/main.ts", allFiles, [
+      { prefix: "@/", target: "src/" },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("returns null for npm packages even with aliases", () => {
+    const result = resolveImport("react", "src/main.ts", allFiles, [
+      { prefix: "@/", target: "src/" },
+    ]);
+    expect(result).toBeNull();
+  });
+});
+
+describe("parseTsconfigPaths", () => {
+  it("parses standard @/* alias", () => {
+    const aliases = parseTsconfigPaths({ "@/*": ["./src/*"] });
+    expect(aliases).toEqual([{ prefix: "@/", target: "src/" }]);
+  });
+
+  it("parses alias with baseUrl", () => {
+    const aliases = parseTsconfigPaths({ "@/*": ["./components/*"] }, "src");
+    expect(aliases).toEqual([{ prefix: "@/", target: "src/components/" }]);
+  });
+
+  it("parses multiple aliases", () => {
+    const aliases = parseTsconfigPaths({
+      "@/*": ["./src/*"],
+      "~/*": ["./lib/*"],
+    });
+    expect(aliases).toHaveLength(2);
+    expect(aliases[0]).toEqual({ prefix: "@/", target: "src/" });
+    expect(aliases[1]).toEqual({ prefix: "~/", target: "lib/" });
+  });
+
+  it("ignores non-wildcard patterns", () => {
+    const aliases = parseTsconfigPaths({ "@utils": ["./src/utils"] });
+    expect(aliases).toHaveLength(0);
+  });
+
+  it("ignores empty targets", () => {
+    const aliases = parseTsconfigPaths({ "@/*": [] });
+    expect(aliases).toHaveLength(0);
   });
 });

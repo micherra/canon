@@ -14,7 +14,7 @@ export interface MatchFilters {
 
 const PATH_TO_LAYER: Array<[RegExp, string]> = [
   [/(^|\/)(api|routes|controllers)(\/|$)/, "api"],
-  [/(^|\/)(components|pages|views)(\/|$)/, "ui"],
+  [/(^|\/)(app|components|pages|views)(\/|$)/, "ui"],
   [/(^|\/)(services|domain|models)(\/|$)/, "domain"],
   [/(^|\/)(db|data|repositories|prisma)(\/|$)/, "data"],
   [/(^|\/)(infra|deploy|terraform|docker)(\/|$)/, "infra"],

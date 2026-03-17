@@ -1,4 +1,4 @@
-import { dirname, join, resolve } from "path";
+import { dirname, join, normalize } from "path";
 
 /**
  * Extract import paths from source file content.
@@ -76,35 +76,78 @@ function extractPyImports(content: string): string[] {
   return imports;
 }
 
+/** A parsed path alias: prefix to match and the directory it maps to */
+export interface PathAlias {
+  prefix: string; // e.g. "@/" or "~/"
+  target: string; // e.g. "src/" — relative to project root
+}
+
 /**
- * Resolve a relative import to an absolute file path.
- * Returns null for non-relative imports (npm packages, etc.)
+ * Parse tsconfig.json compilerOptions.paths into PathAlias entries.
+ * Supports patterns like { "@/*": ["./src/*"] } and { "@components/*": ["src/components/*"] }
+ */
+export function parseTsconfigPaths(
+  paths: Record<string, string[]>,
+  baseUrl?: string,
+): PathAlias[] {
+  const aliases: PathAlias[] = [];
+  const base = baseUrl ? baseUrl.replace(/\/$/, "") + "/" : "";
+
+  for (const [pattern, targets] of Object.entries(paths)) {
+    if (!pattern.endsWith("/*") || targets.length === 0) continue;
+    const prefix = pattern.slice(0, -1); // "@/*" → "@/"
+    let target = targets[0];
+    if (!target.endsWith("/*")) continue;
+    target = target.slice(0, -1); // "./src/*" → "./src/"
+    // Strip leading "./"
+    if (target.startsWith("./")) target = target.slice(2);
+    aliases.push({ prefix, target: base + target });
+  }
+
+  return aliases;
+}
+
+const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
+
+/** Try to find a file in the set with extension and index resolution */
+function tryResolve(candidate: string, allFiles: Set<string>): string | null {
+  if (allFiles.has(candidate)) return candidate;
+  for (const ext of EXTENSIONS) {
+    if (allFiles.has(candidate + ext)) return candidate + ext;
+  }
+  for (const ext of EXTENSIONS) {
+    const indexPath = join(candidate, "index" + ext);
+    if (allFiles.has(indexPath)) return indexPath;
+  }
+  return null;
+}
+
+/**
+ * Resolve an import to a file path in the project.
+ * Handles relative imports and path aliases (e.g. @/ → src/).
  */
 export function resolveImport(
   importPath: string,
   fromFile: string,
-  allFiles: Set<string>
+  allFiles: Set<string>,
+  aliases?: PathAlias[],
 ): string | null {
-  // Only resolve relative imports
-  if (!importPath.startsWith(".")) return null;
-
-  const fromDir = dirname(fromFile);
-  const resolved = join(fromDir, importPath);
-
-  // Try exact match first
-  if (allFiles.has(resolved)) return resolved;
-
-  // Try with common extensions
-  const extensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
-  for (const ext of extensions) {
-    const withExt = resolved + ext;
-    if (allFiles.has(withExt)) return withExt;
+  // Relative imports
+  if (importPath.startsWith(".")) {
+    const fromDir = dirname(fromFile);
+    const resolved = normalize(join(fromDir, importPath));
+    return tryResolve(resolved, allFiles);
   }
 
-  // Try index files
-  for (const ext of extensions) {
-    const indexPath = join(resolved, "index" + ext);
-    if (allFiles.has(indexPath)) return indexPath;
+  // Path alias resolution
+  if (aliases) {
+    for (const alias of aliases) {
+      if (importPath.startsWith(alias.prefix)) {
+        const rest = importPath.slice(alias.prefix.length);
+        const resolved = normalize(join(alias.target, rest));
+        return tryResolve(resolved, allFiles);
+      }
+    }
   }
 
   return null;

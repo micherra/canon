@@ -25,6 +25,12 @@ describe("inferLayer", () => {
     expect(inferLayer("src/controllers/auth.ts")).toBe("api");
   });
 
+  it("infers ui from app path (Next.js)", () => {
+    expect(inferLayer("src/app/page.tsx")).toBe("ui");
+    expect(inferLayer("src/app/dashboard/page.tsx")).toBe("ui");
+    expect(inferLayer("src/app/layout.tsx")).toBe("ui");
+  });
+
   it("infers ui from components path", () => {
     expect(inferLayer("src/components/Button.tsx")).toBe("ui");
   });

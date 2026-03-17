@@ -111,6 +111,44 @@ describe("codebaseGraph", () => {
     const result = await codebaseGraph({ root_dir: tmpDir }, tmpDir, "/nonexistent");
     expect(result.nodes.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("resolves path aliases from tsconfig.json", async () => {
+    await writeFile(
+      join(tmpDir, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          paths: { "@/*": ["./src/*"] },
+        },
+      })
+    );
+    await writeFile(
+      join(tmpDir, "src", "api", "handler.ts"),
+      `import { helper } from '@/utils/helper';`
+    );
+    await writeFile(
+      join(tmpDir, "src", "utils", "helper.ts"),
+      `export function helper() {}`
+    );
+
+    const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
+
+    expect(result.nodes).toHaveLength(2);
+    const edge = result.edges.find(
+      (e) => e.source.includes("handler") && e.target.includes("helper")
+    );
+    expect(edge).toBeDefined();
+  });
+
+  it("classifies app/ directory files as ui layer", async () => {
+    await mkdir(join(tmpDir, "src", "app"), { recursive: true });
+    await writeFile(join(tmpDir, "src", "app", "page.tsx"), `export default function Page() { return <div/>; }`);
+
+    const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
+
+    const appNode = result.nodes.find((n) => n.id === "src/app/page.tsx");
+    expect(appNode).toBeDefined();
+    expect(appNode!.layer).toBe("ui");
+  });
 });
 
 describe("LAYER_COLORS", () => {

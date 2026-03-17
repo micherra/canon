@@ -1,7 +1,7 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { scanSourceFiles } from "../graph/scanner.js";
-import { extractImports, resolveImport } from "../graph/import-parser.js";
+import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
 import { inferLayer } from "../matcher.js";
 import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
@@ -49,6 +49,21 @@ export interface CodebaseGraphOutput {
   hotspots: Array<{ path: string; violation_count: number; top_violations: string[] }>;
   insights: CodebaseInsights;
   generated_at: string;
+}
+
+/** Read path aliases from tsconfig.json if it exists */
+async function loadPathAliases(projectDir: string): Promise<PathAlias[]> {
+  try {
+    const raw = await readFile(join(projectDir, "tsconfig.json"), "utf-8");
+    const tsconfig = JSON.parse(raw);
+    const paths = tsconfig?.compilerOptions?.paths;
+    if (paths && typeof paths === "object") {
+      return parseTsconfigPaths(paths, tsconfig.compilerOptions.baseUrl);
+    }
+  } catch {
+    // no tsconfig or invalid
+  }
+  return [];
 }
 
 /** Read source_dirs from .canon/config.json if it exists */
@@ -164,6 +179,9 @@ export async function codebaseGraph(
     });
   }
 
+  // Load path aliases from tsconfig.json for non-relative import resolution
+  const aliases = await loadPathAliases(projectDir);
+
   // Build edges — read files relative to projectDir (not rootDir) since paths are project-relative
   const edges: GraphEdge[] = [];
 
@@ -173,7 +191,7 @@ export async function codebaseGraph(
       const imports = extractImports(content, filePath);
 
       for (const imp of imports) {
-        const resolved = resolveImport(imp, filePath, fileSet);
+        const resolved = resolveImport(imp, filePath, fileSet, aliases);
         if (resolved && resolved !== filePath) {
           edges.push({
             source: filePath,
