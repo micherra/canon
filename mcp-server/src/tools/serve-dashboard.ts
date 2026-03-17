@@ -1,6 +1,6 @@
 /** Canon dashboard — deploys the HTML and serves it with live API endpoints. */
 
-import { createServer, type Server } from "http";
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from "http";
 import { execFile, spawn } from "child_process";
 import { readFile } from "fs/promises";
 import { join, normalize } from "path";
@@ -9,6 +9,13 @@ import { askCodebase } from "./ask-codebase.js";
 import { getFileContext } from "./get-file-context.js";
 
 let activeServer: Server | null = null;
+
+const MAX_BODY_BYTES = 64 * 1024; // 64 KB
+const MAX_QUESTION_LENGTH = 2000;
+const MAX_HISTORY_ENTRIES = 20;
+const MAX_HISTORY_CONTENT_LENGTH = 4000;
+const VALID_ROLES = new Set(["user", "assistant"]);
+const CLI_TIMEOUT_MS = 35000;
 
 export interface ServeDashboardOutput {
   deployed: boolean;
@@ -19,7 +26,42 @@ export interface ServeDashboardOutput {
   unsummarized_files: string[];
 }
 
-/** Build a concise system prompt with graph context for Claude */
+interface HistoryEntry {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// --- Input validation (validate-at-trust-boundaries) ---
+
+function parseAskInput(body: string): { question: string; history: HistoryEntry[] } {
+  const input = JSON.parse(body);
+
+  const question = typeof input.question === "string"
+    ? input.question.slice(0, MAX_QUESTION_LENGTH).trim()
+    : "";
+  if (!question) throw new Error("Missing or empty question");
+
+  const history: HistoryEntry[] = [];
+  if (Array.isArray(input.history)) {
+    for (const entry of input.history.slice(-MAX_HISTORY_ENTRIES)) {
+      if (
+        entry && typeof entry === "object" &&
+        typeof entry.role === "string" && VALID_ROLES.has(entry.role) &&
+        typeof entry.content === "string"
+      ) {
+        history.push({
+          role: entry.role as "user" | "assistant",
+          content: entry.content.slice(0, MAX_HISTORY_CONTENT_LENGTH),
+        });
+      }
+    }
+  }
+
+  return { question, history };
+}
+
+// --- Graph context ---
+
 async function buildGraphContext(projectDir: string): Promise<string> {
   try {
     const raw = await readFile(join(projectDir, ".canon", "graph-data.json"), "utf-8");
@@ -37,7 +79,6 @@ async function buildGraphContext(projectDir: string): Promise<string> {
       }
     } catch { /* no summaries */ }
 
-    // Build compact context
     const layerCounts = new Map<string, number>();
     for (const n of nodes) {
       layerCounts.set(n.layer, (layerCounts.get(n.layer) || 0) + 1);
@@ -58,7 +99,6 @@ async function buildGraphContext(projectDir: string): Promise<string> {
       lines.push(parts.join(" "));
     }
 
-    // Add dependency info (compact)
     const depMap = new Map<string, string[]>();
     for (const e of edges) {
       const src = typeof e.source === "string" ? e.source : (e.source as unknown as { id: string }).id;
@@ -78,39 +118,37 @@ async function buildGraphContext(projectDir: string): Promise<string> {
   }
 }
 
-/** Call claude CLI with the question and graph context, return the answer */
-function askClaude(question: string, graphContext: string, projectDir: string, history?: Array<{role: string, content: string}>): Promise<string> {
+// --- Claude CLI interaction (consistent-abstraction-levels) ---
+
+function buildAskPrompt(question: string, graphContext: string, history: HistoryEntry[]): { systemPrompt: string; userPrompt: string } {
+  const systemPrompt = [
+    "You are an expert on this codebase. Answer questions about the architecture, files, dependencies, and patterns.",
+    "The user is asking from a codebase visualization dashboard. Treat short queries as questions about the codebase.",
+    "For example, 'Layer violations' means 'What are the layer violations in this codebase?'",
+    "Be concise but thorough. Reference specific file names when relevant.",
+    "Use markdown formatting: **bold** for file names, `code` for code terms, bullet lists for multiple items.",
+    "IMPORTANT: Answer directly using ONLY the codebase context below. Do NOT use any tools.",
+    "",
+    "Here is the codebase context:",
+    graphContext,
+  ].join("\n");
+
+  let userPrompt = question;
+  if (history.length > 1) {
+    const prior = history.slice(0, -1);
+    const convoLines = prior.map(m =>
+      `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`
+    ).join("\n\n");
+    userPrompt = `Previous conversation:\n${convoLines}\n\nCurrent question: ${question}`;
+  }
+
+  return { systemPrompt, userPrompt };
+}
+
+function runClaudeCliPrint(args: string[], cwd: string): Promise<string> {
   return new Promise((resolve) => {
-    const systemPrompt = [
-      "You are an expert on this codebase. Answer questions about the architecture, files, dependencies, and patterns.",
-      "The user is asking from a codebase visualization dashboard. Treat short queries as questions about the codebase.",
-      "For example, 'Layer violations' means 'What are the layer violations in this codebase?'",
-      "Be concise but thorough. Reference specific file names when relevant.",
-      "Use markdown formatting: **bold** for file names, `code` for code terms, bullet lists for multiple items.",
-      "IMPORTANT: Answer directly using ONLY the codebase context below. Do NOT use any tools.",
-      "",
-      "Here is the codebase context:",
-      graphContext,
-    ].join("\n");
-
-    // Build the full prompt with conversation history for follow-up context
-    let fullPrompt = question;
-    if (history && history.length > 1) {
-      const prior = history.slice(0, -1); // exclude the current question (last entry)
-      const convoLines = prior.map(m =>
-        `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
-      ).join("\n\n");
-      fullPrompt = `Previous conversation:\n${convoLines}\n\nCurrent question: ${question}`;
-    }
-
-    const proc = spawn("claude", [
-      "--print",
-      "--system-prompt", systemPrompt,
-      "--max-turns", "1",
-      "--model", "claude-haiku-4-5-20251001",
-      fullPrompt,
-    ], {
-      cwd: projectDir,
+    const proc = spawn("claude", args, {
+      cwd,
       env: { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30000,
@@ -138,22 +176,80 @@ function askClaude(question: string, graphContext: string, projectDir: string, h
       resolve(`Claude CLI not available: ${err.message}. Falling back to graph analysis.`);
     });
 
-    // Safety timeout
     setTimeout(() => {
       try { proc.kill(); } catch { /* ignore */ }
       if (!stdout.trim()) resolve("Request timed out. Try a more specific question.");
-    }, 35000);
+    }, CLI_TIMEOUT_MS);
   });
 }
+
+function askClaude(question: string, graphContext: string, projectDir: string, history: HistoryEntry[]): Promise<string> {
+  const { systemPrompt, userPrompt } = buildAskPrompt(question, graphContext, history);
+  return runClaudeCliPrint([
+    "--print",
+    "--system-prompt", systemPrompt,
+    "--max-turns", "1",
+    "--model", "claude-haiku-4-5-20251001",
+    userPrompt,
+  ], projectDir);
+}
+
+// --- Route handlers (thin-handlers) ---
+
+async function handleDashboard(_req: IncomingMessage, res: ServerResponse, dashboardPath: string): Promise<void> {
+  const html = await readFile(dashboardPath, "utf-8");
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
+async function handleAsk(
+  req: IncomingMessage, res: ServerResponse,
+  projectDir: string, getGraphContext: () => Promise<string>,
+): Promise<void> {
+  const body = await readBody(req);
+  const { question, history } = parseAskInput(body);
+
+  const graphContext = await getGraphContext();
+  const answer = await askClaude(question, graphContext, projectDir, history);
+
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ answer, focus: "claude", relevant_files: [] }));
+}
+
+async function handleFile(url: URL, res: ServerResponse, projectDir: string): Promise<void> {
+  const filePath = url.searchParams.get("path");
+  if (!filePath) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Missing path parameter" }));
+    return;
+  }
+
+  const normalized = normalize(filePath);
+  if (normalized.startsWith("..") || normalized.startsWith("/")) {
+    res.writeHead(403, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Path traversal not allowed" }));
+    return;
+  }
+
+  const result = await getFileContext({ file_path: normalized }, projectDir);
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(result));
+}
+
+async function handleBranch(res: ServerResponse, projectDir: string): Promise<void> {
+  const branch = await gitCurrentBranch(projectDir);
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ branch }));
+}
+
+// --- Server ---
 
 export async function serveDashboard(
   projectDir: string,
   pluginDir: string,
 ): Promise<ServeDashboardOutput> {
-  // Deploy first — generates fresh graph and builds the HTML
   const deployResult = await deployDashboard(projectDir, pluginDir);
 
-  // If already running, return existing URL + deploy info
   if (activeServer?.listening) {
     const addr = activeServer.address();
     if (addr && typeof addr === "object") {
@@ -168,11 +264,13 @@ export async function serveDashboard(
 
   const dashboardPath = join(projectDir, ".canon", "dashboard.html");
 
-  // Pre-build graph context once for the ask endpoint
   let graphContext: string | null = null;
+  async function getGraphContext(): Promise<string> {
+    if (!graphContext) graphContext = await buildGraphContext(projectDir);
+    return graphContext;
+  }
 
   const server = createServer(async (req, res) => {
-    // CORS for local dev
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -186,66 +284,19 @@ export async function serveDashboard(
     const url = new URL(req.url || "/", `http://localhost`);
 
     try {
-      // Serve dashboard
       if (url.pathname === "/" || url.pathname === "/index.html") {
-        const html = await readFile(dashboardPath, "utf-8");
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(html);
-        return;
+        return await handleDashboard(req, res, dashboardPath);
       }
-
-      // API: ask codebase — pipes through claude CLI
       if (url.pathname === "/api/ask" && req.method === "POST") {
-        const body = await readBody(req);
-        const input = JSON.parse(body);
-        const question = input.question || "";
-        const history = input.history || [];
-
-        // Build graph context on first request (lazy)
-        if (!graphContext) {
-          graphContext = await buildGraphContext(projectDir);
-        }
-
-        // Call Claude CLI with conversation history for follow-ups
-        const answer = await askClaude(question, graphContext, projectDir, history);
-
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ answer, focus: "claude", relevant_files: [] }));
-        return;
+        return await handleAsk(req, res, projectDir, getGraphContext);
       }
-
-      // API: get file context
       if (url.pathname === "/api/file" && req.method === "GET") {
-        const filePath = url.searchParams.get("path");
-        if (!filePath) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Missing path parameter" }));
-          return;
-        }
-
-        // Security: prevent path traversal
-        const normalized = normalize(filePath);
-        if (normalized.startsWith("..") || normalized.startsWith("/")) {
-          res.writeHead(403, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Path traversal not allowed" }));
-          return;
-        }
-
-        const result = await getFileContext({ file_path: normalized }, projectDir);
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(result));
-        return;
+        return await handleFile(url, res, projectDir);
       }
-
-      // API: current git branch
       if (url.pathname === "/api/branch" && req.method === "GET") {
-        const branch = await gitCurrentBranch(projectDir);
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ branch }));
-        return;
+        return await handleBranch(res, projectDir);
       }
 
-      // 404
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Not found" }));
     } catch (err) {
@@ -254,9 +305,7 @@ export async function serveDashboard(
     }
   });
 
-  // Find an open port starting from 4567
   const port = await findOpenPort(server, 4567);
-
   activeServer = server;
 
   return {
@@ -267,10 +316,19 @@ export async function serveDashboard(
   };
 }
 
-function readBody(req: import("http").IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let size = 0;
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
   });
