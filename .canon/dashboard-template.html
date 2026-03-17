@@ -865,24 +865,35 @@
       `;
 
       const content = container.querySelector('#pr-content');
+      const prInput = container.querySelector('#pr-number');
       const prReviews = DATA.prReviews || {};
 
-      container.querySelector('#load-pr').addEventListener('click', () => {
-        const value = container.querySelector('#pr-number').value.trim();
+      function loadReview(value) {
         if (!value) return;
+        prInput.value = value;
         const reviewData = prReviews[value];
         if (reviewData) {
           showPrReview(content, reviewData);
         } else {
           content.innerHTML = `<p class="empty-state">No review data for "${value}".<br>Run <code>/canon:pr-review ${value}</code> to generate.</p>`;
         }
-      });
-
-      const keys = Object.keys(prReviews);
-      if (keys.length === 1) {
-        container.querySelector('#pr-number').value = keys[0];
-        showPrReview(content, prReviews[keys[0]]);
       }
+
+      container.querySelector('#load-pr').addEventListener('click', () => loadReview(prInput.value.trim()));
+
+      // Auto-load: try current branch from live API, then embedded keys
+      const keys = Object.keys(prReviews);
+      fetch('/api/branch').then(r => r.json()).then(data => {
+        if (data.branch && prReviews[data.branch]) {
+          loadReview(data.branch);
+        } else if (keys.length === 1) {
+          loadReview(keys[0]);
+        } else if (data.branch) {
+          prInput.value = data.branch;
+        }
+      }).catch(() => {
+        if (keys.length === 1) loadReview(keys[0]);
+      });
     }
 
     function showPrReview(container, data) {

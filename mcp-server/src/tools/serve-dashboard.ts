@@ -1,6 +1,7 @@
 /** Canon dashboard — deploys the HTML and serves it with live API endpoints. */
 
 import { createServer, type Server } from "http";
+import { execFile } from "child_process";
 import { readFile } from "fs/promises";
 import { join, normalize } from "path";
 import { deployDashboard } from "./deploy-dashboard.js";
@@ -96,6 +97,14 @@ export async function serveDashboard(
         return;
       }
 
+      // API: current git branch
+      if (url.pathname === "/api/branch" && req.method === "GET") {
+        const branch = await gitCurrentBranch(projectDir);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ branch }));
+        return;
+      }
+
       // 404
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Not found" }));
@@ -143,4 +152,13 @@ async function findOpenPort(server: Server, startPort: number): Promise<number> 
     }
   }
   throw new Error("Could not find an open port");
+}
+
+function gitCurrentBranch(cwd: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd }, (err, stdout) => {
+      if (err) { resolve(null); return; }
+      resolve(stdout.trim() || null);
+    });
+  });
 }
