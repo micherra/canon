@@ -1,6 +1,6 @@
 /** Canon Dashboard Deployment — generates a self-contained HTML dashboard with embedded data */
 
-import { readFile, writeFile, mkdir, stat } from "fs/promises";
+import { readFile, writeFile, mkdir, stat, readdir } from "fs/promises";
 import { join, dirname } from "path";
 import { codebaseGraph } from "./codebase-graph.js";
 import { loadSummariesFile, flattenSummaries } from "./store-summaries.js";
@@ -12,7 +12,9 @@ interface DeployDashboardOutput {
   unsummarized_files: string[];
 }
 
-async function readJsonSafe(path: string): Promise<unknown> {
+// --- Data loading helpers ---
+
+async function readJsonOrNull(path: string): Promise<unknown> {
   try {
     const content = await readFile(path, "utf-8");
     return JSON.parse(content);
@@ -21,7 +23,6 @@ async function readJsonSafe(path: string): Promise<unknown> {
   }
 }
 
-/** Check if a file has been modified after the given ISO timestamp */
 async function isFileNewerThan(filePath: string, timestamp: string): Promise<boolean> {
   if (!timestamp) return true;
   try {
@@ -32,14 +33,91 @@ async function isFileNewerThan(filePath: string, timestamp: string): Promise<boo
   }
 }
 
+// --- Graph generation ---
+
+async function generateGraphData(
+  projectDir: string,
+  pluginDir: string,
+  canonDir: string,
+): Promise<{ graphData: Record<string, unknown> | null; error: string | null }> {
+  try {
+    const freshGraph = await codebaseGraph({}, projectDir, pluginDir);
+    const graphData = freshGraph as unknown as Record<string, unknown>;
+    await mkdir(canonDir, { recursive: true });
+    await writeFile(join(canonDir, "graph-data.json"), JSON.stringify(freshGraph, null, 2), "utf-8");
+    return { graphData, error: null };
+  } catch (err) {
+    const graphData = await readJsonOrNull(join(canonDir, "graph-data.json")) as Record<string, unknown> | null;
+    return { graphData, error: String(err) };
+  }
+}
+
+// --- Summary staleness detection ---
+
+async function findUnsummarizedFiles(
+  graphData: Record<string, unknown> | null,
+  summaryEntries: Record<string, { summary: string; updated_at: string }>,
+  projectDir: string,
+): Promise<string[]> {
+  const unsummarized: string[] = [];
+  if (!graphData || !Array.isArray(graphData.nodes)) return unsummarized;
+
+  for (const node of graphData.nodes as Array<Record<string, unknown>>) {
+    const id = node.id as string;
+    const entry = summaryEntries[id];
+    if (!entry) {
+      unsummarized.push(id);
+    } else {
+      const stale = await isFileNewerThan(join(projectDir, id), entry.updated_at);
+      if (stale) unsummarized.push(id);
+    }
+  }
+  return unsummarized;
+}
+
+// --- Summary merging ---
+
+function mergeSummariesIntoGraph(
+  graphData: Record<string, unknown>,
+  summaries: Record<string, string>,
+): void {
+  if (!Array.isArray(graphData.nodes)) return;
+  for (const node of graphData.nodes as Array<Record<string, unknown>>) {
+    const id = node.id as string;
+    if (summaries[id]) node.summary = summaries[id];
+  }
+}
+
+// --- PR review collection ---
+
+async function collectPrReviews(canonDir: string): Promise<Record<string, unknown>> {
+  const prReviews: Record<string, unknown> = {};
+  try {
+    const prDir = join(canonDir, "pr-reviews");
+    const entries = await readdir(prDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const reviewData = await readJsonOrNull(join(prDir, entry.name, "review-data.json"));
+        if (reviewData) prReviews[entry.name] = reviewData;
+      }
+    }
+  } catch {
+    // pr-reviews dir may not exist yet
+  }
+  return prReviews;
+}
+
+// --- Main entry point ---
+
 export async function deployDashboard(
   projectDir: string,
   pluginDir: string,
 ): Promise<DeployDashboardOutput> {
   const templatePath = join(pluginDir, ".canon", "dashboard-template.html");
   const outputPath = join(projectDir, ".canon", "dashboard.html");
+  const canonDir = join(projectDir, ".canon");
 
-  // Read the template
+  // Read template
   let template: string;
   try {
     template = await readFile(templatePath, "utf-8");
@@ -52,81 +130,27 @@ export async function deployDashboard(
     };
   }
 
-  // Generate fresh graph data by running the codebase graph scanner
-  const canonDir = join(projectDir, ".canon");
-  let graphData: Record<string, unknown> | null = null;
-  let graphError: string | null = null;
-  try {
-    const freshGraph = await codebaseGraph({}, projectDir, pluginDir);
-    graphData = freshGraph as unknown as Record<string, unknown>;
-    // Persist so other tools (ask_codebase) can also use fresh data
-    await mkdir(canonDir, { recursive: true });
-    await writeFile(join(canonDir, "graph-data.json"), JSON.stringify(freshGraph, null, 2), "utf-8");
-  } catch (err) {
-    graphError = String(err);
-    // Fall back to cached graph data on disk
-    graphData = await readJsonSafe(join(canonDir, "graph-data.json")) as Record<string, unknown> | null;
-  }
+  // Generate graph data
+  const { graphData, error: graphError } = await generateGraphData(projectDir, pluginDir, canonDir);
 
+  // Load and merge summaries
   const summaryEntries = await loadSummariesFile(projectDir);
   const summaries = flattenSummaries(summaryEntries);
+  const unsummarizedFiles = await findUnsummarizedFiles(graphData, summaryEntries, projectDir);
+  if (graphData) mergeSummariesIntoGraph(graphData, summaries);
 
-  // Identify files that need summaries: missing or stale (file modified since last summary)
-  const unsummarizedFiles: string[] = [];
-  if (graphData && Array.isArray(graphData.nodes)) {
-    for (const node of graphData.nodes as Array<Record<string, unknown>>) {
-      const id = node.id as string;
-      const entry = summaryEntries[id];
-      if (!entry) {
-        unsummarizedFiles.push(id);
-      } else {
-        const stale = await isFileNewerThan(join(projectDir, id), entry.updated_at);
-        if (stale) {
-          unsummarizedFiles.push(id);
-        }
-      }
-    }
-  }
+  // Collect PR reviews
+  const prReviews = await collectPrReviews(canonDir);
 
-  // Merge summaries into graph nodes
-  if (graphData && Array.isArray(graphData.nodes)) {
-    for (const node of graphData.nodes as Array<Record<string, unknown>>) {
-      const id = node.id as string;
-      if (summaries[id]) {
-        node.summary = summaries[id];
-      }
-    }
-  }
-
-  // Gather PR review data (collect all available reviews into a map)
-  const prReviews: Record<string, unknown> = {};
-  try {
-    const { readdir } = await import("fs/promises");
-    const prDir = join(canonDir, "pr-reviews");
-    const entries = await readdir(prDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const reviewData = await readJsonSafe(
-          join(prDir, entry.name, "review-data.json"),
-        );
-        if (reviewData) {
-          prReviews[entry.name] = reviewData;
-        }
-      }
-    }
-  } catch {
-    // pr-reviews dir may not exist yet
-  }
-
-  // Inject data into template by replacing placeholder strings
+  // Inject data into template and write
   const html = template
     .replace("__CANON_GRAPH_DATA__", JSON.stringify(graphData))
     .replace("__CANON_PR_REVIEWS__", JSON.stringify(prReviews));
 
-  // Write the self-contained HTML
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, html, "utf-8");
 
+  // Build status message
   const nodeCount = Array.isArray(graphData?.nodes) ? (graphData.nodes as unknown[]).length : 0;
   const edgeCount = Array.isArray(graphData?.edges) ? (graphData.edges as unknown[]).length : 0;
 
@@ -134,12 +158,8 @@ export async function deployDashboard(
     `Dashboard deployed to ${outputPath} — open directly in any browser (no server needed).`,
     `Graph: ${nodeCount} nodes, ${edgeCount} edges.`,
   ];
-  if (graphError) {
-    parts.push(`Graph generation error (used cached data): ${graphError}`);
-  }
-  if (unsummarizedFiles.length > 0) {
-    parts.push(`${unsummarizedFiles.length} files need summaries — read each file and call store_summaries to enrich the dashboard.`);
-  }
+  if (graphError) parts.push(`Graph generation error (used cached data): ${graphError}`);
+  if (unsummarizedFiles.length > 0) parts.push(`${unsummarizedFiles.length} files need summaries — read each file and call store_summaries to enrich the dashboard.`);
 
   return {
     deployed: true,

@@ -37,15 +37,19 @@ export async function getPrReviewData(
 ): Promise<PrReviewDataOutput> {
   const store = new PrStore(projectDir);
 
-  // Determine diff command
+  // Determine diff command — validate all interpolated values to prevent injection
   let diffCommand: string;
   if (input.pr_number) {
+    if (!Number.isInteger(input.pr_number) || input.pr_number <= 0) {
+      throw new Error("pr_number must be a positive integer");
+    }
     diffCommand = `gh pr diff ${input.pr_number} --name-only`;
   } else if (input.branch) {
-    const base = input.diff_base || "main";
-    diffCommand = `git diff ${base}..${input.branch} --name-only`;
+    const base = sanitizeGitRef(input.diff_base || "main");
+    const branch = sanitizeGitRef(input.branch);
+    diffCommand = `git diff ${base}..${branch} --name-only`;
   } else {
-    const base = input.diff_base || "main";
+    const base = sanitizeGitRef(input.diff_base || "main");
     diffCommand = `git diff ${base}..HEAD --name-only`;
   }
 
@@ -54,8 +58,7 @@ export async function getPrReviewData(
   if (input.incremental && input.pr_number) {
     const lastReview = await store.getLastReviewForPr(input.pr_number);
     if (lastReview?.last_reviewed_sha) {
-      lastReviewedSha = lastReview.last_reviewed_sha;
-      // Adjust diff command to only show changes since last review
+      lastReviewedSha = sanitizeGitRef(lastReview.last_reviewed_sha);
       diffCommand = `git diff ${lastReviewedSha}..HEAD --name-only`;
     }
   }
@@ -110,6 +113,15 @@ export async function recordPrReview(
 
   await store.appendReview(entry);
   return { recorded: true, id };
+}
+
+const GIT_REF_PATTERN = /^[a-zA-Z0-9_.\/\-]+$/;
+
+function sanitizeGitRef(ref: string): string {
+  if (!ref || !GIT_REF_PATTERN.test(ref)) {
+    throw new Error(`Invalid git ref: "${ref}". Only alphanumeric, '.', '/', '_', '-' allowed.`);
+  }
+  return ref;
 }
 
 function generateId(prefix: string): string {

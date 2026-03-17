@@ -2,7 +2,7 @@
  * Designed to give Claude everything needed to write a meaningful summary. */
 
 import { readFile } from "fs/promises";
-import { join } from "path";
+import { join, normalize, resolve } from "path";
 import { extractImports, resolveImport } from "../graph/import-parser.js";
 import { extractExports } from "../graph/export-parser.js";
 import { inferLayer } from "../matcher.js";
@@ -42,8 +42,22 @@ export async function getFileContext(
   input: GetFileContextInput,
   projectDir: string,
 ): Promise<FileContextOutput> {
-  const filePath = input.file_path;
-  const absPath = join(projectDir, filePath);
+  const filePath = normalize(input.file_path);
+
+  // Prevent path traversal outside the project directory
+  const absPath = resolve(projectDir, filePath);
+  if (!absPath.startsWith(resolve(projectDir))) {
+    return {
+      file_path: filePath,
+      layer: "unknown",
+      content: "",
+      imports: [],
+      imported_by: [],
+      exports: [],
+      violation_count: 0,
+      last_verdict: null,
+    };
+  }
 
   // Read file content (truncate at 200 lines)
   let content: string;
