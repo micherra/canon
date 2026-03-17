@@ -1,7 +1,7 @@
 /** Canon dashboard — deploys the HTML and serves it with live API endpoints. */
 
 import { createServer, type Server } from "http";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { readFile } from "fs/promises";
 import { join, normalize } from "path";
 import { deployDashboard } from "./deploy-dashboard.js";
@@ -17,6 +17,116 @@ export interface ServeDashboardOutput {
   port: number;
   message: string;
   unsummarized_files: string[];
+}
+
+/** Build a concise system prompt with graph context for Claude */
+async function buildGraphContext(projectDir: string): Promise<string> {
+  try {
+    const raw = await readFile(join(projectDir, ".canon", "graph-data.json"), "utf-8");
+    const graph = JSON.parse(raw);
+    const nodes = (graph.nodes || []) as Array<{ id: string; layer: string; violation_count: number; summary?: string }>;
+    const edges = (graph.edges || []) as Array<{ source: string; target: string }>;
+
+    // Load summaries
+    let summaries: Record<string, string> = {};
+    try {
+      const sumRaw = await readFile(join(projectDir, ".canon", "summaries.json"), "utf-8");
+      const sumData = JSON.parse(sumRaw);
+      for (const [k, v] of Object.entries(sumData)) {
+        summaries[k] = typeof v === "string" ? v : (v as { summary: string }).summary || "";
+      }
+    } catch { /* no summaries */ }
+
+    // Build compact context
+    const layerCounts = new Map<string, number>();
+    for (const n of nodes) {
+      layerCounts.set(n.layer, (layerCounts.get(n.layer) || 0) + 1);
+    }
+
+    const lines: string[] = [
+      `Codebase: ${nodes.length} files, ${edges.length} dependencies.`,
+      `Layers: ${Array.from(layerCounts.entries()).map(([l, c]) => `${l}(${c})`).join(", ")}`,
+      "",
+      "Files:",
+    ];
+
+    for (const n of nodes) {
+      const summary = summaries[n.id] || n.summary || "";
+      const parts = [n.id, `[${n.layer}]`];
+      if (n.violation_count > 0) parts.push(`violations:${n.violation_count}`);
+      if (summary) parts.push(`— ${summary}`);
+      lines.push(parts.join(" "));
+    }
+
+    // Add dependency info (compact)
+    const depMap = new Map<string, string[]>();
+    for (const e of edges) {
+      const src = typeof e.source === "string" ? e.source : (e.source as unknown as { id: string }).id;
+      const tgt = typeof e.target === "string" ? e.target : (e.target as unknown as { id: string }).id;
+      if (!depMap.has(src)) depMap.set(src, []);
+      depMap.get(src)!.push(tgt.split("/").pop() || tgt);
+    }
+
+    lines.push("", "Dependencies:");
+    for (const [src, targets] of depMap) {
+      lines.push(`${src} → ${targets.join(", ")}`);
+    }
+
+    return lines.join("\n");
+  } catch {
+    return "No codebase graph data available.";
+  }
+}
+
+/** Call claude CLI with the question and graph context, return the answer */
+function askClaude(question: string, graphContext: string, projectDir: string): Promise<string> {
+  return new Promise((resolve) => {
+    const systemPrompt = [
+      "You are an expert on this codebase. Answer questions about the architecture, files, dependencies, and patterns.",
+      "Be concise but thorough. Reference specific file names when relevant.",
+      "Use markdown formatting: **bold** for file names, `code` for code terms, bullet lists for multiple items.",
+      "",
+      "Here is the codebase context:",
+      graphContext,
+    ].join("\n");
+
+    const proc = spawn("claude", [
+      "--print",
+      "--system-prompt", systemPrompt,
+      "--max-turns", "1",
+      "--model", "claude-haiku-4-5-20251001",
+      question,
+    ], {
+      cwd: projectDir,
+      env: { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    proc.on("close", (code) => {
+      if (code === 0 && stdout.trim()) {
+        resolve(stdout.trim());
+      } else {
+        resolve(`Error calling Claude CLI (exit ${code}): ${stderr.trim() || "unknown error"}`);
+      }
+    });
+
+    proc.on("error", (err) => {
+      resolve(`Claude CLI not available: ${err.message}. Falling back to graph analysis.`);
+    });
+
+    // Safety timeout
+    setTimeout(() => {
+      try { proc.kill(); } catch { /* ignore */ }
+      if (!stdout.trim()) resolve("Request timed out. Try a more specific question.");
+    }, 35000);
+  });
 }
 
 export async function serveDashboard(
@@ -41,6 +151,9 @@ export async function serveDashboard(
 
   const dashboardPath = join(projectDir, ".canon", "dashboard.html");
 
+  // Pre-build graph context once for the ask endpoint
+  let graphContext: string | null = null;
+
   const server = createServer(async (req, res) => {
     // CORS for local dev
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -64,13 +177,22 @@ export async function serveDashboard(
         return;
       }
 
-      // API: ask codebase
+      // API: ask codebase — pipes through claude CLI
       if (url.pathname === "/api/ask" && req.method === "POST") {
         const body = await readBody(req);
         const input = JSON.parse(body);
-        const result = await askCodebase(input, projectDir);
+        const question = input.question || "";
+
+        // Build graph context on first request (lazy)
+        if (!graphContext) {
+          graphContext = await buildGraphContext(projectDir);
+        }
+
+        // Call Claude CLI
+        const answer = await askClaude(question, graphContext, projectDir);
+
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify(result));
+        res.end(JSON.stringify({ answer, focus: "claude", relevant_files: [] }));
         return;
       }
 

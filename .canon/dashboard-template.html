@@ -796,8 +796,8 @@
         statusDot.className = 'live-dot ' + (live ? 'connected' : 'offline');
         statusDot.title = live ? 'Live API connected' : 'Offline — using embedded data. Run serve_dashboard for live access.';
         addMsg(live
-          ? 'Connected to live API. Ask anything about your codebase — file contents, dependencies, architecture.'
-          : 'Offline mode (embedded data only). Run <code>serve_dashboard</code> for live file access.', 'bot');
+          ? 'Connected — powered by Claude. Ask anything about your codebase.'
+          : 'Offline mode (embedded data only). Run <code>/canon:dashboard</code> to serve with live AI chat.', 'bot');
       });
 
       const suggestions = ['Show cycles', 'Orphan files', 'Most connected', 'Layer violations'];
@@ -813,12 +813,14 @@
         addMsg(question, 'user');
 
         if (askIsLive) {
-          addMsg('<span class="text-muted">Querying codebase...</span>', 'bot', 'ask-loading');
+          addMsg('<span class="text-muted">Thinking...</span>', 'bot', 'ask-loading');
+          sendBtn.disabled = true;
+          input.disabled = true;
           try {
             const resp = await fetch('/api/ask', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question, file_path: findMentionedFile(question, graphData?.nodes || []) }),
+              body: JSON.stringify({ question }),
             });
             const result = await resp.json();
             removeMsg('ask-loading');
@@ -826,11 +828,15 @@
           } catch (err) {
             removeMsg('ask-loading');
             addMsg(`Error: ${err}`, 'bot');
+          } finally {
+            sendBtn.disabled = false;
+            input.disabled = false;
+            input.focus();
           }
         } else {
-          // Offline fallback
-          const answer = offlineAnswer(question, graphData, zoomToNodeFn);
-          addMsg(answer, 'bot');
+          // Offline fallback — use local graph data analysis
+          const result = offlineAnswer(question, graphData, zoomToNodeFn);
+          addMsg(result, 'bot');
         }
         messages.scrollTop = messages.scrollHeight;
       }
@@ -853,8 +859,17 @@
       }
 
       function renderAskResult(result, question, graphData, zoomFn, detailPanel) {
-        // Convert markdown-style answer to HTML with clickable file links
-        let html = (result.answer || 'No answer available.')
+        let text = result.answer || 'No answer available.';
+
+        // Convert markdown to HTML
+        // Code blocks first (preserve them from other transforms)
+        const codeBlocks = [];
+        text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+          codeBlocks.push(`<pre>${escapeHtml(code.trim())}</pre>`);
+          return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+        });
+
+        let html = text
           .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
           .replace(/`([^`]+)`/g, '<code>$1</code>')
           .replace(/\n\n/g, '<br><br>')
@@ -862,14 +877,18 @@
           .replace(/\n(\d+)\. /g, '<br>$1. ')
           .replace(/\n/g, '<br>');
 
-        // Make file paths clickable — match known graph node paths
+        // Restore code blocks
+        codeBlocks.forEach((block, i) => {
+          html = html.replace(`__CODE_BLOCK_${i}__`, block);
+        });
+
+        // Make file paths clickable — match known graph node basenames
         const nodes = graphData?.nodes || [];
         for (const node of nodes) {
           const name = node.id.split('/').pop();
           if (name && html.includes(name)) {
-            // Replace basename occurrences (inside <strong> or standalone) with file links
             const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            html = html.replace(new RegExp(`(?<=>)${escaped}(?=<)`, 'g'), fileLink(node.id, zoomFn));
+            html = html.replace(new RegExp(`(?<![/\\w])${escaped}(?![/\\w])`, 'g'), fileLink(node.id, zoomFn));
           }
         }
 
