@@ -246,19 +246,6 @@ server.tool(
   }
 );
 
-// Tool: serve_dashboard
-server.tool(
-  "serve_dashboard",
-  "Deploy and serve the Canon dashboard with live codebase access. Same as deploy_dashboard — generates a fresh graph, builds the HTML, starts a local HTTP server with live Ask Codebase API.",
-  {},
-  async () => {
-    const result = await serveDashboard(projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
 // Start the server
 async function main() {
   const transport = new StdioServerTransport();
