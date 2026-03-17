@@ -15,6 +15,7 @@ import { deployDashboard } from "./tools/deploy-dashboard.js";
 import { getFileContext } from "./tools/get-file-context.js";
 import { storeSummaries } from "./tools/store-summaries.js";
 import { askCodebase } from "./tools/ask-codebase.js";
+import { serveDashboard } from "./tools/serve-dashboard.js";
 import { reportInputSchema } from "./schema.js";
 
 import { resolve } from "path";
@@ -240,6 +241,19 @@ server.tool(
   },
   async (input) => {
     const result = await askCodebase(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: serve_dashboard
+server.tool(
+  "serve_dashboard",
+  "Start a local HTTP server for the Canon dashboard with live API access. Unlike deploy_dashboard (static HTML), this enables the Ask Codebase chat to query your codebase in real time — file contents, dependency analysis, and architectural insights. Run deploy_dashboard first to generate the dashboard HTML, then serve_dashboard to enable live features.",
+  {},
+  async () => {
+    const result = await serveDashboard(projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

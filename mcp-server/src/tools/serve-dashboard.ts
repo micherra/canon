@@ -1,0 +1,139 @@
+/** Lightweight HTTP server for the Canon dashboard.
+ * Serves the static dashboard HTML and provides live API endpoints
+ * for ask_codebase and file content access. */
+
+import { createServer, type Server } from "http";
+import { readFile } from "fs/promises";
+import { join, normalize } from "path";
+import { askCodebase } from "./ask-codebase.js";
+import { getFileContext } from "./get-file-context.js";
+
+let activeServer: Server | null = null;
+
+export interface ServeDashboardOutput {
+  url: string;
+  port: number;
+  message: string;
+}
+
+export async function serveDashboard(
+  projectDir: string,
+): Promise<ServeDashboardOutput> {
+  // If already running, return existing URL
+  if (activeServer?.listening) {
+    const addr = activeServer.address();
+    if (addr && typeof addr === "object") {
+      return {
+        url: `http://localhost:${addr.port}`,
+        port: addr.port,
+        message: `Dashboard already serving at http://localhost:${addr.port}`,
+      };
+    }
+  }
+
+  const canonDir = join(projectDir, ".canon");
+  const dashboardPath = join(canonDir, "dashboard.html");
+
+  const server = createServer(async (req, res) => {
+    // CORS for local dev
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = new URL(req.url || "/", `http://localhost`);
+
+    try {
+      // Serve dashboard
+      if (url.pathname === "/" || url.pathname === "/index.html") {
+        const html = await readFile(dashboardPath, "utf-8");
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(html);
+        return;
+      }
+
+      // API: ask codebase
+      if (url.pathname === "/api/ask" && req.method === "POST") {
+        const body = await readBody(req);
+        const input = JSON.parse(body);
+        const result = await askCodebase(input, projectDir);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+        return;
+      }
+
+      // API: get file context
+      if (url.pathname === "/api/file" && req.method === "GET") {
+        const filePath = url.searchParams.get("path");
+        if (!filePath) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing path parameter" }));
+          return;
+        }
+
+        // Security: prevent path traversal
+        const normalized = normalize(filePath);
+        if (normalized.startsWith("..") || normalized.startsWith("/")) {
+          res.writeHead(403, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Path traversal not allowed" }));
+          return;
+        }
+
+        const result = await getFileContext({ file_path: normalized }, projectDir);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+        return;
+      }
+
+      // 404
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+    } catch (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+  });
+
+  // Find an open port starting from 4567
+  const port = await findOpenPort(server, 4567);
+
+  activeServer = server;
+
+  return {
+    url: `http://localhost:${port}`,
+    port,
+    message: `Dashboard serving at http://localhost:${port} — open in your browser. The chat panel can now query your codebase live.`,
+  };
+}
+
+function readBody(req: import("http").IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    req.on("error", reject);
+  });
+}
+
+async function findOpenPort(server: Server, startPort: number): Promise<number> {
+  for (let port = startPort; port < startPort + 100; port++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(port, "127.0.0.1", () => {
+          server.removeListener("error", reject);
+          resolve();
+        });
+      });
+      return port;
+    } catch {
+      // port in use, try next
+    }
+  }
+  throw new Error("Could not find an open port");
+}
