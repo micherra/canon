@@ -1,6 +1,6 @@
 ---
 description: Generate the Canon dashboard — graph, summaries, and live UI
-argument-hint: "[--diff-base main] [--skip-summaries]"
+argument-hint: "[--skip-summaries]"
 allowed-tools: [Bash, Read, Glob, Write]
 model: sonnet
 ---
@@ -11,13 +11,7 @@ Generate the codebase graph, file summaries, deploy the dashboard HTML, and open
 
 ### Step 1: Generate graph data
 
-Call the `codebase_graph` MCP tool to scan the codebase and generate the dependency graph with compliance overlay and structural insights.
-
-If `--diff-base` is provided, get changed files first:
-```bash
-git diff {diff_base}..HEAD --name-only
-```
-Pass these as `changed_files` to the tool.
+Call the `codebase_graph` MCP tool to scan the codebase and generate the dependency graph with compliance overlay and structural insights. The tool automatically detects the current branch and highlights files changed vs main.
 
 ### Step 2: Generate file summaries
 

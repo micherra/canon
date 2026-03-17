@@ -568,13 +568,14 @@
           .attr('r', d => {
             if (hasSearch && d.id.toLowerCase().includes(q)) return nodeRadius(d) + 3;
             if (hasPrFilter && isInPrReview(d.id)) return nodeRadius(d) + 2;
+            if (d.changed) return nodeRadius(d) + 2;
             return nodeRadius(d);
           })
           .attr('fill', d => {
             if (hasPrFilter && isInPrReview(d.id)) {
               const severity = prViolationMap.get(d.id);
               if (severity) return SEVERITY_COLORS[severity] || VERDICT_COLORS.WARNING;
-              return VERDICT_COLORS.CLEAN; // file reviewed, no violations
+              return VERDICT_COLORS.CLEAN;
             }
             return d.color || LAYER_COLORS[d.layer] || LAYER_COLORS.unknown;
           })
@@ -585,11 +586,13 @@
               if (severity) return '#fff';
               return VERDICT_COLORS.CLEAN;
             }
+            if (d.changed) return '#4A90D9';
             return (d.violation_count || 0) > 0 ? VERDICT_COLORS.BLOCKING : '#333';
           })
           .attr('stroke-width', d => {
             if (hasSearch && d.id.toLowerCase().includes(q)) return 3;
             if (hasPrFilter && isInPrReview(d.id)) return 2;
+            if (d.changed) return 2.5;
             return (d.violation_count || 0) > 0 ? 2 : 1;
           });
 
@@ -701,10 +704,10 @@
 
       const linkSelection = g.selectAll('.link').data(edgesCopy).join('line').attr('stroke', '#555').attr('stroke-opacity', 0.3);
       const nodeSelection = g.selectAll('.node').data(nodesCopy).join('circle')
-        .attr('r', nodeRadius)
+        .attr('r', d => d.changed ? nodeRadius(d) + 2 : nodeRadius(d))
         .attr('fill', d => d.color || LAYER_COLORS[d.layer] || LAYER_COLORS.unknown)
-        .attr('stroke', d => (d.violation_count || 0) > 0 ? VERDICT_COLORS.BLOCKING : '#333')
-        .attr('stroke-width', d => (d.violation_count || 0) > 0 ? 2 : 1)
+        .attr('stroke', d => d.changed ? '#4A90D9' : (d.violation_count || 0) > 0 ? VERDICT_COLORS.BLOCKING : '#333')
+        .attr('stroke-width', d => d.changed ? 2.5 : (d.violation_count || 0) > 0 ? 2 : 1)
         .style('cursor', 'pointer')
         .on('click', (event, d) => (onNodeClick || showGraphDetail.bind(null, detail))(d))
         .call(d3.drag()

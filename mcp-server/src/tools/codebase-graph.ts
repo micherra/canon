@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { join } from "path";
+import { execFile } from "child_process";
 import { scanSourceFiles } from "../graph/scanner.js";
 import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
 import { inferLayer } from "../matcher.js";
@@ -80,6 +81,35 @@ async function loadSourceDirs(projectDir: string): Promise<string[] | null> {
   return null;
 }
 
+/** Get the current git branch name */
+function gitCurrentBranch(cwd: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd }, (err, stdout) => {
+      if (err) { resolve(null); return; }
+      resolve(stdout.trim() || null);
+    });
+  });
+}
+
+/** Get files changed between a base ref and HEAD */
+function gitChangedFiles(cwd: string, base: string): Promise<string[]> {
+  return new Promise((resolve) => {
+    execFile("git", ["diff", "--name-only", `${base}...HEAD`], { cwd }, (err, stdout) => {
+      if (err) { resolve([]); return; }
+      resolve(stdout.trim().split("\n").filter(Boolean));
+    });
+  });
+}
+
+/** Check if a git ref exists */
+function gitRefExists(cwd: string, ref: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile("git", ["rev-parse", "--verify", ref], { cwd }, (err) => {
+      resolve(!err);
+    });
+  });
+}
+
 export async function codebaseGraph(
   input: CodebaseGraphInput,
   projectDir: string,
@@ -123,7 +153,20 @@ export async function codebaseGraph(
   }
 
   const fileSet = new Set(filePaths);
-  const changedSet = new Set(input.changed_files || []);
+
+  // Auto-detect changed files from git if not explicitly provided
+  let changedFiles = input.changed_files || [];
+  if (changedFiles.length === 0) {
+    const branch = await gitCurrentBranch(projectDir);
+    if (branch && branch !== "main" && branch !== "master") {
+      // Find the base branch to diff against
+      const base = input.diff_base || (await gitRefExists(projectDir, "origin/main") ? "origin/main" : (await gitRefExists(projectDir, "origin/master") ? "origin/master" : null));
+      if (base) {
+        changedFiles = await gitChangedFiles(projectDir, base);
+      }
+    }
+  }
+  const changedSet = new Set(changedFiles);
 
   // Load compliance data
   const store = new DriftStore(projectDir);
