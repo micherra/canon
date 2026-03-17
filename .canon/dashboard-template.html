@@ -274,6 +274,84 @@
     .violation-item p { width: 100%; font-size: 13px; color: var(--text-muted); }
     .suggestion { color: var(--info) !important; }
 
+    /* Health bar */
+    .health-bar {
+      display: flex; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; overflow-x: auto;
+    }
+    .health-card {
+      background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--text-muted);
+      border-radius: var(--radius-sm); padding: 8px 16px; min-width: 100px;
+      cursor: pointer; transition: all 0.15s ease; flex-shrink: 0;
+    }
+    .health-card:hover { background: var(--bg-card-hover); border-color: rgba(255,255,255,0.1); }
+    .health-value { font-size: 20px; font-weight: 700; color: var(--text-bright); line-height: 1.2; }
+    .health-label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; font-weight: 600; margin-top: 2px; }
+
+    /* Insights panel */
+    .insight-section { border-bottom: 1px solid var(--border); }
+    .insight-section:last-child { border-bottom: none; }
+    .insight-header {
+      display: flex; justify-content: space-between; align-items: center;
+      cursor: pointer; padding: 10px 0; font-size: 12px; font-weight: 600;
+      color: var(--text-bright); user-select: none;
+    }
+    .insight-header:hover { color: var(--accent); }
+    .insight-header .badge {
+      font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 10px;
+      background: var(--bg-card); color: var(--text-muted); min-width: 20px; text-align: center;
+    }
+    .insight-header .badge.warn { background: rgba(251,191,36,0.15); color: var(--warning); }
+    .insight-header .badge.danger { background: rgba(255,107,107,0.15); color: var(--danger); }
+    .insight-header .chevron { transition: transform 0.2s; font-size: 10px; color: var(--text-muted); margin-left: 8px; }
+    .insight-section.open .chevron { transform: rotate(90deg); }
+    .insight-body { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
+    .insight-section.open .insight-body { max-height: 400px; overflow-y: auto; }
+    .insight-file { padding: 3px 0; font-size: 12px; cursor: pointer; color: var(--accent); }
+    .insight-file:hover { text-decoration: underline; }
+    .insight-chain { padding: 4px 0; font-size: 11px; color: var(--text); }
+    .insight-chain .file-link { font-size: 11px; }
+    .insight-pair { display: flex; gap: 6px; align-items: center; padding: 3px 0; font-size: 11px; }
+    .insight-pair .layer-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; color: white; }
+    .insight-back { font-size: 11px; color: var(--accent); cursor: pointer; margin-bottom: 8px; display: inline-block; }
+    .insight-back:hover { text-decoration: underline; }
+
+    /* Graph tooltip */
+    .graph-tooltip {
+      position: absolute; pointer-events: none; z-index: 50;
+      background: #14182aee; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius-sm); padding: 10px 14px;
+      font-size: 12px; max-width: 320px; line-height: 1.5;
+      box-shadow: var(--shadow-lg); opacity: 0; transition: opacity 0.12s;
+    }
+    .graph-tooltip.visible { opacity: 1; }
+    .graph-tooltip strong { color: var(--text-bright); font-size: 12px; display: block; margin-bottom: 4px; }
+    .graph-tooltip .tt-meta { color: var(--text-muted); font-size: 11px; }
+    .graph-tooltip .tt-summary { color: var(--text); font-size: 11px; margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
+
+    /* Changed pulse */
+    @keyframes pulseGlow {
+      0%, 100% { filter: drop-shadow(0 0 2px rgba(108,140,255,0.2)); }
+      50% { filter: drop-shadow(0 0 8px rgba(108,140,255,0.5)); }
+    }
+    circle.pulse { animation: pulseGlow 2.5s ease-in-out infinite; }
+
+    /* Keyboard help */
+    .help-overlay {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: #14182af0; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius); padding: 16px 24px;
+      font-size: 12px; z-index: 200; box-shadow: var(--shadow-lg);
+      display: none;
+    }
+    .help-overlay.visible { display: block; }
+    .help-overlay kbd {
+      background: var(--bg-card); padding: 2px 6px; border-radius: 3px;
+      font-family: inherit; font-size: 11px; font-weight: 600; color: var(--text-bright);
+      border: 1px solid var(--border); margin-right: 8px;
+    }
+    .help-overlay div { padding: 3px 0; }
+
     /* Utility */
     .empty-state { color: var(--text-muted); font-style: normal; padding: 48px; text-align: center; font-size: 13px; }
     .empty-state code { background: var(--bg-card); padding: 2px 8px; border-radius: 4px; font-size: 12px; }
@@ -388,11 +466,15 @@
           <div class="toolbar-sep"></div>
           <div id="graph-filters" class="filter-bar"></div>
           <div id="graph-pr-filter" class="pr-filter-bar"></div>
+          <label class="chip" id="changed-toggle" style="display:none"><input type="checkbox" id="changed-only"><span style="color:var(--info)">Changed</span></label>
           <div id="graph-search" class="filter-bar"></div>
         </div>
         <div id="graph-pr-banner" style="display:none"></div>
+        <div class="health-bar" id="health-bar"></div>
         <div class="graph-layout">
-          <div id="graph-canvas" class="graph-canvas"></div>
+          <div id="graph-canvas" class="graph-canvas">
+            <div class="graph-tooltip" id="graph-tooltip"></div>
+          </div>
           <div class="right-panel">
             <div id="graph-detail" class="detail-panel">
               <p class="detail-placeholder">Click a node to see details</p>
@@ -411,6 +493,11 @@
             </div>
           </div>
         </div>
+        <div class="help-overlay" id="help-overlay">
+          <div><kbd>/</kbd>Search files</div>
+          <div><kbd>Esc</kbd>Clear selection</div>
+          <div><kbd>?</kbd>Toggle this help</div>
+        </div>
       `;
 
       const data = DATA.graph;
@@ -425,6 +512,121 @@
       let searchQuery = '';
       let activePrReview = null;
       let prReviewFiles = null;
+      let showChangedOnly = false;
+
+      // ── Health bar ──
+      const ins = data.insights || {};
+      const ov = ins.overview || {};
+      const cycleCount = (ins.circular_dependencies || []).length;
+      const violationCount = (ins.layer_violations || []).length;
+      const orphanCount = (ins.orphan_files || []).length;
+      const hotspotCount = (data.hotspots || []).length;
+      const healthCards = [
+        { value: ov.total_files || data.nodes.length, label: 'Files', color: 'var(--text-muted)', query: null },
+        { value: ov.total_edges || data.edges.length, label: 'Dependencies', color: 'var(--text-muted)', query: null },
+        { value: cycleCount, label: 'Cycles', color: cycleCount > 0 ? 'var(--warning)' : 'var(--success)', query: 'Show cycles' },
+        { value: violationCount, label: 'Layer Violations', color: violationCount > 0 ? 'var(--danger)' : 'var(--success)', query: 'Layer violations' },
+        { value: orphanCount, label: 'Orphans', color: orphanCount > 0 ? 'var(--warning)' : 'var(--success)', query: 'Orphan files' },
+      ];
+      const healthBar = container.querySelector('#health-bar');
+      healthBar.innerHTML = healthCards.map((c, i) => `<div class="health-card" data-idx="${i}" style="border-left-color:${c.color}">
+        <div class="health-value">${c.value}</div><div class="health-label">${c.label}</div>
+      </div>`).join('');
+      healthBar.querySelectorAll('.health-card').forEach(card => {
+        const q = healthCards[parseInt(card.dataset.idx)].query;
+        if (q) card.addEventListener('click', () => {
+          const askInput = container.querySelector('#ask-input');
+          if (askInput) { askInput.value = q; askInput.dispatchEvent(new Event('input')); container.querySelector('#ask-send')?.click(); }
+        });
+      });
+
+      // ── Changed files toggle ──
+      const changedNodes = data.nodes.filter(n => n.changed);
+      if (changedNodes.length > 0) {
+        const toggleContainer = container.querySelector('#changed-toggle');
+        toggleContainer.style.display = '';
+        toggleContainer.querySelector('span').textContent = `Changed (${changedNodes.length})`;
+        container.querySelector('#changed-only').addEventListener('change', (e) => {
+          showChangedOnly = e.target.checked;
+          applyFilters();
+        });
+      }
+
+      // ── Insights panel (default view when no node selected) ──
+      function showInsightsPanel() {
+        const sections = [];
+        const hotspots = data.hotspots || [];
+        if (hotspots.length > 0) {
+          sections.push({ title: 'Hotspots', count: hotspots.length, cls: 'danger',
+            body: hotspots.slice(0, 8).map(h => `<div class="insight-file" data-file="${h.path}">${h.path.split('/').pop()} <span class="text-muted">(${h.violation_count})</span></div>`).join('')
+          });
+        }
+        const cycles = ins.circular_dependencies || [];
+        if (cycles.length > 0) {
+          sections.push({ title: 'Circular Dependencies', count: cycles.length, cls: 'warn',
+            body: cycles.slice(0, 6).map(c => `<div class="insight-chain">${c.map(f => `<span class="insight-file" data-file="${f}">${f.split('/').pop()}</span>`).join(' → ')}</div>`).join('')
+          });
+        }
+        const lv = ins.layer_violations || [];
+        if (lv.length > 0) {
+          sections.push({ title: 'Layer Violations', count: lv.length, cls: 'danger',
+            body: lv.slice(0, 8).map(x => `<div class="insight-pair">
+              <span class="insight-file" data-file="${x.source}">${x.source.split('/').pop()}</span>
+              <span class="layer-badge" style="background:${LAYER_COLORS[x.source_layer] || '#666'}">${x.source_layer}</span>
+              → <span class="insight-file" data-file="${x.target}">${x.target.split('/').pop()}</span>
+              <span class="layer-badge" style="background:${LAYER_COLORS[x.target_layer] || '#666'}">${x.target_layer}</span>
+            </div>`).join('')
+          });
+        }
+        const mc = ins.most_connected || [];
+        if (mc.length > 0) {
+          sections.push({ title: 'Most Connected', count: mc.length, cls: '',
+            body: mc.slice(0, 8).map(n => `<div class="insight-file" data-file="${n.path}">${n.path.split('/').pop()} <span class="text-muted">in:${n.in_degree} out:${n.out_degree}</span></div>`).join('')
+          });
+        }
+        const orphans = ins.orphan_files || [];
+        if (orphans.length > 0) {
+          sections.push({ title: 'Orphan Files', count: orphans.length, cls: 'warn',
+            body: orphans.slice(0, 10).map(f => `<div class="insight-file" data-file="${f}">${f.split('/').pop()}</div>`).join('')
+          });
+        }
+
+        if (sections.length === 0) {
+          detail.innerHTML = '<p class="detail-placeholder">No insights available. Click a node to see details.</p>';
+          return;
+        }
+        detail.innerHTML = '<div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;font-weight:600;margin-bottom:8px">Insights</div>' +
+          sections.map((s, i) => `<div class="insight-section${i === 0 ? ' open' : ''}" data-idx="${i}">
+            <div class="insight-header">${s.title} <span><span class="badge ${s.cls}">${s.count}</span><span class="chevron">›</span></span></div>
+            <div class="insight-body">${s.body}</div>
+          </div>`).join('');
+
+        detail.querySelectorAll('.insight-header').forEach(hdr => {
+          hdr.addEventListener('click', () => hdr.parentElement.classList.toggle('open'));
+        });
+        detail.querySelectorAll('.insight-file').forEach(el => {
+          el.addEventListener('click', () => {
+            const f = el.dataset.file;
+            if (f) { zoomToNode(f); const nd = data.nodes.find(n => n.id === f); if (nd) showNodeDetail(nd); }
+          });
+        });
+      }
+
+      function showNodeDetail(node) {
+        showGraphDetail(detail, node);
+        detail.innerHTML = `<span class="insight-back" id="back-to-insights">← Insights</span>` + detail.innerHTML;
+        detail.querySelector('#back-to-insights').addEventListener('click', showInsightsPanel);
+      }
+
+      showInsightsPanel();
+
+      // ── Keyboard shortcuts ──
+      document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === '/') { e.preventDefault(); const si = container.querySelector('#graph-search .search-input'); if (si) si.focus(); }
+        if (e.key === 'Escape') { searchQuery = ''; const si = container.querySelector('#graph-search .search-input'); if (si) si.value = ''; applyFilters(); showInsightsPanel(); }
+        if (e.key === '?') { container.querySelector('#help-overlay')?.classList.toggle('visible'); }
+      });
 
       createLayerFilters(container.querySelector('#graph-filters'), activeLayers, (layers) => {
         activeLayers = layers;
@@ -481,8 +683,6 @@
             const nodeId = item.dataset.id;
             searchResults.classList.remove('open');
             zoomToNode(nodeId);
-            const nodeData = data.nodes.find(n => n.id === nodeId);
-            if (nodeData) showGraphDetail(detail, nodeData);
           });
         });
       }
@@ -560,7 +760,7 @@
         }, 800);
         // Show detail
         const nodeData = data.nodes.find(n => n.id === nodeId);
-        if (nodeData) showGraphDetail(detail, nodeData);
+        if (nodeData) showNodeDetail(nodeData);
       }
 
       function nodeRadius(d) { return 6 + Math.min((d.violation_count || 0) * 2, 14); }
@@ -592,10 +792,12 @@
         graphState.nodeSelection
           .attr('opacity', d => {
             if (!activeLayers.includes(d.layer)) return 0;
+            if (showChangedOnly && !d.changed) return 0.05;
             if (hasPrFilter && !isInPrReview(d.id)) return 0.05;
             if (hasSearch && !d.id.toLowerCase().includes(q)) return 0.15;
             return 1;
           })
+          .classed('pulse', d => d.changed && !hasPrFilter)
           .attr('r', d => {
             if (hasSearch && d.id.toLowerCase().includes(q)) return nodeRadius(d) + 3;
             if (hasPrFilter && isInPrReview(d.id)) return nodeRadius(d) + 2;
@@ -650,10 +852,21 @@
             }
             return 0.3;
           });
+
+        // Update labels if they exist
+        if (graphState.labelSelection) {
+          graphState.labelSelection.attr('opacity', d => {
+            if (!activeLayers.includes(d.layer)) return 0;
+            if (showChangedOnly && !d.changed) return 0;
+            if (hasPrFilter && !isInPrReview(d.id)) return 0;
+            if (hasSearch && !d.id.toLowerCase().includes(q)) return 0;
+            return graphState.currentZoomK > 1.3 ? 0.8 : 0;
+          });
+        }
       }
 
       function onNodeClick(d) {
-        showGraphDetail(detail, d);
+        showNodeDetail(d);
         if (activePrReview && prReviewFiles && prReviewFiles.has(d.id)) {
           const fileViolations = (activePrReview.violations || []).filter(v => v.file === d.id);
           if (fileViolations.length > 0) {
@@ -726,7 +939,7 @@
         return;
       }
 
-      canvas.innerHTML = '';
+      canvas.innerHTML = '<div class="graph-tooltip" id="graph-tooltip"></div>';
       const width = canvas.clientWidth || 800;
       const height = canvas.clientHeight || 600;
 
@@ -734,24 +947,54 @@
       const edgesCopy = data.edges.map(e => ({ source: e.source?.id || e.source, target: e.target?.id || e.target }));
 
       const svg = d3.select(canvas).append('svg').attr('width', width).attr('height', height).attr('viewBox', [0, 0, width, height]);
+
+      // Arrow marker for edge direction
+      svg.append('defs').append('marker')
+        .attr('id', 'arrow').attr('viewBox', '0 -3 6 6').attr('refX', 12).attr('refY', 0)
+        .attr('markerWidth', 5).attr('markerHeight', 5).attr('orient', 'auto')
+        .append('path').attr('d', 'M0,-3L6,0L0,3').attr('fill', '#555').attr('opacity', 0.4);
+
       const g = svg.append('g');
-      const zoom = d3.zoom().on('zoom', (event) => g.attr('transform', event.transform));
+      let currentZoomK = 1;
+      const zoom = d3.zoom().on('zoom', (event) => {
+        g.attr('transform', event.transform);
+        currentZoomK = event.transform.k;
+        if (graphState) graphState.currentZoomK = currentZoomK;
+        // Show/hide labels based on zoom level
+        labelSelection.attr('opacity', d => currentZoomK > 1.3 ? 0.8 : 0);
+      });
       svg.call(zoom);
+
+      // Layer clustering positions
+      const layerPos = { api: -1, ui: -0.5, domain: 0, data: 0.5, infra: 1, shared: 0 };
 
       const simulation = d3.forceSimulation(nodesCopy)
         .force('link', d3.forceLink(edgesCopy).id(d => d.id).distance(80))
         .force('charge', d3.forceManyBody().strength(-200))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(20));
+        .force('collision', d3.forceCollide().radius(20))
+        .force('layerX', d3.forceX(d => width / 2 + (layerPos[d.layer] || 0) * width * 0.15).strength(0.04))
+        .force('layerY', d3.forceY(height / 2).strength(0.04));
 
       function nodeRadius(d) { return 6 + Math.min((d.violation_count || 0) * 2, 14); }
 
-      const linkSelection = g.selectAll('.link').data(edgesCopy).join('line').attr('stroke', '#555').attr('stroke-opacity', 0.3);
+      // Curved edges with arrow markers
+      const linkSelection = g.selectAll('.link').data(edgesCopy).join('path')
+        .attr('fill', 'none').attr('stroke', '#555').attr('stroke-opacity', 0.2)
+        .attr('marker-end', 'url(#arrow)');
+
+      // Violation rings (behind nodes)
+      const ringSelection = g.selectAll('.violation-ring').data(nodesCopy.filter(n => (n.violation_count || 0) > 0)).join('circle')
+        .attr('r', d => nodeRadius(d) + 4)
+        .attr('fill', 'none').attr('stroke', 'var(--danger)').attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '3,2').attr('opacity', 0.5);
+
       const nodeSelection = g.selectAll('.node').data(nodesCopy).join('circle')
         .attr('r', d => d.changed ? nodeRadius(d) + 2 : nodeRadius(d))
         .attr('fill', d => d.color || LAYER_COLORS[d.layer] || LAYER_COLORS.unknown)
         .attr('stroke', d => d.changed ? '#4A90D9' : (d.violation_count || 0) > 0 ? VERDICT_COLORS.BLOCKING : '#333')
         .attr('stroke-width', d => d.changed ? 2.5 : (d.violation_count || 0) > 0 ? 2 : 1)
+        .classed('pulse', d => d.changed)
         .style('cursor', 'pointer')
         .on('click', (event, d) => (onNodeClick || showGraphDetail.bind(null, detail))(d))
         .call(d3.drag()
@@ -760,13 +1003,50 @@
           .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
         );
 
-      nodeSelection.append('title').text(d => d.id);
+      // Labels — hidden by default, shown on zoom
+      const labelSelection = g.selectAll('.node-label').data(nodesCopy).join('text')
+        .attr('font-size', 9).attr('fill', 'var(--text-muted)')
+        .attr('text-anchor', 'middle').attr('dy', d => nodeRadius(d) + 13)
+        .attr('opacity', 0).attr('pointer-events', 'none')
+        .attr('font-family', "'Inter', sans-serif")
+        .text(d => d.id.split('/').pop());
+
+      // Tooltip on hover
+      const tooltip = canvas.querySelector('#graph-tooltip');
+      nodeSelection
+        .on('mouseover', (event, d) => {
+          const summary = SUMMARIES[d.id] || '';
+          let meta = `<span style="color:${LAYER_COLORS[d.layer] || '#ccc'}">${d.layer}</span>`;
+          if (d.violation_count) meta += ` · <span style="color:var(--danger)">${d.violation_count} violations</span>`;
+          if (d.changed) meta += ' · <span style="color:var(--info)">changed</span>';
+          tooltip.innerHTML = `<strong>${d.id}</strong><div class="tt-meta">${meta}</div>` +
+            (summary ? `<div class="tt-summary">${summary.length > 140 ? summary.slice(0, 140) + '...' : summary}</div>` : '');
+          tooltip.classList.add('visible');
+          const rect = canvas.getBoundingClientRect();
+          tooltip.style.left = (event.clientX - rect.left + 14) + 'px';
+          tooltip.style.top = (event.clientY - rect.top - 10) + 'px';
+        })
+        .on('mousemove', (event) => {
+          const rect = canvas.getBoundingClientRect();
+          tooltip.style.left = (event.clientX - rect.left + 14) + 'px';
+          tooltip.style.top = (event.clientY - rect.top - 10) + 'px';
+        })
+        .on('mouseout', () => { tooltip.classList.remove('visible'); });
+
       simulation.on('tick', () => {
-        linkSelection.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        // Curved edges
+        linkSelection.attr('d', d => {
+          const dx = d.target.x - d.source.x;
+          const dy = d.target.y - d.source.y;
+          const dr = Math.sqrt(dx * dx + dy * dy) * 2;
+          return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+        });
         nodeSelection.attr('cx', d => d.x).attr('cy', d => d.y);
+        ringSelection.attr('cx', d => d.x).attr('cy', d => d.y);
+        labelSelection.attr('x', d => d.x).attr('y', d => d.y);
       });
 
-      graphState = { svg, zoom, nodesCopy, nodeSelection, linkSelection, width, height };
+      graphState = { svg, zoom, nodesCopy, nodeSelection, linkSelection, labelSelection, ringSelection, width, height, currentZoomK };
     }
 
     function showGraphDetail(panel, node) {
