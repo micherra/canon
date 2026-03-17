@@ -196,7 +196,7 @@
     .ask-input-bar { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
     .ask-input-bar input { flex: 1; font-size: 12px; padding: 8px 14px; border-radius: 20px; }
     .ask-input-bar button { font-size: 12px; padding: 8px 18px; border-radius: 20px; }
-    .ask-msg { margin-bottom: 12px; }
+    .ask-msg { margin-bottom: 12px; overflow: hidden; }
     .ask-msg-user { text-align: right; }
     .ask-msg-user .ask-bubble {
       background: linear-gradient(135deg, var(--accent), #5a75e0);
@@ -206,11 +206,12 @@
     .ask-bubble {
       padding: 10px 14px; border-radius: var(--radius); font-size: 13px;
       line-height: 1.6; max-width: 100%; display: inline-block; text-align: left;
+      overflow-wrap: break-word; word-break: break-word; min-width: 0; box-sizing: border-box;
     }
     .ask-bubble code {
       background: rgba(108,140,255,0.1); padding: 2px 6px; border-radius: 4px;
       font-size: 11.5px; font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-      color: var(--accent);
+      color: var(--accent); overflow-wrap: break-word; word-break: break-all;
     }
     .ask-bubble pre {
       background: rgba(0,0,0,0.3); padding: 12px 14px; border-radius: var(--radius-sm);
