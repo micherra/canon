@@ -1,4 +1,4 @@
-/** Ask codebase — returns structured graph analysis for Claude to reason about */
+/** Ask codebase — returns structured graph analysis with human-readable answers */
 
 import { readFile } from "fs/promises";
 import { join } from "path";
@@ -13,6 +13,7 @@ export interface AskCodebaseInput {
 
 export interface AskCodebaseOutput {
   focus: string;
+  answer: string;
   data: Record<string, unknown>;
   relevant_files: string[];
 }
@@ -47,8 +48,10 @@ function detectFocus(question: string): string {
   if (q.includes("connected") || q.includes("hub") || q.includes("central")) return "most_connected";
   if (q.includes("layer")) return "layers";
   if (q.includes("summary") || q.includes("what does") || q.includes("explain") || q.includes("role")) return "file_summary";
-  return "overview";
+  return "search";
 }
+
+const basename = (p: string) => p.split("/").pop() || p;
 
 export async function askCodebase(
   input: AskCodebaseInput,
@@ -60,7 +63,8 @@ export async function askCodebase(
   if (!graph) {
     return {
       focus: "error",
-      data: { message: "No graph data found. Run codebase_graph first to generate the graph." },
+      answer: "No graph data found. Run `/canon:dashboard` first to generate the codebase graph.",
+      data: {},
       relevant_files: [],
     };
   }
@@ -68,7 +72,7 @@ export async function askCodebase(
   const focus = input.file_path ? "file_detail" : detectFocus(input.question);
   const insights = generateInsights(graph.nodes, graph.edges);
 
-  // Build adjacency info for file-specific queries
+  // Build adjacency info
   const inEdges = new Map<string, string[]>();
   const outEdges = new Map<string, string[]>();
   for (const edge of graph.edges) {
@@ -78,148 +82,182 @@ export async function askCodebase(
     inEdges.get(edge.target)!.push(edge.source);
   }
 
-  switch (focus) {
-    case "file_detail": {
-      const fp = input.file_path!;
-      const node = graph.nodes.find((n) => n.id === fp);
-      return {
-        focus: "file_detail",
-        data: {
-          file: fp,
-          layer: node?.layer || "unknown",
-          imports: outEdges.get(fp) || [],
-          imported_by: inEdges.get(fp) || [],
-          violation_count: node?.violation_count || 0,
-          last_verdict: node?.last_verdict || null,
-          summary: summaries[fp] || null,
-        },
-        relevant_files: [fp, ...(outEdges.get(fp) || []), ...(inEdges.get(fp) || [])],
-      };
-    }
+  function fileDetail(fp: string): AskCodebaseOutput {
+    const node = graph!.nodes.find((n) => n.id === fp);
+    const imports = outEdges.get(fp) || [];
+    const importedBy = inEdges.get(fp) || [];
+    const summary = summaries[fp];
+    const lines: string[] = [];
+    lines.push(`**${fp}** (${node?.layer || "unknown"} layer)`);
+    if (summary) lines.push(summary);
+    if (imports.length > 0) lines.push(`**Imports** (${imports.length}): ${imports.map(basename).join(", ")}`);
+    if (importedBy.length > 0) lines.push(`**Imported by** (${importedBy.length}): ${importedBy.map(basename).join(", ")}`);
+    if ((node?.violation_count || 0) > 0) lines.push(`**Violations:** ${node!.violation_count} (verdict: ${node!.last_verdict || "unknown"})`);
+    else lines.push("No violations.");
+    return {
+      focus: "file_detail",
+      answer: lines.join("\n\n"),
+      data: { file: fp, layer: node?.layer, imports, imported_by: importedBy, violation_count: node?.violation_count || 0, summary },
+      relevant_files: [fp, ...imports, ...importedBy],
+    };
+  }
 
-    case "cycles":
-      return {
-        focus: "cycles",
-        data: {
-          circular_dependencies: insights.circular_dependencies,
-          count: insights.circular_dependencies.length,
-        },
-        relevant_files: insights.circular_dependencies.flat(),
-      };
+  switch (focus) {
+    case "file_detail":
+      return fileDetail(input.file_path!);
+
+    case "cycles": {
+      const cycles = insights.circular_dependencies;
+      const answer = cycles.length === 0
+        ? "No circular dependencies found in the codebase."
+        : `Found **${cycles.length}** circular dependenc${cycles.length === 1 ? "y" : "ies"}:\n\n` +
+          cycles.map((c, i) => `${i + 1}. ${c.map(basename).join(" → ")} → ${basename(c[0])}`).join("\n");
+      return { focus: "cycles", answer, data: { circular_dependencies: cycles, count: cycles.length }, relevant_files: cycles.flat() };
+    }
 
     case "dependencies": {
-      // If a file is mentioned in the question, focus on it
       const mentionedFile = findMentionedFile(input.question, graph.nodes);
-      if (mentionedFile) {
-        return {
-          focus: "dependencies",
-          data: {
-            file: mentionedFile,
-            imports: outEdges.get(mentionedFile) || [],
-            imported_by: inEdges.get(mentionedFile) || [],
-            summary: summaries[mentionedFile] || null,
-          },
-          relevant_files: [mentionedFile, ...(outEdges.get(mentionedFile) || []), ...(inEdges.get(mentionedFile) || [])],
-        };
+      if (mentionedFile) return fileDetail(mentionedFile);
+      const top = insights.most_connected.slice(0, 8);
+      const answer = "**Most connected files** (highest total dependencies):\n\n" +
+        top.map((n, i) => `${i + 1}. **${basename(n.path)}** — ${n.in_degree} importers, ${n.out_degree} imports (${n.total} total)`).join("\n");
+      return { focus: "dependencies", answer, data: { most_connected: top }, relevant_files: top.map(n => n.path) };
+    }
+
+    case "orphans": {
+      const orphans = insights.orphan_files;
+      const answer = orphans.length === 0
+        ? "No orphan files — every file is connected to the dependency graph."
+        : `Found **${orphans.length}** orphan file${orphans.length === 1 ? "" : "s"} (no imports or importers):\n\n` +
+          orphans.map(f => `- ${basename(f)}`).join("\n");
+      return { focus: "orphans", answer, data: { orphan_files: orphans, count: orphans.length }, relevant_files: orphans };
+    }
+
+    case "violations": {
+      const lv = insights.layer_violations;
+      const hotspots = graph.nodes.filter(n => n.violation_count > 0).sort((a, b) => b.violation_count - a.violation_count).slice(0, 10);
+      const lines: string[] = [];
+      if (lv.length > 0) {
+        lines.push(`**${lv.length} layer violation${lv.length === 1 ? "" : "s"}:**\n`);
+        lv.slice(0, 8).forEach(v => lines.push(`- ${basename(v.source)} (${v.source_layer}) → ${basename(v.target)} (${v.target_layer})`));
+        if (lv.length > 8) lines.push(`- ...and ${lv.length - 8} more`);
       }
+      if (hotspots.length > 0) {
+        lines.push(`\n**Hotspot files** (most violations):\n`);
+        hotspots.forEach(n => lines.push(`- **${basename(n.id)}** — ${n.violation_count} violations (${n.last_verdict || "no verdict"})`));
+      }
+      if (lines.length === 0) lines.push("No violations found.");
       return {
-        focus: "dependencies",
-        data: { most_connected: insights.most_connected },
-        relevant_files: insights.most_connected.map((n) => n.path),
+        focus: "violations", answer: lines.join("\n"), data: { layer_violations: lv, hotspot_files: hotspots },
+        relevant_files: [...lv.map(v => v.source), ...hotspots.map(n => n.id)],
       };
     }
 
-    case "orphans":
-      return {
-        focus: "orphans",
-        data: {
-          orphan_files: insights.orphan_files,
-          count: insights.orphan_files.length,
-        },
-        relevant_files: insights.orphan_files,
-      };
-
-    case "violations":
-      return {
-        focus: "violations",
-        data: {
-          layer_violations: insights.layer_violations,
-          hotspot_files: graph.nodes
-            .filter((n) => n.violation_count > 0)
-            .sort((a, b) => b.violation_count - a.violation_count)
-            .slice(0, 10)
-            .map((n) => ({ path: n.id, violations: n.violation_count, verdict: n.last_verdict })),
-        },
-        relevant_files: [
-          ...insights.layer_violations.map((v) => v.source),
-          ...graph.nodes.filter((n) => n.violation_count > 0).map((n) => n.id),
-        ],
-      };
-
-    case "most_connected":
-      return {
-        focus: "most_connected",
-        data: { most_connected: insights.most_connected },
-        relevant_files: insights.most_connected.map((n) => n.path),
-      };
+    case "most_connected": {
+      const top = insights.most_connected.slice(0, 8);
+      const answer = "**Most connected files:**\n\n" +
+        top.map((n, i) => `${i + 1}. **${basename(n.path)}** — ${n.in_degree} in, ${n.out_degree} out (${n.total} total)`).join("\n");
+      return { focus: "most_connected", answer, data: { most_connected: top }, relevant_files: top.map(n => n.path) };
+    }
 
     case "layers": {
-      const layerFilter = input.layer;
-      const layerNodes = layerFilter
-        ? graph.nodes.filter((n) => n.layer === layerFilter)
-        : graph.nodes;
       const layerBreakdown = new Map<string, string[]>();
-      for (const n of layerNodes) {
+      for (const n of graph.nodes) {
         if (!layerBreakdown.has(n.layer)) layerBreakdown.set(n.layer, []);
         layerBreakdown.get(n.layer)!.push(n.id);
       }
+      const lines = ["**Codebase layers:**\n"];
+      for (const [layer, files] of layerBreakdown) {
+        lines.push(`- **${layer}**: ${files.length} files`);
+      }
+      if (insights.layer_violations.length > 0) {
+        lines.push(`\n${insights.layer_violations.length} layer violation${insights.layer_violations.length === 1 ? "" : "s"} found.`);
+      }
       return {
-        focus: "layers",
-        data: {
-          layers: Object.fromEntries(layerBreakdown),
-          layer_violations: insights.layer_violations,
-        },
-        relevant_files: layerNodes.map((n) => n.id),
+        focus: "layers", answer: lines.join("\n"), data: { layers: Object.fromEntries(layerBreakdown) },
+        relevant_files: graph.nodes.map(n => n.id),
       };
     }
 
     case "file_summary": {
       const mentionedFile = findMentionedFile(input.question, graph.nodes);
       if (mentionedFile) {
-        return {
-          focus: "file_summary",
-          data: {
-            file: mentionedFile,
-            summary: summaries[mentionedFile] || "No summary available. Run /canon:dashboard to generate.",
-            layer: graph.nodes.find((n) => n.id === mentionedFile)?.layer || "unknown",
-          },
-          relevant_files: [mentionedFile],
-        };
+        const summary = summaries[mentionedFile];
+        const layer = graph.nodes.find(n => n.id === mentionedFile)?.layer || "unknown";
+        const answer = summary
+          ? `**${mentionedFile}** (${layer})\n\n${summary}`
+          : `**${mentionedFile}** (${layer})\n\nNo summary available yet. Run \`/canon:dashboard\` to generate summaries.`;
+        return { focus: "file_summary", answer, data: { file: mentionedFile, summary, layer }, relevant_files: [mentionedFile] };
       }
-      // Return all summaries
+      const total = Object.keys(summaries).length;
       return {
         focus: "file_summary",
-        data: {
-          summaries,
-          total: Object.keys(summaries).length,
-        },
-        relevant_files: Object.keys(summaries),
+        answer: `**${total}** file summaries available. Mention a specific file to see its summary.`,
+        data: { total },
+        relevant_files: [],
       };
     }
 
-    default:
+    default: {
+      // Try to find a file mentioned in the question
+      const mentionedFile = findMentionedFile(input.question, graph.nodes);
+      if (mentionedFile) return fileDetail(mentionedFile);
+
+      // Keyword search across file paths and summaries
+      const q = input.question.toLowerCase();
+      const stopWords = new Set(["the", "and", "for", "are", "what", "how", "does", "which", "that", "this", "with", "from", "have", "has", "used", "use", "where", "who"]);
+      const keywords = q.split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+
+      if (keywords.length > 0) {
+        const scored = graph.nodes.map(n => {
+          const id = n.id.toLowerCase();
+          const summary = (summaries[n.id] || "").toLowerCase();
+          let score = 0;
+          for (const kw of keywords) {
+            if (id.includes(kw)) score += 2;
+            if (summary.includes(kw)) score += 1;
+          }
+          return { node: n, score };
+        }).filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, 10);
+
+        if (scored.length > 0) {
+          const lines = [`Found **${scored.length}** relevant file${scored.length === 1 ? "" : "s"}:\n`];
+          for (const { node: n } of scored) {
+            const summary = summaries[n.id];
+            lines.push(`- **${basename(n.id)}** (${n.layer})${summary ? " — " + summary : ""}`);
+          }
+          return {
+            focus: "search",
+            answer: lines.join("\n"),
+            data: { matches: scored.map(s => ({ path: s.node.id, layer: s.node.layer, summary: summaries[s.node.id] || null })) },
+            relevant_files: scored.map(s => s.node.id),
+          };
+        }
+      }
+
+      // Fallback: overview
+      const ov = insights.overview;
+      const top = insights.most_connected.slice(0, 5);
+      const lines = [
+        `**Codebase overview:** ${ov.total_files} files, ${ov.total_edges} edges\n`,
+        "**Layers:** " + (ov.layers || []).map((l: { name: string; file_count: number }) => `${l.name} (${l.file_count})`).join(", "),
+        "\n**Most connected:** " + top.map(n => `${basename(n.path)} (${n.total})`).join(", "),
+      ];
+      const issues: string[] = [];
+      if (insights.circular_dependencies.length > 0) issues.push(`${insights.circular_dependencies.length} cycles`);
+      if (insights.layer_violations.length > 0) issues.push(`${insights.layer_violations.length} layer violations`);
+      if (insights.orphan_files.length > 0) issues.push(`${insights.orphan_files.length} orphans`);
+      if (issues.length > 0) lines.push("\n**Issues:** " + issues.join(", "));
+      lines.push(`\n${Object.keys(summaries).length} file summaries available.`);
+      lines.push("\nTry asking about a specific file, layer, cycles, violations, or dependencies.");
+
       return {
         focus: "overview",
-        data: {
-          overview: insights.overview,
-          most_connected: insights.most_connected.slice(0, 5),
-          circular_dependencies_count: insights.circular_dependencies.length,
-          layer_violations_count: insights.layer_violations.length,
-          orphan_count: insights.orphan_files.length,
-          summaries_available: Object.keys(summaries).length,
-        },
-        relevant_files: insights.most_connected.slice(0, 5).map((n) => n.path),
+        answer: lines.join("\n"),
+        data: { overview: ov, most_connected: top },
+        relevant_files: top.map(n => n.path),
       };
+    }
   }
 }
 
@@ -234,8 +272,14 @@ function findMentionedFile(
   }
   // Try filename match
   for (const node of nodes) {
-    const basename = node.id.split("/").pop() || "";
-    if (basename && question.includes(basename)) return node.id;
+    const name = node.id.split("/").pop() || "";
+    if (name && question.includes(name)) return node.id;
+  }
+  // Try basename without extension
+  const q = question.toLowerCase();
+  for (const node of nodes) {
+    const name = (node.id.split("/").pop() || "").replace(/\.[^.]+$/, "").toLowerCase();
+    if (name && name.length > 3 && q.includes(name)) return node.id;
   }
   return null;
 }

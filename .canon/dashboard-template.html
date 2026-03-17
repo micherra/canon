@@ -853,85 +853,24 @@
       }
 
       function renderAskResult(result, question, graphData, zoomFn, detailPanel) {
-        const focus = result.focus;
-        const data = result.data || {};
-        const files = result.relevant_files || [];
-        let html = '';
+        // Convert markdown-style answer to HTML with clickable file links
+        let html = (result.answer || 'No answer available.')
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/`([^`]+)`/g, '<code>$1</code>')
+          .replace(/\n\n/g, '<br><br>')
+          .replace(/\n- /g, '<br>• ')
+          .replace(/\n(\d+)\. /g, '<br>$1. ')
+          .replace(/\n/g, '<br>');
 
-        switch (focus) {
-          case 'file_detail': {
-            const fp = data.file;
-            html = `<strong>${fileLink(fp, zoomFn)}</strong><br>`;
-            html += `Layer: ${data.layer}<br>`;
-            if (data.summary) html += `${data.summary}<br>`;
-            html += `Imports: ${(data.imports || []).map(f => fileLink(f, zoomFn)).join(', ') || 'none'}<br>`;
-            html += `Imported by: ${(data.imported_by || []).map(f => fileLink(f, zoomFn)).join(', ') || 'none'}<br>`;
-            html += `Violations: ${data.violation_count || 0}`;
-            // Also fetch file content if live
-            if (askIsLive && fp) {
-              fetchFileContent(fp).then(content => {
-                if (content) {
-                  const existing = messages.lastElementChild?.querySelector('.ask-bubble');
-                  if (existing) {
-                    existing.innerHTML += `<br><br><strong>Source (first 50 lines):</strong><pre>${escapeHtml(content.split('\n').slice(0, 50).join('\n'))}</pre>`;
-                    messages.scrollTop = messages.scrollHeight;
-                  }
-                }
-              });
-            }
-            break;
+        // Make file paths clickable — match known graph node paths
+        const nodes = graphData?.nodes || [];
+        for (const node of nodes) {
+          const name = node.id.split('/').pop();
+          if (name && html.includes(name)) {
+            // Replace basename occurrences (inside <strong> or standalone) with file links
+            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            html = html.replace(new RegExp(`(?<=>)${escaped}(?=<)`, 'g'), fileLink(node.id, zoomFn));
           }
-          case 'cycles':
-            if ((data.circular_dependencies || []).length === 0) { html = 'No circular dependencies.'; break; }
-            html = `<strong>${data.count}</strong> cycle${data.count === 1 ? '' : 's'}:<br>`;
-            html += (data.circular_dependencies || []).map(c =>
-              c.map(f => fileLink(f, zoomFn)).join(' \u2192 ') + ' \u2192 ' + fileLink(c[0], zoomFn)
-            ).join('<br>');
-            break;
-          case 'dependencies':
-            if (data.file) {
-              html = `${fileLink(data.file, zoomFn)}<br>`;
-              html += `Imports: ${(data.imports || []).map(f => fileLink(f, zoomFn)).join(', ') || 'none'}<br>`;
-              html += `Imported by: ${(data.imported_by || []).map(f => fileLink(f, zoomFn)).join(', ') || 'none'}`;
-            } else {
-              html = 'Most connected:<br>' + (data.most_connected || []).slice(0, 8).map(n =>
-                `${fileLink(n.path, zoomFn)} (in:${n.in_degree} out:${n.out_degree})`
-              ).join('<br>');
-            }
-            break;
-          case 'orphans':
-            html = `<strong>${data.count || 0}</strong> orphan files:<br>` +
-              (data.orphan_files || []).map(f => fileLink(f, zoomFn)).join('<br>');
-            break;
-          case 'violations':
-            html = (data.layer_violations || []).slice(0, 8).map(v =>
-              `${fileLink(v.source, zoomFn)} (${v.source_layer}) \u2192 ${fileLink(v.target, zoomFn)} (${v.target_layer})`
-            ).join('<br>') || 'No violations.';
-            break;
-          case 'most_connected':
-            html = (data.most_connected || []).slice(0, 8).map(n =>
-              `${fileLink(n.path, zoomFn)} (in:${n.in_degree} out:${n.out_degree} total:${n.total})`
-            ).join('<br>');
-            break;
-          case 'layers':
-            if (data.layers) {
-              html = Object.entries(data.layers).map(([layer, files]) =>
-                `<span class="layer-dot" style="background:${LAYER_COLORS[layer] || '#ccc'}"></span><strong>${layer}</strong>: ${files.length} files`
-              ).join('<br>');
-            }
-            break;
-          case 'file_summary':
-            if (data.file) {
-              html = `${fileLink(data.file, zoomFn)}<br>${data.summary || 'No summary available.'}`;
-            } else {
-              html = `<strong>${data.total || 0}</strong> summaries available. Mention a specific file.`;
-            }
-            break;
-          case 'error':
-            html = data.message || 'Error querying codebase.';
-            break;
-          default:
-            html = Object.entries(data).map(([k, v]) => `<strong>${k}:</strong> ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('<br>');
         }
 
         addMsg(html, 'bot');
