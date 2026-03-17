@@ -483,7 +483,10 @@
             <div id="ask-panel" class="ask-panel">
               <div class="ask-header">
                 <span>Ask Codebase</span>
-                <span><span class="live-dot offline" id="ask-status-dot"></span></span>
+                <span style="display:flex;align-items:center;gap:8px;">
+                  <button id="ask-clear" title="Clear chat" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;" onmouseover="this.style.color='var(--text-bright)'" onmouseout="this.style.color='var(--text-muted)'">&times;</button>
+                  <span class="live-dot offline" id="ask-status-dot"></span>
+                </span>
               </div>
               <div class="ask-suggestions" id="ask-suggestions"></div>
               <div class="ask-messages" id="ask-messages"></div>
@@ -1086,8 +1089,10 @@
       const messages = container.querySelector('#ask-messages');
       const input = container.querySelector('#ask-input');
       const sendBtn = container.querySelector('#ask-send');
+      const clearBtn = container.querySelector('#ask-clear');
       const suggestionsEl = container.querySelector('#ask-suggestions');
       const statusDot = container.querySelector('#ask-status-dot');
+      let chatHistory = []; // tracks {role, content} for session memory
 
       // Check if live API is available
       checkLiveApi().then(live => {
@@ -1105,25 +1110,39 @@
         btn.addEventListener('click', () => { input.value = btn.textContent; doAsk(); });
       });
 
+      function clearChat() {
+        messages.innerHTML = '';
+        chatHistory = [];
+        suggestionsEl.style.display = '';
+        addMsg(askIsLive
+          ? 'Chat cleared. Ask anything about your codebase.'
+          : 'Chat cleared. Offline mode — using embedded data.', 'bot');
+      }
+
       async function doAsk() {
         const question = input.value.trim();
         if (!question) return;
         input.value = '';
         addMsg(question, 'user');
+        chatHistory.push({ role: 'user', content: question });
 
         if (askIsLive) {
           addMsg('<span class="text-muted">Thinking...</span>', 'bot', 'ask-loading');
           sendBtn.disabled = true;
           input.disabled = true;
           try {
+            // Send last 10 exchanges for context (keep payload reasonable)
+            const history = chatHistory.slice(-20);
             const resp = await fetch('/api/ask', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question }),
+              body: JSON.stringify({ question, history }),
             });
             const result = await resp.json();
             removeMsg('ask-loading');
             renderAskResult(result, question, graphData, zoomToNodeFn, detailPanel);
+            // Store assistant reply in history
+            if (result.answer) chatHistory.push({ role: 'assistant', content: result.answer });
           } catch (err) {
             removeMsg('ask-loading');
             addMsg(`Error: ${err}`, 'bot');
@@ -1141,6 +1160,7 @@
       }
 
       sendBtn.addEventListener('click', doAsk);
+      clearBtn.addEventListener('click', clearChat);
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAsk(); });
 
       function addMsg(html, role, id) {

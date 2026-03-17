@@ -79,7 +79,7 @@ async function buildGraphContext(projectDir: string): Promise<string> {
 }
 
 /** Call claude CLI with the question and graph context, return the answer */
-function askClaude(question: string, graphContext: string, projectDir: string): Promise<string> {
+function askClaude(question: string, graphContext: string, projectDir: string, history?: Array<{role: string, content: string}>): Promise<string> {
   return new Promise((resolve) => {
     const systemPrompt = [
       "You are an expert on this codebase. Answer questions about the architecture, files, dependencies, and patterns.",
@@ -93,12 +93,22 @@ function askClaude(question: string, graphContext: string, projectDir: string): 
       graphContext,
     ].join("\n");
 
+    // Build the full prompt with conversation history for follow-up context
+    let fullPrompt = question;
+    if (history && history.length > 1) {
+      const prior = history.slice(0, -1); // exclude the current question (last entry)
+      const convoLines = prior.map(m =>
+        `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
+      ).join("\n\n");
+      fullPrompt = `Previous conversation:\n${convoLines}\n\nCurrent question: ${question}`;
+    }
+
     const proc = spawn("claude", [
       "--print",
       "--system-prompt", systemPrompt,
       "--max-turns", "1",
       "--model", "claude-haiku-4-5-20251001",
-      question,
+      fullPrompt,
     ], {
       cwd: projectDir,
       env: { ...process.env },
@@ -189,14 +199,15 @@ export async function serveDashboard(
         const body = await readBody(req);
         const input = JSON.parse(body);
         const question = input.question || "";
+        const history = input.history || [];
 
         // Build graph context on first request (lazy)
         if (!graphContext) {
           graphContext = await buildGraphContext(projectDir);
         }
 
-        // Call Claude CLI
-        const answer = await askClaude(question, graphContext, projectDir);
+        // Call Claude CLI with conversation history for follow-ups
+        const answer = await askClaude(question, graphContext, projectDir, history);
 
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ answer, focus: "claude", relevant_files: [] }));
