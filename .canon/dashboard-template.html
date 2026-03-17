@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Canon Dashboard</title>
   <script src="https://d3js.org/d3.v7.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js" defer></script>
   <style>
     :root {
       --bg: #1a1a2e;
@@ -163,10 +164,25 @@
     .ask-msg-user .ask-bubble { background: var(--accent); color: white; display: inline-block; }
     .ask-msg-bot .ask-bubble { background: var(--bg-card); }
     .ask-bubble { padding: 8px 12px; border-radius: 10px; font-size: 12px; line-height: 1.5; max-width: 100%; display: inline-block; text-align: left; }
-    .ask-bubble code { background: rgba(0,0,0,0.2); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+    .ask-bubble code { background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 3px; font-size: 11px; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    .ask-bubble pre { background: var(--bg); padding: 10px 12px; border-radius: 6px; margin: 8px 0; overflow-x: auto; font-size: 11px; white-space: pre; border: 1px solid var(--border); }
+    .ask-bubble pre code { background: none; padding: 0; font-size: 11px; }
+    .ask-bubble p { margin: 0 0 8px 0; }
+    .ask-bubble p:last-child { margin-bottom: 0; }
+    .ask-bubble ul, .ask-bubble ol { margin: 4px 0 8px 0; padding-left: 20px; }
+    .ask-bubble li { margin-bottom: 2px; }
+    .ask-bubble li > p { margin: 0; }
+    .ask-bubble h1, .ask-bubble h2, .ask-bubble h3, .ask-bubble h4 { margin: 10px 0 4px 0; color: var(--text-bright); }
+    .ask-bubble h1 { font-size: 15px; } .ask-bubble h2 { font-size: 14px; } .ask-bubble h3 { font-size: 13px; } .ask-bubble h4 { font-size: 12px; }
+    .ask-bubble blockquote { border-left: 3px solid var(--accent); margin: 6px 0; padding: 2px 10px; color: var(--text-muted); }
+    .ask-bubble table { border-collapse: collapse; margin: 6px 0; font-size: 11px; width: 100%; }
+    .ask-bubble th, .ask-bubble td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+    .ask-bubble th { background: var(--bg); color: var(--text-bright); }
+    .ask-bubble hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+    .ask-bubble a { color: var(--accent); text-decoration: underline; }
+    .ask-bubble a:hover { color: var(--text-bright); }
     .ask-bubble .file-link { color: var(--accent); cursor: pointer; text-decoration: underline; }
     .ask-bubble .file-link:hover { color: var(--text-bright); }
-    .ask-bubble pre { background: var(--bg); padding: 8px; border-radius: 4px; margin: 6px 0; overflow-x: auto; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
     .ask-suggestions { display: flex; gap: 4px; flex-wrap: wrap; padding: 6px 14px; }
     .ask-suggestion { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted); padding: 2px 8px; border-radius: 10px; font-size: 10px; cursor: pointer; font-family: inherit; }
     .ask-suggestion:hover { border-color: var(--accent); color: var(--text); }
@@ -859,28 +875,20 @@
       }
 
       function renderAskResult(result, question, graphData, zoomFn, detailPanel) {
-        let text = result.answer || 'No answer available.';
+        const text = result.answer || 'No answer available.';
 
-        // Convert markdown to HTML
-        // Code blocks first (preserve them from other transforms)
-        const codeBlocks = [];
-        text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-          codeBlocks.push(`<pre>${escapeHtml(code.trim())}</pre>`);
-          return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
-        });
-
-        let html = text
-          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-          .replace(/`([^`]+)`/g, '<code>$1</code>')
-          .replace(/\n\n/g, '<br><br>')
-          .replace(/\n- /g, '<br>• ')
-          .replace(/\n(\d+)\. /g, '<br>$1. ')
-          .replace(/\n/g, '<br>');
-
-        // Restore code blocks
-        codeBlocks.forEach((block, i) => {
-          html = html.replace(`__CODE_BLOCK_${i}__`, block);
-        });
+        // Render markdown to HTML using marked
+        let html;
+        if (typeof marked !== 'undefined' && marked.parse) {
+          html = marked.parse(text, { breaks: true, gfm: true });
+        } else {
+          // Fallback if marked didn't load
+          html = text
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\n/g, '<br>');
+        }
 
         // Make file paths clickable — match known graph node basenames
         const nodes = graphData?.nodes || [];
