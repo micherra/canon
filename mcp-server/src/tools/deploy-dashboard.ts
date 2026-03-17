@@ -2,6 +2,7 @@
 
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
+import { codebaseGraph } from "./codebase-graph.js";
 
 interface DeployDashboardOutput {
   deployed: boolean;
@@ -37,9 +38,19 @@ export async function deployDashboard(
     };
   }
 
-  // Gather data from .canon/ directory
+  // Generate fresh graph data by running the codebase graph scanner
   const canonDir = join(projectDir, ".canon");
-  const graphData = await readJsonSafe(join(canonDir, "graph-data.json")) as Record<string, unknown> | null;
+  let graphData: Record<string, unknown> | null = null;
+  try {
+    const freshGraph = await codebaseGraph({}, projectDir, pluginDir);
+    graphData = freshGraph as unknown as Record<string, unknown>;
+    // Persist so other tools (ask_codebase) can also use fresh data
+    await mkdir(canonDir, { recursive: true });
+    await writeFile(join(canonDir, "graph-data.json"), JSON.stringify(freshGraph, null, 2), "utf-8");
+  } catch {
+    // Fall back to cached graph data on disk
+    graphData = await readJsonSafe(join(canonDir, "graph-data.json")) as Record<string, unknown> | null;
+  }
   const summaries = await readJsonSafe(join(canonDir, "summaries.json")) as Record<string, string> | null;
 
   // Merge summaries into graph nodes
