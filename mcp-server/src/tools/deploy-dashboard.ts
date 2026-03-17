@@ -8,6 +8,7 @@ interface DeployDashboardOutput {
   deployed: boolean;
   dashboard_path: string;
   message: string;
+  unsummarized_files: string[];
 }
 
 async function readJsonSafe(path: string): Promise<unknown> {
@@ -35,6 +36,7 @@ export async function deployDashboard(
       deployed: false,
       dashboard_path: outputPath,
       message: `Failed to read dashboard template: ${err}`,
+      unsummarized_files: [],
     };
   }
 
@@ -52,6 +54,17 @@ export async function deployDashboard(
     graphData = await readJsonSafe(join(canonDir, "graph-data.json")) as Record<string, unknown> | null;
   }
   const summaries = await readJsonSafe(join(canonDir, "summaries.json")) as Record<string, string> | null;
+
+  // Identify files that don't have summaries yet
+  const unsummarizedFiles: string[] = [];
+  if (graphData && Array.isArray(graphData.nodes)) {
+    for (const node of graphData.nodes as Array<Record<string, unknown>>) {
+      const id = node.id as string;
+      if (!summaries || !summaries[id]) {
+        unsummarizedFiles.push(id);
+      }
+    }
+  }
 
   // Merge summaries into graph nodes
   if (graphData && summaries && Array.isArray(graphData.nodes)) {
@@ -92,9 +105,14 @@ export async function deployDashboard(
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, html, "utf-8");
 
+  const summaryNote = unsummarizedFiles.length > 0
+    ? ` ${unsummarizedFiles.length} files need summaries — read each file and call store_summaries to enrich the dashboard.`
+    : "";
+
   return {
     deployed: true,
     dashboard_path: outputPath,
-    message: `Dashboard deployed to ${outputPath} — open directly in any browser (no server needed).`,
+    message: `Dashboard deployed to ${outputPath} — open directly in any browser (no server needed).${summaryNote}`,
+    unsummarized_files: unsummarizedFiles,
   };
 }

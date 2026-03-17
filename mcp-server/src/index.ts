@@ -186,7 +186,7 @@ server.tool(
 // Tool: deploy_dashboard
 server.tool(
   "deploy_dashboard",
-  "Deploy the Canon dashboard UI to the project's .canon/dashboard/ directory. Copies HTML, JS, and CSS files so the dashboard can load data from .canon/ via relative paths.",
+  "Deploy the Canon dashboard. Generates a fresh codebase graph, builds the HTML, and returns unsummarized_files. IMPORTANT: If unsummarized_files is non-empty, you MUST read each file with get_file_context, generate a one-sentence summary of the file's role, then call store_summaries with all summaries. After storing, call deploy_dashboard again to embed the summaries.",
   {},
   async () => {
     const result = await deployDashboard(projectDir, pluginDir);
