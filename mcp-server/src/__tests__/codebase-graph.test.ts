@@ -105,11 +105,29 @@ describe("codebaseGraph", () => {
     expect(result.nodes[0].id).toBe("src/api/handler.ts");
   });
 
-  it("scans root when root_dir explicitly passed", async () => {
+  it("uses root_dir as fallback when no source_dirs configured", async () => {
     await writeFile(join(tmpDir, "src", "api", "a.ts"), `export const a = 1;`);
 
     const result = await codebaseGraph({ root_dir: tmpDir }, tmpDir, "/nonexistent");
     expect(result.nodes.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("source_dirs from config takes precedence over root_dir", async () => {
+    // Config says scan "src" only
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ source_dirs: ["src"] })
+    );
+    // File inside src
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
+    // File outside src (at project root)
+    await mkdir(join(tmpDir, "scripts"), { recursive: true });
+    await writeFile(join(tmpDir, "scripts", "seed.ts"), `export const s = 1;`);
+
+    // Even though root_dir is passed, config source_dirs should win
+    const result = await codebaseGraph({ root_dir: tmpDir }, tmpDir, "/nonexistent");
+    expect(result.nodes.every((n) => n.id.startsWith("src/"))).toBe(true);
+    expect(result.nodes.find((n) => n.id.includes("scripts"))).toBeUndefined();
   });
 
   it("resolves path aliases from tsconfig.json", async () => {

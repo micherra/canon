@@ -85,26 +85,17 @@ export async function codebaseGraph(
   projectDir: string,
   _pluginDir: string
 ): Promise<CodebaseGraphOutput> {
-  const rootDir = input.root_dir || projectDir;
-
   // Determine which directories to scan:
   // 1. Explicit source_dirs from tool input takes priority
   // 2. Then source_dirs from .canon/config.json
-  // 3. If neither exists, scan nothing (return empty) — user must configure source_dirs
-  // Exception: if root_dir is explicitly passed, scan that dir directly
+  // 3. root_dir is only used as a fallback when no source_dirs are configured
   const explicitSourceDirs = input.source_dirs;
   const configSourceDirs = await loadSourceDirs(projectDir);
   const sourceDirs = explicitSourceDirs || configSourceDirs;
 
   let filePaths: string[];
 
-  if (input.root_dir) {
-    // Explicit root_dir passed — scan it directly (e.g. user passed ".")
-    filePaths = await scanSourceFiles(rootDir, {
-      includeExtensions: input.include_extensions,
-      excludeDirs: input.exclude_dirs,
-    });
-  } else if (sourceDirs && sourceDirs.length > 0) {
+  if (sourceDirs && sourceDirs.length > 0) {
     // Scan each source_dir and merge results with paths relative to projectDir
     const allFiles: string[] = [];
     for (const dir of sourceDirs) {
@@ -119,12 +110,16 @@ export async function codebaseGraph(
       }
     }
     filePaths = allFiles.sort();
-  } else {
-    // No source_dirs configured — fall back to scanning the project root
-    filePaths = await scanSourceFiles(projectDir, {
+  } else if (input.root_dir) {
+    // No source_dirs but explicit root_dir — scan that directory
+    const rootDir = input.root_dir === "." ? projectDir : input.root_dir;
+    filePaths = await scanSourceFiles(rootDir, {
       includeExtensions: input.include_extensions,
       excludeDirs: input.exclude_dirs,
     });
+  } else {
+    // No source_dirs configured and no root_dir — return empty graph
+    filePaths = [];
   }
 
   const fileSet = new Set(filePaths);

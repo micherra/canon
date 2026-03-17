@@ -168,7 +168,7 @@ server.tool(
   "codebase_graph",
   "Generate a dependency graph of the codebase with Canon compliance overlay. Returns nodes (files), edges (imports), layers, and hotspots.",
   {
-    root_dir: z.string().optional().describe("Root directory to scan directly (bypasses source_dirs). Use '.' to scan everything from project root."),
+    root_dir: z.string().optional().describe("Fallback root directory to scan when no source_dirs are configured. Ignored if source_dirs exist in input or .canon/config.json."),
     source_dirs: z.array(z.string()).optional().describe("Directories to scan (e.g. ['src', 'lib']). Overrides .canon/config.json source_dirs."),
     include_extensions: z.array(z.string()).optional().describe("File extensions to include (default: ts, js, py, go, rs)"),
     exclude_dirs: z.array(z.string()).optional().describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
