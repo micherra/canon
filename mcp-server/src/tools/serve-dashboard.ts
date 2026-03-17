@@ -93,7 +93,7 @@ function askClaude(question: string, graphContext: string, projectDir: string): 
     const proc = spawn("claude", [
       "--print",
       "--system-prompt", systemPrompt,
-      "--max-turns", "1",
+      "--tools", "",
       "--model", "claude-haiku-4-5-20251001",
       question,
     ], {
