@@ -1,4 +1,4 @@
-import { readFile } from "fs/promises";
+import { readFile, writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { scanSourceFiles } from "../graph/scanner.js";
 import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
@@ -232,7 +232,7 @@ export async function codebaseGraph(
   const nodesForInsights = nodes.map((n) => ({ id: n.id, layer: n.layer }));
   const insights = generateInsights(nodesForInsights, edgesForInsights);
 
-  return {
+  const fullGraph = {
     nodes,
     edges,
     layers,
@@ -240,4 +240,11 @@ export async function codebaseGraph(
     insights,
     generated_at: new Date().toISOString(),
   };
+
+  // Persist full graph to disk — dashboard and ask_codebase read from here
+  const canonDir = join(projectDir, ".canon");
+  await mkdir(canonDir, { recursive: true });
+  await writeFile(join(canonDir, "graph-data.json"), JSON.stringify(fullGraph, null, 2), "utf-8");
+
+  return fullGraph;
 }
