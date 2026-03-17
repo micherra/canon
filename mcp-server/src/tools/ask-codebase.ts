@@ -3,6 +3,7 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { generateInsights } from "../graph/insights.js";
+import { loadSummariesFile, flattenSummaries } from "./store-summaries.js";
 
 export interface AskCodebaseInput {
   question: string;
@@ -32,12 +33,8 @@ async function loadGraphData(projectDir: string): Promise<GraphData | null> {
 }
 
 async function loadSummaries(projectDir: string): Promise<Record<string, string>> {
-  try {
-    const raw = await readFile(join(projectDir, ".canon", "summaries.json"), "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
+  const entries = await loadSummariesFile(projectDir);
+  return flattenSummaries(entries);
 }
 
 /** Route the question to the right analysis */

@@ -1,8 +1,9 @@
 /** Canon Dashboard Deployment — generates a self-contained HTML dashboard with embedded data */
 
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { readFile, writeFile, mkdir, stat } from "fs/promises";
 import { join, dirname } from "path";
 import { codebaseGraph } from "./codebase-graph.js";
+import { loadSummariesFile, flattenSummaries } from "./store-summaries.js";
 
 interface DeployDashboardOutput {
   deployed: boolean;
@@ -17,6 +18,17 @@ async function readJsonSafe(path: string): Promise<unknown> {
     return JSON.parse(content);
   } catch {
     return null;
+  }
+}
+
+/** Check if a file has been modified after the given ISO timestamp */
+async function isFileNewerThan(filePath: string, timestamp: string): Promise<boolean> {
+  if (!timestamp) return true;
+  try {
+    const info = await stat(filePath);
+    return info.mtime.toISOString() > timestamp;
+  } catch {
+    return false;
   }
 }
 
@@ -53,21 +65,29 @@ export async function deployDashboard(
     // Fall back to cached graph data on disk
     graphData = await readJsonSafe(join(canonDir, "graph-data.json")) as Record<string, unknown> | null;
   }
-  const summaries = await readJsonSafe(join(canonDir, "summaries.json")) as Record<string, string> | null;
 
-  // Identify files that don't have summaries yet
+  const summaryEntries = await loadSummariesFile(projectDir);
+  const summaries = flattenSummaries(summaryEntries);
+
+  // Identify files that need summaries: missing or stale (file modified since last summary)
   const unsummarizedFiles: string[] = [];
   if (graphData && Array.isArray(graphData.nodes)) {
     for (const node of graphData.nodes as Array<Record<string, unknown>>) {
       const id = node.id as string;
-      if (!summaries || !summaries[id]) {
+      const entry = summaryEntries[id];
+      if (!entry) {
         unsummarizedFiles.push(id);
+      } else {
+        const stale = await isFileNewerThan(join(projectDir, id), entry.updated_at);
+        if (stale) {
+          unsummarizedFiles.push(id);
+        }
       }
     }
   }
 
   // Merge summaries into graph nodes
-  if (graphData && summaries && Array.isArray(graphData.nodes)) {
+  if (graphData && Array.isArray(graphData.nodes)) {
     for (const node of graphData.nodes as Array<Record<string, unknown>>) {
       const id = node.id as string;
       if (summaries[id]) {
