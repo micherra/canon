@@ -79,6 +79,24 @@
     }
     .search-input:focus { outline: none; border-color: var(--accent); }
 
+    /* Search results dropdown */
+    .search-wrapper { position: relative; display: inline-block; }
+    .search-results {
+      position: absolute; top: 100%; left: 0; width: 360px; max-height: 240px;
+      overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 6px; margin-top: 4px; z-index: 100; display: none;
+    }
+    .search-results.open { display: block; }
+    .search-result-item {
+      padding: 6px 12px; font-size: 12px; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-item:hover, .search-result-item.active { background: rgba(74, 144, 217, 0.2); }
+    .search-result-item .match-path { color: var(--text-bright); }
+    .search-result-item .match-highlight { color: var(--accent); font-weight: 600; }
+
     /* Buttons */
     .btn {
       background: var(--accent); color: white; border: none;
@@ -86,6 +104,12 @@
       font-family: inherit; font-size: 13px;
     }
     .btn:hover { opacity: 0.9; }
+    .btn-ghost {
+      background: transparent; color: var(--text-muted); border: 1px solid var(--border);
+      padding: 6px 16px; border-radius: 6px; cursor: pointer;
+      font-family: inherit; font-size: 13px;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.05); color: var(--text); }
 
     /* Badges */
     .verdict-badge, .severity-badge {
@@ -106,7 +130,7 @@
 
     /* Graph layout */
     .graph-layout { display: flex; gap: 16px; height: calc(100vh - 160px); }
-    .graph-canvas { flex: 1; background: var(--bg-surface); border-radius: 8px; overflow: hidden; }
+    .graph-canvas { flex: 1; background: var(--bg-surface); border-radius: 8px; overflow: hidden; position: relative; }
     .graph-canvas svg { width: 100%; height: 100%; }
     .detail-panel { width: 320px; background: var(--bg-surface); border-radius: 8px; padding: 16px; overflow-y: auto; }
     .detail-field { margin: 12px 0; }
@@ -149,6 +173,30 @@
     }
     .cycle-arrow { color: var(--danger); font-weight: 700; }
     .cycle-file { color: var(--text-bright); }
+
+    /* Chat */
+    .chat-layout { display: flex; flex-direction: column; height: calc(100vh - 120px); }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 8px 0; }
+    .chat-msg { margin-bottom: 16px; display: flex; gap: 10px; }
+    .chat-msg-user { justify-content: flex-end; }
+    .chat-msg-user .chat-bubble { background: var(--accent); color: white; }
+    .chat-msg-bot .chat-bubble { background: var(--bg-card); }
+    .chat-bubble {
+      max-width: 75%; padding: 10px 14px; border-radius: 12px;
+      font-size: 13px; line-height: 1.6;
+    }
+    .chat-bubble code { background: rgba(0,0,0,0.2); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    .chat-bubble .chat-data-table { margin-top: 8px; }
+    .chat-bubble .chat-data-table td, .chat-bubble .chat-data-table th { padding: 4px 8px; font-size: 12px; }
+    .chat-input-bar { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .chat-input-bar input { flex: 1; }
+    .chat-suggestions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .chat-suggestion {
+      background: var(--bg-card); border: 1px solid var(--border);
+      color: var(--text-muted); padding: 4px 10px; border-radius: 12px;
+      font-size: 11px; cursor: pointer; font-family: inherit;
+    }
+    .chat-suggestion:hover { border-color: var(--accent); color: var(--text); }
 
     /* Utility */
     .empty-state { color: var(--text-muted); font-style: italic; padding: 40px; text-align: center; }
@@ -206,6 +254,14 @@
       }
     }
 
+    // ── Summaries map ──
+    const SUMMARIES = {};
+    if (DATA.graph?.nodes) {
+      for (const n of DATA.graph.nodes) {
+        if (n.summary) SUMMARIES[n.id] = n.summary;
+      }
+    }
+
     // ── Filter helpers ──
     function createLayerFilters(container, layers, onChange) {
       container.innerHTML = layers.map(layer => `
@@ -245,6 +301,7 @@
     const NAV_ITEMS = [
       { id: 'graph', label: 'Codebase Graph', icon: '\u25C9' },
       { id: 'insights', label: 'Insights', icon: '\u2261' },
+      { id: 'chat', label: 'Ask Codebase', icon: '\u2709' },
       { id: 'pr-review', label: 'PR Review', icon: '\u2398' },
     ];
 
@@ -277,7 +334,7 @@
     }
 
     // ── View router ──
-    const VIEWS = { graph: renderGraph, insights: renderInsights, 'pr-review': renderPrReview };
+    const VIEWS = { graph: renderGraph, insights: renderInsights, chat: renderChat, 'pr-review': renderPrReview };
 
     function loadView(viewId) {
       const main = document.getElementById('main-content');
@@ -288,6 +345,9 @@
     }
 
     // ── Graph view ──
+    // Persistent graph state so search/filter doesn't rebuild the simulation
+    let graphState = null;
+
     function renderGraph(container) {
       container.innerHTML = `
         <div class="view-header">
@@ -305,7 +365,7 @@
 
       const data = DATA.graph;
       if (!data) {
-        container.querySelector('.graph-canvas').innerHTML = '<p class="empty-state">No graph data. Run <code>/canon:dashboard</code> to generate.</p>';
+        container.querySelector('#graph-canvas').innerHTML = '<p class="empty-state">No graph data. Run <code>/canon:dashboard</code> to generate.</p>';
         return;
       }
 
@@ -314,28 +374,145 @@
       let activeLayers = [...new Set(data.nodes.map(n => n.layer))];
       let searchQuery = '';
 
-      createLayerFilters(container.querySelector('#graph-filters'), activeLayers, (layers) => { activeLayers = layers; doRender(); });
-      createSearchFilter(container.querySelector('#graph-search'), 'Search files...', (q) => { searchQuery = q; doRender(); });
+      createLayerFilters(container.querySelector('#graph-filters'), activeLayers, (layers) => {
+        activeLayers = layers;
+        applyFilters();
+      });
 
-      function doRender() {
-        const filtered = data.nodes.filter(n => activeLayers.includes(n.layer) && (!searchQuery || n.id.toLowerCase().includes(searchQuery.toLowerCase())));
-        const filteredIds = new Set(filtered.map(n => n.id));
-        const filteredEdges = data.edges.filter(e => filteredIds.has(e.source?.id || e.source) && filteredIds.has(e.target?.id || e.target));
-        renderD3Graph(canvas, detail, filtered, filteredEdges);
+      // Search with results dropdown
+      const searchContainer = container.querySelector('#graph-search');
+      searchContainer.innerHTML = `
+        <div class="search-wrapper">
+          <input type="text" class="search-input" placeholder="Search files... (type to highlight)">
+          <div class="search-results" id="graph-search-results"></div>
+        </div>
+      `;
+      const searchInput = searchContainer.querySelector('.search-input');
+      const searchResults = searchContainer.querySelector('#graph-search-results');
+      let searchTimeout;
+
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          searchQuery = searchInput.value;
+          applyFilters();
+          updateSearchDropdown();
+        }, 150);
+      });
+
+      searchInput.addEventListener('focus', () => { if (searchQuery) updateSearchDropdown(); });
+      document.addEventListener('click', (e) => {
+        if (!searchContainer.contains(e.target)) searchResults.classList.remove('open');
+      });
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { searchQuery = ''; searchInput.value = ''; applyFilters(); searchResults.classList.remove('open'); }
+      });
+
+      function updateSearchDropdown() {
+        if (!searchQuery || searchQuery.length < 2) { searchResults.classList.remove('open'); return; }
+        const q = searchQuery.toLowerCase();
+        const matches = data.nodes.filter(n => activeLayers.includes(n.layer) && n.id.toLowerCase().includes(q)).slice(0, 15);
+        if (matches.length === 0) { searchResults.classList.remove('open'); return; }
+        searchResults.innerHTML = matches.map(n => {
+          const idx = n.id.toLowerCase().indexOf(q);
+          const before = n.id.slice(0, idx);
+          const match = n.id.slice(idx, idx + q.length);
+          const after = n.id.slice(idx + q.length);
+          return `<div class="search-result-item" data-id="${n.id}">
+            <span class="chip-dot" style="background:${LAYER_COLORS[n.layer] || LAYER_COLORS.unknown}"></span>
+            <span class="match-path">${before}<span class="match-highlight">${match}</span>${after}</span>
+          </div>`;
+        }).join('');
+        searchResults.classList.add('open');
+        searchResults.querySelectorAll('.search-result-item').forEach(item => {
+          item.addEventListener('click', () => {
+            const nodeId = item.dataset.id;
+            searchResults.classList.remove('open');
+            zoomToNode(nodeId);
+            const nodeData = data.nodes.find(n => n.id === nodeId);
+            if (nodeData) showGraphDetail(detail, nodeData);
+          });
+        });
       }
-      doRender();
+
+      function zoomToNode(nodeId) {
+        if (!graphState) return;
+        const d = graphState.nodesCopy.find(n => n.id === nodeId);
+        if (!d || d.x == null) return;
+        const svg = graphState.svg;
+        const width = graphState.width;
+        const height = graphState.height;
+        const scale = 2;
+        const transform = d3.zoomIdentity.translate(width / 2 - d.x * scale, height / 2 - d.y * scale).scale(scale);
+        svg.transition().duration(500).call(graphState.zoom.transform, transform);
+        // Flash the target node
+        graphState.nodeSelection.attr('r', n => n.id === nodeId ? 16 : nodeRadius(n));
+        setTimeout(() => {
+          graphState.nodeSelection.attr('r', nodeRadius);
+        }, 800);
+        // Show detail
+        const nodeData = data.nodes.find(n => n.id === nodeId);
+        if (nodeData) showGraphDetail(detail, nodeData);
+      }
+
+      function nodeRadius(d) { return 6 + Math.min((d.violation_count || 0) * 2, 14); }
+
+      function applyFilters() {
+        if (!graphState) return;
+        const q = searchQuery.toLowerCase();
+        const hasSearch = q.length >= 2;
+
+        graphState.nodeSelection
+          .attr('opacity', d => {
+            if (!activeLayers.includes(d.layer)) return 0;
+            if (hasSearch && !d.id.toLowerCase().includes(q)) return 0.15;
+            return 1;
+          })
+          .attr('r', d => {
+            if (hasSearch && d.id.toLowerCase().includes(q)) return nodeRadius(d) + 3;
+            return nodeRadius(d);
+          })
+          .attr('stroke', d => {
+            if (hasSearch && d.id.toLowerCase().includes(q)) return '#4A90D9';
+            return (d.violation_count || 0) > 0 ? VERDICT_COLORS.BLOCKING : '#333';
+          })
+          .attr('stroke-width', d => {
+            if (hasSearch && d.id.toLowerCase().includes(q)) return 3;
+            return (d.violation_count || 0) > 0 ? 2 : 1;
+          });
+
+        graphState.linkSelection
+          .attr('opacity', d => {
+            const sId = d.source?.id || d.source;
+            const tId = d.target?.id || d.target;
+            const sNode = graphState.nodesCopy.find(n => n.id === sId);
+            const tNode = graphState.nodesCopy.find(n => n.id === tId);
+            if (!sNode || !tNode) return 0;
+            if (!activeLayers.includes(sNode.layer) || !activeLayers.includes(tNode.layer)) return 0;
+            if (hasSearch) {
+              const sMatch = sId.toLowerCase().includes(q);
+              const tMatch = tId.toLowerCase().includes(q);
+              if (sMatch || tMatch) return 0.6;
+              return 0.05;
+            }
+            return 0.3;
+          });
+      }
+
+      // Build the D3 graph once, then use applyFilters for search/layer changes
+      buildD3Graph(canvas, detail, data);
     }
 
-    function renderD3Graph(canvas, detail, nodes, edges) {
+    function buildD3Graph(canvas, detail, data) {
       if (typeof d3 === 'undefined') {
         canvas.innerHTML = `
           <div class="graph-fallback">
             <h3>Graph Data Summary</h3>
-            <p>${nodes.length} files, ${edges.length} dependencies</p>
+            <p>${data.nodes.length} files, ${data.edges.length} dependencies</p>
             <table class="data-table">
               <thead><tr><th>File</th><th>Layer</th><th>Violations</th></tr></thead>
               <tbody>
-                ${nodes.slice(0, 50).map(n => `
+                ${data.nodes.slice(0, 50).map(n => `
                   <tr class="${n.violation_count > 0 ? 'violation-row' : ''}">
                     <td>${n.id}</td>
                     <td><span class="layer-dot" style="background:${n.color}"></span>${n.layer}</td>
@@ -344,7 +521,7 @@
                 `).join('')}
               </tbody>
             </table>
-            ${nodes.length > 50 ? `<p class="truncated">...and ${nodes.length - 50} more</p>` : ''}
+            ${data.nodes.length > 50 ? `<p class="truncated">...and ${data.nodes.length - 50} more</p>` : ''}
           </div>
         `;
         return;
@@ -354,12 +531,13 @@
       const width = canvas.clientWidth || 800;
       const height = canvas.clientHeight || 600;
 
-      const nodesCopy = nodes.map(n => ({...n}));
-      const edgesCopy = edges.map(e => ({ source: e.source?.id || e.source, target: e.target?.id || e.target }));
+      const nodesCopy = data.nodes.map(n => ({...n}));
+      const edgesCopy = data.edges.map(e => ({ source: e.source?.id || e.source, target: e.target?.id || e.target }));
 
       const svg = d3.select(canvas).append('svg').attr('width', width).attr('height', height).attr('viewBox', [0, 0, width, height]);
       const g = svg.append('g');
-      svg.call(d3.zoom().on('zoom', (event) => g.attr('transform', event.transform)));
+      const zoom = d3.zoom().on('zoom', (event) => g.attr('transform', event.transform));
+      svg.call(zoom);
 
       const simulation = d3.forceSimulation(nodesCopy)
         .force('link', d3.forceLink(edgesCopy).id(d => d.id).distance(80))
@@ -367,12 +545,15 @@
         .force('center', d3.forceCenter(width / 2, height / 2))
         .force('collision', d3.forceCollide().radius(20));
 
-      const link = g.selectAll('.link').data(edgesCopy).join('line').attr('stroke', '#555').attr('stroke-opacity', 0.3);
-      const node = g.selectAll('.node').data(nodesCopy).join('circle')
-        .attr('r', d => 6 + Math.min((d.violation_count || 0) * 2, 14))
+      function nodeRadius(d) { return 6 + Math.min((d.violation_count || 0) * 2, 14); }
+
+      const linkSelection = g.selectAll('.link').data(edgesCopy).join('line').attr('stroke', '#555').attr('stroke-opacity', 0.3);
+      const nodeSelection = g.selectAll('.node').data(nodesCopy).join('circle')
+        .attr('r', nodeRadius)
         .attr('fill', d => d.color || LAYER_COLORS[d.layer] || LAYER_COLORS.unknown)
         .attr('stroke', d => (d.violation_count || 0) > 0 ? VERDICT_COLORS.BLOCKING : '#333')
         .attr('stroke-width', d => (d.violation_count || 0) > 0 ? 2 : 1)
+        .style('cursor', 'pointer')
         .on('click', (event, d) => showGraphDetail(detail, d))
         .call(d3.drag()
           .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
@@ -380,11 +561,13 @@
           .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
         );
 
-      node.append('title').text(d => d.id);
+      nodeSelection.append('title').text(d => d.id);
       simulation.on('tick', () => {
-        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-        node.attr('cx', d => d.x).attr('cy', d => d.y);
+        linkSelection.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        nodeSelection.attr('cx', d => d.x).attr('cy', d => d.y);
       });
+
+      graphState = { svg, zoom, nodesCopy, nodeSelection, linkSelection, width, height };
     }
 
     function showGraphDetail(panel, node) {
@@ -532,6 +715,209 @@
       doRender();
     }
 
+    // ── Chat / Ask Codebase view ──
+    function renderChat(container) {
+      const data = DATA.graph;
+
+      container.innerHTML = `
+        <div class="view-header">
+          <h2>Ask Codebase</h2>
+        </div>
+        <div class="chat-layout">
+          <div id="chat-suggestions" class="chat-suggestions"></div>
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input-bar">
+            <input type="text" id="chat-input" class="search-input" style="width:100%" placeholder="Ask about your codebase architecture...">
+            <button id="chat-send" class="btn">Ask</button>
+          </div>
+        </div>
+      `;
+
+      const messages = container.querySelector('#chat-messages');
+      const input = container.querySelector('#chat-input');
+      const sendBtn = container.querySelector('#chat-send');
+      const suggestionsEl = container.querySelector('#chat-suggestions');
+
+      // Suggested questions
+      const suggestions = [
+        'What are the most connected files?',
+        'Are there any circular dependencies?',
+        'Show me orphan files',
+        'What layer violations exist?',
+        'Give me an overview',
+        'What does the data layer look like?',
+      ];
+      suggestionsEl.innerHTML = suggestions.map(s => `<button class="chat-suggestion">${s}</button>`).join('');
+      suggestionsEl.querySelectorAll('.chat-suggestion').forEach(btn => {
+        btn.addEventListener('click', () => {
+          input.value = btn.textContent;
+          doAsk();
+        });
+      });
+
+      function doAsk() {
+        const question = input.value.trim();
+        if (!question) return;
+        input.value = '';
+        addMessage(question, 'user');
+
+        if (!data) {
+          addMessage('No graph data available. Run <code>/canon:dashboard</code> to generate.', 'bot');
+          return;
+        }
+
+        const answer = answerQuestion(question, data);
+        addMessage(answer, 'bot');
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+      sendBtn.addEventListener('click', doAsk);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAsk(); });
+
+      function addMessage(html, role) {
+        const div = document.createElement('div');
+        div.className = `chat-msg chat-msg-${role}`;
+        div.innerHTML = `<div class="chat-bubble">${html}</div>`;
+        messages.appendChild(div);
+      }
+
+      // Welcome message
+      if (data) {
+        const ins = data.insights?.overview || {};
+        addMessage(`Ready to answer questions about your codebase. <strong>${ins.total_files || 0}</strong> files, <strong>${ins.total_edges || 0}</strong> dependencies across <strong>${(data.insights?.overview?.layers || []).length}</strong> layers.`, 'bot');
+      }
+    }
+
+    /** Client-side question answering over embedded graph data */
+    function answerQuestion(question, data) {
+      const q = question.toLowerCase();
+      const ins = data.insights || {};
+      const nodes = data.nodes || [];
+      const edges = data.edges || [];
+
+      // Detect focus
+      let focus = 'overview';
+      if (q.includes('circular') || q.includes('cycle')) focus = 'cycles';
+      else if (q.includes('depend') || q.includes('import') || q.includes('who uses') || q.includes('what uses')) focus = 'dependencies';
+      else if (q.includes('orphan') || q.includes('unused') || q.includes('dead')) focus = 'orphans';
+      else if (q.includes('hotspot') || q.includes('violation')) focus = 'violations';
+      else if (q.includes('connected') || q.includes('hub') || q.includes('central')) focus = 'most_connected';
+      else if (q.includes('layer')) focus = 'layers';
+      else if (q.includes('summary') || q.includes('what does') || q.includes('explain') || q.includes('role')) focus = 'file_summary';
+
+      // Check if a specific file is mentioned
+      const mentionedFile = findMentionedFile(q, nodes);
+
+      if (mentionedFile) {
+        const node = nodes.find(n => n.id === mentionedFile);
+        const imports = EDGE_OUT.get(mentionedFile) || [];
+        const importedBy = EDGE_IN.get(mentionedFile) || [];
+        const summary = SUMMARIES[mentionedFile];
+        return `<strong>${mentionedFile}</strong><br>
+          Layer: <span class="layer-dot" style="background:${LAYER_COLORS[node?.layer] || '#ccc'}"></span>${node?.layer || 'unknown'}<br>
+          ${summary ? `Summary: ${summary}<br>` : ''}
+          Imports <strong>${imports.length}</strong> files, imported by <strong>${importedBy.length}</strong><br>
+          ${imports.length > 0 ? `Imports: ${imports.map(f => `<code>${f.split('/').pop()}</code>`).join(', ')}<br>` : ''}
+          ${importedBy.length > 0 ? `Imported by: ${importedBy.map(f => `<code>${f.split('/').pop()}</code>`).join(', ')}<br>` : ''}
+          Violations: ${node?.violation_count || 0}`;
+      }
+
+      switch (focus) {
+        case 'cycles': {
+          const cycles = ins.circular_dependencies || [];
+          if (cycles.length === 0) return 'No circular dependencies detected.';
+          return `Found <strong>${cycles.length}</strong> circular dependenc${cycles.length === 1 ? 'y' : 'ies'}:<br>` +
+            cycles.map(c => c.join(' \u2192 ') + ' \u2192 ' + c[0]).map(s => `<code>${s}</code>`).join('<br>');
+        }
+
+        case 'dependencies': {
+          const mc = ins.most_connected || [];
+          if (mc.length === 0) return 'No dependency data available.';
+          return `Top connected files:<br>
+            <table class="data-table chat-data-table">
+              <tr><th>File</th><th>In</th><th>Out</th><th>Total</th></tr>
+              ${mc.slice(0, 10).map(n => `<tr><td><code>${n.path}</code></td><td>${n.in_degree}</td><td>${n.out_degree}</td><td><strong>${n.total}</strong></td></tr>`).join('')}
+            </table>`;
+        }
+
+        case 'orphans': {
+          const orphans = ins.orphan_files || [];
+          if (orphans.length === 0) return 'No orphan files. Every file has at least one connection.';
+          return `Found <strong>${orphans.length}</strong> orphan file${orphans.length === 1 ? '' : 's'} (no imports or importers):<br>` +
+            orphans.map(f => `<code>${f}</code>`).join('<br>');
+        }
+
+        case 'violations': {
+          const v = ins.layer_violations || [];
+          const hotspots = nodes.filter(n => n.violation_count > 0).sort((a, b) => b.violation_count - a.violation_count).slice(0, 5);
+          let html = '';
+          if (v.length > 0) {
+            html += `<strong>${v.length}</strong> layer violation${v.length === 1 ? '' : 's'}:<br>` +
+              v.slice(0, 10).map(x => `<code>${x.source}</code> (${x.source_layer}) \u2192 <code>${x.target}</code> (${x.target_layer})`).join('<br>');
+          }
+          if (hotspots.length > 0) {
+            html += (html ? '<br><br>' : '') + `Top violation hotspots:<br>` +
+              hotspots.map(n => `<code>${n.id}</code>: ${n.violation_count} violation${n.violation_count === 1 ? '' : 's'}`).join('<br>');
+          }
+          return html || 'No violations found.';
+        }
+
+        case 'most_connected': {
+          const mc = ins.most_connected || [];
+          if (mc.length === 0) return 'No connection data available.';
+          return `Most connected files (highest total degree):<br>
+            <table class="data-table chat-data-table">
+              <tr><th>File</th><th>In</th><th>Out</th><th>Total</th></tr>
+              ${mc.slice(0, 10).map(n => `<tr><td><code>${n.path}</code></td><td>${n.in_degree}</td><td>${n.out_degree}</td><td><strong>${n.total}</strong></td></tr>`).join('')}
+            </table>`;
+        }
+
+        case 'layers': {
+          const layerFilter = ['api', 'ui', 'domain', 'data', 'infra', 'shared'].find(l => q.includes(l));
+          if (layerFilter) {
+            const layerNodes = nodes.filter(n => n.layer === layerFilter);
+            return `<span class="layer-dot" style="background:${LAYER_COLORS[layerFilter]}"></span><strong>${layerFilter}</strong> layer: ${layerNodes.length} files<br>` +
+              layerNodes.slice(0, 20).map(n => `<code>${n.id}</code>`).join('<br>') +
+              (layerNodes.length > 20 ? `<br><span class="text-muted">...and ${layerNodes.length - 20} more</span>` : '');
+          }
+          const overview = ins.overview || {};
+          return `Layer distribution:<br>` +
+            (overview.layers || []).map(l => `<span class="layer-dot" style="background:${LAYER_COLORS[l.name] || '#ccc'}"></span><strong>${l.name}</strong>: ${l.file_count} files`).join('<br>');
+        }
+
+        case 'file_summary': {
+          const count = Object.keys(SUMMARIES).length;
+          if (count === 0) return 'No file summaries available. Run <code>/canon:dashboard</code> to generate summaries.';
+          return `<strong>${count}</strong> file summaries available. Mention a specific file to see its summary.`;
+        }
+
+        default: {
+          const overview = ins.overview || {};
+          return `<strong>Codebase Overview</strong><br>
+            Files: <strong>${overview.total_files || 0}</strong><br>
+            Dependencies: <strong>${overview.total_edges || 0}</strong><br>
+            Avg deps/file: <strong>${overview.avg_dependencies_per_file || 0}</strong><br>
+            Cycles: <strong>${(ins.circular_dependencies || []).length}</strong><br>
+            Layer violations: <strong>${(ins.layer_violations || []).length}</strong><br>
+            Orphan files: <strong>${(ins.orphan_files || []).length}</strong><br>
+            Summaries: <strong>${Object.keys(SUMMARIES).length}</strong><br><br>
+            <span class="text-muted">Try asking about specific files, layers, cycles, or dependencies.</span>`;
+        }
+      }
+    }
+
+    function findMentionedFile(question, nodes) {
+      const q = question.toLowerCase();
+      for (const node of nodes) {
+        if (q.includes(node.id.toLowerCase())) return node.id;
+      }
+      for (const node of nodes) {
+        const basename = (node.id.split('/').pop() || '').toLowerCase();
+        if (basename && basename.length > 3 && q.includes(basename.replace(/\.[^.]+$/, ''))) return node.id;
+      }
+      return null;
+    }
+
     // ── PR Review view ──
     function renderPrReview(container) {
       container.innerHTML = `
@@ -605,10 +991,12 @@
       `;
     }
 
-    // ── Init ──
-    initSidebar();
-    const hash = window.location.hash.replace('#', '');
-    loadView(VIEWS[hash] ? hash : 'graph');
+    // ── Init — DOMContentLoaded fires AFTER all defer scripts (d3) have loaded ──
+    document.addEventListener('DOMContentLoaded', () => {
+      initSidebar();
+      const hash = window.location.hash.replace('#', '');
+      loadView(VIEWS[hash] ? hash : 'graph');
+    });
   </script>
 </body>
 </html>
