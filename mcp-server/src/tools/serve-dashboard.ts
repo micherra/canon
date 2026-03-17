@@ -83,8 +83,11 @@ function askClaude(question: string, graphContext: string, projectDir: string): 
   return new Promise((resolve) => {
     const systemPrompt = [
       "You are an expert on this codebase. Answer questions about the architecture, files, dependencies, and patterns.",
+      "The user is asking from a codebase visualization dashboard. Treat short queries as questions about the codebase.",
+      "For example, 'Layer violations' means 'What are the layer violations in this codebase?'",
       "Be concise but thorough. Reference specific file names when relevant.",
       "Use markdown formatting: **bold** for file names, `code` for code terms, bullet lists for multiple items.",
+      "IMPORTANT: Answer directly using ONLY the codebase context below. Do NOT use any tools.",
       "",
       "Here is the codebase context:",
       graphContext,
@@ -93,7 +96,7 @@ function askClaude(question: string, graphContext: string, projectDir: string): 
     const proc = spawn("claude", [
       "--print",
       "--system-prompt", systemPrompt,
-      "--tools", "",
+      "--max-turns", "1",
       "--model", "claude-haiku-4-5-20251001",
       question,
     ], {
@@ -110,10 +113,14 @@ function askClaude(question: string, graphContext: string, projectDir: string): 
     proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
 
     proc.on("close", (code) => {
-      if (code === 0 && stdout.trim()) {
-        resolve(stdout.trim());
+      const out = stdout.trim();
+      const err = stderr.trim();
+      if (out) {
+        resolve(out);
+      } else if (code === 0) {
+        resolve(err || "No response generated. Try rephrasing your question.");
       } else {
-        resolve(`Error calling Claude CLI (exit ${code}): ${stderr.trim() || "unknown error"}`);
+        resolve(`Error (exit ${code}): ${err || "Unknown error. Try again."}`);
       }
     });
 
