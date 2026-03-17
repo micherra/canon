@@ -184,20 +184,6 @@
     .file-list { list-style: none; }
     .file-list li { padding: 4px 0; font-size: 13px; color: var(--text-muted); }
 
-    /* Insights */
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-    .stat-card { background: var(--bg-surface); border-radius: 8px; padding: 16px; text-align: center; }
-    .stat-value { font-size: 28px; font-weight: 700; color: var(--text-bright); }
-    .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
-    .insight-section { margin-bottom: 24px; }
-    .insight-section h3 { font-size: 14px; color: var(--text-bright); margin-bottom: 12px; }
-    .cycle-chain {
-      background: var(--bg-surface); border-radius: 6px; padding: 10px 14px;
-      margin-bottom: 6px; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    }
-    .cycle-arrow { color: var(--danger); font-weight: 700; }
-    .cycle-file { color: var(--text-bright); }
-
     /* Utility */
     .empty-state { color: var(--text-muted); font-style: italic; padding: 40px; text-align: center; }
     .empty-state code { background: var(--bg-card); padding: 2px 6px; border-radius: 3px; }
@@ -300,7 +286,6 @@
     // ── Sidebar ──
     const NAV_ITEMS = [
       { id: 'graph', label: 'Codebase Graph', icon: '\u25C9' },
-      { id: 'insights', label: 'Insights', icon: '\u2261' },
       { id: 'pr-review', label: 'PR Review', icon: '\u2398' },
     ];
 
@@ -333,7 +318,7 @@
     }
 
     // ── View router ──
-    const VIEWS = { graph: renderGraph, insights: renderInsights, 'pr-review': renderPrReview };
+    const VIEWS = { graph: renderGraph, 'pr-review': renderPrReview };
 
     function loadView(viewId) {
       const main = document.getElementById('main-content');
@@ -602,133 +587,6 @@
         <div class="detail-field"><label>Changed</label>${node.changed ? '<span class="text-info">Yes</span>' : '<span class="text-muted">No</span>'}</div>
         ${node.summary ? `<div class="detail-field"><label>Summary</label><div class="file-summary">${node.summary}</div></div>` : '<div class="detail-field"><label>Summary</label><span class="text-muted">Run <code>/canon:dashboard</code> to generate</span></div>'}
       `;
-    }
-
-    // ── Insights view ──
-    function renderInsights(container) {
-      const data = DATA.graph;
-      if (!data || !data.insights) {
-        container.innerHTML = '<p class="empty-state">No insights data. Run <code>/canon:graph</code> to generate the codebase graph first.</p>';
-        return;
-      }
-
-      const ins = data.insights;
-
-      container.innerHTML = `
-        <div class="view-header">
-          <h2>Codebase Insights</h2>
-          <div id="insights-search" class="filter-bar"></div>
-        </div>
-        <div id="insights-content"></div>
-      `;
-
-      let searchQuery = '';
-      createSearchFilter(container.querySelector('#insights-search'), 'Filter by file path...', (q) => { searchQuery = q; doRender(); });
-
-      function doRender() {
-        const content = container.querySelector('#insights-content');
-        const q = searchQuery.toLowerCase();
-
-        // Overview stats
-        const overview = ins.overview || {};
-        let html = `
-          <div class="stat-grid">
-            <div class="stat-card"><div class="stat-value">${overview.total_files || 0}</div><div class="stat-label">Files</div></div>
-            <div class="stat-card"><div class="stat-value">${overview.total_edges || 0}</div><div class="stat-label">Dependencies</div></div>
-            <div class="stat-card"><div class="stat-value">${overview.avg_dependencies_per_file || 0}</div><div class="stat-label">Avg Deps/File</div></div>
-            <div class="stat-card"><div class="stat-value">${(ins.circular_dependencies || []).length}</div><div class="stat-label">Cycles</div></div>
-            <div class="stat-card"><div class="stat-value">${(ins.layer_violations || []).length}</div><div class="stat-label">Layer Violations</div></div>
-            <div class="stat-card"><div class="stat-value">${(ins.orphan_files || []).length}</div><div class="stat-label">Orphan Files</div></div>
-          </div>
-        `;
-
-        // Most connected
-        const connected = (ins.most_connected || []).filter(n => !q || n.path.toLowerCase().includes(q));
-        if (connected.length > 0) {
-          html += `
-            <div class="insight-section">
-              <h3>Most Connected Files</h3>
-              <table class="data-table">
-                <thead><tr><th>File</th><th>Imports</th><th>Imported By</th><th>Total</th></tr></thead>
-                <tbody>
-                  ${connected.map(n => `<tr><td>${n.path}</td><td>${n.out_degree}</td><td>${n.in_degree}</td><td><strong>${n.total}</strong></td></tr>`).join('')}
-                </tbody>
-              </table>
-            </div>
-          `;
-        }
-
-        // Circular dependencies
-        const cycles = (ins.circular_dependencies || []).filter(c => !q || c.some(f => f.toLowerCase().includes(q)));
-        if (cycles.length > 0) {
-          html += `
-            <div class="insight-section">
-              <h3>Circular Dependencies</h3>
-              ${cycles.map(cycle => `
-                <div class="cycle-chain">
-                  ${cycle.map((f, i) => `<span class="cycle-file">${f}</span>${i < cycle.length - 1 ? '<span class="cycle-arrow">\u2192</span>' : ''}`).join('')}
-                  <span class="cycle-arrow">\u2192</span>
-                  <span class="cycle-file">${cycle[0]}</span>
-                </div>
-              `).join('')}
-            </div>
-          `;
-        }
-
-        // Layer violations
-        const violations = (ins.layer_violations || []).filter(v => !q || v.source.toLowerCase().includes(q) || v.target.toLowerCase().includes(q));
-        if (violations.length > 0) {
-          html += `
-            <div class="insight-section">
-              <h3>Layer Violations</h3>
-              <table class="data-table">
-                <thead><tr><th>Source</th><th>Source Layer</th><th></th><th>Target</th><th>Target Layer</th></tr></thead>
-                <tbody>
-                  ${violations.map(v => `
-                    <tr class="violation-row">
-                      <td>${v.source}</td>
-                      <td><span class="layer-dot" style="background:${LAYER_COLORS[v.source_layer] || '#ccc'}"></span>${v.source_layer}</td>
-                      <td class="text-danger">\u2192</td>
-                      <td>${v.target}</td>
-                      <td><span class="layer-dot" style="background:${LAYER_COLORS[v.target_layer] || '#ccc'}"></span>${v.target_layer}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          `;
-        }
-
-        // Orphan files
-        const orphans = (ins.orphan_files || []).filter(f => !q || f.toLowerCase().includes(q));
-        if (orphans.length > 0) {
-          html += `
-            <div class="insight-section">
-              <h3>Orphan Files (No Connections)</h3>
-              <ul class="file-list">${orphans.map(f => `<li>${f}</li>`).join('')}</ul>
-            </div>
-          `;
-        }
-
-        // Layers breakdown
-        if (overview.layers?.length > 0) {
-          html += `
-            <div class="insight-section">
-              <h3>Layer Distribution</h3>
-              <table class="data-table">
-                <thead><tr><th>Layer</th><th>Files</th></tr></thead>
-                <tbody>
-                  ${overview.layers.map(l => `<tr><td><span class="layer-dot" style="background:${LAYER_COLORS[l.name] || '#ccc'}"></span>${l.name}</td><td>${l.file_count}</td></tr>`).join('')}
-                </tbody>
-              </table>
-            </div>
-          `;
-        }
-
-        content.innerHTML = html;
-      }
-
-      doRender();
     }
 
     // ── Ask Codebase panel (integrated into graph view) ──
