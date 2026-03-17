@@ -36,8 +36,9 @@ export async function loadSummariesFile(
       }
     }
     return result;
-  } catch {
-    return {};
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw err;
   }
 }
 

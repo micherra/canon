@@ -30,8 +30,9 @@ async function loadGraphData(projectDir: string): Promise<GraphData | null> {
   try {
     const raw = await readFile(join(projectDir, ".canon", "graph-data.json"), "utf-8");
     return JSON.parse(raw);
-  } catch {
-    return null;
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
   }
 }
 

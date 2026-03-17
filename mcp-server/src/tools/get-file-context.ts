@@ -65,17 +65,20 @@ export async function getFileContext(
     const raw = await readFile(absPath, "utf-8");
     const lines = raw.split("\n");
     content = lines.length > 200 ? lines.slice(0, 200).join("\n") + "\n... (truncated)" : raw;
-  } catch {
-    return {
-      file_path: filePath,
-      layer: inferLayer(filePath) || "unknown",
-      content: "",
-      imports: [],
-      imported_by: [],
-      exports: [],
-      violation_count: 0,
-      last_verdict: null,
-    };
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      return {
+        file_path: filePath,
+        layer: inferLayer(filePath) || "unknown",
+        content: "",
+        imports: [],
+        imported_by: [],
+        exports: [],
+        violation_count: 0,
+        last_verdict: null,
+      };
+    }
+    throw err;
   }
 
   // Infer layer
@@ -124,8 +127,9 @@ export async function getFileContext(
           break;
         }
       }
-    } catch {
-      // skip unreadable
+    } catch (err: unknown) {
+      if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw err;
     }
   }
 

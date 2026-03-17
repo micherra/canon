@@ -303,8 +303,9 @@ export async function loadFlows(
           flow.name = flow.name || name;
           flows.push(flow);
         }
-      } catch {
-        // skip unparseable files
+      } catch (err: unknown) {
+        if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw err;
       }
     }
   }

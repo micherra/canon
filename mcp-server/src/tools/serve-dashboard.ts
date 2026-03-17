@@ -112,8 +112,11 @@ async function buildGraphContext(projectDir: string): Promise<string> {
     }
 
     return lines.join("\n");
-  } catch {
-    return "No codebase graph data available.";
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      return "No codebase graph data available.";
+    }
+    throw err;
   }
 }
 

@@ -101,8 +101,8 @@ async function collectPrReviews(canonDir: string): Promise<Record<string, unknow
         if (reviewData) prReviews[entry.name] = reviewData;
       }
     }
-  } catch {
-    // pr-reviews dir may not exist yet
+  } catch (err: unknown) {
+    if (!(err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT")) throw err;
   }
   return prReviews;
 }
