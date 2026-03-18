@@ -76,7 +76,7 @@ export class DashboardPanel {
       }
       case "getFile": {
         const filePath = msg.path as string;
-        if (!filePath || filePath.startsWith("..") || path.isAbsolute(filePath)) {
+        if (!isValidRelativePath(filePath, workspaceRoot)) {
           this.panel.webview.postMessage({ responseId: msg.id, error: "Invalid path" });
           break;
         }
@@ -201,7 +201,13 @@ export class DashboardPanel {
   }
 }
 
-function getNonce(): string {
+export function isValidRelativePath(filePath: string, workspaceRoot: string): boolean {
+  if (!filePath || filePath.startsWith("..") || path.isAbsolute(filePath)) return false;
+  const fullPath = path.resolve(workspaceRoot, filePath);
+  return fullPath.startsWith(workspaceRoot + path.sep) || fullPath === workspaceRoot;
+}
+
+export function getNonce(): string {
   let text = "";
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   for (let i = 0; i < 32; i++) {
