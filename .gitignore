@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.js.map
 .DS_Store
+cursor-extension/media/dashboard.js
 .idea/
 .claude/
 

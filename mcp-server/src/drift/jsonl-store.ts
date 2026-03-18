@@ -2,6 +2,7 @@
 
 import { readFile, writeFile, appendFile, mkdir } from "fs/promises";
 import { dirname } from "path";
+import { isNotFound } from "../utils/errors.js";
 
 const MAX_ENTRIES = 500;
 
@@ -16,7 +17,7 @@ export async function readJsonl<T>(filePath: string): Promise<T[]> {
     content = await readFile(filePath, "utf-8");
   } catch (err: unknown) {
     // File not existing is expected for new stores — return empty
-    if (isNodeError(err) && err.code === "ENOENT") return [];
+    if (isNotFound(err)) return [];
     // Permission denied, I/O errors, etc. — surface the failure
     throw err;
   }
@@ -46,7 +47,7 @@ export async function rotateIfNeeded(filePath: string): Promise<void> {
   try {
     content = await readFile(filePath, "utf-8");
   } catch (err: unknown) {
-    if (isNodeError(err) && err.code === "ENOENT") return;
+    if (isNotFound(err)) return;
     throw err;
   }
 
@@ -63,6 +64,3 @@ export async function rotateIfNeeded(filePath: string): Promise<void> {
   await writeFile(filePath, keepLines.join("\n") + "\n", "utf-8");
 }
 
-function isNodeError(err: unknown): err is NodeJS.ErrnoException {
-  return err instanceof Error && "code" in err;
-}

@@ -8,6 +8,8 @@ import { extractExports } from "../graph/export-parser.js";
 import { inferLayer } from "../matcher.js";
 import { scanSourceFiles } from "../graph/scanner.js";
 import { DriftStore } from "../drift/store.js";
+import { loadSourceDirs } from "../utils/config.js";
+import { isNotFound } from "../utils/errors.js";
 
 export interface GetFileContextInput {
   file_path: string;
@@ -24,19 +26,6 @@ export interface FileContextOutput {
   last_verdict: string | null;
 }
 
-/** Read source_dirs from .canon/config.json if it exists */
-async function loadSourceDirs(projectDir: string): Promise<string[] | null> {
-  try {
-    const raw = await readFile(join(projectDir, ".canon", "config.json"), "utf-8");
-    const config = JSON.parse(raw);
-    if (Array.isArray(config.source_dirs) && config.source_dirs.length > 0) {
-      return config.source_dirs;
-    }
-  } catch {
-    // no config or invalid
-  }
-  return null;
-}
 
 export async function getFileContext(
   input: GetFileContextInput,
@@ -66,7 +55,7 @@ export async function getFileContext(
     const lines = raw.split("\n");
     content = lines.length > 200 ? lines.slice(0, 200).join("\n") + "\n... (truncated)" : raw;
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isNotFound(err)) {
       return {
         file_path: filePath,
         layer: inferLayer(filePath) || "unknown",

@@ -13,7 +13,6 @@ import { getPrReviewData } from "./tools/pr-review-data.js";
 import { codebaseGraph } from "./tools/codebase-graph.js";
 import { getFileContext } from "./tools/get-file-context.js";
 import { storeSummaries } from "./tools/store-summaries.js";
-import { askCodebase } from "./tools/ask-codebase.js";
 
 import { getDashboardSelection } from "./tools/get-dashboard-selection.js";
 import { reportInputSchema } from "./schema.js";
@@ -167,7 +166,7 @@ server.tool(
 // Tool: codebase_graph
 server.tool(
   "codebase_graph",
-  "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, hotspots, insights). Use ask_codebase to query the full graph.",
+  "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, hotspots, insights).",
   {
     root_dir: z.string().optional().describe("Fallback root directory to scan when no source_dirs are configured. Ignored if source_dirs exist in input or .canon/config.json."),
     source_dirs: z.array(z.string()).optional().describe("Directories to scan (e.g. ['src', 'lib']). Overrides .canon/config.json source_dirs."),
@@ -228,27 +227,11 @@ server.tool(
   }
 );
 
-// Tool: ask_codebase
-server.tool(
-  "ask_codebase",
-  "Query the codebase graph for architectural insights. Returns structured data about dependencies, layers, cycles, hotspots, and file summaries. Claude reasons over the data to answer user questions conversationally.",
-  {
-    question: z.string().describe("Natural language question about the codebase architecture"),
-    file_path: z.string().optional().describe("Focus analysis on a specific file"),
-    layer: z.string().optional().describe("Focus analysis on a specific layer"),
-  },
-  async (input) => {
-    const result = await askCodebase(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
 
 // Tool: get_dashboard_selection
 server.tool(
   "get_dashboard_selection",
-  "Returns the currently selected node from the Canon dashboard VS Code/Cursor extension. Call this to get context about what file the user is looking at in the codebase graph. Returns the node's layer, summary, dependencies, dependents, and a content preview.",
+  "Returns the user's current focus from the Canon dashboard — the selected graph node AND the active editor file with matched principles. Call this at the start of a conversation to understand what the user is working on. Returns layer, summary, dependencies, dependents, content preview, and top 3 principles for the active file.",
   {},
   async () => {
     const result = await getDashboardSelection(projectDir);

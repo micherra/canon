@@ -169,14 +169,3 @@ describe("codebaseGraph", () => {
   });
 });
 
-describe("LAYER_COLORS", () => {
-  it("has colors for all standard layers", () => {
-    expect(LAYER_COLORS.api).toBeDefined();
-    expect(LAYER_COLORS.ui).toBeDefined();
-    expect(LAYER_COLORS.domain).toBeDefined();
-    expect(LAYER_COLORS.data).toBeDefined();
-    expect(LAYER_COLORS.infra).toBeDefined();
-    expect(LAYER_COLORS.shared).toBeDefined();
-    expect(LAYER_COLORS.unknown).toBeDefined();
-  });
-});

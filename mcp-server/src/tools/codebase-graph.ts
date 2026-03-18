@@ -6,6 +6,8 @@ import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } fro
 import { inferLayer } from "../matcher.js";
 import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
+import { loadSourceDirs } from "../utils/config.js";
+import { isNotFound } from "../utils/errors.js";
 
 export const LAYER_COLORS: Record<string, string> = {
   api: "#4A90D9",
@@ -67,19 +69,6 @@ async function loadPathAliases(projectDir: string): Promise<PathAlias[]> {
   return [];
 }
 
-/** Read source_dirs from .canon/config.json if it exists */
-async function loadSourceDirs(projectDir: string): Promise<string[] | null> {
-  try {
-    const raw = await readFile(join(projectDir, ".canon", "config.json"), "utf-8");
-    const config = JSON.parse(raw);
-    if (Array.isArray(config.source_dirs) && config.source_dirs.length > 0) {
-      return config.source_dirs;
-    }
-  } catch {
-    // no config or invalid
-  }
-  return null;
-}
 
 /** Get the current git branch name */
 function gitCurrentBranch(cwd: string): Promise<string | null> {
@@ -239,7 +228,7 @@ export async function codebaseGraph(
         }
       }
     } catch (err: unknown) {
-      if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      if (isNotFound(err)) continue;
       throw err;
     }
   }

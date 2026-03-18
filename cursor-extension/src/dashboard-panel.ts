@@ -132,8 +132,8 @@ export class DashboardPanel {
       }
     }
 
-    // Read the pre-adapted template bundled with the extension
-    const templatePath = path.join(this.extensionUri.fsPath, "media", "dashboard-template.html");
+    // Read the HTML shell bundled with the extension
+    const templatePath = path.join(this.extensionUri.fsPath, "media", "dashboard.html");
     if (!fs.existsSync(templatePath)) {
       return `<html><body><h2>No dashboard template found</h2><p>Extension is missing the dashboard template.</p></body></html>`;
     }
@@ -145,8 +145,10 @@ export class DashboardPanel {
     // Replace resource URI placeholders
     const d3Uri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "d3.v7.min.js"));
     const markedUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "marked.min.js"));
+    const dashboardJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "dashboard.js"));
     html = html.replace("__D3_URI__", d3Uri.toString());
     html = html.replace("__MARKED_URI__", markedUri.toString());
+    html = html.replace("__DASHBOARD_JS_URI__", dashboardJsUri.toString());
 
     // Inject graph data
     html = html.replace("__CANON_GRAPH_DATA__", graphData);

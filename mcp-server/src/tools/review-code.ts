@@ -1,6 +1,5 @@
-import { readFile } from "fs/promises";
-import { join } from "path";
 import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
+import { loadConfigNumber } from "../utils/config.js";
 
 export interface ReviewCodeInput {
   code: string;
@@ -25,17 +24,8 @@ export interface ReviewCodeOutput {
 
 const DEFAULT_MAX_REVIEW_PRINCIPLES = 15;
 
-async function loadMaxReviewPrinciples(projectDir: string): Promise<number> {
-  try {
-    const configPath = join(projectDir, ".canon", "config.json");
-    const raw = await readFile(configPath, "utf-8");
-    const config = JSON.parse(raw);
-    const value = Number(config?.review?.max_review_principles);
-    if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_REVIEW_PRINCIPLES;
-    return Math.floor(value);
-  } catch {
-    return DEFAULT_MAX_REVIEW_PRINCIPLES;
-  }
+function loadMaxReviewPrinciples(projectDir: string): Promise<number> {
+  return loadConfigNumber(projectDir, "review.max_review_principles", DEFAULT_MAX_REVIEW_PRINCIPLES);
 }
 
 export async function reviewCode(

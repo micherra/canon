@@ -82,32 +82,6 @@ export type RalphLoopEntry = {
   team: string[];
 };
 
-// --- Orchestration events: emitted during flow/ralph execution ---
-
-export type OrchestrationEventType =
-  | "flow_start"
-  | "flow_end"
-  | "phase_start"
-  | "phase_end"
-  | "agent_spawn"
-  | "agent_complete"
-  | "agent_blocked"
-  | "loop_iteration"
-  | "loop_end"
-  | "verdict";
-
-export type OrchestrationEvent = {
-  event_id: string;
-  timestamp: string;
-  event_type: OrchestrationEventType;
-  task_slug?: string;
-  agent_name?: string;
-  phase?: string;
-  status?: string;
-  iteration?: number;
-  details?: Record<string, unknown>;
-};
-
 // --- PR Review entry: tracks per-PR review history ---
 
 export type PrReviewEntry = {
@@ -122,29 +96,4 @@ export type PrReviewEntry = {
   honored: string[];
   score: ReviewEntry["score"];
   file_priorities?: Array<{ path: string; priority_score: number }>;
-};
-
-// --- Flow types ---
-
-export type FlowStepDefinition = {
-  id: string;
-  agent?: string;
-  command?: string;
-  input?: string;
-  parallel?: string[];
-  parallel_per?: string;
-  wave?: boolean;
-  loop_until?: string;
-  on_violation?: FlowStepDefinition[];
-  on_failure?: FlowStepDefinition[];
-  goto?: string;
-  max_iterations?: number;
-  passthrough_flags?: boolean;
-};
-
-export type FlowDefinition = {
-  name: string;
-  description: string;
-  max_iterations?: number;
-  steps: FlowStepDefinition[];
 };
