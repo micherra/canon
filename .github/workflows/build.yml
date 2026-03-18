@@ -1,0 +1,37 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        required: true
+        type: string
+        description: "Package directory (e.g. mcp-server, cursor-extension)"
+    outputs:
+      success:
+        description: "Whether the build succeeded"
+        value: ${{ jobs.build.result == 'success' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ inputs.package }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.package }}
+        run: npm ci
+
+      - name: Build
+        working-directory: ${{ inputs.package }}
+        run: npm run build
+
+      - name: Test
+        working-directory: ${{ inputs.package }}
+        run: npm test --if-present

@@ -10,32 +10,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  # --- MCP Server ---
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: mcp-server/package-lock.json
-
-      - name: Install dependencies
-        working-directory: mcp-server
-        run: npm ci
-
-      - name: Build
-        working-directory: mcp-server
-        run: npm run build
-
-      - name: Test
-        working-directory: mcp-server
-        run: npm test
-
+  # --- MCP Server release ---
   release:
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -55,7 +31,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: semantic-release
 
-  # --- VS Code Extension ---
+  # --- Extension release (only when extension files changed) ---
   changes:
     runs-on: ubuntu-latest
     outputs:
