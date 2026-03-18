@@ -5,6 +5,7 @@ export interface GraphNode {
   id: string;
   layer: string;
   violation_count: number;
+  changed?: boolean;
   summary?: string;
   exports?: string[];
 }
