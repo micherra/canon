@@ -61,6 +61,7 @@ export function buildD3Graph(
 ): GraphApi {
   let graphState: GraphState | null = null;
   let focusedNodeId: string | null = null;
+  let lastFilters: FilterOptions | null = null;
 
   if (typeof d3 === "undefined") {
     canvas.innerHTML = `
@@ -271,6 +272,7 @@ export function buildD3Graph(
 
   function applyFilters(f: FilterOptions) {
     if (!graphState) return;
+    lastFilters = f;
     const activeLayerSet = f.activeLayers;
     const parsed = f.parsedSearch;
     const q = (parsed.textQuery || "").toLowerCase();
@@ -420,7 +422,12 @@ export function buildD3Graph(
   function unfocusNode() {
     focusedNodeId = null;
     if (!graphState) return;
+    // Reset link styles
     graphState.linkSelection.attr("stroke", "#8899bb").attr("stroke-width", 1.2);
+    // Re-apply filters to restore node opacity, radius, fill, stroke, labels, rings
+    if (lastFilters) {
+      applyFilters(lastFilters);
+    }
   }
 
   function zoomToNode(nodeId: string): GraphNode | null {
@@ -454,6 +461,9 @@ export function buildD3Graph(
   function clearHighlight() {
     if (!graphState) return;
     graphState.nodeSelection.classed("insight-glow", false);
+    if (lastFilters) {
+      applyFilters(lastFilters);
+    }
   }
 
   return {

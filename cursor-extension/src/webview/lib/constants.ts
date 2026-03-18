@@ -31,6 +31,16 @@ export function truncate(text: string, maxLen: number): string {
   return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
 }
 
+/** Short descriptions for known violation rules, used in tooltips. */
+export const RULE_DESCRIPTIONS: Record<string, string> = {
+  "imports-across-layers": "A file imports directly from a layer it should not depend on, violating the project's layered architecture boundaries.",
+};
+
+/** Get a human-readable description for a violation rule ID. */
+export function getRuleDescription(ruleId: string): string {
+  return RULE_DESCRIPTIONS[ruleId] || ruleId;
+}
+
 export const LAYER_CENTRALITY: Record<string, number> = {
   shared: 3,
   domain: 2,
