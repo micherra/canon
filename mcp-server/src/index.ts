@@ -14,7 +14,8 @@ import { codebaseGraph } from "./tools/codebase-graph.js";
 import { getFileContext } from "./tools/get-file-context.js";
 import { storeSummaries } from "./tools/store-summaries.js";
 import { askCodebase } from "./tools/ask-codebase.js";
-import { serveDashboard } from "./tools/serve-dashboard.js";
+
+import { getDashboardSelection } from "./tools/get-dashboard-selection.js";
 import { reportInputSchema } from "./schema.js";
 
 import { resolve } from "path";
@@ -148,7 +149,7 @@ server.tool(
 // Tool: get_pr_review_data
 server.tool(
   "get_pr_review_data",
-  "Get PR review data — file list, layer grouping, and diff command for a pull request or branch review.",
+  "Get PR review data — file list, layer grouping, diff command, and graph-aware review priority for a pull request or branch review.",
   {
     pr_number: z.number().optional().describe("GitHub PR number"),
     branch: z.string().optional().describe("Branch name to review"),
@@ -193,18 +194,6 @@ server.tool(
   }
 );
 
-// Tool: deploy_dashboard (alias for serve_dashboard)
-server.tool(
-  "deploy_dashboard",
-  "Deploy and serve the Canon dashboard with live codebase access. Generates a fresh graph, builds the HTML, starts a local HTTP server, and returns the URL. IMPORTANT: If unsummarized_files is non-empty, you MUST read each file with get_file_context, generate a one-sentence summary of the file's role, then call store_summaries with all summaries. After storing, call deploy_dashboard again to embed the summaries.",
-  {},
-  async () => {
-    const result = await serveDashboard(projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
 
 // Tool: get_file_context
 server.tool(
@@ -250,6 +239,19 @@ server.tool(
   },
   async (input) => {
     const result = await askCodebase(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: get_dashboard_selection
+server.tool(
+  "get_dashboard_selection",
+  "Returns the currently selected node from the Canon dashboard VS Code/Cursor extension. Call this to get context about what file the user is looking at in the codebase graph. Returns the node's layer, summary, dependencies, dependents, and a content preview.",
+  {},
+  async () => {
+    const result = await getDashboardSelection(projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

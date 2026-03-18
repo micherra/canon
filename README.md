@@ -196,6 +196,12 @@ canon/
 │       ├── tools/       Individual tool implementations
 │       ├── drift/       Store, analyzer, reporter
 │       └── __tests__/   Tests
+├── cursor-extension/    VS Code / Cursor extension (Canon Dashboard)
+│   └── src/
+│       ├── extension.ts       Extension activation, active file tracking
+│       ├── dashboard-panel.ts Webview panel, message handling, file watching
+│       ├── services/          Graph data loading, git integration
+│       └── __tests__/         Tests
 └── skills/canon/        Skill definition + references
 ```
 

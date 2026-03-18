@@ -1,0 +1,54 @@
+{
+  "name": "canon-dashboard",
+  "displayName": "Canon Dashboard",
+  "description": "Engineering principles-as-code dashboard — visualize your codebase graph and feed context into Cursor's AI chat",
+  "version": "0.1.0",
+  "publisher": "canon",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "activationEvents": [
+    "workspaceContains:.canon"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "canon.openDashboard",
+        "title": "Canon: Open Dashboard"
+      },
+      {
+        "command": "canon.refreshGraph",
+        "title": "Canon: Refresh Graph",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "activeWebviewPanelId == canonDashboard",
+          "command": "canon.refreshGraph",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "package": "vsce package",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  }
+}

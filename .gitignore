@@ -2,8 +2,8 @@ node_modules/
 dist/
 *.js.map
 .DS_Store
-.claude/settings.local.json
-.claude/plans/
+.idea/
+.claude/
 
 # Canon local data (generated per-project)
 .canon/reviews.jsonl
