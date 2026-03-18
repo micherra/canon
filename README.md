@@ -300,6 +300,10 @@ In `.canon/config.json`:
 
 Run `/canon:doctor` to check for context bloat issues.
 
+## Privacy
+
+Canon does not collect, transmit, or share any data. There is no telemetry, no analytics, and no network calls to external services. All data — principles, reviews, decisions, and patterns — is stored locally in your project's `.canon/` directory and never leaves your machine.
+
 ## Data Files
 
 All Canon data lives in `.canon/` in your project root:
