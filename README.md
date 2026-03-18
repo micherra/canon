@@ -282,10 +282,12 @@ As your project grows — more principles, more reviews, more conventions — Ca
 
 ### Configuration
 
-In `.canon/config.json`:
+All configuration lives in `.canon/config.json` in your project root. Every key is optional — Canon uses sensible defaults when a key is missing.
 
 ```json
 {
+  "source_dirs": ["src", "lib"],
+  "max_file_lines": 500,
   "review": {
     "max_principles_per_review": 10,
     "max_review_principles": 15
@@ -295,10 +297,12 @@ In `.canon/config.json`:
 
 | Key | Default | What it controls |
 |-----|---------|-----------------|
-| `review.max_principles_per_review` | 10 | Cap for `get_principles` (used during code generation) |
-| `review.max_review_principles` | 15 | Cap for `review_code` (used during reviews) |
+| `source_dirs` | — | Directories to scan for the codebase graph. When not set, tools require an explicit `source_dirs` or `root_dir` parameter. |
+| `max_file_lines` | 500 | Line threshold for the large file guard hook. Files exceeding this trigger a warning on write/edit. |
+| `review.max_principles_per_review` | 10 | Cap for `get_principles` (used during code generation). Rules are always included first. |
+| `review.max_review_principles` | 15 | Cap for `review_code` (used during reviews). Rules are never dropped — the total may exceed this cap when many rules match. |
 
-Run `/canon:doctor` to check for context bloat issues.
+Run `/canon:doctor` to check for configuration issues.
 
 ## Privacy
 
