@@ -121,6 +121,7 @@ export type PrReviewEntry = {
   violations: ReviewViolation[];
   honored: string[];
   score: ReviewEntry["score"];
+  file_priorities?: Array<{ path: string; priority_score: number }>;
 };
 
 // --- Flow types ---

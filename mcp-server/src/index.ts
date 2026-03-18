@@ -149,7 +149,7 @@ server.tool(
 // Tool: get_pr_review_data
 server.tool(
   "get_pr_review_data",
-  "Get PR review data — file list, layer grouping, and diff command for a pull request or branch review.",
+  "Get PR review data — file list, layer grouping, diff command, and graph-aware review priority for a pull request or branch review.",
   {
     pr_number: z.number().optional().describe("GitHub PR number"),
     branch: z.string().optional().describe("Branch name to review"),

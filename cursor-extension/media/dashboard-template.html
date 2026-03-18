@@ -916,21 +916,35 @@
             body: orphans.slice(0, 10).map(f => `<div class="insight-file" data-file="${escapeHtml(f)}">${escapeHtml(f.split('/').pop())}</div>`).join('')
           });
         }
-        // Changed files section
+        // Changed files section — sorted by review priority
         if (changedNodes.length > 0) {
-          // Batch-compute cascades for all changed files upfront
+          const LAYER_CENTRALITY = { shared: 3, domain: 2, data: 1.5, api: 1, infra: 1, ui: 0.5, unknown: 0 };
+          // Batch-compute cascades and priority scores upfront
           const cascadeCache = new Map();
+          const priorityCache = new Map();
           for (const n of changedNodes) {
             const cascade = computeCascade(n.id);
             cascadeCache.set(n.id, cascade.reduce((sum, level) => sum + level.size, 0));
+            const inDeg = (EDGE_IN.get(n.id) || []).length;
+            const score = (inDeg * 3) + ((n.violation_count || 0) * 2) + 1 + (LAYER_CENTRALITY[n.layer] || 0);
+            priorityCache.set(n.id, Math.round(score * 100) / 100);
           }
-          sections.push({ title: 'Changed Files', count: changedNodes.length, cls: '', type: 'changed',
-            body: changedNodes.map(n => {
+          // Sort by priority descending
+          const sorted = [...changedNodes].sort((a, b) => (priorityCache.get(b.id) || 0) - (priorityCache.get(a.id) || 0));
+          const topQuartileThreshold = sorted.length >= 4 ? priorityCache.get(sorted[Math.floor(sorted.length / 4)].id) : Infinity;
+          sections.push({ title: 'Changed Files', count: sorted.length, cls: '', type: 'changed',
+            body: sorted.map(n => {
               const deps = EDGE_IN.get(n.id) || [];
               const summary = SUMMARIES[n.id] || '';
               const totalAffected = cascadeCache.get(n.id) || 0;
+              const priority = priorityCache.get(n.id) || 0;
+              const isHighImpact = priority >= topQuartileThreshold && sorted.length >= 4;
               return `<div class="hotspot-item" style="border-left-color:var(--info)">
-                <div class="insight-file" data-file="${escapeHtml(n.id)}" style="font-size:12px;font-weight:600">${escapeHtml(n.id.split('/').pop())}</div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div class="insight-file" data-file="${escapeHtml(n.id)}" style="font-size:12px;font-weight:600;flex:1">${escapeHtml(n.id.split('/').pop())}</div>
+                  ${isHighImpact ? `<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--warning);color:#000;font-weight:600">HIGH IMPACT</span>` : ''}
+                  <span style="font-size:9px;padding:1px 4px;border-radius:3px;background:var(--bg-secondary);color:var(--text-muted);font-weight:600" title="Review priority score">${priority}</span>
+                </div>
                 <div style="display:flex;align-items:center;gap:6px;margin:2px 0">
                   <span class="layer-badge" style="background:${LAYER_COLORS[n.layer] || '#666'};font-size:9px;padding:1px 5px;border-radius:3px;color:white;font-weight:600">${n.layer}</span>
                   <span class="text-muted" style="font-size:10px">${deps.length} dependent${deps.length !== 1 ? 's' : ''}</span>
@@ -1446,8 +1460,15 @@
         g.attr('transform', event.transform);
         currentZoomK = event.transform.k;
         if (graphState) graphState.currentZoomK = currentZoomK;
-        // Show/hide labels based on zoom level
-        labelSelection.attr('opacity', d => currentZoomK > 1.3 ? 0.8 : 0);
+        // Show/hide labels based on zoom level — respect focused node state
+        if (focusedNodeId) {
+          const connected = new Set([focusedNodeId]);
+          for (const f of (EDGE_OUT.get(focusedNodeId) || [])) connected.add(f);
+          for (const f of (EDGE_IN.get(focusedNodeId) || [])) connected.add(f);
+          labelSelection.attr('opacity', d => connected.has(d.id) && currentZoomK > 0.8 ? 0.9 : 0);
+        } else {
+          labelSelection.attr('opacity', d => currentZoomK > 1.3 ? 0.8 : 0);
+        }
       });
       svg.call(zoom);
       svg.on('click', (event) => {
@@ -1685,6 +1706,13 @@
         ${importedBy.length > 0 ? `<div class="detail-field"><label>Imported By</label><div>${importedBy.map(f => `<span class="tag">${escapeHtml(basename(f))}</span>`).join('')}</div></div>` : ''}
         ${impactHtml}
         <div class="detail-field"><label>Violations</label><span class="${(node.violation_count || 0) > 0 ? 'text-danger' : ''}">${node.violation_count || 0}</span></div>
+        ${(() => {
+          const lv = (DATA.graph?.insights?.layer_violations || []).filter(v => v.source === node.id);
+          if (lv.length === 0) return '';
+          return `<div class="detail-field"><label>Layer Violations</label><div style="font-size:11px">${lv.map(v =>
+            `<div style="margin:2px 0;color:var(--warning)"><span class="layer-badge" style="background:${LAYER_COLORS[node.layer] || '#666'};font-size:9px;padding:1px 5px;border-radius:3px;color:white;font-weight:600">${escapeHtml(node.layer)}</span> → <span class="layer-badge" style="background:${LAYER_COLORS[v.target_layer] || '#666'};font-size:9px;padding:1px 5px;border-radius:3px;color:white;font-weight:600">${escapeHtml(v.target_layer)}</span> <span class="insight-file" data-file="${escapeHtml(v.target)}" style="cursor:pointer;text-decoration:underline">${escapeHtml(v.target.split('/').pop())}</span></div>`
+          ).join('')}</div></div>`;
+        })()}
         <div class="detail-field"><label>Last Verdict</label>${node.last_verdict ? verdictBadge(node.last_verdict) : '<span class="text-muted">No review</span>'}</div>
         <div class="detail-field"><label>Changed</label>${node.changed ? '<span class="text-info">Yes</span>' : '<span class="text-muted">No</span>'}</div>
         ${node.summary ? `<div class="detail-field"><label>Summary</label><div class="file-summary">${escapeHtml(node.summary)}</div></div>` : '<div class="detail-field"><label>Summary</label><span class="text-muted">Run <code>/canon:dashboard</code> to generate</span></div>'}

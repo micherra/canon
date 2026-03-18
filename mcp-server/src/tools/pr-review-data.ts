@@ -1,6 +1,9 @@
 import { randomBytes } from "crypto";
+import { readFile, stat } from "fs/promises";
+import { join } from "path";
 import { PrStore } from "../drift/pr-store.js";
 import type { PrReviewEntry } from "../schema.js";
+import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.js";
 
 export interface PrReviewDataInput {
   pr_number?: number;
@@ -22,6 +25,8 @@ export interface PrReviewDataOutput {
   incremental: boolean;
   last_reviewed_sha?: string;
   diff_command: string;
+  prioritized_files?: FilePriorityScore[];
+  graph_data_age_ms?: number;
 }
 
 /**
@@ -63,6 +68,24 @@ export async function getPrReviewData(
     }
   }
 
+  // Enrich with graph-aware priority scores if graph data exists
+  let prioritizedFiles: FilePriorityScore[] | undefined;
+  let graphDataAgeMs: number | undefined;
+  try {
+    const graphPath = join(projectDir, ".canon", "graph-data.json");
+    const [raw, graphStat] = await Promise.all([
+      readFile(graphPath, "utf-8"),
+      stat(graphPath),
+    ]);
+    graphDataAgeMs = Date.now() - graphStat.mtimeMs;
+    const graph = JSON.parse(raw);
+    if (Array.isArray(graph.nodes) && Array.isArray(graph.edges)) {
+      prioritizedFiles = computeFilePriorities(graph.nodes, graph.edges);
+    }
+  } catch {
+    // No graph data available — priority enrichment skipped
+  }
+
   // Note: actual file list is populated by the command layer which runs
   // the diff command. This tool returns the command and metadata.
   return {
@@ -72,6 +95,8 @@ export async function getPrReviewData(
     incremental: !!lastReviewedSha,
     last_reviewed_sha: lastReviewedSha,
     diff_command: diffCommand,
+    prioritized_files: prioritizedFiles,
+    graph_data_age_ms: graphDataAgeMs,
   };
 }
 
