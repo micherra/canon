@@ -35,7 +35,8 @@ export async function getFileContext(
 
   // Prevent path traversal outside the project directory
   const absPath = resolve(projectDir, filePath);
-  if (!absPath.startsWith(resolve(projectDir))) {
+  const projectRoot = resolve(projectDir) + "/";
+  if (absPath !== resolve(projectDir) && !absPath.startsWith(projectRoot)) {
     return {
       file_path: filePath,
       layer: "unknown",
@@ -125,17 +126,17 @@ export async function getFileContext(
   // Load compliance data
   let violation_count = 0;
   let last_verdict: string | null = null;
+  let lastReviewedAt: string | null = null;
   try {
     const store = new DriftStore(projectDir);
     const reviews = await store.getReviews();
     for (const review of reviews) {
       if (review.files.includes(filePath)) {
-        if (!last_verdict || review.timestamp > last_verdict) {
+        if (!lastReviewedAt || review.timestamp > lastReviewedAt) {
+          lastReviewedAt = review.timestamp;
           last_verdict = review.verdict;
         }
-        for (const v of review.violations) {
-          violation_count++;
-        }
+        violation_count += review.violations.length;
       }
     }
   } catch {

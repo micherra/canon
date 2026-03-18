@@ -131,11 +131,16 @@ export async function codebaseGraph(
     filePaths = allFiles.sort();
   } else if (input.root_dir) {
     // No source_dirs but explicit root_dir — scan that directory
-    const rootDir = input.root_dir === "." ? projectDir : input.root_dir;
-    filePaths = await scanSourceFiles(rootDir, {
+    // Normalize to project-relative paths so node IDs match file reads
+    const isAbsolute = input.root_dir.startsWith("/");
+    const rootDir = input.root_dir === "." || isAbsolute ? input.root_dir : join(projectDir, input.root_dir);
+    const scanned = await scanSourceFiles(rootDir, {
       includeExtensions: input.include_extensions,
       excludeDirs: input.exclude_dirs,
     });
+    // Prefix relative root_dir paths so they're project-relative (consistent with source_dirs behavior)
+    const prefix = (input.root_dir === "." || isAbsolute) ? "" : input.root_dir;
+    filePaths = prefix ? scanned.map((f) => join(prefix, f)) : scanned;
   } else {
     // No source_dirs configured and no root_dir — return empty graph
     filePaths = [];
@@ -163,11 +168,12 @@ export async function codebaseGraph(
 
   // Build per-file violation counts
   const fileViolations = new Map<string, Map<string, number>>();
-  const fileVerdicts = new Map<string, string>();
+  const fileVerdicts = new Map<string, { timestamp: string; verdict: string }>();
   for (const review of reviews) {
     for (const file of review.files) {
-      if (!fileVerdicts.has(file) || review.timestamp > (fileVerdicts.get(file) || "")) {
-        fileVerdicts.set(file, review.verdict);
+      const existing = fileVerdicts.get(file);
+      if (!existing || review.timestamp > existing.timestamp) {
+        fileVerdicts.set(file, { timestamp: review.timestamp, verdict: review.verdict });
       }
     }
     for (const v of review.violations) {
@@ -200,7 +206,7 @@ export async function codebaseGraph(
       color: LAYER_COLORS[layer] || LAYER_COLORS.unknown,
       extension: ext,
       violation_count: violationCount,
-      last_verdict: fileVerdicts.get(filePath) || null,
+      last_verdict: fileVerdicts.get(filePath)?.verdict || null,
       compliance_score: null,
       changed: changedSet.has(filePath),
     });

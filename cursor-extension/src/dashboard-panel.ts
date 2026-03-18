@@ -125,8 +125,10 @@ export class DashboardPanel {
         console.error("[Canon] Failed to load graph data:", err);
       }
       try {
-        const prPath = path.join(workspaceRoot, ".canon", "pr-reviews.json");
-        prReviews = fs.readFileSync(prPath, "utf-8");
+        const prPath = path.join(workspaceRoot, ".canon", "pr-reviews.jsonl");
+        const raw = fs.readFileSync(prPath, "utf-8");
+        const entries = raw.split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l));
+        prReviews = JSON.stringify(entries);
       } catch {
         // No PR reviews file — expected on first run
       }

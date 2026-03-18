@@ -1,4 +1,4 @@
-/** Shared JSONL store utilities — read, append, rotate with fail-closed error handling. */
+/** Shared JSONL store utilities — read, append, rotate. */
 
 import { readFile, writeFile, appendFile, mkdir } from "fs/promises";
 import { dirname } from "path";
@@ -8,8 +8,8 @@ const MAX_ENTRIES = 500;
 
 /**
  * Read a JSONL file into an array of parsed entries.
- * Returns entries for file-not-found (new store). Throws on permission errors
- * or corruption to surface real problems (fail-closed).
+ * Returns empty for file-not-found (new store). Throws on permission errors.
+ * Individual malformed lines are skipped to tolerate partial corruption.
  */
 export async function readJsonl<T>(filePath: string): Promise<T[]> {
   let content: string;

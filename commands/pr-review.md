@@ -31,7 +31,7 @@ gh pr diff {number} --name-only  # or git diff variant
 
 For each changed file, infer the architectural layer using file path patterns:
 - `/api|routes|controllers/` → api
-- `/components|pages|views/` → ui
+- `/app|components|pages|views/` → ui
 - `/services|domain|models/` → domain
 - `/db|data|repositories|prisma/` → data
 - `/infra|deploy|terraform|docker/` → infra
