@@ -1,0 +1,83 @@
+---
+name: feature
+description: Design, implement, test, and review — skip research
+tier: medium
+progress: ${WORKSPACE}/progress.md
+
+states:
+  design:
+    type: single
+    agent: canon-architect
+    template: [design-decision, session-context]
+    transitions:
+      done: implement
+      has_questions: hitl
+
+  implement:
+    type: wave
+    agent: canon-implementor
+    template: implementation-log
+    gate: test-suite
+    transitions:
+      done: test
+      blocked: hitl
+
+  test:
+    type: single
+    agent: canon-tester
+    max_iterations: 2
+    stuck_when: same_file_test
+    transitions:
+      all_passing: review
+      implementation_issue: fix-impl
+
+  fix-impl:
+    type: single
+    agent: canon-implementor
+    role: fix
+    template: implementation-log
+    transitions:
+      done: test
+
+  review:
+    type: single
+    agent: canon-reviewer
+    template: review-checklist
+    transitions:
+      clean: done
+      warning: done
+      blocking: fix-violations
+
+  fix-violations:
+    type: parallel-per
+    agent: canon-refactorer
+    iterate_on: violation_groups
+    max_iterations: 3
+    stuck_when: same_violations
+    transitions:
+      done: review
+      cannot_fix: hitl
+
+  done:
+    type: terminal
+---
+
+## Spawn Instructions
+
+### design
+Design the technical approach for: ${task}. Load relevant Canon principles. Save design to ${WORKSPACE}/plans/${slug}/DESIGN.md. Break the design into atomic task plans — save plans to ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md and index to ${WORKSPACE}/plans/${slug}/INDEX.md. Record design decisions to ${WORKSPACE}/decisions/ using the design-decision template at ${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md. Initialize ${WORKSPACE}/context.md using the session-context template at ${CLAUDE_PLUGIN_ROOT}/templates/session-context.md. Append log entries to ${WORKSPACE}/log.jsonl.
+
+### implement
+Execute the task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Load principles via the get_principles MCP tool with summary_only: true for each file you modify. Read project conventions at .canon/CONVENTIONS.md if it exists. Read task conventions at ${WORKSPACE}/plans/${slug}/CONVENTIONS.md if it exists. Read shared context at ${WORKSPACE}/context.md if it exists. Read referenced decisions from ${WORKSPACE}/decisions/ as listed in your plan's decisions: frontmatter. Read CLAUDE.md. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+
+### test
+Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true. Read task summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md — start with the Coverage Notes section. Read implementor test files. Save test report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md.
+
+### fix-impl
+Fix the implementation bug in ${item.file}. The test `${item.failing_test}` is failing because: ${item.root_cause}. Suggested fix: ${item.suggested_fix}. Read the failing test file to understand the expected behavior. Fix the source file to make the test pass without breaking other tests. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-FIX-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
+
+### review
+Review all code changes from this build. Use git diff to see changes. After completing your independent Stage 1 and Stage 2 review, perform the Stage 3 compliance cross-check by reading implementor summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save review to ${WORKSPACE}/plans/${slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl.
+
+### fix-violations
+Fix the Canon principle violation: ${item.principle_id} (${item.severity}) in ${item.file_path}. Detail: ${item.detail}. Load the violated principle in full. Refactor to comply while preserving behavior. Commit atomically.
