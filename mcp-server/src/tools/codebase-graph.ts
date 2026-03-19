@@ -1,6 +1,6 @@
 import { readFile, mkdir } from "fs/promises";
 import { atomicWriteFile } from "../utils/atomic-write.js";
-import { join } from "path";
+import { join, isAbsolute, posix } from "path";
 import { execFile } from "child_process";
 import { scanSourceFiles } from "../graph/scanner.js";
 import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
@@ -99,6 +99,11 @@ async function loadPathAliases(projectDir: string): Promise<PathAlias[]> {
   return [];
 }
 
+/** Normalize a path to forward slashes so it matches git output on all platforms. */
+function toPosix(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
 // ── Graph building steps ──
 
 /** Scan project directories and return sorted file paths. */
@@ -118,20 +123,23 @@ async function scanProjectFiles(
         includeExtensions: input.include_extensions,
         excludeDirs: input.exclude_dirs,
       });
-      for (const f of files) allFiles.push(join(dir, f));
+      for (const f of files) allFiles.push(toPosix(join(dir, f)));
     }
     return allFiles.sort();
   }
 
   if (input.root_dir) {
-    const isAbsolute = input.root_dir.startsWith("/");
-    const rootDir = input.root_dir === "." || isAbsolute ? input.root_dir : join(projectDir, input.root_dir);
+    const abs = isAbsolute(input.root_dir);
+    const rootDir = input.root_dir === "." || abs ? input.root_dir : join(projectDir, input.root_dir);
     const scanned = await scanSourceFiles(rootDir, {
       includeExtensions: input.include_extensions,
       excludeDirs: input.exclude_dirs,
     });
-    const prefix = (input.root_dir === "." || isAbsolute) ? "" : input.root_dir;
-    return prefix ? scanned.map((f) => join(prefix, f)) : scanned;
+    const prefix = (input.root_dir === "." || abs) ? "" : input.root_dir;
+    // Normalize to POSIX separators so paths match git output on all platforms
+    return prefix
+      ? scanned.map((f) => toPosix(join(prefix, f)))
+      : scanned.map(toPosix);
   }
 
   return [];

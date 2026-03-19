@@ -17,11 +17,12 @@ import { getDashboardSelection } from "./tools/get-dashboard-selection.js";
 import { reportInputSchema } from "./schema.js";
 
 import { resolve } from "path";
+import { fileURLToPath } from "url";
 
 // Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
 // Falls back to cwd which is typically set by Claude Code to the user's project root.
 const projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
-const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname);
+const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || fileURLToPath(new URL("../..", import.meta.url)));
 
 const server = new McpServer({
   name: "canon",

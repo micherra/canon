@@ -2,7 +2,102 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, readFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { reportInputSchema } from "../schema.js";
 import { report } from "../tools/report.js";
+
+// --- Schema validation ---
+
+describe("reportInputSchema", () => {
+  it("parses a valid decision input", () => {
+    const input = {
+      type: "decision" as const,
+      principle_id: "p1",
+      file_path: "src/foo.ts",
+      justification: "Legacy constraint",
+    };
+    expect(reportInputSchema.parse(input)).toEqual(input);
+  });
+
+  it("parses a decision with optional category", () => {
+    const input = {
+      type: "decision" as const,
+      principle_id: "p1",
+      file_path: "src/foo.ts",
+      justification: "Perf reasons",
+      category: "performance" as const,
+    };
+    expect(reportInputSchema.parse(input)).toEqual(input);
+  });
+
+  it("parses a valid pattern input", () => {
+    const input = {
+      type: "pattern" as const,
+      pattern: "Functions return early on error",
+      file_paths: ["src/a.ts"],
+    };
+    const parsed = reportInputSchema.parse(input);
+    expect(parsed.type).toBe("pattern");
+    if (parsed.type === "pattern") {
+      expect(parsed.file_paths).toEqual(["src/a.ts"]);
+    }
+  });
+
+  it("parses a valid review input", () => {
+    const input = {
+      type: "review" as const,
+      files: ["src/a.ts"],
+      violations: [{ principle_id: "p1", severity: "rule" }],
+      honored: ["p2"],
+      score: {
+        rules: { passed: 1, total: 2 },
+        opinions: { passed: 3, total: 3 },
+        conventions: { passed: 0, total: 0 },
+      },
+    };
+    expect(reportInputSchema.parse(input)).toEqual(input);
+  });
+
+  it("parses a review with optional file_path and impact_score on violations", () => {
+    const input = {
+      type: "review" as const,
+      files: ["src/a.ts"],
+      violations: [{ principle_id: "p1", severity: "rule", file_path: "src/a.ts", impact_score: 5.2 }],
+      honored: [],
+      score: {
+        rules: { passed: 0, total: 1 },
+        opinions: { passed: 0, total: 0 },
+        conventions: { passed: 0, total: 0 },
+      },
+    };
+    const parsed = reportInputSchema.parse(input);
+    if (parsed.type === "review") {
+      expect(parsed.violations[0].file_path).toBe("src/a.ts");
+      expect(parsed.violations[0].impact_score).toBe(5.2);
+    }
+  });
+
+  it("rejects input with missing required fields", () => {
+    expect(() =>
+      reportInputSchema.parse({ type: "decision", principle_id: "p1" })
+    ).toThrow();
+  });
+
+  it("rejects input with invalid type discriminant", () => {
+    expect(() =>
+      reportInputSchema.parse({ type: "unknown", foo: "bar" })
+    ).toThrow();
+  });
+
+  it("rejects pattern with empty file_paths array", () => {
+    expect(() =>
+      reportInputSchema.parse({
+        type: "pattern",
+        pattern: "something",
+        file_paths: [],
+      })
+    ).toThrow();
+  });
+});
 
 // --- report() integration with real temp directory ---
 

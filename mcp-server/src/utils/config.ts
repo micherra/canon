@@ -1,13 +1,19 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
 
-/** Read and parse .canon/config.json, returning null if missing or invalid. */
+/** Read and parse .canon/config.json, returning null if missing or unparseable. */
 async function loadCanonConfig(projectDir: string): Promise<Record<string, any> | null> {
+  let raw: string;
   try {
-    const raw = await readFile(join(projectDir, ".canon", "config.json"), "utf-8");
+    raw = await readFile(join(projectDir, ".canon", "config.json"), "utf-8");
+  } catch (err: any) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+  try {
     return JSON.parse(raw);
   } catch {
-    return null;
+    return null; // invalid JSON
   }
 }
 
@@ -41,7 +47,8 @@ export function buildLayerInferrer(mappings: LayerMappings): (filePath: string) 
   for (const [layer, dirs] of Object.entries(mappings)) {
     if (!Array.isArray(dirs) || dirs.length === 0) continue;
     const escaped = dirs.map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    const pattern = new RegExp(`(^|\\/)(${escaped.join("|")})(\\/|$)`);
+    // Match both '/' and '\\' separators so it works on Windows paths too
+    const pattern = new RegExp(`(^|[\\/\\\\])(${escaped.join("|")})([\\/\\\\]|$)`);
     compiled.push([pattern, layer]);
   }
   return (filePath: string) => {
