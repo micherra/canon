@@ -8,7 +8,6 @@ import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
 import { report } from "./tools/report.js";
-import { logRalph } from "./tools/log-ralph.js";
 import { getPrReviewData } from "./tools/pr-review-data.js";
 import { codebaseGraph } from "./tools/codebase-graph.js";
 import { getFileContext } from "./tools/get-file-context.js";
@@ -110,35 +109,6 @@ server.registerTool(
   },
   async (input) => {
     const result = await report(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
-// Tool: log_ralph
-server.tool(
-  "log_ralph",
-  "Log the completion of a Ralph loop — records iteration results, convergence status, and team composition for drift tracking.",
-  {
-    task_slug: z.string().describe("Slug of the task that was built"),
-    iterations: z
-      .array(
-        z.object({
-          iteration: z.number(),
-          verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]),
-          violations_count: z.number(),
-          violations_fixed: z.number(),
-          cannot_fix: z.number(),
-        })
-      )
-      .describe("Results for each iteration of the loop"),
-    final_verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).describe("Final verdict after all iterations"),
-    converged: z.boolean().describe("Whether the loop achieved CLEAN verdict"),
-    team: z.array(z.string()).describe("Agent names used in the loop"),
-  },
-  async (input) => {
-    const result = await logRalph(input, projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };
