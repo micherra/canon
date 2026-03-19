@@ -11,8 +11,3 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       package: mcp-server
-
-  extension:
-    uses: ./.github/workflows/build.yml
-    with:
-      package: cursor-extension
