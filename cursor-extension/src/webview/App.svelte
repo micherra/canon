@@ -21,6 +21,8 @@
   onMount(() => {
     loadEmbeddedData();
     bridge.init();
+    // Signal to extension that webview is ready to receive messages
+    bridge.request("webviewReady", {}).catch(() => {});
     mounted = true;
   });
 

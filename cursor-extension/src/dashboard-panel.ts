@@ -40,25 +40,79 @@ export class DashboardPanel {
     await this.update();
 
     if (!hasGraph) {
-      // No graph at all — generate graph + summaries
       this.runGraphGeneration();
-    } else if (workspaceRoot) {
-      // Graph exists — check if summaries are missing
-      this.runSummariesIfNeeded(workspaceRoot, graphPath!);
     }
+    // Summary check is deferred until webview sends "ready" message
   }
 
-  /** Check if graph nodes are missing summaries and generate them */
+  private summaryPollTimer?: ReturnType<typeof setInterval>;
+
+  /** Check if any graph files are missing from summaries and generate them */
   private async runSummariesIfNeeded(workspaceRoot: string, graphPath: string): Promise<void> {
     try {
-      const raw = await fs.promises.readFile(graphPath, "utf-8");
-      const data = JSON.parse(raw);
-      const nodes = data.nodes || [];
-      const missing = nodes.filter((n: any) => !n.summary);
+      const graphRaw = await fs.promises.readFile(graphPath, "utf-8");
+      const nodes = JSON.parse(graphRaw).nodes || [];
+      const fileIds = new Set(nodes.map((n: any) => n.id));
+      if (fileIds.size === 0) return;
+
+      const sumPath = path.join(workspaceRoot, ".canon", "summaries.json");
+      let existingSummaries = new Set<string>();
+      try {
+        const sumRaw = await fs.promises.readFile(sumPath, "utf-8");
+        existingSummaries = new Set(Object.keys(JSON.parse(sumRaw)));
+      } catch { /* no summaries file yet */ }
+
+      const missing = [...fileIds].filter((id) => !existingSummaries.has(id));
       if (missing.length > 0) {
+        const total = fileIds.size;
+        this.panel.webview.postMessage({
+          type: "summaryProgress",
+          completed: total - missing.length,
+          total,
+        });
         this.runSummaryGeneration();
+        this.startSummaryPolling(workspaceRoot, graphPath);
       }
     } catch { /* ignore parse errors */ }
+  }
+
+  /** Poll summaries.json to track progress during generation */
+  private startSummaryPolling(workspaceRoot: string, graphPath: string): void {
+    if (this.summaryPollTimer) clearInterval(this.summaryPollTimer);
+
+    this.summaryPollTimer = setInterval(() => {
+      try {
+        const graphRaw = fs.readFileSync(graphPath, "utf-8");
+        const total = (JSON.parse(graphRaw).nodes || []).length;
+        const sumPath = path.join(workspaceRoot, ".canon", "summaries.json");
+        const sumRaw = fs.readFileSync(sumPath, "utf-8");
+        const completed = Object.keys(JSON.parse(sumRaw)).length;
+
+        this.panel.webview.postMessage({
+          type: "summaryProgress",
+          completed,
+          total,
+        });
+
+        // Stop polling when done
+        if (completed >= total) {
+          clearInterval(this.summaryPollTimer!);
+          this.summaryPollTimer = undefined;
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+
+    // Stop after 10 minutes
+    setTimeout(() => {
+      if (this.summaryPollTimer) {
+        clearInterval(this.summaryPollTimer);
+        this.summaryPollTimer = undefined;
+      }
+    }, 600000);
+
+    this.disposables.push({ dispose: () => {
+      if (this.summaryPollTimer) clearInterval(this.summaryPollTimer);
+    }});
   }
 
   static createOrShow(context: vscode.ExtensionContext): void {
@@ -102,6 +156,14 @@ export class DashboardPanel {
     if (!workspaceRoot) return;
 
     switch (msg.type) {
+      case "webviewReady": {
+        // Webview is loaded — check if summaries need generating
+        const graphPath = path.join(workspaceRoot, ".canon", "graph-data.json");
+        if (fs.existsSync(graphPath)) {
+          this.runSummariesIfNeeded(workspaceRoot, graphPath);
+        }
+        break;
+      }
       case "getBranch": {
         const branch = await getCurrentBranch(workspaceRoot);
         this.panel.webview.postMessage({ responseId: msg.id, data: { branch } });
@@ -278,7 +340,7 @@ export class DashboardPanel {
   private runGraphGeneration(): void {
     const pf = this.getPluginFlag();
     const graphCmd = `claude ${pf}-p "Call the codebase_graph MCP tool with no arguments."`;
-    const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries in batches of 10 files at a time so progress is saved incrementally."`;
+    const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
 
     const term = this.getOrCreateTerminal();
     term.sendText(`${graphCmd} && ${summaryCmd}`);
@@ -287,7 +349,7 @@ export class DashboardPanel {
   /** Run only summary generation (graph already exists) */
   private runSummaryGeneration(): void {
     const pf = this.getPluginFlag();
-    const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries in batches of 10 files at a time so progress is saved incrementally."`;
+    const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
 
     const term = this.getOrCreateTerminal();
     term.sendText(summaryCmd);
