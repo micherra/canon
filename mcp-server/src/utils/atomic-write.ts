@@ -9,19 +9,7 @@ export async function atomicWriteFile(filePath: string, data: string): Promise<v
   const tmpPath = filePath + ".tmp." + process.pid;
   try {
     await writeFile(tmpPath, data, "utf-8");
-    try {
-      await rename(tmpPath, filePath);
-    } catch (renameErr: any) {
-      // On Windows, rename() fails with EPERM when dest exists — remove dest and retry
-      if (renameErr.code === "EPERM") {
-        try { await unlink(filePath); } catch (e: any) {
-          if (e.code !== "ENOENT") throw e;
-        }
-        await rename(tmpPath, filePath);
-      } else {
-        throw renameErr;
-      }
-    }
+    await rename(tmpPath, filePath);
   } catch (err) {
     // Clean up temp file on failure
     try { await unlink(tmpPath); } catch { /* ignore cleanup failure */ }

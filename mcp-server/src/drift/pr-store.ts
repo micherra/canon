@@ -1,13 +1,12 @@
 import { join } from "path";
 import type { PrReviewEntry } from "../schema.js";
 import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.js";
-import { CANON_DIR } from "../constants.js";
 
 export class PrStore {
   private reviewsPath: string;
 
   constructor(projectDir: string) {
-    this.reviewsPath = join(projectDir, CANON_DIR, "pr-reviews.jsonl");
+    this.reviewsPath = join(projectDir, ".canon", "pr-reviews.jsonl");
   }
 
   async getReviews(prNumber?: number): Promise<PrReviewEntry[]> {

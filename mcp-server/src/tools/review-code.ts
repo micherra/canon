@@ -16,10 +16,15 @@ export interface PrincipleForReview {
   review_hint: "likely-honored" | "check-carefully" | "neutral";
 }
 
-export type ReviewGraphContext = Pick<
-  GraphMetrics,
-  "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "layer" | "impact_score" | "layer_violations"
->;
+export interface ReviewGraphContext {
+  in_degree: number;
+  out_degree: number;
+  is_hub: boolean;
+  in_cycle: boolean;
+  layer: string;
+  impact_score: number;
+  layer_violations: Array<{ target: string; source_layer: string; target_layer: string }>;
+}
 
 export interface ReviewCodeOutput {
   summary: string;
@@ -28,49 +33,6 @@ export interface ReviewCodeOutput {
   file_path: string;
   context?: string;
   graph_context?: ReviewGraphContext;
-}
-
-/**
- * Quick heuristic to hint whether a principle is likely honored or needs careful review.
- * This reduces false positives by giving the reviewer a signal before evaluation.
- * The reviewer can override these hints — they're suggestions, not verdicts.
- */
-function computeReviewHint(
-  principleId: string,
-  code: string
-): PrincipleForReview["review_hint"] {
-  switch (principleId) {
-    case "secrets-never-in-code": {
-      // Look for common secret patterns
-      const secretPatterns = [
-        /(?:api[_-]?key|secret|password|token|credential)\s*[:=]\s*["'][^"']{8,}/i,
-        /(?:sk_live|sk_test|pk_live|pk_test)_[a-zA-Z0-9]/,
-        /(?:postgres|mysql|mongodb|redis):\/\/[^/]*:[^@]*@/,
-        /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/,
-      ];
-      return secretPatterns.some((p) => p.test(code)) ? "check-carefully" : "likely-honored";
-    }
-    case "validate-at-trust-boundaries": {
-      // Check for validation patterns (zod, joi, yup, manual checks)
-      const hasValidation = /safeParse|validate|schema\.|\.parse\(|Joi\.|yup\.|z\.object/i.test(code);
-      return hasValidation ? "likely-honored" : "check-carefully";
-    }
-    case "fail-closed-by-default": {
-      // Check for try/catch that returns/throws on error (not silently continuing)
-      const hasTryCatch = /try\s*\{/.test(code);
-      const hasFailOpen = /catch[^}]*return\s+true|catch[^}]*Infinity|catch[^}]*allow/i.test(code);
-      if (hasFailOpen) return "check-carefully";
-      if (hasTryCatch) return "likely-honored";
-      return "neutral";
-    }
-    case "thin-handlers": {
-      // Short handlers are likely thin
-      const lines = code.split("\n").filter((l) => l.trim()).length;
-      return lines <= 20 ? "likely-honored" : "check-carefully";
-    }
-    default:
-      return "neutral";
-  }
 }
 
 const DEFAULT_MAX_REVIEW_PRINCIPLES = 15;
@@ -118,13 +80,13 @@ export async function reviewCode(
       };
 
       // Inject graph-derived principles without mutating capped
-      if (metrics.layer_violation_count > 0 && !capped.some((c) => c.id === "bounded-context-boundaries")) {
-        const found = allPrinciples.find((a) => a.id === "bounded-context-boundaries");
-        if (found) injected.push(found);
+      if (metrics.layer_violation_count > 0 && !capped.some((p) => p.id === "bounded-context-boundaries")) {
+        const p = allPrinciples.find((p) => p.id === "bounded-context-boundaries");
+        if (p) injected.push(p);
       }
-      if (metrics.in_cycle && !capped.some((c) => c.id === "architectural-fitness-functions")) {
-        const found = allPrinciples.find((a) => a.id === "architectural-fitness-functions");
-        if (found) injected.push(found);
+      if (metrics.in_cycle && !capped.some((p) => p.id === "architectural-fitness-functions")) {
+        const p = allPrinciples.find((p) => p.id === "architectural-fitness-functions");
+        if (p) injected.push(p);
       }
     }
   }
@@ -157,13 +119,7 @@ export async function reviewCode(
     if (hints.length > 0) graphHint = ` Graph context: ${hints.join("; ")}.`;
   }
 
-  const likelyHonored = principlesToEvaluate.filter((p) => p.review_hint === "likely-honored").length;
-  const checkCarefully = principlesToEvaluate.filter((p) => p.review_hint === "check-carefully").length;
-  const hintNote = likelyHonored > 0
-    ? ` Heuristic hints: ${likelyHonored} likely-honored, ${checkCarefully} check-carefully. Principles marked "likely-honored" appear to be satisfied by the code — verify but do not flag as violated unless you find a concrete bad pattern. Focus review effort on "check-carefully" and "neutral" principles.`
-    : "";
-
-  const summary = `${allForReview.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}.${graphHint}${hintNote} Evaluate each against the code below.`;
+  const summary = `${allForReview.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}.${graphHint} Evaluate each against the code below.`;
 
   return {
     summary,

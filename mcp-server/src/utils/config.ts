@@ -1,37 +1,13 @@
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { CANON_DIR, CANON_FILES } from "../constants.js";
 
-// Simple per-event-loop-tick cache — avoids reading config.json 3x when
-// loadLayerMappings, loadSourceDirs, and loadConfigNumber are called in sequence.
-let configCache: { projectDir: string; result: Record<string, any> | null; tick: number } | null = null;
-let currentTick = 0;
-const bumpTick = () => { queueMicrotask(() => { currentTick++; }); };
-
-/** Read and parse .canon/config.json, returning null if missing or unparseable. */
+/** Read and parse .canon/config.json, returning null if missing or invalid. */
 async function loadCanonConfig(projectDir: string): Promise<Record<string, any> | null> {
-  if (configCache && configCache.projectDir === projectDir && configCache.tick === currentTick) {
-    return configCache.result;
-  }
-  bumpTick();
-
-  let raw: string;
   try {
-    raw = await readFile(join(projectDir, CANON_DIR, CANON_FILES.CONFIG), "utf-8");
-  } catch (err: any) {
-    if (err.code === "ENOENT") {
-      configCache = { projectDir, result: null, tick: currentTick };
-      return null;
-    }
-    throw err;
-  }
-  try {
-    const result = JSON.parse(raw);
-    configCache = { projectDir, result, tick: currentTick };
-    return result;
+    const raw = await readFile(join(projectDir, ".canon", "config.json"), "utf-8");
+    return JSON.parse(raw);
   } catch {
-    configCache = { projectDir, result: null, tick: currentTick };
-    return null; // invalid JSON
+    return null;
   }
 }
 
@@ -65,8 +41,7 @@ export function buildLayerInferrer(mappings: LayerMappings): (filePath: string) 
   for (const [layer, dirs] of Object.entries(mappings)) {
     if (!Array.isArray(dirs) || dirs.length === 0) continue;
     const escaped = dirs.map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    // Match both '/' and '\\' separators so it works on Windows paths too
-    const pattern = new RegExp(`(^|[\\/\\\\])(${escaped.join("|")})([\\/\\\\]|$)`);
+    const pattern = new RegExp(`(^|\\/)(${escaped.join("|")})(\\/|$)`);
     compiled.push([pattern, layer]);
   }
   return (filePath: string) => {

@@ -3,8 +3,6 @@
 import { readFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 import { atomicWriteFile } from "../utils/atomic-write.js";
-import { CANON_DIR, CANON_FILES } from "../constants.js";
-import { isNotFound } from "../utils/errors.js";
 
 export interface SummaryEntry {
   summary: string;
@@ -25,7 +23,7 @@ export interface StoreSummariesOutput {
 export async function loadSummariesFile(
   projectDir: string,
 ): Promise<Record<string, SummaryEntry>> {
-  const summariesPath = join(projectDir, CANON_DIR, CANON_FILES.SUMMARIES);
+  const summariesPath = join(projectDir, ".canon", "summaries.json");
   try {
     const raw = await readFile(summariesPath, "utf-8");
     const parsed = JSON.parse(raw);
@@ -40,7 +38,7 @@ export async function loadSummariesFile(
     }
     return result;
   } catch (err: unknown) {
-    if (isNotFound(err)) return {};
+    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw err;
   }
 }
@@ -60,7 +58,7 @@ export async function storeSummaries(
   input: StoreSummariesInput,
   projectDir: string,
 ): Promise<StoreSummariesOutput> {
-  const summariesPath = join(projectDir, CANON_DIR, CANON_FILES.SUMMARIES);
+  const summariesPath = join(projectDir, ".canon", "summaries.json");
 
   // Load existing summaries
   const existing = await loadSummariesFile(projectDir);

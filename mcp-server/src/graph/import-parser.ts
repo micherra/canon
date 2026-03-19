@@ -1,6 +1,5 @@
 import { dirname, join, normalize } from "path";
 import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../constants.js";
-import { toPosix } from "../utils/paths.js";
 
 /** Registry of import extractors by file extension. Add new languages here. */
 const importExtractors = new Map<string, (content: string) => string[]>();
@@ -105,13 +104,12 @@ export function parseTsconfigPaths(
 
 /** Try to find a file in the set with extension and index resolution */
 function tryResolve(candidate: string, allFiles: Set<string>): string | null {
-  const posix = toPosix(candidate);
-  if (allFiles.has(posix)) return posix;
+  if (allFiles.has(candidate)) return candidate;
   for (const ext of RESOLVE_EXTENSIONS) {
-    if (allFiles.has(posix + ext)) return posix + ext;
+    if (allFiles.has(candidate + ext)) return candidate + ext;
   }
   for (const ext of RESOLVE_EXTENSIONS) {
-    const indexPath = toPosix(join(candidate, "index" + ext));
+    const indexPath = join(candidate, "index" + ext);
     if (allFiles.has(indexPath)) return indexPath;
   }
   return null;
@@ -130,7 +128,7 @@ export function resolveImport(
   // Relative imports
   if (importPath.startsWith(".")) {
     const fromDir = dirname(fromFile);
-    const resolved = toPosix(normalize(join(fromDir, importPath)));
+    const resolved = normalize(join(fromDir, importPath));
     return tryResolve(resolved, allFiles);
   }
 
@@ -139,7 +137,7 @@ export function resolveImport(
     for (const alias of aliases) {
       if (importPath.startsWith(alias.prefix)) {
         const rest = importPath.slice(alias.prefix.length);
-        const resolved = toPosix(normalize(join(alias.target, rest)));
+        const resolved = normalize(join(alias.target, rest));
         return tryResolve(resolved, allFiles);
       }
     }

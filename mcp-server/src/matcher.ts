@@ -2,7 +2,6 @@ import { readdir, stat } from "fs/promises";
 import { join } from "path";
 import { type Principle, loadPrincipleFile } from "./parser.js";
 import { DEFAULT_LAYER_MAPPINGS, buildLayerInferrer } from "./utils/config.js";
-import { CANON_DIR } from "./constants.js";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
 

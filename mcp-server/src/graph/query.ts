@@ -8,7 +8,6 @@ import { join } from "path";
 import { isNotFound } from "../utils/errors.js";
 import { LAYER_CENTRALITY, CANON_DIR, CANON_FILES } from "../constants.js";
 import type { CodebaseInsights } from "./insights.js";
-import { buildDegreeMaps } from "./degree.js";
 
 // --- Types ---
 
@@ -106,23 +105,25 @@ export async function loadCachedGraph(projectDir: string): Promise<GraphHandle |
 }
 
 function buildParsedGraph(raw: RawGraphData): ParsedGraph {
+  const inDegree = new Map<string, number>();
+  const outDegree = new Map<string, number>();
   const nodeLayer = new Map<string, string>();
   const nodeChanged = new Map<string, boolean>();
   const nodeViolations = new Map<string, number>();
   const reverseIndex = new Map<string, string[]>();
 
   for (const node of raw.nodes) {
+    inDegree.set(node.id, 0);
+    outDegree.set(node.id, 0);
     nodeLayer.set(node.id, node.layer || "unknown");
     nodeChanged.set(node.id, node.changed || false);
     nodeViolations.set(node.id, node.violation_count || 0);
   }
 
-  const { inDegree, outDegree } = buildDegreeMaps(
-    raw.nodes.map((n) => n.id),
-    raw.edges,
-  );
-
   for (const edge of raw.edges) {
+    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+    outDegree.set(edge.source, (outDegree.get(edge.source) || 0) + 1);
+
     if (!reverseIndex.has(edge.target)) reverseIndex.set(edge.target, []);
     reverseIndex.get(edge.target)!.push(edge.source);
   }

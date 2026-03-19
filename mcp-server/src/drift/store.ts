@@ -1,7 +1,6 @@
 import { join } from "path";
 import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
 import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.js";
-import { CANON_DIR } from "../constants.js";
 
 export class DriftStore {
   private decisionsPath: string;

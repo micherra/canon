@@ -2,9 +2,8 @@ import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { PrStore } from "../drift/pr-store.js";
 import { generateId } from "../utils/id.js";
-import type { PrReviewEntry, ReviewViolation } from "../schema.js";
+import type { PrReviewEntry } from "../schema.js";
 import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.js";
-import { CANON_DIR, CANON_FILES } from "../constants.js";
 
 export interface PrReviewDataInput {
   pr_number?: number;
@@ -73,7 +72,7 @@ export async function getPrReviewData(
   let prioritizedFiles: FilePriorityScore[] | undefined;
   let graphDataAgeMs: number | undefined;
   try {
-    const graphPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
+    const graphPath = join(projectDir, ".canon", "graph-data.json");
     const [raw, graphStat] = await Promise.all([
       readFile(graphPath, "utf-8"),
       stat(graphPath),
@@ -111,7 +110,7 @@ export async function recordPrReview(
     last_reviewed_sha?: string;
     verdict: "BLOCKING" | "WARNING" | "CLEAN";
     files: string[];
-    violations: ReviewViolation[];
+    violations: Array<{ principle_id: string; severity: string }>;
     honored: string[];
     score: {
       rules: { passed: number; total: number };
@@ -146,12 +145,6 @@ const GIT_REF_PATTERN = /^[a-zA-Z0-9_.\/\-]+$/;
 function sanitizeGitRef(ref: string): string {
   if (!ref || !GIT_REF_PATTERN.test(ref)) {
     throw new Error(`Invalid git ref: "${ref}". Only alphanumeric, '.', '/', '_', '-' allowed.`);
-  }
-  if (ref.startsWith("-")) {
-    throw new Error(`Invalid git ref: "${ref}". Refs must not start with '-'.`);
-  }
-  if (ref.includes("..")) {
-    throw new Error(`Invalid git ref: "${ref}". Refs must not contain '..'.`);
   }
   return ref;
 }

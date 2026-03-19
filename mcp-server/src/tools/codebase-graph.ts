@@ -1,16 +1,15 @@
 import { readFile, mkdir } from "fs/promises";
 import { atomicWriteFile } from "../utils/atomic-write.js";
-import { join, isAbsolute } from "path";
+import { join } from "path";
 import { execFile } from "child_process";
 import { scanSourceFiles } from "../graph/scanner.js";
-import { extractImports, resolveImport, type PathAlias } from "../graph/import-parser.js";
+import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
 import { loadAllPrinciples } from "../matcher.js";
 import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
 import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
-import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.js";
-import { toPosix, loadPathAliases } from "../utils/paths.js";
+import { extractSummary } from "../constants.js";
 
 export const LAYER_COLORS: Record<string, string> = {
   api: "#4A90D9",
@@ -86,6 +85,20 @@ function gitRefExists(cwd: string, ref: string): Promise<boolean> {
   });
 }
 
+async function loadPathAliases(projectDir: string): Promise<PathAlias[]> {
+  try {
+    const raw = await readFile(join(projectDir, "tsconfig.json"), "utf-8");
+    const tsconfig = JSON.parse(raw);
+    const paths = tsconfig?.compilerOptions?.paths;
+    if (paths && typeof paths === "object") {
+      return parseTsconfigPaths(paths, tsconfig.compilerOptions.baseUrl);
+    }
+  } catch {
+    // no tsconfig or invalid
+  }
+  return [];
+}
+
 // ── Graph building steps ──
 
 /** Scan project directories and return sorted file paths. */
@@ -105,23 +118,20 @@ async function scanProjectFiles(
         includeExtensions: input.include_extensions,
         excludeDirs: input.exclude_dirs,
       });
-      for (const f of files) allFiles.push(toPosix(join(dir, f)));
+      for (const f of files) allFiles.push(join(dir, f));
     }
     return allFiles.sort();
   }
 
   if (input.root_dir) {
-    const abs = isAbsolute(input.root_dir);
-    const rootDir = input.root_dir === "." || abs ? input.root_dir : join(projectDir, input.root_dir);
+    const isAbsolute = input.root_dir.startsWith("/");
+    const rootDir = input.root_dir === "." || isAbsolute ? input.root_dir : join(projectDir, input.root_dir);
     const scanned = await scanSourceFiles(rootDir, {
       includeExtensions: input.include_extensions,
       excludeDirs: input.exclude_dirs,
     });
-    const prefix = (input.root_dir === "." || abs) ? "" : input.root_dir;
-    // Normalize to POSIX separators so paths match git output on all platforms
-    return prefix
-      ? scanned.map((f) => toPosix(join(prefix, f)))
-      : scanned.map(toPosix);
+    const prefix = (input.root_dir === "." || isAbsolute) ? "" : input.root_dir;
+    return prefix ? scanned.map((f) => join(prefix, f)) : scanned;
   }
 
   return [];
@@ -144,7 +154,7 @@ async function detectChangedFiles(
       }
     }
   }
-  return new Set(changedFiles.map(toPosix));
+  return new Set(changedFiles);
 }
 
 /** Build graph nodes from file paths, enriched with compliance data. */
@@ -312,31 +322,12 @@ export async function codebaseGraph(
     reverseIndex[edge.target].push(edge.source);
   }
 
-  const canonDir = join(projectDir, CANON_DIR);
+  const canonDir = join(projectDir, ".canon");
   await mkdir(canonDir, { recursive: true });
   await Promise.all([
-    atomicWriteFile(join(canonDir, CANON_FILES.GRAPH_DATA), JSON.stringify(fullGraph, null, 2)),
-    atomicWriteFile(join(canonDir, CANON_FILES.REVERSE_DEPS), JSON.stringify(reverseIndex)),
+    atomicWriteFile(join(canonDir, "graph-data.json"), JSON.stringify(fullGraph, null, 2)),
+    atomicWriteFile(join(canonDir, "reverse-deps.json"), JSON.stringify(reverseIndex)),
   ]);
 
   return fullGraph;
-}
-
-/** Compact summary for MCP response — full graph is on disk. */
-export function summarizeGraph(graph: CodebaseGraphOutput) {
-  const violationFiles = graph.nodes
-    .filter((n) => n.violation_count > 0)
-    .sort((a, b) => b.violation_count - a.violation_count)
-    .slice(0, 10)
-    .map((n) => ({ path: n.id, violation_count: n.violation_count, top_violations: n.top_violations }));
-
-  return {
-    total_nodes: graph.nodes.length,
-    total_edges: graph.edges.length,
-    layers: graph.layers,
-    violations: violationFiles,
-    insights: graph.insights,
-    generated_at: graph.generated_at,
-    graph_path: `${CANON_DIR}/${CANON_FILES.GRAPH_DATA}`,
-  };
 }

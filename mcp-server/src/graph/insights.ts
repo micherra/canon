@@ -1,7 +1,5 @@
 /** Codebase graph structural analysis — pure functions, no I/O */
 
-import { buildDegreeMaps } from "./degree.js";
-
 export interface CodebaseInsights {
   overview: {
     total_files: number;
@@ -53,10 +51,16 @@ export function generateInsights(
   const rules = layerRules || DEFAULT_LAYER_RULES;
 
   // Degree maps
-  const { inDegree, outDegree } = buildDegreeMaps(
-    nodes.map((n) => n.id),
-    edges,
-  );
+  const inDegree = new Map<string, number>();
+  const outDegree = new Map<string, number>();
+  for (const node of nodes) {
+    inDegree.set(node.id, 0);
+    outDegree.set(node.id, 0);
+  }
+  for (const edge of edges) {
+    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+    outDegree.set(edge.source, (outDegree.get(edge.source) || 0) + 1);
+  }
 
   // Overview
   const layerCounts = new Map<string, number>();

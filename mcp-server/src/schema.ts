@@ -68,6 +68,26 @@ export type ReviewEntry = Omit<ReviewInput, "type" | "verdict"> & {
 
 export type ReviewViolation = ReviewEntry["violations"][number];
 
+// --- Ralph Loop entry: logged when a ralph loop completes ---
+
+export type RalphIterationResult = {
+  iteration: number;
+  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  violations_count: number;
+  violations_fixed: number;
+  cannot_fix: number;
+};
+
+export type RalphLoopEntry = {
+  loop_id: string;
+  task_slug: string;
+  timestamp: string;
+  iterations: RalphIterationResult[];
+  final_verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  converged: boolean;
+  team: string[];
+};
+
 // --- PR Review entry: tracks per-PR review history ---
 
 export type PrReviewEntry = {
