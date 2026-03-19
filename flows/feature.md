@@ -19,8 +19,15 @@ states:
     template: implementation-log
     gate: test-suite
     transitions:
-      done: test
+      done: context-sync
       blocked: hitl
+
+  context-sync:
+    type: single
+    agent: canon-librarian
+    transitions:
+      updated: test
+      no_updates: test
 
   test:
     type: single
@@ -38,7 +45,14 @@ states:
     role: fix
     template: implementation-log
     transitions:
-      done: test
+      done: context-sync-fix
+
+  context-sync-fix:
+    type: single
+    agent: canon-librarian
+    transitions:
+      updated: test
+      no_updates: test
 
   review:
     type: single
@@ -70,6 +84,12 @@ Design the technical approach for: ${task}. Load relevant Canon principles. Save
 
 ### implement
 Execute the task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Load principles via the get_principles MCP tool with summary_only: true for each file you modify. Read project conventions at .canon/CONVENTIONS.md if it exists. Read task conventions at ${WORKSPACE}/plans/${slug}/CONVENTIONS.md if it exists. Read shared context at ${WORKSPACE}/context.md if it exists. Read referenced decisions from ${WORKSPACE}/decisions/ as listed in your plan's decisions: frontmatter. Read CLAUDE.md. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+
+### context-sync
+Sync project documentation after implementation. Read the git diff from the implementation commits. Read implementor summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Read current CLAUDE.md, ${WORKSPACE}/context.md, and .canon/CONVENTIONS.md. Classify changes as contract/structure/dependency/invariant/internal/test-only. Update docs for contract-level changes only. Use the claudemd-template at ${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md for CLAUDE.md structure. Save sync report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+
+### context-sync-fix
+Sync project documentation after fix-impl. Read the git diff from the fix commits. Read ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md. Read current CLAUDE.md, ${WORKSPACE}/context.md, and .canon/CONVENTIONS.md. Classify changes and update docs for contract-level changes only. Use the claudemd-template at ${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md for CLAUDE.md structure. Save sync report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC-FIX.md. Append a log entry to ${WORKSPACE}/log.jsonl.
 
 ### test
 Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true. Read task summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md — start with the Coverage Notes section. Read implementor test files. Run the full test suite. Save test report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md using the test-report template at ${CLAUDE_PLUGIN_ROOT}/templates/test-report.md. Append a log entry to ${WORKSPACE}/log.jsonl.
