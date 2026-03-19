@@ -136,7 +136,6 @@ Build modifiers can be expressed naturally: "skip research", "just plan don't im
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
 | `/canon:security` | Standalone security scan |
-| `/canon:ralph` | Iterative build-review-refactor loop until violations converge to clean |
 | `/canon:pr-review` | Parallel per-layer PR review with optional GitHub comment posting |
 
 ## The Build Pipeline
@@ -231,7 +230,6 @@ Canon exposes 11 tools via its MCP server for agents to use during normal work:
 | `review_code` | Get matched principles for code review — auto-injects graph-derived principles for layer violations and cycles |
 | `get_compliance` | Query compliance stats and trend for a specific principle |
 | `report` | Log a decision, pattern, or review result for drift tracking and the learning loop |
-| `log_ralph` | Record a Ralph loop completion with iteration history |
 | `get_pr_review_data` | Get PR file list, layers, and graph-aware priority scores |
 | `codebase_graph` | Generate dependency graph with compliance overlay, insights, and reverse-dep index |
 | `get_file_context` | Get file content, imports, dependents, violations, and graph metrics (fan-in, hub status, cycles) |
@@ -253,7 +251,6 @@ Canon uses 10 specialist agents, each with a focused role:
 | `canon-refactorer` | Fix violations using graph-aware caller discovery |
 | `canon-learner` | Analyze patterns and suggest principle refinements |
 | `canon-writer` | Create and edit principles, conventions, and agent-rules |
-| `canon-ralph` | Orchestrate iterative build-review-refactor loops until convergence |
 
 ### Graph-Aware Agents
 
@@ -304,7 +301,7 @@ canon/
 │       ├── schema.ts    Zod input validation schemas
 │       ├── tools/       Individual tool implementations
 │       ├── graph/       Dependency graph: scanner, import/export parsers, insights, query cache, priority scoring
-│       ├── drift/       JSONL stores, analyzer, PR and Ralph tracking
+│       ├── drift/       JSONL stores, analyzer, PR tracking
 │       ├── utils/       Atomic writes, config loader, error helpers, ID generation
 │       └── __tests__/   Tests
 ├── cursor-extension/    VS Code / Cursor extension (Canon Dashboard)
@@ -318,20 +315,6 @@ canon/
 │       └── __tests__/         Tests
 └── skills/canon/        Skill definition + references
 ```
-
-## The Ralph Loop
-
-`/canon:ralph` runs an iterative build-review-refactor cycle that converges to clean:
-
-```
-Iteration 1:  implement → review → find violations
-Iteration 2:  refactor violations → re-review → fewer violations
-Iteration 3:  refactor remaining → re-review → CLEAN ✓
-```
-
-Each iteration spawns refactorer agents in parallel (one per violation group), then re-reviews all changes. The loop exits when the review verdict is CLEAN or violations stop decreasing (convergence). Configurable via `--max-iterations` (default 5).
-
-Ralph tracks every iteration's violations, fixes, and cannot-fix counts. Results are logged via the `log_ralph` MCP tool for drift analysis.
 
 ## The Codebase Graph
 
@@ -486,5 +469,4 @@ All Canon data lives in `.canon/` in your project root:
 | `reverse-deps.json` | Reverse dependency index (who imports each file) | `codebase_graph` MCP tool |
 | `summaries.json` | One-line file summaries for dashboard tooltips | `store_summaries` MCP tool |
 | `pr-reviews.jsonl` | PR review history | `get_pr_review_data` MCP tool |
-| `ralph-loops.jsonl` | Ralph loop iteration history | `log_ralph` MCP tool |
 | `dashboard-state.json` | Dashboard selection state (ephemeral) | Canon Dashboard extension |
