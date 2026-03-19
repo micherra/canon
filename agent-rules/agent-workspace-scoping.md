@@ -53,7 +53,8 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 | **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md, log.jsonl |
 | **tester** | plans/{slug}/*-SUMMARY.md, context.md | plans/{slug}/TEST-REPORT.md, log.jsonl |
 | **security** | plans/{slug}/*-SUMMARY.md | plans/{slug}/SECURITY.md, log.jsonl |
-| **reviewer** | plans/{slug}/*-SUMMARY.md (post-Stage-2 cross-check only) | reviews/, log.jsonl |
+| **reviewer** | plans/{slug}/*-SUMMARY.md (post-Stage-2 cross-check only) | plans/{slug}/REVIEW.md, reviews/, log.jsonl |
+| **scribe** | plans/{slug}/*-SUMMARY.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md | plans/{slug}/CONTEXT-SYNC.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md, log.jsonl |
 | **refactorer** | reviews/, decisions/, context.md | log.jsonl |
 | **learner** | everything in workspace | notes/, log.jsonl |
 | **writer** | everything in workspace | notes/ |

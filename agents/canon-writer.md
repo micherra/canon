@@ -85,7 +85,7 @@ Ask clarifying questions to extract:
      - "Any specific file patterns? (e.g., `**/api/**`)"
    - For agent-rules:
      - "Which Canon agent(s) should this rule apply to?" List the options:
-       `researcher`, `architect`, `implementor`, `tester`, `security`, `reviewer`, `refactorer`, `learner`, `principle-writer`, or `all`
+       `researcher`, `architect`, `implementor`, `tester`, `security`, `reviewer`, `refactorer`, `scribe`, `learner`, `writer`, or `all`
      - "Does this rule apply to specific output files? (e.g., `.canon/plans/**`)"
      - Set `scope.layers` to `[]` (agent-rules don't target architectural layers)
 

@@ -154,33 +154,7 @@ If CLAUDE.md exists but doesn't have the canonical sections, add only the sectio
 
 ### Step 6: Produce summary
 
-Write a sync report to `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`:
-
-```markdown
----
-status: "{UPDATED|NO_UPDATES}"
-agent: canon-scribe
-timestamp: "{ISO-8601}"
----
-
-## Context Sync
-
-### Changes Classified
-| File | Category | Doc Updated |
-|------|----------|-------------|
-| `path/to/file` | contract | CLAUDE.md — Contracts |
-| `path/to/other` | internal | — |
-
-### Documents Updated
-- **CLAUDE.md**: {sections updated, or "No updates needed"}
-- **context.md**: {what changed, or "No updates needed"}
-- **CONVENTIONS.md**: {what added, or "No updates needed"}
-
-### Freshness
-| Document | Section | Last Updated |
-|----------|---------|--------------|
-| CLAUDE.md | Contracts | YYYY-MM-DD |
-```
+Write a sync report to `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`. The orchestrator **must** provide the context-sync-report template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md`.
 
 ### Step 7: Log activity
 

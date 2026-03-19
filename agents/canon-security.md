@@ -97,31 +97,22 @@ For each finding:
 
 ### Step 5: Produce assessment
 
-```markdown
-## Security Assessment: {scope}
-
-### Summary
-Findings: N (X critical, X high, X medium, X low)
-
-### Findings
-
-#### [SEVERITY] Brief description
-**File:** path/to/file.ts:line
-**Pattern:** Category (e.g., Open redirect, SQL injection)
-**Detail:** What the vulnerability is and how it could be exploited.
-**Recommendation:** How to fix it.
-
-### Passed checks
-- No hardcoded secrets found
-- Auth middleware present on protected routes
-- [etc.]
-```
+The orchestrator **must** provide the security-assessment template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md`.
 
 Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/SECURITY.md`).
 
 ### Step 6: Report blocking issues
 
 If any **critical** findings: report to the orchestrator as a blocker. Implementation should not proceed to review until critical issues are resolved.
+
+## Status Protocol
+
+Report one of these statuses back to the orchestrator:
+- **CLEAN** — Zero findings, all checks passed
+- **FINDINGS** — Findings exist but none are critical severity
+- **CRITICAL** — At least one critical finding, blocks the pipeline
+
+The orchestrator reads this status to determine the transition: `done` for CLEAN/FINDINGS, `critical` for CRITICAL.
 
 ## Workspace Integration
 

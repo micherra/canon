@@ -434,7 +434,8 @@ For example:
 - Drift promotion of `validate-at-trust-boundaries` → `sug_drift:promote:validate-at-trust-boundaries` → take first 8 hex chars of a hash
 - New convention about Zod validation → `sug_patterns:new-convention:zod-validation-at-api-boundaries` → take first 8
 
-In bash: `echo -n "drift:promote:validate-at-trust-boundaries" | md5 | head -c 8`
+In bash (portable): `echo -n "drift:promote:validate-at-trust-boundaries" | md5sum | head -c 8`
+(On macOS use `md5 -q` instead of `md5sum` if `md5sum` is unavailable.)
 
 The key property: **the same suggestion always gets the same ID**, regardless of when or how many times the learner runs.
 
