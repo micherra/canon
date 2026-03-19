@@ -5,7 +5,7 @@ allowed-tools: [Read, Glob, Grep, Agent]
 model: sonnet
 ---
 
-Scan a directory for Canon principle applicability across all source files. Identifies which principles apply most broadly, finds hotspot directories, and produces a prioritized remediation plan. Optionally spawns canon-refactorer on the top violations.
+Scan a directory for Canon principle applicability across all source files. Identifies which principles apply most broadly, finds directories with the most violations, and produces a prioritized remediation plan. Optionally spawns canon-refactorer on the top violations.
 
 ## Instructions
 
@@ -13,7 +13,7 @@ Scan a directory for Canon principle applicability across all source files. Iden
 
 From ${ARGUMENTS}, extract:
 - **Directory**: First non-flag argument, defaults to `.` if not provided
-- `--top N`: Number of hotspot files to highlight (default: 10)
+- `--top N`: Number of top violation files to highlight (default: 10)
 - `--severity LEVEL`: Minimum severity to include (default: `convention` — includes everything)
 - `--fix`: If present, spawn canon-refactorer on Tier 1 files after generating the report
 
@@ -90,7 +90,7 @@ Convention-level principles that could be adopted.
 |------|-------|------------|
 | ... | ... | ... |
 
-### Hotspot Directories
+### Top Violation Directories
 Directories with the highest density of applicable principles:
 
 | Directory | Rules | Opinions | Conventions | Files |

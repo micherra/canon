@@ -33,6 +33,7 @@ Create `.canon/config.json` with sensible defaults:
 
 ```json
 {
+  "source_dirs": ["src"],
   "principle_dirs": [".canon/principles"],
   "layer_patterns": {},
   "review": {

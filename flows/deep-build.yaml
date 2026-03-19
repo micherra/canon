@@ -1,0 +1,22 @@
+# Deep Build: Full research-to-review pipeline
+name: deep-build
+description: Full pipeline with parallel research, architecture, and wave implementation
+steps:
+  - id: research
+    agent: canon-researcher
+    parallel: [codebase, domain, risk]
+  - id: architect
+    agent: canon-architect
+    input: research_output
+  - id: implement
+    agent: canon-implementor
+    input: plan
+    wave: true
+  - id: test
+    agent: canon-tester
+  - id: security
+    agent: canon-security
+  - id: review
+    agent: canon-reviewer
+    on_failure:
+      - agent: canon-refactorer

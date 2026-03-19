@@ -19,6 +19,16 @@ Use the `get_principles` MCP tool with the file path you're working on. It retur
 
 If the MCP tool is unavailable, scan `.canon/principles/` (project-local, takes precedence) and `${CLAUDE_PLUGIN_ROOT}/principles/` (fallback) for `.md` files in `rules/`, `strong-opinions/`, and `conventions/` subdirectories. Match against file path and architectural layer.
 
+## Dashboard Context
+
+When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation or task to pick up the user's current focus. It returns:
+- The **selected node** from the graph (the file the user clicked on)
+- The **active editor file** the user is viewing
+- **Matched principles** for the active file (summary-only, top 3)
+- **Dependencies and dependents** from the codebase graph
+
+This gives you immediate context about what the user is looking at without them having to explain it.
+
 ## Apply During Generation
 
 - Follow each loaded principle's guidance
