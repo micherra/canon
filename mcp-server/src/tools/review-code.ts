@@ -15,15 +15,10 @@ export interface PrincipleForReview {
   body: string;
 }
 
-export interface ReviewGraphContext {
-  in_degree: number;
-  out_degree: number;
-  is_hub: boolean;
-  in_cycle: boolean;
-  layer: string;
-  impact_score: number;
-  layer_violations: Array<{ target: string; source_layer: string; target_layer: string }>;
-}
+export type ReviewGraphContext = Pick<
+  GraphMetrics,
+  "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "layer" | "impact_score" | "layer_violations"
+>;
 
 export interface ReviewCodeOutput {
   summary: string;
@@ -79,13 +74,13 @@ export async function reviewCode(
       };
 
       // Inject graph-derived principles without mutating capped
-      if (metrics.layer_violation_count > 0 && !capped.some((p) => p.id === "bounded-context-boundaries")) {
-        const p = allPrinciples.find((p) => p.id === "bounded-context-boundaries");
-        if (p) injected.push(p);
+      if (metrics.layer_violation_count > 0 && !capped.some((c) => c.id === "bounded-context-boundaries")) {
+        const found = allPrinciples.find((a) => a.id === "bounded-context-boundaries");
+        if (found) injected.push(found);
       }
-      if (metrics.in_cycle && !capped.some((p) => p.id === "architectural-fitness-functions")) {
-        const p = allPrinciples.find((p) => p.id === "architectural-fitness-functions");
-        if (p) injected.push(p);
+      if (metrics.in_cycle && !capped.some((c) => c.id === "architectural-fitness-functions")) {
+        const found = allPrinciples.find((a) => a.id === "architectural-fitness-functions");
+        if (found) injected.push(found);
       }
     }
   }

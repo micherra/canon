@@ -1,15 +1,16 @@
 import { readFile, mkdir } from "fs/promises";
 import { atomicWriteFile } from "../utils/atomic-write.js";
-import { join, isAbsolute, posix } from "path";
+import { join, isAbsolute } from "path";
 import { execFile } from "child_process";
 import { scanSourceFiles } from "../graph/scanner.js";
-import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
+import { extractImports, resolveImport } from "../graph/import-parser.js";
 import { loadAllPrinciples } from "../matcher.js";
 import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
 import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
-import { extractSummary } from "../constants.js";
+import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.js";
+import { toPosix, loadPathAliases } from "../utils/paths.js";
 
 export const LAYER_COLORS: Record<string, string> = {
   api: "#4A90D9",
@@ -83,25 +84,6 @@ function gitRefExists(cwd: string, ref: string): Promise<boolean> {
       resolve(!err);
     });
   });
-}
-
-async function loadPathAliases(projectDir: string): Promise<PathAlias[]> {
-  try {
-    const raw = await readFile(join(projectDir, "tsconfig.json"), "utf-8");
-    const tsconfig = JSON.parse(raw);
-    const paths = tsconfig?.compilerOptions?.paths;
-    if (paths && typeof paths === "object") {
-      return parseTsconfigPaths(paths, tsconfig.compilerOptions.baseUrl);
-    }
-  } catch {
-    // no tsconfig or invalid
-  }
-  return [];
-}
-
-/** Normalize a path to forward slashes so it matches git output on all platforms. */
-function toPosix(p: string): string {
-  return p.replace(/\\/g, "/");
 }
 
 // ── Graph building steps ──
@@ -330,12 +312,31 @@ export async function codebaseGraph(
     reverseIndex[edge.target].push(edge.source);
   }
 
-  const canonDir = join(projectDir, ".canon");
+  const canonDir = join(projectDir, CANON_DIR);
   await mkdir(canonDir, { recursive: true });
   await Promise.all([
-    atomicWriteFile(join(canonDir, "graph-data.json"), JSON.stringify(fullGraph, null, 2)),
-    atomicWriteFile(join(canonDir, "reverse-deps.json"), JSON.stringify(reverseIndex)),
+    atomicWriteFile(join(canonDir, CANON_FILES.GRAPH_DATA), JSON.stringify(fullGraph, null, 2)),
+    atomicWriteFile(join(canonDir, CANON_FILES.REVERSE_DEPS), JSON.stringify(reverseIndex)),
   ]);
 
   return fullGraph;
+}
+
+/** Compact summary for MCP response — full graph is on disk. */
+export function summarizeGraph(graph: CodebaseGraphOutput) {
+  const violationFiles = graph.nodes
+    .filter((n) => n.violation_count > 0)
+    .sort((a, b) => b.violation_count - a.violation_count)
+    .slice(0, 10)
+    .map((n) => ({ path: n.id, violation_count: n.violation_count, top_violations: n.top_violations }));
+
+  return {
+    total_nodes: graph.nodes.length,
+    total_edges: graph.edges.length,
+    layers: graph.layers,
+    violations: violationFiles,
+    insights: graph.insights,
+    generated_at: graph.generated_at,
+    graph_path: `${CANON_DIR}/${CANON_FILES.GRAPH_DATA}`,
+  };
 }

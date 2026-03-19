@@ -4,6 +4,7 @@ import { PrStore } from "../drift/pr-store.js";
 import { generateId } from "../utils/id.js";
 import type { PrReviewEntry, ReviewViolation } from "../schema.js";
 import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.js";
+import { CANON_DIR, CANON_FILES } from "../constants.js";
 
 export interface PrReviewDataInput {
   pr_number?: number;
@@ -72,7 +73,7 @@ export async function getPrReviewData(
   let prioritizedFiles: FilePriorityScore[] | undefined;
   let graphDataAgeMs: number | undefined;
   try {
-    const graphPath = join(projectDir, ".canon", "graph-data.json");
+    const graphPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
     const [raw, graphStat] = await Promise.all([
       readFile(graphPath, "utf-8"),
       stat(graphPath),
