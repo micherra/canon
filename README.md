@@ -202,7 +202,7 @@ canon/
 ├── agent-rules/         9 agent behavior guidelines
 ├── hooks/               6 automation hooks
 ├── flows/               5 predefined workflow YAML files
-├── mcp-server/          TypeScript MCP server (11 tools)
+├── mcp-server/          TypeScript MCP server (10 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
 │       ├── constants.ts Shared constants (layer centrality, extensions, extractSummary)
