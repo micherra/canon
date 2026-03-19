@@ -25,9 +25,9 @@ export function formatDriftReport(report: DriftReport): string {
   }
 
   // Hotspots
-  if (report.hotspot_directories.length > 0) {
+  if (report.violation_directories.length > 0) {
     lines.push("### Hotspot directories");
-    for (const dir of report.hotspot_directories) {
+    for (const dir of report.violation_directories) {
       lines.push(`${dir.directory} — ${dir.total_violations} violations across ${dir.review_count} reviews`);
     }
     lines.push("");
@@ -98,7 +98,7 @@ function generateRecommendations(report: DriftReport): string[] {
   }
 
   // Hotspot directories
-  for (const dir of report.hotspot_directories.slice(0, 2)) {
+  for (const dir of report.violation_directories.slice(0, 2)) {
     if (dir.total_violations > 5) {
       recs.push(
         `**${dir.directory}** is a hotspot with ${dir.total_violations} violations. Consider a dedicated code review pass.`
