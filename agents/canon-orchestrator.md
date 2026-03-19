@@ -182,6 +182,18 @@ For a new flow, populate the board from the flow template:
 }
 ```
 
+### Phase 2.5: Pre-flight Validation
+
+Before entering the state machine, run these checks:
+
+1. **Detached HEAD**: Run `git branch --show-current`. If it returns empty, stop with error: "Cannot run in detached HEAD state. Check out a branch first." The workspace path depends on a branch name.
+
+2. **Uncommitted changes**: Run `git status --porcelain`. If the output is non-empty, warn the user: "You have uncommitted changes. Commit or stash before proceeding?" Wait for confirmation before continuing. Do not proceed silently — build commits will interleave with the user's uncommitted work.
+
+3. **Active build lock**: Check for `${WORKSPACE}/.lock`. If it exists, read its contents (`{"pid": "...", "started": "ISO-8601"}`). If `started` is more than 2 hours ago, the lock is stale — remove it and log a warning. If fresh, stop: "Another build is active on this branch (started {time}). Abort it first or wait." On passing this check, write `.lock` with the current timestamp. Delete `.lock` on flow completion (Phase 5) or abort (Phase 4).
+
+4. **Flow entry validation**: After loading the flow template, verify that the `entry` state exists in the `states` map. If not, report error: "Flow '{flow}' has entry state '{entry}' which is not defined in its states." and stop.
+
 ### Phase 3: State Machine Execution
 
 #### Step 6: Run the state machine loop
@@ -191,11 +203,11 @@ Repeat until the current state is `terminal`:
 1. **Read** `board.json`
 2. **Check skip flags**: If the current state was `--skip`-ped, mark it `skipped` and follow the `done` transition.
 3. **Check iterations**: If the state has `max_iterations` and `iterations.{id}.count >= max`, transition to `hitl`.
-4. **Update board**: Set `current_state`, set `states.{id}.status` to `in_progress`, increment `entries`, record `entered_at`. Write `board.json`.
+4. **Update board**: Set `current_state`, set `states.{id}.status` to `in_progress`, increment `entries`, record `entered_at`. **Before writing**, copy the current `board.json` to `board.json.bak`. Then write `board.json`.
 5. **Construct the spawn prompt** (see Step 7).
 6. **Spawn the agent** as a sub-agent (see Step 8).
 7. **Process the result** (see Step 9).
-8. **Update board**: Set state to `done`, record `result`, `artifacts`, `completed_at`. Determine transition. Update `iterations` if applicable. Check stuck detection. Set `current_state` to next state. Write `board.json`.
+8. **Update board**: Set state to `done`, record `result`, `artifacts`, `completed_at`. Determine transition. Update `iterations` if applicable. Check stuck detection. Set `current_state` to next state. **Before writing**, copy the current `board.json` to `board.json.bak`. Then write `board.json`.
 9. **Append to progress.md** (if the flow has a `progress` setting): `- [{state-id}] {result}: {one-sentence summary}`
 10. **Append to log.jsonl**: `{"timestamp": "...", "agent": "canon-orchestrator", "action": "transition", "detail": "{state-id} → {next-state} (result: {result})"}`
 
@@ -250,7 +262,7 @@ Prompt: {constructed spawn prompt}
 Read the agent's output and determine the transition condition:
 
 1. **Parse the agent's status**: Look for status keywords in the output (DONE, BLOCKED, CLEAN, BLOCKING, WARNING, ALL_PASSING, IMPLEMENTATION_ISSUE, CANNOT_FIX, UPDATED, NO_UPDATES, CRITICAL).
-2. **Match to transitions**: Find the matching condition in the state's `transitions` map.
+2. **Match to transitions**: Find the matching condition in the state's `transitions` map. **If no condition matches** (the agent returned an unrecognized status or no status keyword at all), treat the result as `blocked`. Set `states.{id}.status` to `blocked`, record the raw agent output in `states.{id}.error`, and transition to `hitl`. Present the unmatched status to the user so they can decide how to proceed.
 3. **Record artifacts**: Extract artifact paths mentioned in the agent's output. Store in `states.{id}.artifacts`.
 4. **Handle concerns**: If the agent reported DONE_WITH_CONCERNS, append the concern to `board.json concerns`.
 
@@ -311,9 +323,10 @@ This keeps your context lean. The specialist agents handle the heavy reading.
 
 Your state is fully externalized to `board.json`. If your context is compressed or the session restarts:
 
-1. Read `board.json` — it tells you exactly where you are
-2. Read `session.json` — it tells you the task, tier, slug
+1. Read `board.json` — it tells you exactly where you are. **If the file is missing or contains invalid JSON**, check for `board.json.bak`. If the backup exists and is valid, restore it as `board.json` and log a warning: "Recovered board from backup." If neither file is valid, present to user: "Board state is corrupted. Start fresh or abort?" and wait for HITL decision.
+2. Read `session.json` — it tells you the task, tier, slug. **If `session.json` has `status: "aborted"`**, do NOT auto-resume. Ask the user: "Found an aborted build for '{task}'. Resume where it left off, or start fresh?" If fresh: rename `board.json` to `board.aborted.{timestamp}.json`, delete `.lock` if present, and initialize a new board. If resume: set `session.json` status back to `active` and continue from `current_state`.
 3. Read the flow template — it tells you the state machine
 4. Continue from `current_state`
+5. **Orphan commit detection**: When resuming a state with status `in_progress`, check if the agent committed code but left no summary artifact. Run `git log --oneline -5` and compare commit messages against the task slug. If commits exist for the task but no summary file is present in `states.{id}.artifacts`, note this in the HITL message: "Found commits for this task but no summary. The agent may have crashed after committing. Review the commits and decide: retry (agent will see existing code) or mark as done manually."
 
 You hold no state in your context window between transitions. Every transition is: read board → decide → act → write board.

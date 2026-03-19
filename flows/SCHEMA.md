@@ -73,6 +73,8 @@ research:
 ```
 When `agents` has one entry and `roles` has multiple, the agent is spawned once per role.
 
+**Wave resume**: When resuming a `wave` state where `wave_results.{N}.status` is `"in_progress"`, the orchestrator checks which tasks in that wave have completed by looking for their summary artifacts in `plans/{slug}/`. Tasks with existing `*-SUMMARY.md` files are skipped. Only tasks without summaries are re-spawned. This prevents re-running completed work within an interrupted wave.
+
 **`wave`** — Iterates over waves from an INDEX.md. Each wave spawns parallel agents, with a gate check between waves.
 ```yaml
 implement:
@@ -133,12 +135,14 @@ gates:
   lint-check: npm run lint
 ```
 
+**Pre-gate merge check**: Before running the gate command between waves, the orchestrator runs `git status` to check for uncommitted changes or merge conflicts. If conflicts are detected, the gate is skipped and the wave transitions to `blocked` with reason: "Merge conflict detected between wave tasks. Resolve conflicts before proceeding." This surfaces the real issue instead of showing a confusing test failure from conflicted files.
+
 ### Agent Failure Handling
 
 When a spawned agent fails (crashes, times out, or returns an error rather than a status):
 
 1. **Single/wave agents**: The orchestrator sets `states.{id}.status` to `blocked`, records the error in `states.{id}.error`, and transitions to `hitl`. The user decides whether to retry or skip.
-2. **Parallel agents**: If some agents succeed and others fail, the orchestrator keeps successful results and records failures. If all required agents failed, transition to `hitl`. If optional agents failed, proceed with successful results.
+2. **Parallel agents**: If some agents succeed and others fail, the orchestrator keeps successful results and records failures. If all required agents failed, transition to `hitl`. If optional agents failed, proceed with successful results. All roles are **required** by default. A role is **optional** only if explicitly marked with `optional: true` in the flow's `roles` definition (e.g., `roles: [{ name: risk, optional: true }]`).
 3. **Retry**: The orchestrator does not auto-retry agent failures. Retries happen only when the user explicitly requests re-entry from HITL.
 
 ### Transitions
@@ -161,6 +165,8 @@ Transitions are `condition: target-state` pairs. The orchestrator evaluates cond
 | `cannot_fix` | Refactorer cannot resolve the issue |
 
 Custom conditions can be added — the orchestrator matches them against the agent's reported status string.
+
+**Default transition**: If the agent's output contains no recognized status keyword, or if the status keyword has no matching transition in the state's `transitions` map, the orchestrator treats the result as `blocked` and transitions to `hitl`. The raw agent output is recorded in `states.{id}.error` for user review. This prevents the flow from stalling silently when an agent returns an unexpected status.
 
 ### Stuck Detection
 
@@ -214,6 +220,8 @@ design:
 **Resolution rules:**
 - `from: <state-id>`: The orchestrator reads the artifact(s) listed in `board.json` under `states.{id}.artifacts`. If `section` is specified, extracts the content under that heading. The result is included in the spawn instruction as `${as}`.
 - `from: user`: The orchestrator pauses and asks the user the `prompt` question. The user's response is available as `${as}`.
+
+**Artifact validation**: When resolving `from: <state-id>`, the orchestrator checks that each artifact path in `states.{id}.artifacts` exists on disk. If an artifact file is missing, log a warning and exclude it from injection. If ALL artifacts for the source state are missing and the injected variable is referenced in the spawn instruction, transition to `hitl` with message: "Required context from '{state-id}' is missing — artifacts may have been deleted."
 
 ### Progress File
 

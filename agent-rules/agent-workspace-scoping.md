@@ -11,8 +11,10 @@ Agents operate within a **branch-scoped workspace** at `.canon/workspaces/{branc
 
 ```
 .canon/workspaces/{sanitized-branch}/
+├── .lock                     # Build lock — prevents concurrent builds on same branch
 ├── session.json              # Session metadata
 ├── board.json                # Flow execution state (states, transitions, iterations)
+├── board.json.bak            # Board backup — previous valid state for crash recovery
 ├── progress.md               # Append-only learnings across iterations
 ├── log.jsonl                 # Chronological agent activity log
 ├── context.md                # Living shared context document
@@ -61,6 +63,8 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 | **writer** | everything in workspace | notes/ |
 
 Key constraints:
+- **Build lock**: The `.lock` file prevents concurrent builds on the same branch. Format: `{"pid": "...", "started": "ISO-8601"}`. The orchestrator creates it on start and deletes it on completion or abort. Stale locks (>2 hours old) are automatically removed.
+- **Board backup**: `board.json.bak` is written by the orchestrator before every `board.json` update. If `board.json` is corrupted on read, the orchestrator restores from the backup.
 - **Only the orchestrator reads/writes board.json** — agents never touch execution state
 - **Reviewer never reads research or plans** — cold review principle is preserved
 - **Implementor only reads its own plan + referenced decisions** — fresh context principle is preserved

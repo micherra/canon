@@ -25,6 +25,8 @@ Without convergence guards, a refactor→review cycle can oscillate forever: fix
 
 5. **Progress reporting**: After each cycle through a looping state, update `board.json` with: iteration number, result, and history entry matching the `stuck_when` schema. This feeds resumability and enables stuck detection across context resets.
 
+6. **Gate retry on ambiguous failure**: When a wave gate fails, the orchestrator re-runs it once before transitioning to `blocked`. If the second run passes, the gate is considered passed and the next wave proceeds. If it fails again with the same error, transition to `blocked` as normal. This handles flaky tests without masking real failures. The retry is logged in `wave_results.{N}.gate_retried: true`.
+
 ## Exceptions
 
 None. These guards exist to prevent runaway loops. If a task genuinely needs more iterations, the user can increase `max_iterations` in the flow template.

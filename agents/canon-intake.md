@@ -112,6 +112,18 @@ A task is actionable when it answers at least:
 2. **Where** — Which part of the system is affected (even roughly)?
 3. **Boundaries** — What is NOT included?
 
+### Compound requests
+
+If the user's input contains multiple independent tasks (e.g., "add auth AND fix the login bug AND refactor the auth module"), split them:
+
+1. Identify distinct tasks by looking for conjunctions ("and", "also", "plus") separating unrelated actions.
+2. Present the split: "I see {N} separate tasks: 1) {task-a} 2) {task-b}. I'll handle them one at a time, starting with {task-a}. Sound right?"
+3. Hand off the first task to the orchestrator. After completion, return to the next task.
+
+Do NOT bundle unrelated work into a single orchestrator handoff — the architect cannot produce a coherent design for unrelated changes.
+
+If tasks are genuinely coupled (e.g., "add auth and protect the existing routes"), treat them as one task — the conjunction connects related work, not independent tasks.
+
 ### Skip triage when:
 - The task clearly meets all three criteria
 - The user is resuming an existing build

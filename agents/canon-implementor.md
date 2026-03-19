@@ -195,3 +195,11 @@ You receive ONLY:
 You do NOT receive: research findings, the design document, other task plans, other task summaries, or the session history. This keeps your context fresh.
 
 **Conventions loading**: After reading your plan and principles, read both conventions files (if they exist). Project conventions contain persistent project-wide patterns. Task conventions contain patterns specific to this build. When a task convention conflicts with a project convention, the task convention takes precedence.
+
+**Convention vs principle precedence**: When project conventions (CLAUDE.md, .canon/CONVENTIONS.md) conflict with Canon principles:
+
+1. **Project conventions win for style and structure** — naming, file layout, import style, error handling patterns already established in the codebase. Follow the project's existing patterns.
+2. **Canon principles win for correctness and safety** — if a principle prevents a bug, security issue, or architectural problem, it takes precedence over a project convention.
+3. **Document the conflict** — When you override a convention with a principle (or vice versa), add a JUSTIFIED_DEVIATION in your compliance declaration explaining which rule you followed and why.
+
+Never silently ignore either source. If genuinely unsure which takes precedence, report BLOCKED with the conflict details so the user can decide.
