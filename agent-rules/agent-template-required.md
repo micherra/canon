@@ -28,5 +28,20 @@ Templates exist so downstream agents can reliably parse upstream output. When an
 | canon-implementor | implementation-log | `${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md` |
 | canon-tester | test-report | `${CLAUDE_PLUGIN_ROOT}/templates/test-report.md` |
 | canon-reviewer | review-checklist | `${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md` |
+| canon-security | security-assessment | `${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md` |
+| canon-scribe | context-sync-report | `${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md` |
 
 The orchestrator is responsible for passing these paths. Agents are responsible for using them.
+
+## Principle Loading
+
+All agents load Canon principles using MCP tools:
+
+| Tool | Purpose | Use When |
+|------|---------|----------|
+| `get_principles` | Returns matched principles for specific file paths | Evaluating compliance for files you're working on |
+| `list_principles` | Returns the full principle index (metadata only) | Scanning all principles (e.g., security agent filtering by tag) |
+
+**Fallback** (if MCP tools are unavailable): glob `.canon/principles/**/*.md`, then `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`. Read frontmatter to filter by tags, severity, or ID.
+
+The two tools serve different purposes — `get_principles` applies file-path matching to return only relevant principles; `list_principles` returns the full catalog for agents that need to scan or filter broadly.
