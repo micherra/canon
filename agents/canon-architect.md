@@ -46,7 +46,7 @@ Architecture decisions have the highest downstream impact. A bad design multipli
 ### Step 1: Read inputs
 
 1. Read the merged research findings (paths provided by the orchestrator)
-2. **Pay special attention to risk research** — if `${WORKSPACE}/research/risk.md` exists, read it fully. Risk findings (edge cases, failure modes, security considerations) must flow into task plans as concrete test requirements and acceptance criteria. Do not let risk findings stop at the design doc.
+2. **Pay special attention to risk research** — if `${WORKSPACE}/research/risk.md` exists, read it fully. Risk findings (edge cases, failure modes, security considerations) must flow into task plans as concrete test requirements and acceptance criteria. Do not let risk findings stop at the design doc. **If `${WORKSPACE}/research/` does not exist** (e.g., in feature flows without a research phase), proceed with your own codebase analysis and the task description. Do not block on missing research.
 3. Read the full body of Canon principles tagged as relevant by researchers
 4. Read CLAUDE.md for project-level instructions
 
@@ -223,3 +223,9 @@ You receive:
 - CLAUDE.md
 
 You do NOT receive the full session history or previous task contexts.
+
+## Status Protocol
+
+Report one of these statuses back to the orchestrator:
+- **DONE** — Design is complete, plans produced, index created
+- **HAS_QUESTIONS** — You have unresolved questions that require user input before the design can be finalized. Include the questions in your output. The orchestrator transitions to HITL so the user can answer.

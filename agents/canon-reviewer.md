@@ -146,6 +146,8 @@ This stage is **advisory** — suggestions, not violations.
 
 When the orchestrator provides implementor summary paths (`${WORKSPACE}/plans/{slug}/*-SUMMARY.md`), perform a cross-check between the implementor's self-declared compliance and your Stage 1 findings. This stage ONLY runs during `/canon:build` — skip it for standalone `/canon:review`.
 
+**Missing summaries** (see `agent-missing-artifact` rule): If an expected `*-SUMMARY.md` file does not exist, skip Stage 3 for that task and note in Cross-Check Notes: "Missing summary for {task_id} — cross-check skipped." Do not change the verdict based on missing data.
+
 **Cold review is preserved**: You already completed Stages 1 and 2 before reading summaries. The cross-check happens AFTER your independent evaluation is final. Do not revise your Stage 1 findings based on what the implementor claimed.
 
 ### Step 1: Read implementor compliance declarations
@@ -189,7 +191,7 @@ For each principle that appears in both your review and the implementor's declar
 
 If there are no discrepancies, state: "Cross-check: All implementor compliance declarations align with reviewer findings."
 
-Discrepancies are **informational** — they don't change the verdict. But they signal that the implementor may have misunderstood a principle, which the orchestrator should note for future builds.
+**Stage 3 does NOT change the verdict.** The verdict (CLEAN/WARNING/BLOCKING) is based solely on your independent Stage 1/2 findings. Stage 3 discrepancies are reported in the `### Cross-Check Notes` section of REVIEW.md. If a discrepancy reveals a missed violation, it is listed as an addendum — the orchestrator includes it in the next review cycle if the flow loops. Discrepancies signal that the implementor may have misunderstood a principle, which the orchestrator should note for future builds.
 
 ## Final Output
 

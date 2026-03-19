@@ -112,7 +112,7 @@ Report one of these statuses back to the orchestrator:
 - **FINDINGS** — Findings exist but none are critical severity
 - **CRITICAL** — At least one critical finding, blocks the pipeline
 
-The orchestrator reads this status to determine the transition: `done` for CLEAN/FINDINGS, `critical` for CRITICAL.
+The orchestrator reads this status to determine the transition: `CLEAN` and `FINDINGS` both map to the `done` transition — non-critical findings are recorded in the artifact but don't block the pipeline. Only `CRITICAL` maps to the `critical` transition and blocks the flow.
 
 ## Workspace Integration
 

@@ -200,3 +200,13 @@ You receive:
 - Existing test patterns in the codebase
 
 You do NOT receive plan files, research, or design doc.
+
+## Status Protocol
+
+Report one of these statuses back to the orchestrator:
+- **ALL_PASSING** — All tests pass (implementor tests + your new tests). No implementation issues found.
+- **IMPLEMENTATION_ISSUE** — Tests fail due to implementation bugs. Include the `### Issues found` table in your report so the orchestrator can spawn fixes.
+
+## Missing Artifacts
+
+Follow the `agent-missing-artifact` rule. Implementation summaries (`*-SUMMARY.md`) are **required** input for the tester. If an expected summary does not exist, report `BLOCKED` with detail: "Missing implementation summary: {path}". Do not proceed without understanding what was implemented.

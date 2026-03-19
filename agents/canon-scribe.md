@@ -67,7 +67,7 @@ If the orchestrator provides commit hashes, use `git diff ${before_commit}..${af
 
 ### Step 2: Read implementor summaries
 
-Read the implementation summaries from `${WORKSPACE}/plans/${slug}/*-SUMMARY.md`. Extract:
+Read the implementation summaries from `${WORKSPACE}/plans/${slug}/*-SUMMARY.md` (see `agent-missing-artifact` rule — summaries are **optional** for the scribe. If a summary is missing, proceed with git diff only and note in CONTEXT-SYNC.md: "Summary missing for {task_id} — sync based on git diff."). Extract:
 - **What Changed** section — the implementor's description of changes
 - **Files** table — which files were created/modified and why
 - **Canon Compliance** section — any justified deviations that affect contracts

@@ -82,7 +82,7 @@ Before committing, explicitly declare compliance for each loaded Canon principle
 For each principle, evaluate your implementation and declare one of:
 - **✓ COMPLIANT**: The implementation honors this principle. State how in one line.
 - **⚠ JUSTIFIED_DEVIATION**: The implementation intentionally deviates. State why. Use the `report` MCP tool with type=decision to persist the deviation — this is **required**, not optional. If the tool is unavailable, note it in your summary so the orchestrator can log it.
-- **✗ VIOLATION_FOUND → FIXED**: You found a violation during review and fixed it. State what was wrong and what you changed.
+- **✗ VIOLATION_FOUND → FIXED**: You found a violation and fixed it before committing. This applies when you discover a pre-existing violation in code you're modifying, OR when your initial implementation violated a principle and you corrected it. Run your compliance check after writing code but before the final commit. State what was wrong and what you changed.
 
 If a `rule`-severity principle is violated and cannot be fixed, report status `BLOCKED` — do NOT commit with a known rule violation.
 
@@ -203,3 +203,7 @@ You do NOT receive: research findings, the design document, other task plans, ot
 3. **Document the conflict** — When you override a convention with a principle (or vice versa), add a JUSTIFIED_DEVIATION in your compliance declaration explaining which rule you followed and why.
 
 Never silently ignore either source. If genuinely unsure which takes precedence, report BLOCKED with the conflict details so the user can decide.
+
+**Resuming with existing commits**: If the orchestrator indicates existing commits for your task (or you see them in git log matching your task slug), read the committed code first. Build on existing work — do not rewrite from scratch. If the existing code is already complete, produce a summary artifact and report DONE.
+
+**Summary completeness**: Your `*-SUMMARY.md` file MUST contain a `### Status` heading with your final status keyword (DONE, DONE_WITH_CONCERNS, BLOCKED, or NEEDS_CONTEXT). Downstream agents (tester, reviewer, scribe) depend on this section to validate completeness. Follow the `agent-missing-artifact` rule — other agents classify your summary as required, optional, or cross-check input depending on their role.

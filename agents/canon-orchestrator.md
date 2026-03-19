@@ -82,9 +82,11 @@ Estimate the task size to select the appropriate flow:
 
 | Tier | Heuristic | Flow |
 |------|-----------|------|
-| `small` | 1-3 files affected, single concern, bug fix or minor addition | `quick-fix` |
-| `medium` | 4-10 files, single feature, clear boundaries | `feature` |
-| `large` | 10+ files, cross-cutting concern, needs research or architectural decisions | `deep-build` |
+| `small` | 1-3 files the implementation will likely touch, single concern, bug fix or minor addition | `quick-fix` |
+| `medium` | 4-10 files likely touched, single feature, clear boundaries | `feature` |
+| `large` | 10+ files likely touched, cross-cutting concern, needs research or architectural decisions | `deep-build` |
+
+"Files likely touched" means files the task description implies modifying — based on scope, not transitive dependencies or imports. When in doubt between tiers, prefer the higher tier — over-planning is cheaper than under-planning.
 
 4. **Present the tier to the user** before proceeding: "Detected tier: **{tier}** → flow: **{flow}**. Proceed?" If the user overrides, use their choice.
 
@@ -146,6 +148,7 @@ The workspace path is: `.canon/workspaces/{sanitized-branch}/`
    - Lowercase, replace spaces with hyphens
    - Strip non-alphanumeric characters except hyphens
    - Truncate to 40 characters
+   - **Collision check**: If `${WORKSPACE}/plans/{slug}/` already exists from a previous build, append `-{N}` where N is the next available integer (e.g., `add-auth-2`).
 
 4. Create `plans/{slug}/` directory.
 
@@ -221,7 +224,7 @@ For each state, build the prompt from the flow's spawn instruction section (`###
 | `${WORKSPACE}` | Workspace path |
 | `${slug}` | `session.json` slug field |
 | `${CLAUDE_PLUGIN_ROOT}` | Canon plugin install path |
-| `${progress}` | Contents of `progress.md` (read from disk) |
+| `${progress}` | Contents of `progress.md` (read from disk). Provides a running log of completed states — agents may reference it for situational awareness but are not required to act on it. |
 | `${role}` | Current role from `roles` list (parallel states) |
 | `${task_id}` | Current task ID from INDEX.md (wave states) |
 | `${item}` / `${item.field}` | Current item (parallel-per states) |
@@ -251,7 +254,7 @@ Prompt: {constructed spawn prompt}
 3. If the state has a `gate`, run it (e.g., execute the project test suite).
 4. If gate passes, proceed to next wave. If gate fails, set result to `blocked`.
 
-**`parallel-per`**: Parse the `iterate_on` data source from the previous state's artifact. Spawn one sub-agent per item, concurrently. Filter out `cannot_fix` items from `iterations.{id}.cannot_fix`.
+**`parallel-per`**: Parse the `iterate_on` data source from the previous state's artifact. Spawn one sub-agent per item, concurrently. Filter out `cannot_fix` items from `iterations.{id}.cannot_fix`. **If the iteration list is empty after filtering** (no violations, or all items in `cannot_fix`), the state transitions immediately to `done` with result `no_items`. No agents are spawned.
 
 **Agent failure handling**:
 - If a single/wave agent fails: set state to `blocked`, record error, transition to `hitl`.
@@ -261,8 +264,17 @@ Prompt: {constructed spawn prompt}
 
 Read the agent's output and determine the transition condition:
 
-1. **Parse the agent's status**: Look for status keywords in the output (DONE, BLOCKED, CLEAN, BLOCKING, WARNING, ALL_PASSING, IMPLEMENTATION_ISSUE, CANNOT_FIX, UPDATED, NO_UPDATES, CRITICAL).
-2. **Match to transitions**: Find the matching condition in the state's `transitions` map. **If no condition matches** (the agent returned an unrecognized status or no status keyword at all), treat the result as `blocked`. Set `states.{id}.status` to `blocked`, record the raw agent output in `states.{id}.error`, and transition to `hitl`. Present the unmatched status to the user so they can decide how to proceed.
+1. **Parse the agent's status**: Look for status keywords in the output (DONE, DONE_WITH_CONCERNS, BLOCKED, NEEDS_CONTEXT, CLEAN, BLOCKING, WARNING, ALL_PASSING, IMPLEMENTATION_ISSUE, CANNOT_FIX, FIXED, PARTIAL_FIX, FINDINGS, UPDATED, NO_UPDATES, CRITICAL, HAS_QUESTIONS). **Case normalization**: Lowercase the keyword before matching to transitions (agents report UPPERCASE; transitions are lowercase).
+2. **Apply status aliases**: Some agent statuses map to flow transition conditions via aliases:
+   | Agent Status | Maps To Transition | Notes |
+   |---|---|---|
+   | `FIXED` | `done` | Refactorer — violation resolved |
+   | `PARTIAL_FIX` | `done` | Refactorer — partial fix, iteration continues |
+   | `FINDINGS` | `done` | Security — non-critical findings recorded in artifact |
+   | `NEEDS_CONTEXT` | `hitl` | Any agent — missing template or context |
+   | `DONE_WITH_CONCERNS` | `done` | Any agent — concern text appended to `board.json concerns[]` |
+   | `HAS_QUESTIONS` | `has_questions` | Architect — questions for user |
+3. **Match to transitions**: Find the matching condition in the state's `transitions` map. **If no condition matches** (the agent returned an unrecognized status or no status keyword at all), treat the result as `blocked`. Set `states.{id}.status` to `blocked`, record the raw agent output in `states.{id}.error`, and transition to `hitl`. Present the unmatched status to the user so they can decide how to proceed.
 3. **Record artifacts**: Extract artifact paths mentioned in the agent's output. Store in `states.{id}.artifacts`.
 4. **Handle concerns**: If the agent reported DONE_WITH_CONCERNS, append the concern to `board.json concerns`.
 

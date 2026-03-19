@@ -73,7 +73,7 @@ research:
 ```
 When `agents` has one entry and `roles` has multiple, the agent is spawned once per role.
 
-**Wave resume**: When resuming a `wave` state where `wave_results.{N}.status` is `"in_progress"`, the orchestrator checks which tasks in that wave have completed by looking for their summary artifacts in `plans/{slug}/`. Tasks with existing `*-SUMMARY.md` files are skipped. Only tasks without summaries are re-spawned. This prevents re-running completed work within an interrupted wave.
+**Wave resume**: When resuming a `wave` state where `wave_results.{N}.status` is `"in_progress"`, the orchestrator checks which tasks in that wave have completed by looking for their summary artifacts in `plans/{slug}/`. A summary is considered complete if the file exists AND contains a `### Status` heading with a recognized status keyword. If the file exists but lacks this section, treat the task as incomplete and re-spawn it. Tasks with valid summaries are skipped. Only tasks without valid summaries are re-spawned. This prevents re-running completed work within an interrupted wave.
 
 **`wave`** — Iterates over waves from an INDEX.md. Each wave spawns parallel agents, with a gate check between waves.
 ```yaml
@@ -115,6 +115,8 @@ For `parallel-per` states, `iterate_on` names a data source the orchestrator ext
 The orchestrator parses the violations table from the reviewer's REVIEW.md. Each unique `{principle_id, file_path}` pair becomes one item. If the table has multiple violations for the same principle in the same file, they are grouped into one item.
 
 Custom `iterate_on` values can reference any artifact from the prior state. The orchestrator reads the artifact as a markdown table or JSON array and fans out.
+
+**Empty iteration list**: If the iteration list is empty after parsing and filtering (no items, or all items excluded by `cannot_fix`), the state transitions immediately to `done` with result `no_items`. No agents are spawned.
 
 ### Gate Contract
 
@@ -163,8 +165,19 @@ Transitions are `condition: target-state` pairs. The orchestrator evaluates cond
 | `has_questions` | Agent has open questions for user |
 | `critical` | Critical finding requiring user attention |
 | `cannot_fix` | Refactorer cannot resolve the issue |
+| `needs_context` | Agent missing required template or context — always transitions to `hitl` |
 
-Custom conditions can be added — the orchestrator matches them against the agent's reported status string.
+**Status aliases**: Some agent-reported keywords map to existing transition conditions:
+| Agent Status | Transition Alias | Notes |
+|---|---|---|
+| `fixed` | `done` | Refactorer — violation resolved |
+| `partial_fix` | `done` | Refactorer — partial fix, remaining items iterate |
+| `findings` | `done` | Security — non-critical findings in artifact |
+| `done_with_concerns` | `done` | Concern text stored in `board.json concerns[]` |
+
+**Case normalization**: Agents report status keywords in UPPERCASE (e.g., `DONE`). The orchestrator lowercases them before matching to transition conditions (e.g., `done`). Flow templates always define transitions in lowercase.
+
+Custom conditions can be added — the orchestrator matches them against the agent's reported status string (after lowercasing).
 
 **Default transition**: If the agent's output contains no recognized status keyword, or if the status keyword has no matching transition in the state's `transitions` map, the orchestrator treats the result as `blocked` and transitions to `hitl`. The raw agent output is recorded in `states.{id}.error` for user review. This prevents the flow from stalling silently when an agent returns an unexpected status.
 
@@ -186,10 +199,10 @@ Each `stuck_when` strategy stores history entries in `iterations.{id}.history` w
 
 | Strategy | History Entry Shape | Stuck When |
 |----------|-------------------|------------|
-| `same_violations` | `{ principle_ids: [...], file_paths: [...] }` | Current entry's sets match previous entry |
-| `same_file_test` | `{ pairs: [{ file, test }] }` | Current entry's pairs are a subset of previous entry |
-| `same_status` | `{ status: "..." }` | Current status string equals previous |
-| `no_progress` | `{ commit_sha: "...", artifact_count: N }` | Same commit SHA and artifact count as previous |
+| `same_violations` | `{ principle_ids: [...], file_paths: [...] }` | Current entry's sets are identical to previous entry (set equality — same elements regardless of order) |
+| `same_file_test` | `{ pairs: [{ file, test }] }` | Current entry's pairs are a subset of previous entry's pairs |
+| `same_status` | `{ status: "..." }` | Current status string is identical to previous |
+| `no_progress` | `{ commit_sha: "...", artifact_count: N }` | Same commit SHA and same artifact count as previous |
 
 The orchestrator records one history entry per state entry. Stuck detection compares only the two most recent entries (current vs previous).
 
@@ -221,7 +234,10 @@ design:
 - `from: <state-id>`: The orchestrator reads the artifact(s) listed in `board.json` under `states.{id}.artifacts`. If `section` is specified, extracts the content under that heading. The result is included in the spawn instruction as `${as}`.
 - `from: user`: The orchestrator pauses and asks the user the `prompt` question. The user's response is available as `${as}`.
 
-**Artifact validation**: When resolving `from: <state-id>`, the orchestrator checks that each artifact path in `states.{id}.artifacts` exists on disk. If an artifact file is missing, log a warning and exclude it from injection. If ALL artifacts for the source state are missing and the injected variable is referenced in the spawn instruction, transition to `hitl` with message: "Required context from '{state-id}' is missing — artifacts may have been deleted."
+**Artifact validation**: When resolving `from: <state-id>`, the orchestrator checks that each artifact path in `states.{id}.artifacts` exists on disk:
+- **Some missing**: Log a warning for each missing file and inject only the available artifacts.
+- **All missing** and the injected variable is referenced in the spawn instruction: transition to `hitl` with message: "Required context from '{state-id}' is missing — artifacts may have been deleted."
+- **Section not found**: If `section:` is specified but the heading does not exist in the artifact, inject the full artifact content with a warning note prepended: "Warning: Section '{section}' not found — injecting full artifact."
 
 ### Progress File
 
@@ -244,7 +260,7 @@ Variables available in spawn instructions:
 | `${slug}` | Task slug from `session.json` (task description → lowercase, hyphens, truncated) | All states |
 | `${CLAUDE_PLUGIN_ROOT}` | Canon plugin install path | All states |
 | `${progress}` | Contents of the progress file (if `progress` is set in flow) | All states |
-| `${role}` | Role label from `roles` list | `parallel` states |
+| `${role}` | Role label from `roles` list. `roles` (plural) in state definitions lists available roles for parallel spawning. If a state has no `roles` field, the agent is spawned once with no `${role}` variable. | `parallel` states |
 | `${task_id}` | Task ID from INDEX.md current wave | `wave` states |
 | `${item}` | Current item (string) or `${item.field}` (structured) | `parallel-per` states |
 | `${<as>}` | Injected context variable from `inject_context` | States with `inject_context` |
@@ -342,7 +358,7 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
 | `states.{id}.completed_at` | ISO-8601 | When the state completed (if done) |
 | `states.{id}.entries` | int | How many times this state has been entered (tracks loops) |
 | `states.{id}.result` | string | The condition that triggered the outgoing transition |
-| `states.{id}.artifacts` | list | Paths to artifacts produced (relative to `${WORKSPACE}`) |
+| `states.{id}.artifacts` | list | Paths to artifacts produced, stored relative to `${WORKSPACE}`. The orchestrator resolves them by prepending the workspace path. Agents should report paths relative to workspace in their output. |
 | `states.{id}.wave` | int | Current wave (for `wave` type states) |
 | `states.{id}.wave_total` | int | Total waves (for `wave` type states) |
 | `states.{id}.wave_results` | map | Per-wave results (for `wave` type states) |
@@ -354,7 +370,7 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
 | `iterations.{id}.history` | list | Previous results — entries shaped by `stuck_when` strategy (see History Entry Schemas) |
 | `iterations.{id}.cannot_fix` | list | `{principle_id, file_path}` pairs excluded from future `parallel-per` fan-out |
 | `blocked` | object or null | If non-null: `{ "state": "...", "reason": "...", "since": "ISO-8601" }` |
-| `concerns` | list | Accumulated DONE_WITH_CONCERNS messages |
+| `concerns` | list | Accumulated DONE_WITH_CONCERNS messages. Each entry: `{ state_id: string, agent: string, message: string, timestamp: ISO-8601 }`. Concerns are presented to the user in the final build summary. |
 | `skipped` | list | State IDs skipped due to `--skip-*` flags |
 
 ### Orchestrator Board Protocol
