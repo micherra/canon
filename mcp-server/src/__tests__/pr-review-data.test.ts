@@ -99,7 +99,7 @@ describe("recordPrReview", () => {
     );
 
     expect(result.recorded).toBe(true);
-    expect(result.id).toMatch(/^prrev_\d{8}_[0-9a-f]{4}$/);
+    expect(result.id).toMatch(/^prrev_\d{8}_[0-9a-f]{16}$/);
 
     const content = await readFile(
       join(tmpDir, ".canon", "pr-reviews.jsonl"),

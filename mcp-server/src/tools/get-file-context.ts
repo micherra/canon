@@ -2,7 +2,7 @@
  * Designed to give Claude everything needed to write a meaningful summary. */
 
 import { readFile } from "fs/promises";
-import { join, normalize, resolve, sep } from "path";
+import { join, resolve, sep } from "path";
 import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
 import { extractExports } from "../graph/export-parser.js";
 import { scanSourceFiles } from "../graph/scanner.js";
@@ -42,7 +42,8 @@ export async function getFileContext(
   input: GetFileContextInput,
   projectDir: string,
 ): Promise<FileContextOutput> {
-  const filePath = normalize(input.file_path);
+  // Normalize to POSIX separators — graph IDs and layer patterns use '/' consistently
+  const filePath = input.file_path.replace(/\\/g, "/");
 
   // Load user-configurable layer mappings
   const layerMappings = await loadLayerMappings(projectDir);
