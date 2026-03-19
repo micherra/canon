@@ -133,14 +133,14 @@ For each state, based on its `type`:
 
 **`parallel`**: Spawn one agent per role (or per entry in `agents`). Wait for all to complete. If all succeed, result is `done`.
 
-**`wave`**: Read INDEX.md. For each wave:
-- Update `board.json` with current wave number
-- Spawn one agent per task in that wave (parallel within wave)
-- Wait for all to complete. Update `wave_results` in board.
-- Run the `gate` check (e.g., test suite). If gate fails, result is `blocked`. If gate passes, proceed to next wave.
-- After all waves, result is `done`.
+**`wave`**: Read `${WORKSPACE}/plans/${slug}/INDEX.md` for the wave breakdown. If `--wave N` was passed, skip waves 1 through N-1 (they should already be `done` in `wave_results`). For each wave:
+- Update `board.json` with current wave number (`states.{id}.wave`)
+- Spawn one agent per task in that wave (parallel within wave), substituting `${task_id}` for each
+- Wait for all to complete. Update `wave_results.{N}` in board with task list and status.
+- Run the gate: resolve the gate name from the flow's `gates` map (or use built-in `test-suite`). If gate fails, record `gate_output` in `wave_results.{N}` and set result to `blocked`. If gate passes, proceed to next wave.
+- After all waves complete and pass gates, result is `done`.
 
-**`parallel-per`**: Read the `iterate_on` data from the previous state's output. Spawn one agent per item. Wait for all. If all succeed, result is `done`.
+**`parallel-per`**: Resolve `iterate_on` — read the source artifact from the previous state's `artifacts` in `board.json` and parse items (see SCHEMA.md iterate_on data contract). Exclude items in `iterations.{id}.cannot_fix`. Spawn one agent per remaining item, substituting `${item}` / `${item.field}`. Wait for all. If all succeed, result is `done`. If any return `cannot_fix`, record in `iterations.{id}.cannot_fix` and check if any items remain.
 
 **`terminal`**: Flow is complete. Proceed to post-flow.
 
@@ -149,7 +149,12 @@ For each state, based on its `type`:
 When a transition targets `hitl`:
 1. Update board: set `blocked` to `{ "state": "{id}", "reason": "{agent output}", "since": "ISO-8601" }`
 2. Write `board.json`
-3. Present the agent's output/concerns to the user
+3. Present to the user:
+   - The state that triggered HITL and why (agent blocked, stuck detection, max iterations, cannot_fix, agent failure)
+   - The agent's output or error message
+   - If stuck: the stuck strategy, iteration count, and what's repeating (from `iterations.{id}.history`)
+   - If cannot_fix: the list of violations that can't be auto-fixed
+   - Remaining options: retry the state, skip it, or provide guidance
 4. Wait for user input
 5. Clear `blocked` in board
 6. Re-enter the current state with user input as injected context, OR advance to the next state if user says to proceed
@@ -172,7 +177,7 @@ If the flow has a `progress` field:
 
 ### Plan-only mode
 
-If `--plan-only`: after the design state completes, present the design and plan index to the user and stop. Update board: set `current_state` to design, status to `done`. Do not enter the implement state.
+If `--plan-only`: after the first state with `agent: canon-architect` completes, present the design artifacts to the user and stop. Update the board: mark the architect state as `done`, set `current_state` to it, and do not proceed to the next transition.
 
 ## Post-Flow
 
@@ -180,29 +185,30 @@ After the state machine reaches `terminal`:
 
 ### Update board
 
-Set `states.done.status` = `done`, `completed_at` = now. Write final `board.json`.
+Set the terminal state's status to `done`, `completed_at` = now. Write final `board.json`.
 
 ### Log
 
-Log the review results for drift tracking using the `report` MCP tool (type=review). Extract from `${WORKSPACE}/plans/{slug}/REVIEW.md`:
+If the flow included a reviewer state (any state with `agent: canon-reviewer`), log results for drift tracking using the `report` MCP tool (type=review). Read the reviewer's artifact from `board.json` under `states.{reviewer-state}.artifacts` and extract:
 - `files`: The list of files that were reviewed
 - `violations`: Each violation's `principle_id` and `severity`
 - `honored`: IDs of principles that were honored
 - `score`: The pass/total counts for rules, opinions, and conventions
 - `verdict`: The verdict from the review header
 
+If no reviewer state exists in the flow, skip this step.
+
 ### Summary
 
-Present a final summary to the user. Read the board to generate it — do not reconstruct from memory:
+Present a final summary to the user. Read `board.json` to generate it — do not reconstruct from memory:
 - Flow used and tier classification
-- What was built
-- States visited and iterations (from `board.json` — entries counts, wave results)
+- What was built (from `task` in board)
+- States visited and iterations (walk all `states` in board — report `entries` counts, `wave_results` for wave states)
 - Any states that were skipped (from `skipped` list)
-- Which Canon principles were applied
 - Any concerns flagged (from `concerns` list)
-- Security findings (if any)
-- Review verdict and results
-- Links to all artifacts (from `states.{id}.artifacts`)
+- Review verdict and results (if a reviewer state produced artifacts)
+- Security findings (if a security state produced artifacts)
+- Links to all artifacts (collect `artifacts` from all `states.{id}`)
 - Link to the workspace: `${WORKSPACE}/`
 - Link to the board: `${WORKSPACE}/board.json`
 

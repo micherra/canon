@@ -26,6 +26,7 @@ Templates exist so downstream agents can reliably parse upstream output. When an
 | canon-architect | design-decision | `${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md` |
 | canon-architect | session-context | `${CLAUDE_PLUGIN_ROOT}/templates/session-context.md` |
 | canon-implementor | implementation-log | `${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md` |
+| canon-tester | test-report | `${CLAUDE_PLUGIN_ROOT}/templates/test-report.md` |
 | canon-reviewer | review-checklist | `${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md` |
 
 The orchestrator is responsible for passing these paths. Agents are responsible for using them.

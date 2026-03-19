@@ -37,6 +37,7 @@ states:
   test:
     type: single
     agent: canon-tester
+    template: test-report
     max_iterations: 2
     stuck_when: same_file_test
     transitions:
@@ -93,10 +94,10 @@ Design the technical approach for: ${task}. Read research findings from ${WORKSP
 Execute the task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Load principles via the get_principles MCP tool with summary_only: true for each file you modify. Read project conventions at .canon/CONVENTIONS.md if it exists. Read task conventions at ${WORKSPACE}/plans/${slug}/CONVENTIONS.md if it exists. Read shared context at ${WORKSPACE}/context.md if it exists. Read referenced decisions from ${WORKSPACE}/decisions/ as listed in your plan's decisions: frontmatter. Read CLAUDE.md. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl.
 
 ### test
-Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true. Read task summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md — start with the Coverage Notes section. Read implementor test files. Save test report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md.
+Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true. Read task summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md — start with the Coverage Notes section. Read implementor test files. Run the full test suite. Save test report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md using the test-report template at ${CLAUDE_PLUGIN_ROOT}/templates/test-report.md. Append a log entry to ${WORKSPACE}/log.jsonl.
 
 ### fix-impl
-Fix the implementation bug in ${item.file}. The test `${item.failing_test}` is failing because: ${item.root_cause}. Suggested fix: ${item.suggested_fix}. Read the failing test file to understand the expected behavior. Fix the source file to make the test pass without breaking other tests. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-FIX-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
+Fix the failing tests reported in ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Read the ### Issues Found table for the specific files, failing tests, root causes, and suggested fixes. Read each failing test file to understand expected behavior. Fix the source files to make failing tests pass without breaking other tests. Run the test suite to verify. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl.
 
 ### security
 Scan implemented code for security vulnerabilities. Read task summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md for file list. Save assessment to ${WORKSPACE}/plans/${slug}/SECURITY.md.

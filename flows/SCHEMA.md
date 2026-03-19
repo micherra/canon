@@ -100,6 +100,47 @@ done:
   type: terminal
 ```
 
+### iterate_on Data Contract
+
+For `parallel-per` states, `iterate_on` names a data source the orchestrator extracts from the previous state's artifact. The orchestrator reads the artifact and parses it into a list of items. Each item is available in spawn instructions as `${item}` (for strings) or `${item.field}` (for structured items).
+
+**Built-in iterate_on sources:**
+
+| Source | Parsed From | Item Shape |
+|--------|-------------|------------|
+| `violation_groups` | REVIEW.md `#### Violations` table | `{ principle_id, severity, file_path, detail }` |
+
+The orchestrator parses the violations table from the reviewer's REVIEW.md. Each unique `{principle_id, file_path}` pair becomes one item. If the table has multiple violations for the same principle in the same file, they are grouped into one item.
+
+Custom `iterate_on` values can reference any artifact from the prior state. The orchestrator reads the artifact as a markdown table or JSON array and fans out.
+
+### Gate Contract
+
+The `gate` field on `wave` states names a verification step run between waves. Gates are shell commands or test suite invocations.
+
+**Built-in gates:**
+
+| Gate | Command | Pass Condition |
+|------|---------|----------------|
+| `test-suite` | Run the project's test command (auto-detected from `package.json scripts.test`, `Makefile test`, `pytest`, etc.) | Exit code 0 |
+
+If the gate fails, the wave state's result is `blocked` and the orchestrator follows the `blocked` transition. The gate failure output (stderr/stdout) is included in `board.json` under `states.{id}.wave_results.{N}.gate_output`.
+
+Custom gates can be defined as shell commands in the flow frontmatter:
+```yaml
+gates:
+  test-suite: npm test
+  lint-check: npm run lint
+```
+
+### Agent Failure Handling
+
+When a spawned agent fails (crashes, times out, or returns an error rather than a status):
+
+1. **Single/wave agents**: The orchestrator sets `states.{id}.status` to `blocked`, records the error in `states.{id}.error`, and transitions to `hitl`. The user decides whether to retry or skip.
+2. **Parallel agents**: If some agents succeed and others fail, the orchestrator keeps successful results and records failures. If all required agents failed, transition to `hitl`. If optional agents failed, proceed with successful results.
+3. **Retry**: The orchestrator does not auto-retry agent failures. Retries happen only when the user explicitly requests re-entry from HITL.
+
 ### Transitions
 
 Transitions are `condition: target-state` pairs. The orchestrator evaluates conditions based on the agent's output.
@@ -131,7 +172,20 @@ Custom conditions can be added — the orchestrator matches them against the age
 | `same_status` | Agent returned identical status as previous iteration |
 | `no_progress` | No new commits or artifacts since previous iteration |
 
-When stuck is detected, the state transitions to `hitl` regardless of the normal transition map.
+When stuck is detected, the state transitions to `hitl` regardless of the normal transition map. The HITL message includes: the stuck strategy that triggered, the current iteration count, and the history entries showing repeated patterns.
+
+#### History Entry Schemas
+
+Each `stuck_when` strategy stores history entries in `iterations.{id}.history` with a defined shape:
+
+| Strategy | History Entry Shape | Stuck When |
+|----------|-------------------|------------|
+| `same_violations` | `{ principle_ids: [...], file_paths: [...] }` | Current entry's sets match previous entry |
+| `same_file_test` | `{ pairs: [{ file, test }] }` | Current entry's pairs are a subset of previous entry |
+| `same_status` | `{ status: "..." }` | Current status string equals previous |
+| `no_progress` | `{ commit_sha: "...", artifact_count: N }` | Same commit SHA and artifact count as previous |
+
+The orchestrator records one history entry per state entry. Stuck detection compares only the two most recent entries (current vs previous).
 
 ### Context Injection
 
@@ -153,35 +207,39 @@ design:
 | Field | Description |
 |-------|-------------|
 | `from` | Source: a state ID or `user` |
-| `section` | Optional — specific section/artifact from that state's output |
+| `section` | Optional — heading name from the state's primary artifact (e.g., `risk` reads `### Risk` from the artifact). If omitted, includes the full artifact. |
 | `as` | Variable name available in the spawn instruction via `${variable}` |
 | `prompt` | For `from: user` — question to ask |
+
+**Resolution rules:**
+- `from: <state-id>`: The orchestrator reads the artifact(s) listed in `board.json` under `states.{id}.artifacts`. If `section` is specified, extracts the content under that heading. The result is included in the spawn instruction as `${as}`.
+- `from: user`: The orchestrator pauses and asks the user the `prompt` question. The user's response is available as `${as}`.
 
 ### Progress File
 
 When `progress` is set at the top level, the orchestrator:
-1. Reads the file at the start of each state-machine cycle
-2. Includes its contents as context for each agent spawn
-3. After each cycle, appends a summary of what happened (what worked, what failed, what was learned)
+1. Reads the file at the start of each state (if it exists)
+2. Includes its contents in the agent's spawn instruction as `${progress}`
+3. After each state completes, the orchestrator appends a one-line summary: `- [{state-id}] {result}: {one-sentence summary from agent output}`
 
-Progress persists on disk across fresh-context iterations — each agent starts clean but learns from what previous iterations discovered.
+The orchestrator owns the progress file — agents never write to it directly. Progress persists on disk across fresh-context iterations — each agent starts clean but learns from what previous iterations discovered.
 
 ## Markdown Body: Spawn Instructions
 
 The markdown body contains `### state-id` sections. Each section is the prompt template for that state's agent.
 
 Variables available in spawn instructions:
-| Variable | Source |
-|----------|--------|
-| `${task}` | The user's task description |
-| `${WORKSPACE}` | Workspace path |
-| `${slug}` | Task slug |
-| `${role}` | Agent's role (for parallel states) |
-| `${task_id}` | Task ID (for wave states) |
-| `${CLAUDE_PLUGIN_ROOT}` | Plugin root path |
-| `${item}` | Current item (for parallel-per states) |
-| `${progress}` | Contents of the progress file |
-| Any `as:` variable from `inject_context` |
+| Variable | Source | Available In |
+|----------|--------|-------------|
+| `${task}` | User's task description from `session.json` | All states |
+| `${WORKSPACE}` | Workspace path: `.canon/workspaces/{sanitized-branch}` | All states |
+| `${slug}` | Task slug from `session.json` (task description → lowercase, hyphens, truncated) | All states |
+| `${CLAUDE_PLUGIN_ROOT}` | Canon plugin install path | All states |
+| `${progress}` | Contents of the progress file (if `progress` is set in flow) | All states |
+| `${role}` | Role label from `roles` list | `parallel` states |
+| `${task_id}` | Task ID from INDEX.md current wave | `wave` states |
+| `${item}` | Current item (string) or `${item.field}` (structured) | `parallel-per` states |
+| `${<as>}` | Injected context variable from `inject_context` | States with `inject_context` |
 
 ## Tier Mapping
 
@@ -280,10 +338,13 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
 | `states.{id}.wave` | int | Current wave (for `wave` type states) |
 | `states.{id}.wave_total` | int | Total waves (for `wave` type states) |
 | `states.{id}.wave_results` | map | Per-wave results (for `wave` type states) |
+| `states.{id}.wave_results.{N}.gate_output` | string | Gate failure output (stderr/stdout) if gate failed |
+| `states.{id}.error` | string | Error message if agent crashed or timed out |
 | `iterations` | map | Per-state loop tracking for states with `max_iterations` |
 | `iterations.{id}.count` | int | How many times this state has been entered |
 | `iterations.{id}.max` | int | Max iterations from the flow template |
-| `iterations.{id}.history` | list | Previous results — used for stuck detection |
+| `iterations.{id}.history` | list | Previous results — entries shaped by `stuck_when` strategy (see History Entry Schemas) |
+| `iterations.{id}.cannot_fix` | list | `{principle_id, file_path}` pairs excluded from future `parallel-per` fan-out |
 | `blocked` | object or null | If non-null: `{ "state": "...", "reason": "...", "since": "ISO-8601" }` |
 | `concerns` | list | Accumulated DONE_WITH_CONCERNS messages |
 | `skipped` | list | State IDs skipped due to `--skip-*` flags |
@@ -299,12 +360,11 @@ The orchestrator follows this protocol at every state transition:
 5. **Execute** the state (spawn agent(s))
 6. **Read** the agent's result
 7. **Update** the board:
-   - Set `states.{id}.status` to `done` (or `blocked`)
-   - Set `states.{id}.result` to the matched transition condition
-   - Record `artifacts`, `completed_at`
-   - Update `iterations.{id}` if applicable
+   - If agent succeeded: set `states.{id}.status` to `done`, set `result` to matched transition condition, record `artifacts` and `completed_at`
+   - If agent failed: set `states.{id}.status` to `blocked`, record `error`, transition to `hitl`
+   - Update `iterations.{id}` if applicable (increment count, append history entry matching `stuck_when` schema)
    - Set `current_state` to the target state from the transition
-   - Check stuck detection against `iterations.{id}.history`
+   - Check stuck detection: compare latest two `iterations.{id}.history` entries
 8. **Write** `board.json`
 9. **Proceed** to next state (go to step 1)
 
