@@ -63,18 +63,26 @@ If the verdict is **CLEAN**: Log the loop (1 iteration, converged) and report su
 
 ### Step 2: Enter Convergence Loop
 
-Initialize tracking state:
+Read `${WORKSPACE}/board.json` — the flow's board is your source of truth. Initialize Ralph-specific tracking in a separate file `${WORKSPACE}/ralph.json`:
+
+```json
+{
+  "iteration": 1,
+  "max_iterations": 3,
+  "attempted_fixes": {},
+  "cannot_fix_list": [],
+  "history": [],
+  "status": "in_progress"
+}
 ```
-iteration = 1
-attempted_fixes = {}  # {principle_id:file_path → fix_description}
-cannot_fix_list = []
-```
+
+All tracking state lives on disk — never in your context window. Read `ralph.json` at the start of each step, write it after each step.
 
 The flow's own state machine already handles internal loops (test→fix, review→refactor). Ralph's loop is the **outer** loop — it re-runs the review→fix→re-review cycle when the flow completes with violations still present.
 
 ### Step 3: Parse Violations
 
-From the REVIEW.md, extract violations:
+Read `ralph.json` to get `cannot_fix_list`. Read REVIEW.md and extract violations:
 - principle_id
 - severity
 - file_path
@@ -94,7 +102,7 @@ Iteration {N}: {count} violation(s) found.
 Continue fixing? (Y/n)
 ```
 
-If user declines, log the loop and report the remaining violations.
+If user declines: update `ralph.json` with `"status": "user_stopped"`, log, and report.
 
 ### Step 5: Spawn Refactorers
 
@@ -102,12 +110,12 @@ For each violation group, spawn a canon-refactorer agent in parallel:
 - Provide: principle_id, file_path, violation detail, severity
 - The refactorer returns: FIXED, PARTIAL_FIX, or CANNOT_FIX
 
-Collect all outcomes:
+Collect all outcomes and update `ralph.json`:
 - **FIXED**: Violation resolved
 - **PARTIAL_FIX**: Note remaining work
 - **CANNOT_FIX**: Add to `cannot_fix_list`, remove from future iterations
 
-Track fix descriptions in `attempted_fixes` to detect repeated fix attempts.
+Track fix descriptions in `attempted_fixes` to detect repeated fix attempts. Write `ralph.json`.
 
 ### Step 6: Re-Review
 
@@ -117,22 +125,22 @@ Read the new verdict.
 
 ### Step 7: Convergence Check
 
-Record iteration result:
-```
+Read `ralph.json`. Record iteration result in `history`:
+```json
 {
-  iteration: N,
-  verdict: "...",
-  violations_count: ...,
-  violations_fixed: ...,
-  cannot_fix: ...
+  "iteration": 2,
+  "verdict": "WARNING",
+  "violations_count": 2,
+  "violations_fixed": 1,
+  "cannot_fix": 1
 }
 ```
 
 Check convergence:
-- **CLEAN** → Exit loop, log as converged
-- **Same violations as previous iteration** (count AND principle IDs match) → Exit loop as "stuck"
-- **Max iterations reached** → Exit loop as max_iterations
-- **Otherwise** → Increment iteration, go to Step 3
+- **CLEAN** → Update `ralph.json` with `"status": "converged"`. Exit loop.
+- **Same violations as previous iteration** (count AND principle IDs match) → `"status": "stuck"`. Exit loop.
+- **Max iterations reached** → `"status": "max_iterations"`. Exit loop.
+- **Otherwise** → Increment `iteration` in `ralph.json`. Write. Go to Step 3.
 
 ### Step 8: Append to Progress
 
@@ -147,21 +155,21 @@ If the flow has a `progress` file path, append a summary of this iteration:
 
 ### Step 9: Log and Report
 
-Log the loop via the `log_ralph` MCP tool with:
+Log the loop via the `log_ralph` MCP tool. Read `ralph.json` for all data — do not reconstruct from memory:
 - task_slug
 - flow_name
-- All iteration results
-- final_verdict
-- converged (true/false)
+- `history` (all iteration results)
+- `status` (converged/stuck/max_iterations/user_stopped)
 
 Save a report to `${WORKSPACE}/plans/{slug}/RALPH-REPORT.md`:
 
 ```markdown
 ## Ralph Report: {task description}
 
-### Result: {CONVERGED | STUCK | MAX_ITERATIONS}
+### Result: {CONVERGED | STUCK | MAX_ITERATIONS | USER_STOPPED}
 Final verdict: {CLEAN | WARNING | BLOCKING}
 Flow: {flow_name}
+Iterations: {N}
 
 ### Iteration Summary
 | # | Verdict | Violations | Fixed | Cannot Fix |
@@ -174,13 +182,15 @@ Flow: {flow_name}
 - [principle-id] in file/path: reason (CANNOT_FIX | stuck)
 
 ### Artifacts
+- Board: ${WORKSPACE}/board.json
+- Ralph state: ${WORKSPACE}/ralph.json
 - Review: ${WORKSPACE}/plans/{slug}/REVIEW.md
 - Progress: ${WORKSPACE}/progress.md
 ```
 
 ## Status Protocol
 
-Report one of:
+Read from `ralph.json` `status` field:
 - **CONVERGED** — Achieved CLEAN verdict
 - **STUCK** — Violations unchanged between iterations
 - **MAX_ITERATIONS** — Hit the iteration cap
@@ -188,4 +198,10 @@ Report one of:
 
 ## Context Isolation
 
-You are a thin orchestrator. You spawn agents, pass context between them, and track convergence. You never read file contents into your own context — only paths and summaries. Stay under 30-40% context usage.
+You are a thin orchestrator. You hold NO state in your context window. All state lives on disk:
+- `board.json` — flow execution state (owned by build orchestrator)
+- `ralph.json` — convergence loop state (owned by you)
+- `progress.md` — append-only learnings across iterations
+- `log.jsonl` — chronological event trail
+
+Read a file, make a decision, write a file. Stay under 30-40% context usage.

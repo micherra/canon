@@ -92,44 +92,67 @@ Read the selected flow file. Parse:
 1. **YAML frontmatter** — states, transitions, settings
 2. **Markdown body** — spawn instructions per state (under `### state-id` headings)
 
+### Step 4: Initialize or resume the board
+
+Check if `${WORKSPACE}/board.json` exists:
+
+**If it does NOT exist** (new flow): Initialize the board:
+1. Create a state entry for each state in the flow, all set to `pending`
+2. Set `current_state` to `entry` (or first state)
+3. Populate `iterations` from states that have `max_iterations`
+4. Write `board.json`
+
+**If it DOES exist** (resuming): Read the board:
+1. If `current_state` has status `in_progress`, the previous execution was interrupted — re-enter that state
+2. Skip all states with status `done`
+3. Announce: "Resuming flow **{flow_name}** from state **{current_state}**."
+
 ## Flow Execution
 
-Execute the flow as a state machine. Start at the `entry` state (or the first state defined).
+Execute the flow by walking the state machine. The board is the single source of truth — never track state in your context window.
+
+### Transition loop
+
+Repeat until `current_state` is `terminal`:
+
+1. **Read** `board.json`
+2. **Check skip flags**: If `current_state`'s agent matches a `--skip-*` flag, mark state as `skipped`, add to `skipped` list, follow the `done` transition, write board, continue
+3. **Update board**: Set `states.{current}.status` = `in_progress`, set `entered_at`, increment `entries`. Write `board.json`.
+4. **Execute the state** (see state execution below)
+5. **Read** the agent's result (status string, artifacts produced)
+6. **Evaluate transition**: Match result against the state's `transitions` map. First match wins.
+7. **Check stuck detection**: If the state has `stuck_when` + `max_iterations`, compare result against `iterations.{id}.history`. If stuck, override transition to `hitl`.
+8. **Update board**: Set `states.{current}.status` = `done`, record `result`, `completed_at`, `artifacts`. Update `iterations.{id}` if applicable. Set `current_state` to target state. Write `board.json`.
+9. **Continue** to step 1
 
 ### State execution
 
 For each state, based on its `type`:
 
-**`single`**: Spawn the agent with the spawn instruction from the markdown body. Substitute variables (`${task}`, `${WORKSPACE}`, `${slug}`, `${role}`, etc.). Wait for completion. Read the agent's status. Match status to a transition condition. Move to the target state.
+**`single`**: Spawn the agent with the spawn instruction from the markdown body. Substitute variables (`${task}`, `${WORKSPACE}`, `${slug}`, `${role}`, etc.). Wait for completion. Read the agent's status.
 
-**`parallel`**: Spawn one agent per role (or per entry in `agents`). Wait for all to complete. If all succeed, follow the `done` transition.
+**`parallel`**: Spawn one agent per role (or per entry in `agents`). Wait for all to complete. If all succeed, result is `done`.
 
-**`wave`**: Read INDEX.md. For each wave, spawn one agent per task in that wave (parallel within wave). Between waves, run the `gate` check (e.g., test suite). If gate fails, transition to `blocked`. If all waves complete, transition to `done`.
+**`wave`**: Read INDEX.md. For each wave:
+- Update `board.json` with current wave number
+- Spawn one agent per task in that wave (parallel within wave)
+- Wait for all to complete. Update `wave_results` in board.
+- Run the `gate` check (e.g., test suite). If gate fails, result is `blocked`. If gate passes, proceed to next wave.
+- After all waves, result is `done`.
 
-**`parallel-per`**: Read the `iterate_on` data from the previous state's output. Spawn one agent per item. Wait for all. If all succeed, follow `done`.
+**`parallel-per`**: Read the `iterate_on` data from the previous state's output. Spawn one agent per item. Wait for all. If all succeed, result is `done`.
 
-**`terminal`**: Flow is complete. Proceed to logging and summary.
-
-### Transition evaluation
-
-After each state completes, evaluate transitions in order:
-1. Check the agent's reported status against transition conditions
-2. First matching condition determines the target state
-3. If no condition matches, treat as an error and surface to user
+**`terminal`**: Flow is complete. Proceed to post-flow.
 
 ### HITL handling
 
 When a transition targets `hitl`:
-- Present the agent's output/concerns to the user
-- Wait for user input
-- Re-enter the current state with user input as injected context, OR advance to the next state if user says to proceed
-
-### Stuck detection
-
-If a state has `stuck_when` and `max_iterations`:
-- Track entries to this state and the condition data (violations, file+test pairs, etc.)
-- If the stuck condition is met, override the normal transition and go to `hitl`
-- Include iteration count and what's stuck in the HITL message
+1. Update board: set `blocked` to `{ "state": "{id}", "reason": "{agent output}", "since": "ISO-8601" }`
+2. Write `board.json`
+3. Present the agent's output/concerns to the user
+4. Wait for user input
+5. Clear `blocked` in board
+6. Re-enter the current state with user input as injected context, OR advance to the next state if user says to proceed
 
 ### Skip flags
 
@@ -138,7 +161,7 @@ When `--skip-*` flags are active, skip states whose agent matches:
 - `--skip-tests`: skip states with `canon-tester`
 - `--skip-security`: skip states with `canon-security`
 
-Skipped states follow their `done` transition immediately.
+Mark skipped states in the board as `skipped` and add to the `skipped` list. Follow their `done` transition immediately.
 
 ### Progress file
 
@@ -149,11 +172,15 @@ If the flow has a `progress` field:
 
 ### Plan-only mode
 
-If `--plan-only`: after the design state completes, present the design and plan index to the user and stop. Do not enter the implement state.
+If `--plan-only`: after the design state completes, present the design and plan index to the user and stop. Update board: set `current_state` to design, status to `done`. Do not enter the implement state.
 
 ## Post-Flow
 
 After the state machine reaches `terminal`:
+
+### Update board
+
+Set `states.done.status` = `done`, `completed_at` = now. Write final `board.json`.
 
 ### Log
 
@@ -166,15 +193,17 @@ Log the review results for drift tracking using the `report` MCP tool (type=revi
 
 ### Summary
 
-Present a final summary to the user:
+Present a final summary to the user. Read the board to generate it — do not reconstruct from memory:
 - Flow used and tier classification
 - What was built
-- States visited and iterations (if any loops occurred)
+- States visited and iterations (from `board.json` — entries counts, wave results)
+- Any states that were skipped (from `skipped` list)
 - Which Canon principles were applied
-- Any concerns or issues flagged
+- Any concerns flagged (from `concerns` list)
 - Security findings (if any)
 - Review verdict and results
-- Links to all artifacts in `${WORKSPACE}/plans/{slug}/`
+- Links to all artifacts (from `states.{id}.artifacts`)
 - Link to the workspace: `${WORKSPACE}/`
+- Link to the board: `${WORKSPACE}/board.json`
 
 At the end of the summary, include: "Tip: Run `/canon:learn` periodically to discover codebase patterns and refine principles based on review data. Run `/canon:clean` when this branch is merged to archive workspace artifacts."
