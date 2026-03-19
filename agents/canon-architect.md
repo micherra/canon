@@ -185,12 +185,26 @@ Create an index at `.canon/plans/{task-slug}/INDEX.md`:
 | {slug}-01 | 1 | — | path/to/file.ts | principle-id |
 ```
 
+## Workspace Integration
+
+When the orchestrator provides a workspace path (`${WORKSPACE}`):
+
+1. **Read research from workspace**: Research findings are at `${WORKSPACE}/research/`, not `.canon/plans/`.
+2. **Record decisions**: For each non-trivial design decision, save a decision doc to `${WORKSPACE}/decisions/` using the design-decision template (if template path provided). Name files `{decision-id}.md`.
+3. **Initialize context.md**: Create `${WORKSPACE}/context.md` using the session-context template. This is the living shared context document that other agents will read.
+4. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
+   ```json
+   {"timestamp": "ISO-8601", "agent": "canon-architect", "action": "start", "detail": "Designing approach for {task}"}
+   {"timestamp": "ISO-8601", "agent": "canon-architect", "action": "complete", "detail": "{summary}", "artifacts": ["plans/{slug}/DESIGN.md", "decisions/...", "context.md"]}
+   ```
+
 ## Context Isolation
 
 You receive:
-- Merged research findings
+- Merged research findings (from workspace research/ directory)
 - Relevant Canon principles (full body)
 - The user's task description
+- Workspace path and template paths
 - Project conventions at `.canon/CONVENTIONS.md` (if it exists)
 - CLAUDE.md
 

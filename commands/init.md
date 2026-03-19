@@ -13,6 +13,7 @@ Initialize Canon engineering principles in the current project. This sets up the
 
 ```bash
 mkdir -p .canon/principles/rules .canon/principles/strong-opinions .canon/principles/conventions
+mkdir -p .canon/workspaces .canon/history
 ```
 
 ### Step 2: Copy starter principles
@@ -131,9 +132,11 @@ This file is the persistent, project-level conventions layer. It gets read by im
 Tell the user:
 - How many principles were copied (or that an empty directory was created)
 - That `.canon/CONVENTIONS.md` was created (for project-level conventions)
+- That `.canon/workspaces/` was created (for branch-scoped agent workspaces)
 - That CLAUDE.md was updated/created
 - Suggest running `/canon:status` to verify the setup
 - Suggest running `/canon:list` to browse the principles
 - Suggest editing `.canon/CONVENTIONS.md` directly to add project conventions
 - Suggest running `/canon:learn` after accumulating 10+ reviews to discover patterns and refine principles
-- Suggest adding `.canon/` to git tracking if not already tracked
+- Suggest running `/canon:clean` after merging branches to archive workspace artifacts
+- Suggest adding `.canon/` to git tracking if not already tracked (note: `.canon/workspaces/` can be gitignored if ephemeral workspaces aren't needed in version control)

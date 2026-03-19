@@ -164,6 +164,20 @@ Include the verdict prominently at the top of the report:
 
 The build orchestrator reads this verdict to decide whether to gate the pipeline.
 
+## Workspace Integration
+
+When the orchestrator provides a workspace path (`${WORKSPACE}`):
+
+1. **Use template**: If a review-checklist template path is provided, read and follow its structure for the review output.
+2. **Save to reviews/**: In addition to the primary output path, save a copy to `${WORKSPACE}/reviews/`.
+3. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
+   ```json
+   {"timestamp": "ISO-8601", "agent": "canon-reviewer", "action": "start", "detail": "Reviewing changes"}
+   {"timestamp": "ISO-8601", "agent": "canon-reviewer", "action": "complete", "detail": "Verdict: {verdict}", "artifacts": ["{review-path}"]}
+   ```
+
+**Cold review is preserved**: The reviewer still does NOT read research, plans, decisions, or context.md from the workspace. The only workspace interaction is writing output and logging.
+
 ## Recording Reviews
 
 Do NOT write to `reviews.jsonl` directly. The orchestrator (`/canon:review` or `/canon:build`) is responsible for logging review results via the `report` MCP tool (type=review) after you return your report. Your job is to produce the structured report — the orchestrator handles persistence.

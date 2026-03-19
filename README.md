@@ -102,6 +102,7 @@ When you write code, Canon automatically loads principles matched to your file's
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
 | `/canon:security` | Standalone security scan |
 | `/canon:pr-review` | Parallel per-layer PR review with optional GitHub comment posting |
+| `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
 
 ## The Build Pipeline
 
@@ -114,6 +115,53 @@ Large (10+ files)     →  research → architect & plan → implement → test 
 ```
 
 Each phase is handled by a specialized agent. The orchestrator stays thin — it spawns agents, passes context, and manages the workflow.
+
+## Agent Workspaces
+
+Canon agents share context through **branch-scoped workspaces** — structured folders where agents write research, decisions, logs, and plans that other agents can read.
+
+```
+.canon/workspaces/{sanitized-branch}/
+├── session.json              # Session metadata (branch, task, tier, status)
+├── log.jsonl                 # Chronological agent activity log
+├── context.md                # Living shared context (architect-owned)
+├── research/                 # Research findings (one per dimension)
+├── decisions/                # Design decisions with rationale
+├── plans/                    # Task plans and build artifacts
+│   └── {task-slug}/
+├── reviews/                  # Review outputs
+└── notes/                    # Freeform notes
+```
+
+### How it works
+
+1. When `/canon:build` runs, it creates a workspace for the current branch
+2. Each agent reads and writes to scoped areas — the researcher writes to `research/`, the architect writes to `decisions/` and `plans/`, etc.
+3. All agents append to `log.jsonl` for a shared activity timeline
+4. The architect owns `context.md` — a living document with key decisions and patterns that downstream agents read
+
+### Agent permissions
+
+Agents have scoped read/write access to preserve existing isolation principles:
+- **Reviewer never reads research or plans** — cold review is preserved
+- **Implementor only reads its own plan** + shared context — fresh context is preserved
+- **Researcher never reads other researchers** — scoped research is preserved
+
+### Templates
+
+Standardized output templates in the plugin's `templates/` directory ensure consistent structure:
+- `research-finding.md` — structured format for researcher output
+- `design-decision.md` — problem/options/chosen/rationale for architectural decisions
+- `implementation-log.md` — standardized task summary with compliance declaration
+- `review-checklist.md` — structured review report with verdict and scores
+- `session-context.md` — living shared context document format
+
+### Lifecycle
+
+Workspaces are ephemeral by default — scoped to a branch's active development:
+- **Create**: Automatically on `/canon:build`
+- **Archive**: Run `/canon:clean --archive` to save decisions and notes to `.canon/history/`
+- **Delete**: Run `/canon:clean` to remove workspace artifacts after branch merge
 
 ## The Learning Loop
 
@@ -197,9 +245,10 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/            17 slash commands
+├── commands/            18 slash commands
 ├── agents/              10 specialist agents
-├── agent-rules/         9 agent behavior guidelines
+├── agent-rules/         10 agent behavior guidelines
+├── templates/           5 standardized output templates for agent artifacts
 ├── hooks/               6 automation hooks
 ├── flows/               5 predefined workflow YAML files
 ├── mcp-server/          TypeScript MCP server (11 tools)
@@ -374,7 +423,8 @@ All Canon data lives in `.canon/` in your project root:
 | `patterns.jsonl` | Observed patterns | `report` MCP tool (type=pattern) |
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
-| `plans/*/` | Build artifacts per task | `/canon:build` |
+| `workspaces/{branch}/` | Branch-scoped agent workspace (research, decisions, plans, logs) | `/canon:build` |
+| `history/{branch}/` | Archived workspace artifacts (decisions, notes, summary) | `/canon:clean --archive` |
 | `graph-data.json` | Codebase dependency graph with insights | `codebase_graph` MCP tool |
 | `reverse-deps.json` | Reverse dependency index (who imports each file) | `codebase_graph` MCP tool |
 | `summaries.json` | One-line file summaries for dashboard tooltips | `store_summaries` MCP tool |

@@ -104,29 +104,40 @@ Verification: passed ({verification details})
 
 ### Step 8: Produce summary
 
-Write a summary file to the path specified by the orchestrator:
+Write a summary file to the path specified by the orchestrator. Use the **implementation-log template** if the orchestrator provides a template path — read it first and follow its structure. Otherwise, use this default format:
 
 ```markdown
-## Summary: {task-id}
+---
+task-id: "{slug}-{NN}"
+status: "{DONE|DONE_WITH_CONCERNS|BLOCKED|NEEDS_CONTEXT}"
+agent: canon-implementor
+timestamp: "{ISO-8601}"
+commit: "{hash}"
+---
 
-### Status: DONE
-### Files changed
-- path/to/file.ts (created/modified)
+## Implementation: {task-id}
 
-### Tests written
-- path/to/file.test.ts: {N} tests (happy path, error cases, edge cases)
+### What Changed
+{brief description}
 
-### Canon compliance
-- {principle-id} ({severity}): ✓ COMPLIANT — how
-- {principle-id} ({severity}): ✓ COMPLIANT — how
-- {principle-id} ({severity}): ⚠ JUSTIFIED_DEVIATION — why (reported)
+### Files
+| File | Action | Purpose |
+|------|--------|---------|
+| `path/to/file.ts` | created/modified | {purpose} |
+
+### Tests Written
+| Test File | Count | Coverage |
+|-----------|-------|----------|
+| `path/to/file.test.ts` | {N} | happy path, error cases |
+
+### Canon Compliance
+- **{principle-id}** ({severity}): ✓ COMPLIANT — how
+- **{principle-id}** ({severity}): ⚠ JUSTIFIED_DEVIATION — why (reported)
 
 ### Verification
-- New tests: {N} passing
-- Full test suite: passing (no regressions)
-- {additional steps}: passed
-
-### Commit: {hash}
+- [ ] New tests: {N} passing
+- [ ] Full test suite: passing (no regressions)
+- [ ] {additional steps}: passed
 ```
 
 ## Status Protocol
@@ -137,13 +148,27 @@ Report one of these statuses back to the orchestrator:
 - **BLOCKED** — Can't complete, needs human or architect input (describe what's blocking)
 - **NEEDS_CONTEXT** — Plan is ambiguous, needs clarification
 
+## Workspace Integration
+
+When the orchestrator provides a workspace path (`${WORKSPACE}`):
+
+1. **Read shared context**: Read `${WORKSPACE}/context.md` if it exists — the architect's living context doc with key decisions and patterns.
+2. **Read relevant decisions**: If the plan references specific decision IDs, read those from `${WORKSPACE}/decisions/`.
+3. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
+   ```json
+   {"timestamp": "ISO-8601", "agent": "canon-implementor", "action": "start", "detail": "Implementing {task-id}"}
+   {"timestamp": "ISO-8601", "agent": "canon-implementor", "action": "complete", "detail": "Status: {status}", "artifacts": ["{summary-path}"]}
+   ```
+
 ## Context Isolation (Critical)
 
 You receive ONLY:
 - The plan file (~500 tokens)
 - Canon principles listed in the plan (~1500 tokens)
 - Project conventions at `.canon/CONVENTIONS.md` (~200 tokens, if it exists)
-- Task conventions at `.canon/plans/{slug}/CONVENTIONS.md` (~200 tokens, if it exists)
+- Task conventions at `${WORKSPACE}/plans/{slug}/CONVENTIONS.md` (~200 tokens, if it exists)
+- Workspace context at `${WORKSPACE}/context.md` (~300 tokens, if it exists)
+- Referenced decisions from `${WORKSPACE}/decisions/` (only those in your plan)
 - CLAUDE.md (~500 tokens)
 - Filesystem access (to read existing code you need to modify)
 

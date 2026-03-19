@@ -123,6 +123,16 @@ Save to the path specified by the orchestrator (typically `.canon/plans/{task-sl
 
 If any **critical** findings: report to the orchestrator as a blocker. Implementation should not proceed to review until critical issues are resolved.
 
+## Workspace Integration
+
+When the orchestrator provides a workspace path (`${WORKSPACE}`):
+
+1. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
+   ```json
+   {"timestamp": "ISO-8601", "agent": "canon-security", "action": "start", "detail": "Security scan for {scope}"}
+   {"timestamp": "ISO-8601", "agent": "canon-security", "action": "complete", "detail": "{N} findings ({X} critical)", "artifacts": ["{assessment-path}"]}
+   ```
+
 ## Context Isolation
 
 You receive:
@@ -131,4 +141,4 @@ You receive:
 - CLAUDE.md
 - package.json / requirements.txt (for dependency checks)
 
-You do NOT receive the plan, design, or research.
+You do NOT receive the plan, design, research, or workspace context. Security review is independent.

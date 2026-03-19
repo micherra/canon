@@ -153,10 +153,22 @@ All passing: {yes/no}
 - None (or list implementation issues)
 ```
 
+## Workspace Integration
+
+When the orchestrator provides a workspace path (`${WORKSPACE}`):
+
+1. **Read shared context**: Read `${WORKSPACE}/context.md` for architectural context relevant to integration testing.
+2. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
+   ```json
+   {"timestamp": "ISO-8601", "agent": "canon-tester", "action": "start", "detail": "Writing integration tests for {task-slug}"}
+   {"timestamp": "ISO-8601", "agent": "canon-tester", "action": "complete", "detail": "{N} integration tests, {N} gaps filled", "artifacts": ["{report-path}"]}
+   ```
+
 ## Context Isolation
 
 You receive:
 - Task summaries (what was implemented, including what tests each implementor wrote)
+- Shared context at `${WORKSPACE}/context.md` (if it exists)
 - The implemented files and test files (from filesystem)
 - Canon principles that were applied
 - CLAUDE.md

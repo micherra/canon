@@ -68,26 +68,45 @@ You will be assigned one of these dimensions:
 
 ## Output Format
 
-Save findings to the specified output path (provided by the orchestrator). Use this format:
+Save findings to the specified output path (provided by the orchestrator). Use the **research-finding template** if the orchestrator provides a template path — read it first and follow its structure. Otherwise, use this default format:
 
 ```markdown
+---
+dimension: "{codebase|architecture|domain|risk}"
+task: "{task description}"
+agent: canon-researcher
+timestamp: "{ISO-8601}"
+---
+
 ## {Dimension} Research: {task description}
 
-### Key findings
+### Key Findings
 - [Most important discovery]
 - [Second most important]
 
-### Relevant existing patterns
-- [description of what already exists, with file paths]
+### Relevant Existing Patterns
+- `path/to/file.ts` — [description of what already exists]
 
-### Files likely affected
-- path/to/file.ts — reason
+### Files Likely Affected
+- `path/to/file.ts` — reason
 
-### Applicable Canon principles
-- [principle-id] — relevant because...
+### Applicable Canon Principles
+- **[principle-id]** — relevant because...
 
-### Concerns
+### Constraints and Risks
 - [anything the planner/architect should know]
+
+### Recommendation
+[One-paragraph recommendation based on findings]
+```
+
+## Workspace Logging
+
+If the orchestrator provides a `log.jsonl` path, append an entry when you start and complete research:
+
+```json
+{"timestamp": "ISO-8601", "agent": "canon-researcher", "action": "start", "detail": "{dimension} research for {task}"}
+{"timestamp": "ISO-8601", "agent": "canon-researcher", "action": "complete", "detail": "{summary}", "artifacts": ["{output-path}"]}
 ```
 
 ## Context Isolation

@@ -31,11 +31,36 @@ From ${ARGUMENTS}, extract:
 
 ## Setup
 
-Create the artifact directory:
+Initialize the branch workspace and create the artifact directory:
 ```bash
+# Sanitize branch name for folder use
+BRANCH=$(git branch --show-current)
+SANITIZED_BRANCH=$(echo "${BRANCH}" | tr '[:upper:]' '[:lower:]' | sed 's|/|--|g' | sed 's/ /-/g' | sed 's/[^a-z0-9-]//g' | head -c 80)
+WORKSPACE=".canon/workspaces/${SANITIZED_BRANCH}"
+
+# Create workspace structure
+mkdir -p "${WORKSPACE}/research" "${WORKSPACE}/decisions" "${WORKSPACE}/plans" "${WORKSPACE}/reviews" "${WORKSPACE}/notes"
+
+# Create task slug for plan artifacts
 TASK_SLUG=$(echo "${task_description}" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | head -c 50)
-mkdir -p .canon/plans/${TASK_SLUG}/research
+mkdir -p "${WORKSPACE}/plans/${TASK_SLUG}/research"
 ```
+
+Initialize `session.json` if it doesn't exist:
+```json
+{
+  "branch": "{BRANCH}",
+  "sanitized": "{SANITIZED_BRANCH}",
+  "created": "{ISO-8601 timestamp}",
+  "task": "{task_description}",
+  "tier": "{tier}",
+  "status": "active"
+}
+```
+
+All artifact paths below use `${WORKSPACE}` as the base instead of `.canon/plans`. Plans live at `${WORKSPACE}/plans/{slug}/`, research at `${WORKSPACE}/research/`, decisions at `${WORKSPACE}/decisions/`.
+
+Agents should use templates from the `templates/` directory (in the plugin root) for standardized output formats. Pass the template path alongside the output path when spawning agents.
 
 ## Task Classification
 
@@ -78,10 +103,10 @@ Any `--skip-*` flag applies on top of the tier. `--skip-tests` on a large task s
 
 Spawn 2-4 canon-researcher agents in parallel, each investigating one dimension:
 
-1. **Codebase researcher**: "Research the existing codebase patterns relevant to: {task}. Save findings to .canon/plans/{slug}/research/codebase.md"
-2. **Architecture researcher**: "Examine how this change fits the existing architecture: {task}. Save findings to .canon/plans/{slug}/research/architecture.md"
-3. **Domain researcher** (if external APIs/libs involved): "Research external APIs and best practices for: {task}. Save findings to .canon/plans/{slug}/research/domain.md"
-4. **Risk researcher** (for larger tasks): "Identify edge cases, failure modes, and security considerations for: {task}. Save findings to .canon/plans/{slug}/research/risk.md"
+1. **Codebase researcher**: "Research the existing codebase patterns relevant to: {task}. Use the research-finding template at ${CLAUDE_PLUGIN_ROOT}/templates/research-finding.md. Save findings to ${WORKSPACE}/research/codebase.md. Append a log entry to ${WORKSPACE}/log.jsonl."
+2. **Architecture researcher**: "Examine how this change fits the existing architecture: {task}. Use the research-finding template at ${CLAUDE_PLUGIN_ROOT}/templates/research-finding.md. Save findings to ${WORKSPACE}/research/architecture.md. Append a log entry to ${WORKSPACE}/log.jsonl."
+3. **Domain researcher** (if external APIs/libs involved): "Research external APIs and best practices for: {task}. Use the research-finding template at ${CLAUDE_PLUGIN_ROOT}/templates/research-finding.md. Save findings to ${WORKSPACE}/research/domain.md. Append a log entry to ${WORKSPACE}/log.jsonl."
+4. **Risk researcher** (for larger tasks): "Identify edge cases, failure modes, and security considerations for: {task}. Use the research-finding template at ${CLAUDE_PLUGIN_ROOT}/templates/research-finding.md. Save findings to ${WORKSPACE}/research/risk.md. Append a log entry to ${WORKSPACE}/log.jsonl."
 
 Each researcher gets: task description, their dimension, CLAUDE.md path, and the Canon principle index.
 
@@ -90,9 +115,9 @@ Wait for all researchers to complete. Read their summary outputs (not full findi
 ### Phase 2: ARCHITECT & PLAN (Medium + Large)
 
 Spawn canon-architect agent:
-"Design the technical approach for: {task}. Read research findings from .canon/plans/{slug}/research/. Load relevant Canon principles. Save design to .canon/plans/{slug}/DESIGN.md. Then break the design into atomic task plans — save plans to .canon/plans/{slug}/{task-id}-PLAN.md and index to .canon/plans/{slug}/INDEX.md"
+"Design the technical approach for: {task}. Read research findings from ${WORKSPACE}/research/. Load relevant Canon principles. Save design to ${WORKSPACE}/plans/{slug}/DESIGN.md. Then break the design into atomic task plans — save plans to ${WORKSPACE}/plans/{slug}/{task-id}-PLAN.md and index to ${WORKSPACE}/plans/{slug}/INDEX.md. Record design decisions to ${WORKSPACE}/decisions/ using the design-decision template at ${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md. Initialize ${WORKSPACE}/context.md using the session-context template at ${CLAUDE_PLUGIN_ROOT}/templates/session-context.md. Append log entries to ${WORKSPACE}/log.jsonl."
 
-The architect gets: task description, research file paths, Canon principle directory paths, project conventions path.
+The architect gets: task description, research file paths, workspace path, Canon principle directory paths, project conventions path, template paths.
 
 If the architect's design has **open questions for user**, present them and wait for answers. Pass answers back to the architect if needed.
 
@@ -106,7 +131,7 @@ For each wave (starting from --wave N if specified, else wave 1):
 
 1. Read INDEX.md to get tasks in this wave
 2. For each task in the wave, spawn a canon-implementor agent in parallel:
-   "Execute the task plan at .canon/plans/{slug}/{task-id}-PLAN.md. Load principles via the get_principles MCP tool with summary_only: true for each file you modify — do NOT read principle files from disk directly. Read project conventions at .canon/CONVENTIONS.md if it exists. Read task conventions at .canon/plans/{slug}/CONVENTIONS.md if it exists. Read CLAUDE.md. Commit atomically. Save summary to .canon/plans/{slug}/{task-id}-SUMMARY.md"
+   "Execute the task plan at ${WORKSPACE}/plans/{slug}/{task-id}-PLAN.md. Load principles via the get_principles MCP tool with summary_only: true for each file you modify — do NOT read principle files from disk directly. Read project conventions at .canon/CONVENTIONS.md if it exists. Read task conventions at ${WORKSPACE}/plans/{slug}/CONVENTIONS.md if it exists. Read shared context at ${WORKSPACE}/context.md if it exists. Read relevant decisions from ${WORKSPACE}/decisions/ if referenced in your plan. Read CLAUDE.md. Commit atomically. Save summary to ${WORKSPACE}/plans/{slug}/{task-id}-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl."
 3. Wait for all implementors in the wave to complete
 4. Read their summary statuses:
    - **DONE**: Proceed
@@ -125,21 +150,21 @@ For each wave (starting from --wave N if specified, else wave 1):
 ### Phase 4: TEST (Medium + Large, skippable with --skip-tests)
 
 Spawn canon-tester agent:
-"Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true — do NOT read principle files from disk directly. Read task summaries from .canon/plans/{slug}/*-SUMMARY.md. Read implementor test files. Save test report to .canon/plans/{slug}/TEST-REPORT.md"
+"Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true — do NOT read principle files from disk directly. Read task summaries from ${WORKSPACE}/plans/{slug}/*-SUMMARY.md. Read implementor test files. Save test report to ${WORKSPACE}/plans/{slug}/TEST-REPORT.md"
 
 If tester reports IMPLEMENTATION_ISSUE, surface to user.
 
 ### Phase 5: SECURITY (Large only, skippable with --skip-security)
 
 Spawn canon-security agent:
-"Scan implemented code for security vulnerabilities. Read task summaries from .canon/plans/{slug}/*-SUMMARY.md for file list. Save assessment to .canon/plans/{slug}/SECURITY.md"
+"Scan implemented code for security vulnerabilities. Read task summaries from ${WORKSPACE}/plans/{slug}/*-SUMMARY.md for file list. Save assessment to ${WORKSPACE}/plans/{slug}/SECURITY.md"
 
 If any **critical** findings, surface to user as a blocker.
 
 ### Phase 6: REVIEW (all tiers)
 
 Spawn canon-reviewer agent:
-"Review all code changes from this build. Use git diff to see changes. Save review to .canon/plans/{slug}/REVIEW.md"
+"Review all code changes from this build. Use git diff to see changes. Save review to ${WORKSPACE}/plans/{slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl."
 
 Read the review verdict from REVIEW.md:
 - **BLOCKING**: Rule-severity violations found. Surface all violations to the user. The build is NOT complete — violations must be fixed (spawn canon-refactorer for each violation, or surface for manual fix). After fixes, re-run the review.
@@ -148,7 +173,7 @@ Read the review verdict from REVIEW.md:
 
 ### Phase 7: LOG (all tiers)
 
-Log the review results for drift tracking using the `report` MCP tool (type=review). Extract from `.canon/plans/{slug}/REVIEW.md`:
+Log the review results for drift tracking using the `report` MCP tool (type=review). Extract from `${WORKSPACE}/plans/{slug}/REVIEW.md`:
 - `files`: The list of files that were reviewed
 - `violations`: Each violation's `principle_id` and `severity`
 - `honored`: IDs of principles that were honored
@@ -164,6 +189,7 @@ Present a final summary to the user:
 - Any concerns or issues flagged
 - Security findings (if any)
 - Review results
-- Links to all artifacts in `.canon/plans/{slug}/`
+- Links to all artifacts in `${WORKSPACE}/plans/{slug}/`
+- Link to the workspace: `${WORKSPACE}/`
 
-At the end of the summary, include: "Tip: Run `/canon:learn` periodically to discover codebase patterns and refine principles based on review data."
+At the end of the summary, include: "Tip: Run `/canon:learn` periodically to discover codebase patterns and refine principles based on review data. Run `/canon:clean` when this branch is merged to archive workspace artifacts."
