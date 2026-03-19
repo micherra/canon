@@ -1,6 +1,7 @@
 import { readdir, stat } from "fs/promises";
 import { join } from "path";
 import { type Principle, loadPrincipleFile } from "./parser.js";
+import { DEFAULT_LAYER_MAPPINGS, buildLayerInferrer } from "./utils/config.js";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
 
@@ -12,26 +13,18 @@ export interface MatchFilters {
   include_archived?: boolean;
 }
 
-const PATH_TO_LAYER: Array<[RegExp, string]> = [
-  [/\/(api|routes|controllers)\//, "api"],
-  [/\/(components|pages|views)\//, "ui"],
-  [/\/(services|domain|models)\//, "domain"],
-  [/\/(db|data|repositories|prisma)\//, "data"],
-  [/\/(infra|deploy|terraform|docker)\//, "infra"],
-  [/\/(utils|lib|shared|types)\//, "shared"],
-];
-
 const SEVERITY_RANK: Record<string, number> = {
   rule: 1,
   "strong-opinion": 2,
   convention: 3,
 };
 
+/** Default layer inferrer using built-in mappings. For config-aware inference, use buildLayerInferrer(). */
+const defaultInferLayer = buildLayerInferrer(DEFAULT_LAYER_MAPPINGS);
+
 export function inferLayer(filePath: string): string | undefined {
-  for (const [pattern, layer] of PATH_TO_LAYER) {
-    if (pattern.test(filePath)) return layer;
-  }
-  return undefined;
+  const layer = defaultInferLayer(filePath);
+  return layer === "unknown" ? undefined : layer;
 }
 
 // Cache compiled glob regexes to avoid recompilation on every match

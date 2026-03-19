@@ -16,16 +16,22 @@ export const reportInputSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("pattern"),
     pattern: z.string().describe("Description of the observed pattern"),
-    file_paths: z.array(z.string()).min(1).describe("File paths where the pattern was observed"),
+    file_paths: z.array(z.string()).min(1).max(1000).describe("File paths where the pattern was observed"),
     context: z.string().optional().describe("Additional context"),
   }),
   z.object({
     type: z.literal("review"),
-    files: z.array(z.string()).describe("File paths that were reviewed"),
+    files: z.array(z.string()).max(1000).describe("File paths that were reviewed"),
     violations: z
-      .array(z.object({ principle_id: z.string(), severity: z.string() }))
+      .array(z.object({
+        principle_id: z.string(),
+        severity: z.string(),
+        file_path: z.string().optional().describe("Specific file where violation occurred"),
+        impact_score: z.number().optional().describe("Graph-derived impact score (higher = more dependents affected)"),
+      }))
+      .max(1000)
       .describe("Principle violations found"),
-    honored: z.array(z.string()).describe("IDs of principles honored"),
+    honored: z.array(z.string()).max(1000).describe("IDs of principles honored"),
     score: z.object({
       rules: z.object({ passed: z.number(), total: z.number() }),
       opinions: z.object({ passed: z.number(), total: z.number() }),
@@ -61,3 +67,39 @@ export type ReviewEntry = Omit<ReviewInput, "type" | "verdict"> & {
 };
 
 export type ReviewViolation = ReviewEntry["violations"][number];
+
+// --- Ralph Loop entry: logged when a ralph loop completes ---
+
+export type RalphIterationResult = {
+  iteration: number;
+  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  violations_count: number;
+  violations_fixed: number;
+  cannot_fix: number;
+};
+
+export type RalphLoopEntry = {
+  loop_id: string;
+  task_slug: string;
+  timestamp: string;
+  iterations: RalphIterationResult[];
+  final_verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  converged: boolean;
+  team: string[];
+};
+
+// --- PR Review entry: tracks per-PR review history ---
+
+export type PrReviewEntry = {
+  pr_review_id: string;
+  timestamp: string;
+  pr_number?: number;
+  branch?: string;
+  last_reviewed_sha?: string;
+  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  files: string[];
+  violations: ReviewViolation[];
+  honored: string[];
+  score: ReviewEntry["score"];
+  file_priorities?: Array<{ path: string; priority_score: number }>;
+};

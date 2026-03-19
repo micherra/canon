@@ -1,7 +1,8 @@
-import { readFile } from "fs/promises";
-import { join } from "path";
 import { type Principle } from "../parser.js";
+import { loadConfigNumber } from "../utils/config.js";
 import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
+import { loadCachedGraph, getNodeMetrics } from "../graph/query.js";
+import { extractSummary } from "../constants.js";
 
 export interface GetPrinciplesInput {
   file_path?: string;
@@ -19,31 +20,19 @@ export interface GetPrinciplesOutput {
   }>;
   total_matched: number;
   total_in_canon: number;
+  graph_context?: {
+    in_degree: number;
+    out_degree: number;
+    is_hub: boolean;
+    in_cycle: boolean;
+    impact_score: number;
+  };
 }
 
 const DEFAULT_MAX_PRINCIPLES = 10;
 
-async function loadMaxPrinciples(projectDir: string): Promise<number> {
-  try {
-    const configPath = join(projectDir, ".canon", "config.json");
-    const raw = await readFile(configPath, "utf-8");
-    const config = JSON.parse(raw);
-    const value = Number(config?.review?.max_principles_per_review);
-    if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_PRINCIPLES;
-    return Math.floor(value);
-  } catch {
-    return DEFAULT_MAX_PRINCIPLES;
-  }
-}
-
-/**
- * Extract just the first paragraph (summary) from a principle body.
- * This is the falsifiable constraint statement — enough for code generation
- * context without loading full rationale, examples, and exceptions.
- */
-function extractSummary(body: string): string {
-  const paragraphs = body.split(/\n\n/);
-  return paragraphs[0]?.trim() || body;
+function loadMaxPrinciples(projectDir: string): Promise<number> {
+  return loadConfigNumber(projectDir, "review.max_principles_per_review", DEFAULT_MAX_PRINCIPLES);
 }
 
 export async function getPrinciples(
@@ -61,6 +50,24 @@ export async function getPrinciples(
 
   const top = matched.slice(0, maxPrinciples);
 
+  // Load graph context if file_path is provided
+  let graph_context: GetPrinciplesOutput["graph_context"];
+  if (input.file_path) {
+    const graph = await loadCachedGraph(projectDir);
+    if (graph) {
+      const metrics = getNodeMetrics(graph, input.file_path);
+      if (metrics) {
+        graph_context = {
+          in_degree: metrics.in_degree,
+          out_degree: metrics.out_degree,
+          is_hub: metrics.is_hub,
+          in_cycle: metrics.in_cycle,
+          impact_score: metrics.impact_score,
+        };
+      }
+    }
+  }
+
   return {
     principles: top.map((p) => ({
       id: p.id,
@@ -70,5 +77,6 @@ export async function getPrinciples(
     })),
     total_matched: matched.length,
     total_in_canon: allPrinciples.length,
+    graph_context,
   };
 }

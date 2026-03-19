@@ -196,7 +196,7 @@ describe("analyzeDrift", () => {
     expect(report.total_reviews).toBe(1);
   });
 
-  it("computes directory hotspots", () => {
+  it("computes violation directories", () => {
     const reviews = [
       makeReview({
         files: ["src/routes/users.ts"],
@@ -211,7 +211,7 @@ describe("analyzeDrift", () => {
       }),
     ];
     const report = analyzeDrift(reviews, [], ["p1", "p2"]);
-    expect(report.hotspot_directories.length).toBeGreaterThan(0);
-    expect(report.hotspot_directories[0].directory).toBe("src/routes");
+    expect(report.violation_directories.length).toBeGreaterThan(0);
+    expect(report.violation_directories[0].directory).toBe("src/routes");
   });
 });

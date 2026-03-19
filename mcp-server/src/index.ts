@@ -8,10 +8,21 @@ import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
 import { report } from "./tools/report.js";
+import { logRalph } from "./tools/log-ralph.js";
+import { getPrReviewData } from "./tools/pr-review-data.js";
+import { codebaseGraph } from "./tools/codebase-graph.js";
+import { getFileContext } from "./tools/get-file-context.js";
+import { storeSummaries } from "./tools/store-summaries.js";
+
+import { getDashboardSelection } from "./tools/get-dashboard-selection.js";
 import { reportInputSchema } from "./schema.js";
 
-const projectDir = process.env.CANON_PROJECT_DIR || process.cwd();
-const pluginDir = process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname;
+import { resolve } from "path";
+
+// Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
+// Falls back to cwd which is typically set by Claude Code to the user's project root.
+const projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
+const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || new URL("../..", import.meta.url).pathname);
 
 const server = new McpServer({
   name: "canon",
@@ -99,6 +110,136 @@ server.registerTool(
   },
   async (input) => {
     const result = await report(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: log_ralph
+server.tool(
+  "log_ralph",
+  "Log the completion of a Ralph loop — records iteration results, convergence status, and team composition for drift tracking.",
+  {
+    task_slug: z.string().describe("Slug of the task that was built"),
+    iterations: z
+      .array(
+        z.object({
+          iteration: z.number(),
+          verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]),
+          violations_count: z.number(),
+          violations_fixed: z.number(),
+          cannot_fix: z.number(),
+        })
+      )
+      .describe("Results for each iteration of the loop"),
+    final_verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).describe("Final verdict after all iterations"),
+    converged: z.boolean().describe("Whether the loop achieved CLEAN verdict"),
+    team: z.array(z.string()).describe("Agent names used in the loop"),
+  },
+  async (input) => {
+    const result = await logRalph(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: get_pr_review_data
+server.tool(
+  "get_pr_review_data",
+  "Get PR review data — file list, layer grouping, diff command, and graph-aware review priority for a pull request or branch review.",
+  {
+    pr_number: z.number().optional().describe("GitHub PR number"),
+    branch: z.string().optional().describe("Branch name to review"),
+    diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
+    incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
+  },
+  async (input) => {
+    const result = await getPrReviewData(input, projectDir, pluginDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: codebase_graph
+server.tool(
+  "codebase_graph",
+  "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, violations, insights).",
+  {
+    root_dir: z.string().optional().describe("Fallback root directory to scan when no source_dirs are configured. Ignored if source_dirs exist in input or .canon/config.json."),
+    source_dirs: z.array(z.string()).optional().describe("Directories to scan (e.g. ['src', 'lib']). Overrides .canon/config.json source_dirs."),
+    include_extensions: z.array(z.string()).optional().describe("File extensions to include (default: ts, js, py, go, rs)"),
+    exclude_dirs: z.array(z.string()).optional().describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
+    diff_base: z.string().optional().describe("Git ref to diff against — marks changed files in the graph"),
+    changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
+  },
+  async (input) => {
+    const result = await codebaseGraph(input, projectDir, pluginDir);
+    // Return compact summary — full graph is on disk at .canon/graph-data.json
+    const violationFiles = result.nodes
+      .filter((n) => n.violation_count > 0)
+      .sort((a, b) => b.violation_count - a.violation_count)
+      .slice(0, 10)
+      .map((n) => ({ path: n.id, violation_count: n.violation_count, top_violations: n.top_violations }));
+    const summary = {
+      total_nodes: result.nodes.length,
+      total_edges: result.edges.length,
+      layers: result.layers,
+      violations: violationFiles,
+      insights: result.insights,
+      generated_at: result.generated_at,
+      graph_path: ".canon/graph-data.json",
+    };
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
+    };
+  }
+);
+
+
+// Tool: get_file_context
+server.tool(
+  "get_file_context",
+  "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data. Use this to understand a file before generating a summary.",
+  {
+    file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
+  },
+  async (input) => {
+    const result = await getFileContext(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+// Tool: store_summaries
+server.tool(
+  "store_summaries",
+  "Store file summaries to .canon/summaries.json. Merges with existing summaries so you can generate them incrementally.",
+  {
+    summaries: z.array(z.object({
+      file_path: z.string().describe("Project-relative file path"),
+      summary: z.string().describe("Rich contextual summary of the file's role"),
+    })).describe("Array of file summaries to store"),
+  },
+  async (input) => {
+    const result = await storeSummaries(input, projectDir);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
+
+// Tool: get_dashboard_selection
+server.tool(
+  "get_dashboard_selection",
+  "Returns the user's current focus from the Canon dashboard — the selected graph node AND the active editor file with matched principles. Call this at the start of a conversation to understand what the user is working on. Returns layer, summary, dependencies, dependents, content preview, and top 3 principles for the active file.",
+  {},
+  async () => {
+    const result = await getDashboardSelection(projectDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };

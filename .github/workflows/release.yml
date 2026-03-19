@@ -10,31 +10,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: mcp-server/package-lock.json
-
-      - name: Install dependencies
-        working-directory: mcp-server
-        run: npm ci
-
-      - name: Build
-        working-directory: mcp-server
-        run: npm run build
-
-      - name: Test
-        working-directory: mcp-server
-        run: npm test
-
+  # --- MCP Server release ---
   release:
-    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -52,4 +29,54 @@ jobs:
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release
+
+  # --- Extension release (only when extension files changed) ---
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      extension: ${{ steps.filter.outputs.extension }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            extension:
+              - 'cursor-extension/**'
+
+  release-extension:
+    needs: changes
+    if: needs.changes.outputs.extension == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cursor-extension/package-lock.json
+
+      - name: Install dependencies
+        working-directory: cursor-extension
+        run: npm ci
+
+      - name: Install release tooling
+        run: >
+          npm install -g
+          semantic-release
+          @semantic-release/changelog
+          @semantic-release/git
+          semantic-release-vsce
+
+      - name: Release extension
+        working-directory: cursor-extension
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: semantic-release
