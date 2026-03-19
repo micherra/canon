@@ -1,5 +1,6 @@
 {
   "name": "canon-dashboard",
+  "icon": "assets/icon.png",
   "displayName": "Canon Dashboard",
   "description": "Engineering principles-as-code dashboard — visualize your codebase graph and feed context into Cursor's AI chat",
   "version": "0.1.0",
@@ -52,7 +53,7 @@
     "@types/d3": "^7.4.3",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
-    "esbuild": "^0.24.0",
+    "esbuild": "0.25.0",
     "esbuild-svelte": "^0.9.4",
     "svelte": "^5.54.0",
     "typescript": "^5.7.0",
