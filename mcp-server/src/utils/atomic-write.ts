@@ -14,7 +14,9 @@ export async function atomicWriteFile(filePath: string, data: string): Promise<v
     } catch (renameErr: any) {
       // On Windows, rename() fails with EPERM when dest exists — remove dest and retry
       if (renameErr.code === "EPERM") {
-        await unlink(filePath);
+        try { await unlink(filePath); } catch (e: any) {
+          if (e.code !== "ENOENT") throw e;
+        }
         await rename(tmpPath, filePath);
       } else {
         throw renameErr;

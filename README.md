@@ -139,7 +139,7 @@ Use `--apply` to walk through suggestions interactively.
 
 ## MCP Tools
 
-Canon exposes 11 tools via its MCP server for agents to use during normal work:
+Canon exposes 10 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
@@ -202,7 +202,7 @@ canon/
 ├── agent-rules/         9 agent behavior guidelines
 ├── hooks/               6 automation hooks
 ├── flows/               5 predefined workflow YAML files
-├── mcp-server/          TypeScript MCP server (11 tools)
+├── mcp-server/          TypeScript MCP server (10 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
 │       ├── constants.ts Shared constants (layer centrality, extensions, extractSummary)
@@ -358,7 +358,7 @@ Run `/canon:doctor` to check for configuration issues.
 
 ## Privacy
 
-Canon does not collect, transmit, or share any data. There is no telemetry, no analytics, and no network calls to external services. All data — principles, reviews, decisions, and patterns — is stored locally in your project's `.canon/` directory and never leaves your machine.
+Canon itself does not collect, transmit, or share any data. There is no telemetry, no analytics, and no background network calls to external services from Canon. All data — principles, reviews, decisions, and patterns — is stored locally in your project's `.canon/` directory and never leaves your machine. Optional workflows that you run alongside Canon (for example, using `gh pr diff` via the GitHub CLI for PR review) may make their own network requests according to those tools' behavior.
 
 ## Data Files
 
