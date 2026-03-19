@@ -139,7 +139,7 @@ Use `--apply` to walk through suggestions interactively.
 
 ## MCP Tools
 
-Canon exposes 11 tools via its MCP server for agents to use during normal work:
+Canon exposes 10 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
