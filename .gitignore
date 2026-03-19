@@ -2,14 +2,17 @@ node_modules/
 dist/
 *.js.map
 .DS_Store
-.claude/settings.local.json
-.claude/plans/
+cursor-extension/media/dashboard.js
+.idea/
+.claude/
 
 # Canon local data (generated per-project)
-.canon/reviews.jsonl
-.canon/decisions.jsonl
-.canon/patterns.jsonl
-.canon/learning.jsonl
+.canon/*.jsonl
 .canon/*.archive.jsonl
+.canon/graph-data.json
+.canon/summaries.json
+.canon/dashboard-state.json
 .canon/LEARNING-REPORT.md
 .canon/plans/
+# Keep config (user-edited)
+!.canon/config.json

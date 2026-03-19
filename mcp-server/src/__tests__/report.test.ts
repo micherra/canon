@@ -57,6 +57,25 @@ describe("reportInputSchema", () => {
     expect(reportInputSchema.parse(input)).toEqual(input);
   });
 
+  it("parses a review with optional file_path and impact_score on violations", () => {
+    const input = {
+      type: "review" as const,
+      files: ["src/a.ts"],
+      violations: [{ principle_id: "p1", severity: "rule", file_path: "src/a.ts", impact_score: 5.2 }],
+      honored: [],
+      score: {
+        rules: { passed: 0, total: 1 },
+        opinions: { passed: 0, total: 0 },
+        conventions: { passed: 0, total: 0 },
+      },
+    };
+    const parsed = reportInputSchema.parse(input);
+    if (parsed.type === "review") {
+      expect(parsed.violations[0].file_path).toBe("src/a.ts");
+      expect(parsed.violations[0].impact_score).toBe(5.2);
+    }
+  });
+
   it("rejects input with missing required fields", () => {
     expect(() =>
       reportInputSchema.parse({ type: "decision", principle_id: "p1" })
@@ -113,7 +132,7 @@ describe("report()", () => {
     );
 
     expect(result.recorded).toBe(true);
-    expect(result.id).toMatch(/^dec_\d{8}_[0-9a-f]{4}$/);
+    expect(result.id).toMatch(/^dec_\d{8}_[0-9a-f]{16}$/);
 
     const entries = await readJsonl(join(tmpDir, ".canon", "decisions.jsonl"));
     expect(entries).toHaveLength(1);
@@ -132,7 +151,7 @@ describe("report()", () => {
     );
 
     expect(result.recorded).toBe(true);
-    expect(result.id).toMatch(/^pat_\d{8}_[0-9a-f]{4}$/);
+    expect(result.id).toMatch(/^pat_\d{8}_[0-9a-f]{16}$/);
 
     const entries = await readJsonl(join(tmpDir, ".canon", "patterns.jsonl"));
     expect(entries).toHaveLength(1);

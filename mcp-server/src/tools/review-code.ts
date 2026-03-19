@@ -1,6 +1,6 @@
-import { readFile } from "fs/promises";
-import { join } from "path";
 import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
+import { loadConfigNumber } from "../utils/config.js";
+import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.js";
 
 export interface ReviewCodeInput {
   code: string;
@@ -15,27 +15,24 @@ export interface PrincipleForReview {
   body: string;
 }
 
+export type ReviewGraphContext = Pick<
+  GraphMetrics,
+  "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "layer" | "impact_score" | "layer_violations"
+>;
+
 export interface ReviewCodeOutput {
   summary: string;
   principles_to_evaluate: PrincipleForReview[];
   code: string;
   file_path: string;
   context?: string;
+  graph_context?: ReviewGraphContext;
 }
 
 const DEFAULT_MAX_REVIEW_PRINCIPLES = 15;
 
-async function loadMaxReviewPrinciples(projectDir: string): Promise<number> {
-  try {
-    const configPath = join(projectDir, ".canon", "config.json");
-    const raw = await readFile(configPath, "utf-8");
-    const config = JSON.parse(raw);
-    const value = Number(config?.review?.max_review_principles);
-    if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_REVIEW_PRINCIPLES;
-    return Math.floor(value);
-  } catch {
-    return DEFAULT_MAX_REVIEW_PRINCIPLES;
-  }
+function loadMaxReviewPrinciples(projectDir: string): Promise<number> {
+  return loadConfigNumber(projectDir, "review.max_review_principles", DEFAULT_MAX_REVIEW_PRINCIPLES);
 }
 
 export async function reviewCode(
@@ -58,22 +55,64 @@ export async function reviewCode(
   const budgetForNonRules = Math.max(0, maxReviewPrinciples - rules.length);
   const capped = [...rules, ...nonRules.slice(0, budgetForNonRules)];
 
-  const principlesToEvaluate: PrincipleForReview[] = capped.map((p) => ({
+  // Load graph data to enrich review context
+  let graphContext: ReviewGraphContext | undefined;
+  let metrics: GraphMetrics | null = null;
+  const injected: typeof capped = [];
+  const graph = await loadCachedGraph(projectDir);
+  if (graph) {
+    metrics = getNodeMetrics(graph, input.file_path);
+    if (metrics) {
+      graphContext = {
+        in_degree: metrics.in_degree,
+        out_degree: metrics.out_degree,
+        is_hub: metrics.is_hub,
+        in_cycle: metrics.in_cycle,
+        layer: metrics.layer,
+        impact_score: metrics.impact_score,
+        layer_violations: metrics.layer_violations,
+      };
+
+      // Inject graph-derived principles without mutating capped
+      if (metrics.layer_violation_count > 0 && !capped.some((c) => c.id === "bounded-context-boundaries")) {
+        const found = allPrinciples.find((a) => a.id === "bounded-context-boundaries");
+        if (found) injected.push(found);
+      }
+      if (metrics.in_cycle && !capped.some((c) => c.id === "architectural-fitness-functions")) {
+        const found = allPrinciples.find((a) => a.id === "architectural-fitness-functions");
+        if (found) injected.push(found);
+      }
+    }
+  }
+
+  const allForReview = [...capped, ...injected];
+  const principlesToEvaluate: PrincipleForReview[] = allForReview.map((p) => ({
     principle_id: p.id,
     principle_title: p.title,
     severity: p.severity,
     body: p.body,
   }));
 
-  const ruleCount = rules.length;
-  const opinionCount = capped.filter((p) => p.severity === "strong-opinion").length;
-  const conventionCount = capped.filter((p) => p.severity === "convention").length;
+  const ruleCount = allForReview.filter((p) => p.severity === "rule").length;
+  const opinionCount = allForReview.filter((p) => p.severity === "strong-opinion").length;
+  const conventionCount = allForReview.filter((p) => p.severity === "convention").length;
 
   const omitted = matched.length - capped.length;
   const truncated = omitted > 0
     ? ` (${omitted} lower-priority principles omitted)`
     : "";
-  const summary = `${capped.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}. Evaluate each against the code below.`;
+
+  // Build summary with graph context hints
+  let graphHint = "";
+  if (metrics) {
+    const hints: string[] = [];
+    if (metrics.is_hub) hints.push(`hub file (${metrics.in_degree} dependents)`);
+    if (metrics.in_cycle) hints.push(`in circular dependency with ${metrics.cycle_peers.length} file(s)`);
+    if (metrics.layer_violation_count > 0) hints.push(`${metrics.layer_violation_count} layer boundary violation(s)`);
+    if (hints.length > 0) graphHint = ` Graph context: ${hints.join("; ")}.`;
+  }
+
+  const summary = `${allForReview.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}.${graphHint} Evaluate each against the code below.`;
 
   return {
     summary,
@@ -81,5 +120,6 @@ export async function reviewCode(
     code: input.code,
     file_path: input.file_path,
     context: input.context,
+    graph_context: graphContext,
   };
 }
