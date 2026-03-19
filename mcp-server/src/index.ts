@@ -9,7 +9,7 @@ import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
 import { report } from "./tools/report.js";
 import { getPrReviewData } from "./tools/pr-review-data.js";
-import { codebaseGraph } from "./tools/codebase-graph.js";
+import { codebaseGraph, summarizeGraph } from "./tools/codebase-graph.js";
 import { getFileContext } from "./tools/get-file-context.js";
 import { storeSummaries } from "./tools/store-summaries.js";
 
@@ -29,6 +29,11 @@ const server = new McpServer({
   version: "0.1.0",
 });
 
+/** Standard JSON response wrapper for MCP tool results. */
+function jsonResponse(result: unknown) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+}
+
 // Tool: get_principles
 server.tool(
   "get_principles",
@@ -41,9 +46,7 @@ server.tool(
   },
   async (input) => {
     const result = await getPrinciples(input, projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 
@@ -62,9 +65,7 @@ server.tool(
   },
   async (input) => {
     const result = await listPrinciples(input, projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 
@@ -79,9 +80,7 @@ server.tool(
   },
   async (input) => {
     const result = await reviewCode(input, projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 
@@ -94,9 +93,7 @@ server.tool(
   },
   async (input) => {
     const result = await getCompliance(input, projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 
@@ -110,9 +107,7 @@ server.registerTool(
   },
   async (input) => {
     const result = await report(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 
@@ -128,9 +123,7 @@ server.tool(
   },
   async (input) => {
     const result = await getPrReviewData(input, projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 
@@ -148,24 +141,7 @@ server.tool(
   },
   async (input) => {
     const result = await codebaseGraph(input, projectDir, pluginDir);
-    // Return compact summary — full graph is on disk at .canon/graph-data.json
-    const violationFiles = result.nodes
-      .filter((n) => n.violation_count > 0)
-      .sort((a, b) => b.violation_count - a.violation_count)
-      .slice(0, 10)
-      .map((n) => ({ path: n.id, violation_count: n.violation_count, top_violations: n.top_violations }));
-    const summary = {
-      total_nodes: result.nodes.length,
-      total_edges: result.edges.length,
-      layers: result.layers,
-      violations: violationFiles,
-      insights: result.insights,
-      generated_at: result.generated_at,
-      graph_path: ".canon/graph-data.json",
-    };
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
-    };
+    return jsonResponse(summarizeGraph(result));
   }
 );
 
@@ -179,9 +155,7 @@ server.tool(
   },
   async (input) => {
     const result = await getFileContext(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 
@@ -197,9 +171,7 @@ server.tool(
   },
   async (input) => {
     const result = await storeSummaries(input, projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 
@@ -211,9 +183,7 @@ server.tool(
   {},
   async () => {
     const result = await getDashboardSelection(projectDir, pluginDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
+    return jsonResponse(result);
   }
 );
 

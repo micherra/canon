@@ -9,7 +9,7 @@ import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
 import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
-import { extractSummary } from "../constants.js";
+import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.js";
 import { toPosix, loadPathAliases } from "../utils/paths.js";
 
 export const LAYER_COLORS: Record<string, string> = {
@@ -312,12 +312,31 @@ export async function codebaseGraph(
     reverseIndex[edge.target].push(edge.source);
   }
 
-  const canonDir = join(projectDir, ".canon");
+  const canonDir = join(projectDir, CANON_DIR);
   await mkdir(canonDir, { recursive: true });
   await Promise.all([
-    atomicWriteFile(join(canonDir, "graph-data.json"), JSON.stringify(fullGraph, null, 2)),
-    atomicWriteFile(join(canonDir, "reverse-deps.json"), JSON.stringify(reverseIndex)),
+    atomicWriteFile(join(canonDir, CANON_FILES.GRAPH_DATA), JSON.stringify(fullGraph, null, 2)),
+    atomicWriteFile(join(canonDir, CANON_FILES.REVERSE_DEPS), JSON.stringify(reverseIndex)),
   ]);
 
   return fullGraph;
+}
+
+/** Compact summary for MCP response — full graph is on disk. */
+export function summarizeGraph(graph: CodebaseGraphOutput) {
+  const violationFiles = graph.nodes
+    .filter((n) => n.violation_count > 0)
+    .sort((a, b) => b.violation_count - a.violation_count)
+    .slice(0, 10)
+    .map((n) => ({ path: n.id, violation_count: n.violation_count, top_violations: n.top_violations }));
+
+  return {
+    total_nodes: graph.nodes.length,
+    total_edges: graph.edges.length,
+    layers: graph.layers,
+    violations: violationFiles,
+    insights: graph.insights,
+    generated_at: graph.generated_at,
+    graph_path: `${CANON_DIR}/${CANON_FILES.GRAPH_DATA}`,
+  };
 }

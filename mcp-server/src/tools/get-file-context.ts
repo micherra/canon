@@ -9,22 +9,18 @@ import { scanSourceFiles } from "../graph/scanner.js";
 import { DriftStore } from "../drift/store.js";
 import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
-import { loadCachedGraph, getNodeMetrics } from "../graph/query.js";
+import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.js";
 import { toPosix, loadPathAliases } from "../utils/paths.js";
+import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.js";
 
 export interface GetFileContextInput {
   file_path: string;
 }
 
-export interface FileGraphMetrics {
-  in_degree: number;
-  out_degree: number;
-  is_hub: boolean;
-  in_cycle: boolean;
-  cycle_peers: string[];
-  layer_violation_count: number;
-  impact_score: number;
-}
+export type FileGraphMetrics = Pick<
+  GraphMetrics,
+  "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "cycle_peers" | "layer_violation_count" | "impact_score"
+>;
 
 export interface FileContextOutput {
   file_path: string;
@@ -68,12 +64,13 @@ export async function getFileContext(
     return emptyResult("unknown");
   }
 
-  // Read file content (truncate at 200 lines)
   let content: string;
   try {
     const raw = await readFile(absPath, "utf-8");
     const lines = raw.split("\n");
-    content = lines.length > 200 ? lines.slice(0, 200).join("\n") + "\n... (truncated)" : raw;
+    content = lines.length > FILE_PREVIEW_MAX_LINES
+      ? lines.slice(0, FILE_PREVIEW_MAX_LINES).join("\n") + "\n... (truncated)"
+      : raw;
   } catch (err: unknown) {
     if (isNotFound(err)) {
       return emptyResult(inferLayer(filePath) || "unknown");
@@ -120,7 +117,7 @@ export async function getFileContext(
   // Try the cached reverse index first (O(1)), fall back to O(n) scan.
   let imported_by: string[] = [];
   try {
-    const raw = await readFile(join(projectDir, ".canon", "reverse-deps.json"), "utf-8");
+    const raw = await readFile(join(projectDir, CANON_DIR, CANON_FILES.REVERSE_DEPS), "utf-8");
     const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
     imported_by = reverseIndex[filePath] || [];
   } catch {

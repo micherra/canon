@@ -4,8 +4,8 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { getFileContext } from "./get-file-context.js";
 import { loadAllPrinciples, matchPrinciples } from "../matcher.js";
-import { loadCachedGraph, getNodeMetrics, getDownstreamAffected } from "../graph/query.js";
-import { extractSummary } from "../constants.js";
+import { loadCachedGraph, getNodeMetrics, getDownstreamAffected, type GraphMetrics } from "../graph/query.js";
+import { extractSummary, CANON_DIR } from "../constants.js";
 
 interface ActiveFilePrinciple {
   id: string;
@@ -14,14 +14,10 @@ interface ActiveFilePrinciple {
   summary: string;
 }
 
-export interface DashboardGraphMetrics {
-  in_degree: number;
-  out_degree: number;
-  is_hub: boolean;
-  in_cycle: boolean;
-  impact_score: number;
-  downstream_affected: string[];
-}
+export type DashboardGraphMetrics = Pick<
+  GraphMetrics,
+  "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "impact_score"
+> & { downstream_affected: string[] };
 
 export interface DashboardSelectionOutput {
   has_selection: boolean;
@@ -42,7 +38,7 @@ export async function getDashboardSelection(
   projectDir: string,
   pluginDir: string,
 ): Promise<DashboardSelectionOutput> {
-  const statePath = join(projectDir, ".canon", "dashboard-state.json");
+  const statePath = join(projectDir, CANON_DIR, "dashboard-state.json");
 
   const emptyResult: DashboardSelectionOutput = {
     has_selection: false,
