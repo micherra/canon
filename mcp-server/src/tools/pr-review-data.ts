@@ -2,7 +2,7 @@ import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { PrStore } from "../drift/pr-store.js";
 import { generateId } from "../utils/id.js";
-import type { PrReviewEntry } from "../schema.js";
+import type { PrReviewEntry, ReviewViolation } from "../schema.js";
 import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.js";
 
 export interface PrReviewDataInput {
@@ -110,7 +110,7 @@ export async function recordPrReview(
     last_reviewed_sha?: string;
     verdict: "BLOCKING" | "WARNING" | "CLEAN";
     files: string[];
-    violations: Array<{ principle_id: string; severity: string }>;
+    violations: ReviewViolation[];
     honored: string[];
     score: {
       rules: { passed: number; total: number };
@@ -145,6 +145,12 @@ const GIT_REF_PATTERN = /^[a-zA-Z0-9_.\/\-]+$/;
 function sanitizeGitRef(ref: string): string {
   if (!ref || !GIT_REF_PATTERN.test(ref)) {
     throw new Error(`Invalid git ref: "${ref}". Only alphanumeric, '.', '/', '_', '-' allowed.`);
+  }
+  if (ref.startsWith("-")) {
+    throw new Error(`Invalid git ref: "${ref}". Refs must not start with '-'.`);
+  }
+  if (ref.includes("..")) {
+    throw new Error(`Invalid git ref: "${ref}". Refs must not contain '..'.`);
   }
   return ref;
 }
