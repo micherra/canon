@@ -3,7 +3,7 @@ import { atomicWriteFile } from "../utils/atomic-write.js";
 import { join, isAbsolute } from "path";
 import { execFile } from "child_process";
 import { scanSourceFiles } from "../graph/scanner.js";
-import { extractImports, resolveImport } from "../graph/import-parser.js";
+import { extractImports, resolveImport, type PathAlias } from "../graph/import-parser.js";
 import { loadAllPrinciples } from "../matcher.js";
 import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
@@ -144,7 +144,7 @@ async function detectChangedFiles(
       }
     }
   }
-  return new Set(changedFiles);
+  return new Set(changedFiles.map(toPosix));
 }
 
 /** Build graph nodes from file paths, enriched with compliance data. */
