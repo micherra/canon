@@ -7,9 +7,10 @@
 
   interface Props {
     onZoomToNode: (nodeId: string) => void;
+    onRefreshGraph: () => void;
   }
 
-  let { onZoomToNode }: Props = $props();
+  let { onZoomToNode, onRefreshGraph }: Props = $props();
 
   let branchName = $state("...");
   let changedCount = $state(0);
@@ -63,6 +64,12 @@
   {/if}
   <div class="toolbar-spacer"></div>
   <SearchBar {onZoomToNode} />
+  <button class="refresh-btn" onclick={onRefreshGraph} title="Regenerate graph">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+    </svg>
+  </button>
 </div>
 
 <style>
@@ -93,4 +100,11 @@
     cursor: pointer; transition: border-color 0.15s;
   }
   .pr-filter-bar :global(select:focus) { outline: none; border-color: var(--accent); }
+  .refresh-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted);
+    width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+    transition: color 0.15s, border-color 0.15s; flex-shrink: 0;
+  }
+  .refresh-btn:hover { color: var(--accent); border-color: var(--accent); }
 </style>

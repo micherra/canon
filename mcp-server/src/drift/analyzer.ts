@@ -25,7 +25,7 @@ export interface DriftReport {
     conventions: number;
   };
   most_violated: PrincipleStats[];
-  hotspot_directories: DirectoryStats[];
+  violation_directories: DirectoryStats[];
   intentional_ratio: number; // 0-100: what % of deviations were intentional
   recent_decisions: DecisionEntry[];
   never_triggered: string[]; // principle IDs that never appeared in reviews
@@ -116,7 +116,7 @@ export function analyzeDrift(
     .filter((s) => s.total_violations > 0)
     .sort((a, b) => b.total_violations - a.total_violations);
 
-  // Compute directory hotspots
+  // Compute directories with most violations
   const dirMap = new Map<string, DirectoryStats>();
   for (const review of filteredReviews) {
     if (review.violations.length === 0) continue;
@@ -128,7 +128,7 @@ export function analyzeDrift(
       dirMap.set(dir, stats);
     }
   }
-  const hotspotDirectories = [...dirMap.values()]
+  const violationDirectories = [...dirMap.values()]
     .sort((a, b) => b.total_violations - a.total_violations)
     .slice(0, 10);
 
@@ -189,7 +189,7 @@ export function analyzeDrift(
     total_decisions: filteredDecisions.length,
     avg_score: avgScore,
     most_violated: mostViolated.slice(0, 10),
-    hotspot_directories: hotspotDirectories,
+    violation_directories: violationDirectories,
     intentional_ratio: intentionalRatio,
     recent_decisions: recentDecisions,
     never_triggered: neverTriggered,

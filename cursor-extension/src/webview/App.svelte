@@ -12,6 +12,8 @@
   import GraphCanvas from "./components/GraphCanvas.svelte";
   import RightPanel from "./components/RightPanel.svelte";
   import HelpOverlay from "./components/HelpOverlay.svelte";
+  import Tooltip from "./components/Tooltip.svelte";
+  import { tooltipState } from "./lib/tooltip";
 
   let mounted = $state(false);
   let graphCanvas = $state<GraphCanvas>();
@@ -80,6 +82,10 @@
     getGraphApi()?.highlightCascade(nodeId, cascadeFiles);
   }
 
+  function handleRefreshGraph() {
+    bridge.request("refreshGraph");
+  }
+
   // Global Escape handler
   function handleKeydown(e: KeyboardEvent) {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -95,7 +101,7 @@
 
 <div class="main-content">
   {#if mounted && $graphData}
-    <Toolbar onZoomToNode={handleZoomToNode} />
+    <Toolbar onZoomToNode={handleZoomToNode} onRefreshGraph={handleRefreshGraph} />
     <PrBanner />
     <div class="graph-layout">
       <GraphCanvas
@@ -113,8 +119,13 @@
       />
     </div>
     <HelpOverlay />
+    <Tooltip text={$tooltipState.text} visible={$tooltipState.visible} x={$tooltipState.x} y={$tooltipState.y} />
   {:else if mounted}
-    <p class="empty-state">No graph data. Run <code>/canon:dashboard</code> to generate.</p>
+    <div class="loading-state">
+      <div class="loading-spinner"></div>
+      <p class="loading-title">Mapping your codebase</p>
+      <p class="loading-subtitle">Scanning files, resolving imports, and inferring layers...</p>
+    </div>
   {/if}
 </div>
 
@@ -132,17 +143,34 @@
     min-height: 0;
     position: relative;
   }
-  .empty-state {
-    color: var(--text-muted);
-    font-style: normal;
+  .loading-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
     padding: 48px;
-    text-align: center;
-    font-size: 13px;
   }
-  .empty-state :global(code) {
-    background: var(--bg-card);
-    padding: 2px 8px;
-    border-radius: 4px;
+  .loading-spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-title {
+    color: var(--text-bright);
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .loading-subtitle {
+    color: var(--text-muted);
     font-size: 12px;
+    text-align: center;
+    max-width: 320px;
+    line-height: 1.6;
   }
 </style>

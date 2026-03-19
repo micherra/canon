@@ -5,10 +5,9 @@ import { readFile } from "fs/promises";
 import { join, normalize, resolve } from "path";
 import { extractImports, resolveImport } from "../graph/import-parser.js";
 import { extractExports } from "../graph/export-parser.js";
-import { inferLayer } from "../matcher.js";
 import { scanSourceFiles } from "../graph/scanner.js";
 import { DriftStore } from "../drift/store.js";
-import { loadSourceDirs } from "../utils/config.js";
+import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
 
 export interface GetFileContextInput {
@@ -32,6 +31,10 @@ export async function getFileContext(
   projectDir: string,
 ): Promise<FileContextOutput> {
   const filePath = normalize(input.file_path);
+
+  // Load user-configurable layer mappings
+  const layerMappings = await loadLayerMappings(projectDir);
+  const inferLayer = buildLayerInferrer(layerMappings);
 
   // Prevent path traversal outside the project directory
   const absPath = resolve(projectDir, filePath);

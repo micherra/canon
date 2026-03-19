@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { buildD3Graph, type GraphApi, type FilterOptions } from "../lib/d3Graph";
   import { parseSearchQuery } from "../lib/graph";
-  import { graphData, edgeIn, edgeOut, summaries, type GraphNode } from "../stores/graphData";
+  import { graphData, edgeIn, edgeOut, type GraphNode } from "../stores/graphData";
   import { activeLayers, searchQuery, activeInsightFilter, prReviewFiles, showChangedOnly } from "../stores/filters";
   import { selectedNode, panelMode } from "../stores/selection";
   import { bridge } from "../stores/bridge";
@@ -30,7 +30,7 @@
       onBackgroundClick: () => onBackgroundClick(),
       edgeIn: $edgeIn,
       edgeOut: $edgeOut,
-      summaries: $summaries,
+      summaries: {},
     });
 
   });

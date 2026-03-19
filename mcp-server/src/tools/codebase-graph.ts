@@ -3,10 +3,10 @@ import { join } from "path";
 import { execFile } from "child_process";
 import { scanSourceFiles } from "../graph/scanner.js";
 import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
-import { inferLayer } from "../matcher.js";
+import { loadAllPrinciples } from "../matcher.js";
 import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
-import { loadSourceDirs } from "../utils/config.js";
+import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
 
 export const LAYER_COLORS: Record<string, string> = {
@@ -25,6 +25,7 @@ export interface GraphNode {
   color: string;
   extension: string;
   violation_count: number;
+  top_violations: string[];
   last_verdict: string | null;
   compliance_score: number | null;
   changed: boolean;
@@ -49,7 +50,7 @@ export interface CodebaseGraphOutput {
   nodes: GraphNode[];
   edges: GraphEdge[];
   layers: Array<{ name: string; color: string; file_count: number }>;
-  hotspots: Array<{ path: string; violation_count: number; top_violations: string[] }>;
+  principles: Record<string, { title: string; severity: string; summary: string }>;
   insights: CodebaseInsights;
   generated_at: string;
 }
@@ -102,7 +103,7 @@ function gitRefExists(cwd: string, ref: string): Promise<boolean> {
 export async function codebaseGraph(
   input: CodebaseGraphInput,
   projectDir: string,
-  _pluginDir: string
+  pluginDir: string
 ): Promise<CodebaseGraphOutput> {
   // Determine which directories to scan:
   // 1. Explicit source_dirs from tool input takes priority
@@ -111,6 +112,10 @@ export async function codebaseGraph(
   const explicitSourceDirs = input.source_dirs;
   const configSourceDirs = await loadSourceDirs(projectDir);
   const sourceDirs = explicitSourceDirs || configSourceDirs;
+
+  // Load user-configurable layer mappings
+  const layerMappings = await loadLayerMappings(projectDir);
+  const inferLayer = buildLayerInferrer(layerMappings);
 
   let filePaths: string[];
 
@@ -198,6 +203,13 @@ export async function codebaseGraph(
       ? Array.from(violations.values()).reduce((a, b) => a + b, 0)
       : 0;
 
+    const topViolations = violations
+      ? Array.from(violations.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([id]) => id)
+      : [];
+
     const ext = filePath.split(".").pop() || "";
 
     nodes.push({
@@ -206,6 +218,7 @@ export async function codebaseGraph(
       color: LAYER_COLORS[layer] || LAYER_COLORS.unknown,
       extension: ext,
       violation_count: violationCount,
+      top_violations: topViolations,
       last_verdict: fileVerdicts.get(filePath)?.verdict || null,
       compliance_score: null,
       changed: changedSet.has(filePath),
@@ -248,34 +261,39 @@ export async function codebaseGraph(
     }))
     .sort((a, b) => b.file_count - a.file_count);
 
-  // Build hotspots (top 10 files by violation count)
-  const hotspots = nodes
-    .filter((n) => n.violation_count > 0)
-    .sort((a, b) => b.violation_count - a.violation_count)
-    .slice(0, 10)
-    .map((n) => {
-      const violations = fileViolations.get(n.id)!;
-      const topViolations = Array.from(violations.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([id]) => id);
-      return {
-        path: n.id,
-        violation_count: n.violation_count,
-        top_violations: topViolations,
-      };
-    });
-
   // Generate structural insights
   const edgesForInsights = edges.map((e) => ({ source: e.source, target: e.target }));
   const nodesForInsights = nodes.map((n) => ({ id: n.id, layer: n.layer }));
   const insights = generateInsights(nodesForInsights, edgesForInsights);
 
+  // Fold layer violations into per-node violation_count and top_violations
+  const layerViolationsBySource = new Map<string, number>();
+  for (const lv of insights.layer_violations) {
+    layerViolationsBySource.set(lv.source, (layerViolationsBySource.get(lv.source) || 0) + 1);
+  }
+  for (const node of nodes) {
+    const lvCount = layerViolationsBySource.get(node.id) || 0;
+    if (lvCount > 0) {
+      node.violation_count += lvCount;
+      if (!node.top_violations.includes("imports-across-layers")) {
+        node.top_violations.push("imports-across-layers");
+      }
+    }
+  }
+
+  // Load principles for tooltip descriptions
+  const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
+  const principles: Record<string, { title: string; severity: string; summary: string }> = {};
+  for (const p of allPrinciples) {
+    const firstParagraph = p.body.split(/\n\n/)[0]?.trim() || p.body;
+    principles[p.id] = { title: p.title, severity: p.severity, summary: firstParagraph };
+  }
+
   const fullGraph = {
     nodes,
     edges,
     layers,
-    hotspots,
+    principles,
     insights,
     generated_at: new Date().toISOString(),
   };

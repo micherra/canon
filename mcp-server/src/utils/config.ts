@@ -11,6 +11,47 @@ async function loadCanonConfig(projectDir: string): Promise<Record<string, any> 
   }
 }
 
+/** Default layer mappings — directory patterns to layer names. */
+export const DEFAULT_LAYER_MAPPINGS: Record<string, string[]> = {
+  api: ["api", "routes", "controllers"],
+  ui: ["app", "components", "pages", "views"],
+  domain: ["services", "domain", "models"],
+  data: ["db", "data", "repositories", "prisma"],
+  infra: ["infra", "deploy", "terraform", "docker"],
+  shared: ["utils", "lib", "shared", "types"],
+};
+
+export type LayerMappings = Record<string, string[]>;
+
+/**
+ * Load layer mappings from .canon/config.json, falling back to defaults.
+ * Config format: `{ "layers": { "api": ["api", "routes"], "ui": ["components"] } }`
+ */
+export async function loadLayerMappings(projectDir: string): Promise<LayerMappings> {
+  const config = await loadCanonConfig(projectDir);
+  if (config?.layers && typeof config.layers === "object" && !Array.isArray(config.layers)) {
+    return config.layers as LayerMappings;
+  }
+  return DEFAULT_LAYER_MAPPINGS;
+}
+
+/** Build a layer inference function from a layer mappings object. */
+export function buildLayerInferrer(mappings: LayerMappings): (filePath: string) => string {
+  const compiled: Array<[RegExp, string]> = [];
+  for (const [layer, dirs] of Object.entries(mappings)) {
+    if (!Array.isArray(dirs) || dirs.length === 0) continue;
+    const escaped = dirs.map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const pattern = new RegExp(`(^|\\/)(${escaped.join("|")})(\\/|$)`);
+    compiled.push([pattern, layer]);
+  }
+  return (filePath: string) => {
+    for (const [pattern, layer] of compiled) {
+      if (pattern.test(filePath)) return layer;
+    }
+    return "unknown";
+  };
+}
+
 /** Read source_dirs from .canon/config.json if it exists. */
 export async function loadSourceDirs(projectDir: string): Promise<string[] | null> {
   const config = await loadCanonConfig(projectDir);

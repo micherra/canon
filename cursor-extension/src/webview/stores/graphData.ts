@@ -4,10 +4,10 @@ export interface GraphNode {
   id: string;
   layer: string;
   violation_count?: number;
+  top_violations?: string[];
   changed?: boolean;
   summary?: string;
   exports?: string[];
-  _has_violation?: boolean;
 }
 
 export interface GraphEdge {
@@ -16,11 +16,17 @@ export interface GraphEdge {
   kind?: string;
 }
 
+export interface PrincipleInfo {
+  title: string;
+  severity: string;
+  summary: string;
+}
+
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
   insights?: any;
-  hotspots?: any[];
+  principles?: Record<string, PrincipleInfo>;
 }
 
 export interface PrReview {
@@ -30,8 +36,11 @@ export interface PrReview {
   files: string[];
 }
 
+export type GraphStatus = "ready" | "generating" | "error" | "empty";
 export const graphData = writable<GraphData | null>(null);
+export const graphStatus = writable<GraphStatus>("empty");
 export const prReviews = writable<Record<string, PrReview> | null>(null);
+export const summaryProgress = writable<{ completed: number; total: number } | null>(null);
 
 // Derived edge maps
 export const edgeIn = derived(graphData, ($g) => {
@@ -72,21 +81,11 @@ export const layerMap = derived(graphData, ($g) => {
   return map;
 });
 
-export const summaries = derived(graphData, ($g) => {
-  const map: Record<string, string> = {};
-  if (!$g?.nodes) return map;
-  for (const n of $g.nodes) {
-    if (n.summary) map[n.id] = n.summary;
-  }
-  return map;
-});
 
 // Derived insight counts (shared between HealthStrip and InsightsPanel)
 export const violationCount = derived(graphData, ($g) => {
   if (!$g) return 0;
-  const ins = $g.insights || {};
-  return (ins.layer_violations || []).length +
-    ($g.hotspots || []).reduce((sum: number, h: any) => sum + (h.violation_count || 0), 0);
+  return $g.nodes.reduce((sum, n) => sum + (n.violation_count || 0), 0);
 });
 
 export const cycleCount = derived(graphData, ($g) =>
@@ -97,24 +96,27 @@ export const orphanCount = derived(graphData, ($g) =>
   ($g?.insights?.orphan_files || []).length,
 );
 
+export const principles = derived(graphData, ($g) =>
+  $g?.principles || {},
+);
+
 /** Read JSON from embedded script tags and populate stores */
 export function loadEmbeddedData() {
+  // Read graph generation status
+  const appEl = document.getElementById("app");
+  const status = appEl?.dataset.graphStatus;
+  if (status === "generating") {
+    graphStatus.set("generating");
+  }
+
   const graphEl = document.getElementById("canon-graph-data");
   if (graphEl) {
     try {
       const text = graphEl.textContent?.trim() ?? "";
       if (!text.startsWith("__")) {
         const data = JSON.parse(text) as GraphData;
-
-        // Mark layer violation source files
-        const lvSources = new Set((data.insights?.layer_violations || []).map((v: any) => v.source));
-        for (const node of data.nodes) {
-          if (lvSources.has(node.id) && !(node.violation_count! > 0)) {
-            node._has_violation = true;
-          }
-        }
-
         graphData.set(data);
+        graphStatus.set("ready");
       }
     } catch { /* empty */ }
   }
@@ -128,4 +130,12 @@ export function loadEmbeddedData() {
       }
     } catch { /* empty */ }
   }
+
+  // Listen for push messages from extension (summary progress)
+  window.addEventListener("message", (event) => {
+    const msg = event.data;
+    if (msg.type === "summaryProgress") {
+      summaryProgress.set({ completed: msg.completed, total: msg.total });
+    }
+  });
 }

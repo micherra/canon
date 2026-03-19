@@ -1,9 +1,10 @@
 <script lang="ts">
   import InsightSection from "./InsightSection.svelte";
-  import { graphData, edgeIn, violationCount as violationCountStore } from "../stores/graphData";
+  import { graphData, edgeIn, violationCount as violationCountStore, principles } from "../stores/graphData";
   import { LAYER_CENTRALITY, getLayerColor, truncate, getRuleDescription } from "../lib/constants";
   import { computeCascade, basename } from "../lib/graph";
   import { escapeHtml } from "../lib/escapeHtml";
+  import { tooltip } from "../lib/tooltip";
 
   interface Props {
     onFileClick: (fileId: string) => void;
@@ -18,12 +19,6 @@
   let ins = $derived(data?.insights || {});
   let changedNodes = $derived((data?.nodes || []).filter((n) => n.changed));
 
-  // Summaries
-  let summaries = $derived.by(() => {
-    const map: Record<string, string> = {};
-    for (const n of data?.nodes || []) { if (n.summary) map[n.id] = n.summary; }
-    return map;
-  });
 
   // Changed files with priority scoring
   let sortedChanged = $derived.by(() => {
@@ -46,24 +41,18 @@
       totalAffected: cascadeCache.get(n.id) || 0,
       priority: priorityCache.get(n.id) || 0,
       isHighImpact: (priorityCache.get(n.id) || 0) >= topQuartileThreshold && sorted.length >= 4,
-      summary: summaries[n.id] || "",
     }));
   });
 
-  // Violations
-  let hotspots = $derived(data?.hotspots || []);
-  let layerViolations = $derived(ins.layer_violations || []);
-  let totalViolations = $derived($violationCountStore);
-
-  // Violation files grouped by source
-  let violationsByFile = $derived.by(() => {
-    const byFile = new Map<string, any[]>();
-    for (const x of layerViolations) {
-      if (!byFile.has(x.source)) byFile.set(x.source, []);
-      byFile.get(x.source)!.push(x);
-    }
-    return byFile;
+  // Violations — nodes with violation_count > 0, sorted by count
+  let violationNodes = $derived.by(() => {
+    if (!data?.nodes) return [];
+    return data.nodes
+      .filter((n: any) => (n.violation_count || 0) > 0)
+      .sort((a: any, b: any) => (b.violation_count || 0) - (a.violation_count || 0))
+      .slice(0, 10);
   });
+  let totalViolations = $derived($violationCountStore);
 
   let orphans = $derived(ins.orphan_files || []);
   let mostConnected = $derived(ins.most_connected || []);
@@ -85,20 +74,14 @@
   {#if sortedChanged.length > 0}
     <InsightSection title="Changed Files" count={sortedChanged.length} badgeClass="" type="changed" open={true} onHeaderClick={onHighlightCategory}>
       {#each sortedChanged as n}
-        <div class="hotspot-item" style="border-left-color:var(--info)">
+        <div class="insight-item" style="border-left-color:var(--info)">
           <div style="display:flex;align-items:center;gap:6px">
+            <span class="layer-badge" style="background:{getLayerColor(n.layer)}">{n.layer}</span>
             <button class="file-link-btn" onclick={() => onFileClick(n.id)} style="font-size:12px;font-weight:600;flex:1;text-align:left">{basename(n.id)}</button>
             {#if n.isHighImpact}
               <span class="high-impact-badge">HIGH IMPACT</span>
             {/if}
             <span class="priority-badge" title="Review priority score">{n.priority}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;margin:2px 0">
-            <span class="layer-badge" style="background:{getLayerColor(n.layer)}">{n.layer}</span>
-            <span class="text-muted" style="font-size:10px">{n.deps} dependent{n.deps !== 1 ? "s" : ""}</span>
-            {#if n.totalAffected > 0}
-              <span class="text-info" style="font-size:10px">{n.totalAffected} affected downstream</span>
-            {/if}
           </div>
           {#if n.summary}
             <div style="font-size:10px;color:var(--text-muted);margin:2px 0;line-height:1.4">{truncate(n.summary, 100)}</div>
@@ -110,56 +93,21 @@
 
   {#if totalViolations > 0}
     <InsightSection title="Violations" count={totalViolations} badgeClass="danger" type="violations" onHeaderClick={onHighlightCategory}>
-      {#each hotspots.slice(0, 8) as h}
+      {#each violationNodes as vn}
         <div class="violation-card">
           <div class="violation-card-header">
-            <button class="file-link-btn" onclick={() => onFileClick(h.path)} style="font-size:12px;font-weight:600">{basename(h.path)}</button>
-            <span class="violation-count-badge">{h.violation_count}</span>
+            <span class="layer-badge" style="background:{getLayerColor(vn.layer)};margin-right:6px">{vn.layer}</span>
+            <button class="file-link-btn" onclick={() => onFileClick(vn.id)} style="font-size:12px;font-weight:600">{basename(vn.id)}</button>
+            <span class="violation-count-badge" style="margin-left:auto">{vn.violation_count}</span>
           </div>
           <div class="violation-card-body">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-              <span class="layer-badge" style="background:{getLayerColor(getNodeLayer(h.path))}">{getNodeLayer(h.path)}</span>
-              {#if ($edgeIn.get(h.path) || []).length > 0}
-                <span class="text-muted" style="font-size:10px">{($edgeIn.get(h.path) || []).length} dependents</span>
-              {/if}
-            </div>
-            {#if summaries[h.path]}
-              <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;line-height:1.4">{escapeHtml(truncate(summaries[h.path] || "", 100))}</div>
-            {/if}
-            {#if h.top_violations?.length}
+            {#if vn.top_violations?.length}
               <div style="display:flex;flex-wrap:wrap;gap:4px">
-                {#each h.top_violations as p}
-                  <span class="violation-rule-chip" title={getRuleDescription(p)}>{p}</span>
+                {#each vn.top_violations as p}
+                  <span class="violation-rule-chip" use:tooltip={getRuleDescription(p, $principles)}>{p}</span>
                 {/each}
               </div>
             {/if}
-          </div>
-        </div>
-      {/each}
-      {#each [...violationsByFile.entries()] as [filePath, items]}
-        <div class="violation-card">
-          <div class="violation-card-header">
-            <button class="file-link-btn" onclick={() => onFileClick(filePath)} style="font-size:12px;font-weight:600">{basename(filePath)}</button>
-            <span class="violation-count-badge">{items.length}</span>
-          </div>
-          <div class="violation-card-body">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-              <span class="layer-badge" style="background:{getLayerColor(items[0].source_layer)}">{items[0].source_layer}</span>
-              {#if ($edgeIn.get(filePath) || []).length > 0}
-                <span class="text-muted" style="font-size:10px">{($edgeIn.get(filePath) || []).length} dependents</span>
-              {/if}
-            </div>
-            {#each items as v}
-              <div class="violation-row">
-                <span class="layer-badge" style="background:{getLayerColor(v.source_layer)}">{v.source_layer}</span>
-                <span class="violation-arrow">→</span>
-                <span class="layer-badge" style="background:{getLayerColor(v.target_layer)}">{v.target_layer}</span>
-                <button class="file-link-btn" onclick={() => onFileClick(v.target)}>{basename(v.target)}</button>
-              </div>
-            {/each}
-            <div style="margin-top:4px">
-              <span class="violation-rule-chip" title={getRuleDescription("imports-across-layers")}>imports-across-layers</span>
-            </div>
           </div>
         </div>
       {/each}
@@ -212,12 +160,12 @@
   .file-link-btn:hover { text-decoration: underline; }
   .insight-chain { padding: 4px 0; font-size: 11px; color: var(--text); }
   .insight-chain .file-link-btn { display: inline; padding: 0; font-size: 11px; }
-  .hotspot-item {
+  .insight-item {
     padding: 8px 10px; margin-bottom: 6px;
     background: var(--bg-card); border-radius: var(--radius-sm);
     border: 1px solid var(--border); border-left: 3px solid var(--danger);
   }
-  .hotspot-item .file-link-btn { padding: 0; }
+  .insight-item .file-link-btn { padding: 0; }
   .violation-card {
     margin-bottom: 6px;
     background: var(--bg-card);
@@ -243,11 +191,8 @@
   .violation-card-body {
     padding: 2px 10px 8px;
   }
-  .violation-row { margin: 3px 0; display: flex; align-items: center; gap: 4px; font-size: 11px; }
-  .violation-arrow { color: var(--text-muted); font-size: 10px; }
   .layer-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; color: white; font-weight: 600; }
   .text-muted { color: var(--text-muted); }
-  .text-info { color: var(--info); }
   .high-impact-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: var(--warning); color: #000; font-weight: 600; }
   .priority-badge { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: var(--bg-surface); color: var(--text-muted); font-weight: 600; }
   .clear-highlight-btn {

@@ -26,9 +26,9 @@ description: >-
   </example>
 
   <example>
-  Context: Adoption scan found hotspot files
-  user: "Refactor the top 5 hotspot files to comply with Canon principles"
-  assistant: "Spawning canon-refactorer instances for each hotspot file with its specific violations."
+  Context: Adoption scan found files with violations
+  user: "Refactor the top 5 violation files to comply with Canon principles"
+  assistant: "Spawning canon-refactorer instances for each violation file with its specific violations."
   <commentary>
   The refactorer handles one violation or one tightly related group per invocation for fresh context.
   </commentary>

@@ -159,7 +159,7 @@ export function buildD3Graph(
     .attr("marker-end", "url(#arrow)");
 
   // Violation rings
-  const hasViolation = (n: any) => (n.violation_count || 0) > 0 || n._has_violation;
+  const hasViolation = (n: any) => (n.violation_count || 0) > 0;
   const ringSelection = g
     .selectAll(".violation-ring")
     .data(nodesCopy.filter(hasViolation))

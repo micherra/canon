@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { graphData, violationCount, cycleCount, orphanCount } from "../stores/graphData";
+  import { graphData, violationCount, cycleCount, orphanCount, summaryProgress } from "../stores/graphData";
 
   interface Props {
     onStatClick: (type: string) => void;
@@ -48,6 +48,15 @@
   </div>
 </div>
 
+{#if $summaryProgress && $summaryProgress.completed < $summaryProgress.total}
+  <div class="summary-progress">
+    <div class="summary-progress-bar">
+      <div class="summary-progress-fill" style="width:{Math.round(($summaryProgress.completed / $summaryProgress.total) * 100)}%"></div>
+    </div>
+    <span class="summary-progress-text">Generating summaries {$summaryProgress.completed}/{$summaryProgress.total}</span>
+  </div>
+{/if}
+
 <style>
   .health-strip {
     display: flex; align-items: center; gap: 12px;
@@ -68,4 +77,11 @@
   .health-stat:hover { background: var(--bg-card); }
   .health-stat-val { font-weight: 700; }
   .health-stat-label { color: var(--text-muted); font-weight: 500; }
+  .summary-progress {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 16px 6px; border-bottom: 1px solid var(--border);
+  }
+  .summary-progress-bar { flex: 1; height: 3px; background: var(--bg-card); border-radius: 2px; overflow: hidden; }
+  .summary-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s ease; }
+  .summary-progress-text { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 </style>

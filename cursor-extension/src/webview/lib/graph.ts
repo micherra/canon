@@ -47,7 +47,7 @@ export function basename(filePath: string): string {
 }
 
 /** Collect file IDs for an insight category */
-export function getInsightFiles(type: string, data: { nodes: any[]; edges: any[]; insights?: any; hotspots?: any[] }): Set<string> {
+export function getInsightFiles(type: string, data: { nodes: any[]; edges: any[]; insights?: any }): Set<string> {
   const ins = data.insights || {};
   const files = new Set<string>();
 
@@ -56,7 +56,9 @@ export function getInsightFiles(type: string, data: { nodes: any[]; edges: any[]
       if (v.source) files.add(v.source);
       if (v.target) files.add(v.target);
     }
-    for (const h of data.hotspots || []) files.add(h.path);
+    for (const n of data.nodes) {
+      if ((n.violation_count || 0) > 0) files.add(n.id);
+    }
   } else if (type === "cycles") {
     for (const cycle of ins.circular_dependencies || []) {
       for (const f of cycle) files.add(f);

@@ -3,8 +3,10 @@
   import {getLayerColor, getRuleDescription, SEVERITY_COLORS} from "../lib/constants";
   import {basename, computeCascade, getNodeLayer} from "../lib/graph";
   import type {GraphNode} from "../stores/graphData";
-  import {edgeIn, edgeOut, graphData, layerMap} from "../stores/graphData";
+  import {edgeIn, edgeOut, graphData, layerMap, principles} from "../stores/graphData";
   import {activePrReview, prReviewFiles} from "../stores/filters";
+  import {tooltip} from "../lib/tooltip";
+  import {bridge} from "../stores/bridge";
 
   interface Props {
     node: GraphNode;
@@ -14,6 +16,18 @@
   }
 
   let { node, onBackToOverview, onFileClick, onHighlightCascade }: Props = $props();
+
+  // Lazy-load summary if not already on the node
+  let lazySummary = $state<string | null>(null);
+  $effect(() => {
+    lazySummary = null;
+    if (!node.summary) {
+      bridge.request("getSummary", { fileId: node.id })
+        .then((res: any) => { if (res?.summary) lazySummary = res.summary; })
+        .catch(() => {});
+    }
+  });
+  let displaySummary = $derived(node.summary || lazySummary);
 
   let imports = $derived($edgeOut.get(node.id) || []);
   let importedBy = $derived($edgeIn.get(node.id) || []);
@@ -32,54 +46,9 @@
     return map;
   });
 
-  // Layer violations for this node
-  let nodeViolations = $derived.by(() => {
-    const lv = $graphData?.insights?.layer_violations || [];
-    return lv.filter((v: any) => v.source === node.id);
-  });
-
-  // Top violations from hotspot data for this node
-  let hotspotViolations = $derived.by(() => {
-    const hotspots = $graphData?.hotspots || [];
-    const match = hotspots.find((h: any) => h.path === node.id);
-    return match?.top_violations || [];
-  });
-
-  // Group all violations by rule for the card-per-rule layout
-  interface ViolationGroup {
-    rule: string;
-    count: number;
-    files: Array<{ sourceLayer: string; targetLayer: string; target: string }>;
-  }
-  let violationGroups = $derived.by((): ViolationGroup[] => {
-    const groups = new Map<string, ViolationGroup>();
-
-    // Layer violations → imports-across-layers
-    if (nodeViolations.length > 0) {
-      groups.set("imports-across-layers", {
-        rule: "imports-across-layers",
-        count: nodeViolations.length,
-        files: nodeViolations.map((v: any) => ({
-          sourceLayer: node.layer,
-          targetLayer: v.target_layer,
-          target: v.target,
-        })),
-      });
-    }
-
-    // Hotspot violations (principle-based)
-    for (const rule of hotspotViolations) {
-      if (!groups.has(rule)) {
-        groups.set(rule, { rule, count: 1, files: [] });
-      }
-    }
-
-    return [...groups.values()];
-  });
-
-  let totalViolationCount = $derived(
-    (node.violation_count || 0) + nodeViolations.length
-  );
+  // Violations — unified from node data (MCP folds layer + principle violations together)
+  let totalViolationCount = $derived(node.violation_count || 0);
+  let violationRules = $derived(node.top_violations || []);
 
   // PR review violations for this file
   let prFileViolations = $derived.by(() => {
@@ -131,26 +100,16 @@
     {#if totalViolationCount === 0}
       <span class="text-muted">None</span>
     {:else}
-      {#each violationGroups as group}
-        <div class="violation-card">
-          <div class="violation-card-header">
-            <span class="violation-rule-chip" title={getRuleDescription(group.rule)}>{group.rule}</span>
-            <span class="violation-count-badge">{group.count}</span>
-          </div>
-          {#if group.files.length > 0}
-            <div class="violation-card-body">
-              {#each group.files as f}
-                <div class="violation-row">
-                  <span class="layer-badge" style="background:{getLayerColor(f.sourceLayer)}">{f.sourceLayer}</span>
-                  <span class="violation-arrow">→</span>
-                  <span class="layer-badge" style="background:{getLayerColor(f.targetLayer)}">{f.targetLayer}</span>
-                  <button class="file-link-btn" onclick={() => onFileClick(f.target)}>{basename(f.target)}</button>
-                </div>
-              {/each}
-            </div>
+      <div class="violation-card">
+        <div class="violation-card-header">
+          {#if violationRules.length > 0}
+            {#each violationRules as rule}
+              <span class="violation-rule-chip" use:tooltip={getRuleDescription(rule, $principles)}>{rule}</span>
+            {/each}
           {/if}
+          <span class="violation-count-badge">{totalViolationCount}</span>
         </div>
-      {/each}
+      </div>
     {/if}
   </div>
 
@@ -165,10 +124,10 @@
 
   <div class="detail-field">
     <span class="field-label">Summary</span>
-    {#if node.summary}
-      <div class="file-summary">{node.summary}</div>
+    {#if displaySummary}
+      <div class="file-summary">{displaySummary}</div>
     {:else}
-      <span class="text-muted">Run <code>/canon:dashboard</code> to generate</span>
+      <span class="text-muted">No summary available</span>
     {/if}
   </div>
 
@@ -208,7 +167,7 @@
   }
   .violation-card-header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 10px;
+    padding: 6px 10px; gap: 6px; flex-wrap: wrap;
   }
   .violation-rule-chip {
     font-size: 11px; font-weight: 600; color: var(--danger);
@@ -218,16 +177,6 @@
     font-size: 10px; font-weight: 700; color: var(--danger);
     background: rgba(231, 76, 60, 0.12);
     padding: 1px 7px; border-radius: 10px;
-  }
-  .violation-card-body {
-    padding: 2px 10px 8px;
-  }
-  .violation-row { margin: 4px 0; display: flex; align-items: center; gap: 4px; font-size: 11px; }
-  .violation-arrow { color: var(--text-muted); font-size: 10px; }
-  .layer-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; color: white; font-weight: 600; }
-  .file-link-btn {
-    background: none; border: none; padding: 0; cursor: pointer;
-    text-decoration: underline; color: var(--accent); font-family: inherit; font-size: inherit;
   }
   .insight-back {
     background: none; border: none; padding: 0;

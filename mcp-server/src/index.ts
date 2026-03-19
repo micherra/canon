@@ -166,7 +166,7 @@ server.tool(
 // Tool: codebase_graph
 server.tool(
   "codebase_graph",
-  "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, hotspots, insights).",
+  "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, violations, insights).",
   {
     root_dir: z.string().optional().describe("Fallback root directory to scan when no source_dirs are configured. Ignored if source_dirs exist in input or .canon/config.json."),
     source_dirs: z.array(z.string()).optional().describe("Directories to scan (e.g. ['src', 'lib']). Overrides .canon/config.json source_dirs."),
@@ -178,11 +178,16 @@ server.tool(
   async (input) => {
     const result = await codebaseGraph(input, projectDir, pluginDir);
     // Return compact summary — full graph is on disk at .canon/graph-data.json
+    const violationFiles = result.nodes
+      .filter((n) => n.violation_count > 0)
+      .sort((a, b) => b.violation_count - a.violation_count)
+      .slice(0, 10)
+      .map((n) => ({ path: n.id, violation_count: n.violation_count, top_violations: n.top_violations }));
     const summary = {
       total_nodes: result.nodes.length,
       total_edges: result.edges.length,
       layers: result.layers,
-      hotspots: result.hotspots,
+      violations: violationFiles,
       insights: result.insights,
       generated_at: result.generated_at,
       graph_path: ".canon/graph-data.json",

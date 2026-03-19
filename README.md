@@ -288,6 +288,14 @@ All configuration lives in `.canon/config.json` in your project root. Every key 
 {
   "source_dirs": ["src", "lib"],
   "max_file_lines": 500,
+  "layers": {
+    "api": ["api", "routes", "controllers"],
+    "ui": ["app", "components", "pages", "views"],
+    "domain": ["services", "domain", "models"],
+    "data": ["db", "data", "repositories", "prisma"],
+    "infra": ["infra", "deploy", "terraform", "docker"],
+    "shared": ["utils", "lib", "shared", "types"]
+  },
   "review": {
     "max_principles_per_review": 10,
     "max_review_principles": 15
@@ -299,6 +307,7 @@ All configuration lives in `.canon/config.json` in your project root. Every key 
 |-----|---------|-----------------|
 | `source_dirs` | — | Directories to scan for the codebase graph. When not set, tools require an explicit `source_dirs` or `root_dir` parameter. |
 | `max_file_lines` | 500 | Line threshold for the large file guard hook. Files exceeding this trigger a warning on write/edit. |
+| `layers` | See defaults above | Maps layer names to directory patterns for architectural layer inference. Files in matching directories are assigned that layer. Override to match your project's structure. |
 | `review.max_principles_per_review` | 10 | Cap for `get_principles` (used during code generation). Rules are always included first. |
 | `review.max_review_principles` | 15 | Cap for `review_code` (used during reviews). Rules are never dropped — the total may exceed this cap when many rules match. |
 
