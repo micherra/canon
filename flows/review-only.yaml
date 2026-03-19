@@ -1,7 +1,0 @@
-# Review Only: Just review current changes
-name: review-only
-description: Review staged or working changes against Canon principles
-steps:
-  - id: review
-    agent: canon-reviewer
-    input: git_diff
