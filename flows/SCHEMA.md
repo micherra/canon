@@ -164,7 +164,7 @@ When `progress` is set at the top level, the orchestrator:
 2. Includes its contents as context for each agent spawn
 3. After each cycle, appends a summary of what happened (what worked, what failed, what was learned)
 
-This is the Ralph pattern — progress persists on disk across fresh-context iterations.
+Progress persists on disk across fresh-context iterations — each agent starts clean but learns from what previous iterations discovered.
 
 ## Markdown Body: Spawn Instructions
 

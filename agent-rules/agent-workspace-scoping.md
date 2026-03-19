@@ -12,6 +12,8 @@ Agents operate within a **branch-scoped workspace** at `.canon/workspaces/{branc
 ```
 .canon/workspaces/{sanitized-branch}/
 ├── session.json              # Session metadata
+├── board.json                # Flow execution state (states, transitions, iterations)
+├── progress.md               # Append-only learnings across iterations
 ├── log.jsonl                 # Chronological agent activity log
 ├── context.md                # Living shared context document
 ├── research/                 # Research findings
@@ -45,6 +47,7 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 
 | Agent | Read | Write |
 |-------|------|-------|
+| **orchestrator** | board.json, session.json, flow templates | board.json, session.json, progress.md, log.jsonl |
 | **researcher** | templates/, session.json | research/, log.jsonl |
 | **architect** | research/, templates/, session.json, context.md | decisions/, plans/, log.jsonl, context.md |
 | **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md, log.jsonl |
@@ -56,6 +59,7 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 | **writer** | everything in workspace | notes/ |
 
 Key constraints:
+- **Only the orchestrator reads/writes board.json** — agents never touch execution state
 - **Reviewer never reads research or plans** — cold review principle is preserved
 - **Implementor only reads its own plan + referenced decisions** — fresh context principle is preserved
 - **Researcher never reads other researchers** — scoped research principle is preserved

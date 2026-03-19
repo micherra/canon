@@ -107,4 +107,4 @@ Display the unified review to the user:
 - Violations with fix suggestions
 - Per-layer score breakdown
 - If `--post-comments` was used: "Comments posted to PR #{number}"
-- Tip: "Run `/canon:ralph` to auto-fix violations."
+- Tip: "Run `/canon:build --flow quick-fix` to auto-fix violations."
