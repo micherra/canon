@@ -119,8 +119,8 @@ If **test-the-sad-path** applies:
 
 Run the complete test suite (implementor tests + your new tests). If tests fail:
 - Determine if it's a test bug or an implementation bug
-- If implementation bug: report `IMPLEMENTATION_ISSUE` to the orchestrator
 - If test bug: fix the test and re-run (max 2 retries)
+- If implementation bug: include a structured entry in the `### Issues found` section of your test report (see format below) and report `IMPLEMENTATION_ISSUE` to the orchestrator
 
 ### Step 8: Commit tests
 
@@ -165,8 +165,18 @@ All passing: {yes/no}
 - {principle-id}: tested {what} — {result}
 
 ### Issues found
-- None (or list implementation issues)
+<!-- If no issues: "None" -->
+<!-- If IMPLEMENTATION_ISSUE: use this structured format so the orchestrator can parse it -->
+| File | Failing Test | Root Cause | Suggested Fix |
+|------|-------------|------------|---------------|
+| `path/to/file.ts` | `test name or describe block` | {what the code does wrong — be specific} | {concrete fix suggestion} |
 ```
+
+**IMPLEMENTATION_ISSUE format rule**: The `### Issues found` table is the contract between tester and orchestrator. The orchestrator parses this table to spawn the refactorer. Every column is required:
+- **File**: exact path to the source file (not the test file) with the bug
+- **Failing Test**: test name or describe block that fails
+- **Root Cause**: what the implementation does wrong (not "test fails" — explain WHY)
+- **Suggested Fix**: concrete suggestion the refactorer can act on
 
 ## Workspace Integration
 

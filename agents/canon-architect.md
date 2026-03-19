@@ -204,8 +204,8 @@ Create an index at `.canon/plans/{task-slug}/INDEX.md`:
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Read research from workspace**: Research findings are at `${WORKSPACE}/research/`, not `.canon/plans/`.
-2. **Record decisions**: For each non-trivial design decision, save a decision doc to `${WORKSPACE}/decisions/` using the design-decision template (if template path provided). Name files `{decision-id}.md`.
-3. **Initialize context.md**: Create `${WORKSPACE}/context.md` using the session-context template. This is the living shared context document that other agents will read.
+2. **Record decisions**: For each non-trivial design decision, save a decision doc to `${WORKSPACE}/decisions/` using the design-decision template at `${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md`. Read the template first and follow its structure exactly (see agent-template-required rule). Name files `{decision-id}.md`.
+3. **Initialize context.md**: Create `${WORKSPACE}/context.md` using the session-context template at `${CLAUDE_PLUGIN_ROOT}/templates/session-context.md`. Read the template first and follow its structure exactly (see agent-template-required rule).
 4. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
    ```json
    {"timestamp": "ISO-8601", "agent": "canon-architect", "action": "start", "detail": "Designing approach for {task}"}

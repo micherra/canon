@@ -55,11 +55,21 @@ principles-checked: {N}
 <!-- Read *-SUMMARY.md AFTER completing Stages 1 and 2. Do not revise earlier findings. -->
 
 #### Discrepancies
+<!-- Implementor self-declared compliant, but reviewer found a violation. -->
 | Principle | Implementor Declared | Reviewer Found | Assessment |
 |-----------|---------------------|----------------|-----------|
 | {id} | ✓ COMPLIANT | VIOLATED | {detail} |
 
+#### Unnecessary Deviations
+<!-- Implementor declared deviation, but reviewer sees no need for it. -->
+- **{principle-id}**: Implementor justified deviation but code appears compliant. The deviation may be unnecessary.
+
+#### Confirmed Fixes
+<!-- Implementor declared VIOLATION_FOUND → FIXED, reviewer confirms fix is complete. -->
+- **{principle-id}**: Fix confirmed — {detail}
+
 #### Incomplete Fixes
+<!-- Implementor declared VIOLATION_FOUND → FIXED, but reviewer still finds a violation. -->
 - **{principle-id}**: {detail of remaining issue}
 
 #### Cross-Check Summary

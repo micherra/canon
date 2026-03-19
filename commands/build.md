@@ -155,15 +155,15 @@ Spawn canon-tester agent:
 **Test → Fix Loop** (max 2 iterations):
 
 If tester reports IMPLEMENTATION_ISSUE:
-1. Read the test report to identify the specific issue (file path, failing test, root cause)
-2. Spawn canon-refactorer targeting the specific issue:
-   "Fix the implementation issue identified by the tester: {issue description}. File: {file path}. Root cause: {root cause from test report}. The fix must make the failing test pass without breaking existing tests. Commit atomically."
-3. After refactorer completes, re-run the tester:
-   "Re-run integration tests after fix. Read the updated task summaries and test files. Verify the previously failing test now passes. Continue filling coverage gaps. Save updated test report to ${WORKSPACE}/plans/{slug}/TEST-REPORT.md"
-4. If the tester reports IMPLEMENTATION_ISSUE again on the **same issue**, surface to the user as a blocker — the automated fix loop has failed. Do NOT retry a third time.
+1. Parse the `### Issues found` table from TEST-REPORT.md. Extract each row's columns: `File`, `Failing Test`, `Root Cause`, `Suggested Fix`.
+2. For each issue, spawn a canon-implementor (not refactorer — these are logic bugs, not principle violations):
+   "Fix the implementation bug in {File}. The test `{Failing Test}` is failing because: {Root Cause}. Suggested fix: {Suggested Fix}. Read the failing test file to understand the expected behavior. Fix the source file to make the test pass without breaking other tests. Commit atomically with message: `fix({task-slug}): {brief description}`. Save summary to ${WORKSPACE}/plans/{slug}/{task-id}-FIX-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md."
+3. After fix completes, re-run the tester:
+   "Re-run integration tests after fix. Read the updated code and test files. Verify the previously failing test now passes. Continue filling coverage gaps. Save updated test report to ${WORKSPACE}/plans/{slug}/TEST-REPORT.md"
+4. If the tester reports IMPLEMENTATION_ISSUE again on the **same file + test**, surface to the user as a blocker — the automated fix loop has failed. Do NOT retry a third time.
 5. If the tester reports a **new** IMPLEMENTATION_ISSUE (different file/test), run one more fix iteration for the new issue.
 
-Track fix attempts per issue to avoid infinite loops. Log each iteration to `${WORKSPACE}/log.jsonl`.
+Track fix attempts per `{File}:{Failing Test}` pair to detect retries on the same issue. Log each iteration to `${WORKSPACE}/log.jsonl`.
 
 ### Phase 5: SECURITY (Large only, skippable with --skip-security)
 
