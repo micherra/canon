@@ -74,8 +74,8 @@ export function buildD3Graph(
   }
 
   canvas.innerHTML = '<div class="graph-tooltip" id="graph-tooltip"></div>';
-  const width = canvas.clientWidth || 800;
-  const height = canvas.clientHeight || 600;
+  let width = canvas.clientWidth || 800;
+  let height = canvas.clientHeight || 600;
 
   const nodesCopy = data.nodes.map((n) => ({ ...n }));
   const edgesCopy = data.edges.map((e) => ({
@@ -256,6 +256,8 @@ export function buildD3Graph(
       const dx = d.target.x - d.source.x;
       const dy = d.target.y - d.source.y;
       const dr = Math.sqrt(dx * dx + dy * dy) * 2;
+      // Guard: degenerate arc when source and target overlap
+      if (dr < 1) return `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`;
       return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
     });
     nodeSelection.attr("cx", (d: any) => d.x).attr("cy", (d: any) => d.y);
@@ -267,6 +269,28 @@ export function buildD3Graph(
   for (const n of nodesCopy) nodesCopyMap.set(n.id, n);
 
   graphState = { svg, zoom, nodesCopy, nodesCopyMap, nodeSelection, linkSelection, labelSelection, ringSelection, width, height, currentZoomK };
+
+  // Handle canvas resize — update SVG dimensions and simulation forces
+  const resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const newW = entry.contentRect.width;
+      const newH = entry.contentRect.height;
+      if (newW > 0 && newH > 0 && (Math.abs(newW - width) > 1 || Math.abs(newH - height) > 1)) {
+        width = newW;
+        height = newH;
+        if (graphState) {
+          graphState.width = width;
+          graphState.height = height;
+        }
+        svg.attr("width", width).attr("height", height).attr("viewBox", [0, 0, width, height]);
+        simulation.force("center", d3.forceCenter(width / 2, height / 2));
+        simulation.force("layerX", d3.forceX((d: any) => width / 2 + (layerPos[d.layer] || 0) * width * 0.15).strength(0.04));
+        simulation.force("layerY", d3.forceY(height / 2).strength(0.04));
+        simulation.alpha(0.3).restart();
+      }
+    }
+  });
+  resizeObserver.observe(canvas);
 
   // ── API ──
 
@@ -475,6 +499,7 @@ export function buildD3Graph(
     clearHighlight,
     getGraphState: () => graphState,
     destroy() {
+      resizeObserver.disconnect();
       simulation.stop();
       svg.remove();
       graphState = null;

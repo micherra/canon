@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
   import { buildD3Graph, type GraphApi, type FilterOptions } from "../lib/d3Graph";
   import { parseSearchQuery } from "../lib/graph";
   import { graphData, edgeIn, edgeOut, type GraphNode } from "../stores/graphData";
@@ -17,9 +17,16 @@
 
   let { onNodeClick, onBackgroundClick }: Props = $props();
 
-  onMount(() => {
+  // Build/rebuild D3 graph whenever graphData changes (initial load or message push)
+  $effect(() => {
     const data = $graphData;
     if (!data || !container) return;
+
+    // Destroy previous graph if it exists (prevents memory leak)
+    if (graphApi) {
+      graphApi.destroy();
+      graphApi = undefined;
+    }
 
     // Initialize active layers with all layers present in data
     const allLayers = [...new Set(data.nodes.map((n) => n.layer))];
@@ -32,7 +39,6 @@
       edgeOut: $edgeOut,
       summaries: {},
     });
-
   });
 
   onDestroy(() => {

@@ -50,18 +50,18 @@ while IFS= read -r file; do
 
   # Single-pass secret detection: check all patterns at once to avoid
   # spawning 5+ grep processes per staged file
-  MATCHES=$(echo "$CONTENT" | grep -nEi \
+  MATCHES=$(printf '%s\n' "$CONTENT" | grep -nEi -- \
     'AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY|(password|secret|api_key|apikey|secret_key|access_key|private_key|auth_token)[[:space:]]*[:=][[:space:]]*"[^"]{16,}"|sk_live_[a-zA-Z0-9]{20,}|(postgres|mysql|mongodb|redis)://[^:]+:[^@]{4,}@' \
     2>/dev/null || true)
 
   if [[ -n "$MATCHES" ]]; then
     # Classify the matches for a readable report
     HITS=""
-    echo "$MATCHES" | grep -qEi 'AKIA[0-9A-Z]{16}' 2>/dev/null && HITS="${HITS}  - AWS access key pattern detected\n"
-    echo "$MATCHES" | grep -qEi '-----BEGIN.*PRIVATE KEY' 2>/dev/null && HITS="${HITS}  - Private key detected\n"
-    echo "$MATCHES" | grep -qEi '(password|secret|api_key|apikey|secret_key|access_key|private_key|auth_token)' 2>/dev/null && HITS="${HITS}  - Hardcoded credential in variable assignment\n"
-    echo "$MATCHES" | grep -qE 'sk_live_' 2>/dev/null && HITS="${HITS}  - Stripe live secret key detected\n"
-    echo "$MATCHES" | grep -qE '(postgres|mysql|mongodb|redis)://' 2>/dev/null && HITS="${HITS}  - Connection string with embedded password\n"
+    printf '%s\n' "$MATCHES" | grep -qEi -- 'AKIA[0-9A-Z]{16}' 2>/dev/null && HITS="${HITS}  - AWS access key pattern detected\n"
+    printf '%s\n' "$MATCHES" | grep -qEi -- '-----BEGIN.*PRIVATE KEY' 2>/dev/null && HITS="${HITS}  - Private key detected\n"
+    printf '%s\n' "$MATCHES" | grep -qEi -- '(password|secret|api_key|apikey|secret_key|access_key|private_key|auth_token)' 2>/dev/null && HITS="${HITS}  - Hardcoded credential in variable assignment\n"
+    printf '%s\n' "$MATCHES" | grep -qE -- 'sk_live_' 2>/dev/null && HITS="${HITS}  - Stripe live secret key detected\n"
+    printf '%s\n' "$MATCHES" | grep -qE -- '(postgres|mysql|mongodb|redis)://' 2>/dev/null && HITS="${HITS}  - Connection string with embedded password\n"
     SECRET_VIOLATIONS="${SECRET_VIOLATIONS}**${file}**:\n${HITS}\n"
   fi
 done <<< "$STAGED_FILES"

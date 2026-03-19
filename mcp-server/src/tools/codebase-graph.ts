@@ -1,4 +1,5 @@
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
+import { atomicWriteFile } from "../utils/atomic-write.js";
 import { join } from "path";
 import { execFile } from "child_process";
 import { scanSourceFiles } from "../graph/scanner.js";
@@ -8,6 +9,7 @@ import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
 import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
+import { extractSummary } from "../constants.js";
 
 export const LAYER_COLORS: Record<string, string> = {
   api: "#4A90D9",
@@ -55,7 +57,34 @@ export interface CodebaseGraphOutput {
   generated_at: string;
 }
 
-/** Read path aliases from tsconfig.json if it exists */
+// ── Git helpers ──
+
+function gitCurrentBranch(cwd: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd }, (err, stdout) => {
+      if (err) { resolve(null); return; }
+      resolve(stdout.trim() || null);
+    });
+  });
+}
+
+function gitChangedFiles(cwd: string, base: string): Promise<string[]> {
+  return new Promise((resolve) => {
+    execFile("git", ["diff", "--name-only", `${base}...HEAD`], { cwd }, (err, stdout) => {
+      if (err) { resolve([]); return; }
+      resolve(stdout.trim().split("\n").filter(Boolean));
+    });
+  });
+}
+
+function gitRefExists(cwd: string, ref: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile("git", ["rev-parse", "--verify", ref], { cwd }, (err) => {
+      resolve(!err);
+    });
+  });
+}
+
 async function loadPathAliases(projectDir: string): Promise<PathAlias[]> {
   try {
     const raw = await readFile(join(projectDir, "tsconfig.json"), "utf-8");
@@ -70,57 +99,18 @@ async function loadPathAliases(projectDir: string): Promise<PathAlias[]> {
   return [];
 }
 
+// ── Graph building steps ──
 
-/** Get the current git branch name */
-function gitCurrentBranch(cwd: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd }, (err, stdout) => {
-      if (err) { resolve(null); return; }
-      resolve(stdout.trim() || null);
-    });
-  });
-}
-
-/** Get files changed between a base ref and HEAD */
-function gitChangedFiles(cwd: string, base: string): Promise<string[]> {
-  return new Promise((resolve) => {
-    execFile("git", ["diff", "--name-only", `${base}...HEAD`], { cwd }, (err, stdout) => {
-      if (err) { resolve([]); return; }
-      resolve(stdout.trim().split("\n").filter(Boolean));
-    });
-  });
-}
-
-/** Check if a git ref exists */
-function gitRefExists(cwd: string, ref: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    execFile("git", ["rev-parse", "--verify", ref], { cwd }, (err) => {
-      resolve(!err);
-    });
-  });
-}
-
-export async function codebaseGraph(
+/** Scan project directories and return sorted file paths. */
+async function scanProjectFiles(
   input: CodebaseGraphInput,
   projectDir: string,
-  pluginDir: string
-): Promise<CodebaseGraphOutput> {
-  // Determine which directories to scan:
-  // 1. Explicit source_dirs from tool input takes priority
-  // 2. Then source_dirs from .canon/config.json
-  // 3. root_dir is only used as a fallback when no source_dirs are configured
+): Promise<string[]> {
   const explicitSourceDirs = input.source_dirs;
   const configSourceDirs = await loadSourceDirs(projectDir);
   const sourceDirs = explicitSourceDirs || configSourceDirs;
 
-  // Load user-configurable layer mappings
-  const layerMappings = await loadLayerMappings(projectDir);
-  const inferLayer = buildLayerInferrer(layerMappings);
-
-  let filePaths: string[];
-
   if (sourceDirs && sourceDirs.length > 0) {
-    // Scan each source_dir and merge results with paths relative to projectDir
     const allFiles: string[] = [];
     for (const dir of sourceDirs) {
       const absDir = join(projectDir, dir);
@@ -128,50 +118,56 @@ export async function codebaseGraph(
         includeExtensions: input.include_extensions,
         excludeDirs: input.exclude_dirs,
       });
-      // Prefix relative paths with the source dir
-      for (const f of files) {
-        allFiles.push(join(dir, f));
-      }
+      for (const f of files) allFiles.push(join(dir, f));
     }
-    filePaths = allFiles.sort();
-  } else if (input.root_dir) {
-    // No source_dirs but explicit root_dir — scan that directory
-    // Normalize to project-relative paths so node IDs match file reads
+    return allFiles.sort();
+  }
+
+  if (input.root_dir) {
     const isAbsolute = input.root_dir.startsWith("/");
     const rootDir = input.root_dir === "." || isAbsolute ? input.root_dir : join(projectDir, input.root_dir);
     const scanned = await scanSourceFiles(rootDir, {
       includeExtensions: input.include_extensions,
       excludeDirs: input.exclude_dirs,
     });
-    // Prefix relative root_dir paths so they're project-relative (consistent with source_dirs behavior)
     const prefix = (input.root_dir === "." || isAbsolute) ? "" : input.root_dir;
-    filePaths = prefix ? scanned.map((f) => join(prefix, f)) : scanned;
-  } else {
-    // No source_dirs configured and no root_dir — return empty graph
-    filePaths = [];
+    return prefix ? scanned.map((f) => join(prefix, f)) : scanned;
   }
 
-  const fileSet = new Set(filePaths);
+  return [];
+}
 
-  // Auto-detect changed files from git if not explicitly provided
+/** Detect changed files via git diff or explicit input. */
+async function detectChangedFiles(
+  input: CodebaseGraphInput,
+  projectDir: string,
+): Promise<Set<string>> {
   let changedFiles = input.changed_files || [];
   if (changedFiles.length === 0) {
     const branch = await gitCurrentBranch(projectDir);
     if (branch && branch !== "main" && branch !== "master") {
-      // Find the base branch to diff against
-      const base = input.diff_base || (await gitRefExists(projectDir, "origin/main") ? "origin/main" : (await gitRefExists(projectDir, "origin/master") ? "origin/master" : null));
+      const base = input.diff_base
+        || (await gitRefExists(projectDir, "origin/main") ? "origin/main"
+        : (await gitRefExists(projectDir, "origin/master") ? "origin/master" : null));
       if (base) {
         changedFiles = await gitChangedFiles(projectDir, base);
       }
     }
   }
-  const changedSet = new Set(changedFiles);
+  return new Set(changedFiles);
+}
 
-  // Load compliance data
+/** Build graph nodes from file paths, enriched with compliance data. */
+async function buildNodes(
+  filePaths: string[],
+  inferLayer: (filePath: string) => string,
+  changedSet: Set<string>,
+  projectDir: string,
+): Promise<{ nodes: GraphNode[]; layerCounts: Map<string, number> }> {
   const store = new DriftStore(projectDir);
   const reviews = await store.getReviews();
 
-  // Build per-file violation counts
+  // Per-file violation counts and verdicts
   const fileViolations = new Map<string, Map<string, number>>();
   const fileVerdicts = new Map<string, { timestamp: string; verdict: string }>();
   for (const review of reviews) {
@@ -182,15 +178,14 @@ export async function codebaseGraph(
       }
     }
     for (const v of review.violations) {
-      for (const file of review.files) {
-        if (!fileViolations.has(file)) fileViolations.set(file, new Map());
-        const counts = fileViolations.get(file)!;
-        counts.set(v.principle_id, (counts.get(v.principle_id) || 0) + 1);
-      }
+      const targetFile = v.file_path || review.files[0];
+      if (!targetFile) continue;
+      if (!fileViolations.has(targetFile)) fileViolations.set(targetFile, new Map());
+      const counts = fileViolations.get(targetFile)!;
+      counts.set(v.principle_id, (counts.get(v.principle_id) || 0) + 1);
     }
   }
 
-  // Build nodes
   const nodes: GraphNode[] = [];
   const layerCounts = new Map<string, number>();
 
@@ -200,23 +195,16 @@ export async function codebaseGraph(
 
     const violations = fileViolations.get(filePath);
     const violationCount = violations
-      ? Array.from(violations.values()).reduce((a, b) => a + b, 0)
-      : 0;
-
+      ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
     const topViolations = violations
-      ? Array.from(violations.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(([id]) => id)
+      ? Array.from(violations.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id)
       : [];
-
-    const ext = filePath.split(".").pop() || "";
 
     nodes.push({
       id: filePath,
       layer,
       color: LAYER_COLORS[layer] || LAYER_COLORS.unknown,
-      extension: ext,
+      extension: filePath.split(".").pop() || "",
       violation_count: violationCount,
       top_violations: topViolations,
       last_verdict: fileVerdicts.get(filePath)?.verdict || null,
@@ -225,25 +213,25 @@ export async function codebaseGraph(
     });
   }
 
-  // Load path aliases from tsconfig.json for non-relative import resolution
-  const aliases = await loadPathAliases(projectDir);
+  return { nodes, layerCounts };
+}
 
-  // Build edges — read files relative to projectDir (not rootDir) since paths are project-relative
+/** Build import edges by reading each file and resolving imports. */
+async function buildEdges(
+  filePaths: string[],
+  fileSet: Set<string>,
+  aliases: PathAlias[],
+  projectDir: string,
+): Promise<GraphEdge[]> {
   const edges: GraphEdge[] = [];
-
   for (const filePath of filePaths) {
     try {
       const content = await readFile(join(projectDir, filePath), "utf-8");
       const imports = extractImports(content, filePath);
-
       for (const imp of imports) {
         const resolved = resolveImport(imp, filePath, fileSet, aliases);
         if (resolved && resolved !== filePath) {
-          edges.push({
-            source: filePath,
-            target: resolved,
-            type: "import",
-          });
+          edges.push({ source: filePath, target: resolved, type: "import" });
         }
       }
     } catch (err: unknown) {
@@ -251,57 +239,95 @@ export async function codebaseGraph(
       throw err;
     }
   }
+  return edges;
+}
 
-  // Build layers summary
-  const layers = Array.from(layerCounts.entries())
-    .map(([name, file_count]) => ({
-      name,
-      color: LAYER_COLORS[name] || LAYER_COLORS.unknown,
-      file_count,
-    }))
-    .sort((a, b) => b.file_count - a.file_count);
-
-  // Generate structural insights
-  const edgesForInsights = edges.map((e) => ({ source: e.source, target: e.target }));
-  const nodesForInsights = nodes.map((n) => ({ id: n.id, layer: n.layer }));
-  const insights = generateInsights(nodesForInsights, edgesForInsights);
-
-  // Fold layer violations into per-node violation_count and top_violations
+/** Fold structural violations (layer crossings, cycles) into node violation counts. */
+function enrichNodesWithInsights(nodes: GraphNode[], insights: CodebaseInsights): void {
   const layerViolationsBySource = new Map<string, number>();
   for (const lv of insights.layer_violations) {
     layerViolationsBySource.set(lv.source, (layerViolationsBySource.get(lv.source) || 0) + 1);
+  }
+  const cycleMembers = new Set<string>();
+  for (const cycle of insights.circular_dependencies) {
+    for (const node of cycle) cycleMembers.add(node);
   }
   for (const node of nodes) {
     const lvCount = layerViolationsBySource.get(node.id) || 0;
     if (lvCount > 0) {
       node.violation_count += lvCount;
-      if (!node.top_violations.includes("imports-across-layers")) {
-        node.top_violations.push("imports-across-layers");
+      if (!node.top_violations.includes("bounded-context-boundaries")) {
+        node.top_violations.push("bounded-context-boundaries");
+      }
+    }
+    if (cycleMembers.has(node.id)) {
+      if (!node.top_violations.includes("architectural-fitness-functions")) {
+        node.top_violations.push("architectural-fitness-functions");
       }
     }
   }
+}
 
-  // Load principles for tooltip descriptions
+// ── Main entry point ──
+
+export async function codebaseGraph(
+  input: CodebaseGraphInput,
+  projectDir: string,
+  pluginDir: string
+): Promise<CodebaseGraphOutput> {
+  const layerMappings = await loadLayerMappings(projectDir);
+  const inferLayer = buildLayerInferrer(layerMappings);
+
+  // Step 1: Scan files
+  const filePaths = await scanProjectFiles(input, projectDir);
+  const fileSet = new Set(filePaths);
+
+  // Step 2: Detect changed files
+  const changedSet = await detectChangedFiles(input, projectDir);
+
+  // Step 3: Build nodes with compliance data
+  const { nodes, layerCounts } = await buildNodes(filePaths, inferLayer, changedSet, projectDir);
+
+  // Step 4: Build edges
+  const aliases = await loadPathAliases(projectDir);
+  const edges = await buildEdges(filePaths, fileSet, aliases, projectDir);
+
+  // Step 5: Generate insights and enrich nodes
+  const insights = generateInsights(
+    nodes.map((n) => ({ id: n.id, layer: n.layer })),
+    edges.map((e) => ({ source: e.source, target: e.target })),
+  );
+  enrichNodesWithInsights(nodes, insights);
+
+  // Step 6: Build metadata
+  const layers = Array.from(layerCounts.entries())
+    .map(([name, file_count]) => ({ name, color: LAYER_COLORS[name] || LAYER_COLORS.unknown, file_count }))
+    .sort((a, b) => b.file_count - a.file_count);
+
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
   const principles: Record<string, { title: string; severity: string; summary: string }> = {};
   for (const p of allPrinciples) {
-    const firstParagraph = p.body.split(/\n\n/)[0]?.trim() || p.body;
-    principles[p.id] = { title: p.title, severity: p.severity, summary: firstParagraph };
+    principles[p.id] = { title: p.title, severity: p.severity, summary: extractSummary(p.body) };
   }
 
-  const fullGraph = {
-    nodes,
-    edges,
-    layers,
-    principles,
-    insights,
+  const fullGraph: CodebaseGraphOutput = {
+    nodes, edges, layers, principles, insights,
     generated_at: new Date().toISOString(),
   };
 
-  // Persist full graph to disk — dashboard and ask_codebase read from here
+  // Step 7: Persist graph + reverse index
+  const reverseIndex: Record<string, string[]> = {};
+  for (const edge of edges) {
+    if (!reverseIndex[edge.target]) reverseIndex[edge.target] = [];
+    reverseIndex[edge.target].push(edge.source);
+  }
+
   const canonDir = join(projectDir, ".canon");
   await mkdir(canonDir, { recursive: true });
-  await writeFile(join(canonDir, "graph-data.json"), JSON.stringify(fullGraph, null, 2), "utf-8");
+  await Promise.all([
+    atomicWriteFile(join(canonDir, "graph-data.json"), JSON.stringify(fullGraph, null, 2)),
+    atomicWriteFile(join(canonDir, "reverse-deps.json"), JSON.stringify(reverseIndex)),
+  ]);
 
   return fullGraph;
 }

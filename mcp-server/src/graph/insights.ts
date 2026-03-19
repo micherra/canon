@@ -151,24 +151,41 @@ function detectCycles(nodes: NodeLike[], edges: EdgeLike[]): string[][] {
   const cycleSet = new Set<string>();
   const visited = new Set<string>();
   const inStack = new Set<string>();
-  const stack: string[] = [];
+  const path: string[] = [];
 
-  function dfs(node: string): void {
-    if (cycles.length >= 20) return; // cap total cycles found
-    visited.add(node);
-    inStack.add(node);
-    stack.push(node);
+  // Iterative DFS using explicit call stack to avoid stack overflow on deep graphs
+  // Each frame tracks: node, neighbor index (which neighbor to visit next)
+  type Frame = { node: string; neighborIdx: number };
 
-    for (const neighbor of adj.get(node) || []) {
-      if (cycles.length >= 20) return;
+  for (const startNode of nodes) {
+    if (visited.has(startNode.id) || cycles.length >= 20) continue;
+
+    const callStack: Frame[] = [{ node: startNode.id, neighborIdx: 0 }];
+    visited.add(startNode.id);
+    inStack.add(startNode.id);
+    path.push(startNode.id);
+
+    while (callStack.length > 0 && cycles.length < 20) {
+      const frame = callStack[callStack.length - 1];
+      const neighbors = adj.get(frame.node) || [];
+
+      if (frame.neighborIdx >= neighbors.length) {
+        // All neighbors explored — backtrack
+        callStack.pop();
+        path.pop();
+        inStack.delete(frame.node);
+        continue;
+      }
+
+      const neighbor = neighbors[frame.neighborIdx];
+      frame.neighborIdx++;
 
       if (inStack.has(neighbor)) {
         // Found a cycle — extract it
-        const cycleStart = stack.indexOf(neighbor);
+        const cycleStart = path.indexOf(neighbor);
         if (cycleStart >= 0) {
-          const cycle = stack.slice(cycleStart);
+          const cycle = path.slice(cycleStart);
           if (cycle.length <= MAX_CYCLE_LEN) {
-            // Normalize: rotate so smallest element is first
             const normalized = normalizeCycle(cycle);
             const key = normalized.join(" -> ");
             if (!cycleSet.has(key)) {
@@ -178,18 +195,16 @@ function detectCycles(nodes: NodeLike[], edges: EdgeLike[]): string[][] {
           }
         }
       } else if (!visited.has(neighbor)) {
-        dfs(neighbor);
+        visited.add(neighbor);
+        inStack.add(neighbor);
+        path.push(neighbor);
+        callStack.push({ node: neighbor, neighborIdx: 0 });
       }
     }
 
-    stack.pop();
-    inStack.delete(node);
-  }
-
-  for (const node of nodes) {
-    if (!visited.has(node.id)) {
-      dfs(node.id);
-    }
+    // Clean up if we exited early (cycle cap reached)
+    for (const node of path) inStack.delete(node);
+    path.length = 0;
   }
 
   return cycles;

@@ -101,6 +101,17 @@ Rules: X/Y passed | Opinions: X/Y passed | Conventions: X/Y passed
 
 If no violations found, say so clearly.
 
+## Graph-Aware Context
+
+If the `review_code` MCP tool returned `graph_context`, use it to inform your review:
+
+- **Hub files** (high `in_degree`): Violations here affect many dependents. Note the blast radius in your report — e.g., "This file is imported by 23 other files; this violation has high cascade impact."
+- **Circular dependencies** (`in_cycle: true`): Flag tightly coupled code. If the file participates in a cycle, note which files are involved and whether the change makes the cycle better or worse.
+- **Layer boundary violations** (`layer_violations`): These are architectural violations where imports cross layer boundaries. Treat them as `bounded-context-boundaries` violations.
+- **Impact score**: Use this to prioritize findings. Higher-impact violations should appear first in your report.
+
+If `graph_context` is not provided (graph not yet generated), skip this — do not request graph data yourself.
+
 ## Stage 2: Principle-Informed Code Quality
 
 Using the same diff, evaluate broader code quality **through the lens of the loaded canon principles**. This is NOT a generic code review — it's quality evaluation informed by what the canon values.
@@ -110,6 +121,11 @@ Examples:
 - If `naming-reveals-intent` is loaded: scrutinize naming quality — are names descriptive or generic?
 - If `errors-are-values` is loaded: check error handling patterns beyond just the return types
 - If `thin-handlers` is loaded: check for business logic creeping into handlers
+
+When graph context is available, also evaluate:
+- **Coupling quality**: Does this change increase fan-in or fan-out unnecessarily? Does it introduce new cross-layer imports?
+- **Dependency direction**: Do new imports flow in the correct architectural direction (e.g., api → domain → data, not reverse)?
+- **Hub responsibility**: If this is a hub file, is its interface surface growing? (Hubs should have narrow, stable APIs.)
 
 This stage is **advisory** — suggestions, not violations.
 

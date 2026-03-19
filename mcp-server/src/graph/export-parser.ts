@@ -1,17 +1,18 @@
+import { JS_EXTENSIONS, PY_EXTENSIONS } from "../constants.js";
+
+/** Registry of export extractors by file extension. Add new languages here. */
+const exportExtractors = new Map<string, (content: string) => string[]>();
+for (const ext of JS_EXTENSIONS) exportExtractors.set(ext, extractJsExports);
+for (const ext of PY_EXTENSIONS) exportExtractors.set(ext, extractPyExports);
+
 /**
  * Extract exported names from source file content.
  * Returns an array of exported identifiers (function names, class names, constants, etc.)
  */
 export function extractExports(content: string, filePath: string): string[] {
   const ext = filePath.split(".").pop() || "";
-
-  if (["ts", "tsx", "js", "jsx", "mjs", "cjs"].includes(ext)) {
-    return extractJsExports(content);
-  } else if (ext === "py") {
-    return extractPyExports(content);
-  }
-
-  return [];
+  const extractor = exportExtractors.get(ext);
+  return extractor ? extractor(content) : [];
 }
 
 function extractJsExports(content: string): string[] {

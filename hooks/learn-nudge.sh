@@ -30,7 +30,7 @@ if command -v md5sum &>/dev/null; then
 else
   PROJECT_HASH=$(echo -n "$(pwd)" | md5 | head -c 8)
 fi
-NUDGE_FILE="/tmp/canon-learn-nudged-${PROJECT_HASH}"
+NUDGE_FILE=".canon/.learn-nudged-${PROJECT_HASH}"
 if [[ -f "$NUDGE_FILE" ]]; then
   exit 0
 fi

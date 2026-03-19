@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { graphData, loadEmbeddedData, edgeIn, nodeMap, type GraphNode } from "./stores/graphData";
+  import { graphData, graphStatus, loadEmbeddedData, edgeIn, nodeMap, type GraphNode } from "./stores/graphData";
   import { bridge } from "./stores/bridge";
   import { activeInsightFilter, searchQuery } from "./stores/filters";
   import { selectedNode, panelMode } from "./stores/selection";
@@ -103,6 +103,9 @@
 
 <div class="main-content">
   {#if mounted && $graphData}
+    {#if $graphStatus === "refreshing"}
+      <div class="refresh-bar">Refreshing graph...</div>
+    {/if}
     <Toolbar onZoomToNode={handleZoomToNode} onRefreshGraph={handleRefreshGraph} />
     <PrBanner />
     <div class="graph-layout">
@@ -125,8 +128,16 @@
   {:else if mounted}
     <div class="loading-state">
       <div class="loading-spinner"></div>
-      <p class="loading-title">Mapping your codebase</p>
-      <p class="loading-subtitle">Scanning files, resolving imports, and inferring layers...</p>
+      {#if $graphStatus === "generating"}
+        <p class="loading-title">Mapping your codebase</p>
+        <p class="loading-subtitle">Scanning files, resolving imports, and inferring layers...</p>
+      {:else if $graphStatus === "error"}
+        <p class="loading-title">Failed to load graph</p>
+        <p class="loading-subtitle">Check the Canon terminal for errors, then click refresh to retry.</p>
+      {:else}
+        <p class="loading-title">No graph data</p>
+        <p class="loading-subtitle">Click refresh to generate your codebase graph.</p>
+      {/if}
     </div>
   {/if}
 </div>
@@ -144,6 +155,20 @@
     flex: 1;
     min-height: 0;
     position: relative;
+  }
+  .refresh-bar {
+    background: var(--accent);
+    color: var(--bg);
+    text-align: center;
+    padding: 4px 0;
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+    animation: pulse-bg 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-bg {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
   }
   .loading-state {
     flex: 1;

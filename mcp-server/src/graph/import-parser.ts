@@ -1,4 +1,10 @@
 import { dirname, join, normalize } from "path";
+import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../constants.js";
+
+/** Registry of import extractors by file extension. Add new languages here. */
+const importExtractors = new Map<string, (content: string) => string[]>();
+for (const ext of JS_EXTENSIONS) importExtractors.set(ext, extractJsImports);
+for (const ext of PY_EXTENSIONS) importExtractors.set(ext, extractPyImports);
 
 /**
  * Extract import paths from source file content.
@@ -8,21 +14,12 @@ export function extractImports(
   content: string,
   filePath: string
 ): string[] {
-  const imports: string[] = [];
   const ext = filePath.split(".").pop() || "";
-
-  if (["ts", "tsx", "js", "jsx", "mjs", "cjs"].includes(ext)) {
-    imports.push(...extractJsImports(content));
-  } else if (ext === "py") {
-    imports.push(...extractPyImports(content));
-  }
-
-  return imports;
+  const extractor = importExtractors.get(ext);
+  return extractor ? extractor(content) : [];
 }
 
-/**
- * Extract JS/TS import paths.
- */
+/** Extract JS/TS import paths. */
 function extractJsImports(content: string): string[] {
   const imports: string[] = [];
 
@@ -54,9 +51,7 @@ function extractJsImports(content: string): string[] {
   return imports;
 }
 
-/**
- * Extract Python import paths.
- */
+/** Extract Python import paths. */
 function extractPyImports(content: string): string[] {
   const imports: string[] = [];
 
@@ -107,15 +102,13 @@ export function parseTsconfigPaths(
   return aliases;
 }
 
-const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
-
 /** Try to find a file in the set with extension and index resolution */
 function tryResolve(candidate: string, allFiles: Set<string>): string | null {
   if (allFiles.has(candidate)) return candidate;
-  for (const ext of EXTENSIONS) {
+  for (const ext of RESOLVE_EXTENSIONS) {
     if (allFiles.has(candidate + ext)) return candidate + ext;
   }
-  for (const ext of EXTENSIONS) {
+  for (const ext of RESOLVE_EXTENSIONS) {
     const indexPath = join(candidate, "index" + ext);
     if (allFiles.has(indexPath)) return indexPath;
   }

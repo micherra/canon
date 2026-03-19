@@ -129,10 +129,17 @@ Break the design into atomic tasks. Each task should:
 - Have concrete verification steps
 - Be independently committable
 
+**Graph-informed wave assignment**: Before assigning waves, use the `get_file_context` MCP tool for key files in the design to understand the real dependency graph:
+- Check `imports` and `imported_by` to understand actual dependency direction
+- Check `graph_metrics.in_degree` to identify high-impact files that many other tasks may depend on — place these in earlier waves
+- Check `graph_metrics.in_cycle` to detect tightly coupled files — tasks touching files in the same cycle should be in the same wave (they can't be parallelized safely)
+- Verify: no task in Wave N depends on output from a task in Wave N+1
+
 Assign wave numbers based on dependencies:
-- **Wave 1**: Tasks with no dependencies (can run in parallel)
+- **Wave 1**: Foundation tasks (high fan-in targets, shared utilities, types) — no dependencies
 - **Wave 2**: Tasks that depend on wave 1 output
 - Etc.
+- **Same wave**: Tasks touching files in the same dependency cycle
 
 For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md`:
 

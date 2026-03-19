@@ -120,8 +120,25 @@ export function analyzeDrift(
   const dirMap = new Map<string, DirectoryStats>();
   for (const review of filteredReviews) {
     if (review.violations.length === 0) continue;
-    for (const file of review.files) {
-      const dir = dirname(file);
+    // When violations have file_path, attribute to that specific file's directory.
+    // Otherwise fall back to distributing across all reviewed files (legacy behavior).
+    const hasPerFileViolations = review.violations.some((v) => v.file_path);
+    if (hasPerFileViolations) {
+      const perFileCount = new Map<string, number>();
+      for (const v of review.violations) {
+        const file = v.file_path || review.files[0] || "";
+        perFileCount.set(file, (perFileCount.get(file) || 0) + 1);
+      }
+      for (const [file, count] of perFileCount) {
+        const dir = dirname(file);
+        const stats = dirMap.get(dir) || { directory: dir, total_violations: 0, review_count: 0 };
+        stats.total_violations += count;
+        stats.review_count++;
+        dirMap.set(dir, stats);
+      }
+    } else {
+      // Legacy: no per-file attribution — count once per review, attributed to first file's dir
+      const dir = dirname(review.files[0] || ".");
       const stats = dirMap.get(dir) || { directory: dir, total_violations: 0, review_count: 0 };
       stats.total_violations += review.violations.length;
       stats.review_count++;

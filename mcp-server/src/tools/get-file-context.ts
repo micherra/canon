@@ -9,9 +9,20 @@ import { scanSourceFiles } from "../graph/scanner.js";
 import { DriftStore } from "../drift/store.js";
 import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
+import { loadCachedGraph, getNodeMetrics } from "../graph/query.js";
 
 export interface GetFileContextInput {
   file_path: string;
+}
+
+export interface FileGraphMetrics {
+  in_degree: number;
+  out_degree: number;
+  is_hub: boolean;
+  in_cycle: boolean;
+  cycle_peers: string[];
+  layer_violation_count: number;
+  impact_score: number;
 }
 
 export interface FileContextOutput {
@@ -23,6 +34,7 @@ export interface FileContextOutput {
   exports: string[];
   violation_count: number;
   last_verdict: string | null;
+  graph_metrics?: FileGraphMetrics;
 }
 
 
@@ -94,7 +106,7 @@ export async function getFileContext(
     }
   } catch { /* no tsconfig or no paths */ }
 
-  // Scan all project files to resolve imports and find reverse dependencies
+  // Scan all project files to resolve this file's imports
   const sourceDirs = await loadSourceDirs(projectDir);
   let allFiles: string[] = [];
 
@@ -117,23 +129,31 @@ export async function getFileContext(
     if (resolved) imports.push(resolved);
   }
 
-  // Find files that import this file (reverse dependencies)
-  const imported_by: string[] = [];
-  for (const otherFile of allFiles) {
-    if (otherFile === filePath) continue;
-    try {
-      const otherContent = await readFile(join(projectDir, otherFile), "utf-8");
-      const otherImports = extractImports(otherContent, otherFile);
-      for (const imp of otherImports) {
-        const resolved = resolveImport(imp, otherFile, fileSet, aliases);
-        if (resolved === filePath) {
-          imported_by.push(otherFile);
-          break;
+  // Find files that import this file (reverse dependencies).
+  // Try the cached reverse index first (O(1)), fall back to O(n) scan.
+  let imported_by: string[] = [];
+  try {
+    const raw = await readFile(join(projectDir, ".canon", "reverse-deps.json"), "utf-8");
+    const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
+    imported_by = reverseIndex[filePath] || [];
+  } catch {
+    // No reverse index — fall back to scanning all files
+    for (const otherFile of allFiles) {
+      if (otherFile === filePath) continue;
+      try {
+        const otherContent = await readFile(join(projectDir, otherFile), "utf-8");
+        const otherImports = extractImports(otherContent, otherFile);
+        for (const imp of otherImports) {
+          const resolved = resolveImport(imp, otherFile, fileSet, aliases);
+          if (resolved === filePath) {
+            imported_by.push(otherFile);
+            break;
+          }
         }
+      } catch (err: unknown) {
+        if (isNotFound(err)) continue;
+        throw err;
       }
-    } catch (err: unknown) {
-      if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") continue;
-      throw err;
     }
   }
 
@@ -150,11 +170,36 @@ export async function getFileContext(
           lastReviewedAt = review.timestamp;
           last_verdict = review.verdict;
         }
-        violation_count += review.violations.length;
+        // Count only violations attributed to this specific file.
+        // Falls back to counting all violations if none have file_path (legacy data).
+        const hasPerFile = review.violations.some((v) => v.file_path);
+        if (hasPerFile) {
+          violation_count += review.violations.filter((v) => v.file_path === filePath).length;
+        } else {
+          violation_count += review.violations.length;
+        }
       }
     }
   } catch {
     // no compliance data
+  }
+
+  // Load graph metrics if graph data exists
+  let graph_metrics: FileGraphMetrics | undefined;
+  const graph = await loadCachedGraph(projectDir);
+  if (graph) {
+    const metrics = getNodeMetrics(graph, filePath);
+    if (metrics) {
+      graph_metrics = {
+        in_degree: metrics.in_degree,
+        out_degree: metrics.out_degree,
+        is_hub: metrics.is_hub,
+        in_cycle: metrics.in_cycle,
+        cycle_peers: metrics.cycle_peers,
+        layer_violation_count: metrics.layer_violation_count,
+        impact_score: metrics.impact_score,
+      };
+    }
   }
 
   return {
@@ -166,5 +211,6 @@ export async function getFileContext(
     exports,
     violation_count,
     last_verdict,
+    graph_metrics,
   };
 }

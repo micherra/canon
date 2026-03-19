@@ -5,12 +5,23 @@ import { join } from "path";
 import { resolve } from "path";
 import { getFileContext } from "./get-file-context.js";
 import { loadAllPrinciples, matchPrinciples } from "../matcher.js";
+import { loadCachedGraph, getNodeMetrics, getDownstreamAffected } from "../graph/query.js";
+import { extractSummary } from "../constants.js";
 
 interface ActiveFilePrinciple {
   id: string;
   title: string;
   severity: string;
   summary: string;
+}
+
+export interface DashboardGraphMetrics {
+  in_degree: number;
+  out_degree: number;
+  is_hub: boolean;
+  in_cycle: boolean;
+  impact_score: number;
+  downstream_affected: string[];
 }
 
 export interface DashboardSelectionOutput {
@@ -25,6 +36,7 @@ export interface DashboardSelectionOutput {
   timestamp: string | null;
   active_file: string | null;
   active_file_principles: ActiveFilePrinciple[];
+  graph_metrics?: DashboardGraphMetrics;
 }
 
 export async function getDashboardSelection(
@@ -63,7 +75,7 @@ export async function getDashboardSelection(
           id: p.id,
           title: p.title,
           severity: p.severity,
-          summary: p.body.split(/\n\n/)[0]?.trim() || p.title,
+          summary: extractSummary(p.body),
         }));
       } catch {
         // Principle loading failed — skip
@@ -95,6 +107,23 @@ export async function getDashboardSelection(
       // File context unavailable
     }
 
+    // Load graph metrics for selected node
+    let graphMetrics: DashboardGraphMetrics | undefined;
+    const graph = await loadCachedGraph(projectDir);
+    if (graph) {
+      const metrics = getNodeMetrics(graph, node.id);
+      if (metrics) {
+        graphMetrics = {
+          in_degree: metrics.in_degree,
+          out_degree: metrics.out_degree,
+          is_hub: metrics.is_hub,
+          in_cycle: metrics.in_cycle,
+          impact_score: metrics.impact_score,
+          downstream_affected: getDownstreamAffected(graph, node.id, 2),
+        };
+      }
+    }
+
     return {
       has_selection: true,
       selected_node_id: node.id,
@@ -107,6 +136,7 @@ export async function getDashboardSelection(
       timestamp: state.timestamp || null,
       active_file: activeFile,
       active_file_principles: activeFilePrinciples,
+      graph_metrics: graphMetrics,
     };
   } catch {
     return emptyResult;

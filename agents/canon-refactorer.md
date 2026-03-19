@@ -75,14 +75,24 @@ Pay special attention to:
 
 If the violation falls under a documented exception, report **CANNOT_FIX** with reason: "Falls under documented exception: {exception text}."
 
-### Step 3: Read the violating code
+### Step 3: Read the violating code and understand its graph position
 
 Read the full file containing the violation. Understand:
 - What the code currently does (functional behavior to preserve)
 - Where exactly the violation occurs
 - What upstream and downstream code depends on the current behavior
 
-If the file imports from or is imported by other files, read those dependency files to understand the contract you must preserve.
+**Use the dependency graph for caller discovery**: Call the `get_file_context` MCP tool with the violation's file path. The response includes:
+- `imports`: files this code depends on (fan-out)
+- `imported_by`: files that depend on this code (fan-in) — these are callers whose contracts you must preserve
+- `graph_metrics` (if available): `in_degree`, `out_degree`, `is_hub`, `in_cycle`, `impact_score`
+
+Use this structural context to understand refactoring risk:
+- **High fan-in** (10+ dependents): Changes to public API are high-risk. Prefer internal-only refactoring that preserves the external interface.
+- **Hub file**: Extra caution — test all callers after refactoring.
+- **In cycle**: Breaking the cycle may require coordinated changes across cycle peers. If the fix would require changing cycle peers, report **CANNOT_FIX** with a suggestion to address the cycle holistically.
+
+Read the most critical callers (highest fan-in files from `imported_by`) to understand what API contract they depend on.
 
 ### Step 4: Plan the refactor
 

@@ -1,5 +1,7 @@
 /** Graph-aware file priority scoring for PR review — pure functions, no I/O */
 
+import { LAYER_CENTRALITY } from "../constants.js";
+
 export interface FilePriorityScore {
   path: string;
   priority_score: number;
@@ -24,15 +26,7 @@ interface PriorityEdge {
   target: string;
 }
 
-const LAYER_CENTRALITY: Record<string, number> = {
-  shared: 3,
-  domain: 2,
-  data: 1.5,
-  api: 1,
-  infra: 1,
-  ui: 0.5,
-  unknown: 0,
-};
+// LAYER_CENTRALITY imported from constants.ts
 
 /**
  * Compute priority scores for files based on graph structure.

@@ -1,0 +1,39 @@
+/** Shared constants — single source of truth for values used across modules. */
+
+/** Layer centrality weights for impact scoring. Higher = more central to architecture. */
+export const LAYER_CENTRALITY: Record<string, number> = {
+  shared: 3,
+  domain: 2,
+  data: 1.5,
+  api: 1,
+  infra: 1,
+  ui: 0.5,
+  unknown: 0,
+};
+
+/** Extensions with import/export parsers (JS/TS and Python). */
+export const JS_EXTENSIONS = new Set(["ts", "tsx", "js", "jsx", "mjs", "cjs"]);
+export const PY_EXTENSIONS = new Set(["py"]);
+
+/** All extensions to scan for (includes Go/Rust which are scanned but lack import parsers). */
+export const SCANNABLE_EXTENSIONS = new Set([
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+  ".py", ".go", ".rs",
+]);
+
+/** Extensions to try when resolving imports (e.g., `./foo` → `./foo.ts`). */
+export const RESOLVE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
+
+/** Canon data directory and file names. */
+export const CANON_DIR = ".canon";
+export const CANON_FILES = {
+  GRAPH_DATA: "graph-data.json",
+  REVERSE_DEPS: "reverse-deps.json",
+  SUMMARIES: "summaries.json",
+  CONFIG: "config.json",
+} as const;
+
+/** Extract the first paragraph from a principle body as its summary. */
+export function extractSummary(body: string): string {
+  return body.split(/\n\n/)[0]?.trim() || body;
+}

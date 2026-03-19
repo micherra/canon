@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 import { DashboardPanel } from "./dashboard-panel";
+import { CANON_DIR, FILES, TIMEOUTS } from "./constants";
 
 /** Currently selected node in the dashboard graph — written to .canon/dashboard-state.json for MCP access */
 export interface SelectedNode {
@@ -21,11 +24,11 @@ export function setSelectedNode(node: SelectedNode | null): void {
   // Persist to .canon/dashboard-state.json so the MCP server can read it
   const workspaceRoot = getWorkspaceRoot();
   if (workspaceRoot) {
-    const fs = require("fs");
-    const path = require("path");
-    const statePath = path.join(workspaceRoot, ".canon", "dashboard-state.json");
+    const statePath = path.join(workspaceRoot, CANON_DIR, FILES.DASHBOARD_STATE);
     const state = { selectedNode: node, timestamp: new Date().toISOString() };
-    fs.writeFileSync(statePath, JSON.stringify(state, null, 2), "utf-8");
+    fs.promises.writeFile(statePath, JSON.stringify(state, null, 2), "utf-8").catch(() => {
+      // .canon dir may not exist yet
+    });
   }
 }
 
@@ -48,16 +51,14 @@ export function activate(context: vscode.ExtensionContext): void {
   // Track active editor file for MCP context injection
   const updateActiveFile = (editor: vscode.TextEditor | undefined) => {
     if (activeFileTimer) clearTimeout(activeFileTimer);
-    activeFileTimer = setTimeout(() => {
+    activeFileTimer = setTimeout(async () => {
       const workspaceRoot = getWorkspaceRoot();
       if (!workspaceRoot) return;
-      const fs = require("fs");
-      const path = require("path");
-      const statePath = path.join(workspaceRoot, ".canon", "dashboard-state.json");
+      const statePath = path.join(workspaceRoot, CANON_DIR, FILES.DASHBOARD_STATE);
 
       let state: Record<string, unknown> = {};
       try {
-        state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+        state = JSON.parse(await fs.promises.readFile(statePath, "utf-8"));
       } catch {
         // No existing state
       }
@@ -73,7 +74,7 @@ export function activate(context: vscode.ExtensionContext): void {
       state.timestamp = new Date().toISOString();
 
       try {
-        fs.writeFileSync(statePath, JSON.stringify(state, null, 2), "utf-8");
+        await fs.promises.writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
       } catch {
         // .canon dir may not exist yet
       }
@@ -92,13 +93,9 @@ export function deactivate(): void {
   // Clean up dashboard state file
   const workspaceRoot = getWorkspaceRoot();
   if (workspaceRoot) {
-    const fs = require("fs");
-    const path = require("path");
-    const statePath = path.join(workspaceRoot, ".canon", "dashboard-state.json");
-    try {
-      fs.unlinkSync(statePath);
-    } catch {
-      // ignore
-    }
+    const statePath = path.join(workspaceRoot, CANON_DIR, FILES.DASHBOARD_STATE);
+    fs.promises.unlink(statePath).catch(() => {
+      // File may not exist
+    });
   }
 }

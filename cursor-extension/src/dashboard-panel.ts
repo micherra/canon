@@ -1,9 +1,31 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
+import * as crypto from "crypto";
 import { readGraphData } from "./services/graph";
 import { getCurrentBranch, getChangedFiles } from "./services/git";
 import { setSelectedNode, getWorkspaceRoot } from "./extension";
+import { CANON_DIR, FILES, TIMEOUTS } from "./constants";
+import type { WebviewRequest, ExtensionPushMessage } from "./messages";
+
+/**
+ * Resolve a relative path within the workspace root, throwing if the result
+ * escapes the workspace (path traversal). Returns the absolute path on success.
+ */
+function safeResolvePath(workspaceRoot: string, relativePath: string): string {
+  if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    throw new Error("Invalid path");
+  }
+  const fullPath = path.resolve(workspaceRoot, relativePath);
+  if (!fullPath.startsWith(workspaceRoot + path.sep) && fullPath !== workspaceRoot) {
+    throw new Error("Invalid path");
+  }
+  return fullPath;
+}
+
+function isEnoent(err: unknown): boolean {
+  return err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT";
+}
 
 export class DashboardPanel {
   private static instance: DashboardPanel | undefined;
@@ -14,6 +36,12 @@ export class DashboardPanel {
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
   private graphTerminal: vscode.Terminal | undefined;
+  private summaryPollTimer?: ReturnType<typeof setInterval>;
+  private summaryPollTimeout?: ReturnType<typeof setTimeout>;
+  private summaryPollTotal?: number;
+  private disposed = false;
+  private generationInProgress = false;
+  private generationTimeout?: ReturnType<typeof setTimeout>;
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this.panel = panel;
@@ -33,34 +61,80 @@ export class DashboardPanel {
   /** Load data and auto-generate if missing */
   private async initDashboard(): Promise<void> {
     const workspaceRoot = getWorkspaceRoot();
-    const graphPath = workspaceRoot ? path.join(workspaceRoot, ".canon", "graph-data.json") : null;
+    const graphPath = workspaceRoot ? path.join(workspaceRoot, CANON_DIR, FILES.GRAPH_DATA) : null;
     const hasGraph = graphPath && fs.existsSync(graphPath);
 
-    // Always render the webview (shows loading state if no data)
+    // Render the webview HTML shell once (embeds graph data if available)
     await this.update();
 
     if (!hasGraph) {
+      // Notify webview that generation is starting, then kick it off
+      this.panel.webview.postMessage({ type: "graphStatus", status: "generating" });
       this.runGraphGeneration();
     }
     // Summary check is deferred until webview sends "ready" message
   }
 
-  private summaryPollTimer?: ReturnType<typeof setInterval>;
+  // ── Data Push (message-based, no HTML re-render) ──
+
+  /** Push graph data to webview via postMessage — no HTML teardown */
+  private async pushGraphData(): Promise<void> {
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) return;
+    try {
+      const graph = await readGraphData(workspaceRoot);
+      const changedFiles = await getChangedFiles(workspaceRoot);
+      const changedSet = new Set(changedFiles);
+      // Create new nodes with changed flag (avoid mutating cached data)
+      graph.nodes = graph.nodes.map((n) => ({ ...n, changed: changedSet.has(n.id) }));
+      this.panel.webview.postMessage({ type: "graphData", data: graph });
+    } catch (err) {
+      console.error("[Canon] Failed to push graph data:", err);
+      this.panel.webview.postMessage({ type: "graphStatus", status: "error" });
+    }
+  }
+
+  /** Push graph data and check if summaries need generating */
+  private async pushGraphDataAndCheckSummaries(): Promise<void> {
+    await this.pushGraphData();
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) return;
+    const graphPath = path.join(workspaceRoot, CANON_DIR, FILES.GRAPH_DATA);
+    this.runSummariesIfNeeded(workspaceRoot, graphPath).catch((err) => {
+      console.error("[Canon] Summary check failed:", err);
+    });
+  }
+
+  /** Push PR review data to webview */
+  private pushPrReviews(workspaceRoot: string): void {
+    try {
+      const prPath = path.join(workspaceRoot, CANON_DIR, FILES.PR_REVIEWS);
+      const raw = fs.readFileSync(prPath, "utf-8");
+      const entries = raw.split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l));
+      this.panel.webview.postMessage({ type: "prReviews", data: entries });
+    } catch (err) {
+      if (!isEnoent(err)) console.warn("[Canon] Failed to read pr-reviews:", err);
+    }
+  }
+
+  // ── Summary Polling ──
 
   /** Check if any graph files are missing from summaries and generate them */
   private async runSummariesIfNeeded(workspaceRoot: string, graphPath: string): Promise<void> {
     try {
       const graphRaw = await fs.promises.readFile(graphPath, "utf-8");
       const nodes = JSON.parse(graphRaw).nodes || [];
-      const fileIds = new Set(nodes.map((n: any) => n.id));
+      const fileIds = new Set(nodes.map((n: { id: string }) => n.id));
       if (fileIds.size === 0) return;
 
-      const sumPath = path.join(workspaceRoot, ".canon", "summaries.json");
+      const sumPath = path.join(workspaceRoot, CANON_DIR, FILES.SUMMARIES);
       let existingSummaries = new Set<string>();
       try {
         const sumRaw = await fs.promises.readFile(sumPath, "utf-8");
         existingSummaries = new Set(Object.keys(JSON.parse(sumRaw)));
-      } catch { /* no summaries file yet */ }
+      } catch (err) {
+        if (!isEnoent(err)) console.warn("[Canon] Failed to read summaries.json:", err);
+      }
 
       const missing = [...fileIds].filter((id) => !existingSummaries.has(id));
       if (missing.length > 0) {
@@ -73,18 +147,32 @@ export class DashboardPanel {
         this.runSummaryGeneration();
         this.startSummaryPolling(workspaceRoot, graphPath);
       }
-    } catch { /* ignore parse errors */ }
+    } catch (err) {
+      if (!isEnoent(err)) console.warn("[Canon] Failed to check summaries:", err);
+    }
   }
 
   /** Poll summaries.json to track progress during generation */
   private startSummaryPolling(workspaceRoot: string, graphPath: string): void {
-    if (this.summaryPollTimer) clearInterval(this.summaryPollTimer);
+    this.clearSummaryPolling();
+
+    // Capture total once at start to avoid moving target if graph updates mid-poll
+    try {
+      const graphRaw = fs.readFileSync(graphPath, "utf-8");
+      this.summaryPollTotal = (JSON.parse(graphRaw).nodes || []).length;
+    } catch {
+      this.summaryPollTotal = undefined;
+    }
+    if (!this.summaryPollTotal) return;
+    const total = this.summaryPollTotal;
 
     this.summaryPollTimer = setInterval(() => {
+      if (this.disposed) {
+        this.clearSummaryPolling();
+        return;
+      }
       try {
-        const graphRaw = fs.readFileSync(graphPath, "utf-8");
-        const total = (JSON.parse(graphRaw).nodes || []).length;
-        const sumPath = path.join(workspaceRoot, ".canon", "summaries.json");
+        const sumPath = path.join(workspaceRoot, CANON_DIR, FILES.SUMMARIES);
         const sumRaw = fs.readFileSync(sumPath, "utf-8");
         const completed = Object.keys(JSON.parse(sumRaw)).length;
 
@@ -94,26 +182,31 @@ export class DashboardPanel {
           total,
         });
 
-        // Stop polling when done
         if (completed >= total) {
-          clearInterval(this.summaryPollTimer!);
-          this.summaryPollTimer = undefined;
+          this.clearSummaryPolling();
         }
-      } catch { /* ignore */ }
+      } catch (err) {
+        if (!isEnoent(err)) console.warn("[Canon] Summary poll error:", err);
+      }
     }, 2000);
 
-    // Stop after 10 minutes
-    setTimeout(() => {
-      if (this.summaryPollTimer) {
-        clearInterval(this.summaryPollTimer);
-        this.summaryPollTimer = undefined;
-      }
-    }, 600000);
-
-    this.disposables.push({ dispose: () => {
-      if (this.summaryPollTimer) clearInterval(this.summaryPollTimer);
-    }});
+    this.summaryPollTimeout = setTimeout(() => {
+      this.clearSummaryPolling();
+    }, TIMEOUTS.GENERATION_TIMEOUT_MS);
   }
+
+  private clearSummaryPolling(): void {
+    if (this.summaryPollTimer) {
+      clearInterval(this.summaryPollTimer);
+      this.summaryPollTimer = undefined;
+    }
+    if (this.summaryPollTimeout) {
+      clearTimeout(this.summaryPollTimeout);
+      this.summaryPollTimeout = undefined;
+    }
+  }
+
+  // ── Panel Lifecycle ──
 
   static createOrShow(context: vscode.ExtensionContext): void {
     const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
@@ -141,110 +234,119 @@ export class DashboardPanel {
 
   static refresh(context: vscode.ExtensionContext): void {
     if (DashboardPanel.instance) {
-      DashboardPanel.instance.update();
+      DashboardPanel.instance.pushGraphData().catch((err) => {
+        console.error("[Canon] Failed to refresh dashboard:", err);
+      });
     } else {
       DashboardPanel.createOrShow(context);
     }
   }
 
+  /** Render full HTML shell — only called once during initDashboard() */
   private async update(): Promise<void> {
     this.panel.webview.html = await this.getWebviewContent();
   }
 
-  private async handleMessage(msg: { type: string; id?: number; [key: string]: unknown }): Promise<void> {
+  // ── Message Handling ──
+
+  private async handleMessage(msg: WebviewRequest): Promise<void> {
     const workspaceRoot = getWorkspaceRoot();
     if (!workspaceRoot) return;
 
     switch (msg.type) {
-      case "webviewReady": {
-        // Webview is loaded — check if summaries need generating
-        const graphPath = path.join(workspaceRoot, ".canon", "graph-data.json");
-        if (fs.existsSync(graphPath)) {
-          this.runSummariesIfNeeded(workspaceRoot, graphPath);
-        }
-        break;
-      }
-      case "getBranch": {
-        const branch = await getCurrentBranch(workspaceRoot);
-        this.panel.webview.postMessage({ responseId: msg.id, data: { branch } });
-        break;
-      }
-      case "getFile": {
-        const filePath = msg.path as string;
-        if (!isValidRelativePath(filePath, workspaceRoot)) {
-          this.panel.webview.postMessage({ responseId: msg.id, error: "Invalid path" });
-          break;
-        }
-        try {
-          const fullPath = path.resolve(workspaceRoot, filePath);
-          if (!fullPath.startsWith(workspaceRoot + path.sep) && fullPath !== workspaceRoot) {
-            this.panel.webview.postMessage({ responseId: msg.id, error: "Invalid path" });
-            break;
-          }
-          const content = fs.readFileSync(fullPath, "utf-8");
-          this.panel.webview.postMessage({
-            responseId: msg.id,
-            data: { content, path: filePath },
-          });
-        } catch {
-          this.panel.webview.postMessage({ responseId: msg.id, error: "File not found" });
-        }
-        break;
-      }
-      case "getSummary": {
-        const fileId = msg.fileId as string;
-        if (!fileId || !isValidRelativePath(fileId, workspaceRoot)) {
-          this.panel.webview.postMessage({ responseId: msg.id, data: { summary: null } });
-          break;
-        }
-        // Try summaries.json first
-        try {
-          const sumPath = path.join(workspaceRoot, ".canon", "summaries.json");
-          const raw = fs.readFileSync(sumPath, "utf-8");
-          const summaries = JSON.parse(raw) as Record<string, string | { summary: string }>;
-          const entry = summaries[fileId];
-          if (entry) {
-            const summary = typeof entry === "string" ? entry : entry.summary || "";
-            this.panel.webview.postMessage({ responseId: msg.id, data: { summary } });
-            break;
-          }
-        } catch { /* no summaries file */ }
-        // Fallback: read first few lines of the file
-        try {
-          const fullPath = path.resolve(workspaceRoot, fileId);
-          const content = fs.readFileSync(fullPath, "utf-8");
-          const lines = content.split("\n").slice(0, 5).join("\n").trim();
-          this.panel.webview.postMessage({ responseId: msg.id, data: { summary: lines ? `${lines}...` : null } });
-        } catch {
-          this.panel.webview.postMessage({ responseId: msg.id, data: { summary: null } });
-        }
-        break;
-      }
-      case "nodeSelected": {
-        const node = msg.node as { id: string; layer: string; summary: string; violation_count: number } | null;
-        setSelectedNode(node);
-        break;
-      }
-      case "refreshGraph": {
-        this.runGraphGeneration();
-        break;
-      }
+      case "webviewReady": return this.onWebviewReady(workspaceRoot);
+      case "getBranch": return this.onGetBranch(workspaceRoot, msg.id!);
+      case "getFile": return this.onGetFile(workspaceRoot, msg.path as string, msg.id!);
+      case "getSummary": return this.onGetSummary(workspaceRoot, msg.fileId as string, msg.id!);
+      case "nodeSelected": return this.onNodeSelected(msg.node as any);
+      case "refreshGraph": return this.onRefreshGraph();
     }
   }
+
+  private onWebviewReady(workspaceRoot: string): void {
+    this.pushPrReviews(workspaceRoot);
+    const graphPath = path.join(workspaceRoot, CANON_DIR, FILES.GRAPH_DATA);
+    if (fs.existsSync(graphPath)) {
+      this.runSummariesIfNeeded(workspaceRoot, graphPath).catch((err) => {
+        console.error("[Canon] Summary check failed:", err);
+      });
+    }
+  }
+
+  private async onGetBranch(workspaceRoot: string, id: number): Promise<void> {
+    const branch = await getCurrentBranch(workspaceRoot);
+    this.panel.webview.postMessage({ responseId: id, data: { branch } });
+  }
+
+  private onGetFile(workspaceRoot: string, filePath: string, id: number): void {
+    try {
+      const fullPath = safeResolvePath(workspaceRoot, filePath);
+      const content = fs.readFileSync(fullPath, "utf-8");
+      this.panel.webview.postMessage({ responseId: id, data: { content, path: filePath } });
+    } catch {
+      this.panel.webview.postMessage({ responseId: id, error: "Invalid path or file not found" });
+    }
+  }
+
+  private onGetSummary(workspaceRoot: string, fileId: string, id: number): void {
+    try {
+      safeResolvePath(workspaceRoot, fileId);
+    } catch {
+      this.panel.webview.postMessage({ responseId: id, data: { summary: null } });
+      return;
+    }
+    // Try summaries.json first
+    try {
+      const sumPath = path.join(workspaceRoot, CANON_DIR, FILES.SUMMARIES);
+      const raw = fs.readFileSync(sumPath, "utf-8");
+      const summaries = JSON.parse(raw) as Record<string, string | { summary: string }>;
+      const entry = summaries[fileId];
+      if (entry) {
+        const summary = typeof entry === "string" ? entry : entry.summary || "";
+        this.panel.webview.postMessage({ responseId: id, data: { summary } });
+        return;
+      }
+    } catch (err) {
+      if (!isEnoent(err)) console.warn("[Canon] Failed to read summaries.json:", err);
+    }
+    // Fallback: read first few lines
+    try {
+      const fullPath = safeResolvePath(workspaceRoot, fileId);
+      const content = fs.readFileSync(fullPath, "utf-8");
+      const lines = content.split("\n").slice(0, 5).join("\n").trim();
+      this.panel.webview.postMessage({ responseId: id, data: { summary: lines ? `${lines}...` : null } });
+    } catch {
+      this.panel.webview.postMessage({ responseId: id, data: { summary: null } });
+    }
+  }
+
+  private onNodeSelected(node: { id: string; layer: string; summary: string; violation_count: number } | null): void {
+    setSelectedNode(node);
+  }
+
+  private onRefreshGraph(): void {
+    this.postToWebview({ type: "graphStatus", status: "refreshing" });
+    this.runGraphGeneration();
+  }
+
+  /** Type-safe wrapper for posting messages to the webview. */
+  private postToWebview(msg: ExtensionPushMessage): void {
+    this.panel.webview.postMessage(msg);
+  }
+
+  // ── HTML Template (initial render only) ──
 
   private async getWebviewContent(): Promise<string> {
     const webview = this.panel.webview;
     const workspaceRoot = getWorkspaceRoot();
 
-    // Load graph data from workspace
+    // Embed graph data if available (fast startup on re-open)
     let graphData = "null";
     let graphExists = false;
-    let prReviews = "null";
     if (workspaceRoot) {
       try {
         const graph = await readGraphData(workspaceRoot);
         graphExists = true;
-        // Overlay live git changed files onto graph nodes
         const changedFiles = await getChangedFiles(workspaceRoot);
         const changedSet = new Set(changedFiles);
         for (const node of graph.nodes) {
@@ -254,45 +356,33 @@ export class DashboardPanel {
       } catch (err) {
         console.error("[Canon] Failed to load graph data:", err);
       }
-      try {
-        const prPath = path.join(workspaceRoot, ".canon", "pr-reviews.jsonl");
-        const raw = fs.readFileSync(prPath, "utf-8");
-        const entries = raw.split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l));
-        prReviews = JSON.stringify(entries);
-      } catch {
-        // No PR reviews file — expected on first run
-      }
     }
 
-    // Read the HTML shell bundled with the extension
     const templatePath = path.join(this.extensionUri.fsPath, "media", "dashboard.html");
     if (!fs.existsSync(templatePath)) {
       return `<html><body><h2>No dashboard template found</h2><p>Extension is missing the dashboard template.</p></body></html>`;
     }
     let html = fs.readFileSync(templatePath, "utf-8");
 
-    // Generate nonce for CSP
     const nonce = getNonce();
 
-    // Replace resource URI placeholders
     const d3Uri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "d3.v7.min.js"));
     const markedUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "marked.min.js"));
     const dashboardJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "dashboard.js"));
-    html = html.replace("__D3_URI__", d3Uri.toString());
-    html = html.replace("__MARKED_URI__", markedUri.toString());
-    html = html.replace("__DASHBOARD_JS_URI__", dashboardJsUri.toString());
+    html = html.replaceAll("__D3_URI__", d3Uri.toString());
+    html = html.replaceAll("__MARKED_URI__", markedUri.toString());
+    html = html.replaceAll("__DASHBOARD_JS_URI__", dashboardJsUri.toString());
 
-    // Inject graph data and generation status
     const graphStatus = graphExists ? "ready" : "empty";
-    html = html.replace("__CANON_GRAPH_DATA__", graphData);
-    html = html.replace("__CANON_PR_REVIEWS__", prReviews);
-    html = html.replace("__CANON_GRAPH_STATUS__", graphStatus);
+    // Escape </script> sequences to prevent XSS when embedding JSON in script tags
+    const safeGraphData = graphData.replaceAll("</", "<\\/");
+    html = html.replaceAll("__CANON_GRAPH_DATA__", safeGraphData);
+    // PR reviews loaded via message after webviewReady, not embedded
+    html = html.replaceAll("__CANON_PR_REVIEWS__", "null");
+    html = html.replaceAll("__CANON_GRAPH_STATUS__", graphStatus);
 
-    // Add nonce to all script tags
     html = html.replaceAll("<script", `<script nonce="${nonce}"`);
-    // Fix the data scripts (they don't need nonce but it doesn't hurt)
 
-    // Add CSP meta tag
     const csp = [
       `default-src 'none'`,
       `style-src ${webview.cspSource} 'unsafe-inline'`,
@@ -308,13 +398,12 @@ export class DashboardPanel {
     return html;
   }
 
-  /** Resolve the Canon plugin directory */
+  // ── Terminal & Generation ──
+
   private findPluginDir(): string | null {
     const home = process.env.HOME || process.env.USERPROFILE || "";
     const candidates = [
-      // Monorepo sibling (development)
       path.resolve(this.extensionUri.fsPath, ".."),
-      // Installed plugin cache
       path.join(home, ".claude", "plugins", "cache", "canon"),
     ];
     for (const dir of candidates) {
@@ -336,8 +425,15 @@ export class DashboardPanel {
     return this.graphTerminal;
   }
 
-  /** Run codebase_graph via Claude CLI in a terminal, then generate summaries */
   private runGraphGeneration(): void {
+    if (this.generationInProgress) return;
+    this.generationInProgress = true;
+    // Safety timeout: reset flag after 10 minutes if generation never completes
+    if (this.generationTimeout) clearTimeout(this.generationTimeout);
+    this.generationTimeout = setTimeout(() => {
+      this.generationInProgress = false;
+      this.generationTimeout = undefined;
+    }, TIMEOUTS.GENERATION_TIMEOUT_MS);
     const pf = this.getPluginFlag();
     const graphCmd = `claude ${pf}-p "Call the codebase_graph MCP tool with no arguments."`;
     const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
@@ -346,8 +442,9 @@ export class DashboardPanel {
     term.sendText(`${graphCmd} && ${summaryCmd}`);
   }
 
-  /** Run only summary generation (graph already exists) */
   private runSummaryGeneration(): void {
+    if (this.generationInProgress) return;
+    this.generationInProgress = true;
     const pf = this.getPluginFlag();
     const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
 
@@ -357,23 +454,26 @@ export class DashboardPanel {
 
   private sendSummaryProgress(workspaceRoot: string): void {
     try {
-      const graphRaw = fs.readFileSync(path.join(workspaceRoot, ".canon", "graph-data.json"), "utf-8");
+      const graphRaw = fs.readFileSync(path.join(workspaceRoot, CANON_DIR, FILES.GRAPH_DATA), "utf-8");
       const totalFiles = (JSON.parse(graphRaw).nodes || []).length;
-      const sumRaw = fs.readFileSync(path.join(workspaceRoot, ".canon", "summaries.json"), "utf-8");
+      const sumRaw = fs.readFileSync(path.join(workspaceRoot, CANON_DIR, FILES.SUMMARIES), "utf-8");
       const summaryCount = Object.keys(JSON.parse(sumRaw)).length;
       this.panel.webview.postMessage({
         type: "summaryProgress",
         completed: summaryCount,
         total: totalFiles,
       });
-    } catch { /* ignore */ }
+    } catch (err) {
+      if (!isEnoent(err)) console.warn("[Canon] Summary progress read failed:", err);
+    }
   }
+
+  // ── File Watcher ──
 
   private setupFileWatcher(): void {
     const workspaceRoot = getWorkspaceRoot();
     if (!workspaceRoot) return;
 
-    // Watch .canon/ data files + git HEAD (branch switches, commits)
     const pattern = new vscode.RelativePattern(workspaceRoot, "{.canon/{graph-data,summaries}.json,.git/HEAD}");
     this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
 
@@ -381,11 +481,14 @@ export class DashboardPanel {
       if (this.debounceTimer) clearTimeout(this.debounceTimer);
       this.debounceTimer = setTimeout(() => {
         if (uri.fsPath.endsWith("summaries.json")) {
-          // Push summary progress to webview without full re-render
           this.sendSummaryProgress(workspaceRoot);
         } else {
-          console.log("[Canon] File watcher triggered, refreshing dashboard");
-          this.update();
+          if (uri.fsPath.endsWith("graph-data.json")) this.generationInProgress = false;
+          if (this.generationTimeout) { clearTimeout(this.generationTimeout); this.generationTimeout = undefined; }
+          console.log("[Canon] File watcher triggered, pushing graph data");
+          this.pushGraphDataAndCheckSummaries().catch((err) => {
+            console.error("[Canon] Failed to push graph data:", err);
+          });
         }
       }, 500);
     };
@@ -394,27 +497,35 @@ export class DashboardPanel {
     this.fileWatcher.onDidCreate(debouncedUpdate, null, this.disposables);
     this.disposables.push(this.fileWatcher);
 
-    // Also poll for graph-data.json when it doesn't exist yet (file watchers
-    // can miss creation if the .canon/ directory didn't exist when the watcher was set up)
-    const graphPath = path.join(workspaceRoot, ".canon", "graph-data.json");
+    // Poll for graph-data.json when it doesn't exist yet
+    const graphPath = path.join(workspaceRoot, CANON_DIR, FILES.GRAPH_DATA);
     if (!fs.existsSync(graphPath)) {
       const pollInterval = setInterval(() => {
         if (fs.existsSync(graphPath)) {
           clearInterval(pollInterval);
-          console.log("[Canon] graph-data.json detected via polling, refreshing dashboard");
-          this.update();
+          this.generationInProgress = false;
+          if (this.generationTimeout) { clearTimeout(this.generationTimeout); this.generationTimeout = undefined; }
+          console.log("[Canon] graph-data.json detected via polling, pushing data");
+          this.pushGraphDataAndCheckSummaries().catch((err) => {
+            console.error("[Canon] Failed to push graph data:", err);
+          });
         }
       }, 2000);
-      // Stop polling after 5 minutes
-      setTimeout(() => clearInterval(pollInterval), 300000);
-      this.disposables.push({ dispose: () => clearInterval(pollInterval) });
+      const pollTimeout = setTimeout(() => clearInterval(pollInterval), TIMEOUTS.POLL_TIMEOUT_MS);
+      this.disposables.push({ dispose: () => {
+        clearInterval(pollInterval);
+        clearTimeout(pollTimeout);
+      }});
     }
   }
 
   private dispose(): void {
+    this.disposed = true;
     DashboardPanel.instance = undefined;
     setSelectedNode(null);
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    if (this.generationTimeout) clearTimeout(this.generationTimeout);
+    this.clearSummaryPolling();
     for (const d of this.disposables) {
       d.dispose();
     }
@@ -423,16 +534,14 @@ export class DashboardPanel {
 }
 
 export function isValidRelativePath(filePath: string, workspaceRoot: string): boolean {
-  if (!filePath || filePath.startsWith("..") || path.isAbsolute(filePath)) return false;
-  const fullPath = path.resolve(workspaceRoot, filePath);
-  return fullPath.startsWith(workspaceRoot + path.sep) || fullPath === workspaceRoot;
+  try {
+    safeResolvePath(workspaceRoot, filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function getNonce(): string {
-  let text = "";
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
+  return crypto.randomBytes(16).toString("hex");
 }

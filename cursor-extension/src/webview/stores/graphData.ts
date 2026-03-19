@@ -36,7 +36,7 @@ export interface PrReview {
   files: string[];
 }
 
-export type GraphStatus = "ready" | "generating" | "error" | "empty";
+export type GraphStatus = "ready" | "generating" | "refreshing" | "error" | "empty";
 export const graphData = writable<GraphData | null>(null);
 export const graphStatus = writable<GraphStatus>("empty");
 export const prReviews = writable<Record<string, PrReview> | null>(null);
@@ -131,11 +131,29 @@ export function loadEmbeddedData() {
     } catch { /* empty */ }
   }
 
-  // Listen for push messages from extension (summary progress)
+  // Listen for push messages from extension
   window.addEventListener("message", (event) => {
     const msg = event.data;
     if (msg.type === "summaryProgress") {
-      summaryProgress.set({ completed: msg.completed, total: msg.total });
+      if (typeof msg.completed === "number" && typeof msg.total === "number") {
+        summaryProgress.set({ completed: msg.completed, total: msg.total });
+      }
+    } else if (msg.type === "graphData") {
+      // Validate at trust boundary — ensure data has expected shape
+      const data = msg.data;
+      if (data && Array.isArray(data.nodes) && Array.isArray(data.edges)) {
+        graphData.set(data as GraphData);
+        graphStatus.set("ready");
+      }
+    } else if (msg.type === "graphStatus") {
+      const valid: GraphStatus[] = ["ready", "generating", "refreshing", "error", "empty"];
+      if (valid.includes(msg.status)) {
+        graphStatus.set(msg.status as GraphStatus);
+      }
+    } else if (msg.type === "prReviews") {
+      if (Array.isArray(msg.data)) {
+        prReviews.set(msg.data);
+      }
     }
   });
 }

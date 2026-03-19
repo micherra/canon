@@ -1,7 +1,8 @@
 /** Store file summaries to .canon/summaries.json — merges with existing */
 
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
+import { atomicWriteFile } from "../utils/atomic-write.js";
 
 export interface SummaryEntry {
   summary: string;
@@ -70,7 +71,7 @@ export async function storeSummaries(
 
   // Write back
   await mkdir(dirname(summariesPath), { recursive: true });
-  await writeFile(summariesPath, JSON.stringify(existing, null, 2), "utf-8");
+  await atomicWriteFile(summariesPath, JSON.stringify(existing, null, 2));
 
   return {
     stored: input.summaries.length,
