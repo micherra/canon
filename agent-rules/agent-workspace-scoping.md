@@ -47,6 +47,7 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 
 | Agent | Read | Write |
 |-------|------|-------|
+| **intake** | board.json, session.json (read-only for status) | — (no workspace writes; spawns orchestrator) |
 | **orchestrator** | board.json, session.json, flow templates | board.json, session.json, progress.md, log.jsonl |
 | **researcher** | templates/, session.json | research/, log.jsonl |
 | **architect** | research/, templates/, session.json, context.md | decisions/, plans/, log.jsonl, context.md |
