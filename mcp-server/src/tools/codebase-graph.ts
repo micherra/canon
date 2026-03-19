@@ -144,7 +144,7 @@ async function detectChangedFiles(
       }
     }
   }
-  return new Set(changedFiles);
+  return new Set(changedFiles.map(toPosix));
 }
 
 /** Build graph nodes from file paths, enriched with compliance data. */
