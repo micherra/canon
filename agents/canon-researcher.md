@@ -68,7 +68,7 @@ You will be assigned one of these dimensions:
 
 ## Output Format
 
-Save findings to the specified output path (provided by the orchestrator). Use the **research-finding template** if the orchestrator provides a template path — read it first and follow its structure. Otherwise, use this default format:
+Save findings to the specified output path (provided by the orchestrator). The orchestrator **must** provide the research-finding template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format:
 
 ```markdown
 ---

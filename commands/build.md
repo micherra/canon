@@ -152,7 +152,18 @@ For each wave (starting from --wave N if specified, else wave 1):
 Spawn canon-tester agent:
 "Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true — do NOT read principle files from disk directly. Read task summaries from ${WORKSPACE}/plans/{slug}/*-SUMMARY.md. Read implementor test files. Save test report to ${WORKSPACE}/plans/{slug}/TEST-REPORT.md"
 
-If tester reports IMPLEMENTATION_ISSUE, surface to user.
+**Test → Fix Loop** (max 2 iterations):
+
+If tester reports IMPLEMENTATION_ISSUE:
+1. Read the test report to identify the specific issue (file path, failing test, root cause)
+2. Spawn canon-refactorer targeting the specific issue:
+   "Fix the implementation issue identified by the tester: {issue description}. File: {file path}. Root cause: {root cause from test report}. The fix must make the failing test pass without breaking existing tests. Commit atomically."
+3. After refactorer completes, re-run the tester:
+   "Re-run integration tests after fix. Read the updated task summaries and test files. Verify the previously failing test now passes. Continue filling coverage gaps. Save updated test report to ${WORKSPACE}/plans/{slug}/TEST-REPORT.md"
+4. If the tester reports IMPLEMENTATION_ISSUE again on the **same issue**, surface to the user as a blocker — the automated fix loop has failed. Do NOT retry a third time.
+5. If the tester reports a **new** IMPLEMENTATION_ISSUE (different file/test), run one more fix iteration for the new issue.
+
+Track fix attempts per issue to avoid infinite loops. Log each iteration to `${WORKSPACE}/log.jsonl`.
 
 ### Phase 5: SECURITY (Large only, skippable with --skip-security)
 
@@ -164,7 +175,7 @@ If any **critical** findings, surface to user as a blocker.
 ### Phase 6: REVIEW (all tiers)
 
 Spawn canon-reviewer agent:
-"Review all code changes from this build. Use git diff to see changes. Save review to ${WORKSPACE}/plans/{slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl."
+"Review all code changes from this build. Use git diff to see changes. After completing your independent Stage 1 and Stage 2 review, perform the Stage 3 compliance cross-check by reading implementor summaries from ${WORKSPACE}/plans/{slug}/*-SUMMARY.md. Save review to ${WORKSPACE}/plans/{slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl."
 
 Read the review verdict from REVIEW.md:
 - **BLOCKING**: Rule-severity violations found. Surface all violations to the user. The build is NOT complete — violations must be fixed (spawn canon-refactorer for each violation, or surface for manual fix). After fixes, re-run the review.

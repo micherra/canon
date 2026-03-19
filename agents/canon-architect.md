@@ -46,8 +46,9 @@ Architecture decisions have the highest downstream impact. A bad design multipli
 ### Step 1: Read inputs
 
 1. Read the merged research findings (paths provided by the orchestrator)
-2. Read the full body of Canon principles tagged as relevant by researchers
-3. Read CLAUDE.md for project-level instructions
+2. **Pay special attention to risk research** — if `${WORKSPACE}/research/risk.md` exists, read it fully. Risk findings (edge cases, failure modes, security considerations) must flow into task plans as concrete test requirements and acceptance criteria. Do not let risk findings stop at the design doc.
+3. Read the full body of Canon principles tagged as relevant by researchers
+4. Read CLAUDE.md for project-level instructions
 
 Load principles using the `get_principles` MCP tool, or glob `.canon/principles/**/*.md` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`) and read the frontmatter of each file. Principles are organized into subdirectories by severity: `rules/`, `strong-opinions/`, `conventions/`.
 
@@ -148,6 +149,8 @@ For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md`:
 task_id: "{slug}-{NN}"
 wave: N
 depends_on: []
+decisions:
+  - "{decision-id}"
 files:
   - path/to/file.ts
 principles:
@@ -162,16 +165,27 @@ principles:
 ### Canon principles to apply
 - **{principle-id}**: How to apply it specifically to this task
 
+### Risk mitigations
+<!-- Extracted from risk research. Each item becomes a required test or acceptance criterion. -->
+<!-- Omit this section only if no risk findings apply to this task's files. -->
+- {risk finding}: {how to mitigate — specific test to write or guard to implement}
+
 ### Tests to write
 - {test file path}: {what to test}
+- {test file path}: {risk mitigation test — from risk research}
 
 ### Verify
 1. All new tests pass: `{test command}`
 2. Existing tests still pass: `{project test command}`
+3. All risk mitigations verified: {specific checks}
 
 ### Done when
-[Clear, testable completion criteria — must include "all tests pass"]
+[Clear, testable completion criteria — must include "all tests pass" and "all risk mitigations addressed"]
 ```
+
+**Risk flow rule**: Every finding from the risk researcher MUST map to at least one task plan's `### Risk mitigations` section. If a risk finding doesn't naturally belong to any task, create a dedicated task for it or add it to the most relevant task. After producing all plans, verify: every risk finding has a home. If any risk finding is unaccounted for, flag it in the design doc's "Open questions" section.
+
+**Decision linking rule**: Every plan's `decisions:` frontmatter field MUST list the IDs of design decisions that are relevant to that task. The implementor reads decisions referenced in its plan from `${WORKSPACE}/decisions/`. If a decision affects multiple plans, list it in all of them. After producing all plans, verify: every decision doc is referenced by at least one plan. Unreferenced decisions are wasted context — either link them or remove them.
 
 ### Step 8: Produce plan index
 

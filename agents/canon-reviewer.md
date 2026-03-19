@@ -142,9 +142,58 @@ This stage is **advisory** — suggestions, not violations.
 - [positive observations about code quality]
 ```
 
+## Stage 3: Compliance Cross-Check (Build Pipeline Only)
+
+When the orchestrator provides implementor summary paths (`${WORKSPACE}/plans/{slug}/*-SUMMARY.md`), perform a cross-check between the implementor's self-declared compliance and your Stage 1 findings. This stage ONLY runs during `/canon:build` — skip it for standalone `/canon:review`.
+
+**Cold review is preserved**: You already completed Stages 1 and 2 before reading summaries. The cross-check happens AFTER your independent evaluation is final. Do not revise your Stage 1 findings based on what the implementor claimed.
+
+### Step 1: Read implementor compliance declarations
+
+Read the `### Canon Compliance` section from each `*-SUMMARY.md` file. Extract each principle's declared status (COMPLIANT, JUSTIFIED_DEVIATION, VIOLATION_FOUND → FIXED).
+
+### Step 2: Compare against your Stage 1 findings
+
+For each principle that appears in both your review and the implementor's declaration:
+
+| Your Finding | Implementor Declared | Discrepancy? |
+|-------------|---------------------|-------------|
+| Honored | ✓ COMPLIANT | No — agreement |
+| Violated | ✓ COMPLIANT | **YES — implementor missed a violation** |
+| Honored | ⚠ JUSTIFIED_DEVIATION | Flag — deviation may be unnecessary |
+| Violated | ✗ VIOLATION_FOUND → FIXED | Flag — fix may be incomplete |
+
+### Step 3: Produce cross-check output
+
+```markdown
+### Compliance Cross-Check
+
+#### Discrepancies
+<!-- Implementor self-declared compliant, but reviewer found a violation. -->
+| Principle | Implementor Declared | Reviewer Found | Assessment |
+|-----------|---------------------|----------------|-----------|
+| {id} | ✓ COMPLIANT | VIOLATED | Implementor missed this — {detail} |
+
+#### Unnecessary Deviations
+<!-- Implementor declared deviation, but reviewer sees no need for it. -->
+- **{principle-id}**: Implementor justified deviation but code appears compliant. The deviation may be unnecessary.
+
+#### Confirmed Fixes
+<!-- Implementor declared VIOLATION_FOUND → FIXED, reviewer confirms fix is complete. -->
+- **{principle-id}**: Fix confirmed — {detail}
+
+#### Incomplete Fixes
+<!-- Implementor declared VIOLATION_FOUND → FIXED, but reviewer still finds a violation. -->
+- **{principle-id}**: Fix incomplete — {detail of remaining issue}
+```
+
+If there are no discrepancies, state: "Cross-check: All implementor compliance declarations align with reviewer findings."
+
+Discrepancies are **informational** — they don't change the verdict. But they signal that the implementor may have misunderstood a principle, which the orchestrator should note for future builds.
+
 ## Final Output
 
-Combine both stages into a single review report. Always include both stages, even if one has no findings.
+Combine all stages into a single review report. Always include Stages 1 and 2, even if they have no findings. Include Stage 3 only when implementor summaries were provided.
 
 ### Review verdict
 
@@ -168,7 +217,7 @@ The build orchestrator reads this verdict to decide whether to gate the pipeline
 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
-1. **Use template**: If a review-checklist template path is provided, read and follow its structure for the review output.
+1. **Use template**: The orchestrator **must** provide the review-checklist template path. Read it first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT`.
 2. **Save to reviews/**: In addition to the primary output path, save a copy to `${WORKSPACE}/reviews/`.
 3. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
    ```json
@@ -176,7 +225,7 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
    {"timestamp": "ISO-8601", "agent": "canon-reviewer", "action": "complete", "detail": "Verdict: {verdict}", "artifacts": ["{review-path}"]}
    ```
 
-**Cold review is preserved**: The reviewer still does NOT read research, plans, decisions, or context.md from the workspace. The only workspace interaction is writing output and logging.
+**Cold review is preserved**: The reviewer does NOT read research, plans, decisions, or context.md from the workspace. The only reads are implementor `*-SUMMARY.md` files AFTER Stage 1 and 2 are complete (for the compliance cross-check in Stage 3). The cross-check never influences the independent review.
 
 ## Recording Reviews
 

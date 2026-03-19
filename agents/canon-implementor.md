@@ -66,13 +66,22 @@ If the plan has no `### Tests to write` section, write at minimum:
 - One happy-path test per new public function/endpoint
 - One error-case test per error branch (especially if `errors-are-values` applies)
 
-### Step 5: Compliance declaration
+### Step 5: Coverage notes
+
+Before committing, produce honest coverage notes for the tester. The tester reads this section FIRST to prioritize their work. Being thorough here prevents the tester from duplicating your tests and ensures gaps get filled.
+
+For each file you modified:
+- **Tested Paths**: List every code path you wrote tests for (happy path, error branches, edge cases)
+- **Known Gaps**: List code paths you did NOT test and why (needs integration setup, out of plan scope, complex setup). Be honest — hidden gaps waste the tester's time.
+- **Risk Mitigation Tests**: If your plan had a `### Risk mitigations` section, list each risk item and whether you tested it. Mark untested risks clearly.
+
+### Step 6: Compliance declaration
 
 Before committing, explicitly declare compliance for each loaded Canon principle. This is not optional — you must produce a compliance entry for every principle in the plan.
 
 For each principle, evaluate your implementation and declare one of:
 - **✓ COMPLIANT**: The implementation honors this principle. State how in one line.
-- **⚠ JUSTIFIED_DEVIATION**: The implementation intentionally deviates. State why. (Use the `report` MCP tool with type=decision if available.)
+- **⚠ JUSTIFIED_DEVIATION**: The implementation intentionally deviates. State why. Use the `report` MCP tool with type=decision to persist the deviation — this is **required**, not optional. If the tool is unavailable, note it in your summary so the orchestrator can log it.
 - **✗ VIOLATION_FOUND → FIXED**: You found a violation during review and fixed it. State what was wrong and what you changed.
 
 If a `rule`-severity principle is violated and cannot be fixed, report status `BLOCKED` — do NOT commit with a known rule violation.
@@ -84,14 +93,14 @@ Example compliance declaration:
 - errors-are-values (strong-opinion): ✗ VIOLATION_FOUND → FIXED — createOrder was throwing on invalid input, changed to return Result type
 ```
 
-### Step 6: Verify
+### Step 7: Verify
 
 Run the verification steps from the plan. All must pass:
 1. All new tests written for this task pass
 2. The full project test suite passes (no regressions)
 3. Any additional verification steps from the plan
 
-### Step 7: Commit
+### Step 8: Commit
 
 If verification passes, commit atomically:
 
@@ -102,9 +111,9 @@ Canon principles applied: {principle-1}, {principle-2}
 Verification: passed ({verification details})
 ```
 
-### Step 8: Produce summary
+### Step 9: Produce summary
 
-Write a summary file to the path specified by the orchestrator. Use the **implementation-log template** if the orchestrator provides a template path — read it first and follow its structure. Otherwise, use this default format:
+Write a summary file to the path specified by the orchestrator. The orchestrator **must** provide the implementation-log template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format:
 
 ```markdown
 ---
@@ -130,6 +139,17 @@ commit: "{hash}"
 |-----------|-------|----------|
 | `path/to/file.test.ts` | {N} | happy path, error cases |
 
+### Coverage Notes
+#### Tested Paths
+- {function}: happy path, error return, {edge case}
+
+#### Known Gaps
+- {function}: {untested path} — {reason}
+
+#### Risk Mitigation Tests
+- {risk item}: tested via {test name} — PASS
+- {risk item}: NOT tested — {reason}
+
 ### Canon Compliance
 - **{principle-id}** ({severity}): ✓ COMPLIANT — how
 - **{principle-id}** ({severity}): ⚠ JUSTIFIED_DEVIATION — why (reported)
@@ -153,7 +173,7 @@ Report one of these statuses back to the orchestrator:
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Read shared context**: Read `${WORKSPACE}/context.md` if it exists — the architect's living context doc with key decisions and patterns.
-2. **Read relevant decisions**: If the plan references specific decision IDs, read those from `${WORKSPACE}/decisions/`.
+2. **Read referenced decisions**: Check your plan's `decisions:` frontmatter field. If it lists decision IDs, you **must** read each one from `${WORKSPACE}/decisions/{decision-id}.md`. These contain the architect's rationale for choices that affect your task — ignoring them risks rebuilding a rejected approach or contradicting the design.
 3. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
    ```json
    {"timestamp": "ISO-8601", "agent": "canon-implementor", "action": "start", "detail": "Implementing {task-id}"}

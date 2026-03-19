@@ -49,6 +49,22 @@ principles-checked: {N}
 - **Hub impact**: {observations about high fan-in files}
 - **Cycles**: {observations about circular dependencies}
 - **Layer boundaries**: {observations about cross-layer imports}
+
+### Compliance Cross-Check
+<!-- Only during /canon:build when implementor summaries are available. Omit for standalone /canon:review. -->
+<!-- Read *-SUMMARY.md AFTER completing Stages 1 and 2. Do not revise earlier findings. -->
+
+#### Discrepancies
+| Principle | Implementor Declared | Reviewer Found | Assessment |
+|-----------|---------------------|----------------|-----------|
+| {id} | ✓ COMPLIANT | VIOLATED | {detail} |
+
+#### Incomplete Fixes
+- **{principle-id}**: {detail of remaining issue}
+
+#### Cross-Check Summary
+<!-- "All declarations aligned" or "N discrepancies found — implementor may have misunderstood {principle-ids}" -->
+{summary}
 ```
 
 ## Rules
