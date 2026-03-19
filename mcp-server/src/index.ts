@@ -16,13 +16,19 @@ import { storeSummaries } from "./tools/store-summaries.js";
 import { getDashboardSelection } from "./tools/get-dashboard-selection.js";
 import { reportInputSchema } from "./schema.js";
 
-import { resolve } from "path";
+import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 
 // Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
 // Falls back to cwd which is typically set by Claude Code to the user's project root.
 const projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
-const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || fileURLToPath(new URL("../..", import.meta.url)));
+
+// Plugin dir: the repo root that contains the `principles/` directory.
+// __filename → src/index.ts (or dist/index.js), dirname twice → mcp-server/, once more → repo root.
+// Using dirname(fileURLToPath(...)) is more explicit than URL("..") traversal.
+const thisFile = fileURLToPath(import.meta.url);
+const mcpServerRoot = dirname(dirname(thisFile));
+const pluginDir = resolve(process.env.CANON_PLUGIN_DIR || dirname(mcpServerRoot));
 
 const server = new McpServer({
   name: "canon",
