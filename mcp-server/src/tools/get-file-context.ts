@@ -3,13 +3,14 @@
 
 import { readFile } from "fs/promises";
 import { join, resolve, sep } from "path";
-import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
+import { extractImports, resolveImport } from "../graph/import-parser.js";
 import { extractExports } from "../graph/export-parser.js";
 import { scanSourceFiles } from "../graph/scanner.js";
 import { DriftStore } from "../drift/store.js";
 import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
 import { isNotFound } from "../utils/errors.js";
 import { loadCachedGraph, getNodeMetrics } from "../graph/query.js";
+import { toPosix, loadPathAliases } from "../utils/paths.js";
 
 export interface GetFileContextInput {
   file_path: string;
@@ -43,26 +44,28 @@ export async function getFileContext(
   projectDir: string,
 ): Promise<FileContextOutput> {
   // Normalize to POSIX separators — graph IDs and layer patterns use '/' consistently
-  const filePath = input.file_path.replace(/\\/g, "/");
+  const filePath = toPosix(input.file_path);
 
   // Load user-configurable layer mappings
   const layerMappings = await loadLayerMappings(projectDir);
   const inferLayer = buildLayerInferrer(layerMappings);
 
+  const emptyResult = (layer: string): FileContextOutput => ({
+    file_path: filePath,
+    layer,
+    content: "",
+    imports: [],
+    imported_by: [],
+    exports: [],
+    violation_count: 0,
+    last_verdict: null,
+  });
+
   // Prevent path traversal outside the project directory
   const absPath = resolve(projectDir, filePath);
   const projectRoot = resolve(projectDir) + sep;
   if (absPath !== resolve(projectDir) && !absPath.startsWith(projectRoot)) {
-    return {
-      file_path: filePath,
-      layer: "unknown",
-      content: "",
-      imports: [],
-      imported_by: [],
-      exports: [],
-      violation_count: 0,
-      last_verdict: null,
-    };
+    return emptyResult("unknown");
   }
 
   // Read file content (truncate at 200 lines)
@@ -73,16 +76,7 @@ export async function getFileContext(
     content = lines.length > 200 ? lines.slice(0, 200).join("\n") + "\n... (truncated)" : raw;
   } catch (err: unknown) {
     if (isNotFound(err)) {
-      return {
-        file_path: filePath,
-        layer: inferLayer(filePath) || "unknown",
-        content: "",
-        imports: [],
-        imported_by: [],
-        exports: [],
-        violation_count: 0,
-        last_verdict: null,
-      };
+      return emptyResult(inferLayer(filePath) || "unknown");
     }
     throw err;
   }
@@ -97,15 +91,7 @@ export async function getFileContext(
   const rawImports = extractImports(content, filePath);
 
   // Load path aliases from tsconfig.json
-  let aliases: PathAlias[] = [];
-  try {
-    const tsconfigRaw = await readFile(join(projectDir, "tsconfig.json"), "utf-8");
-    const tsconfig = JSON.parse(tsconfigRaw);
-    const paths = tsconfig.compilerOptions?.paths;
-    if (paths) {
-      aliases = parseTsconfigPaths(paths, tsconfig.compilerOptions.baseUrl);
-    }
-  } catch { /* no tsconfig or no paths */ }
+  const aliases = await loadPathAliases(projectDir);
 
   // Scan all project files to resolve this file's imports
   const sourceDirs = await loadSourceDirs(projectDir);
