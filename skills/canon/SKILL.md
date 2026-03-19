@@ -30,6 +30,16 @@ The orchestrator handles everything:
 - **Learning** ("what patterns should we codify?") → spawns canon-learner
 - **Resume** ("continue where we left off") → resumes from board.json
 
+## Dashboard Context
+
+When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation or task to pick up the user's current focus. It returns:
+- The **selected node** from the graph (the file the user clicked on)
+- The **active editor file** the user is viewing
+- **Matched principles** for the active file (summary-only, top 3)
+- **Dependencies and dependents** from the codebase graph
+
+This gives you immediate context about what the user is looking at without them having to explain it.
+
 ## Activation
 
 When Canon is initialized in a project (`.canon/` directory exists), spawn the **canon-intake** agent with the user's input. Intake classifies intent and either handles it directly (questions, status) or hands off to the orchestrator (builds, reviews, security scans).
@@ -52,10 +62,6 @@ When you are writing or modifying code **outside** of a Canon build pipeline (e.
 4. After generating code, self-review against loaded principles before presenting
 
 This inline mode ensures principles are always applied, even for quick edits that don't warrant the full pipeline.
-
-## Dashboard Context
-
-When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation or task to pick up the user's current focus.
 
 ## Principle Format Reference
 
