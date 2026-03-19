@@ -1,0 +1,10 @@
+# Quick Fix: Implement + review, no research or architecture
+name: quick-fix
+description: Fast path for small fixes — implement then review
+steps:
+  - id: implement
+    agent: canon-implementor
+    input: task_description
+  - id: review
+    agent: canon-reviewer
+    input: git_diff
