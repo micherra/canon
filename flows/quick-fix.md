@@ -14,7 +14,7 @@ states:
 
   context-sync:
     type: single
-    agent: canon-librarian
+    agent: canon-scribe
     transitions:
       updated: review
       no_updates: review

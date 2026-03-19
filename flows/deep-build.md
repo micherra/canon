@@ -36,7 +36,7 @@ states:
 
   context-sync:
     type: single
-    agent: canon-librarian
+    agent: canon-scribe
     transitions:
       updated: test
       no_updates: test
@@ -61,7 +61,7 @@ states:
 
   context-sync-fix:
     type: single
-    agent: canon-librarian
+    agent: canon-scribe
     transitions:
       updated: test
       no_updates: test
