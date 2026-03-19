@@ -2,8 +2,8 @@
  * Designed to give Claude everything needed to write a meaningful summary. */
 
 import { readFile } from "fs/promises";
-import { join, normalize, resolve } from "path";
-import { extractImports, resolveImport } from "../graph/import-parser.js";
+import { join, normalize, resolve, sep } from "path";
+import { extractImports, resolveImport, parseTsconfigPaths, type PathAlias } from "../graph/import-parser.js";
 import { extractExports } from "../graph/export-parser.js";
 import { scanSourceFiles } from "../graph/scanner.js";
 import { DriftStore } from "../drift/store.js";
@@ -38,7 +38,7 @@ export async function getFileContext(
 
   // Prevent path traversal outside the project directory
   const absPath = resolve(projectDir, filePath);
-  const projectRoot = resolve(projectDir) + "/";
+  const projectRoot = resolve(projectDir) + sep;
   if (absPath !== resolve(projectDir) && !absPath.startsWith(projectRoot)) {
     return {
       file_path: filePath,
@@ -83,6 +83,17 @@ export async function getFileContext(
   // Extract this file's imports
   const rawImports = extractImports(content, filePath);
 
+  // Load path aliases from tsconfig.json
+  let aliases: PathAlias[] = [];
+  try {
+    const tsconfigRaw = await readFile(join(projectDir, "tsconfig.json"), "utf-8");
+    const tsconfig = JSON.parse(tsconfigRaw);
+    const paths = tsconfig.compilerOptions?.paths;
+    if (paths) {
+      aliases = parseTsconfigPaths(paths, tsconfig.compilerOptions.baseUrl);
+    }
+  } catch { /* no tsconfig or no paths */ }
+
   // Scan all project files to resolve imports and find reverse dependencies
   const sourceDirs = await loadSourceDirs(projectDir);
   let allFiles: string[] = [];
@@ -102,7 +113,7 @@ export async function getFileContext(
   // Resolve this file's imports to project-relative paths
   const imports: string[] = [];
   for (const imp of rawImports) {
-    const resolved = resolveImport(imp, filePath, fileSet);
+    const resolved = resolveImport(imp, filePath, fileSet, aliases);
     if (resolved) imports.push(resolved);
   }
 
@@ -114,7 +125,7 @@ export async function getFileContext(
       const otherContent = await readFile(join(projectDir, otherFile), "utf-8");
       const otherImports = extractImports(otherContent, otherFile);
       for (const imp of otherImports) {
-        const resolved = resolveImport(imp, otherFile, fileSet);
+        const resolved = resolveImport(imp, otherFile, fileSet, aliases);
         if (resolved === filePath) {
           imported_by.push(otherFile);
           break;
