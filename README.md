@@ -101,6 +101,8 @@ When you write code, Canon automatically loads principles matched to your file's
 | `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped by the matcher |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
 | `/canon:security` | Standalone security scan |
+| `/canon:ralph` | Iterative build-review-refactor loop until violations converge to clean |
+| `/canon:pr-review` | Parallel per-layer PR review with optional GitHub comment posting |
 
 ## The Build Pipeline
 
@@ -138,31 +140,46 @@ Use `--apply` to walk through suggestions interactively.
 
 ## MCP Tools
 
-Canon exposes 5 tools via its MCP server for agents to use during normal work:
+Canon exposes 11 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
-| `get_principles` | Get principles relevant to a file/layer context |
+| `get_principles` | Get principles relevant to a file/layer context, enriched with graph metrics |
 | `list_principles` | Browse the full principle index with filters |
-| `review_code` | Get matched principles for a code snippet to evaluate |
+| `review_code` | Get matched principles for code review — auto-injects graph-derived principles for layer violations and cycles |
 | `get_compliance` | Query compliance stats and trend for a specific principle |
 | `report` | Log a decision, pattern, or review result for drift tracking and the learning loop |
+| `log_ralph` | Record a Ralph loop completion with iteration history |
+| `get_pr_review_data` | Get PR file list, layers, and graph-aware priority scores |
+| `codebase_graph` | Generate dependency graph with compliance overlay, insights, and reverse-dep index |
+| `get_file_context` | Get file content, imports, dependents, violations, and graph metrics (fan-in, hub status, cycles) |
+| `store_summaries` | Persist file summaries incrementally for dashboard display |
+| `get_dashboard_selection` | Get selected node context with graph metrics and downstream impact |
 
 ## Agents
 
-Canon uses 9 specialist agents, each with a focused role:
+Canon uses 10 specialist agents, each with a focused role:
 
 | Agent | Role |
 |-------|------|
 | `canon-researcher` | Investigate codebase, architecture, domain, and risk |
-| `canon-architect` | Design approach, extract task conventions, break into task plans |
+| `canon-architect` | Design approach, graph-informed wave assignment, break into task plans |
 | `canon-implementor` | Write code against plans and principles |
 | `canon-tester` | Generate integration tests |
 | `canon-security` | Scan for vulnerabilities |
-| `canon-reviewer` | Two-stage review: compliance + code quality |
-| `canon-refactorer` | Fix violations and improve code |
+| `canon-reviewer` | Two-stage review: compliance + graph-aware code quality |
+| `canon-refactorer` | Fix violations using graph-aware caller discovery |
 | `canon-learner` | Analyze patterns and suggest principle refinements |
 | `canon-writer` | Create and edit principles, conventions, and agent-rules |
+| `canon-ralph` | Orchestrate iterative build-review-refactor loops until convergence |
+
+### Graph-Aware Agents
+
+The reviewer, refactorer, and architect agents are graph-aware — they use the codebase dependency graph to make better decisions:
+
+- **Reviewer**: When `review_code` returns `graph_context`, the reviewer factors in fan-in (blast radius), cycle membership, and layer boundary violations. Violations in hub files are flagged as higher-impact.
+- **Refactorer**: Calls `get_file_context` to discover callers via the dependency graph before refactoring. High fan-in files get extra caution — prefer internal-only changes that preserve the external API.
+- **Architect**: Uses `get_file_context` to verify wave assignments against the real dependency graph. Files in dependency cycles are placed in the same wave.
 
 ## Hooks
 
@@ -183,27 +200,70 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/            15 slash commands
-├── agents/              9 specialist agents
-├── agent-rules/         8 agent behavior guidelines
+├── commands/            17 slash commands
+├── agents/              10 specialist agents
+├── agent-rules/         9 agent behavior guidelines
 ├── hooks/               6 automation hooks
-├── mcp-server/          TypeScript MCP server (5 tools)
+├── flows/               5 predefined workflow YAML files
+├── mcp-server/          TypeScript MCP server (11 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
+│       ├── constants.ts Shared constants (layer centrality, extensions, extractSummary)
 │       ├── matcher.ts   Principle matching logic
 │       ├── parser.ts    Principle parsing and frontmatter extraction
 │       ├── schema.ts    Zod input validation schemas
 │       ├── tools/       Individual tool implementations
-│       ├── drift/       Store, analyzer, reporter
+│       ├── graph/       Dependency graph: scanner, import/export parsers, insights, query cache, priority scoring
+│       ├── drift/       JSONL stores, analyzer, PR and Ralph tracking
+│       ├── utils/       Atomic writes, config loader, error helpers, ID generation
 │       └── __tests__/   Tests
 ├── cursor-extension/    VS Code / Cursor extension (Canon Dashboard)
 │   └── src/
 │       ├── extension.ts       Extension activation, active file tracking
-│       ├── dashboard-panel.ts Webview panel, message handling, file watching
+│       ├── constants.ts       Shared paths and timeouts
+│       ├── messages.ts        Typed extension ↔ webview message protocol
+│       ├── dashboard-panel.ts Webview panel, message-based data push, file watching
 │       ├── services/          Graph data loading, git integration
+│       ├── webview/           Svelte app: stores, components, D3 graph, filters
 │       └── __tests__/         Tests
 └── skills/canon/        Skill definition + references
 ```
+
+## The Ralph Loop
+
+`/canon:ralph` runs an iterative build-review-refactor cycle that converges to clean:
+
+```
+Iteration 1:  implement → review → find violations
+Iteration 2:  refactor violations → re-review → fewer violations
+Iteration 3:  refactor remaining → re-review → CLEAN ✓
+```
+
+Each iteration spawns refactorer agents in parallel (one per violation group), then re-reviews all changes. The loop exits when the review verdict is CLEAN or violations stop decreasing (convergence). Configurable via `--max-iterations` (default 5).
+
+Ralph tracks every iteration's violations, fixes, and cannot-fix counts. Results are logged via the `log_ralph` MCP tool for drift analysis.
+
+## The Codebase Graph
+
+Canon builds a dependency graph of your codebase to power structural analysis:
+
+```bash
+# Generated automatically when the dashboard opens, or manually:
+# Call codebase_graph MCP tool
+```
+
+The graph includes:
+- **Nodes**: Every source file with layer, violation count, changed status
+- **Edges**: Import/dependency relationships
+- **Insights**: Most connected files, orphans, circular dependencies, layer boundary violations
+- **Reverse index**: Which files depend on each file (persisted as `reverse-deps.json`)
+
+Graph data enriches the entire review pipeline:
+- `review_code` auto-injects `bounded-context-boundaries` for files with layer violations
+- `review_code` auto-injects `architectural-fitness-functions` for files in cycles
+- `get_file_context` returns fan-in, fan-out, hub status, cycle membership, and impact score
+- Violations carry optional `impact_score` — higher score = more dependents affected
+- The Canon Dashboard visualizes the graph with D3 force layout
 
 ## The Canon Template
 
@@ -332,3 +392,9 @@ All Canon data lives in `.canon/` in your project root:
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
 | `plans/*/` | Build artifacts per task | `/canon:build` |
+| `graph-data.json` | Codebase dependency graph with insights | `codebase_graph` MCP tool |
+| `reverse-deps.json` | Reverse dependency index (who imports each file) | `codebase_graph` MCP tool |
+| `summaries.json` | One-line file summaries for dashboard tooltips | `store_summaries` MCP tool |
+| `pr-reviews.jsonl` | PR review history | `get_pr_review_data` MCP tool |
+| `ralph-loops.jsonl` | Ralph loop iteration history | `log_ralph` MCP tool |
+| `dashboard-state.json` | Dashboard selection state (ephemeral) | Canon Dashboard extension |
