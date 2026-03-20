@@ -89,7 +89,7 @@ $file_content
         --output-format text \
         --no-session-persistence \
         --allowedTools "Read Grep Glob" \
-        --max-budget-usd 0.50 \
+        --max-budget-usd 1.00 \
         2>&1) || exit_code=$?
     else
       # For should_trigger=true, run inside the Canon project
@@ -98,7 +98,7 @@ $file_content
         --output-format text \
         --no-session-persistence \
         --allowedTools "Read Grep Glob" \
-        --max-budget-usd 0.50 \
+        --max-budget-usd 1.00 \
         2>&1) || exit_code=$?
     fi
   else
@@ -108,7 +108,7 @@ $file_content
       --output-format text \
       --no-session-persistence \
       --allowedTools "Read Grep Glob" \
-      --max-budget-usd 0.50 \
+      --max-budget-usd 1.00 \
       2>&1) || exit_code=$?
   fi
 
