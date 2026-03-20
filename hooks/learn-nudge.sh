@@ -23,20 +23,20 @@ if ! echo "$INPUT" | grep -q "git commit"; then
   exit 0
 fi
 
-# Session dedup — only nudge once per session, scoped to this project
-# Cross-platform hash: try md5sum (Linux), fall back to md5 (macOS)
-if command -v md5sum &>/dev/null; then
-  PROJECT_HASH=$(echo -n "$(pwd)" | md5sum | head -c 8)
-else
-  PROJECT_HASH=$(echo -n "$(pwd)" | md5 | head -c 8)
-fi
-NUDGE_FILE=".canon/.learn-nudged-${PROJECT_HASH}"
+# Session dedup — only nudge once per session.
+# Use session_id from the hook JSON input (not PID or pwd-based hash).
+SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+NUDGE_FILE="${TMPDIR:-/tmp}/canon-learn-nudged-${SESSION_ID:-unknown}"
 if [[ -f "$NUDGE_FILE" ]]; then
   exit 0
 fi
 
+# Resolve main repo root for worktree support
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+CANON_DIR="${MAIN_ROOT:-.}/.canon"
+
 # Check if reviews.jsonl exists
-REVIEWS_FILE=".canon/reviews.jsonl"
+REVIEWS_FILE="${CANON_DIR}/reviews.jsonl"
 if [[ ! -f "$REVIEWS_FILE" ]]; then
   exit 0
 fi
@@ -44,7 +44,7 @@ fi
 REVIEW_COUNT=$(wc -l < "$REVIEWS_FILE" | tr -d ' ')
 
 # Check when the last learn run happened
-LEARNING_FILE=".canon/learning.jsonl"
+LEARNING_FILE="${CANON_DIR}/learning.jsonl"
 if [[ -f "$LEARNING_FILE" ]]; then
   LAST_LEARN_REVIEWS=$(tail -1 "$LEARNING_FILE" 2>/dev/null | grep -o '"reviews_analyzed":[0-9]*' | grep -o '[0-9]*' || echo "0")
   REVIEWS_SINCE=$((REVIEW_COUNT - LAST_LEARN_REVIEWS))
