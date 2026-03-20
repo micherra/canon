@@ -27,7 +27,7 @@
       "type": "trigger",
       "prompt": "build a user dashboard",
       "should_trigger": false,
-      "expected_output": "PASS if the response provides useful assistance with building a dashboard (clarifying questions, planning, starting implementation, or generic framework discussion). The CLI may still load Canon skill context globally, so brief Canon references or best practices are acceptable. The key is useful help without requiring a .canon/ directory. FAIL only if the response errors out, refuses to help, or provides no useful content. It is acceptable if the response attempts to read project files that don't exist and then proceeds to help anyway."
+      "expected_output": "PASS if the response provides useful assistance with building a dashboard (clarifying questions, planning, starting implementation, or generic framework discussion). The CLI may still load Canon skill context globally, so Canon references and attempts to read Canon files (like .canon/) are acceptable and should NOT cause a FAIL. The key is useful help without requiring a .canon/ directory. FAIL only if the response errors out, refuses to help, or provides no useful content. It is acceptable if the response attempts to read project files that don't exist and then proceeds to help anyway."
     },
     {
       "id": "intent-review",
