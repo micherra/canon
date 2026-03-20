@@ -4,24 +4,6 @@ description: >-
   Researches a specific dimension of a development task before planning.
   Spawned in parallel by the build orchestrator. Produces a compressed
   findings document. Does NOT write code.
-
-  <example>
-  Context: Build orchestrator needs codebase analysis before designing a feature
-  user: "Research the existing codebase patterns for the order creation task"
-  assistant: "Spawning canon-researcher to analyze existing codebase patterns, file structure, and applicable Canon principles."
-  <commentary>
-  The orchestrator spawns 2-4 researchers in parallel, each focused on one dimension.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Need to understand external APIs before implementation
-  user: "Research the Stripe API integration patterns for payment processing"
-  assistant: "Spawning canon-researcher focused on domain research for Stripe integration."
-  <commentary>
-  Domain research investigates external knowledge, API docs, and framework best practices.
-  </commentary>
-  </example>
 model: sonnet
 color: yellow
 tools:

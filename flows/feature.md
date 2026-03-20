@@ -89,27 +89,27 @@ states:
 ## Spawn Instructions
 
 ### design
-Design the technical approach for: ${task}. Load relevant Canon principles. Save design to ${WORKSPACE}/plans/${slug}/DESIGN.md. Break the design into atomic task plans — save plans to ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md and index to ${WORKSPACE}/plans/${slug}/INDEX.md. Record design decisions to ${WORKSPACE}/decisions/ using the design-decision template at ${CLAUDE_PLUGIN_ROOT}/templates/design-decision.md. Initialize ${WORKSPACE}/context.md using the session-context template at ${CLAUDE_PLUGIN_ROOT}/templates/session-context.md. Append log entries to ${WORKSPACE}/log.jsonl.
+Design the technical approach for: ${task}. Save design to ${WORKSPACE}/plans/${slug}/DESIGN.md. Save task plans to ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md and index to INDEX.md. Record decisions to ${WORKSPACE}/decisions/. Templates: design-decision, session-context at ${CLAUDE_PLUGIN_ROOT}/templates/. Initialize ${WORKSPACE}/context.md.
 
 ### implement
-Execute the task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Load principles via the get_principles MCP tool with summary_only: true for each file you modify. Read project conventions at .canon/CONVENTIONS.md if it exists. Read task conventions at ${WORKSPACE}/plans/${slug}/CONVENTIONS.md if it exists. Read shared context at ${WORKSPACE}/context.md if it exists. Read referenced decisions from ${WORKSPACE}/decisions/ as listed in your plan's decisions: frontmatter. Read CLAUDE.md. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+Execute task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
 
 ${wave_briefing}
 
 ### context-sync
-Sync project documentation after implementation. Read the git diff from the implementation commits. Read implementor summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Read current CLAUDE.md, ${WORKSPACE}/context.md, and .canon/CONVENTIONS.md. Classify changes as contract/structure/dependency/invariant/internal/test-only. Update docs for contract-level changes only. Use the claudemd-template at ${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md for CLAUDE.md structure. Save sync report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md using the context-sync-report template at ${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+Sync docs after implementation. Diff source: implementation commits. Summaries: ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md.
 
 ### context-sync-fix
-Sync project documentation after fix-impl. Read the git diff from the fix commits. Read ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md. Read current CLAUDE.md, ${WORKSPACE}/context.md, and .canon/CONVENTIONS.md. Classify changes and update docs for contract-level changes only. Use the claudemd-template at ${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md for CLAUDE.md structure. Save sync report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC-FIX.md using the context-sync-report template at ${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+Sync docs after fix-impl. Diff source: fix commits. Summary: ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md. Save report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC-FIX.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md.
 
 ### test
-Write integration tests and fill coverage gaps. Implementors already wrote unit tests — focus on cross-task integration and missed coverage. Load principles via the get_principles MCP tool with summary_only: true. Read task summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md — start with the Coverage Notes section. Read implementor test files. Run the full test suite. Save test report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md using the test-report template at ${CLAUDE_PLUGIN_ROOT}/templates/test-report.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+Write integration tests and fill coverage gaps. Start with Coverage Notes from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/test-report.md.
 
 ### fix-impl
-Fix the failing tests reported in ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Read the ### Issues Found table for the specific files, failing tests, root causes, and suggested fixes. Read each failing test file to understand expected behavior. For each failure, determine if it is a source code bug or a test bug. Fix source code bugs by changing implementation. Fix test bugs by correcting the test (wrong assertions, testing implementation details, broken setup). Document both types of fixes clearly in your summary. Run the test suite to verify. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+Fix failures from ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Determine source bugs vs test bugs for each failure. Save summary to ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
 
 ### review
-Review all code changes from this build. Use `git diff ${base_commit}..HEAD` to see all changes (base_commit is the pre-build state). After completing your independent Stage 1 and Stage 2 review, perform the Stage 3 compliance cross-check by reading implementor summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save review to ${WORKSPACE}/plans/${slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl.
+Review all changes via `git diff ${base_commit}..HEAD`. After Stages 1-2, cross-check against ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.
 
 ### fix-violations
-Fix the Canon principle violation: ${item.principle_id} (${item.severity}) in ${item.file_path}. Detail: ${item.detail}. Load the violated principle in full. Refactor to comply while preserving behavior. Commit atomically.
+Fix violation: ${item.principle_id} (${item.severity}) in ${item.file_path}. Detail: ${item.detail}.

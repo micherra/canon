@@ -34,18 +34,7 @@ If the principle has `file_patterns`, glob for those directly. Otherwise, find s
 
 Read the principle's `## Examples` section. From the "Bad" examples, identify signature code patterns — function shapes, import patterns, naming conventions, structural anti-patterns.
 
-Search the codebase for those patterns using targeted grep queries. The specific patterns depend on the principle:
-
-- **thin-handlers**: Look for database calls, complex logic, or long functions in handler/controller/route files
-- **errors-are-values**: Look for `throw new` in domain/service files where result types should be used
-- **naming-reveals-intent**: Look for vague names like `processData`, `handleResult`, `utils.ts`
-- **secrets-never-in-code**: Look for hardcoded strings matching API key/password patterns
-- **information-hiding**: Look for the same constants, formats, or field names repeated across multiple files
-- **deep-modules**: Look for classes/modules with many small pass-through methods
-
-For principles not listed above, derive patterns from the "Bad" example code.
-
-Read the matching files to confirm whether the pattern is actually a violation (grep hits can be false positives).
+Search the codebase for those patterns using targeted grep queries. Derive search patterns from the principle's own "Bad" examples. Read matching files to confirm (grep hits can be false positives).
 
 ### Step 5: Search for compliance patterns
 
@@ -111,10 +100,8 @@ To fix violations: ask Canon to review the file, or spawn canon-refactorer
 To see all principles: `/canon:list`
 ```
 
-### Important constraints
+### Constraints
 
-- This command is **read-only**. It MUST NOT modify any files.
-- Limit code snippets to ≤20 lines each to keep output scannable.
-- Show at most 3 honored examples and 3 violated examples.
-- If the principle has no `## Examples` section, show the principle body with the list of applicable files but skip the codebase search.
-- Always include line numbers in code snippets for reference.
+- **Read-only** — never modify files.
+- Code snippets ≤20 lines, with line numbers. At most 3 honored + 3 violated examples.
+- If the principle has no `## Examples` section, show the principle body with applicable files but skip codebase search.

@@ -4,15 +4,6 @@ description: >-
   Executes a single Canon task plan in fresh context. Receives a plan
   file and relevant principles. Writes code, verifies, and commits.
   Spawned by the build orchestrator — one instance per task.
-
-  <example>
-  Context: Plan is ready, need to execute implementation
-  user: "Implement task order-01 from the plan"
-  assistant: "Spawning canon-implementor with the task plan for order-01 in fresh context."
-  <commentary>
-  Each implementor gets a fresh context with only its plan, principles, and CLAUDE.md.
-  </commentary>
-  </example>
 model: sonnet
 color: magenta
 tools:
@@ -113,52 +104,7 @@ Verification: passed ({verification details})
 
 ### Step 9: Produce summary
 
-Write a summary file to the path specified by the orchestrator. The orchestrator **must** provide the implementation-log template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format:
-
-```markdown
----
-task-id: "{slug}-{NN}"
-status: "{DONE|DONE_WITH_CONCERNS|BLOCKED|NEEDS_CONTEXT}"
-agent: canon-implementor
-timestamp: "{ISO-8601}"
-commit: "{hash}"
----
-
-## Implementation: {task-id}
-
-### What Changed
-{brief description}
-
-### Files
-| File | Action | Purpose |
-|------|--------|---------|
-| `path/to/file.ts` | created/modified | {purpose} |
-
-### Tests Written
-| Test File | Count | Coverage |
-|-----------|-------|----------|
-| `path/to/file.test.ts` | {N} | happy path, error cases |
-
-### Coverage Notes
-#### Tested Paths
-- {function}: happy path, error return, {edge case}
-
-#### Known Gaps
-- {function}: {untested path} — {reason}
-
-#### Risk Mitigation Tests
-- {risk item}: tested via {test name} — PASS
-- {risk item}: NOT tested — {reason}
-
-### Canon Compliance
-- **{principle-id}** ({severity}): ✓ COMPLIANT — how
-- **{principle-id}** ({severity}): ⚠ JUSTIFIED_DEVIATION — why (reported)
-
-### Verification
-- [ ] New tests: {N} passing
-- [ ] Full test suite: passing (no regressions)
-- [ ] {additional steps}: passed
-```
+Write a summary file to the path specified by the orchestrator using the implementation-log template (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT`. The summary must include: what changed, files modified, tests written, coverage notes (from Step 5), compliance declarations (from Step 6), and verification results.
 
 ## Fix Mode (`role: fix`)
 
@@ -222,15 +168,7 @@ You receive ONLY:
 
 You do NOT receive: research findings, the design document, other task plans, other task summaries, or the session history. This keeps your context fresh.
 
-**Conventions loading**: After reading your plan and principles, read both conventions files (if they exist). Project conventions contain persistent project-wide patterns. Task conventions contain patterns specific to this build. When a task convention conflicts with a project convention, the task convention takes precedence.
-
-**Convention vs principle precedence**: When project conventions (CLAUDE.md, .canon/CONVENTIONS.md) conflict with Canon principles:
-
-1. **Project conventions win for style and structure** — naming, file layout, import style, error handling patterns already established in the codebase. Follow the project's existing patterns.
-2. **Canon principles win for correctness and safety** — if a principle prevents a bug, security issue, or architectural problem, it takes precedence over a project convention.
-3. **Document the conflict** — When you override a convention with a principle (or vice versa), add a JUSTIFIED_DEVIATION in your compliance declaration explaining which rule you followed and why.
-
-Never silently ignore either source. If genuinely unsure which takes precedence, report BLOCKED with the conflict details so the user can decide.
+**Conventions loading**: Read both `.canon/CONVENTIONS.md` (project) and `${WORKSPACE}/plans/{slug}/CONVENTIONS.md` (task) if they exist. Task conventions override project conventions. Canon principles override both for correctness and safety. Document any conflicts as JUSTIFIED_DEVIATION.
 
 **Resuming with existing commits**: If the orchestrator indicates existing commits for your task (or you see them in git log matching your task slug), read the committed code first. Build on existing work — do not rewrite from scratch. If the existing code is already complete, produce a summary artifact and report DONE.
 

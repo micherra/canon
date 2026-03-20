@@ -141,12 +141,9 @@ After walking through all suggestions, show a summary:
 Applied: N | Skipped: M | Dismissed: K
 ```
 
-### Important constraints
+### Constraints
 
-- Without `--apply`, this command is **read-only analysis** — it never modifies principles, conventions, or any project files (except writing the report and learning log)
-- With `--apply`, it modifies only what the user explicitly approves per suggestion
-- The report REPLACES any previous `.canon/LEARNING-REPORT.md` (it's a snapshot, not a log)
-- The learning log (`.canon/learning.jsonl`) is append-only (except for updating action status during --apply)
-- All suggestions include confidence levels and sample sizes so the user can judge quality
-- The agent should be conservative — false positives erode trust in the learning loop
-- **Demotion safety**: The agent will never suggest demoting security-tagged rules. If `--apply` encounters a demotion suggestion, show an extra confirmation warning before proceeding.
+- Without `--apply`: read-only (only writes report + learning log)
+- With `--apply`: modifies only what the user explicitly approves
+- Report replaces previous `.canon/LEARNING-REPORT.md`; learning log is append-only
+- Never demote security-tagged rules; show extra confirmation for any rule demotion during `--apply`

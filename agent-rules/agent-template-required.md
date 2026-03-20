@@ -37,15 +37,3 @@ The orchestrator is responsible for passing these paths. Agents are responsible 
 
 **canon-refactorer**: The refactorer produces a structured status report (FIXED/PARTIAL_FIX/CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The refactorer is exempt from template requirements — no template is defined for it in the flow states, and it should NOT report NEEDS_CONTEXT for a missing template.
 
-## Principle Loading
-
-All agents load Canon principles using MCP tools:
-
-| Tool | Purpose | Use When |
-|------|---------|----------|
-| `get_principles` | Returns matched principles for specific file paths | Evaluating compliance for files you're working on |
-| `list_principles` | Returns the full principle index (metadata only) | Scanning all principles (e.g., security agent filtering by tag) |
-
-**Fallback** (if MCP tools are unavailable): glob `.canon/principles/**/*.md`, then `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`. Read frontmatter to filter by tags, severity, or ID.
-
-The two tools serve different purposes — `get_principles` applies file-path matching to return only relevant principles; `list_principles` returns the full catalog for agents that need to scan or filter broadly.

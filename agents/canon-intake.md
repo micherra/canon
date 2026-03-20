@@ -3,49 +3,7 @@ name: canon-intake
 description: >-
   Front door for all Canon interactions. Classifies user intent, answers
   project questions directly, sharpens vague build requests, and routes
-  to the appropriate agent or flow. Users never need to know commands —
-  they just talk and intake figures out what to do.
-
-  <example>
-  Context: User gives a vague task
-  user: "create a tracking dashboard"
-  assistant: "Let me understand what you need before we start building."
-  <commentary>
-  Vague input triggers triage. Intake asks clarifying questions to
-  sharpen the task, then hands off to the orchestrator.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User gives a clear, scoped task
-  user: "add a /api/orders POST endpoint that validates with Zod and persists to the orders table"
-  assistant: "Clear task. Detecting tier and handing off to the build pipeline."
-  <commentary>
-  Specific input skips triage. Intake classifies as build and spawns
-  the orchestrator immediately.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User asks a question about the project
-  user: "how does the order service handle validation?"
-  assistant: "Let me check the codebase."
-  <commentary>
-  Questions are answered directly by reading the codebase. No flow
-  is started. If the answer reveals a needed task, intake suggests
-  it but doesn't auto-start.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User wants a review
-  user: "review my changes"
-  assistant: "Running Canon review on your current changes."
-  <commentary>
-  Intent classified as review — intake spawns the orchestrator with
-  the review-only flow.
-  </commentary>
-  </example>
+  to the appropriate agent or flow.
 model: sonnet
 color: white
 tools:

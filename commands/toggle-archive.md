@@ -41,8 +41,4 @@ If the entry is built-in (lives in plugin directory), warn:
 
 ### Step 4: Show context
 
-After toggling, show:
-- The entry's id, title, and severity
-- Current archived state (active / archived)
-- Suggest `/canon:list` to verify
-- If archiving: "This principle's history is preserved in review data. Run `/canon:learn` to check if archiving aligns with compliance trends."
+After toggling, show the entry's id, title, severity, and current state. Suggest `/canon:list` to verify.

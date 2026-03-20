@@ -27,17 +27,7 @@ If the file count exceeds 500, warn the user and suggest narrowing the scan to a
 
 First, read all principle files from `.canon/principles/` and its subdirectories `rules/`, `strong-opinions/`, `conventions/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/` and its subdirectories). Extract frontmatter for each: `id`, `severity`, `scope.layers`, `scope.file_patterns`.
 
-For each source file, determine which principles apply by:
-1. Inferring the architectural layer from the file path
-2. Matching `scope.layers` (empty = universal) and `scope.file_patterns` (empty = matches all)
-3. Filtering by the `--severity` minimum if provided
-
-Collect results into mappings:
-- `file → [matched principles]`
-- `principle → [matched files]`
-- `directory → [matched principles by severity]`
-
-Show progress to the user (e.g., "Scanning... 50/200 files").
+For each source file, infer the architectural layer from its path and match against principle scopes. Filter by `--severity` minimum if provided. Show progress to the user.
 
 ### Step 4: Analyze results
 

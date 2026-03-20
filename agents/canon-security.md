@@ -3,26 +3,7 @@ name: canon-security
 description: >-
   Reviews code for security vulnerabilities, unsafe patterns, and
   compliance issues. Produces a security assessment with findings
-  ranked by severity. Spawned by the build orchestrator or
-  via Canon intake ("scan for vulnerabilities").
-
-  <example>
-  Context: Implementation is complete, need security review
-  user: "Run a security scan on the new API endpoints"
-  assistant: "Spawning canon-security to scan for vulnerabilities, unsafe patterns, and compliance issues."
-  <commentary>
-  Security scans can run as part of the build pipeline or standalone via Canon intake.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User wants to audit existing code for security issues
-  user: "Check this directory for security vulnerabilities"
-  assistant: "Spawning canon-security for a targeted security assessment."
-  <commentary>
-  Standalone security scans are available outside the build workflow.
-  </commentary>
-  </example>
+  ranked by severity.
 model: sonnet
 color: red
 tools:

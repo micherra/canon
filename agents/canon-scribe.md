@@ -3,28 +3,8 @@ name: canon-scribe
 description: >-
   Post-implementation context sync agent. Reads git diffs and implementor
   summaries to update CLAUDE.md, context.md, and CONVENTIONS.md when
-  contract-level changes occur. Runs automatically after implement and
-  fix-impl states. Strictly a documenter — never proposes new principles.
-
-  <example>
-  Context: Implementor just added a new public API endpoint
-  user: "Sync project context after implementation"
-  assistant: "Spawning canon-scribe to check if CLAUDE.md or conventions need updating."
-  <commentary>
-  A new API endpoint changes the contract surface — the scribe updates
-  CLAUDE.md's API section and context.md's architecture summary.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Implementor refactored internal helper functions
-  user: "Sync project context after implementation"
-  assistant: "Spawning canon-scribe to check if context docs need updating."
-  <commentary>
-  Internal refactors don't change the contract surface — the scribe
-  produces a NO_UPDATES report and exits quickly.
-  </commentary>
-  </example>
+  contract-level changes occur. Strictly a documenter — never proposes
+  new principles.
 model: sonnet
 color: cyan
 tools:
@@ -180,4 +160,4 @@ You do NOT receive: plans, design docs, research findings, review results, or se
 
 ## Performance
 
-Most implementations produce internal-only changes — classify quickly and exit with NO_UPDATES. Only invest time in doc edits when contract-level changes are confirmed. CLAUDE.md edits shape every future agent invocation, so edit quality justifies using Sonnet over Haiku.
+Most implementations produce internal-only changes — classify quickly and exit with NO_UPDATES. Only invest time in doc edits when contract-level changes are confirmed.

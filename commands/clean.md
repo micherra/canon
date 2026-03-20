@@ -23,10 +23,7 @@ If `--all`: list all directories in `.canon/workspaces/`.
 If `--branch <name>`: sanitize the branch name and target that workspace.
 Otherwise: detect the current git branch and target its workspace.
 
-Branch name sanitization:
-```bash
-echo "${branch}" | tr '[:upper:]' '[:lower:]' | sed 's|/|--|g' | sed 's/ /-/g' | sed 's/[^a-z0-9-]//g' | head -c 80
-```
+Branch name sanitization: lowercase, replace `/` and spaces with `-`, strip non-alphanumeric except `-`, truncate to 80 chars.
 
 ### Step 2: Show workspace summary
 
