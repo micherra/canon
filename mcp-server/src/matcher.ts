@@ -2,6 +2,7 @@ import { readdir, stat } from "fs/promises";
 import { join } from "path";
 import { type Principle, loadPrincipleFile } from "./parser.js";
 import { DEFAULT_LAYER_MAPPINGS, buildLayerInferrer } from "./utils/config.js";
+import { CANON_DIR } from "./constants.js";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
 
@@ -147,7 +148,7 @@ async function getFileMtimes(dir: string): Promise<string[]> {
 
 async function computeMtimeKey(projectDir: string, pluginDir: string): Promise<string> {
   const dirs = SEVERITY_SUBDIRS.flatMap((sub) => [
-    join(projectDir, ".canon", "principles", sub),
+    join(projectDir, CANON_DIR, "principles", sub),
     join(pluginDir, "principles", sub),
   ]);
   const allMtimes = await Promise.all(dirs.map(getFileMtimes));
@@ -165,7 +166,7 @@ export async function loadAllPrinciples(
   }
 
   const projectPrinciples = await loadPrinciplesFromDir(
-    join(projectDir, ".canon", "principles")
+    join(projectDir, CANON_DIR, "principles")
   );
   const pluginPrinciples = await loadPrinciplesFromDir(
     join(pluginDir, "principles")

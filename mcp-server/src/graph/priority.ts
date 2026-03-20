@@ -1,6 +1,7 @@
 /** Graph-aware file priority scoring for PR review — pure functions, no I/O */
 
 import { LAYER_CENTRALITY } from "../constants.js";
+import { buildDegreeMaps } from "./degree.js";
 
 export interface FilePriorityScore {
   path: string;
@@ -39,14 +40,10 @@ export function computeFilePriorities(
   edges: PriorityEdge[],
   filterToChanged = true,
 ): FilePriorityScore[] {
-  // Build in-degree map
-  const inDegree = new Map<string, number>();
-  for (const node of nodes) {
-    inDegree.set(node.id, 0);
-  }
-  for (const edge of edges) {
-    inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
-  }
+  const { inDegree } = buildDegreeMaps(
+    nodes.map((n) => n.id),
+    edges,
+  );
 
   const candidates = filterToChanged ? nodes.filter((n) => n.changed) : nodes;
 

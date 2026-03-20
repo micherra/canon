@@ -1,6 +1,7 @@
 import { join } from "path";
 import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
 import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.js";
+import { CANON_DIR } from "../constants.js";
 
 export class DriftStore {
   private decisionsPath: string;
@@ -8,7 +9,7 @@ export class DriftStore {
   private reviewsPath: string;
 
   constructor(projectDir: string) {
-    const canonDir = join(projectDir, ".canon");
+    const canonDir = join(projectDir, CANON_DIR);
     this.decisionsPath = join(canonDir, "decisions.jsonl");
     this.patternsPath = join(canonDir, "patterns.jsonl");
     this.reviewsPath = join(canonDir, "reviews.jsonl");

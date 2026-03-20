@@ -1,7 +1,7 @@
 import { type Principle } from "../parser.js";
 import { loadConfigNumber } from "../utils/config.js";
 import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
-import { loadCachedGraph, getNodeMetrics } from "../graph/query.js";
+import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.js";
 import { extractSummary } from "../constants.js";
 
 export interface GetPrinciplesInput {
@@ -10,6 +10,11 @@ export interface GetPrinciplesInput {
   task_description?: string;
   summary_only?: boolean;
 }
+
+type PrinciplesGraphContext = Pick<
+  GraphMetrics,
+  "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "impact_score"
+>;
 
 export interface GetPrinciplesOutput {
   principles: Array<{
@@ -20,13 +25,7 @@ export interface GetPrinciplesOutput {
   }>;
   total_matched: number;
   total_in_canon: number;
-  graph_context?: {
-    in_degree: number;
-    out_degree: number;
-    is_hub: boolean;
-    in_cycle: boolean;
-    impact_score: number;
-  };
+  graph_context?: PrinciplesGraphContext;
 }
 
 const DEFAULT_MAX_PRINCIPLES = 10;
