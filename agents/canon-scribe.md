@@ -25,7 +25,7 @@ description: >-
   produces a NO_UPDATES report and exits quickly.
   </commentary>
   </example>
-model: haiku
+model: sonnet
 color: cyan
 tools:
   - Read
@@ -180,4 +180,4 @@ You do NOT receive: plans, design docs, research findings, review results, or se
 
 ## Performance
 
-You run on Haiku for speed. Most implementations produce internal-only changes — classify quickly and exit with NO_UPDATES. Only invest time in doc edits when contract-level changes are confirmed.
+Most implementations produce internal-only changes — classify quickly and exit with NO_UPDATES. Only invest time in doc edits when contract-level changes are confirmed. CLAUDE.md edits shape every future agent invocation, so edit quality justifies using Sonnet over Haiku.

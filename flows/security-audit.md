@@ -10,6 +10,7 @@ states:
     transitions:
       done: review
       critical: hitl
+      blocked: hitl
 
   review:
     type: single
@@ -19,6 +20,7 @@ states:
       clean: done
       warning: done
       blocking: hitl
+      blocked: hitl
 
   done:
     type: terminal

@@ -29,6 +29,7 @@ states:
     transitions:
       updated: test
       no_updates: test
+      blocked: hitl
 
   test:
     type: single
@@ -39,6 +40,7 @@ states:
     transitions:
       all_passing: review
       implementation_issue: fix-impl
+      blocked: hitl
 
   fix-impl:
     type: single
@@ -47,6 +49,7 @@ states:
     template: implementation-log
     transitions:
       done: context-sync-fix
+      blocked: hitl
 
   context-sync-fix:
     type: single
@@ -55,6 +58,7 @@ states:
     transitions:
       updated: test
       no_updates: test
+      blocked: hitl
 
   review:
     type: single
@@ -64,6 +68,7 @@ states:
       clean: done
       warning: done
       blocking: fix-violations
+      blocked: hitl
 
   fix-violations:
     type: parallel-per
@@ -100,7 +105,7 @@ Write integration tests and fill coverage gaps. Implementors already wrote unit 
 Fix the failing tests reported in ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Read the ### Issues Found table for the specific files, failing tests, root causes, and suggested fixes. Read each failing test file to understand expected behavior. Fix the source files to make failing tests pass without breaking other tests. Run the test suite to verify. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl.
 
 ### review
-Review all code changes from this build. Use git diff to see changes. After completing your independent Stage 1 and Stage 2 review, perform the Stage 3 compliance cross-check by reading implementor summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save review to ${WORKSPACE}/plans/${slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl.
+Review all code changes from this build. Use `git diff ${base_commit}..HEAD` to see all changes (base_commit is the pre-build state). After completing your independent Stage 1 and Stage 2 review, perform the Stage 3 compliance cross-check by reading implementor summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save review to ${WORKSPACE}/plans/${slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl.
 
 ### fix-violations
 Fix the Canon principle violation: ${item.principle_id} (${item.severity}) in ${item.file_path}. Detail: ${item.detail}. Load the violated principle in full. Refactor to comply while preserving behavior. Commit atomically.

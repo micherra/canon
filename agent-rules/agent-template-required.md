@@ -33,6 +33,10 @@ Templates exist so downstream agents can reliably parse upstream output. When an
 
 The orchestrator is responsible for passing these paths. Agents are responsible for using them.
 
+## Exceptions
+
+**canon-refactorer**: The refactorer produces a structured status report (FIXED/PARTIAL_FIX/CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The refactorer is exempt from template requirements — no template is defined for it in the flow states, and it should NOT report NEEDS_CONTEXT for a missing template.
+
 ## Principle Loading
 
 All agents load Canon principles using MCP tools:

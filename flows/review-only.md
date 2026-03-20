@@ -11,6 +11,7 @@ states:
       clean: done
       warning: done
       blocking: hitl
+      blocked: hitl
 
   done:
     type: terminal

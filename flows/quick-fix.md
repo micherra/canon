@@ -17,9 +17,11 @@ states:
     type: single
     agent: canon-tester
     role: verify
+    template: test-report
     transitions:
       all_passing: context-sync
       implementation_issue: hitl
+      blocked: hitl
 
   context-sync:
     type: single
@@ -28,6 +30,7 @@ states:
     transitions:
       updated: review
       no_updates: review
+      blocked: hitl
 
   review:
     type: single
@@ -37,6 +40,7 @@ states:
       clean: done
       warning: done
       blocking: fix-violations
+      blocked: hitl
 
   fix-violations:
     type: parallel-per

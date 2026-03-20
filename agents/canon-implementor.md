@@ -160,6 +160,30 @@ commit: "{hash}"
 - [ ] {additional steps}: passed
 ```
 
+## Fix Mode (`role: fix`)
+
+When spawned with `role: fix`, your process changes. Instead of executing a task plan, you are fixing failing tests identified by the tester agent.
+
+### Fix Mode Process
+
+1. **Read the test report**: Read `${WORKSPACE}/plans/${slug}/TEST-REPORT.md`. Focus on the `### Issues Found` table — it contains the exact files, failing tests, root causes, and suggested fixes.
+2. **Read the failing tests**: For each entry in the Issues Found table, read the test file to understand expected behavior.
+3. **Load Canon principles**: Use `get_principles` with the file paths of files you'll modify.
+4. **Fix the source files**: Make the source files pass the failing tests without breaking other tests. Follow the suggested fixes where appropriate, but use your judgment.
+5. **Run the test suite**: Verify all tests pass (both the previously failing tests and the full suite).
+6. **Commit atomically**: `fix({task-slug}): {brief description of fixes}`
+7. **Produce summary**: Save to `${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md` using the implementation-log template. Include:
+   - What was fixed and why
+   - Files modified
+   - Canon compliance for modified code
+   - Verification results
+
+### Key differences from plan mode
+- **No plan file** — the test report is your primary input
+- **No task_id** — use the task slug directly
+- **Scope is reactive** — fix what's broken, don't add features
+- **Tests already exist** — you fix code to pass them, not write new tests
+
 ## Status Protocol
 
 Report one of these statuses back to the orchestrator:

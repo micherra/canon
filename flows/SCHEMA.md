@@ -31,6 +31,7 @@ Prompt text for the agent in this state...
 | `entry` | string | no | Starting state (defaults to first state defined) |
 | `progress` | string | no | Path to append-only learnings file for cross-iteration context |
 | `hitl_default` | string | no | Default HITL behavior: `pause` (default) or `report` |
+| `review_threshold` | string | no | Minimum review verdict that triggers fix-violations: `blocking` (default) or `warning`. When set to `warning`, both BLOCKING and WARNING verdicts route to fix-violations instead of only BLOCKING. |
 
 ### States
 
@@ -75,7 +76,7 @@ When `agents` has one entry and `roles` has multiple, the agent is spawned once 
 
 **Wave resume**: When resuming a `wave` state where `wave_results.{N}.status` is `"in_progress"`, the orchestrator checks which tasks in that wave have completed by looking for their summary artifacts in `plans/{slug}/`. A summary is considered complete if the file exists AND contains a `### Status` heading with a recognized status keyword. If the file exists but lacks this section, treat the task as incomplete and re-spawn it. Tasks with valid summaries are skipped. Only tasks without valid summaries are re-spawned. This prevents re-running completed work within an interrupted wave.
 
-**`wave`** — Iterates over waves from an INDEX.md. Each wave spawns parallel agents, with a gate check between waves.
+**`wave`** — Iterates over waves from an INDEX.md. Each wave spawns parallel agents in isolated worktrees, with a gate check between waves.
 ```yaml
 implement:
   type: wave
@@ -85,6 +86,17 @@ implement:
     done: test
     blocked: hitl
 ```
+
+**Wave isolation via worktrees**: Each implementor in a wave runs in its own git worktree to prevent parallel tasks from overwriting each other's file changes. The orchestrator:
+1. Creates a temporary worktree per task: `git worktree add .canon/worktrees/{task_id} -b canon-wave/{task_id} HEAD`
+2. Spawns each agent with its worktree as the working directory (using `isolation: "worktree"` on the Agent tool)
+3. Each implementor commits atomically within its worktree branch
+4. After all tasks in the wave complete, the orchestrator merges each worktree branch back into the main working branch sequentially: `git merge --no-ff canon-wave/{task_id} -m "merge: {task_id}"`
+5. If a merge produces conflicts, the orchestrator records the conflicting task IDs and transitions to `hitl` with message: "Merge conflict between wave tasks {task_a} and {task_b}. Resolve manually or re-plan wave assignment."
+6. After successful merges (or HITL resolution), the orchestrator cleans up: `git worktree remove .canon/worktrees/{task_id}` and `git branch -d canon-wave/{task_id}`
+7. The gate check runs after all merges complete
+
+This prevents the silent data loss that occurs when parallel implementors modify overlapping files on the same branch.
 
 **`parallel-per`** — Spawns one agent per item in a dynamic list (e.g., one refactorer per violation group).
 ```yaml
@@ -111,12 +123,19 @@ For `parallel-per` states, `iterate_on` names a data source the orchestrator ext
 | Source | Parsed From | Item Shape |
 |--------|-------------|------------|
 | `violation_groups` | REVIEW.md `#### Violations` table | `{ principle_id, severity, file_path, detail }` |
+| `security_findings` | SECURITY.md `### Findings` section | `{ severity, file_path, detail, category }` |
 
 The orchestrator parses the violations table from the reviewer's REVIEW.md. Each unique `{principle_id, file_path}` pair becomes one item. If the table has multiple violations for the same principle in the same file, they are grouped into one item.
 
 Custom `iterate_on` values can reference any artifact from the prior state. The orchestrator reads the artifact as a markdown table or JSON array and fans out.
 
 **Empty iteration list**: If the iteration list is empty after parsing and filtering (no items, or all items excluded by `cannot_fix`), the state transitions immediately to `done` with result `no_items`. No agents are spawned.
+
+**Result aggregation for `parallel-per`**: When multiple agents run in parallel-per, their individual results are aggregated:
+- If **all items** return `done` (including aliases like `fixed`, `partial_fix`): the state transitions to `done`.
+- If **some items** return `done` and **some** return `cannot_fix`: the state transitions to `done`. The `cannot_fix` items are recorded in `iterations.{id}.cannot_fix` and excluded from future iterations. The flow continues with the successful fixes.
+- If **all items** return `cannot_fix`: the state transitions to `cannot_fix` (typically `hitl`). All items are recorded in `cannot_fix`.
+- If **any item** returns `blocked` or fails: the successful items are kept, and the orchestrator transitions to `hitl` with details about the blocked items. On retry, only the failed items are re-spawned.
 
 ### Gate Contract
 
@@ -138,6 +157,31 @@ gates:
 ```
 
 **Pre-gate merge check**: Before running the gate command between waves, the orchestrator runs `git status` to check for uncommitted changes or merge conflicts. If conflicts are detected, the gate is skipped and the wave transitions to `blocked` with reason: "Merge conflict detected between wave tasks. Resolve conflicts before proceeding." This surfaces the real issue instead of showing a confusing test failure from conflicted files.
+
+### Agent Timeouts
+
+Each state type has a default timeout. If an agent does not return within the timeout, the orchestrator treats it as a failure (same as a crash — transitions to `blocked`/`hitl`).
+
+| Agent Role | Default Timeout | Rationale |
+|-----------|----------------|-----------|
+| `canon-researcher` | 5 minutes | Scoped to one dimension; should complete quickly |
+| `canon-architect` | 15 minutes | Produces design + plans; needs time for graph analysis |
+| `canon-implementor` | 20 minutes | Writes code + tests; largest working scope |
+| `canon-tester` | 10 minutes | Writes integration tests; runs test suite |
+| `canon-reviewer` | 10 minutes | Reads diff + principles; no code writing |
+| `canon-refactorer` | 10 minutes | Fixes one violation group |
+| `canon-security` | 10 minutes | Scans files + runs dependency audit |
+| `canon-scribe` | 5 minutes | Classification + surgical edits |
+
+Flows can override the default timeout per state:
+```yaml
+implement:
+  type: wave
+  agent: canon-implementor
+  timeout: 30m  # Override default 20m for large tasks
+```
+
+The orchestrator logs timeouts in `board.json states.{id}.error: "Agent timed out after {N}m"`.
 
 ### Agent Failure Handling
 
@@ -178,6 +222,8 @@ Transitions are `condition: target-state` pairs. The orchestrator evaluates cond
 **Case normalization**: Agents report status keywords in UPPERCASE (e.g., `DONE`). The orchestrator lowercases them before matching to transition conditions (e.g., `done`). Flow templates always define transitions in lowercase.
 
 Custom conditions can be added — the orchestrator matches them against the agent's reported status string (after lowercasing).
+
+**`review_threshold` override**: When `review_threshold: warning` is set at the flow level, the orchestrator overrides the review state's `warning: done` transition to `warning: fix-violations` (or whatever the `blocking` transition targets). This allows projects to opt into automated remediation of strong-opinion violations without modifying the flow template's state definitions. Default: `blocking` (only rule-severity violations trigger fixes).
 
 **Default transition**: If the agent's output contains no recognized status keyword, or if the status keyword has no matching transition in the state's `transitions` map, the orchestrator treats the result as `blocked` and transitions to `hitl`. The raw agent output is recorded in `states.{id}.error` for user review. This prevents the flow from stalling silently when an agent returns an unexpected status.
 
@@ -260,6 +306,7 @@ Variables available in spawn instructions:
 | `${slug}` | Task slug from `session.json` (task description → lowercase, hyphens, truncated) | All states |
 | `${CLAUDE_PLUGIN_ROOT}` | Canon plugin install path | All states |
 | `${progress}` | Contents of the progress file (if `progress` is set in flow) | All states |
+| `${base_commit}` | Git commit SHA at flow initialization (from `board.json`) — use for diff ranges | All states |
 | `${role}` | Role label from `roles` list. `roles` (plural) in state definitions lists available roles for parallel spawning. If a state has no `roles` field, the agent is spawned once with no `${role}` variable. | `parallel` states |
 | `${task_id}` | Task ID from INDEX.md current wave | `wave` states |
 | `${item}` | Current item (string) or `${item.field}` (structured) | `parallel-per` states |
@@ -295,6 +342,7 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
   "task": "Add order creation endpoint",
   "entry": "research",
   "current_state": "implement",
+  "base_commit": "abc123def",
   "started": "ISO-8601",
   "last_updated": "ISO-8601",
   "states": {
@@ -350,6 +398,7 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
 | `task` | string | User's task description |
 | `entry` | string | Starting state of the flow |
 | `current_state` | string | State the orchestrator is currently in or about to enter |
+| `base_commit` | string | Git commit SHA at flow initialization. Used for diff ranges (`git diff ${base_commit}..HEAD`) and rollback. Recorded by the orchestrator during workspace init. |
 | `started` | ISO-8601 | When the flow began |
 | `last_updated` | ISO-8601 | Last board write |
 | `states` | map | Per-state status and metadata |
@@ -358,7 +407,8 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
 | `states.{id}.completed_at` | ISO-8601 | When the state completed (if done) |
 | `states.{id}.entries` | int | How many times this state has been entered (tracks loops) |
 | `states.{id}.result` | string | The condition that triggered the outgoing transition |
-| `states.{id}.artifacts` | list | Paths to artifacts produced, stored relative to `${WORKSPACE}`. The orchestrator resolves them by prepending the workspace path. Agents should report paths relative to workspace in their output. |
+| `states.{id}.artifacts` | list | Paths to artifacts produced (latest entry), stored relative to `${WORKSPACE}`. The orchestrator resolves them by prepending the workspace path. Agents should report paths relative to workspace in their output. |
+| `states.{id}.artifact_history` | list | For looping states: `[{ entry: 1, artifacts: [...] }, ...]`. Preserves artifacts from all iterations, not just the latest. The current `artifacts` field is always the latest snapshot; `artifact_history` provides the full audit trail. |
 | `states.{id}.wave` | int | Current wave (for `wave` type states) |
 | `states.{id}.wave_total` | int | Total waves (for `wave` type states) |
 | `states.{id}.wave_results` | map | Per-wave results (for `wave` type states) |

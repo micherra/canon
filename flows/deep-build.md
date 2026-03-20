@@ -12,6 +12,7 @@ states:
     template: research-finding
     transitions:
       done: design
+      blocked: hitl
 
   design:
     type: single
@@ -41,6 +42,7 @@ states:
     transitions:
       updated: test
       no_updates: test
+      blocked: hitl
 
   test:
     type: single
@@ -51,6 +53,7 @@ states:
     transitions:
       all_passing: security
       implementation_issue: fix-impl
+      blocked: hitl
 
   fix-impl:
     type: single
@@ -59,6 +62,7 @@ states:
     template: implementation-log
     transitions:
       done: context-sync-fix
+      blocked: hitl
 
   context-sync-fix:
     type: single
@@ -67,6 +71,7 @@ states:
     transitions:
       updated: test
       no_updates: test
+      blocked: hitl
 
   security:
     type: single
@@ -74,7 +79,19 @@ states:
     template: security-assessment
     transitions:
       done: review
-      critical: hitl
+      critical: fix-security
+      blocked: hitl
+
+  fix-security:
+    type: parallel-per
+    agent: canon-refactorer
+    iterate_on: security_findings
+    max_iterations: 2
+    stuck_when: same_violations
+    transitions:
+      done: security
+      cannot_fix: hitl
+      blocked: hitl
 
   review:
     type: single
@@ -84,6 +101,7 @@ states:
       clean: done
       warning: done
       blocking: fix-violations
+      blocked: hitl
 
   fix-violations:
     type: parallel-per
@@ -126,7 +144,10 @@ Fix the failing tests reported in ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Rea
 Scan implemented code for security vulnerabilities. Read task summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md for file list. Save assessment to ${WORKSPACE}/plans/${slug}/SECURITY.md using the security-assessment template at ${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md. Append a log entry to ${WORKSPACE}/log.jsonl.
 
 ### review
-Review all code changes from this build. Use git diff to see changes. After completing your independent Stage 1 and Stage 2 review, perform the Stage 3 compliance cross-check by reading implementor summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save review to ${WORKSPACE}/plans/${slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl.
+Review all code changes from this build. Use `git diff ${base_commit}..HEAD` to see all changes (base_commit is the pre-build state). After completing your independent Stage 1 and Stage 2 review, perform the Stage 3 compliance cross-check by reading implementor summaries from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save review to ${WORKSPACE}/plans/${slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl.
+
+### fix-security
+Fix the critical security finding: ${item.severity} — ${item.detail} in ${item.file_path}. Load the relevant security principles in full. Fix the vulnerability while preserving behavior. Run any existing tests to verify no regressions. Commit atomically.
 
 ### fix-violations
 Fix the Canon principle violation: ${item.principle_id} (${item.severity}) in ${item.file_path}. Detail: ${item.detail}. Load the violated principle in full. Refactor to comply while preserving behavior. Commit atomically.
