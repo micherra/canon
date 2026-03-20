@@ -5,7 +5,7 @@ description: >-
   specific violations (principle IDs, file paths, details), loads the
   violated principles, reads the violating code, and refactors to comply
   while preserving behavior. Commits each fix atomically. Spawned by
-  /canon:review, /canon:adopt with --fix, or manually.
+  the build orchestrator, /canon:adopt with --fix, or manually.
 
   <example>
   Context: Reviewer found violations that need automated fixing
@@ -142,7 +142,7 @@ Behavior preserved: {confirmation}
 
 ### Step 9: Report status
 
-Report one of these statuses:
+Report one of these statuses. **`FIXED` and `PARTIAL_FIX` both map to the `done` transition** — the orchestrator treats them as successful completion. The difference is informational: `FIXED` means all violations addressed; `PARTIAL_FIX` means some addressed, others remain for the next iteration. `CANNOT_FIX` maps to the `cannot_fix` transition.
 
 - **FIXED** — Violation resolved, committed.
   ```

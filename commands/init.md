@@ -13,6 +13,7 @@ Initialize Canon engineering principles in the current project. This sets up the
 
 ```bash
 mkdir -p .canon/principles/rules .canon/principles/strong-opinions .canon/principles/conventions
+mkdir -p .canon/workspaces .canon/history
 ```
 
 ### Step 2: Copy starter principles
@@ -64,34 +65,9 @@ If `CLAUDE.md` doesn't exist, create it with just the Canon section above.
 
 Scan the existing codebase to infer conventions and pre-populate `.canon/CONVENTIONS.md`. This gives new projects a useful starting point instead of a blank template.
 
-#### 5a: Detect language and framework
+Detect the language/framework from config files (package.json, go.mod, Cargo.toml, etc.). Sample 10-20 source files to detect naming, error handling, testing, import, and validation patterns.
 
-Look for telltale files to identify the stack:
-- `package.json` → Node.js (check for React, Next.js, Express, etc. in dependencies)
-- `requirements.txt` / `pyproject.toml` / `setup.py` → Python (check for Django, Flask, FastAPI, etc.)
-- `go.mod` → Go
-- `Cargo.toml` → Rust
-- `*.csproj` / `*.sln` → .NET
-- `Gemfile` → Ruby
-
-#### 5b: Scan for naming patterns
-
-Sample 10-20 source files across the project and detect:
-- **Naming convention**: camelCase vs snake_case vs PascalCase for functions/variables
-- **File naming**: kebab-case vs camelCase vs PascalCase for filenames
-- **Export style**: default exports vs named exports (JS/TS)
-
-#### 5c: Scan for structural patterns
-
-Look for recurring patterns:
-- **Error handling**: Do files use try/catch, Result types, error codes, or `.catch()`?
-- **Testing framework**: Jest, Vitest, pytest, Go testing, etc. (check devDependencies or test files)
-- **Import style**: Relative vs absolute imports, barrel files (index.ts re-exports)
-- **Validation**: Zod, Joi, class-validator, Pydantic, etc.
-- **ORM/data layer**: Prisma, Drizzle, SQLAlchemy, GORM, etc.
-- **API style**: REST routes, GraphQL, tRPC, gRPC
-
-#### 5d: Write CONVENTIONS.md
+#### Write CONVENTIONS.md
 
 Create `.canon/CONVENTIONS.md` with detected conventions:
 
@@ -124,16 +100,6 @@ If no conventions could be detected (empty project or unrecognizable stack), fal
 <!-- - **Testing**: Vitest with inline test data -->
 ```
 
-This file is the persistent, project-level conventions layer. It gets read by implementor and refactorer agents. Edit `.canon/CONVENTIONS.md` directly as patterns emerge.
-
 ### Step 6: Report what was done
 
-Tell the user:
-- How many principles were copied (or that an empty directory was created)
-- That `.canon/CONVENTIONS.md` was created (for project-level conventions)
-- That CLAUDE.md was updated/created
-- Suggest running `/canon:status` to verify the setup
-- Suggest running `/canon:list` to browse the principles
-- Suggest editing `.canon/CONVENTIONS.md` directly to add project conventions
-- Suggest running `/canon:learn` after accumulating 10+ reviews to discover patterns and refine principles
-- Suggest adding `.canon/` to git tracking if not already tracked
+Tell the user what was created (principles, conventions, workspaces, CLAUDE.md) and suggest next steps: `/canon:list` to browse principles, edit `.canon/CONVENTIONS.md` to add conventions, and add `.canon/` to git tracking.

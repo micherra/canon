@@ -68,7 +68,7 @@ We also recommend enabling tool search to reduce context usage from MCP tools:
 /canon:init
 ```
 
-This creates `.canon/principles/` with 47 starter principles, a `CONVENTIONS.md` template, and integrates with your `CLAUDE.md`. Run `/canon:status` to verify.
+This creates `.canon/principles/` with 47 starter principles, a `CONVENTIONS.md` template, and integrates with your `CLAUDE.md`. Ask Canon for status to verify.
 
 ## How It Works
 
@@ -82,30 +82,44 @@ Canon operates on a three-tier severity model:
 
 When you write code, Canon automatically loads principles matched to your file's architectural layer and path patterns. Agents self-review against them before presenting output.
 
-## Commands
+## Commands & Natural Language
+
+Canon uses a two-tier interface: **natural language** for common workflows and **slash commands** for specialized utilities.
+
+### Natural Language (via Canon Intake)
+
+Just describe what you want. Canon's intake agent classifies your intent and routes to the right agent:
+
+| What you say | What happens |
+|-------------|-------------|
+| "Add an order creation endpoint with Zod validation" | Build pipeline: triage → tier detection → research → architect → implement → test → review |
+| "Review my changes" / "Review PR 42" | Code review against Canon principles (supports staged, branch, PR, or file scoping) |
+| "Scan for vulnerabilities" | Security audit flow |
+| "What's the status?" | Health dashboard — principle counts, review scorecard, build progress |
+| "Create a new principle about error handling" | Interactive principle authoring via canon-writer |
+| "Create a new agent-rule" | Interactive agent-rule authoring via canon-writer |
+| "Skip tests, this is a small task" | Build with flags parsed from natural language |
+
+Build modifiers can be expressed naturally: "skip research", "just plan don't implement", "this is a large task", "use the quick-fix flow".
+
+### Slash Commands (10 utilities)
 
 | Command | What it does |
 |---------|-------------|
 | `/canon:init` | Set up Canon in your project — auto-detects codebase conventions |
-| `/canon:build` | Full pipeline: research → architect & plan → implement → test → security → review |
-| `/canon:review` | Review code changes against principles |
-| `/canon:status` | Health dashboard — principle counts, review scorecard, actionable suggestions |
 | `/canon:learn` | Analyze data to suggest principle and convention improvements |
 | `/canon:list` | Browse and filter principles |
 | `/canon:explain` | Deep-dive on a principle with real codebase examples |
 | `/canon:adopt` | Scan for coverage gaps and produce a remediation plan |
-| `/canon:new-principle` | Author a new principle via guided interview |
-| `/canon:new-agent-rule` | Author a new agent-rule via guided interview |
 | `/canon:edit-principle` | Edit an existing principle — change severity, scope, tags, or body |
 | `/canon:test-principle` | Verify a principle is detected during review by generating a violation |
 | `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped by the matcher |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
-| `/canon:security` | Standalone security scan |
-| `/canon:pr-review` | Parallel per-layer PR review with optional GitHub comment posting |
+| `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
 
 ## The Build Pipeline
 
-`/canon:build` scales dynamically to task size:
+Canon's build pipeline scales dynamically to task size:
 
 ```
 Small (1-3 files)     →  implement → review → log
@@ -114,6 +128,53 @@ Large (10+ files)     →  research → architect & plan → implement → test 
 ```
 
 Each phase is handled by a specialized agent. The orchestrator stays thin — it spawns agents, passes context, and manages the workflow.
+
+## Agent Workspaces
+
+Canon agents share context through **branch-scoped workspaces** — structured folders where agents write research, decisions, logs, and plans that other agents can read.
+
+```
+.canon/workspaces/{sanitized-branch}/
+├── session.json              # Session metadata (branch, task, tier, status)
+├── log.jsonl                 # Chronological agent activity log
+├── context.md                # Living shared context (architect-owned)
+├── research/                 # Research findings (one per dimension)
+├── decisions/                # Design decisions with rationale
+├── plans/                    # Task plans and build artifacts
+│   └── {task-slug}/
+├── reviews/                  # Review outputs
+└── notes/                    # Freeform notes
+```
+
+### How it works
+
+1. When a build starts, the orchestrator creates a workspace for the current branch
+2. Each agent reads and writes to scoped areas — the researcher writes to `research/`, the architect writes to `decisions/` and `plans/`, etc.
+3. All agents append to `log.jsonl` for a shared activity timeline
+4. The architect owns `context.md` — a living document with key decisions and patterns that downstream agents read
+
+### Agent permissions
+
+Agents have scoped read/write access to preserve existing isolation principles:
+- **Reviewer never reads research or plans** — cold review is preserved
+- **Implementor only reads its own plan** + shared context — fresh context is preserved
+- **Researcher never reads other researchers** — scoped research is preserved
+
+### Templates
+
+Standardized output templates in the plugin's `templates/` directory ensure consistent structure:
+- `research-finding.md` — structured format for researcher output
+- `design-decision.md` — problem/options/chosen/rationale for architectural decisions
+- `implementation-log.md` — standardized task summary with compliance declaration
+- `review-checklist.md` — structured review report with verdict and scores
+- `session-context.md` — living shared context document format
+
+### Lifecycle
+
+Workspaces are ephemeral by default — scoped to a branch's active development:
+- **Create**: Automatically when a build starts
+- **Archive**: Run `/canon:clean --archive` to save decisions and notes to `.canon/history/`
+- **Delete**: Run `/canon:clean` to remove workspace artifacts after branch merge
 
 ## The Learning Loop
 
@@ -197,9 +258,10 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/            17 slash commands
+├── commands/            10 slash commands
 ├── agents/              10 specialist agents
-├── agent-rules/         9 agent behavior guidelines
+├── agent-rules/         10 agent behavior guidelines
+├── templates/           5 standardized output templates for agent artifacts
 ├── hooks/               6 automation hooks
 ├── flows/               5 predefined workflow YAML files
 ├── mcp-server/          TypeScript MCP server (11 tools)
@@ -306,9 +368,9 @@ Place your file in the appropriate directory under `.canon/` (for project-local)
 └── agent-rules/            # Behavioral constraints for Canon agents
 ```
 
-Use the guided commands or create files directly:
-- `/canon:new-principle` — walks you through authoring a new principle
-- `/canon:new-agent-rule` — walks you through authoring a new agent-rule
+Use guided authoring or create files directly:
+- Ask Canon to create a new principle — intake spawns the canon-writer in new-principle mode
+- Ask Canon to create a new agent-rule — intake spawns the canon-writer in new-agent-rule mode
 
 ## Context Management
 
@@ -366,7 +428,7 @@ All Canon data lives in `.canon/` in your project root:
 
 | File | Purpose | Written by |
 |------|---------|-----------|
-| `principles/{rules,strong-opinions,conventions}/*.md` | Principle definitions | `/canon:init`, `/canon:new-principle` |
+| `principles/{rules,strong-opinions,conventions}/*.md` | Principle definitions | `/canon:init`, canon-writer agent |
 | `CONVENTIONS.md` | Project conventions | `/canon:init` (auto-detected), `/canon:learn --apply`, or edit directly |
 | `config.json` | Project configuration | `/canon:init` |
 | `reviews.jsonl` | Review results | `report` MCP tool (type=review) |
@@ -374,7 +436,8 @@ All Canon data lives in `.canon/` in your project root:
 | `patterns.jsonl` | Observed patterns | `report` MCP tool (type=pattern) |
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
-| `plans/*/` | Build artifacts per task | `/canon:build` |
+| `workspaces/{branch}/` | Branch-scoped agent workspace (research, decisions, plans, logs) | Build pipeline (orchestrator) |
+| `history/{branch}/` | Archived workspace artifacts (decisions, notes, summary) | `/canon:clean --archive` |
 | `graph-data.json` | Codebase dependency graph with insights | `codebase_graph` MCP tool |
 | `reverse-deps.json` | Reverse dependency index (who imports each file) | `codebase_graph` MCP tool |
 | `summaries.json` | One-line file summaries for dashboard tooltips | `store_summaries` MCP tool |
