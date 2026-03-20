@@ -24,10 +24,11 @@ jobs:
           node-version: 22
 
       - name: Install semantic-release
-        run: npm install -g semantic-release
+        run: npm install -g semantic-release @semantic-release/npm
 
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: semantic-release
 

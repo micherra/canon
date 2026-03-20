@@ -34,6 +34,25 @@ After installing, Canon's slash commands, agents, hooks, and MCP tools are avail
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 - Node.js 18+ (for the MCP server)
 
+## Cursor-only Setup (no Claude Code plugin)
+
+Canon’s full build/review pipeline can run in Cursor without installing the Claude Code plugin.
+
+1. In your project repo, run:
+```bash
+npx -y cursor-canon
+```
+This installs Cursor configuration and the Cursor-side runner into the repo (including `.cursor/mcp.json` and `AGENTS.md`).
+
+2. Restart Cursor.
+
+3. Trigger Canon in chat, for example:
+- `Review my changes`
+- `Security scan for vulnerabilities`
+- `Add an auth-protected dashboard with Zod validation`
+
+On first use, Cursor will start Canon’s MCP server and auto-run `npm install` inside `mcp-server/` if dependencies are missing.
+
 ### Claude Max users
 
 Opus 4.6 uses a 1M context window which requires **extra usage** on Claude Max. If you see `"Extra usage is required for long context requests"`:
