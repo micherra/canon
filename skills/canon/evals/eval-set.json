@@ -6,100 +6,100 @@
       "type": "trigger",
       "prompt": "review my staged changes",
       "should_trigger": true,
-      "expected_output": "Skill activates and intake classifies as review intent, spawns orchestrator with flow: review-only"
+      "expected_output": "The response indicates the skill activated and understood this as a code review request. It may check for staged changes, ask about review scope, or attempt to run a review. It should NOT respond as if it doesn't know what Canon is."
     },
     {
       "id": "trigger-build-request",
       "type": "trigger",
       "prompt": "build a user dashboard with auth",
       "should_trigger": true,
-      "expected_output": "Skill activates and intake classifies as build intent, spawns orchestrator"
+      "expected_output": "The response indicates the skill activated and understood this as a build/implementation task. It may ask clarifying questions about the dashboard, start planning, or begin implementation. It should NOT just answer generically without engaging Canon's build system."
     },
     {
       "id": "trigger-off-topic-still-activates",
       "type": "trigger",
       "prompt": "what's the weather today?",
       "should_trigger": true,
-      "expected_output": "Skill activates in Canon-enabled project. Intake classifies as chat intent and responds directly without spawning a pipeline"
+      "expected_output": "The response handles the off-topic question. In a Canon-enabled project the skill still activates, but since this is off-topic, the response should be a brief conversational reply. PASS if any response is given (Canon activates for all input in a Canon project)."
     },
     {
       "id": "trigger-no-canon-project",
       "type": "trigger",
       "prompt": "build a user dashboard",
       "should_trigger": false,
-      "expected_output": "Skill does not activate because no .canon/ directory exists in the project"
+      "expected_output": "The response does NOT mention Canon, principles, or engineering rules. Since this runs outside a Canon project (no .canon/ directory), the skill should not activate. The response should be generic Claude assistance without Canon-specific behavior."
     },
     {
       "id": "intent-review",
       "type": "quality",
       "prompt": "review my staged changes",
-      "expected_output": "Intake classifies as 'review' intent. Detects review scope via git diff --cached. Spawns canon-orchestrator with flow: review-only and review_scope: { type: 'staged' }"
+      "expected_output": "The response treats this as a code review request. It should check git for staged changes (e.g., run git diff --cached or similar). If no staged changes exist, it should report that and offer alternatives. It should NOT treat this as a build task or general question."
     },
     {
       "id": "intent-build",
       "type": "quality",
       "prompt": "create a REST API for order management",
-      "expected_output": "Intake classifies as 'build' intent. Triages the task for actionability (What: REST API, Where: order management domain, Boundaries: may need clarification). Spawns canon-orchestrator with the sharpened task description"
+      "expected_output": "The response treats this as a build/implementation task. It should either ask clarifying questions (what endpoints, what framework, what's in scope) or begin planning the implementation. It should NOT just explain what a REST API is."
     },
     {
       "id": "intent-security",
       "type": "quality",
       "prompt": "scan for vulnerabilities",
-      "expected_output": "Intake classifies as 'security' intent. Spawns canon-orchestrator with flow: security-audit"
+      "expected_output": "The response treats this as a security scan request. It should attempt to scan the codebase for security issues, or initiate a security audit flow. It should NOT just explain what vulnerability scanning is."
     },
     {
       "id": "intent-question",
       "type": "quality",
-      "prompt": "how does the payment service work?",
-      "expected_output": "Intake classifies as 'question' intent. Answers directly by reading the codebase using Grep/Glob/Read tools. Does NOT spawn a pipeline or orchestrator"
+      "prompt": "how does the principle matching system work in this project?",
+      "expected_output": "The response directly answers the question by reading code from the codebase (e.g., matcher.ts, parser.ts). It should explain how principles are matched, referencing actual code. It should NOT start a build pipeline or ask to implement something."
     },
     {
       "id": "intent-chat",
       "type": "quality",
       "prompt": "what's the weather today?",
-      "expected_output": "Intake classifies as 'chat' intent. Responds directly with a conversational answer. Does NOT spawn a pipeline or orchestrator"
+      "expected_output": "The response is a brief conversational reply acknowledging it can't check weather. It should NOT start a Canon build pipeline, review flow, or security scan for this off-topic question."
     },
     {
       "id": "matching-secrets-in-code",
       "type": "quality",
-      "prompt": "Review this file for principle compliance",
+      "prompt": "Review this code for Canon principle compliance. The file path is src/config/keys.ts. Identify which Canon principles are violated.",
       "files": ["fixtures/secret-in-code.ts"],
-      "expected_output": "get_principles with file_path returns secrets-never-in-code (rule severity). The hardcoded STRIPE_KEY and database connection string with embedded password both match this principle"
+      "expected_output": "The response identifies that the code violates the secrets-never-in-code principle. It should flag the hardcoded STRIPE_KEY and/or the database connection string with embedded password as security violations."
     },
     {
       "id": "matching-clean-api-handler",
       "type": "quality",
-      "prompt": "Review this file for principle compliance",
+      "prompt": "Review this code for Canon principle compliance. The file path is src/api/handlers/users.ts. Identify which Canon principles apply and any violations.",
       "files": ["fixtures/clean-api-handler.ts"],
-      "expected_output": "get_principles with file_path src/api/handlers/users.ts returns API-layer principles (validate-at-trust-boundaries, command-query-separation). Does NOT match secrets-never-in-code since no secrets are present in the code"
+      "expected_output": "The response identifies relevant API-layer principles. It should NOT flag this code for secrets violations since there are no hardcoded secrets. The code is clean and should receive a positive or neutral assessment."
     },
     {
       "id": "matching-cross-context-import",
       "type": "quality",
-      "prompt": "Review this file for principle compliance",
+      "prompt": "Review this code for Canon principle compliance. The file path is src/domain/orders/order-service.ts. Identify which Canon principles are violated.",
       "files": ["fixtures/cross-context-import.ts"],
-      "expected_output": "get_principles with file_path src/domain/orders/order-service.ts returns domain-layer principles including bounded-context-boundaries. The import of Customer from ../customers/ crosses bounded context boundaries"
+      "expected_output": "The response identifies that importing Customer from ../customers/ violates bounded-context-boundaries. The order service should not directly import domain types from the customers context."
     },
     {
       "id": "matching-test-external-data",
       "type": "quality",
-      "prompt": "Review this file for principle compliance",
+      "prompt": "Review this code for Canon principle compliance. The file path is tests/user.test.ts. Identify which Canon principles are violated.",
       "files": ["fixtures/test-with-external-data.ts"],
-      "expected_output": "get_principles with file_path tests/user.test.ts returns test-scoped principles including test-data-belongs-in-the-test and arrange-act-assert. The import of testUsers from a shared fixtures file violates test-data-belongs-in-the-test"
+      "expected_output": "The response identifies that importing test data from a shared fixtures file violates test-data-belongs-in-the-test. Test data should be defined inline within each test, not imported from external files."
     },
     {
       "id": "review-verdict-blocking",
       "type": "quality",
-      "prompt": "Run a full code review on this file",
+      "prompt": "Run a Canon code review on this file and provide a verdict (BLOCKING, WARNING, or CLEAN). The file path is src/config/keys.ts.",
       "files": ["fixtures/secret-in-code.ts"],
-      "expected_output": "review_code returns matched principles including secrets-never-in-code (rule). Reviewer agent produces verdict: BLOCKING due to rule-severity violation. Identifies the hardcoded Stripe key and database credentials as violations"
+      "expected_output": "The review verdict is BLOCKING. The code contains hardcoded secrets (API key and database credentials) which violate the secrets-never-in-code rule. Rule violations always result in a BLOCKING verdict."
     },
     {
       "id": "review-verdict-clean",
       "type": "quality",
-      "prompt": "Run a full code review on this file",
+      "prompt": "Run a Canon code review on this file and provide a verdict (BLOCKING, WARNING, or CLEAN). The file path is src/api/handlers/users.ts.",
       "files": ["fixtures/clean-api-handler.ts"],
-      "expected_output": "review_code returns matched principles for the API layer. Reviewer agent produces verdict: CLEAN or WARNING (no rule violations). The handler follows standard patterns with proper error handling"
+      "expected_output": "The review verdict is CLEAN or WARNING (not BLOCKING). The code follows good patterns with proper error handling and no rule violations. There are no hardcoded secrets or critical security issues."
     }
   ]
 }
