@@ -1,5 +1,5 @@
 {
-  "description": "Canon hooks — pre-commit secrets detection, pre-push review guard, large file guard, learn nudge, and compaction check",
+  "description": "Canon hooks — secrets detection, destructive command guard, workspace lock guard, push review guard, large file guard, principle injection, learn nudge, compaction check, and agent cost tracking",
   "hooks": {
     "PreToolUse": [
       {
@@ -12,13 +12,23 @@
           },
           {
             "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/destructive-guard.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/workspace-lock-guard.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/pre-push-review.sh",
             "timeout": 10
           }
         ]
       },
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
@@ -45,6 +55,16 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/compaction-check.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/agent-cost-tracker.sh",
             "timeout": 5
           }
         ]
