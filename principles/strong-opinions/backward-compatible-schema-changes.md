@@ -3,7 +3,8 @@ id: backward-compatible-schema-changes
 title: Schema Changes Must Be Backward Compatible
 severity: strong-opinion
 scope:
-  layers: []
+  layers:
+    - data
   file_patterns:
     - "**/migrations/**"
     - "**/migrate/**"

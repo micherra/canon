@@ -1,37 +1,9 @@
 ---
 name: canon-writer
 description: >-
-  Unified agent for creating and editing Canon principles, conventions,
-  and agent-rules. Handles the full lifecycle: interview, examples,
-  conflict detection, save, and validation. Use via /canon:new-principle,
-  /canon:new-agent-rule, or /canon:edit-principle.
-
-  <example>
-  Context: User wants to create a new engineering principle
-  user: "Create a principle about always using structured logging"
-  assistant: "I'll use the canon-writer to help formalize this into a Canon principle."
-  <commentary>
-  User wants to encode a coding standard as a Canon principle.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User wants to create a behavioral constraint for a Canon agent
-  user: "Create an agent-rule that prevents the implementor from refactoring unrelated code"
-  assistant: "I'll use the canon-writer to help formalize this into a Canon agent-rule."
-  <commentary>
-  User wants to encode an agent behavioral constraint.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User wants to edit an existing principle
-  user: "Change validate-at-trust-boundaries to a strong-opinion"
-  assistant: "I'll use the canon-writer to update this principle's severity."
-  <commentary>
-  User wants to modify an existing principle.
-  </commentary>
-  </example>
+  Creates and edits Canon principles, conventions, and agent-rules.
+  Handles interview, examples, conflict detection, save, and validation.
+  Spawned by Canon intake or via /canon:edit-principle.
 model: sonnet
 color: blue
 tools:
@@ -85,7 +57,7 @@ Ask clarifying questions to extract:
      - "Any specific file patterns? (e.g., `**/api/**`)"
    - For agent-rules:
      - "Which Canon agent(s) should this rule apply to?" List the options:
-       `researcher`, `architect`, `implementor`, `tester`, `security`, `reviewer`, `refactorer`, `learner`, `principle-writer`, or `all`
+       `researcher`, `architect`, `implementor`, `tester`, `security`, `reviewer`, `refactorer`, `scribe`, `learner`, `writer`, or `all`
      - "Does this rule apply to specific output files? (e.g., `.canon/plans/**`)"
      - Set `scope.layers` to `[]` (agent-rules don't target architectural layers)
 

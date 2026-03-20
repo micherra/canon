@@ -5,7 +5,7 @@ description: >-
   specific violations (principle IDs, file paths, details), loads the
   violated principles, reads the violating code, and refactors to comply
   while preserving behavior. Commits each fix atomically. Spawned by
-  /canon:review, /canon:adopt with --fix, or manually.
+  the build orchestrator, /canon:adopt with --fix, or manually.
 
   <example>
   Context: Reviewer found violations that need automated fixing
@@ -26,9 +26,9 @@ description: >-
   </example>
 
   <example>
-  Context: Adoption scan found hotspot files
-  user: "Refactor the top 5 hotspot files to comply with Canon principles"
-  assistant: "Spawning canon-refactorer instances for each hotspot file with its specific violations."
+  Context: Adoption scan found files with violations
+  user: "Refactor the top 5 violation files to comply with Canon principles"
+  assistant: "Spawning canon-refactorer instances for each violation file with its specific violations."
   <commentary>
   The refactorer handles one violation or one tightly related group per invocation for fresh context.
   </commentary>
@@ -75,14 +75,24 @@ Pay special attention to:
 
 If the violation falls under a documented exception, report **CANNOT_FIX** with reason: "Falls under documented exception: {exception text}."
 
-### Step 3: Read the violating code
+### Step 3: Read the violating code and understand its graph position
 
 Read the full file containing the violation. Understand:
 - What the code currently does (functional behavior to preserve)
 - Where exactly the violation occurs
 - What upstream and downstream code depends on the current behavior
 
-If the file imports from or is imported by other files, read those dependency files to understand the contract you must preserve.
+**Use the dependency graph for caller discovery**: Call the `get_file_context` MCP tool with the violation's file path. The response includes:
+- `imports`: files this code depends on (fan-out)
+- `imported_by`: files that depend on this code (fan-in) — these are callers whose contracts you must preserve
+- `graph_metrics` (if available): `in_degree`, `out_degree`, `is_hub`, `in_cycle`, `impact_score`
+
+Use this structural context to understand refactoring risk:
+- **High fan-in** (10+ dependents): Changes to public API are high-risk. Prefer internal-only refactoring that preserves the external interface.
+- **Hub file**: Extra caution — test all callers after refactoring.
+- **In cycle**: Breaking the cycle may require coordinated changes across cycle peers. If the fix would require changing cycle peers, report **CANNOT_FIX** with a suggestion to address the cycle holistically.
+
+Read the most critical callers (highest fan-in files from `imported_by`) to understand what API contract they depend on.
 
 ### Step 4: Plan the refactor
 
@@ -132,7 +142,7 @@ Behavior preserved: {confirmation}
 
 ### Step 9: Report status
 
-Report one of these statuses:
+Report one of these statuses. **`FIXED` and `PARTIAL_FIX` both map to the `done` transition** — the orchestrator treats them as successful completion. The difference is informational: `FIXED` means all violations addressed; `PARTIAL_FIX` means some addressed, others remain for the next iteration. `CANNOT_FIX` maps to the `cannot_fix` transition.
 
 - **FIXED** — Violation resolved, committed.
   ```

@@ -2,26 +2,8 @@
 name: canon-researcher
 description: >-
   Researches a specific dimension of a development task before planning.
-  Spawned in parallel by /canon:build orchestrator. Produces a compressed
+  Spawned in parallel by the build orchestrator. Produces a compressed
   findings document. Does NOT write code.
-
-  <example>
-  Context: Build orchestrator needs codebase analysis before designing a feature
-  user: "Research the existing codebase patterns for the order creation task"
-  assistant: "Spawning canon-researcher to analyze existing codebase patterns, file structure, and applicable Canon principles."
-  <commentary>
-  The orchestrator spawns 2-4 researchers in parallel, each focused on one dimension.
-  </commentary>
-  </example>
-
-  <example>
-  Context: Need to understand external APIs before implementation
-  user: "Research the Stripe API integration patterns for payment processing"
-  assistant: "Spawning canon-researcher focused on domain research for Stripe integration."
-  <commentary>
-  Domain research investigates external knowledge, API docs, and framework best practices.
-  </commentary>
-  </example>
 model: sonnet
 color: yellow
 tools:
@@ -68,26 +50,45 @@ You will be assigned one of these dimensions:
 
 ## Output Format
 
-Save findings to the specified output path (provided by the orchestrator). Use this format:
+Save findings to the specified output path (provided by the orchestrator). The orchestrator **must** provide the research-finding template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format:
 
 ```markdown
+---
+dimension: "{codebase|architecture|domain|risk}"
+task: "{task description}"
+agent: canon-researcher
+timestamp: "{ISO-8601}"
+---
+
 ## {Dimension} Research: {task description}
 
-### Key findings
+### Key Findings
 - [Most important discovery]
 - [Second most important]
 
-### Relevant existing patterns
-- [description of what already exists, with file paths]
+### Relevant Existing Patterns
+- `path/to/file.ts` — [description of what already exists]
 
-### Files likely affected
-- path/to/file.ts — reason
+### Files Likely Affected
+- `path/to/file.ts` — reason
 
-### Applicable Canon principles
-- [principle-id] — relevant because...
+### Applicable Canon Principles
+- **[principle-id]** — relevant because...
 
-### Concerns
+### Constraints and Risks
 - [anything the planner/architect should know]
+
+### Recommendation
+[One-paragraph recommendation based on findings]
+```
+
+## Workspace Logging
+
+If the orchestrator provides a `log.jsonl` path, append an entry when you start and complete research:
+
+```json
+{"timestamp": "ISO-8601", "agent": "canon-researcher", "action": "start", "detail": "{dimension} research for {task}"}
+{"timestamp": "ISO-8601", "agent": "canon-researcher", "action": "complete", "detail": "{summary}", "artifacts": ["{output-path}"]}
 ```
 
 ## Context Isolation

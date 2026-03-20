@@ -29,11 +29,10 @@ And the research findings: [4000 tokens]."
 
 ```
 Orchestrator spawns implementor with:
-- The plan file (self-contained, ~500 tokens)
-- 2 Canon principles (full body, ~1500 tokens)
-- CLAUDE.md (~500 tokens)
+- The plan file (self-contained)
+- Matched Canon principles (summary only)
+- CLAUDE.md
 - Filesystem access to read existing code as needed
-Total context load: ~2500 tokens. 197k tokens free for work.
 ```
 
 ## Exceptions

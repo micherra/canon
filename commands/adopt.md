@@ -5,7 +5,7 @@ allowed-tools: [Read, Glob, Grep, Agent]
 model: sonnet
 ---
 
-Scan a directory for Canon principle applicability across all source files. Identifies which principles apply most broadly, finds hotspot directories, and produces a prioritized remediation plan. Optionally spawns canon-refactorer on the top violations.
+Scan a directory for Canon principle applicability across all source files. Identifies which principles apply most broadly, finds directories with the most violations, and produces a prioritized remediation plan. Optionally spawns canon-refactorer on the top violations.
 
 ## Instructions
 
@@ -13,7 +13,7 @@ Scan a directory for Canon principle applicability across all source files. Iden
 
 From ${ARGUMENTS}, extract:
 - **Directory**: First non-flag argument, defaults to `.` if not provided
-- `--top N`: Number of hotspot files to highlight (default: 10)
+- `--top N`: Number of top violation files to highlight (default: 10)
 - `--severity LEVEL`: Minimum severity to include (default: `convention` — includes everything)
 - `--fix`: If present, spawn canon-refactorer on Tier 1 files after generating the report
 
@@ -27,17 +27,7 @@ If the file count exceeds 500, warn the user and suggest narrowing the scan to a
 
 First, read all principle files from `.canon/principles/` and its subdirectories `rules/`, `strong-opinions/`, `conventions/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/` and its subdirectories). Extract frontmatter for each: `id`, `severity`, `scope.layers`, `scope.file_patterns`.
 
-For each source file, determine which principles apply by:
-1. Inferring the architectural layer from the file path
-2. Matching `scope.layers` (empty = universal) and `scope.file_patterns` (empty = matches all)
-3. Filtering by the `--severity` minimum if provided
-
-Collect results into mappings:
-- `file → [matched principles]`
-- `principle → [matched files]`
-- `directory → [matched principles by severity]`
-
-Show progress to the user (e.g., "Scanning... 50/200 files").
+For each source file, infer the architectural layer from its path and match against principle scopes. Filter by `--severity` minimum if provided. Show progress to the user.
 
 ### Step 4: Analyze results
 
@@ -90,7 +80,7 @@ Convention-level principles that could be adopted.
 |------|-------|------------|
 | ... | ... | ... |
 
-### Hotspot Directories
+### Top Violation Directories
 Directories with the highest density of applicable principles:
 
 | Directory | Rules | Opinions | Conventions | Files |
@@ -105,7 +95,7 @@ Principles that apply across the most files:
 | simplicity-first | strong-opinion | 45 | 12 |
 
 ### Recommended Actions
-1. Start with Tier 1 — run `/canon:review` on files with rule-severity principles
+1. Start with Tier 1 — ask Canon to review files with rule-severity principles
 2. For Tier 2 — schedule a principle-by-principle sweep starting with the most broadly applicable
 3. For Tier 3 — adopt conventions incrementally during regular development
 4. Consider running `/canon:explain <principle-id>` on unfamiliar principles
