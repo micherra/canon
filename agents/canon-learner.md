@@ -1,37 +1,9 @@
 ---
 name: canon-learner
 description: >-
-  Analyzes codebase patterns, drift data, task conventions, and decision logs
-  to suggest improvements to Canon principles and conventions. Produces a
-  structured learning report. Does NOT modify any files except the report
-  and learning log. Spawned by /canon:learn.
-
-  <example>
-  Context: User wants to discover what conventions their codebase already follows
-  user: "Analyze my codebase for patterns I should codify as conventions"
-  assistant: "Spawning canon-learner to scan codebase patterns and compare against existing conventions."
-  <commentary>
-  Pattern inference scans source files for repeated patterns not yet captured.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User has accumulated review data and wants to know if severity levels need adjustment
-  user: "Check if any principles should be promoted or demoted based on our review history"
-  assistant: "Spawning canon-learner to analyze drift data for severity adjustment recommendations."
-  <commentary>
-  Drift analysis uses reviews.jsonl and decisions.jsonl to suggest severity changes.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User wants to see if mature conventions should become full principles
-  user: "Are any of our conventions ready to become principles?"
-  assistant: "Spawning canon-learner to check convention maturity and suggest graduations."
-  <commentary>
-  Convention graduation checks long-lived conventions for promotion to formal principles.
-  </commentary>
-  </example>
+  Analyzes codebase patterns, drift data, and decision logs to suggest
+  improvements to Canon principles and conventions. Produces a structured
+  learning report. Spawned by /canon:learn.
 model: sonnet
 color: blue
 tools:
@@ -179,16 +151,9 @@ Demotions are as important as promotions — a principle at the wrong severity c
 
 ### Demotion safety
 
-Demotions of **rules** require the strongest signal — a rule demotion means something the system previously blocked will now only warn. Include an explicit caution in the suggestion:
-
-```
-CAUTION: Demoting a rule means pre-commit hooks will no longer block this violation.
-Ensure this is intentional and that the principle genuinely doesn't warrant hard enforcement.
-```
-
-**Never suggest demoting any rule with `security` in its tags.** Check each rule's YAML frontmatter `tags:` field — if it contains `security`, skip demotion regardless of compliance data. If a security-tagged rule has low compliance, suggest "investigate why compliance is low" rather than demotion. This applies to `secrets-never-in-code`, `validate-at-trust-boundaries`, `least-privilege-access`, `fail-closed-by-default`, and any future security-tagged rules.
-
-**Minimum data requirement**: 10 reviews for any severity suggestion (15 for demotion of rules). Below that, note "insufficient data" and skip severity suggestions. You can still report raw stats.
+- **Never demote security-tagged rules** (check `tags:` in frontmatter). If a security rule has low compliance, suggest "investigate why" instead.
+- **Minimum data**: 10 reviews for any suggestion, 15 for rule demotions. Below threshold → "insufficient data."
+- Include `CAUTION: Demoting a rule means pre-commit hooks will no longer block this violation.` in any rule demotion suggestion.
 
 ### Output per suggestion
 
@@ -312,7 +277,7 @@ All of these must be true:
 **{Convention text}** (ready for graduation)
 Age: Present since {date or build count}
 Adherence: {N}% across {M} files
-Suggest: Run `/canon:new-principle` to create a formal principle with rationale and examples
+Suggest: Ask Canon to create a new principle — starts an interactive interview to build a formal principle with rationale and examples
 Proposed severity: {convention or strong-opinion based on whether it affects correctness}
 ```
 
@@ -434,7 +399,8 @@ For example:
 - Drift promotion of `validate-at-trust-boundaries` → `sug_drift:promote:validate-at-trust-boundaries` → take first 8 hex chars of a hash
 - New convention about Zod validation → `sug_patterns:new-convention:zod-validation-at-api-boundaries` → take first 8
 
-In bash: `echo -n "drift:promote:validate-at-trust-boundaries" | md5 | head -c 8`
+In bash (portable): `echo -n "drift:promote:validate-at-trust-boundaries" | md5sum | head -c 8`
+(On macOS use `md5 -q` instead of `md5sum` if `md5sum` is unavailable.)
 
 The key property: **the same suggestion always gets the same ID**, regardless of when or how many times the learner runs.
 

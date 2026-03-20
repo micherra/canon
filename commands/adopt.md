@@ -27,17 +27,7 @@ If the file count exceeds 500, warn the user and suggest narrowing the scan to a
 
 First, read all principle files from `.canon/principles/` and its subdirectories `rules/`, `strong-opinions/`, `conventions/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/` and its subdirectories). Extract frontmatter for each: `id`, `severity`, `scope.layers`, `scope.file_patterns`.
 
-For each source file, determine which principles apply by:
-1. Inferring the architectural layer from the file path
-2. Matching `scope.layers` (empty = universal) and `scope.file_patterns` (empty = matches all)
-3. Filtering by the `--severity` minimum if provided
-
-Collect results into mappings:
-- `file → [matched principles]`
-- `principle → [matched files]`
-- `directory → [matched principles by severity]`
-
-Show progress to the user (e.g., "Scanning... 50/200 files").
+For each source file, infer the architectural layer from its path and match against principle scopes. Filter by `--severity` minimum if provided. Show progress to the user.
 
 ### Step 4: Analyze results
 
@@ -105,7 +95,7 @@ Principles that apply across the most files:
 | simplicity-first | strong-opinion | 45 | 12 |
 
 ### Recommended Actions
-1. Start with Tier 1 — run `/canon:review` on files with rule-severity principles
+1. Start with Tier 1 — ask Canon to review files with rule-severity principles
 2. For Tier 2 — schedule a principle-by-principle sweep starting with the most broadly applicable
 3. For Tier 3 — adopt conventions incrementally during regular development
 4. Consider running `/canon:explain <principle-id>` on unfamiliar principles

@@ -3,7 +3,9 @@ id: validate-at-trust-boundaries
 title: Validate Data at Every Trust Boundary
 severity: rule
 scope:
-  layers: []
+  layers:
+    - api
+    - infra
 tags:
   - security
   - threat-modeling

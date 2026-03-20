@@ -26,8 +26,10 @@ case "$FILE_PATH" in
   *.lock|*.svg|*.json|*.csv|*.sql|*.min.*|*bundle*|*vendor*|*node_modules*|*.generated.*|*.md) exit 0 ;;
 esac
 
-# Session dedup: skip if we already injected for this file in this session
-DEDUP_DIR="${TMPDIR:-/tmp}/canon-inject-$$"
+# Session dedup: skip if we already injected for this file in this session.
+# Use session_id from the hook JSON input (not $$ which changes per invocation).
+SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+DEDUP_DIR="${TMPDIR:-/tmp}/canon-inject-${SESSION_ID:-unknown}"
 mkdir -p "$DEDUP_DIR" 2>/dev/null || true
 HASH=$(echo -n "$FILE_PATH" | shasum | cut -d' ' -f1)
 DEDUP_FILE="$DEDUP_DIR/$HASH"
@@ -43,6 +45,11 @@ WORKER="$HOOK_DIR/principle-inject-worker.mjs"
 if [[ ! -f "$WORKER" ]]; then
   exit 0
 fi
+
+# Resolve main repo root for worktree support — ensures project-local
+# principles in .canon/ are found even when running in a worktree.
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+export CANON_PROJECT_DIR="${MAIN_ROOT:-.}"
 
 # Run the worker — pass plugin dir so it can find compiled matcher
 export CANON_PLUGIN_DIR="${CANON_PLUGIN_DIR:-$(dirname "$HOOK_DIR")}"

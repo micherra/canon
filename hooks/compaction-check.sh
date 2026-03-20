@@ -26,22 +26,22 @@ if ! echo "$INPUT" | grep -q "git commit"; then
   exit 0
 fi
 
-# Session dedup — only nudge once per session, scoped to this project
-# Cross-platform hash: try md5sum (Linux), fall back to md5 (macOS)
-if command -v md5sum &>/dev/null; then
-  PROJECT_HASH=$(echo -n "$(pwd)" | md5sum | head -c 8)
-else
-  PROJECT_HASH=$(echo -n "$(pwd)" | md5 | head -c 8)
-fi
-NUDGE_FILE="/tmp/canon-compaction-nudged-${PROJECT_HASH}"
+# Session dedup — only nudge once per session.
+# Use session_id from the hook JSON input (not PID or pwd-based hash).
+SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
+NUDGE_FILE="${TMPDIR:-/tmp}/canon-compaction-nudged-${SESSION_ID:-unknown}"
 if [[ -f "$NUDGE_FILE" ]]; then
   exit 0
 fi
 
+# Resolve main repo root for worktree support
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+CANON_DIR="${MAIN_ROOT:-.}/.canon"
+
 WARNINGS=()
 
 # Check .jsonl file sizes
-for JSONL_FILE in .canon/reviews.jsonl .canon/decisions.jsonl .canon/patterns.jsonl; do
+for JSONL_FILE in "${CANON_DIR}/reviews.jsonl" "${CANON_DIR}/decisions.jsonl" "${CANON_DIR}/patterns.jsonl"; do
   if [[ -f "$JSONL_FILE" ]]; then
     LINE_COUNT=$(wc -l < "$JSONL_FILE" | tr -d ' ')
     if [[ $LINE_COUNT -gt 500 ]]; then
@@ -51,7 +51,7 @@ for JSONL_FILE in .canon/reviews.jsonl .canon/decisions.jsonl .canon/patterns.js
 done
 
 # Check CONVENTIONS.md size
-CONVENTIONS_FILE=".canon/CONVENTIONS.md"
+CONVENTIONS_FILE="${CANON_DIR}/CONVENTIONS.md"
 if [[ -f "$CONVENTIONS_FILE" ]]; then
   CONVENTION_COUNT=$(grep -c '^- \*\*' "$CONVENTIONS_FILE" 2>/dev/null || echo "0")
   if [[ $CONVENTION_COUNT -gt 20 ]]; then

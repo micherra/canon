@@ -280,20 +280,6 @@ server.tool(
   }
 );
 
-
-// Tool: get_dashboard_selection
-server.tool(
-  "get_dashboard_selection",
-  "Returns the user's current focus from the Canon dashboard — the selected graph node AND the active editor file with matched principles. Call this at the start of a conversation to understand what the user is working on. Returns layer, summary, dependencies, dependents, content preview, and top 3 principles for the active file.",
-  {},
-  async () => {
-    const result = await getDashboardSelection(projectDir);
-    return {
-      content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-    };
-  }
-);
-
 // Start the server
 async function main() {
   const transport = new StdioServerTransport();

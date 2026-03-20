@@ -1,23 +1,34 @@
 ---
 name: canon
 description: >-
-  Load and apply engineering principles before writing code. Use when
-  creating, modifying, or reviewing any source file. Activates
-  automatically for code generation tasks. MUST be used whenever writing,
-  modifying, reviewing, or generating code of any kind. Use when the user
-  mentions "principles", "canon", "engineering standards", "code quality",
-  or "architecture rules".
+  Canon — engineering principles and agent-driven build system. This is
+  the single entry point for all Canon interactions. Activates for ANY
+  user input in a Canon-enabled project: build requests, questions,
+  reviews, principle management, or general project queries. Routes
+  everything through the canon-orchestrator which classifies intent and
+  decides whether to spin up the pipeline or just answer directly.
+
+  MUST activate when: the user mentions "canon", "principles", "build",
+  "review", "security scan", "conventions", or describes a task to
+  implement. Also activates for project questions when Canon is
+  initialized (.canon/ directory exists).
 ---
 
-# Canon Engineering Principles
+# Canon
 
-If you are about to write, modify, or generate code, you MUST load and apply Canon principles.
+Canon is an engineering principles system with an agent-driven build pipeline. All user interactions are routed through the **canon-orchestrator**, which classifies intent and decides the appropriate response.
 
-## How to Load Principles
+## How It Works
 
-Use the `get_principles` MCP tool with the file path you're working on. It returns matched principles sorted by severity (rules first, then strong-opinions, then conventions), capped at 10.
+The orchestrator handles everything:
 
-If the MCP tool is unavailable, scan `.canon/principles/` (project-local, takes precedence) and `${CLAUDE_PLUGIN_ROOT}/principles/` (fallback) for `.md` files in `rules/`, `strong-opinions/`, and `conventions/` subdirectories. Match against file path and architectural layer.
+- **Build tasks** ("create a dashboard", "add auth") → triage, tier detection, full agent pipeline
+- **Reviews** ("review my changes") → review-only flow
+- **Security** ("scan for vulnerabilities") → security-audit flow
+- **Questions** ("how does the order service work?") → reads codebase and answers directly
+- **Principles** ("create a rule about logging") → spawns canon-writer
+- **Learning** ("what patterns should we codify?") → spawns canon-learner
+- **Resume** ("continue where we left off") → resumes from board.json
 
 ## Dashboard Context
 
@@ -29,15 +40,32 @@ When the Canon Dashboard extension is active, call `get_dashboard_selection` at 
 
 This gives you immediate context about what the user is looking at without them having to explain it.
 
-## Apply During Generation
+## Activation
 
-- Follow each loaded principle's guidance
-- Use the **Examples** section to calibrate good vs bad code
-- `rule` severity is non-negotiable; `strong-opinion` requires justification to skip; `convention` is noted but doesn't block
+When Canon is initialized in a project (`.canon/` directory exists), spawn the **canon-intake** agent with the user's input. Intake classifies intent and either handles it directly (questions, status) or hands off to the orchestrator (builds, reviews, security scans).
 
-## Self-Review Before Presenting
+```
+Agent: canon-intake
+Prompt: {user's message}
+```
 
-After generating code, check each loaded principle: "Does my implementation honor this?" Fix violations before presenting. If intentionally violating a principle, note the reason.
+The intake definition is at `${CLAUDE_PLUGIN_ROOT}/agents/canon-intake.md`.
+The orchestrator definition is at `${CLAUDE_PLUGIN_ROOT}/agents/canon-orchestrator.md`.
+
+## Principle Loading (Inline Mode)
+
+When you are writing or modifying code **outside** of a Canon build pipeline (e.g., the user asks you to edit a file directly without going through `/canon`), you must still load and apply Canon principles:
+
+1. Use the `get_principles` MCP tool with the file path you're working on
+2. Follow each loaded principle's guidance
+3. `rule` severity is non-negotiable; `strong-opinion` requires justification to skip; `convention` is noted but doesn't block
+4. After generating code, self-review against loaded principles before presenting
+
+This inline mode ensures principles are always applied, even for quick edits that don't warrant the full pipeline.
+
+## Dashboard Context
+
+When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation or task to pick up the user's current focus.
 
 ## Principle Format Reference
 
