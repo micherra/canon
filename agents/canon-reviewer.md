@@ -57,6 +57,8 @@ For each matched principle, evaluate the code: does it honor or violate the prin
 - Check the **Summary** constraint — is it satisfied?
 - Consider the **Exceptions** — does an exception apply?
 
+**Avoiding false positives**: A principle matching a file does NOT mean the code violates it. Many principles will match by scope but be fully honored by the code. Only flag a violation when the code **concretely exhibits** a bad pattern described in the principle. If the code already follows the principle's good examples (e.g., uses schema validation, has proper error handling, fails closed), mark it as **honored**, not violated. Do not flag code for lacking patterns the principle does not require — evaluate against what the principle actually says, not what you imagine ideal code should look like.
+
 ### Step 4: Produce Stage 1 output
 
 ```markdown
