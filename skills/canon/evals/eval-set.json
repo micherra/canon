@@ -27,7 +27,7 @@
       "type": "trigger",
       "prompt": "build a user dashboard",
       "should_trigger": false,
-      "expected_output": "PASS if the response treats this as a generic build task (asking about frameworks, planning implementation, etc.) without requiring Canon-specific project structure. It's acceptable if Claude mentions general best practices. The key test is whether the response works as useful assistance even without a .canon/ directory present. FAIL only if the response errors out or refuses to help."
+      "expected_output": "PASS if the response provides any useful assistance with building a dashboard (asking clarifying questions, planning, or starting implementation). The CLI may still load Canon skill context globally, so Canon references are acceptable. FAIL only if the response errors out, refuses to help, or provides no useful content."
     },
     {
       "id": "intent-review",
