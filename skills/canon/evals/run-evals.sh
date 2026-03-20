@@ -77,12 +77,12 @@ $file_content
 
   local output=""
   local exit_code=0
-  local eval_budget="0.25"
+  local eval_budget="0.50"
   local eval_model="$MODEL"
-  local max_turns="3"
+  local max_turns="6"
 
   if [[ "$type" == "trigger" ]]; then
-    # Trigger evals need less budget and can use haiku for speed
+    # Trigger evals need less budget
     eval_budget="0.15"
     max_turns="2"
     if [[ "$should_trigger" == "false" ]]; then
