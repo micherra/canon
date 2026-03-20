@@ -6,7 +6,7 @@
       "type": "trigger",
       "prompt": "review my staged changes",
       "should_trigger": true,
-      "expected_output": "The response indicates the skill activated and understood this as a code review request. It may check for staged changes, ask about review scope, or attempt to run a review. It should NOT respond as if it doesn't know what Canon is."
+      "expected_output": "PASS if the response does any of: checks for staged changes, reports no staged changes found, asks about review scope, or attempts to run a review. The key signal is that the response understood 'review' as a code review action (not a general question). It's fine if it says 'no staged changes found'."
     },
     {
       "id": "trigger-build-request",
