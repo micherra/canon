@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Canon Skill Eval Runner
 # Runs eval cases from eval-set.json using the claude CLI in print mode.
-# Usage: bash skills/canon/evals/run-evals.sh [--filter <id-substring>] [--model <model>]
+# Usage: bash skills/canon/evals/run-evals.sh [--filter <id-substring>] [--model <model>] [--parallel]
 #
 # Examples:
 #   bash skills/canon/evals/run-evals.sh                    # Run all evals
 #   bash skills/canon/evals/run-evals.sh --filter trigger   # Run only trigger evals
 #   bash skills/canon/evals/run-evals.sh --model sonnet     # Use sonnet model
+#   bash skills/canon/evals/run-evals.sh --parallel         # Run cases in parallel
 
 set -euo pipefail
 
@@ -17,12 +18,14 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 MODEL="sonnet"
 FILTER=""
 VERBOSE=false
+PARALLEL=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --filter) FILTER="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
     --verbose) VERBOSE=true; shift ;;
+    --parallel) PARALLEL=true; shift ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -37,12 +40,8 @@ if ! command -v claude &>/dev/null; then
   exit 1
 fi
 
-TOTAL=0
-PASSED=0
-FAILED=0
-ERRORS=0
-
-results=()
+TMPDIR_EVALS=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_EVALS"' EXIT
 
 run_eval_case() {
   local id="$1"
@@ -51,8 +50,7 @@ run_eval_case() {
   local expected="$4"
   local should_trigger="$5"
   local files_json="$6"
-
-  TOTAL=$((TOTAL + 1))
+  local result_file="$TMPDIR_EVALS/$id.result"
 
   # Build the prompt with fixture file contents if specified
   local full_prompt="$prompt"
@@ -79,41 +77,49 @@ $file_content
 
   local output=""
   local exit_code=0
+  local eval_budget="0.25"
+  local eval_model="$MODEL"
+  local max_turns="3"
 
   if [[ "$type" == "trigger" ]]; then
+    # Trigger evals need less budget and can use haiku for speed
+    eval_budget="0.15"
+    max_turns="2"
     if [[ "$should_trigger" == "false" ]]; then
       # For should_trigger=false, run outside the Canon project (in /tmp)
       output=$(cd /tmp && claude -p "$full_prompt" \
-        --model "$MODEL" \
+        --model "$eval_model" \
         --output-format text \
         --no-session-persistence \
         --allowedTools "Read Grep Glob" \
-        --max-budget-usd 1.00 \
+        --max-turns "$max_turns" \
+        --max-budget-usd "$eval_budget" \
         2>&1) || exit_code=$?
     else
       # For should_trigger=true, run inside the Canon project
       output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
-        --model "$MODEL" \
+        --model "$eval_model" \
         --output-format text \
         --no-session-persistence \
         --allowedTools "Read Grep Glob" \
-        --max-budget-usd 1.00 \
+        --max-turns "$max_turns" \
+        --max-budget-usd "$eval_budget" \
         2>&1) || exit_code=$?
     fi
   else
     # Quality evals always run inside the Canon project
     output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
-      --model "$MODEL" \
+      --model "$eval_model" \
       --output-format text \
       --no-session-persistence \
       --allowedTools "Read Grep Glob" \
-      --max-budget-usd 1.00 \
+      --max-turns "$max_turns" \
+      --max-budget-usd "$eval_budget" \
       2>&1) || exit_code=$?
   fi
 
   if [[ $exit_code -ne 0 ]]; then
-    ERRORS=$((ERRORS + 1))
-    results+=("ERROR  $id  (exit code $exit_code)")
+    echo "ERROR  $id  (exit code $exit_code)" > "$result_file"
     if $VERBOSE; then
       echo "  OUTPUT: ${output:0:500}" >&2
     fi
@@ -140,24 +146,23 @@ Does the actual output satisfy the expected behavior? Reply with ONLY 'PASS' or 
     --output-format text \
     --no-session-persistence \
     --disable-slash-commands \
-    --max-budget-usd 0.10 \
+    --max-turns 1 \
+    --max-budget-usd 0.05 \
     2>&1) || true
 
   local first_line
   first_line=$(echo "$verdict" | head -1 | tr -d '[:space:]')
 
   if [[ "$first_line" == "PASS" ]]; then
-    PASSED=$((PASSED + 1))
-    results+=("PASS   $id")
+    echo "PASS   $id" > "$result_file"
   else
-    FAILED=$((FAILED + 1))
     local explanation
     explanation=$(echo "$verdict" | tail -n +2 | head -1)
-    results+=("FAIL   $id  ($explanation)")
+    echo "FAIL   $id  ($explanation)" > "$result_file"
   fi
 
   if $VERBOSE; then
-    echo "  JUDGE: $verdict" >&2
+    echo "  JUDGE ($id): $verdict" >&2
     echo "" >&2
   fi
 }
@@ -167,10 +172,13 @@ echo "=================="
 echo "Model: $MODEL"
 echo "Eval file: $EVAL_FILE"
 [[ -n "$FILTER" ]] && echo "Filter: $FILTER"
+$PARALLEL && echo "Mode: parallel"
 echo ""
 
 # Read and iterate eval cases
 eval_count=$(jq '.evals | length' "$EVAL_FILE")
+pids=()
+case_ids=()
 
 for ((i = 0; i < eval_count; i++)); do
   id=$(jq -r ".evals[$i].id" "$EVAL_FILE")
@@ -186,7 +194,49 @@ for ((i = 0; i < eval_count; i++)); do
   fi
 
   echo "Running: $id ($type)..."
-  run_eval_case "$id" "$type" "$prompt" "$expected" "$should_trigger" "$files_json"
+  case_ids+=("$id")
+
+  if $PARALLEL; then
+    run_eval_case "$id" "$type" "$prompt" "$expected" "$should_trigger" "$files_json" &
+    pids+=($!)
+  else
+    run_eval_case "$id" "$type" "$prompt" "$expected" "$should_trigger" "$files_json"
+  fi
+done
+
+# Wait for parallel jobs
+if $PARALLEL && [[ ${#pids[@]} -gt 0 ]]; then
+  echo ""
+  echo "Waiting for ${#pids[@]} parallel eval(s)..."
+  for pid in "${pids[@]}"; do
+    wait "$pid" 2>/dev/null || true
+  done
+fi
+
+# Collect results from files
+TOTAL=0
+PASSED=0
+FAILED=0
+ERRORS=0
+results=()
+
+for id in "${case_ids[@]}"; do
+  TOTAL=$((TOTAL + 1))
+  result_file="$TMPDIR_EVALS/$id.result"
+  if [[ -f "$result_file" ]]; then
+    result=$(cat "$result_file")
+    results+=("$result")
+    if [[ "$result" == PASS* ]]; then
+      PASSED=$((PASSED + 1))
+    elif [[ "$result" == ERROR* ]]; then
+      ERRORS=$((ERRORS + 1))
+    else
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    ERRORS=$((ERRORS + 1))
+    results+=("ERROR  $id  (no result file)")
+  fi
 done
 
 echo ""
