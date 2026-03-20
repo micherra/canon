@@ -1,0 +1,105 @@
+{
+  "skill_name": "canon",
+  "evals": [
+    {
+      "id": "trigger-review-request",
+      "type": "trigger",
+      "prompt": "review my staged changes",
+      "should_trigger": true,
+      "expected_output": "Skill activates and intake classifies as review intent, spawns orchestrator with flow: review-only"
+    },
+    {
+      "id": "trigger-build-request",
+      "type": "trigger",
+      "prompt": "build a user dashboard with auth",
+      "should_trigger": true,
+      "expected_output": "Skill activates and intake classifies as build intent, spawns orchestrator"
+    },
+    {
+      "id": "trigger-off-topic-still-activates",
+      "type": "trigger",
+      "prompt": "what's the weather today?",
+      "should_trigger": true,
+      "expected_output": "Skill activates in Canon-enabled project. Intake classifies as chat intent and responds directly without spawning a pipeline"
+    },
+    {
+      "id": "trigger-no-canon-project",
+      "type": "trigger",
+      "prompt": "build a user dashboard",
+      "should_trigger": false,
+      "expected_output": "Skill does not activate because no .canon/ directory exists in the project"
+    },
+    {
+      "id": "intent-review",
+      "type": "quality",
+      "prompt": "review my staged changes",
+      "expected_output": "Intake classifies as 'review' intent. Detects review scope via git diff --cached. Spawns canon-orchestrator with flow: review-only and review_scope: { type: 'staged' }"
+    },
+    {
+      "id": "intent-build",
+      "type": "quality",
+      "prompt": "create a REST API for order management",
+      "expected_output": "Intake classifies as 'build' intent. Triages the task for actionability (What: REST API, Where: order management domain, Boundaries: may need clarification). Spawns canon-orchestrator with the sharpened task description"
+    },
+    {
+      "id": "intent-security",
+      "type": "quality",
+      "prompt": "scan for vulnerabilities",
+      "expected_output": "Intake classifies as 'security' intent. Spawns canon-orchestrator with flow: security-audit"
+    },
+    {
+      "id": "intent-question",
+      "type": "quality",
+      "prompt": "how does the payment service work?",
+      "expected_output": "Intake classifies as 'question' intent. Answers directly by reading the codebase using Grep/Glob/Read tools. Does NOT spawn a pipeline or orchestrator"
+    },
+    {
+      "id": "intent-chat",
+      "type": "quality",
+      "prompt": "what's the weather today?",
+      "expected_output": "Intake classifies as 'chat' intent. Responds directly with a conversational answer. Does NOT spawn a pipeline or orchestrator"
+    },
+    {
+      "id": "matching-secrets-in-code",
+      "type": "quality",
+      "prompt": "Review this file for principle compliance",
+      "files": ["fixtures/secret-in-code.ts"],
+      "expected_output": "get_principles with file_path returns secrets-never-in-code (rule severity). The hardcoded STRIPE_KEY and database connection string with embedded password both match this principle"
+    },
+    {
+      "id": "matching-clean-api-handler",
+      "type": "quality",
+      "prompt": "Review this file for principle compliance",
+      "files": ["fixtures/clean-api-handler.ts"],
+      "expected_output": "get_principles with file_path src/api/handlers/users.ts returns API-layer principles (validate-at-trust-boundaries, command-query-separation). Does NOT match secrets-never-in-code since no secrets are present in the code"
+    },
+    {
+      "id": "matching-cross-context-import",
+      "type": "quality",
+      "prompt": "Review this file for principle compliance",
+      "files": ["fixtures/cross-context-import.ts"],
+      "expected_output": "get_principles with file_path src/domain/orders/order-service.ts returns domain-layer principles including bounded-context-boundaries. The import of Customer from ../customers/ crosses bounded context boundaries"
+    },
+    {
+      "id": "matching-test-external-data",
+      "type": "quality",
+      "prompt": "Review this file for principle compliance",
+      "files": ["fixtures/test-with-external-data.ts"],
+      "expected_output": "get_principles with file_path tests/user.test.ts returns test-scoped principles including test-data-belongs-in-the-test and arrange-act-assert. The import of testUsers from a shared fixtures file violates test-data-belongs-in-the-test"
+    },
+    {
+      "id": "review-verdict-blocking",
+      "type": "quality",
+      "prompt": "Run a full code review on this file",
+      "files": ["fixtures/secret-in-code.ts"],
+      "expected_output": "review_code returns matched principles including secrets-never-in-code (rule). Reviewer agent produces verdict: BLOCKING due to rule-severity violation. Identifies the hardcoded Stripe key and database credentials as violations"
+    },
+    {
+      "id": "review-verdict-clean",
+      "type": "quality",
+      "prompt": "Run a full code review on this file",
+      "files": ["fixtures/clean-api-handler.ts"],
+      "expected_output": "review_code returns matched principles for the API layer. Reviewer agent produces verdict: CLEAN or WARNING (no rule violations). The handler follows standard patterns with proper error handling"
+    }
+  ]
+}
