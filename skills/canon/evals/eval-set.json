@@ -71,7 +71,7 @@
       "type": "quality",
       "prompt": "Review this code for Canon principle compliance. The file path is src/api/handlers/users.ts. Identify which Canon principles apply and any violations.",
       "files": ["fixtures/clean-api-handler.ts"],
-      "expected_output": "The response identifies relevant API-layer principles. It should NOT flag this code for secrets violations since there are no hardcoded secrets. The code is clean and should receive a positive or neutral assessment."
+      "expected_output": "The response identifies relevant API-layer principles (such as validate-at-trust-boundaries, fail-closed-by-default). It should NOT flag this code for secrets violations since there are no hardcoded secrets. The code uses Zod schema validation at the trust boundary and has proper error handling with try/catch that fails closed (returns 500), so it should receive a positive or neutral assessment. PASS if the response acknowledges the code follows good practices."
     },
     {
       "id": "matching-cross-context-import",
@@ -99,7 +99,7 @@
       "type": "quality",
       "prompt": "Run a Canon code review on this file and provide a verdict (BLOCKING, WARNING, or CLEAN). The file path is src/api/handlers/users.ts.",
       "files": ["fixtures/clean-api-handler.ts"],
-      "expected_output": "The review verdict is CLEAN or WARNING (not BLOCKING). The code follows good patterns with proper error handling and no rule violations. There are no hardcoded secrets or critical security issues."
+      "expected_output": "The review verdict is CLEAN or WARNING (not BLOCKING). The code uses Zod schema validation at the API boundary and has proper error handling with try/catch that fails closed (returns 500). There are no hardcoded secrets or rule violations."
     }
   ]
 }
