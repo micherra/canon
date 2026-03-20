@@ -57,6 +57,8 @@ For each matched principle, evaluate the code: does it honor or violate the prin
 - Check the **Summary** constraint — is it satisfied?
 - Consider the **Exceptions** — does an exception apply?
 
+**Avoiding false positives**: A principle matching a file does NOT mean the code violates it. Many principles will match by scope but be fully honored by the code. Only flag a violation when the code **concretely exhibits** a bad pattern described in the principle. If the code already follows the principle's good examples (e.g., uses schema validation, has proper error handling, fails closed), mark it as **honored**, not violated. Do not flag code for lacking patterns the principle does not require — evaluate against what the principle actually says, not what you imagine ideal code should look like.
+
 ### Step 4: Produce Stage 1 output
 
 ```markdown
@@ -179,6 +181,12 @@ Based on the most severe Stage 1 finding:
 | **BLOCKING** | Any `rule`-severity violation found | Build must stop. Violations must be fixed before proceeding. |
 | **WARNING** | `strong-opinion` violations found, but no `rule` violations | Build can proceed but violations should be addressed. |
 | **CLEAN** | No violations, or only `convention`-level issues | Build proceeds. |
+
+**Critical: Getting the verdict right.** Before assigning the verdict, double-check:
+
+1. **BLOCKING requires a concrete `rule`-severity violation.** Only principles with `severity: rule` in their frontmatter can trigger BLOCKING. If you only found `strong-opinion` or `convention` violations, the verdict MUST be WARNING or CLEAN — never BLOCKING.
+2. **A matched principle is not a violated principle.** The `review_code` tool returns principles that are *relevant* to the file — not principles that are violated. Most matched principles will be honored by well-written code. Only flag a violation when the code clearly exhibits a bad pattern.
+3. **Check each violation's severity explicitly.** Before writing the verdict, list which violations are rule-level vs strong-opinion vs convention. Only rule-level violations make it BLOCKING.
 
 Include `## Canon Review — Verdict: {BLOCKING|WARNING|CLEAN}` at the top of the report.
 
