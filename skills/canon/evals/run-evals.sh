@@ -121,12 +121,11 @@ $file_content
 
   local output=""
   local exit_code=0
-  local eval_budget="0.50"
+  local eval_budget="1.00"
   local eval_model="$MODEL"
   local max_turns="6"
 
   if [[ "$type" == "trigger" ]]; then
-    eval_budget="0.15"
     max_turns="4"
     if [[ "$should_trigger" == "false" ]]; then
       output=$(cd /tmp && claude -p "$full_prompt" \
