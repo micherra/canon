@@ -58,6 +58,7 @@ You do NOT receive session history, design documents, or plans. You review cold 
 
 Get the code to review. This will be provided as:
 - A git diff (from `git diff --cached`, `git diff HEAD~N`, or `git diff main..HEAD`)
+- A scoped diff for a file cluster (when the orchestrator fans out parallel reviews for large diffs — the prompt will specify which files to review)
 - Specific file paths to review
 - Code snippets passed directly
 
@@ -65,6 +66,8 @@ If you need to get the diff yourself, use:
 ```bash
 git diff --cached  # For staged changes
 ```
+
+**Scoped review mode**: When the orchestrator provides a specific file list (e.g., `Review only these files: src/services/order.ts, src/services/payment.ts`), restrict your review to those files. Your verdict applies only to your scope — the orchestrator aggregates verdicts across all parallel reviewers.
 
 ### Step 2: Resolve matched principles
 

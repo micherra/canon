@@ -168,13 +168,16 @@ When spawned with `role: fix`, your process changes. Instead of executing a task
 
 1. **Read the test report**: Read `${WORKSPACE}/plans/${slug}/TEST-REPORT.md`. Focus on the `### Issues Found` table — it contains the exact files, failing tests, root causes, and suggested fixes.
 2. **Read the failing tests**: For each entry in the Issues Found table, read the test file to understand expected behavior.
-3. **Load Canon principles**: Use `get_principles` with the file paths of files you'll modify.
-4. **Fix the source files**: Make the source files pass the failing tests without breaking other tests. Follow the suggested fixes where appropriate, but use your judgment.
-5. **Run the test suite**: Verify all tests pass (both the previously failing tests and the full suite).
-6. **Commit atomically**: `fix({task-slug}): {brief description of fixes}`
-7. **Produce summary**: Save to `${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md` using the implementation-log template. Include:
+3. **Assess each failure**: Determine whether the failure is a **source code bug** or a **test bug**. A test bug is when the test itself has incorrect assertions, wrong setup, or tests implementation details rather than the contract. A source bug is when the implementation genuinely doesn't match the intended behavior.
+4. **Load Canon principles**: Use `get_principles` with the file paths of files you'll modify.
+5. **Fix source code bugs**: Make the source files pass the legitimate failing tests without breaking other tests. Follow the suggested fixes where appropriate, but use your judgment.
+6. **Flag test bugs**: If you identify tests that are incorrect (wrong assertions, testing implementation details, broken test setup), do NOT change source code to satisfy broken tests. Instead, fix the test to match the correct contract behavior. Document each test fix in your summary.
+7. **Run the test suite**: Verify all tests pass (both the previously failing tests and the full suite).
+8. **Commit atomically**: `fix({task-slug}): {brief description of fixes}`
+9. **Produce summary**: Save to `${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md` using the implementation-log template. Include:
    - What was fixed and why
-   - Files modified
+   - **Source fixes**: Files modified and what changed
+   - **Test fixes**: Tests that were incorrect and how you corrected them (if any)
    - Canon compliance for modified code
    - Verification results
 
@@ -182,7 +185,8 @@ When spawned with `role: fix`, your process changes. Instead of executing a task
 - **No plan file** — the test report is your primary input
 - **No task_id** — use the task slug directly
 - **Scope is reactive** — fix what's broken, don't add features
-- **Tests already exist** — you fix code to pass them, not write new tests
+- **Tests may be wrong** — you can fix both source AND test bugs. Document test fixes clearly.
+- **Use judgment**: If a test asserts against implementation details (internal state, private methods, exact error strings) rather than the public contract, fixing the test is correct — not the source code
 
 ## Status Protocol
 
