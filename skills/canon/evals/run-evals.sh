@@ -68,7 +68,6 @@ run_eval_case() {
         file_content=$(cat "$file_path")
         full_prompt="$full_prompt
 
-File: $file_ref
 \`\`\`typescript
 $file_content
 \`\`\`"

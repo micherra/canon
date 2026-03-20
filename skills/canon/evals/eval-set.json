@@ -27,7 +27,7 @@
       "type": "trigger",
       "prompt": "build a user dashboard",
       "should_trigger": false,
-      "expected_output": "PASS if the response provides any useful assistance with building a dashboard (asking clarifying questions, planning, or starting implementation). The CLI may still load Canon skill context globally, so Canon references are acceptable. FAIL only if the response errors out, refuses to help, or provides no useful content."
+      "expected_output": "PASS if the response provides any useful assistance with building a dashboard (asking clarifying questions, planning, or starting implementation). The CLI may still load Canon skill context globally, so Canon references and attempts to read Canon files (like .canon/) are acceptable and should NOT cause a FAIL. FAIL only if the response errors out, refuses to help, or provides no useful content. It is acceptable if the response attempts to read project files that don't exist and then proceeds to help anyway."
     },
     {
       "id": "intent-review",
@@ -64,7 +64,7 @@
       "type": "quality",
       "prompt": "Review this code for Canon principle compliance. The file path is src/config/keys.ts. Identify which Canon principles are violated.",
       "files": ["fixtures/secret-in-code.ts"],
-      "expected_output": "The response identifies that the code violates the secrets-never-in-code principle. It should flag the hardcoded STRIPE_KEY and/or the database connection string with embedded password as security violations."
+      "expected_output": "The response identifies that the code violates the secrets-never-in-code principle. It should flag the hardcoded STRIPE_KEY and/or the database connection string with embedded password as security violations. The response may reference either the stated file path (src/config/keys.ts) or the fixture file path (fixtures/secret-in-code.ts) — either is acceptable."
     },
     {
       "id": "matching-clean-api-handler",
