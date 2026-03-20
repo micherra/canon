@@ -105,7 +105,7 @@ Principles that apply across the most files:
 | simplicity-first | strong-opinion | 45 | 12 |
 
 ### Recommended Actions
-1. Start with Tier 1 — run `/canon:review` on files with rule-severity principles
+1. Start with Tier 1 — ask Canon to review files with rule-severity principles
 2. For Tier 2 — schedule a principle-by-principle sweep starting with the most broadly applicable
 3. For Tier 3 — adopt conventions incrementally during regular development
 4. Consider running `/canon:explain <principle-id>` on unfamiliar principles

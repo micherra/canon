@@ -38,7 +38,7 @@ Also glob for source files: `**/*.{ts,tsx,js,jsx,py,go,rs}` (excluding `node_mod
 
 **Early exit**: If `reviews.jsonl` has fewer than 10 lines AND the user didn't pass `--patterns`, `--graduation`, or `--staleness` (which only need the codebase), tell the user:
 
-"Not enough data yet — Canon needs at least 10 code reviews to generate meaningful learning suggestions. You have {N} so far. Run `/canon:review` on a few more files, then come back."
+"Not enough data yet — Canon needs at least 10 code reviews to generate meaningful learning suggestions. You have {N} so far. Run code reviews on a few more files, then come back."
 
 Stop here. Do not spawn the learner.
 
@@ -86,7 +86,7 @@ If `--apply` was NOT passed, show action hints after the report:
 **Manual actions:**
 - Add a convention: Edit `.canon/CONVENTIONS.md` directly
 - Edit a principle's severity: `/canon:edit-principle {id} --severity {level}`
-- Create a new principle: `/canon:new-principle {topic}`
+- Create a new principle: `ask Canon to create a new principle {topic}`
 - Log a decision: Use the `report` MCP tool (type=decision)
 
 **To re-run specific dimensions:**
@@ -118,7 +118,7 @@ Execute the suggestion:
 | Severity promotion/demotion | Run `/canon:edit-principle {id} --severity {level}` or edit the principle's YAML frontmatter and move to the appropriate subdirectory |
 | Task convention promotion | Append to `.canon/CONVENTIONS.md` |
 | Principle revision (add exception) | Read the principle file, append an exception to its Exceptions section |
-| Convention graduation | Tell the user to run `/canon:new-principle {topic}` — this requires interactive authoring, don't attempt inline |
+| Convention graduation | Tell the user to run `ask Canon to create a new principle {topic}` — this requires interactive authoring, don't attempt inline |
 | Stale convention removal | Remove the convention line from `.canon/CONVENTIONS.md` |
 | Stale convention update | Replace the convention line in `.canon/CONVENTIONS.md` with updated text |
 

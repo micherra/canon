@@ -51,7 +51,7 @@ principles-checked: {N}
 - **Layer boundaries**: {observations about cross-layer imports}
 
 ### Compliance Cross-Check
-<!-- Only during /canon:build when implementor summaries are available. Omit for standalone /canon:review. -->
+<!-- Only during build pipelines when implementor summaries are available. Omit for standalone reviews. -->
 <!-- Read *-SUMMARY.md AFTER completing Stages 1 and 2. Do not revise earlier findings. -->
 
 #### Discrepancies

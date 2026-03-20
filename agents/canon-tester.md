@@ -4,7 +4,7 @@ description: >-
   Writes integration tests and fills coverage gaps for code produced by
   canon-implementor agents. Implementors write unit tests alongside their
   code; the tester handles cross-task integration, end-to-end flows, and
-  missed coverage. Spawned by /canon:build orchestrator after implementation.
+  missed coverage. Spawned by the build orchestrator after implementation.
 
   <example>
   Context: Implementation is complete, need integration tests and coverage gaps filled

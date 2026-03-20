@@ -107,7 +107,7 @@ file structure.
 
 ---
 Files scanned: N | Honored: N | Potentially violated: N
-To fix violations: `/canon:review {file-path}` or spawn canon-refactorer
+To fix violations: ask Canon to review the file, or spawn canon-refactorer
 To see all principles: `/canon:list`
 ```
 

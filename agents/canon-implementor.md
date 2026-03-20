@@ -3,7 +3,7 @@ name: canon-implementor
 description: >-
   Executes a single Canon task plan in fresh context. Receives a plan
   file and relevant principles. Writes code, verifies, and commits.
-  Spawned by /canon:build orchestrator — one instance per task.
+  Spawned by the build orchestrator — one instance per task.
 
   <example>
   Context: Plan is ready, need to execute implementation

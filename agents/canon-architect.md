@@ -3,7 +3,7 @@ name: canon-architect
 description: >-
   Designs technical approach for a development task. Takes research
   findings and produces a design document checked against Canon
-  principles. Spawned by /canon:build orchestrator. Does NOT write code.
+  principles. Spawned by the build orchestrator. Does NOT write code.
 
   <example>
   Context: Research is complete, need to design the technical approach

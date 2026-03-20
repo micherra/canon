@@ -98,4 +98,4 @@ rm -rf .canon/workspaces/{sanitized-branch}
 Tell the user:
 - What was cleaned
 - What was archived (if applicable) and where to find it
-- Suggest: "Run `/canon:status` to verify project health"
+- Suggest: "Ask Canon for status to verify project health"

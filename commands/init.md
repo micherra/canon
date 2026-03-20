@@ -134,7 +134,7 @@ Tell the user:
 - That `.canon/CONVENTIONS.md` was created (for project-level conventions)
 - That `.canon/workspaces/` was created (for branch-scoped agent workspaces)
 - That CLAUDE.md was updated/created
-- Suggest running `/canon:status` to verify the setup
+- Suggest asking Canon for status to verify the setup
 - Suggest running `/canon:list` to browse the principles
 - Suggest editing `.canon/CONVENTIONS.md` directly to add project conventions
 - Suggest running `/canon:learn` after accumulating 10+ reviews to discover patterns and refine principles

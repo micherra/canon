@@ -312,7 +312,7 @@ All of these must be true:
 **{Convention text}** (ready for graduation)
 Age: Present since {date or build count}
 Adherence: {N}% across {M} files
-Suggest: Run `/canon:new-principle` to create a formal principle with rationale and examples
+Suggest: Ask Canon to create a new principle — starts an interactive interview to build a formal principle with rationale and examples
 Proposed severity: {convention or strong-opinion based on whether it affects correctness}
 ```
 

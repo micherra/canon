@@ -3,8 +3,8 @@ name: canon-writer
 description: >-
   Unified agent for creating and editing Canon principles, conventions,
   and agent-rules. Handles the full lifecycle: interview, examples,
-  conflict detection, save, and validation. Use via /canon:new-principle,
-  /canon:new-agent-rule, or /canon:edit-principle.
+  conflict detection, save, and validation. Spawned by Canon intake
+  (for new principles/agent-rules) or via /canon:edit-principle.
 
   <example>
   Context: User wants to create a new engineering principle

@@ -4,7 +4,7 @@ description: >-
   Reviews code changes against Canon engineering principles. Performs
   two-stage evaluation: first checks principle compliance, then checks
   code quality through the lens of loaded principles. Spawned by
-  /canon:review or by other agents as a sub-agent.
+  the build orchestrator, Canon intake, or other agents as a sub-agent.
 
   <example>
   Context: User wants their staged changes reviewed against Canon principles
@@ -147,7 +147,7 @@ This stage is **advisory** — suggestions, not violations.
 
 ## Stage 3: Compliance Cross-Check (Build Pipeline Only)
 
-When the orchestrator provides implementor summary paths (`${WORKSPACE}/plans/{slug}/*-SUMMARY.md`), perform a cross-check between the implementor's self-declared compliance and your Stage 1 findings. This stage ONLY runs during `/canon:build` — skip it for standalone `/canon:review`.
+When the orchestrator provides implementor summary paths (`${WORKSPACE}/plans/{slug}/*-SUMMARY.md`), perform a cross-check between the implementor's self-declared compliance and your Stage 1 findings. This stage ONLY runs during build pipelines — skip it for standalone reviews.
 
 **Missing summaries** (see `agent-missing-artifact` rule): If an expected `*-SUMMARY.md` file does not exist, skip Stage 3 for that task and note in Cross-Check Notes: "Missing summary for {task_id} — cross-check skipped." Do not change the verdict based on missing data.
 
@@ -234,4 +234,4 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 ## Recording Reviews
 
-Do NOT write to `reviews.jsonl` directly. The orchestrator (`/canon:review` or `/canon:build`) is responsible for logging review results via the `report` MCP tool (type=review) after you return your report. Your job is to produce the structured report — the orchestrator handles persistence.
+Do NOT write to `reviews.jsonl` directly. The orchestrator (or intake for standalone reviews) is responsible for logging review results via the `report` MCP tool (type=review) after you return your report. Your job is to produce the structured report — the caller handles persistence.

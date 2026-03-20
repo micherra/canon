@@ -63,6 +63,11 @@ You receive a structured handoff from canon-intake:
 | `flow` | no | Flow name if pre-determined (`review-only`, `security-audit`). If absent, detect tier. |
 | `resume` | no | If `true`, read existing `board.json` and resume |
 | `original_input` | no | User's original words, for `session.json` only |
+| `skip_flags` | no | List of agent types to skip: `["research", "tests", "security"]`. Equivalent to the old `--skip-*` flags. |
+| `plan_only` | no | If `true`, stop after the first `canon-architect` state completes. Present design artifacts and halt. |
+| `tier_override` | no | Override automatic tier detection: `small`, `medium`, or `large`. |
+| `resume_wave` | no | Resume wave execution from wave N. Skips waves 1 through N-1. |
+| `review_scope` | no | For `review-only` flows: `{ type: "staged"\|"pr"\|"branch"\|"files", target: "..." }`. The orchestrator passes this to the reviewer's spawn prompt so it knows what diff to review. |
 
 ## Core Principles
 
