@@ -13,6 +13,7 @@ export interface PrincipleForReview {
   principle_title: string;
   severity: string;
   body: string;
+  review_hint: "likely-honored" | "check-carefully" | "neutral";
 }
 
 export type ReviewGraphContext = Pick<
@@ -27,6 +28,51 @@ export interface ReviewCodeOutput {
   file_path: string;
   context?: string;
   graph_context?: ReviewGraphContext;
+}
+
+/**
+ * Quick heuristic to hint whether a principle is likely honored or needs careful review.
+ * This reduces false positives by giving the reviewer a signal before evaluation.
+ * The reviewer can override these hints — they're suggestions, not verdicts.
+ */
+function computeReviewHint(
+  principleId: string,
+  code: string
+): PrincipleForReview["review_hint"] {
+  const lower = code.toLowerCase();
+
+  switch (principleId) {
+    case "secrets-never-in-code": {
+      // Look for common secret patterns
+      const secretPatterns = [
+        /(?:api[_-]?key|secret|password|token|credential)\s*[:=]\s*["'][^"']{8,}/i,
+        /(?:sk_live|sk_test|pk_live|pk_test)_[a-zA-Z0-9]/,
+        /(?:postgres|mysql|mongodb|redis):\/\/[^/]*:[^@]*@/,
+        /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/,
+      ];
+      return secretPatterns.some((p) => p.test(code)) ? "check-carefully" : "likely-honored";
+    }
+    case "validate-at-trust-boundaries": {
+      // Check for validation patterns (zod, joi, yup, manual checks)
+      const hasValidation = /safeParse|validate|schema\.|\.parse\(|Joi\.|yup\.|z\.object/i.test(code);
+      return hasValidation ? "likely-honored" : "check-carefully";
+    }
+    case "fail-closed-by-default": {
+      // Check for try/catch that returns/throws on error (not silently continuing)
+      const hasTryCatch = /try\s*\{/.test(code);
+      const hasFailOpen = /catch[^}]*return\s+true|catch[^}]*Infinity|catch[^}]*allow/i.test(code);
+      if (hasFailOpen) return "check-carefully";
+      if (hasTryCatch) return "likely-honored";
+      return "neutral";
+    }
+    case "thin-handlers": {
+      // Short handlers are likely thin
+      const lines = code.split("\n").filter((l) => l.trim()).length;
+      return lines <= 20 ? "likely-honored" : "check-carefully";
+    }
+    default:
+      return "neutral";
+  }
 }
 
 const DEFAULT_MAX_REVIEW_PRINCIPLES = 15;
@@ -91,6 +137,7 @@ export async function reviewCode(
     principle_title: p.title,
     severity: p.severity,
     body: p.body,
+    review_hint: computeReviewHint(p.id, input.code),
   }));
 
   const ruleCount = allForReview.filter((p) => p.severity === "rule").length;
@@ -112,7 +159,13 @@ export async function reviewCode(
     if (hints.length > 0) graphHint = ` Graph context: ${hints.join("; ")}.`;
   }
 
-  const summary = `${allForReview.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}.${graphHint} Evaluate each against the code below.`;
+  const likelyHonored = principlesToEvaluate.filter((p) => p.review_hint === "likely-honored").length;
+  const checkCarefully = principlesToEvaluate.filter((p) => p.review_hint === "check-carefully").length;
+  const hintNote = likelyHonored > 0
+    ? ` Heuristic hints: ${likelyHonored} likely-honored, ${checkCarefully} check-carefully. Principles marked "likely-honored" appear to be satisfied by the code — verify but do not flag as violated unless you find a concrete bad pattern. Focus review effort on "check-carefully" and "neutral" principles.`
+    : "";
+
+  const summary = `${allForReview.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}.${graphHint}${hintNote} Evaluate each against the code below.`;
 
   return {
     summary,
