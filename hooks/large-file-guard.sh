@@ -29,9 +29,13 @@ case "$FILE_PATH" in
   *.lock|*.svg|*.json|*.csv|*.sql|*.min.*|*bundle*|*vendor*|*node_modules*|*.generated.*) exit 0 ;;
 esac
 
+# Resolve main repo root for worktree support
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+CANON_DIR="${MAIN_ROOT:-.}/.canon"
+
 # Read threshold from .canon/config.json if present, default 500
 MAX_LINES=500
-CONFIG_FILE=".canon/config.json"
+CONFIG_FILE="${CANON_DIR}/config.json"
 if [[ -f "$CONFIG_FILE" ]]; then
   CONFIGURED=$(grep -o '"max_file_lines"[[:space:]]*:[[:space:]]*[0-9]*' "$CONFIG_FILE" | grep -o '[0-9]*' || true)
   if [[ -n "$CONFIGURED" ]]; then

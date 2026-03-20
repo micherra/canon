@@ -35,8 +35,12 @@ if [[ -f "$NUDGE_FILE" ]]; then
   exit 0
 fi
 
+# Resolve main repo root for worktree support
+MAIN_ROOT=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)
+CANON_DIR="${MAIN_ROOT:-.}/.canon"
+
 # Check if reviews.jsonl exists
-REVIEWS_FILE=".canon/reviews.jsonl"
+REVIEWS_FILE="${CANON_DIR}/reviews.jsonl"
 if [[ ! -f "$REVIEWS_FILE" ]]; then
   exit 0
 fi
@@ -44,7 +48,7 @@ fi
 REVIEW_COUNT=$(wc -l < "$REVIEWS_FILE" | tr -d ' ')
 
 # Check when the last learn run happened
-LEARNING_FILE=".canon/learning.jsonl"
+LEARNING_FILE="${CANON_DIR}/learning.jsonl"
 if [[ -f "$LEARNING_FILE" ]]; then
   LAST_LEARN_REVIEWS=$(tail -1 "$LEARNING_FILE" 2>/dev/null | grep -o '"reviews_analyzed":[0-9]*' | grep -o '[0-9]*' || echo "0")
   REVIEWS_SINCE=$((REVIEW_COUNT - LAST_LEARN_REVIEWS))
