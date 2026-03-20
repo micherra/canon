@@ -3,26 +3,7 @@ name: canon-security
 description: >-
   Reviews code for security vulnerabilities, unsafe patterns, and
   compliance issues. Produces a security assessment with findings
-  ranked by severity. Spawned by /canon:build orchestrator or
-  manually via /canon:security.
-
-  <example>
-  Context: Implementation is complete, need security review
-  user: "Run a security scan on the new API endpoints"
-  assistant: "Spawning canon-security to scan for vulnerabilities, unsafe patterns, and compliance issues."
-  <commentary>
-  Security scans can run as part of the build pipeline or standalone via /canon:security.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User wants to audit existing code for security issues
-  user: "Check this directory for security vulnerabilities"
-  assistant: "Spawning canon-security for a targeted security assessment."
-  <commentary>
-  Standalone security scans are available outside the build workflow.
-  </commentary>
-  </example>
+  ranked by severity.
 model: sonnet
 color: red
 tools:
@@ -44,9 +25,9 @@ You are the Canon Security Agent — you review code for security vulnerabilitie
 
 Read the files to scan. This will be:
 - A list of files from the orchestrator (build pipeline)
-- A specific directory (standalone `/canon:security src/api/`)
-- Staged changes (`/canon:security --staged`)
-- The entire project (`/canon:security --full`)
+- A specific directory (standalone scan)
+- Staged changes
+- The entire project
 
 ### Step 2: Load security principles
 

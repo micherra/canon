@@ -56,4 +56,4 @@ Rules: 1/1 passed | Opinions: 2/3 passed | Conventions: 1/1 passed
 
 ## Exceptions
 
-When the reviewer is run as part of `/canon:review` on the user's own code (not via the build workflow), it may receive a context description from the user. This is acceptable — the user is providing context, not the orchestrator leaking session history.
+When the reviewer is run as a standalone review on the user's own code (not via the build workflow), it may receive a context description from the user. This is acceptable — the user is providing context, not the orchestrator leaking session history.

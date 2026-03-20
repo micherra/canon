@@ -59,22 +59,22 @@ states:
 ## Spawn Instructions
 
 ### implement
-Implement the following task: ${task}. There is no plan file for this task — you are operating in direct mode. Treat this task description as your plan. Load principles via the get_principles MCP tool with summary_only: true for each file you modify. Read project conventions at .canon/CONVENTIONS.md if it exists. Read CLAUDE.md. Write tests alongside your code. Commit atomically. Save summary to ${WORKSPACE}/plans/${slug}/SUMMARY.md using the implementation-log template at ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+Direct mode — no plan file. Task: ${task}. Treat the task description as your plan. Save summary to ${WORKSPACE}/plans/${slug}/SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
 
 ${progress}
 
 ### verify
-Run the project test suite to verify the implementation. This is a lightweight verification gate — not full integration testing. Run the project's test command (auto-detected from package.json scripts.test, Makefile test, pytest, etc.). If all tests pass, report all_passing. If tests fail, report implementation_issue with the failing test names and files. Do NOT write new tests — only run existing ones (including tests the implementor just wrote). Append a log entry to ${WORKSPACE}/log.jsonl.
+Lightweight verification gate — run the project test suite only (do NOT write new tests). Report all_passing or implementation_issue.
 
 ### context-sync
-Sync project documentation after implementation. Read the git diff from the implementation commit. Read ${WORKSPACE}/plans/${slug}/SUMMARY.md. Read current CLAUDE.md and .canon/CONVENTIONS.md. Classify changes as contract/structure/dependency/invariant/internal/test-only. Update docs for contract-level changes only. Use the claudemd-template at ${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md for CLAUDE.md structure. Save sync report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md using the context-sync-report template at ${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+Sync docs after implementation. Diff source: implementation commit. Summary: ${WORKSPACE}/plans/${slug}/SUMMARY.md. Save report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md.
 
 ### review
-Review all code changes from this build. Use git diff to see changes. Save review to ${WORKSPACE}/plans/${slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl.
+Review all changes from this build via git diff. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.
 
 ${progress}
 
 ### fix-violations
-Fix the Canon principle violation: ${item.principle_id} (${item.severity}) in ${item.file_path}. Detail: ${item.detail}. Load the violated principle in full. Refactor to comply while preserving behavior. Commit atomically.
+Fix violation: ${item.principle_id} (${item.severity}) in ${item.file_path}. Detail: ${item.detail}.
 
 ${progress}

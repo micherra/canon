@@ -29,7 +29,7 @@ states:
 ## Spawn Instructions
 
 ### security
-Scan the codebase for security vulnerabilities. Focus on OWASP top 10, secrets in code, injection vectors, and authentication/authorization issues. Save assessment to ${WORKSPACE}/plans/${slug}/SECURITY.md using the security-assessment template at ${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md. Append a log entry to ${WORKSPACE}/log.jsonl.
+Scan for security vulnerabilities. Save to ${WORKSPACE}/plans/${slug}/SECURITY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md.
 
 ### review
-Review all code for Canon principle compliance. Use git diff to see recent changes. Save review to ${WORKSPACE}/plans/${slug}/REVIEW.md using the review-checklist template at ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md. Also save a copy to ${WORKSPACE}/reviews/. Append a log entry to ${WORKSPACE}/log.jsonl.
+Review all code for Canon principle compliance via git diff. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.

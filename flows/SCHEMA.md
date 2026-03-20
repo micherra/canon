@@ -51,6 +51,8 @@ Each key under `states:` is a state ID. State IDs must be lowercase, alphanumeri
 | `gate` | string | no | For `wave` type — verification to run between waves |
 | `iterate_on` | string | no | For `parallel-per` type — what to fan out on |
 | `inject_context` | list | no | Context to inject from prior states or user (see below) |
+| `skip_when` | string | no | Pre-check condition — if met, skip the state with `no_items` result (see below) |
+| `large_diff_threshold` | int | no | For `single` review states: if the diff exceeds this many lines, the orchestrator fans out parallel reviewers by file cluster instead of running a single reviewer (see Large Diff Review) |
 
 ### State Types
 
@@ -252,6 +254,34 @@ Each `stuck_when` strategy stores history entries in `iterations.{id}.history` w
 
 The orchestrator records one history entry per state entry. Stuck detection compares only the two most recent entries (current vs previous).
 
+### Large Diff Review
+
+When a `single` review state has `large_diff_threshold` set and the diff (`git diff --stat ${base_commit}..HEAD | tail -1`) exceeds that threshold in lines changed, the orchestrator automatically fans out the review:
+
+1. **Group files by directory cluster**: Use the top-level directory of each changed file as the cluster key (e.g., `src/services/`, `src/types/`, `src/handlers/`). Files in the same directory cluster are reviewed together.
+2. **Spawn parallel reviewers**: One reviewer per cluster, each receiving only the diff for its file set (`git diff ${base_commit}..HEAD -- {file1} {file2} ...`).
+3. **Aggregate verdicts**: Collect all cluster reviews. The final verdict is the most severe across all clusters (BLOCKING > WARNING > CLEAN). Merge all violation tables into a single REVIEW.md.
+4. **Proceed normally**: The aggregated review is stored as the state's artifact, and transitions are based on the merged verdict.
+
+If the diff is under the threshold, the state runs normally as a single reviewer.
+
+### Conditional Skip (`skip_when`)
+
+States can define a `skip_when` condition that the orchestrator evaluates before spawning the agent. If the condition is true, the state is skipped with the `done` transition (using the first `done`-like transition: `updated` → `no_updates` → `done`).
+
+**Built-in skip_when conditions:**
+
+| Condition | Check | When to Skip |
+|-----------|-------|-------------|
+| `no_contract_changes` | Run `git diff --name-only ${before}..HEAD` and check if any changed files match contract patterns: `**/index.ts`, `**/api/**`, `**/routes/**`, `**/types/**`, `**/schema*`, `**/public/**`, `package.json`, `**/migrations/**`. | Skip if all changes are internal (test files, private modules, config). |
+
+If `skip_when` is set and the condition is met, the orchestrator:
+1. Logs: `"Skipping {state-id}: {skip_when} condition met"`
+2. Sets `states.{id}.status` to `done`, `result` to the first available done-like transition
+3. Proceeds to the target state without spawning an agent
+
+This avoids unnecessary agent spawns for states that frequently produce no-op results (e.g., scribe after internal-only changes).
+
 ### Context Injection
 
 States can pull context from prior states or from the user mid-flow:
@@ -309,6 +339,7 @@ Variables available in spawn instructions:
 | `${base_commit}` | Git commit SHA at flow initialization (from `board.json`) — use for diff ranges | All states |
 | `${role}` | Role label from `roles` list. `roles` (plural) in state definitions lists available roles for parallel spawning. If a state has no `roles` field, the agent is spawned once with no `${role}` variable. | `parallel` states |
 | `${task_id}` | Task ID from INDEX.md current wave | `wave` states |
+| `${wave_briefing}` | Inter-wave learning briefing extracted from previous wave's summaries (new shared code, patterns established, gotchas). Empty for wave 1. | `wave` states (waves 2+) |
 | `${item}` | Current item (string) or `${item.field}` (structured) | `parallel-per` states |
 | `${<as>}` | Injected context variable from `inject_context` | States with `inject_context` |
 
@@ -414,6 +445,7 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
 | `states.{id}.wave_results` | map | Per-wave results (for `wave` type states) |
 | `states.{id}.wave_results.{N}.gate_output` | string | Gate failure output (stderr/stdout) if gate failed |
 | `states.{id}.error` | string | Error message if agent crashed or timed out |
+| `states.{id}.metrics` | object | `{ duration_ms, spawns, model }` — performance metrics for the state (see Cost Observability) |
 | `iterations` | map | Per-state loop tracking for states with `max_iterations` |
 | `iterations.{id}.count` | int | How many times this state has been entered |
 | `iterations.{id}.max` | int | Max iterations from the flow template |

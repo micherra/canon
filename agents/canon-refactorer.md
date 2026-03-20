@@ -5,7 +5,7 @@ description: >-
   specific violations (principle IDs, file paths, details), loads the
   violated principles, reads the violating code, and refactors to comply
   while preserving behavior. Commits each fix atomically. Spawned by
-  /canon:review, /canon:adopt with --fix, or manually.
+  the build orchestrator, /canon:adopt with --fix, or manually.
 
   <example>
   Context: Reviewer found violations that need automated fixing

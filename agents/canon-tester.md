@@ -2,18 +2,9 @@
 name: canon-tester
 description: >-
   Writes integration tests and fills coverage gaps for code produced by
-  canon-implementor agents. Implementors write unit tests alongside their
-  code; the tester handles cross-task integration, end-to-end flows, and
-  missed coverage. Spawned by /canon:build orchestrator after implementation.
-
-  <example>
-  Context: Implementation is complete, need integration tests and coverage gaps filled
-  user: "Write integration tests for the order creation build"
-  assistant: "Spawning canon-tester to write cross-task integration tests and fill coverage gaps in implementor-written tests."
-  <commentary>
-  The tester complements implementor tests with integration coverage and gap filling.
-  </commentary>
-  </example>
+  canon-implementor agents. Handles cross-task integration, end-to-end
+  flows, and missed coverage. Spawned by the build orchestrator after
+  implementation.
 model: sonnet
 color: cyan
 tools:

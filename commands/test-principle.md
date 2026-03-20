@@ -38,7 +38,7 @@ Tell the user: "Generated test file with an intentional violation of `{id}`."
 
 ### Step 3: Run the review
 
-Use the `review_code` MCP tool to get matched principles for the test file content. Alternatively, run `/canon:review .canon/test-principle-{id}.tmp.{ext}` by spawning the reviewer agent on just this file.
+Use the `review_code` MCP tool to get matched principles for the test file content. Alternatively, spawn the canon-reviewer agent directly on the test file.
 
 ### Step 4: Check the result
 

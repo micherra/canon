@@ -53,7 +53,5 @@ tests-failed: {N}
 
 ## Rules
 
-- Status must be one of the three defined values
 - Issues Found table is mandatory when status is IMPLEMENTATION_ISSUE — the fix-impl state reads it
-- Always start by reading implementor Coverage Notes from *-SUMMARY.md
 - Keep under 500 tokens

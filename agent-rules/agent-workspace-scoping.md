@@ -63,13 +63,10 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 | **writer** | everything in workspace | notes/ |
 
 Key constraints:
-- **Build lock**: The `.lock` file prevents concurrent builds on the same branch. Format: `{"pid": "...", "started": "ISO-8601"}`. The orchestrator creates it on start and deletes it on completion or abort. Stale locks (>2 hours old) are automatically removed.
-- **Board backup**: `board.json.bak` is written by the orchestrator before every `board.json` update. If `board.json` is corrupted on read, the orchestrator restores from the backup.
-- **Only the orchestrator reads/writes board.json** — agents never touch execution state
-- **Reviewer never reads research or plans** — cold review principle is preserved
-- **Implementor only reads its own plan + referenced decisions** — fresh context principle is preserved
-- **Researcher never reads other researchers** — scoped research principle is preserved
-- **All agents append to log.jsonl** — shared activity trail
+- **Build lock**: `.lock` prevents concurrent builds. Stale locks (>2 hours) are auto-removed.
+- **Board backup**: `board.json.bak` written before every update for crash recovery.
+- Only the orchestrator reads/writes `board.json`
+- All agents append to `log.jsonl`
 
 ## Log Entry Format
 
@@ -80,21 +77,6 @@ Every agent appends a JSON line to `log.jsonl` when starting or completing work:
 {"timestamp": "ISO-8601", "agent": "canon-researcher", "action": "complete", "detail": "Found 3 relevant patterns", "artifacts": ["research/codebase.md"]}
 ```
 
-## Session Metadata
-
-`session.json` is created by the orchestrator at workspace initialization:
-
-```json
-{
-  "branch": "feature/add-auth",
-  "sanitized": "feature--add-auth",
-  "created": "ISO-8601",
-  "task": "Add authentication to API endpoints",
-  "tier": "medium",
-  "status": "active"
-}
-```
-
 ## When to Write
 
-Agents write to the workspace **when they produce artifacts that other agents or users would benefit from**. This is not forced — if an agent's output is ephemeral or only relevant to the orchestrator, it doesn't need to be persisted. But anything that provides context, rationale, or findings should be written using the appropriate template.
+Agents write to the workspace when they produce artifacts that other agents or users would benefit from. Ephemeral output (only relevant to the orchestrator) doesn't need to be persisted.
