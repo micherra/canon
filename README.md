@@ -32,7 +32,7 @@ After installing, Canon's slash commands, agents, hooks, and MCP tools are avail
 ### Requirements
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- Node.js 18+ (for the MCP server)
+- Node.js 22+ (for the MCP server; matches CI and release workflows)
 
 ## Cursor-only Setup (no Claude Code plugin)
 
@@ -121,7 +121,7 @@ Just describe what you want. Canon's intake agent classifies your intent and rou
 
 Build modifiers can be expressed naturally: "skip research", "just plan don't implement", "this is a large task", "use the quick-fix flow".
 
-### Slash Commands (10 utilities)
+### Slash Commands
 
 | Command | What it does |
 |---------|-------------|
@@ -135,6 +135,8 @@ Build modifiers can be expressed naturally: "skip research", "just plan don't im
 | `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped by the matcher |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
+| `/canon:security` | Standalone security scan |
+| `/canon:pr-review` | Parallel per-layer PR review with optional GitHub comment posting |
 
 ## The Build Pipeline
 
@@ -219,7 +221,7 @@ Use `--apply` to walk through suggestions interactively.
 
 ## MCP Tools
 
-Canon exposes 11 tools via its MCP server for agents to use during normal work:
+Canon exposes 12 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
@@ -277,13 +279,13 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (28 principles)
 │   └── conventions/     Stylistic preferences (15 principles)
-├── commands/            10 slash commands
-├── agents/              10 specialist agents
-├── agent-rules/         10 agent behavior guidelines
-├── templates/           5 standardized output templates for agent artifacts
+├── commands/            Slash command specs (`commands/`)
+├── agents/              Specialist agent prompts (`agents/`)
+├── agent-rules/         Agent behavior guidelines (`agent-rules/`)
+├── templates/           Standardized output templates for agent artifacts
 ├── hooks/               6 automation hooks
 ├── flows/               5 predefined workflow YAML files
-├── mcp-server/          TypeScript MCP server (11 tools)
+├── mcp-server/          TypeScript MCP server (12 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
 │       ├── constants.ts Shared constants (layer centrality, extensions, extractSummary)
@@ -456,6 +458,7 @@ All Canon data lives in `.canon/` in your project root:
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
 | `workspaces/{branch}/` | Branch-scoped agent workspace (research, decisions, plans, logs) | Build pipeline (orchestrator) |
+| `plans/{task-slug}/` | Task plans and build artifacts inside the workspace | Build pipeline |
 | `history/{branch}/` | Archived workspace artifacts (decisions, notes, summary) | `/canon:clean --archive` |
 | `graph-data.json` | Codebase dependency graph with insights | `codebase_graph` MCP tool |
 | `reverse-deps.json` | Reverse dependency index (who imports each file) | `codebase_graph` MCP tool |

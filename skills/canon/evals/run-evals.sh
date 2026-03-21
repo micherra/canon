@@ -63,7 +63,7 @@ trap 'rm -rf "$TMPDIR_EVALS"' EXIT
 wait_parallel_slot() {
   local max="$1"
   while (( ${#PARALLEL_PIDS[@]} >= max )); do
-    wait "${PARALLEL_PIDS[0]}"
+    wait "${PARALLEL_PIDS[0]}" || true
     local i new_pids=()
     for ((i = 1; i < ${#PARALLEL_PIDS[@]}; i++)); do
       new_pids+=("${PARALLEL_PIDS[i]}")
@@ -121,12 +121,11 @@ $file_content
 
   local output=""
   local exit_code=0
-  local eval_budget="0.50"
+  local eval_budget="1.00"
   local eval_model="$MODEL"
   local max_turns="6"
 
   if [[ "$type" == "trigger" ]]; then
-    eval_budget="0.15"
     max_turns="4"
     if [[ "$should_trigger" == "false" ]]; then
       output=$(cd /tmp && claude -p "$full_prompt" \
@@ -223,10 +222,17 @@ $file_content
     local verdict_json verdict_token explanation
     verdict_token=""
     explanation=""
-    verdict_json=$(printf '%s\n' "$verdict" | head -n 1)
+    verdict_json=$(printf '%s\n' "$verdict")
 
-    verdict_token=$(printf '%s\n' "$verdict" | jq -r '.verdict // empty' 2>/dev/null || true)
-    explanation=$(printf '%s\n' "$verdict" | jq -r '.explanation // empty' 2>/dev/null || true)
+    verdict_token=$(printf '%s\n' "$verdict_json" | jq -r '.verdict // empty' 2>/dev/null || true)
+    explanation=$(printf '%s\n' "$verdict_json" | jq -r '.explanation // empty' 2>/dev/null || true)
+
+    if [[ -z "$verdict_token" ]]; then
+      # Fallback for mixed output: try parsing just the first line as JSON.
+      verdict_json=$(printf '%s\n' "$verdict" | head -n 1)
+      verdict_token=$(printf '%s\n' "$verdict_json" | jq -r '.verdict // empty' 2>/dev/null || true)
+      explanation=$(printf '%s\n' "$verdict_json" | jq -r '.explanation // empty' 2>/dev/null || true)
+    fi
 
     if [[ "$verdict_token" == "PASS" ]]; then
       echo "PASS   $id" > "$result_file"

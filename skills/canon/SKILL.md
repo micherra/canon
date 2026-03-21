@@ -65,7 +65,14 @@ This inline mode ensures principles are always applied, even for quick edits tha
 
 ## Dashboard Context
 
-When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation or task to pick up the user's current focus.
+When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation or task to pick up the user's current focus. It returns:
+
+- The **selected node** from the graph (the file the user clicked on)
+- The **active editor file** the user is viewing
+- **Matched principles** for the active file (summary-only, top 3)
+- **Dependencies and dependents** from the codebase graph
+
+This gives you immediate context about what the user is looking at without them having to explain it.
 
 ## Principle Format Reference
 
