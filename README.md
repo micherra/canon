@@ -314,6 +314,8 @@ canon/
 │       ├── services/          Graph data loading, git integration
 │       ├── webview/           Svelte app: stores, components, D3 graph, filters
 │       └── __tests__/         Tests
+├── canon-cursor-cli/    CLI package for Cursor-only setup (npx -y canon-cursor)
+├── scripts/             Build and bundle scripts
 ├── templates/           9 output templates (research, design, review, security, etc.)
 └── skills/canon/        Skill definition + references
 ```
