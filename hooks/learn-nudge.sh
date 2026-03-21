@@ -27,8 +27,11 @@ fi
 # Cross-platform hash: try md5sum (Linux), fall back to md5 (macOS)
 if command -v md5sum &>/dev/null; then
   PROJECT_HASH=$(echo -n "$(pwd)" | md5sum | head -c 8)
+elif command -v md5 &>/dev/null; then
+  # BSD/macOS: default `md5` prints a labeled line; `-q` is raw hex.
+  PROJECT_HASH=$(echo -n "$(pwd)" | md5 -q | head -c 8)
 else
-  PROJECT_HASH=$(echo -n "$(pwd)" | md5 | head -c 8)
+  PROJECT_HASH=$(echo -n "$(pwd)" | cksum | awk '{print $1}' | head -c 8)
 fi
 NUDGE_FILE=".canon/.learn-nudged-${PROJECT_HASH}"
 if [[ -f "$NUDGE_FILE" ]]; then

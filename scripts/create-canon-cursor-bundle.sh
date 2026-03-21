@@ -39,8 +39,10 @@ copy_into_stage "${REPO_ROOT}/.cursor/mcp.json" ".cursor/mcp.json"
 
 # Canon runtime needed by the Cursor runner
 cp -R "${REPO_ROOT}/.cursor/agents" "$STAGE_DIR/.cursor/"
-cp -R "${REPO_ROOT}/.cursor/hooks" "$STAGE_DIR/.cursor/"
-rm -f "$STAGE_DIR/.cursor/hooks/state/continual-learning.json" "$STAGE_DIR/.cursor/hooks/state/._continual-learning.json"
+if [ -d "${REPO_ROOT}/.cursor/hooks" ]; then
+  cp -R "${REPO_ROOT}/.cursor/hooks" "$STAGE_DIR/.cursor/"
+  rm -f "$STAGE_DIR/.cursor/hooks/state/continual-learning.json" "$STAGE_DIR/.cursor/hooks/state/continual-learning-index.json" "$STAGE_DIR/.cursor/hooks/state/._continual-learning.json"
+fi
 
 cp -R "${REPO_ROOT}/mcp-server" "$STAGE_DIR/"
 cp -R "${REPO_ROOT}/flows" "$STAGE_DIR/"

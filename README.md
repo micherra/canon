@@ -32,7 +32,7 @@ After installing, Canon's slash commands, agents, hooks, and MCP tools are avail
 ### Requirements
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- Node.js 18+ (for the MCP server)
+- Node.js 22+ (for the MCP server; matches CI and release workflows)
 
 ## Cursor-only Setup (no Claude Code plugin)
 

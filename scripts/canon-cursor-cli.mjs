@@ -177,6 +177,21 @@ function cmdBundle(opts) {
       }
     }
 
+    const hookStateDir = path.join(stageRoot, ".cursor/hooks/state");
+    if (exists(hookStateDir)) {
+      for (const name of [
+        "continual-learning.json",
+        "continual-learning-index.json",
+        "._continual-learning.json",
+      ]) {
+        try {
+          fs.unlinkSync(path.join(hookStateDir, name));
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     // Create tar.gz from stageRoot
     if (exists(outTgz)) fs.rmSync(outTgz, { force: true });
     execFileSync("tar", ["-C", stageRoot, "-czf", outTgz, "."], { stdio: "inherit" });
@@ -231,6 +246,7 @@ async function cmdInstall(opts) {
       ".cursor/agents",
       ".cursor/hooks",
       "mcp-server",
+      "cursor-extension",
       "flows",
       "agents",
       "agent-rules",

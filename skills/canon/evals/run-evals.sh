@@ -63,7 +63,7 @@ trap 'rm -rf "$TMPDIR_EVALS"' EXIT
 wait_parallel_slot() {
   local max="$1"
   while (( ${#PARALLEL_PIDS[@]} >= max )); do
-    wait "${PARALLEL_PIDS[0]}"
+    wait "${PARALLEL_PIDS[0]}" || true
     local i new_pids=()
     for ((i = 1; i < ${#PARALLEL_PIDS[@]}; i++)); do
       new_pids+=("${PARALLEL_PIDS[i]}")
@@ -224,8 +224,8 @@ $file_content
     explanation=""
     verdict_json=$(printf '%s\n' "$verdict" | head -n 1)
 
-    verdict_token=$(printf '%s\n' "$verdict" | jq -r '.verdict // empty' 2>/dev/null || true)
-    explanation=$(printf '%s\n' "$verdict" | jq -r '.explanation // empty' 2>/dev/null || true)
+    verdict_token=$(printf '%s\n' "$verdict_json" | jq -r '.verdict // empty' 2>/dev/null || true)
+    explanation=$(printf '%s\n' "$verdict_json" | jq -r '.explanation // empty' 2>/dev/null || true)
 
     if [[ "$verdict_token" == "PASS" ]]; then
       echo "PASS   $id" > "$result_file"
