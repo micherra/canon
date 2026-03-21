@@ -4,17 +4,23 @@
   "description": "Install the Cursor-only Canon runner into a repo (MCP + flows + specialist roles).",
   "license": "MIT",
   "type": "module",
+
   "bin": {
-    "canon-cursor": "./bin/cli.mjs"
+    "canon-cursor": "bin/cli.mjs"
   },
+
   "files": [
     "bin/",
     "bundle/",
     "README.md"
   ],
+
   "scripts": {
-    "prepack": "bash ../scripts/create-canon-cursor-bundle.sh >/dev/null && node ./scripts/prepare-bundle.mjs",
-    "prepare-bundle": "node ./scripts/prepare-bundle.mjs"
+    "build": "node ./scripts/prepare-bundle.mjs"
+  },
+
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }
-
