@@ -287,7 +287,7 @@ server.tool(
   "Returns the user's current focus from the Canon dashboard — the selected graph node AND the active editor file with matched principles. Call this at the start of a conversation to understand what the user is working on. Returns layer, summary, dependencies, dependents, content preview, and top 3 principles for the active file.",
   {},
   async () => {
-    const result = await getDashboardSelection(projectDir);
+    const result = await getDashboardSelection(projectDir, pluginDir);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
     };
