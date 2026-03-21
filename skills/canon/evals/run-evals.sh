@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Canon Skill Eval Runner
 # Runs eval cases from eval-set.json using the claude CLI in print mode.
-# Usage: bash skills/canon/evals/run-evals.sh [--filter <id-substring>] [--model <model>] [--parallel]
+# Usage: bash skills/canon/evals/run-evals.sh [--filter <id-substring>] [--model <model>] [--parallel] [--jobs <n>] [--dry-run] [--no-judge] [--structured-judge]
 #
 # Examples:
 #   bash skills/canon/evals/run-evals.sh                    # Run all evals
 #   bash skills/canon/evals/run-evals.sh --filter trigger   # Run only trigger evals
 #   bash skills/canon/evals/run-evals.sh --model sonnet     # Use sonnet model
-#   bash skills/canon/evals/run-evals.sh --parallel         # Run cases in parallel
+#   bash skills/canon/evals/run-evals.sh --parallel         # Run cases in parallel (max 4)
+#   bash skills/canon/evals/run-evals.sh --parallel --jobs 8
 
 set -euo pipefail
 
@@ -19,6 +20,10 @@ MODEL="sonnet"
 FILTER=""
 VERBOSE=false
 PARALLEL=false
+MAX_PARALLEL_JOBS=4
+DRY_RUN=false
+NO_JUDGE=false
+STRUCTURED_JUDGE=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -26,6 +31,17 @@ while [[ $# -gt 0 ]]; do
     --model) MODEL="$2"; shift 2 ;;
     --verbose) VERBOSE=true; shift ;;
     --parallel) PARALLEL=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    --no-judge) NO_JUDGE=true; shift ;;
+    --structured-judge) STRUCTURED_JUDGE=true; shift ;;
+    --jobs)
+      MAX_PARALLEL_JOBS="$2"
+      if ! [[ "$MAX_PARALLEL_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: --jobs must be a positive integer" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -35,13 +51,36 @@ if ! command -v jq &>/dev/null; then
   exit 1
 fi
 
-if ! command -v claude &>/dev/null; then
+if ! $DRY_RUN && ! command -v claude &>/dev/null; then
   echo "Error: claude CLI is required but not found." >&2
   exit 1
 fi
 
 TMPDIR_EVALS=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_EVALS"' EXIT
+
+# Bash 3.2–compatible: wait for a free parallel slot (pid queue without ${arr[@]:1}).
+wait_parallel_slot() {
+  local max="$1"
+  while (( ${#PARALLEL_PIDS[@]} >= max )); do
+    wait "${PARALLEL_PIDS[0]}"
+    local i new_pids=()
+    for ((i = 1; i < ${#PARALLEL_PIDS[@]}; i++)); do
+      new_pids+=("${PARALLEL_PIDS[i]}")
+    done
+    PARALLEL_PIDS=("${new_pids[@]}")
+  done
+}
+
+# First word of judge line, stripped of markdown/whitespace, uppercased — must be PASS for success.
+judge_first_token_is_pass() {
+  local line verdict="$1"
+  line=$(printf '%s\n' "$verdict" | head -n 1)
+  line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^\*\*//;s/\*\*$//')
+  local token
+  token=$(echo "$line" | awk '{print $1}' | tr -cd 'A-Za-z' | tr '[:lower:]' '[:upper:]')
+  [[ "$token" == PASS ]]
+}
 
 run_eval_case() {
   local id="$1"
@@ -51,6 +90,11 @@ run_eval_case() {
   local should_trigger="$5"
   local files_json="$6"
   local result_file="$TMPDIR_EVALS/$id.result"
+
+  if $DRY_RUN; then
+    echo "DRYRUN  $id" > "$result_file"
+    return
+  fi
 
   # Build the prompt with fixture file contents if specified
   local full_prompt="$prompt"
@@ -82,11 +126,9 @@ $file_content
   local max_turns="6"
 
   if [[ "$type" == "trigger" ]]; then
-    # Trigger evals need less budget
     eval_budget="0.15"
-    max_turns="2"
+    max_turns="4"
     if [[ "$should_trigger" == "false" ]]; then
-      # For should_trigger=false, run outside the Canon project (in /tmp)
       output=$(cd /tmp && claude -p "$full_prompt" \
         --model "$eval_model" \
         --output-format text \
@@ -96,7 +138,6 @@ $file_content
         --max-budget-usd "$eval_budget" \
         2>&1) || exit_code=$?
     else
-      # For should_trigger=true, run inside the Canon project
       output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
         --model "$eval_model" \
         --output-format text \
@@ -107,7 +148,6 @@ $file_content
         2>&1) || exit_code=$?
     fi
   else
-    # Quality evals always run inside the Canon project
     output=$(cd "$PROJECT_DIR" && claude -p "$full_prompt" \
       --model "$eval_model" \
       --output-format text \
@@ -126,19 +166,48 @@ $file_content
     return
   fi
 
-  # Judge the output against expected behavior using claude as judge
-  local judge_prompt="You are an eval judge. Given the following eval case and actual output, determine if the output satisfies the expected behavior.
+  # Truncate for judge context (avoid huge argv / prompt limits)
+  local output_trunc="${output:0:3000}"
 
-Eval ID: $id
-Eval Type: $type
-Prompt: $prompt
-Expected: $expected
-Actual Output:
----
-${output:0:3000}
----
+  if $NO_JUDGE; then
+    echo "NOJUDGE $id" > "$result_file"
+    return
+  fi
 
-Does the actual output satisfy the expected behavior? Reply with ONLY 'PASS' or 'FAIL' on the first line, followed by a one-sentence explanation."
+  # Assemble multiline judge prompt with printf (clearer than one huge quoted string).
+  local judge_prompt
+  if $STRUCTURED_JUDGE; then
+    judge_prompt=$(printf '%s\n' \
+      "You are an eval judge. Given the following eval case and actual output, determine if the output satisfies the expected behavior." \
+      "" \
+      "Eval ID: ${id}" \
+      "Eval Type: ${type}" \
+      "Prompt: ${prompt}" \
+      "Expected: ${expected}" \
+      "Actual Output:" \
+      "---" \
+      "${output_trunc}" \
+      "---" \
+      "" \
+      "Does the actual output satisfy the expected behavior?" \
+      "Return ONLY valid JSON with keys:" \
+      "  verdict: \"PASS\" or \"FAIL\"" \
+      "  explanation: one sentence string" )
+  else
+    judge_prompt=$(printf '%s\n' \
+      "You are an eval judge. Given the following eval case and actual output, determine if the output satisfies the expected behavior." \
+      "" \
+      "Eval ID: ${id}" \
+      "Eval Type: ${type}" \
+      "Prompt: ${prompt}" \
+      "Expected: ${expected}" \
+      "Actual Output:" \
+      "---" \
+      "${output_trunc}" \
+      "---" \
+      "" \
+      "Does the actual output satisfy the expected behavior? Reply with ONLY 'PASS' or 'FAIL' on the first line, followed by a one-sentence explanation.")
+  fi
 
   local verdict=""
   verdict=$(cd /tmp && claude -p "$judge_prompt" \
@@ -150,15 +219,37 @@ Does the actual output satisfy the expected behavior? Reply with ONLY 'PASS' or 
     --max-budget-usd 0.05 \
     2>&1) || true
 
-  local first_line
-  first_line=$(echo "$verdict" | head -1 | tr -d '[:space:]')
+  if $STRUCTURED_JUDGE; then
+    local verdict_json verdict_token explanation
+    verdict_token=""
+    explanation=""
+    verdict_json=$(printf '%s\n' "$verdict" | head -n 1)
 
-  if [[ "$first_line" == "PASS" ]]; then
-    echo "PASS   $id" > "$result_file"
+    verdict_token=$(printf '%s\n' "$verdict" | jq -r '.verdict // empty' 2>/dev/null || true)
+    explanation=$(printf '%s\n' "$verdict" | jq -r '.explanation // empty' 2>/dev/null || true)
+
+    if [[ "$verdict_token" == "PASS" ]]; then
+      echo "PASS   $id" > "$result_file"
+    elif [[ "$verdict_token" == "FAIL" ]]; then
+      echo "FAIL   $id  ($explanation)" > "$result_file"
+    else
+      # Fallback for cases where the judge doesn't return JSON.
+      if judge_first_token_is_pass "$verdict"; then
+        echo "PASS   $id" > "$result_file"
+      else
+        local explanation_fallback
+        explanation_fallback=$(printf '%s\n' "$verdict" | tail -n +2 | head -1)
+        echo "FAIL   $id  ($explanation_fallback)" > "$result_file"
+      fi
+    fi
   else
-    local explanation
-    explanation=$(echo "$verdict" | tail -n +2 | head -1)
-    echo "FAIL   $id  ($explanation)" > "$result_file"
+    if judge_first_token_is_pass "$verdict"; then
+      echo "PASS   $id" > "$result_file"
+    else
+      local explanation
+      explanation=$(printf '%s\n' "$verdict" | tail -n +2 | head -1)
+      echo "FAIL   $id  ($explanation)" > "$result_file"
+    fi
   fi
 
   if $VERBOSE; then
@@ -172,23 +263,33 @@ echo "=================="
 echo "Model: $MODEL"
 echo "Eval file: $EVAL_FILE"
 [[ -n "$FILTER" ]] && echo "Filter: $FILTER"
-$PARALLEL && echo "Mode: parallel"
+if $PARALLEL; then
+  echo "Mode: parallel (max jobs: $MAX_PARALLEL_JOBS)"
+fi
+if $DRY_RUN; then
+  echo "Mode: dry-run (no model calls)"
+fi
+if $NO_JUDGE; then
+  echo "Judge: disabled"
+fi
+if $STRUCTURED_JUDGE; then
+  echo "Judge format: structured JSON"
+fi
 echo ""
 
-# Read and iterate eval cases
-eval_count=$(jq '.evals | length' "$EVAL_FILE")
-pids=()
+PARALLEL_PIDS=()
 case_ids=()
 
-for ((i = 0; i < eval_count; i++)); do
-  id=$(jq -r ".evals[$i].id" "$EVAL_FILE")
-  type=$(jq -r ".evals[$i].type" "$EVAL_FILE")
-  prompt=$(jq -r ".evals[$i].prompt" "$EVAL_FILE")
-  expected=$(jq -r ".evals[$i].expected_output" "$EVAL_FILE")
-  should_trigger=$(jq -r ".evals[$i].should_trigger // \"true\"" "$EVAL_FILE")
-  files_json=$(jq -c ".evals[$i].files // []" "$EVAL_FILE")
+while IFS= read -r case_json; do
+  [[ -z "$case_json" ]] && continue
 
-  # Apply filter
+  id=$(jq -r '.id' <<<"$case_json")
+  type=$(jq -r '.type' <<<"$case_json")
+  prompt=$(jq -r '.prompt' <<<"$case_json")
+  expected=$(jq -r '.expected_output' <<<"$case_json")
+  should_trigger=$(jq -r '.should_trigger // "true"' <<<"$case_json")
+  files_json=$(jq -c '.files // []' <<<"$case_json")
+
   if [[ -n "$FILTER" ]] && [[ "$id" != *"$FILTER"* ]]; then
     continue
   fi
@@ -197,27 +298,27 @@ for ((i = 0; i < eval_count; i++)); do
   case_ids+=("$id")
 
   if $PARALLEL; then
+    wait_parallel_slot "$MAX_PARALLEL_JOBS"
     run_eval_case "$id" "$type" "$prompt" "$expected" "$should_trigger" "$files_json" &
-    pids+=($!)
+    PARALLEL_PIDS+=($!)
   else
     run_eval_case "$id" "$type" "$prompt" "$expected" "$should_trigger" "$files_json"
   fi
-done
+done < <(jq -c '.evals[]' "$EVAL_FILE")
 
-# Wait for parallel jobs
-if $PARALLEL && [[ ${#pids[@]} -gt 0 ]]; then
+if $PARALLEL && [[ ${#PARALLEL_PIDS[@]} -gt 0 ]]; then
   echo ""
-  echo "Waiting for ${#pids[@]} parallel eval(s)..."
-  for pid in "${pids[@]}"; do
+  echo "Waiting for ${#PARALLEL_PIDS[@]} parallel eval(s)..."
+  for pid in "${PARALLEL_PIDS[@]}"; do
     wait "$pid" 2>/dev/null || true
   done
 fi
 
-# Collect results from files
 TOTAL=0
 PASSED=0
 FAILED=0
 ERRORS=0
+SKIPPED=0
 results=()
 
 for id in "${case_ids[@]}"; do
@@ -230,6 +331,8 @@ for id in "${case_ids[@]}"; do
       PASSED=$((PASSED + 1))
     elif [[ "$result" == ERROR* ]]; then
       ERRORS=$((ERRORS + 1))
+    elif [[ "$result" == DRYRUN* || "$result" == NOJUDGE* ]]; then
+      SKIPPED=$((SKIPPED + 1))
     else
       FAILED=$((FAILED + 1))
     fi
@@ -246,7 +349,7 @@ for r in "${results[@]}"; do
   echo "  $r"
 done
 echo ""
-echo "Total: $TOTAL | Passed: $PASSED | Failed: $FAILED | Errors: $ERRORS"
+echo "Total: $TOTAL | Passed: $PASSED | Failed: $FAILED | Errors: $ERRORS | Skipped: $SKIPPED"
 
 if [[ $FAILED -gt 0 || $ERRORS -gt 0 ]]; then
   exit 1

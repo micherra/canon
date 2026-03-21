@@ -23,10 +23,14 @@ if ! echo "$INPUT" | grep -q "git commit"; then
   exit 0
 fi
 
-# Session dedup — only nudge once per session.
-# Use session_id from the hook JSON input (not PID or pwd-based hash).
-SESSION_ID=$(echo "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"session_id"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)
-NUDGE_FILE="${TMPDIR:-/tmp}/canon-learn-nudged-${SESSION_ID:-unknown}"
+# Session dedup — only nudge once per session, scoped to this project
+# Cross-platform hash: try md5sum (Linux), fall back to md5 (macOS)
+if command -v md5sum &>/dev/null; then
+  PROJECT_HASH=$(echo -n "$(pwd)" | md5sum | head -c 8)
+else
+  PROJECT_HASH=$(echo -n "$(pwd)" | md5 | head -c 8)
+fi
+NUDGE_FILE=".canon/.learn-nudged-${PROJECT_HASH}"
 if [[ -f "$NUDGE_FILE" ]]; then
   exit 0
 fi

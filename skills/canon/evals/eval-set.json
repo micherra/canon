@@ -51,7 +51,7 @@
       "id": "intent-question",
       "type": "quality",
       "prompt": "how does the principle matching system work in this project?",
-      "expected_output": "The response directly answers the question by reading code from the codebase (e.g., matcher.ts, parser.ts). It should explain how principles are matched, referencing actual code. It should NOT start a build pipeline or ask to implement something."
+      "expected_output": "The response directly answers the question by reading code from the codebase (e.g., mcp-server/src/matcher.ts and mcp-server/src/parser.ts). It should explain how principles are matched, referencing actual code. It should NOT start a build pipeline or ask to implement something."
     },
     {
       "id": "intent-chat",
