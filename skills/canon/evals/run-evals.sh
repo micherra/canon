@@ -222,10 +222,17 @@ $file_content
     local verdict_json verdict_token explanation
     verdict_token=""
     explanation=""
-    verdict_json=$(printf '%s\n' "$verdict" | head -n 1)
+    verdict_json=$(printf '%s\n' "$verdict")
 
     verdict_token=$(printf '%s\n' "$verdict_json" | jq -r '.verdict // empty' 2>/dev/null || true)
     explanation=$(printf '%s\n' "$verdict_json" | jq -r '.explanation // empty' 2>/dev/null || true)
+
+    if [[ -z "$verdict_token" ]]; then
+      # Fallback for mixed output: try parsing just the first line as JSON.
+      verdict_json=$(printf '%s\n' "$verdict" | head -n 1)
+      verdict_token=$(printf '%s\n' "$verdict_json" | jq -r '.verdict // empty' 2>/dev/null || true)
+      explanation=$(printf '%s\n' "$verdict_json" | jq -r '.explanation // empty' 2>/dev/null || true)
+    fi
 
     if [[ "$verdict_token" == "PASS" ]]; then
       echo "PASS   $id" > "$result_file"

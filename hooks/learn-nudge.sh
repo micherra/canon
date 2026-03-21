@@ -24,7 +24,7 @@ if ! echo "$INPUT" | grep -q "git commit"; then
 fi
 
 # Session dedup — only nudge once per session, scoped to this project
-# Cross-platform hash: try md5sum (Linux), fall back to md5 (macOS)
+# Cross-platform hash: try md5sum (Linux), then md5 -q (macOS), else cksum
 if command -v md5sum &>/dev/null; then
   PROJECT_HASH=$(echo -n "$(pwd)" | md5sum | head -c 8)
 elif command -v md5 &>/dev/null; then
