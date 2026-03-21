@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import http from "node:http";
 import https from "node:https";
 import { execFileSync } from "node:child_process";
 
@@ -59,21 +60,56 @@ function copyIntoTarget({ stageRoot, relPath, targetRoot, force }) {
   return { skipped: false, relPath };
 }
 
-function downloadToFile(url, destPath) {
+const MAX_DOWNLOAD_REDIRECTS = 10;
+
+function getOnce(urlString) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      if (res.statusCode && res.statusCode >= 400) {
-        reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+    let u;
+    try {
+      u = new URL(urlString);
+    } catch {
+      reject(new Error(`Download failed: invalid URL`));
+      return;
+    }
+    const lib = u.protocol === "https:" ? https : u.protocol === "http:" ? http : null;
+    if (!lib) {
+      reject(new Error(`Download failed: unsupported URL protocol ${u.protocol}`));
+      return;
+    }
+    const req = lib.get(urlString, (res) => resolve(res));
+    req.on("error", reject);
+  });
+}
+
+async function downloadToFile(url, destPath) {
+  let currentUrl = url;
+  let redirectsFollowed = 0;
+  while (true) {
+    const res = await getOnce(currentUrl);
+    const code = res.statusCode ?? 0;
+    if (code >= 300 && code < 400 && res.headers.location) {
+      if (redirectsFollowed >= MAX_DOWNLOAD_REDIRECTS) {
         res.resume();
-        return;
+        throw new Error(`Download failed: too many redirects (max ${MAX_DOWNLOAD_REDIRECTS})`);
       }
+      res.resume();
+      currentUrl = new URL(res.headers.location, currentUrl).href;
+      redirectsFollowed++;
+      continue;
+    }
+    if (code >= 400) {
+      res.resume();
+      throw new Error(`Download failed: HTTP ${code}`);
+    }
+    await new Promise((resolve, reject) => {
       const file = fs.createWriteStream(destPath);
       res.pipe(file);
       file.on("finish", () => file.close(resolve));
       file.on("error", reject);
+      res.on("error", reject);
     });
-    req.on("error", reject);
-  });
+    return;
+  }
 }
 
 function ensureTar() {
