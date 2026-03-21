@@ -81,6 +81,8 @@ If the flow doesn't exist, report the error and stop.
 branch=$(git branch --show-current)
 ```
 
+If `branch` is empty, stop with error: "Cannot run in detached HEAD state. Check out a branch first."
+
 Sanitize the branch name for the workspace path:
 - Replace `/` with `--`
 - Replace spaces with `-`
@@ -165,7 +167,7 @@ For a new flow, populate the board from the flow template:
 
 Before entering the state machine, run these checks:
 
-1. **Detached HEAD**: Run `git branch --show-current`. If it returns empty, stop with error: "Cannot run in detached HEAD state. Check out a branch first." The workspace path depends on a branch name.
+1. **Detached HEAD**: Already validated in Phase 2 Step 3 (no-op here).
 
 2. **Uncommitted changes**: Run `git status --porcelain`. If the output is non-empty, warn the user: "You have uncommitted changes. Commit or stash before proceeding?" Wait for confirmation before continuing. Do not proceed silently — build commits will interleave with the user's uncommitted work.
 

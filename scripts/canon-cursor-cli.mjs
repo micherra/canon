@@ -20,9 +20,9 @@ function parseArgs(argv) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--force") opts.force = true;
-    else if (a === "--bundle-path") opts.bundlePath = args[i + 1];
-    else if (a === "--bundle-url") opts.bundleUrl = args[i + 1];
-    else if (a === "--out-dir") opts.outDir = args[i + 1];
+    else if (a === "--bundle-path") opts.bundlePath = args[++i];
+    else if (a === "--bundle-url") opts.bundleUrl = args[++i];
+    else if (a === "--out-dir") opts.outDir = args[++i];
     else if (a === "--help" || a === "-h") opts.help = true;
     else if (a.startsWith("-")) die(`Unknown option: ${a}`);
   }
@@ -177,6 +177,21 @@ function cmdBundle(opts) {
       }
     }
 
+    const hookStateDir = path.join(stageRoot, ".cursor/hooks/state");
+    if (exists(hookStateDir)) {
+      for (const name of [
+        "continual-learning.json",
+        "continual-learning-index.json",
+        "._continual-learning.json",
+      ]) {
+        try {
+          fs.unlinkSync(path.join(hookStateDir, name));
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     // Create tar.gz from stageRoot
     if (exists(outTgz)) fs.rmSync(outTgz, { force: true });
     execFileSync("tar", ["-C", stageRoot, "-czf", outTgz, "."], { stdio: "inherit" });
@@ -231,6 +246,7 @@ async function cmdInstall(opts) {
       ".cursor/agents",
       ".cursor/hooks",
       "mcp-server",
+      "cursor-extension",
       "flows",
       "agents",
       "agent-rules",

@@ -16,14 +16,14 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
 
       - uses: actions/setup-node@v6
         with:
           node-version: 22
 
-      - name: Install semantic-release
-        run: npm install -g semantic-release @semantic-release/npm
+      - name: Install semantic-release + plugins
+        run: npm install -g semantic-release @semantic-release/npm @semantic-release/github @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/git
 
       - name: Release
         env:

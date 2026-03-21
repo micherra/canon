@@ -39,8 +39,6 @@ function computeReviewHint(
   principleId: string,
   code: string
 ): PrincipleForReview["review_hint"] {
-  const lower = code.toLowerCase();
-
   switch (principleId) {
     case "secrets-never-in-code": {
       // Look for common secret patterns

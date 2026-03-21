@@ -1,14 +1,23 @@
-// src/api/handlers/users.ts
-import { Request, Response } from "express";
-import { z } from "zod";
-import { UserService } from "../../domain/user-service";
 
-const GetUserParams = z.object({
-  id: z.string().uuid(),
-});
+type UserRecord = { id: string; email: string };
+type Request = { params: { id?: string } };
+type Response = {
+  status: (code: number) => Response;
+  json: (body: unknown) => Response;
+};
+
+const UserService = {
+  findById: async (_id: string): Promise<UserRecord | null> => null,
+};
+
+function parseUserParams(params: Request["params"]): { success: true; data: { id: string } } | { success: false } {
+  const id = params.id;
+  if (!id || typeof id !== "string") return { success: false };
+  return { success: true, data: { id } };
+}
 
 export async function getUser(req: Request, res: Response) {
-  const parsed = GetUserParams.safeParse(req.params);
+  const parsed = parseUserParams(req.params);
   if (!parsed.success) return res.status(400).json({ error: "Invalid user ID" });
 
   try {

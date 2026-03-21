@@ -1,5 +1,7 @@
 node_modules/
 dist/
+canon-cursor-cli/bundle/
+canon-cursor-cli/bundle/*.tgz
 *.js.map
 .DS_Store
 cursor-extension/media/dashboard.js
@@ -14,5 +16,7 @@ cursor-extension/media/dashboard.js
 .canon/dashboard-state.json
 .canon/LEARNING-REPORT.md
 .canon/plans/
+.cursor/hooks/state/continual-learning.json
+.cursor/hooks/state/continual-learning-index.json
 # Keep config (user-edited)
 !.canon/config.json
