@@ -58,7 +58,7 @@ function extractBundle({ bundlePath, extractedRoot }) {
 function main() {
   const opts = parseArgs(process.argv);
   if (opts.help) {
-    console.log(`Usage: cursor-canon [--force] [--bundle-path path]`);
+    console.log(`Usage: canon-cursor [--force] [--bundle-path path]`);
     console.log(`Installs Cursor Canon runner assets into the current repo.`);
     process.exit(0);
   }
@@ -67,12 +67,12 @@ function main() {
 
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
-  const bundleDefault = path.resolve(__dirname, "..", "bundle", "cursor-canon-everything.tgz");
+  const bundleDefault = path.resolve(__dirname, "..", "bundle", "canon-cursor-everything.tgz");
 
   const bundlePath = opts.bundlePath ? path.resolve(opts.bundlePath) : bundleDefault;
   if (!exists(bundlePath)) die(`Bundle not found: ${bundlePath}`);
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-canon-install-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "canon-cursor-install-"));
   try {
     const extractedRoot = path.join(tmpDir, "extracted");
     fs.mkdirSync(extractedRoot, { recursive: true });

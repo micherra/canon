@@ -59,27 +59,27 @@ If it does not exist, the runner continues without blocking on dashboard UI stat
 
 If you need to install via a prebuilt bundle, create it here with:
 
-- `bash scripts/create-cursor-canon-bundle.sh`
+- `bash scripts/create-canon-cursor-bundle.sh`
 
-Then install via the published `cursor-canon` npm package (preferred):
-- `npx -y cursor-canon`
+Then install via the published `canon-cursor` npm package (preferred):
+- `npx -y canon-cursor`
 
 ## Installing via `npx`
 
 You can also run the same logic via a Node CLI (no root `package.json` required):
 
 - Create bundle:
-  - `npx --no-install ./scripts/cursor-canon-cli.mjs bundle`
+  - `npx --no-install ./scripts/canon-cursor-cli.mjs bundle`
 - Install into the current repo:
-  - `npx --no-install ./scripts/cursor-canon-cli.mjs install --bundle-path /path/to/cursor-canon-everything.tgz --force`
-  - `npx --no-install ./scripts/cursor-canon-cli.mjs install --bundle-url https://example.com/cursor-canon-everything.tgz --force`
+  - `npx --no-install ./scripts/canon-cursor-cli.mjs install --bundle-path /path/to/canon-cursor-everything.tgz --force`
+  - `npx --no-install ./scripts/canon-cursor-cli.mjs install --bundle-url https://example.com/canon-cursor-everything.tgz --force`
 
-## Installing via `npx cursor-canon` (published package)
+## Installing via `npx canon-cursor` (published package)
 
-If/when the `cursor-canon` npm package is published, target users can install with:
+If/when the `canon-cursor` npm package is published, target users can install with:
 
-- `npx -y cursor-canon`
-- `npx -y cursor-canon --force`
+- `npx -y canon-cursor`
+- `npx -y canon-cursor --force`
 
 After installing, restart Cursor and run a Canon action in chat.
 

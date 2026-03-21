@@ -128,10 +128,10 @@ function cmdBundle(opts) {
   const outDir = opts.outDir ? path.resolve(repoRoot, opts.outDir) : path.join(repoRoot, "dist");
   fs.mkdirSync(outDir, { recursive: true });
 
-  const outTgz = path.join(outDir, "cursor-canon-everything.tgz");
+  const outTgz = path.join(outDir, "canon-cursor-everything.tgz");
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-canon-bundle-"));
-  const stageRoot = path.join(tmpDir, "cursor-canon-bundle");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "canon-cursor-bundle-"));
+  const stageRoot = path.join(tmpDir, "canon-cursor-bundle");
   fs.mkdirSync(stageRoot, { recursive: true });
 
   const cleanup = () => {
@@ -196,8 +196,8 @@ async function cmdInstall(opts) {
     die("install requires --bundle-path or --bundle-url");
   }
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cursor-canon-install-"));
-  const tgzPath = path.join(tmpDir, "cursor-canon-bundle.tgz");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "canon-cursor-install-"));
+  const tgzPath = path.join(tmpDir, "canon-cursor-bundle.tgz");
   const extractedRoot = path.join(tmpDir, "extracted");
   fs.mkdirSync(extractedRoot, { recursive: true });
 
@@ -262,7 +262,7 @@ async function main() {
     console.log(`Usage:
   ${process.argv[1]} bundle [--out-dir dist]
   ${process.argv[1]} install --bundle-path /path/to.tgz [--force]
-  ${process.argv[1]} install --bundle-url https://.../cursor-canon-everything.tgz [--force]`);
+  ${process.argv[1]} install --bundle-url https://.../canon-cursor-everything.tgz [--force]`);
     return;
   }
 

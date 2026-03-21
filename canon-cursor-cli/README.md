@@ -1,4 +1,4 @@
-# cursor-canon (npm)
+# canon-cursor (npm)
 
 This package installs the Cursor-only Canon runner into the current repo.
 
@@ -7,19 +7,19 @@ This package installs the Cursor-only Canon runner into the current repo.
 From a target repo root:
 
 ```bash
-npx -y cursor-canon
+npx -y canon-cursor
 ```
 
 Use `--force` to overwrite existing files:
 
 ```bash
-npx -y cursor-canon --force
+npx -y canon-cursor --force
 ```
 
 To install from a specific bundle tarball (optional):
 
 ```bash
-npx -y cursor-canon --bundle-path /path/to/cursor-canon-everything.tgz --force
+npx -y canon-cursor --bundle-path /path/to/canon-cursor-everything.tgz --force
 ```
 
 ## Publish (maintainer)
@@ -27,9 +27,8 @@ npx -y cursor-canon --bundle-path /path/to/cursor-canon-everything.tgz --force
 Run:
 
 ```bash
-cd cursor-canon-cli
+cd canon-cursor-cli
 npm publish
 ```
 
 The package `prepack` step builds the embedded bundle from the parent repo.
-

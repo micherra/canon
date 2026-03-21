@@ -2,7 +2,7 @@
 set -euo pipefail
 
 OUT_DIR="dist"
-OUT_TGZ="${OUT_DIR}/cursor-canon-everything.tgz"
+OUT_TGZ="${OUT_DIR}/canon-cursor-everything.tgz"
 
 mkdir -p "$OUT_DIR"
 
@@ -10,7 +10,7 @@ TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
-STAGE_DIR="$TMP_DIR/cursor-canon-bundle"
+STAGE_DIR="$TMP_DIR/canon-cursor-bundle"
 mkdir -p "$STAGE_DIR"
 
 copy_into_stage() {
@@ -49,7 +49,7 @@ if [ -f "${repo_root}/.mcp.json" ]; then
 fi
 
 echo "Bundling to: $OUT_TGZ"
-tar -C "$TMP_DIR/cursor-canon-bundle" -czf "$OUT_TGZ" .
+tar -C "$TMP_DIR/canon-cursor-bundle" -czf "$OUT_TGZ" .
 
 echo "Bundle created: $OUT_TGZ"
 

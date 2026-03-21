@@ -40,7 +40,7 @@ Canon’s full build/review pipeline can run in Cursor without installing the Cl
 
 1. In your project repo, run:
 ```bash
-npx -y cursor-canon
+npx -y canon-cursor
 ```
 This installs Cursor configuration and the Cursor-side runner into the repo (including `.cursor/mcp.json` and `AGENTS.md`).
 

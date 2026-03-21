@@ -6,7 +6,7 @@
     [
       "@semantic-release/npm",
       {
-        "pkgRoot": "cursor-canon-cli",
+        "pkgRoot": "canon-cursor-cli",
         "npmPublish": true
       }
     ],
