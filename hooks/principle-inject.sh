@@ -79,7 +79,13 @@ if [[ ! -f "$WORKER" ]]; then
   exit 0
 fi
 
-# Run the worker — pass plugin dir so it can find compiled matcher
+# Run the worker — pass repo/plugin roots so it can resolve principles correctly,
+# including from git worktrees where cwd may not point at the main repo root.
+MAIN_REPO_ROOT="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$||' || true)"
+if [[ -z "$MAIN_REPO_ROOT" ]]; then
+  MAIN_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+fi
+export CANON_PROJECT_DIR="${CANON_PROJECT_DIR:-$MAIN_REPO_ROOT}"
 export CANON_PLUGIN_DIR="${CANON_PLUGIN_DIR:-$(dirname "$HOOK_DIR")}"
 node "$WORKER" "$FILE_PATH" 2>/dev/null || true
 
