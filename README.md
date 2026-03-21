@@ -188,6 +188,10 @@ Standardized output templates in the plugin's `templates/` directory ensure cons
 - `implementation-log.md` — standardized task summary with compliance declaration
 - `review-checklist.md` — structured review report with verdict and scores
 - `session-context.md` — living shared context document format
+- `security-assessment.md` — structured security scan output
+- `test-report.md` — test coverage and results summary
+- `context-sync-report.md` — scribe output for contract-level changes
+- `claudemd-template.md` — CLAUDE.md generation template
 
 ### Lifecycle
 
@@ -310,6 +314,7 @@ canon/
 │       ├── services/          Graph data loading, git integration
 │       ├── webview/           Svelte app: stores, components, D3 graph, filters
 │       └── __tests__/         Tests
+├── templates/           9 output templates (research, design, review, security, etc.)
 └── skills/canon/        Skill definition + references
 ```
 
@@ -461,9 +466,9 @@ All Canon data lives in `.canon/` in your project root:
 | `patterns.jsonl` | Observed patterns | `report` MCP tool (type=pattern) |
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
-| `plans/*/` | Build artifacts per task | `/canon:build` |
+| `plans/*/` | Build artifacts per task | canon-orchestrator agent |
 | `graph-data.json` | Codebase dependency graph with insights | `codebase_graph` MCP tool |
 | `reverse-deps.json` | Reverse dependency index (who imports each file) | `codebase_graph` MCP tool |
 | `summaries.json` | One-line file summaries for dashboard tooltips | `store_summaries` MCP tool |
-| `pr-reviews.jsonl` | PR review history | `get_pr_review_data` MCP tool |
+| `pr-reviews.jsonl` | PR review history | canon-reviewer agent (via `recordPrReview`) |
 | `dashboard-state.json` | Dashboard selection state (ephemeral) | Canon Dashboard extension |
