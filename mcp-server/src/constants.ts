@@ -33,6 +33,9 @@ export const CANON_FILES = {
   CONFIG: "config.json",
 } as const;
 
+/** Maximum lines of file content returned by get_file_context. */
+export const FILE_PREVIEW_MAX_LINES = 200;
+
 /** Extract the first paragraph from a principle body as its summary. */
 export function extractSummary(body: string): string {
   return body.split(/\n\n/)[0]?.trim() || body;

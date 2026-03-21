@@ -146,6 +146,12 @@ function sanitizeGitRef(ref: string): string {
   if (!ref || !GIT_REF_PATTERN.test(ref)) {
     throw new Error(`Invalid git ref: "${ref}". Only alphanumeric, '.', '/', '_', '-' allowed.`);
   }
+  if (ref.startsWith("-")) {
+    throw new Error(`Invalid git ref: "${ref}". Refs must not start with '-'.`);
+  }
+  if (ref.includes("..")) {
+    throw new Error(`Invalid git ref: "${ref}". Refs must not contain '..'.`);
+  }
   return ref;
 }
 

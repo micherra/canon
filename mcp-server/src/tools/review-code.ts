@@ -35,6 +35,49 @@ export interface ReviewCodeOutput {
   graph_context?: ReviewGraphContext;
 }
 
+/**
+ * Heuristic hint for code reviewers — pattern-matches code against common signals.
+ * This reduces false positives by giving the reviewer a signal before evaluation.
+ * The reviewer can override these hints — they're suggestions, not verdicts.
+ */
+function computeReviewHint(
+  principleId: string,
+  code: string
+): PrincipleForReview["review_hint"] {
+  switch (principleId) {
+    case "secrets-never-in-code": {
+      // Look for common secret patterns
+      const secretPatterns = [
+        /(?:api[_-]?key|secret|password|token|credential)\s*[:=]\s*["'][^"']{8,}/i,
+        /(?:sk_live|sk_test|pk_live|pk_test)_[a-zA-Z0-9]/,
+        /(?:postgres|mysql|mongodb|redis):\/\/[^/]*:[^@]*@/,
+        /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/,
+      ];
+      return secretPatterns.some((p) => p.test(code)) ? "check-carefully" : "likely-honored";
+    }
+    case "validate-at-trust-boundaries": {
+      // Check for validation patterns (zod, joi, yup, manual checks)
+      const hasValidation = /safeParse|validate|schema\.|\.parse\(|Joi\.|yup\.|z\.object/i.test(code);
+      return hasValidation ? "likely-honored" : "check-carefully";
+    }
+    case "fail-closed-by-default": {
+      // Check for try/catch that returns/throws on error (not silently continuing)
+      const hasTryCatch = /try\s*\{/.test(code);
+      const hasFailOpen = /catch[^}]*return\s+true|catch[^}]*Infinity|catch[^}]*allow/i.test(code);
+      if (hasFailOpen) return "check-carefully";
+      if (hasTryCatch) return "likely-honored";
+      return "neutral";
+    }
+    case "thin-handlers": {
+      // Short handlers are likely thin
+      const lines = code.split("\n").filter((l) => l.trim()).length;
+      return lines <= 20 ? "likely-honored" : "check-carefully";
+    }
+    default:
+      return "neutral";
+  }
+}
+
 const DEFAULT_MAX_REVIEW_PRINCIPLES = 15;
 
 function loadMaxReviewPrinciples(projectDir: string): Promise<number> {

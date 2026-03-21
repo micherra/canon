@@ -1,7 +1,7 @@
 import { type Principle } from "../parser.js";
 import { loadConfigNumber } from "../utils/config.js";
 import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
-import { loadCachedGraph, getNodeMetrics } from "../graph/query.js";
+import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.js";
 import { extractSummary } from "../constants.js";
 
 export interface GetPrinciplesInput {
