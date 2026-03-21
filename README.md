@@ -135,7 +135,6 @@ Build modifiers can be expressed naturally: "skip research", "just plan don't im
 | `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped by the matcher |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
-| `/canon:ralph` | Iterative build-review-refactor loop until CLEAN verdict or max iterations |
 | `/canon:pr-review` | Parallel per-layer PR review with optional GitHub comment posting |
 
 ## The Build Pipeline
@@ -238,13 +237,12 @@ Canon exposes 10 tools via its MCP server for agents to use during normal work:
 
 ## Agents
 
-Canon uses 13 specialist agents, each with a focused role:
+Canon uses 12 specialist agents, each with a focused role:
 
 | Agent | Role |
 |-------|------|
 | `canon-intake` | Classify user intent, sharpen requests, route to agents or flows |
 | `canon-orchestrator` | Flow execution engine — drives state machine, spawns sub-agents, manages board |
-| `canon-ralph` | Iterative build-review-refactor loop until CLEAN verdict or max iterations |
 | `canon-researcher` | Investigate codebase, architecture, domain, and risk |
 | `canon-architect` | Design approach, graph-informed wave assignment, break into task plans |
 | `canon-implementor` | Write code against plans and principles |
@@ -286,11 +284,11 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (36 principles)
 │   └── conventions/     Stylistic preferences (18 principles)
-├── commands/            12 slash commands
-├── agents/              13 specialist agents
-├── agent-rules/         14 agent behavior guidelines
+├── commands/            11 slash commands
+├── agents/              12 specialist agents
+├── agent-rules/         13 agent behavior guidelines
 ├── hooks/               9 automation hooks
-├── flows/               5 predefined workflow YAML files
+├── flows/               4 predefined workflow YAML files
 ├── mcp-server/          TypeScript MCP server (10 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
