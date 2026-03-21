@@ -2,7 +2,6 @@
 
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { resolve } from "path";
 import { getFileContext } from "./get-file-context.js";
 import { loadAllPrinciples, matchPrinciples } from "../matcher.js";
 import { loadCachedGraph, getNodeMetrics, getDownstreamAffected } from "../graph/query.js";
@@ -40,10 +39,10 @@ export interface DashboardSelectionOutput {
 }
 
 export async function getDashboardSelection(
-  projectDir: string
+  projectDir: string,
+  pluginDir: string
 ): Promise<DashboardSelectionOutput> {
   const statePath = join(projectDir, ".canon", "dashboard-state.json");
-  const pluginDir = resolve(new URL("../..", import.meta.url).pathname);
 
   const emptyResult: DashboardSelectionOutput = {
     has_selection: false,

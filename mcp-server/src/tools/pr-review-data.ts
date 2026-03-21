@@ -140,6 +140,7 @@ export async function recordPrReview(
   return { recorded: true, id };
 }
 
+/** Basic character allowlist; structural rules (no leading `-`, no `..`) are enforced below. */
 const GIT_REF_PATTERN = /^[a-zA-Z0-9_.\/\-]+$/;
 
 function sanitizeGitRef(ref: string): string {
