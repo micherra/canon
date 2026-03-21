@@ -52,8 +52,6 @@ cp -R "${REPO_ROOT}/hooks" "$STAGE_DIR/"
 cp -R "${REPO_ROOT}/commands" "$STAGE_DIR/"
 cp -R "${REPO_ROOT}/cursor-extension" "$STAGE_DIR/"
 cp -R "${REPO_ROOT}/CLAUDE.md" "$STAGE_DIR/"
-
-# Optional: include project-level MCP config (mostly for completeness)
 if [ -f "${REPO_ROOT}/.mcp.json" ]; then
   cp -R "${REPO_ROOT}/.mcp.json" "$STAGE_DIR/"
 fi

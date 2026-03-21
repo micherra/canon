@@ -20,9 +20,9 @@ function parseArgs(argv) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--force") opts.force = true;
-    else if (a === "--bundle-path") opts.bundlePath = args[i + 1];
-    else if (a === "--bundle-url") opts.bundleUrl = args[i + 1];
-    else if (a === "--out-dir") opts.outDir = args[i + 1];
+    else if (a === "--bundle-path") opts.bundlePath = args[++i];
+    else if (a === "--bundle-url") opts.bundleUrl = args[++i];
+    else if (a === "--out-dir") opts.outDir = args[++i];
     else if (a === "--help" || a === "-h") opts.help = true;
     else if (a.startsWith("-")) die(`Unknown option: ${a}`);
   }
