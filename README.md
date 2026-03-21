@@ -87,7 +87,7 @@ We also recommend enabling tool search to reduce context usage from MCP tools:
 /canon:init
 ```
 
-This creates `.canon/principles/` with 58 starter principles, a `CONVENTIONS.md` template, and integrates with your `CLAUDE.md`. Ask Canon for status to verify.
+This creates `.canon/principles/` with 59 starter principles, a `CONVENTIONS.md` template, and integrates with your `CLAUDE.md`. Ask Canon for status to verify.
 
 ## How It Works
 
@@ -97,7 +97,7 @@ Canon operates on a three-tier severity model:
 |----------|---------|-------------|
 | **rule** (4) | Hard constraint | Blocks commits. Reviewer verdict: BLOCKING. |
 | **strong-opinion** (36) | Default path | Warns. Deviations require justification via `report` tool. |
-| **convention** (18) | Stylistic preference | Noted in reports. Tracked for drift. |
+| **convention** (19) | Stylistic preference | Noted in reports. Tracked for drift. |
 
 When you write code, Canon automatically loads principles matched to your file's architectural layer and path patterns. Agents self-review against them before presenting output.
 
@@ -284,10 +284,10 @@ Canon includes 9 automation hooks:
 
 ```
 canon/
-├── principles/          58 engineering principles organized by severity
+├── principles/          59 engineering principles organized by severity
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (36 principles)
-│   └── conventions/     Stylistic preferences (18 principles)
+│   └── conventions/     Stylistic preferences (19 principles)
 ├── commands/            11 slash commands
 ├── agents/              12 specialist agents
 ├── agent-rules/         13 agent behavior guidelines
