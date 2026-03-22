@@ -117,8 +117,10 @@ export function loadEmbeddedData() {
       const text = graphEl.textContent?.trim() ?? "";
       if (!text.startsWith("__")) {
         const data = JSON.parse(text) as GraphData;
-        graphData.set(data);
-        graphStatus.set("ready");
+        if (data && Array.isArray(data.nodes) && Array.isArray(data.edges)) {
+          graphData.set(data);
+          graphStatus.set("ready");
+        }
       }
     } catch { /* empty */ }
   }

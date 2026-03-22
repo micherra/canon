@@ -1,6 +1,6 @@
 {
   "name": "canon-dashboard",
-  "icon": "assets/icon.png",
+  "icon": "assets/logo.png",
   "displayName": "Canon Dashboard",
   "description": "Engineering principles-as-code dashboard — visualize your codebase graph and feed context into Cursor's AI chat",
   "version": "0.1.0",

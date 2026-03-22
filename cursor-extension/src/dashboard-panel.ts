@@ -439,7 +439,7 @@ export class DashboardPanel {
     const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
 
     const term = this.getOrCreateTerminal();
-    term.sendText(`${graphCmd} && ${summaryCmd}`);
+    term.sendText(graphCmd);
   }
 
   private runSummaryGeneration(): void {
