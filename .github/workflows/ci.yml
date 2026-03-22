@@ -7,12 +7,21 @@ on:
     branches: [main]
 
 jobs:
-  mcp-server:
-    uses: ./.github/workflows/build.yml
-    with:
-      package: mcp-server
-
-  cursor-extension:
-    uses: ./.github/workflows/build.yml
-    with:
-      package: cursor-extension
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [mcp-server, cursor-extension]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+      - run: npm ci
+        working-directory: ${{ matrix.package }}
+      - run: npm run build
+        working-directory: ${{ matrix.package }}
+      - run: npm test --if-present
+        working-directory: ${{ matrix.package }}
