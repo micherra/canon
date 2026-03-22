@@ -1,7 +1,10 @@
+# Source and tooling (runtime is dist/ + media/)
 src/**
 node_modules/**
 .gitignore
 tsconfig.json
 **/*.ts
+# Bundled runtime — must ship in the .vsix
 !dist/**
+!media/**
 **/*.map

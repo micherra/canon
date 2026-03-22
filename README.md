@@ -87,7 +87,7 @@ We also recommend enabling tool search to reduce context usage from MCP tools:
 /canon:init
 ```
 
-This creates `.canon/principles/` with 47 starter principles, a `CONVENTIONS.md` template, and integrates with your `CLAUDE.md`. Ask Canon for status to verify.
+This creates `.canon/principles/` with 59 starter principles, a `CONVENTIONS.md` template, and integrates with your `CLAUDE.md`. Ask Canon for status to verify.
 
 ## How It Works
 
@@ -96,8 +96,8 @@ Canon operates on a three-tier severity model:
 | Severity | Meaning | Enforcement |
 |----------|---------|-------------|
 | **rule** (4) | Hard constraint | Blocks commits. Reviewer verdict: BLOCKING. |
-| **strong-opinion** (28) | Default path | Warns. Deviations require justification via `report` tool. |
-| **convention** (15) | Stylistic preference | Noted in reports. Tracked for drift. |
+| **strong-opinion** (36) | Default path | Warns. Deviations require justification via `report` tool. |
+| **convention** (19) | Stylistic preference | Noted in reports. Tracked for drift. |
 
 When you write code, Canon automatically loads principles matched to your file's architectural layer and path patterns. Agents self-review against them before presenting output.
 
@@ -135,8 +135,6 @@ Build modifiers can be expressed naturally: "skip research", "just plan don't im
 | `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped by the matcher |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
-| `/canon:security` | Standalone security scan |
-| `/canon:pr-review` | Parallel per-layer PR review with optional GitHub comment posting |
 
 ## The Build Pipeline
 
@@ -189,6 +187,10 @@ Standardized output templates in the plugin's `templates/` directory ensure cons
 - `implementation-log.md` — standardized task summary with compliance declaration
 - `review-checklist.md` — structured review report with verdict and scores
 - `session-context.md` — living shared context document format
+- `security-assessment.md` — structured security scan output
+- `context-sync-report.md` — scribe context sync report
+- `test-report.md` — standardized test results
+- `claudemd-template.md` — CLAUDE.md template for project initialization
 
 ### Lifecycle
 
@@ -221,7 +223,7 @@ Use `--apply` to walk through suggestions interactively.
 
 ## MCP Tools
 
-Canon exposes 12 tools via its MCP server for agents to use during normal work:
+Canon exposes 10 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
@@ -238,10 +240,12 @@ Canon exposes 12 tools via its MCP server for agents to use during normal work:
 
 ## Agents
 
-Canon uses 10 specialist agents, each with a focused role:
+Canon uses 12 specialist agents, each with a focused role:
 
 | Agent | Role |
 |-------|------|
+| `canon-intake` | Classify user intent and route to the right agent or pipeline |
+| `canon-orchestrator` | Manage build pipeline — spawn agents, pass context, track progress |
 | `canon-researcher` | Investigate codebase, architecture, domain, and risk |
 | `canon-architect` | Design approach, graph-informed wave assignment, break into task plans |
 | `canon-implementor` | Write code against plans and principles |
@@ -251,6 +255,7 @@ Canon uses 10 specialist agents, each with a focused role:
 | `canon-refactorer` | Fix violations using graph-aware caller discovery |
 | `canon-learner` | Analyze patterns and suggest principle refinements |
 | `canon-writer` | Create and edit principles, conventions, and agent-rules |
+| `canon-scribe` | Post-implementation documentation sync (CLAUDE.md, context.md, CONVENTIONS.md) |
 
 ### Graph-Aware Agents
 
@@ -262,30 +267,33 @@ The reviewer, refactorer, and architect agents are graph-aware — they use the 
 
 ## Hooks
 
-Canon includes 6 automation hooks:
+Canon includes 9 automation hooks:
 
 - **Pre-commit secrets check** — Blocks commits containing hardcoded secrets (API keys, private keys, connection strings)
 - **Pre-push review guard** — Warns before pushing if no Canon review covers the unpushed commits
 - **Large file guard** — Warns before writing or editing files that exceed a line threshold (default 500, configurable via `max_file_lines` in `.canon/config.json`)
 - **Compaction check** — Warns when `.jsonl` data files or `CONVENTIONS.md` grow past thresholds
 - **Learn nudge** — Suggests `/canon:learn` after 10+ reviews accumulate
-- **Principle loading** — Ensures Canon principles are loaded before code generation tasks
+- **Principle injection** — Injects relevant Canon principles into context before Write/Edit operations
+- **Agent cost tracker** — Logs every agent spawn to `.canon/agent-costs.jsonl` for cost observability
+- **Destructive git guard** — Blocks destructive git operations (reset --hard, clean -f, checkout --, branch -D) for user confirmation
+- **Workspace lock guard** — Warns before git commit/merge if the workspace has an active lock from another session
 
 ## Project Structure
 
 ```
 canon/
-├── principles/          47 engineering principles organized by severity
+├── principles/          59 engineering principles organized by severity
 │   ├── rules/           Hard constraints (4 principles)
-│   ├── strong-opinions/ Default path (28 principles)
-│   └── conventions/     Stylistic preferences (15 principles)
-├── commands/            Slash command specs (`commands/`)
-├── agents/              Specialist agent prompts (`agents/`)
-├── agent-rules/         Agent behavior guidelines (`agent-rules/`)
-├── templates/           Standardized output templates for agent artifacts
-├── hooks/               6 automation hooks
-├── flows/               5 predefined workflow YAML files
-├── mcp-server/          TypeScript MCP server (12 tools)
+│   ├── strong-opinions/ Default path (36 principles)
+│   └── conventions/     Stylistic preferences (19 principles)
+├── commands/            10 slash command specs
+├── agents/              12 specialist agent prompts
+├── agent-rules/         13 agent behavior guidelines
+├── templates/           9 standardized output templates for agent artifacts
+├── hooks/               9 automation hooks
+├── flows/               5 predefined workflow definitions
+├── mcp-server/          TypeScript MCP server (10 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
 │       ├── constants.ts Shared constants (layer centrality, extensions, extractSummary)
