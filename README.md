@@ -265,6 +265,14 @@ The reviewer, refactorer, and architect agents are graph-aware — they use the 
 - **Refactorer**: Calls `get_file_context` to discover callers via the dependency graph before refactoring. High fan-in files get extra caution — prefer internal-only changes that preserve the external API.
 - **Architect**: Uses `get_file_context` to verify wave assignments against the real dependency graph. Files in dependency cycles are placed in the same wave.
 
+### Graph-Aware Agents
+
+The reviewer, refactorer, and architect agents are graph-aware — they use the codebase dependency graph to make better decisions:
+
+- **Reviewer**: When `review_code` returns `graph_context`, the reviewer factors in fan-in (blast radius), cycle membership, and layer boundary violations. Violations in hub files are flagged as higher-impact.
+- **Refactorer**: Calls `get_file_context` to discover callers via the dependency graph before refactoring. High fan-in files get extra caution — prefer internal-only changes that preserve the external API.
+- **Architect**: Uses `get_file_context` to verify wave assignments against the real dependency graph. Files in dependency cycles are placed in the same wave.
+
 ## Hooks
 
 Canon includes 9 automation hooks:
