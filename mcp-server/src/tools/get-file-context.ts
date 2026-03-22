@@ -99,7 +99,7 @@ export async function getFileContext(
       const absDir = join(projectDir, dir);
       const files = await scanSourceFiles(absDir, {});
       for (const f of files) {
-        allFiles.push(toPosix(join(dir, f)));
+        allFiles.push(toPosix(dir + "/" + f));
       }
     }
   }

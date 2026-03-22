@@ -66,7 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (editor?.document.uri.scheme === "file") {
         const absPath = editor.document.uri.fsPath;
         if (absPath.startsWith(workspaceRoot)) {
-          state.activeFile = path.relative(workspaceRoot, absPath);
+          state.activeFile = path.relative(workspaceRoot, absPath).replace(/\\/g, "/");
         }
       } else {
         state.activeFile = null;

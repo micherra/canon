@@ -9,6 +9,7 @@
  */
 
 import { resolve, join } from "path";
+import { fileURLToPath } from "url";
 
 const filePath = process.argv[2];
 if (!filePath) process.exit(0);
@@ -16,7 +17,7 @@ if (!filePath) process.exit(0);
 const projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
 const pluginDir = resolve(
   process.env.CANON_PLUGIN_DIR ||
-    new URL("../mcp-server", import.meta.url).pathname
+    fileURLToPath(new URL("../mcp-server", import.meta.url))
 );
 
 // Import compiled matcher from the MCP server dist

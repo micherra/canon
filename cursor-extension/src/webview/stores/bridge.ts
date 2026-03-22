@@ -1,10 +1,17 @@
-let vscodeApi: VsCodeApi;
+let vscodeApi: VsCodeApi | undefined;
 const pendingRequests = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 let requestId = 0;
 
+function ensureApi(): VsCodeApi {
+  if (!vscodeApi) {
+    vscodeApi = acquireVsCodeApi();
+  }
+  return vscodeApi;
+}
+
 export const bridge = {
   init() {
-    vscodeApi = acquireVsCodeApi();
+    ensureApi();
     window.addEventListener("message", (event) => {
       const msg = event.data;
       if (msg.responseId == null) return;
@@ -20,7 +27,7 @@ export const bridge = {
     return new Promise((resolve, reject) => {
       const id = ++requestId;
       pendingRequests.set(id, { resolve, reject });
-      vscodeApi.postMessage({ type, id, ...payload });
+      ensureApi().postMessage({ type, id, ...payload });
       setTimeout(() => {
         if (pendingRequests.has(id)) {
           pendingRequests.delete(id);
@@ -31,7 +38,7 @@ export const bridge = {
   },
 
   notifyNodeSelected(node: { id: string; layer: string; summary: string; violation_count: number } | null) {
-    vscodeApi.postMessage({
+    ensureApi().postMessage({
       type: "nodeSelected",
       node: node ? { id: node.id, layer: node.layer, summary: node.summary || "", violation_count: node.violation_count || 0 } : null,
     });

@@ -16,7 +16,7 @@
   let changedCount = $state(0);
 
   // PR review handling
-  let prKeys = $derived(Object.keys($prReviews || {}));
+  let reviews = $derived($prReviews || []);
 
   onMount(() => {
     const data = $graphData;
@@ -28,12 +28,17 @@
     }).catch(() => {});
   });
 
+  function prLabel(r: { pr_number?: number; pr_review_id?: string; verdict: string }): string {
+    const id = r.pr_number != null ? `PR #${r.pr_number}` : r.pr_review_id || "Review";
+    return `${id} — ${r.verdict}`;
+  }
+
   function onPrChange(e: Event) {
-    const key = (e.target as HTMLSelectElement).value;
-    const reviews = $prReviews;
-    if (key && reviews?.[key]) {
-      activePrReview.set(reviews[key]);
-      prReviewFiles.set(new Set(reviews[key].files || []));
+    const idx = parseInt((e.target as HTMLSelectElement).value, 10);
+    const review = reviews[idx];
+    if (review) {
+      activePrReview.set(review);
+      prReviewFiles.set(new Set(review.files || []));
     } else {
       activePrReview.set(null);
       prReviewFiles.set(null);
@@ -51,13 +56,13 @@
       <span class="branch-changed-badge">{changedCount} changed</span>
     {/if}
   </div>
-  {#if prKeys.length > 0}
+  {#if reviews.length > 0}
     <div class="pr-filter-bar">
       <label for="pr-review-select" style="font-size:12px;color:var(--text-muted)">PR Review:</label>
       <select id="pr-review-select" onchange={onPrChange}>
         <option value="">All files</option>
-        {#each prKeys as key}
-          <option value={key}>{key}</option>
+        {#each reviews as review, idx}
+          <option value={idx}>{prLabel(review)}</option>
         {/each}
       </select>
     </div>

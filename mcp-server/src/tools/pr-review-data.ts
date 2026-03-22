@@ -45,7 +45,7 @@ export async function getPrReviewData(
 
   // Determine diff command — validate all interpolated values to prevent injection
   let diffCommand: string;
-  if (input.pr_number) {
+  if (input.pr_number !== undefined) {
     if (!Number.isInteger(input.pr_number) || input.pr_number <= 0) {
       throw new Error("pr_number must be a positive integer");
     }
@@ -61,7 +61,7 @@ export async function getPrReviewData(
 
   // Check for incremental review
   let lastReviewedSha: string | undefined;
-  if (input.incremental && input.pr_number) {
+  if (input.incremental && input.pr_number !== undefined) {
     const lastReview = await store.getLastReviewForPr(input.pr_number);
     if (lastReview?.last_reviewed_sha) {
       lastReviewedSha = sanitizeGitRef(lastReview.last_reviewed_sha);

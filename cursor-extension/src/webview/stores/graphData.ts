@@ -30,6 +30,8 @@ export interface GraphData {
 }
 
 export interface PrReview {
+  pr_review_id?: string;
+  pr_number?: number;
   verdict: string;
   score: any;
   violations: any[];
@@ -39,7 +41,7 @@ export interface PrReview {
 export type GraphStatus = "ready" | "generating" | "refreshing" | "error" | "empty";
 export const graphData = writable<GraphData | null>(null);
 export const graphStatus = writable<GraphStatus>("empty");
-export const prReviews = writable<Record<string, PrReview> | null>(null);
+export const prReviews = writable<PrReview[] | null>(null);
 export const summaryProgress = writable<{ completed: number; total: number } | null>(null);
 
 // Derived edge maps
@@ -126,7 +128,10 @@ export function loadEmbeddedData() {
     try {
       const text = prEl.textContent?.trim() ?? "";
       if (!text.startsWith("__")) {
-        prReviews.set(JSON.parse(text));
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          prReviews.set(parsed);
+        }
       }
     } catch { /* empty */ }
   }
