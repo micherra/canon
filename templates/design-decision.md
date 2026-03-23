@@ -2,6 +2,8 @@
 template: design-decision
 description: Structured format for recording architectural and design decisions
 used-by: [canon-architect]
+read-by: [canon-implementor]
+output-path: ${WORKSPACE}/decisions/${decision-id}.md
 ---
 
 # Template: Design Decision
@@ -56,4 +58,3 @@ timestamp: "{ISO-8601}"
 - File naming: `{decision-id}.md` (e.g., `auth-01.md`)
 - Always include at least 2 options — if the choice was obvious, you don't need a decision doc
 - Tie rationale to Canon principles whenever possible
-- Keep under 400 tokens — decisions should be concise

@@ -2,6 +2,8 @@
 template: review-checklist
 description: Structured format for review outputs
 used-by: [canon-reviewer]
+read-by: [canon-shipper]
+output-path: ${WORKSPACE}/reviews/
 ---
 
 # Template: Review Checklist
@@ -52,7 +54,6 @@ principles-checked: {N}
 
 ### Compliance Cross-Check
 <!-- Only during build pipelines when implementor summaries are available. Omit for standalone reviews. -->
-<!-- Read *-SUMMARY.md AFTER completing Stages 1 and 2. Do not revise earlier findings. -->
 
 #### Discrepancies
 <!-- Implementor self-declared compliant, but reviewer found a violation. -->
@@ -83,4 +84,4 @@ principles-checked: {N}
 - Violations ordered by impact (rule > strong-opinion > convention, then by impact score)
 - The reviewer never reads research or plans — this template enforces cold review
 - Graph context section only appears when `review_code` returned graph data
-- Keep under 600 tokens
+- Keep concise — favor tables over prose

@@ -2,6 +2,8 @@
 template: research-finding
 description: Structured format for researcher agent output
 used-by: [canon-researcher]
+read-by: [canon-architect]
+output-path: orchestrator-provided
 ---
 
 # Template: Research Finding
@@ -45,7 +47,6 @@ timestamp: "{ISO-8601}"
 
 ## Rules
 
-- Keep findings under 500 tokens — the architect reads multiple research docs
 - Lead with the most important finding
 - Include file paths for every reference to existing code
 - Do not duplicate findings across dimensions — stay in your lane

@@ -1,7 +1,9 @@
 ---
 template: implementation-log
 description: Structured format for implementor task summaries
-used-by: [canon-implementor]
+used-by: [canon-implementor, canon-fixer]
+read-by: [canon-tester, canon-reviewer, canon-scribe, canon-shipper]
+output-path: ${WORKSPACE}/plans/${slug}/SUMMARY.md
 ---
 
 # Template: Implementation Log
@@ -70,5 +72,4 @@ commit: "{hash}"
 - Write this summary immediately after committing
 - Status must be one of the four defined values — no custom statuses
 - Canon compliance section is mandatory — every principle in the plan must appear
-- Keep under 400 tokens
 - Concerns and Blockers sections only appear when relevant

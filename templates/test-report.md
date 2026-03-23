@@ -2,6 +2,8 @@
 template: test-report
 description: Structured format for tester outputs
 used-by: [canon-tester]
+read-by: [canon-shipper]
+output-path: ${WORKSPACE}/plans/${slug}/TEST-REPORT.md
 ---
 
 # Template: Test Report
@@ -54,4 +56,3 @@ tests-failed: {N}
 ## Rules
 
 - Issues Found table is mandatory when status is IMPLEMENTATION_ISSUE — the fix-impl state reads it
-- Keep under 500 tokens
