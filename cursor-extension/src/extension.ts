@@ -59,8 +59,11 @@ export function activate(context: vscode.ExtensionContext): void {
       let state: Record<string, unknown> = {};
       try {
         state = JSON.parse(await fs.promises.readFile(statePath, "utf-8"));
-      } catch {
-        // No existing state
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+          console.warn("[Canon] Failed to read dashboard state:", err);
+        }
+        // ENOENT: no existing state file yet — start with empty state
       }
 
       if (editor?.document.uri.scheme === "file") {
