@@ -139,6 +139,9 @@ Build modifiers can be expressed naturally: "skip research", "just plan don't im
 | `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped by the matcher |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
+| `/canon:create-flow` | Create a new flow definition |
+| `/canon:create-overlay` | Create a new role overlay |
+| `/canon:workspaces` | List and manage Canon workspaces |
 
 ## The Build Pipeline
 
@@ -246,7 +249,7 @@ Use `--apply` to walk through suggestions interactively.
 
 ## MCP Tools
 
-Canon exposes 13 tools via its MCP server for agents to use during normal work:
+Canon exposes 14 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
@@ -262,11 +265,12 @@ Canon exposes 13 tools via its MCP server for agents to use during normal work:
 | `codebase_graph` | Generate dependency graph with compliance overlay, insights, and reverse-dep index |
 | `get_file_context` | Get file content, imports, dependents, violations, and graph metrics (fan-in, hub status, cycles) |
 | `store_summaries` | Persist file summaries incrementally for dashboard display |
+| `store_pr_review` | Store a PR review result for drift tracking |
 | `get_dashboard_selection` | Get selected node context with graph metrics and downstream impact |
 
 ## Agents
 
-Canon uses 11 specialist agents, each with a focused role. The top-level Claude acts as the orchestrator (using MCP harness tools), spawning these agents as leaf workers:
+Canon uses 13 specialist agents, each with a focused role. The top-level Claude acts as the orchestrator (using MCP harness tools), spawning these agents as leaf workers:
 
 | Agent | Role |
 |-------|------|
@@ -281,6 +285,8 @@ Canon uses 11 specialist agents, each with a focused role. The top-level Claude 
 | `canon-writer` | Create and edit principles, conventions, and agent-rules |
 | `canon-shipper` | Post-build PR description, changelog, and optional PR creation |
 | `canon-scribe` | Post-implementation documentation sync (CLAUDE.md, context.md, CONVENTIONS.md) |
+| `canon-guide` | Answer questions, browse principles, show status |
+| `canon-inspector` | Analyze completed builds, produce cost/bottleneck reports |
 
 ### Graph-Aware Agents
 
@@ -312,14 +318,14 @@ canon/
 │   ├── rules/           Hard constraints (4 principles)
 │   ├── strong-opinions/ Default path (36 principles)
 │   └── conventions/     Stylistic preferences (19 principles)
-├── commands/            10 slash command specs
-├── agents/              13 specialist agent prompts
+├── commands/            13 slash command specs
+├── agents/              14 specialist agent prompts
 ├── agent-rules/         13 agent behavior guidelines
 ├── templates/           10 standardized output templates for agent artifacts
 ├── hooks/               9 automation hooks
-├── flows/               11 workflow definitions + 11 reusable fragments
+├── flows/               11 workflow definitions + 12 reusable fragments
 │   └── fragments/       Composable state groups + consultation fragments
-├── mcp-server/          TypeScript MCP server (13 tools)
+├── mcp-server/          TypeScript MCP server (24 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
 │       ├── constants.ts Shared constants (layer centrality, extensions, extractSummary)
