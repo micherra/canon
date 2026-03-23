@@ -36,7 +36,7 @@ export class DashboardPanel {
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
   private graphTerminal: vscode.Terminal | undefined;
-  private summaryPollTimer?: ReturnType<typeof setInterval>;
+  private summaryPollTimer?: ReturnType<typeof setTimeout>;
   private summaryPollTimeout?: ReturnType<typeof setTimeout>;
   private summaryPollTotal?: number;
   private disposed = false;
@@ -173,52 +173,54 @@ export class DashboardPanel {
     }
   }
 
-  /** Poll summaries.json to track progress during generation */
+  /** Poll summaries.json to track progress during generation (async, self-scheduling) */
   private startSummaryPolling(workspaceRoot: string, graphPath: string): void {
     this.clearSummaryPolling();
 
-    // Capture total once at start to avoid moving target if graph updates mid-poll
-    try {
-      const graphRaw = fs.readFileSync(graphPath, "utf-8");
-      this.summaryPollTotal = (JSON.parse(graphRaw).nodes || []).length;
-    } catch {
-      this.summaryPollTotal = undefined;
-    }
-    if (!this.summaryPollTotal) return;
-    const total = this.summaryPollTotal;
+    // Capture total once at start to avoid moving target if graph updates mid-poll.
+    // Read asynchronously so we don't block the extension host.
+    fs.promises.readFile(graphPath, "utf-8").then((graphRaw) => {
+      const total: number = (JSON.parse(graphRaw).nodes || []).length;
+      if (!total || this.disposed) return;
+      this.summaryPollTotal = total;
 
-    this.summaryPollTimer = setInterval(() => {
-      if (this.disposed) {
+      // Safety deadline: stop polling after the generation timeout
+      this.summaryPollTimeout = setTimeout(() => {
         this.clearSummaryPolling();
-        return;
-      }
-      try {
-        const sumPath = path.join(workspaceRoot, CANON_DIR, FILES.SUMMARIES);
-        const sumRaw = fs.readFileSync(sumPath, "utf-8");
-        const completed = Object.keys(JSON.parse(sumRaw)).length;
+      }, TIMEOUTS.GENERATION_TIMEOUT_MS);
 
-        this.panel.webview.postMessage({
-          type: "summaryProgress",
-          completed,
-          total,
-        });
-
-        if (completed >= total) {
+      const tick = () => {
+        if (this.disposed) {
           this.clearSummaryPolling();
+          return;
         }
-      } catch (err) {
-        if (!isEnoent(err)) console.warn("[Canon] Summary poll error:", err);
-      }
-    }, 2000);
+        const sumPath = path.join(workspaceRoot, CANON_DIR, FILES.SUMMARIES);
+        fs.promises.readFile(sumPath, "utf-8")
+          .then((sumRaw) => {
+            if (this.disposed) { this.clearSummaryPolling(); return; }
+            const completed = Object.keys(JSON.parse(sumRaw)).length;
+            this.panel.webview.postMessage({ type: "summaryProgress", completed, total });
+            if (completed >= total) {
+              this.clearSummaryPolling();
+            } else {
+              this.summaryPollTimer = setTimeout(tick, 2000);
+            }
+          })
+          .catch((err) => {
+            if (!isEnoent(err)) console.warn("[Canon] Summary poll error:", err);
+            if (!this.disposed) this.summaryPollTimer = setTimeout(tick, 2000);
+          });
+      };
 
-    this.summaryPollTimeout = setTimeout(() => {
-      this.clearSummaryPolling();
-    }, TIMEOUTS.GENERATION_TIMEOUT_MS);
+      this.summaryPollTimer = setTimeout(tick, 2000);
+    }).catch(() => {
+      // If the graph file can't be read, abort polling silently
+    });
   }
 
   private clearSummaryPolling(): void {
     if (this.summaryPollTimer) {
-      clearInterval(this.summaryPollTimer);
+      clearTimeout(this.summaryPollTimer);
       this.summaryPollTimer = undefined;
     }
     if (this.summaryPollTimeout) {
