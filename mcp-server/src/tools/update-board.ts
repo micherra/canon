@@ -166,12 +166,14 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
 
   await writeBoard(input.workspace, board);
 
-  // Emit events (best-effort — listeners must swallow errors)
+  // Emit events (best-effort — listeners must swallow errors).
+  // once() auto-removes listeners on first fire; the finally block removes any
+  // listeners that were registered but not fired due to an error mid-sequence.
   const log = createJsonlLogger(input.workspace);
   const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
     log("board_updated", event).catch(() => {});
   };
-  flowEventBus.on("board_updated", onBoardUpdated);
+  flowEventBus.once("board_updated", onBoardUpdated);
   try {
     flowEventBus.emit("board_updated", {
       action: input.action,
@@ -182,14 +184,17 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
       const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
         log("state_entered", event).catch(() => {});
       };
-      flowEventBus.on("state_entered", onStateEntered);
-      flowEventBus.emit("state_entered", {
-        stateId: input.state_id,
-        stateType: "unknown", // state type not available in update-board context
-        timestamp: new Date().toISOString(),
-        iterationCount: board.iterations[input.state_id]?.count ?? 0,
-      });
-      flowEventBus.removeListener("state_entered", onStateEntered);
+      flowEventBus.once("state_entered", onStateEntered);
+      try {
+        flowEventBus.emit("state_entered", {
+          stateId: input.state_id,
+          stateType: "unknown", // state type not available in update-board context
+          timestamp: new Date().toISOString(),
+          iterationCount: board.iterations[input.state_id]?.count ?? 0,
+        });
+      } finally {
+        flowEventBus.removeListener("state_entered", onStateEntered);
+      }
     }
   } finally {
     flowEventBus.removeListener("board_updated", onBoardUpdated);

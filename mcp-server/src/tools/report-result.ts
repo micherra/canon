@@ -287,7 +287,9 @@ async function reportResultLocked(
   // Write board
   await writeBoard(input.workspace, board);
 
-  // Emit events (best-effort — listeners must swallow errors)
+  // Emit events (best-effort — listeners must swallow errors).
+  // once() auto-removes listeners on first fire; the finally block removes any
+  // listeners that were registered but not fired due to an error mid-sequence.
   const log = createJsonlLogger(input.workspace);
   const onStateCompleted = (event: import("../orchestration/events.js").FlowEventMap["state_completed"]) => {
     log("state_completed", event).catch(() => {});
@@ -295,8 +297,8 @@ async function reportResultLocked(
   const onTransitionEvaluated = (event: import("../orchestration/events.js").FlowEventMap["transition_evaluated"]) => {
     log("transition_evaluated", event).catch(() => {});
   };
-  flowEventBus.on("state_completed", onStateCompleted);
-  flowEventBus.on("transition_evaluated", onTransitionEvaluated);
+  flowEventBus.once("state_completed", onStateCompleted);
+  flowEventBus.once("transition_evaluated", onTransitionEvaluated);
   try {
     flowEventBus.emit("state_completed", {
       stateId: input.state_id,
