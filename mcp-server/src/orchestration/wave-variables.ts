@@ -43,6 +43,7 @@ export async function resolveWaveVariables(
   wave: number,
   slug: string,
   totalWaves: number,
+  projectDir?: string,
 ): Promise<Record<string, string>> {
   const plansDir = path.join(workspace, "plans", slug);
 
@@ -54,7 +55,8 @@ export async function resolveWaveVariables(
       readAllSummaries(plansDir),
     ]);
 
-  const wave_diff = readWaveDiff();
+  const resolvedProjectDir = projectDir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
+  const wave_diff = readWaveDiff(resolvedProjectDir);
 
   return {
     wave_plans,
@@ -148,11 +150,14 @@ async function readWaveFiles(plansDir: string, wave: number): Promise<string> {
 /**
  * Run git diff HEAD~1 and return the output.
  * Returns empty string on failure (git not available, no prior commit, etc.).
+ * cwd is set to projectDir to ensure we diff the correct repository when the
+ * MCP server process cwd differs from the project root.
  */
-function readWaveDiff(): string {
+function readWaveDiff(cwd: string): string {
   try {
     const result = spawnSync("git", ["diff", "HEAD~1"], {
       encoding: "utf-8",
+      cwd,
     });
 
     if (result.error || result.status !== 0) {
