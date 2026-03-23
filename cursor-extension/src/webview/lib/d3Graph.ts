@@ -1,4 +1,4 @@
-import { LAYER_COLORS, NODE_DEFAULT, NODE_CHANGED, getLayerColor, truncate } from "./constants";
+import { NODE_DEFAULT, NODE_CHANGED, getLayerColor, truncate } from "./constants";
 import { escapeHtml } from "./escapeHtml";
 import type { GraphData, GraphNode, GraphEdge } from "../stores/graphData";
 
@@ -59,6 +59,7 @@ export function buildD3Graph(
     edgeIn: Map<string, string[]>;
     edgeOut: Map<string, string[]>;
     summaries: Record<string, string>;
+    layerColors: Record<string, string>;
   },
 ): GraphApi {
   let graphState: GraphState | null = null;
@@ -109,10 +110,15 @@ export function buildD3Graph(
     .attr("fill", "#8899bb")
     .attr("opacity", 0.5);
 
+  const bgRect = svg.append("rect")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("fill", "transparent");
+
   const g = svg.append("g");
   let currentZoomK = 1;
 
-  const zoom = d3.zoom().on("zoom", (event: any) => {
+  const zoom = d3.zoom().clickDistance(4).on("zoom", (event: any) => {
     g.attr("transform", event.transform);
     currentZoomK = event.transform.k;
     if (graphState) graphState.currentZoomK = currentZoomK;
@@ -130,12 +136,21 @@ export function buildD3Graph(
   svg.call(zoom as any);
   svg.on("click", (event: any) => {
     if (event.target.tagName === "svg" || event.target.tagName === "rect") {
-      if (focusedNodeId) opts.onBackgroundClick();
+      opts.onBackgroundClick();
     }
   });
 
-  // Layer clustering positions
-  const layerPos: Record<string, number> = { api: -1, ui: -0.5, domain: 0, data: 0.5, infra: 1, shared: 0 };
+  const configuredOrder = (data.layers || []).slice().sort((a, b) => (a.index ?? 0) - (b.index ?? 0)).map((l) => l.name);
+  const runtimeLayers = [...new Set(nodesCopy.map((n: any) => n.layer))];
+  const orderedLayers = configuredOrder.length > 0
+    ? configuredOrder.concat(runtimeLayers.filter((l) => !configuredOrder.includes(l)))
+    : runtimeLayers.sort();
+  const layerPos = new Map<string, number>();
+  const centerIdx = (orderedLayers.length - 1) / 2;
+  for (const [idx, layer] of orderedLayers.entries()) {
+    layerPos.set(layer, idx - centerIdx);
+  }
+  const layerXOffset = Math.max(0.12, 0.3 / Math.max(orderedLayers.length, 2));
 
   const simulation = d3
     .forceSimulation(nodesCopy)
@@ -143,7 +158,7 @@ export function buildD3Graph(
     .force("charge", d3.forceManyBody().strength(-120))
     .force("center", d3.forceCenter(width / 2, height / 2))
     .force("collision", d3.forceCollide().radius(20))
-    .force("layerX", d3.forceX((d: any) => width / 2 + (layerPos[d.layer] || 0) * width * 0.15).strength(0.04))
+    .force("layerX", d3.forceX((d: any) => width / 2 + (layerPos.get(d.layer) || 0) * width * layerXOffset).strength(0.04))
     .force("layerY", d3.forceY(height / 2).strength(0.04));
 
   function nodeRadius(d: any): number {
@@ -181,7 +196,7 @@ export function buildD3Graph(
     .data(nodesCopy)
     .join("circle")
     .attr("r", (d: any) => (d.isCluster ? nodeRadius(d) : d.changed ? nodeRadius(d) + 2 : nodeRadius(d)))
-    .attr("fill", (d: any) => (d.isCluster ? getLayerColor(d.layer) : d.changed ? NODE_CHANGED : NODE_DEFAULT))
+    .attr("fill", (d: any) => (d.isCluster ? getLayerColor(d.layer, opts.layerColors) : d.changed ? NODE_CHANGED : NODE_DEFAULT))
     .attr("stroke", (d: any) => (d.isCluster ? "rgba(255,255,255,0.25)" : d.changed ? "rgba(108,140,255,0.4)" : "rgba(255,255,255,0.08)"))
     .attr("stroke-width", (d: any) => (d.isCluster ? 2 : d.changed ? 2.5 : 1))
     .attr("stroke-dasharray", (d: any) => (d.isCluster ? "4,2" : null))
@@ -250,7 +265,7 @@ export function buildD3Graph(
   nodeSelection
     .on("mouseover", (event: MouseEvent, d: any) => {
       if (d.isCluster) {
-        let meta = `<span style="color:${getLayerColor(d.layer)}">${escapeHtml(d.layer)}</span>`;
+        let meta = `<span style="color:${getLayerColor(d.layer, opts.layerColors)}">${escapeHtml(d.layer)}</span>`;
         if (d.violation_count) meta += ` \u00b7 <span style="color:var(--danger)">${d.violation_count} violations</span>`;
         if (d.changed) meta += ' \u00b7 <span style="color:var(--info)">has changes</span>';
         tooltip.innerHTML =
@@ -258,7 +273,7 @@ export function buildD3Graph(
           `<div class="tt-summary">${d.expandedFileCount} files — click to expand</div>`;
       } else {
         const summary = opts.summaries[d.id] || "";
-        let meta = `<span style="color:${getLayerColor(d.layer)}">${escapeHtml(d.layer)}</span>`;
+        let meta = `<span style="color:${getLayerColor(d.layer, opts.layerColors)}">${escapeHtml(d.layer)}</span>`;
         if (d.violation_count) meta += ` \u00b7 <span style="color:var(--danger)">${d.violation_count} violations</span>`;
         if (d.changed) meta += ' \u00b7 <span style="color:var(--info)">changed</span>';
         const safeSummary = escapeHtml(summary);
@@ -311,8 +326,9 @@ export function buildD3Graph(
           graphState.height = height;
         }
         svg.attr("width", width).attr("height", height).attr("viewBox", [0, 0, width, height]);
+        bgRect.attr("width", width).attr("height", height);
         simulation.force("center", d3.forceCenter(width / 2, height / 2));
-        simulation.force("layerX", d3.forceX((d: any) => width / 2 + (layerPos[d.layer] || 0) * width * 0.15).strength(0.04));
+        simulation.force("layerX", d3.forceX((d: any) => width / 2 + (layerPos.get(d.layer) || 0) * width * layerXOffset).strength(0.04));
         simulation.force("layerY", d3.forceY(height / 2).strength(0.04));
         simulation.alpha(0.3).restart();
       }
@@ -365,9 +381,9 @@ export function buildD3Graph(
         return nodeRadius(d);
       })
       .attr("fill", (d: any) => {
-        if (hasInsightFilter && f.insightFilter!.has(d.id)) return getLayerColor(d.layer);
-        if (hasPrFilter && isInPrReview(d.id)) return getLayerColor(d.layer);
-        if (hasSearch && matchesSearch(d)) return getLayerColor(d.layer);
+        if (hasInsightFilter && f.insightFilter!.has(d.id)) return getLayerColor(d.layer, opts.layerColors);
+        if (hasPrFilter && isInPrReview(d.id)) return getLayerColor(d.layer, opts.layerColors);
+        if (hasSearch && matchesSearch(d)) return getLayerColor(d.layer, opts.layerColors);
         return d.changed ? NODE_CHANGED : NODE_DEFAULT;
       })
       .attr("stroke", (d: any) => {
@@ -436,7 +452,7 @@ export function buildD3Graph(
       .attr("r", (n: any) => (n.id === node.id ? nodeRadius(n) + 3 : nodeRadius(n)))
       .attr("fill", (n: any) => {
         if (n.id === node.id) return "#e8eaf0";
-        if (connected.has(n.id)) return getLayerColor(n.layer);
+        if (connected.has(n.id)) return getLayerColor(n.layer, opts.layerColors);
         return NODE_DEFAULT;
       })
       .attr("stroke", (n: any) => {
