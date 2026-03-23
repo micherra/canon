@@ -1,26 +1,28 @@
 ---
-name: quick-fix
-description: Implement, verify, and review — fast path for small changes
-tier: small
+fragment: implement-verify
+description: Direct-mode implement then verify — fast path for small changes with no plan file
 entry: implement
-progress: ${WORKSPACE}/progress.md
+params:
+  after_all_passing: ~
 
-includes:
-  - fragment: implement-verify
-    with:
-      after_all_passing: context-sync
+states:
+  implement:
+    type: single
+    agent: canon-implementor
+    template: implementation-log
+    transitions:
+      done: verify
+      blocked: hitl
 
-  - fragment: context-sync
-    with:
-      next: review
-
-  - fragment: review-fix-loop
-    with:
-      after_clean: ship
-      after_warning: ship
-      max_iterations: 2
-
-  - fragment: ship-done
+  verify:
+    type: single
+    agent: canon-tester
+    role: verify
+    template: test-report
+    transitions:
+      all_passing: ${after_all_passing}
+      implementation_issue: hitl
+      blocked: hitl
 ---
 
 ## Spawn Instructions

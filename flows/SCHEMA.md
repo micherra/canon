@@ -30,8 +30,8 @@ Prompt text for the agent in this state...
 | `tier` | string | no | Default tier this flow maps to (`small`, `medium`, `large`) |
 | `entry` | string | no | Starting state (defaults to first state defined) |
 | `progress` | string | no | Path to append-only learnings file for cross-iteration context |
-| `hitl_default` | string | no | Default HITL behavior: `pause` (default) or `report` |
 | `review_threshold` | string | no | Minimum review verdict that triggers fix-violations: `blocking` (default) or `warning`. When set to `warning`, both BLOCKING and WARNING verdicts route to fix-violations instead of only BLOCKING. |
+| `includes` | list | no | Fragment includes — reusable state groups expanded at load time (see Flow Fragments) |
 
 ### States
 
@@ -49,10 +49,12 @@ Each key under `states:` is a state ID. State IDs must be lowercase, alphanumeri
 | `max_iterations` | int | no | Max times this state can be entered before escalating to HITL |
 | `stuck_when` | string | no | Stuck detection strategy (see below) |
 | `gate` | string | no | For `wave` type — verification to run between waves |
+| `consultations` | map | no | For `wave` type — consultation fragments at wave breakpoints (see Consultations) |
 | `iterate_on` | string | no | For `parallel-per` type — what to fan out on |
 | `inject_context` | list | no | Context to inject from prior states or user (see below) |
 | `skip_when` | string | no | Pre-check condition — if met, skip the state with `no_items` result (see below) |
 | `large_diff_threshold` | int | no | For `single` review states: if the diff exceeds this many lines, the orchestrator fans out parallel reviewers by file cluster instead of running a single reviewer (see Large Diff Review) |
+| `cluster_by` | string | no | For review states with `large_diff_threshold`: clustering strategy — `directory` (default) or `layer` (see Large Diff Review) |
 
 ### State Types
 
@@ -70,7 +72,7 @@ design:
 research:
   type: parallel
   agents: [canon-researcher]
-  roles: [codebase, architecture, risk]
+  roles: [codebase, risk]
   transitions:
     done: design
 ```
@@ -84,10 +86,16 @@ implement:
   type: wave
   agent: canon-implementor
   gate: test-suite
+  consultations:
+    before: [plan-review]
+    between: [pattern-check, early-scan]
+    after: [impl-handoff]
   transitions:
     done: test
     blocked: hitl
 ```
+
+See **Consultations** for details on `before`, `between`, and `after` breakpoints.
 
 **Wave isolation via worktrees**: Each implementor in a wave runs in its own git worktree to prevent parallel tasks from overwriting each other's file changes. The orchestrator:
 1. Creates a temporary worktree per task: `git worktree add .canon/worktrees/{task_id} -b canon-wave/{task_id} HEAD`
@@ -100,11 +108,30 @@ implement:
 
 This prevents the silent data loss that occurs when parallel implementors modify overlapping files on the same branch.
 
-**`parallel-per`** — Spawns one agent per item in a dynamic list (e.g., one refactorer per violation group).
+**Consultations**: Wave states can define a `consultations` map with three timing breakpoints:
+
+```yaml
+consultations:
+  before: [plan-review]              # before each wave's workers spawn
+  between: [pattern-check, early-scan]  # after wave merge, before gate (skipped on final wave)
+  after: [impl-handoff]              # once after all waves complete
+```
+
+Each list references consultation fragments included via `includes:`. See **Consultation Fragments** under Flow Fragments for the fragment format.
+
+| Sub-field | Timing | Context received | Output destination |
+|-----------|--------|-----------------|-------------------|
+| `before` | Before worker spawn (every wave) | Upcoming wave plans, accumulated briefing | Folded into `${wave_briefing}` |
+| `between` | After merge, before gate (not final wave) | Completed wave summaries, changed files | Folded into `${wave_briefing}` for next wave |
+| `after` | After final wave gate passes (once) | All summaries across all waves | Saved as workspace artifact |
+
+All consultations within a timing group spawn concurrently. Consultation failures are advisory — they log a warning and do not block the flow.
+
+**`parallel-per`** — Spawns one agent per item in a dynamic list (e.g., one fixer per violation group).
 ```yaml
 fix-violations:
   type: parallel-per
-  agent: canon-refactorer
+  agent: canon-fixer
   iterate_on: violation_groups
   transitions:
     done: review
@@ -171,9 +198,10 @@ Each state type has a default timeout. If an agent does not return within the ti
 | `canon-implementor` | 20 minutes | Writes code + tests; largest working scope |
 | `canon-tester` | 10 minutes | Writes integration tests; runs test suite |
 | `canon-reviewer` | 10 minutes | Reads diff + principles; no code writing |
-| `canon-refactorer` | 10 minutes | Fixes one violation group |
+| `canon-fixer` | 10 minutes | Fixes one violation group or test failure |
 | `canon-security` | 10 minutes | Scans files + runs dependency audit |
 | `canon-scribe` | 5 minutes | Classification + surgical edits |
+| `canon-shipper` | 5 minutes | Read-only artifact synthesis; optional PR creation |
 
 Flows can override the default timeout per state:
 ```yaml
@@ -258,12 +286,32 @@ The orchestrator records one history entry per state entry. Stuck detection comp
 
 When a `single` review state has `large_diff_threshold` set and the diff (`git diff --stat ${base_commit}..HEAD | tail -1`) exceeds that threshold in lines changed, the orchestrator automatically fans out the review:
 
-1. **Group files by directory cluster**: Use the top-level directory of each changed file as the cluster key (e.g., `src/services/`, `src/types/`, `src/handlers/`). Files in the same directory cluster are reviewed together.
+1. **Group files by cluster**: Clustering strategy is determined by the `cluster_by` field (default: `directory`).
 2. **Spawn parallel reviewers**: One reviewer per cluster, each receiving only the diff for its file set (`git diff ${base_commit}..HEAD -- {file1} {file2} ...`).
 3. **Aggregate verdicts**: Collect all cluster reviews. The final verdict is the most severe across all clusters (BLOCKING > WARNING > CLEAN). Merge all violation tables into a single REVIEW.md.
 4. **Proceed normally**: The aggregated review is stored as the state's artifact, and transitions are based on the merged verdict.
 
 If the diff is under the threshold, the state runs normally as a single reviewer.
+
+#### `cluster_by` Strategies
+
+| Strategy | Grouping Logic |
+|----------|---------------|
+| `directory` (default) | Top-level directory of each changed file (e.g., `src/services/`, `src/types/`) |
+| `layer` | Architectural layer inferred from file path patterns |
+
+**Layer mapping** (for `cluster_by: layer`):
+
+| Pattern | Layer |
+|---------|-------|
+| `/api\|routes\|controllers/` | api |
+| `/app\|components\|pages\|views/` | ui |
+| `/services\|domain\|models/` | domain |
+| `/db\|data\|repositories\|prisma/` | data |
+| `/infra\|deploy\|terraform\|docker/` | infra |
+| `/utils\|lib\|shared\|types/` | shared |
+
+Files that don't match any pattern are grouped into a `general` cluster. If `--layer` is specified, only files in that layer are reviewed.
 
 ### Conditional Skip (`skip_when`)
 
@@ -274,6 +322,7 @@ States can define a `skip_when` condition that the orchestrator evaluates before
 | Condition | Check | When to Skip |
 |-----------|-------|-------------|
 | `no_contract_changes` | Run `git diff --name-only ${before}..HEAD` and check if any changed files match contract patterns: `**/index.ts`, `**/api/**`, `**/routes/**`, `**/types/**`, `**/schema*`, `**/public/**`, `package.json`, `**/migrations/**`. | Skip if all changes are internal (test files, private modules, config). |
+| `no_fix_requested` | Check `board.json` metadata for `fix_requested: false`. | Skip if the user did not request automated fixes (e.g., adopt without `--fix`). |
 
 If `skip_when` is set and the condition is met, the orchestrator:
 1. Logs: `"Skipping {state-id}: {skip_when} condition met"`
@@ -339,7 +388,13 @@ Variables available in spawn instructions:
 | `${base_commit}` | Git commit SHA at flow initialization (from `board.json`) — use for diff ranges | All states |
 | `${role}` | Role label from `roles` list. `roles` (plural) in state definitions lists available roles for parallel spawning. If a state has no `roles` field, the agent is spawned once with no `${role}` variable. | `parallel` states |
 | `${task_id}` | Task ID from INDEX.md current wave | `wave` states |
-| `${wave_briefing}` | Inter-wave learning briefing extracted from previous wave's summaries (new shared code, patterns established, gotchas). Empty for wave 1. | `wave` states (waves 2+) |
+| `${wave_briefing}` | Inter-wave learning briefing built from the wave-briefing template. Includes summaries from prior waves plus consultation outputs. Empty for wave 1 (unless `consultations.before` produces output). | `wave` states (waves 2+) |
+| `${wave}` | Current wave number | `consultations.before` and `consultations.between` |
+| `${wave_plans}` | Contents of upcoming wave's `*-PLAN.md` files | `consultations.before` |
+| `${wave_summaries}` | Contents of completed wave's `*-SUMMARY.md` files | `consultations.between` |
+| `${wave_files}` | List of files changed in the wave (`git diff --name-only`) | `consultations.between` |
+| `${wave_diff}` | Abbreviated diff of wave changes (`git diff --stat`) | `consultations.between` |
+| `${all_summaries}` | Contents of all `*-SUMMARY.md` files across all waves | `consultations.after` |
 | `${item}` | Current item (string) or `${item.field}` (structured) | `parallel-per` states |
 | `${<as>}` | Injected context variable from `inject_context` | States with `inject_context` |
 
@@ -383,7 +438,7 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
       "completed_at": "ISO-8601",
       "entries": 1,
       "result": "done",
-      "artifacts": ["research/codebase.md", "research/architecture.md", "research/risk.md"]
+      "artifacts": ["research/codebase.md", "research/risk.md"]
     },
     "design": {
       "status": "done",
@@ -400,7 +455,16 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
       "wave": 2,
       "wave_total": 3,
       "wave_results": {
-        "1": { "tasks": ["order-01", "order-02"], "status": "done", "gate": "passed" },
+        "1": {
+          "tasks": ["order-01", "order-02"], "status": "done", "gate": "passed",
+          "consultations": {
+            "before": { "plan-review": { "status": "done", "summary": "..." } },
+            "between": {
+              "pattern-check": { "status": "done", "summary": "..." },
+              "early-scan": { "status": "done", "summary": "..." }
+            }
+          }
+        },
         "2": { "tasks": ["order-03"], "status": "in_progress" }
       }
     },
@@ -444,6 +508,8 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
 | `states.{id}.wave_total` | int | Total waves (for `wave` type states) |
 | `states.{id}.wave_results` | map | Per-wave results (for `wave` type states) |
 | `states.{id}.wave_results.{N}.gate_output` | string | Gate failure output (stderr/stdout) if gate failed |
+| `states.{id}.wave_results.{N}.consultations` | map | Consultation results keyed by timing (`before`, `between`), then by fragment name. Each entry: `{ status, summary }`. Advisory — failures (`{ status: "timeout", summary: null }`) never block the flow. |
+| `states.{id}.consultations.after` | map | After-wave consultation results keyed by fragment name. Each entry: `{ status, artifact }`. Recorded at state level, not per-wave. |
 | `states.{id}.error` | string | Error message if agent crashed or timed out |
 | `states.{id}.metrics` | object | `{ duration_ms, spawns, model }` — performance metrics for the state (see Cost Observability) |
 | `iterations` | map | Per-state loop tracking for states with `max_iterations` |
@@ -486,6 +552,174 @@ When starting a new flow, initialize `board.json` with:
 - `iterations` populated from states that have `max_iterations`
 - `blocked`, `concerns`, `skipped` empty
 
+## Flow Fragments
+
+Fragments are reusable state groups that flows include to avoid duplication. They live in `flows/fragments/` and use the same YAML frontmatter + markdown body format as flows.
+
+### Fragment File Format
+
+```
+---
+fragment: fragment-name
+description: What this fragment does
+entry: first-state-id
+params:
+  exit_target: ~          # required (caller must provide)
+  max_iterations: 3       # default (caller can override)
+
+states:
+  first-state:
+    type: single
+    agent: canon-example
+    transitions:
+      done: ${exit_target}
+      blocked: hitl
+---
+
+## Spawn Instructions
+
+### first-state
+Prompt text for the agent...
+```
+
+### Fragment Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `fragment` | string | yes | Unique fragment identifier (replaces `name:` — a file with `fragment:` cannot be executed directly) |
+| `description` | string | yes | Human-readable description |
+| `entry` | string | no | Entry state — the state host flows wire transitions to (defaults to first state defined) |
+| `params` | map | no | Fragment interface. Each key is a parameter name. Value `~` = required, any other value = default. |
+| `states` | map | yes* | State definitions (same schema as flow states). *Not required for consultation fragments. |
+
+### Consultation Fragments
+
+Consultation fragments are a lightweight fragment type for advisory agents that run at wave breakpoints. They use `type: consultation` instead of defining `states:`.
+
+```
+---
+fragment: pattern-check
+type: consultation
+description: Architect reviews wave output for pattern drift
+agent: canon-architect
+role: pattern-check
+section: Pattern review
+timeout: 5m
+---
+
+## Spawn Instructions
+
+### pattern-check
+Prompt text for the consultation agent...
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `fragment` | string | yes | Unique fragment identifier |
+| `type` | `consultation` | yes | Marks this as a consultation, not a state group |
+| `description` | string | yes | What this consultation checks for |
+| `agent` | string | yes | Agent to spawn |
+| `role` | string | yes | Role label passed to the agent |
+| `section` | string | conditional | Heading name for output in wave briefing. Required for `before`/`between` consultations. |
+| `artifact` | string | conditional | Filename for output, saved to `${WORKSPACE}/plans/${slug}/`. Required for `after` consultations. |
+| `timeout` | string | no | Max time (default: 5m) |
+
+Constraints:
+- Cannot define `states:` or `transitions:`
+- Cannot include other fragments
+- Spawn instructions live in the markdown body (same `### state-id` format)
+- Consultation agents are read-only — they produce advisory text, not code or file changes
+- `section` and `artifact` are mutually exclusive — a fragment declares one or the other
+
+**Resolution**: During flow template loading, consultation fragments are NOT merged into the `states:` map. They are stored in a separate `consultations` map keyed by fragment name. Wave states reference them by name in their `consultations.before`, `consultations.between`, or `consultations.after` lists.
+
+### Params
+
+Params declare the fragment's interface — its exit points and configurable values.
+
+- **Exit points**: Required params (`~`) that become transition targets, connecting the fragment back to the host flow's state graph.
+- **Configurable values**: Params with defaults (e.g., `max_iterations: 3`) that the host flow can override.
+
+Params are substituted in state definitions using `${param_name}` syntax — the same variable substitution the system already uses for `${task}`, `${WORKSPACE}`, etc.
+
+### Including Fragments
+
+Flows reference fragments via a top-level `includes:` list:
+
+```yaml
+includes:
+  - fragment: review-fix-loop
+    with:
+      after_clean: ship
+      after_warning: ship
+    overrides:
+      review:
+        large_diff_threshold: 500
+  - fragment: ship-done
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `fragment` | string | yes | Fragment name — resolves to `flows/fragments/{name}.md` |
+| `with` | map | no | Param values. All required params (those with `~` default) must be provided. |
+| `as` | string | no | Rename the fragment's states. For single-state fragments, replaces the state ID. For multi-state fragments, prefixes state IDs. Use when including the same fragment multiple times. |
+| `overrides` | map | no | Per-state field overrides. Keyed by state ID within the fragment. Fields are shallow-merged onto the state definition. |
+
+### Fragment-Level Loops
+
+Fragments can contain internal loops — cycles between their own states. The host flow sees only entry and exit points:
+
+- **Entry**: The fragment's `entry` state. Host flows wire transitions to this state ID.
+- **Exit**: Required params that become transition targets leaving the fragment.
+- **Internal loop**: Hardwired transitions between fragment states (e.g., `fix-violations → review`).
+- **Convergence**: `max_iterations` and `stuck_when` live inside the fragment, keeping loop control self-contained.
+
+Example: `test-fix-loop` contains `test → fix-impl → context-sync-fix → test`. The host flow provides `after_all_passing` as the exit. The loop runs internally until tests pass or `max_iterations` is reached.
+
+### Resolution Algorithm
+
+The orchestrator resolves fragments during flow template loading (Phase 1, Step 2). Resolution is a single-pass expansion:
+
+1. Read the flow file, parse frontmatter
+2. For each entry in `includes:`:
+   a. Read `${CLAUDE_PLUGIN_ROOT}/flows/fragments/{fragment}.md`
+   b. Validate that all required params (those with `~` default) are provided in `with:`
+   c. Substitute `${param}` values in the fragment's state definitions
+   d. If `as:` is specified, rename the state(s)
+   e. If `overrides:` is specified, shallow-merge override fields onto matching states
+   f. If the fragment has `type: consultation`: store it in a `consultations` map keyed by fragment name (do NOT merge into `states:`). Append spawn instructions to the flow's markdown body.
+   g. Otherwise: merge the fragment's states into the flow's `states:` map (error if a state ID already exists). Append the fragment's spawn instructions to the flow's markdown body.
+3. Proceed with the merged flow as if it were a monolithic flow file
+
+### Constraints
+
+- Fragments **cannot include other fragments** — no recursive resolution
+- State ID collision between fragment states and inline states is an error
+- Fragment spawn instructions are appended after the flow's own spawn instructions
+- After resolution, the merged flow is indistinguishable from a monolithic flow — the state machine execution logic does not change
+
+### Built-in Fragments
+
+| Fragment | States | Params | Description |
+|----------|--------|--------|-------------|
+| `implement-verify` | implement, verify | `after_all_passing` (required) | Direct-mode implement then verify — fast path for small changes |
+| `verify-fix-loop` | verify, fix-impl | `after_all_passing` (required), `role` (default: verify), `max_iterations` (default: 2) | Verify tests, fix impl bugs, loop until passing |
+| `test-fix-loop` | test, fix-impl, context-sync-fix | `after_all_passing` (required), `max_iterations` (default: 2) | Test, fix bugs, sync docs, loop until passing |
+| `security-scan` | security, fix-security | `after_done` (required), `on_critical` (default: hitl), `fix_max_iterations` (default: 2) | Security scan with optional fix loop for critical findings |
+| `user-checkpoint` | checkpoint | `after_approved`, `on_revise` (required) | Present summary for user approval; stores revision notes on revise |
+| `review-fix-loop` | review, fix-violations | `after_clean`, `after_warning` (required), `max_iterations` (default: 3) | Review code, fix violations, loop until clean |
+| `context-sync` | context-sync | `next` (required) | Sync documentation after changes |
+| `ship-done` | ship, done | (none) | PR description + terminal state |
+
+**Consultation fragments:**
+
+| Fragment | Agent | Section/Artifact | Description |
+|----------|-------|-----------------|-------------|
+| `plan-review` | canon-architect | section: Plan clarifications | Reviews upcoming wave plans for conflicts and pre-answers likely questions |
+| `pattern-check` | canon-architect | section: Pattern review | Reviews wave output for pattern drift and convention consistency |
+| `early-scan` | canon-security | section: Early warnings | Quick security scan of wave changes before next wave |
+| `impl-handoff` | canon-architect | artifact: IMPL-OVERVIEW.md | Produces implementation overview for downstream agents |
+
 ## Example
 
-See `flows/deep-build.md` for a complete example.
+See `flows/deep-build.md` for a complete example with fragment includes.
