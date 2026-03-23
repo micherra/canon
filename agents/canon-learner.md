@@ -4,7 +4,7 @@ description: >-
   Analyzes codebase patterns, drift data, and decision logs to suggest
   improvements to Canon principles and conventions. Produces a structured
   learning report. Spawned by /canon:learn.
-model: sonnet
+model: opus
 color: blue
 tools:
   - Read
@@ -35,7 +35,7 @@ You receive from the orchestrator:
 
 Load the current state of Canon in this project:
 
-1. Build the principle index — read YAML frontmatter of all `.canon/principles/**/*.md` (or `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`). Principles are in severity subdirectories: `rules/`, `strong-opinions/`, `conventions/`. Record each principle's id, severity, scope, and tags.
+1. Build the principle index — per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`, use `list_principles` MCP tool for the metadata-only index. Record each principle's id, severity, scope, and tags.
 2. Read `.canon/CONVENTIONS.md` if it exists — these are the project's current conventions.
 3. Read `.canon/learning.jsonl` if it exists — these are previous suggestions. Check for:
    - **Suppressed suggestions**: entries with `"action": "dismissed"` — do NOT re-suggest these
@@ -44,7 +44,12 @@ Load the current state of Canon in this project:
 
 ### Step 2: Run requested dimensions
 
-Run each requested dimension. Collect suggestions into a unified list.
+Run dimensions in order of data availability. **Skip dimensions without sufficient data**:
+- Dimension 2 (drift) requires **>= 10 reviews**
+- Dimensions 3, 5 (convention promotion, graduation) require **>= 3 builds**
+- If a dimension is skipped, note it in the report: "Skipped: {dimension} — requires {threshold}, have {current}."
+
+Collect suggestions into a unified list.
 
 ---
 
@@ -52,23 +57,17 @@ Run each requested dimension. Collect suggestions into a unified list.
 
 **Goal**: Find repeated patterns in the codebase that aren't yet captured as conventions or principles.
 
-### Pre-validated observations
+### Pre-validated observations (primary source)
 
-Before scanning, check for `.canon/patterns.jsonl`. This file contains pattern observations logged by agents via the `report` MCP tool (type=pattern) during normal work. Each line is:
+Call the `get_patterns` MCP tool to load pre-validated pattern observations logged by agents during normal work. Results are pre-grouped by pattern text with counts and file paths.
 
-```json
-{"pattern_id":"pat_...","timestamp":"...","pattern":"...","file_paths":["..."],"context":"..."}
-```
+Use these as your primary source:
+1. For patterns with count >= 3, verify they still hold (files may have changed since observation)
+2. Check each against the baseline — skip if already a convention or principle
 
-These are pre-validated signals from agents who saw the pattern in context. Use them as strong starting points:
-1. Read all entries from `patterns.jsonl`
-2. Group entries with similar `pattern` descriptions
-3. For grouped patterns, verify they still hold (files may have changed since observation)
-4. Patterns reported 3+ times by agents get a confidence boost — treat as medium confidence minimum if verification confirms
+### Manual scanning (fill gaps)
 
-### What to scan for
-
-In addition to agent-reported patterns, use Grep and Glob to identify patterns across the project source files (exclude `node_modules`, `.git`, `.canon`, `dist`, `build`):
+Only do manual Grep scanning for pattern categories **not covered** by `get_patterns` results. For example, if `get_patterns` returns no naming convention patterns, scan for those manually. Use Grep and Glob across project source files (exclude `node_modules`, `.git`, `.canon`, `dist`, `build`):
 
 1. **Error handling style** — Do functions throw exceptions, return Result/Either types, return null, use error codes? What's the dominant pattern?
 2. **Validation patterns** — Is there a consistent validation library or pattern (Zod, Joi, manual checks)? Where does validation happen?
@@ -85,11 +84,9 @@ For each pattern you observe:
 2. Calculate consistency: `files_following / total_relevant_files`
 3. Only report patterns with **consistency >= 70%** across **>= 5 relevant files**
 
-### Confidence model
+### Inclusion threshold
 
-- **High**: 90%+ consistency across 10+ files
-- **Medium**: 70-89% consistency, or 90%+ across 5-9 files
-- **Low**: Skip. Don't include low-confidence pattern suggestions.
+Only include patterns with **>= 70% consistency** across **>= 5 relevant files**. Report the raw numbers (e.g., "23/28 files"); let the user judge confidence.
 
 ### Output per suggestion
 
@@ -107,20 +104,12 @@ Suggest: Add to CONVENTIONS.md — "{one-line convention text}"
 
 ### Data sources
 
-- `.canon/reviews.jsonl` — review results with verdict, violations, honored lists, scores
-- `.canon/decisions.jsonl` — intentional deviations with justifications
+Call the `get_drift_report` MCP tool to get baseline stats: per-principle compliance rates, violation counts, intentional deviation counts, trend, never-triggered list, and hotspot directories.
 
-### Analysis
-
-Read both files. For each principle that appears in the data:
-
-1. **Compliance rate**: `times_honored / (times_honored + times_violated)` across all reviews
-2. **Intentional deviation count**: How many entries in decisions.jsonl for this principle
-3. **Sample size**: Total reviews where this principle was evaluated
-4. **Verdict impact**: How many reviews containing this principle's violations had verdict `BLOCKING` vs `WARNING` vs `CLEAN`. A principle that frequently causes BLOCKING verdicts (build-stopping) is higher-impact than one that only appears in WARNING reviews. Use this to weight severity recommendations:
-   - Violations in BLOCKING reviews count 2x for severity analysis (they stopped builds)
-   - Violations in WARNING reviews count 1x (normal weight)
-   - This means a principle violated 3 times in BLOCKING reviews has the same signal as one violated 6 times in WARNING reviews
+For verdict-impact weighting (learner-specific), also call `get_decisions` to access the raw decision data for BLOCKING/WARNING categorization:
+- Violations in BLOCKING reviews count 2x for severity analysis (they stopped builds)
+- Violations in WARNING reviews count 1x (normal weight)
+- A principle violated 3 times in BLOCKING reviews has the same signal as one violated 6 times in WARNING reviews
 
 ### Promotion rules
 
@@ -204,14 +193,13 @@ Suggest: Add to CONVENTIONS.md — "{convention text}"
 
 ### Data source
 
-- `.canon/decisions.jsonl` — intentional deviations with justifications and optional categories
+Call the `get_decisions` MCP tool to get decisions pre-grouped by principle_id with category counts.
 
 ### Analysis
 
-1. Group decisions by `principle_id`
-2. For each principle with >= 3 decisions, read the justifications
-3. **Use categories first**: If decisions have a `category` field, group by category within each principle. This is the strongest clustering signal.
-4. **Fall back to justification text**: For decisions without categories, identify recurring themes:
+1. From the grouped results, focus on principles with count >= 3
+2. **Use categories first**: The tool returns per-category counts. Categories with 3+ occurrences are strong clustering signals.
+3. **Fall back to justification text**: For decisions in the "uncategorized" category, read justifications and identify recurring themes:
    - Same technical reason (e.g., "performance requires this", "legacy API constraint")
    - Same scope (all deviations in the same layer or file pattern)
    - Same exception pattern (e.g., "factory pattern justified when genuinely polymorphic")

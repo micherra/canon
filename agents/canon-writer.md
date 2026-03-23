@@ -39,9 +39,9 @@ Read 2-3 existing entries as examples:
 - For **new-principle**: Read from `${CLAUDE_PLUGIN_ROOT}/principles/` — pick entries from different severity subdirectories (`rules/`, `strong-opinions/`, `conventions/`)
 - For **new-agent-rule**: Read from `${CLAUDE_PLUGIN_ROOT}/agent-rules/` — pick 2-3 examples
 
-### Step 2: Interview the user
+### Step 2: Interview the user (if needed)
 
-Ask clarifying questions to extract:
+Ask only questions the user hasn't already answered. If the prompt includes the constraint, failure mode, and scope, skip to Step 3. Otherwise, ask **up to 3 targeted questions** to fill gaps from:
 
 1. **The constraint** — What must be true?
    - For principles: "What engineering pattern or constraint do you want to encode?"
@@ -93,6 +93,58 @@ Produce the complete file with:
 
 Generate a kebab-case `id` from the title. For agent-rules, prefix with `agent-`.
 
+### Worked Example
+
+A complete principle file looks like this:
+
+```markdown
+---
+id: thin-handlers
+title: Keep Handlers Thin
+severity: strong-opinion
+scope:
+  layers: [api]
+  file_patterns: ["**/handlers/**", "**/routes/**", "**/controllers/**"]
+tags: [architecture, api, separation-of-concerns]
+---
+
+Handlers (route handlers, controllers, resolvers) must only parse input, call a service, and format the response. No business logic, no direct data access, no orchestration.
+
+## Rationale
+
+Fat handlers couple request handling to business logic, making both untestable in isolation. When logic lives in a service, it can be called from handlers, CLI commands, queues, and tests alike.
+
+## Examples
+
+Bad — handler contains business logic:
+\```typescript
+app.post('/orders', async (req, res) => {
+  const items = req.body.items;
+  let total = 0;
+  for (const item of items) {
+    const product = await db.products.find(item.id);
+    total += product.price * item.qty;
+  }
+  const order = await db.orders.create({ items, total });
+  res.json(order);
+});
+\```
+
+Good — handler delegates to service:
+\```typescript
+app.post('/orders', async (req, res) => {
+  const result = await orderService.create(req.body);
+  if (!result.ok) return res.status(400).json(result.error);
+  res.status(201).json(result.data);
+});
+\```
+
+## Exceptions
+
+- Health check and readiness probe endpoints may inline simple logic.
+- File streaming endpoints where the handler IS the logic.
+```
+
 ### Step 5: Check for conflicts
 
 Use the `list_principles` MCP tool to load the index of all existing entries (metadata only — id, title, severity, tags, scope). This avoids loading full bodies into context.
@@ -126,10 +178,9 @@ Re-read the saved file and verify:
 - The body has required sections (summary, `## Rationale`, `## Examples`)
 - For agent-rules: `id` starts with `agent-`, tags include `agent-behavior`
 
-### Step 8: Offer to test
+### Step 8: Suggest testing
 
-- For principles: "Want me to test this? I can generate code that violates it and verify the review agent catches the violation."
-- For agent-rules: "Want me to test this? I can run a build or review and verify the agent respects this rule."
+After saving, suggest: "Run `/canon:test-principle {id}` to verify this principle works correctly in reviews."
 
 ---
 
@@ -200,7 +251,7 @@ Re-read and verify the file. Tell the user:
 - Each modified field: before → after
 - New file path if it moved
 - If saved as a project-local override, explain precedence
-- Suggest `/canon:list` to verify
+- Suggest asking Canon to list principles to verify
 
 ---
 

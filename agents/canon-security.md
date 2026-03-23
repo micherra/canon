@@ -29,9 +29,13 @@ Read the files to scan. This will be:
 - Staged changes
 - The entire project
 
+### Step 1.5: Detect project stack
+
+Read `package.json`, `requirements.txt`, `go.mod`, or equivalent to detect the project's technology stack. Skip vulnerability categories that don't apply to the detected stack (e.g., skip XSS for backend-only APIs, skip prototype pollution for Python projects). Note skipped categories in the assessment.
+
 ### Step 2: Load security principles
 
-Use the `list_principles` MCP tool to get all principles, then filter for those tagged "security". Or glob `.canon/principles/**/*.md` (falling back to `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md`), read frontmatter, and keep principles with "security" in their tags.
+Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use `list_principles` for the full index, then filter for principles tagged "security". Load full body for matched security principles — you need the examples to identify patterns.
 
 ### Step 3: Scan for vulnerabilities
 
@@ -67,6 +71,34 @@ Check each file for these patterns:
 - Debug mode enabled in production configs
 - Permissive file permissions
 
+**False positive verification**: Before reporting a finding, verify it's exploitable. For SQL injection: confirm the string reaches a query executor, not just a log line. For hardcoded secrets: confirm the value is a real credential, not a test fixture or placeholder. If uncertain, report as `info` severity with a verification note.
+
+### Step 3.5: Dependency health audit
+
+Beyond vulnerability scanning, assess the project's dependency health:
+
+**Outdated dependencies:**
+- Run `npm outdated --json` (Node) or `pip list --outdated --format=json` (Python) or equivalent
+- Flag dependencies more than 2 major versions behind as `medium`
+- Flag dependencies more than 1 major version behind as `low`
+- Skip this check if the command is unavailable or errors out
+
+**License compliance:**
+- Run `npx license-checker --json` (Node) or `pip-licenses --format=json` (Python) or equivalent
+- Flag any copyleft licenses (GPL, AGPL) in a project not already using that license as `high`
+- Flag unknown or missing licenses as `medium`
+- If the license checker tool is not installed, skip with a note: "License check skipped — install license-checker for compliance analysis"
+
+**Unnecessary dependencies:**
+- Check `package.json` dependencies against actual imports in source files using Grep
+- Flag dependencies imported by zero source files as `low` — "unused dependency: {name}"
+- Do NOT flag devDependencies that are only used in build/test tooling (eslint, prettier, vitest, jest, typescript, etc.)
+
+**New dependency justification (build pipeline only):**
+- If `${base_commit}` is available, compare current `package.json`/`requirements.txt` against `git show ${base_commit}:package.json`
+- For each newly added dependency, flag as `info`: "New dependency: {name} — verify it's necessary and actively maintained"
+- Skip this check for standalone scans (no base_commit)
+
 ### Step 4: Assess severity
 
 For each finding:
@@ -99,11 +131,7 @@ The orchestrator reads this status to determine the transition: `CLEAN` and `FIN
 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
-1. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
-   ```json
-   {"timestamp": "ISO-8601", "agent": "canon-security", "action": "start", "detail": "Security scan for {scope}"}
-   {"timestamp": "ISO-8601", "agent": "canon-security", "action": "complete", "detail": "{N} findings ({X} critical)", "artifacts": ["{assessment-path}"]}
-   ```
+1. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
 
 ## Context Isolation
 
@@ -112,5 +140,12 @@ You receive:
 - Security-tagged Canon principles
 - CLAUDE.md
 - package.json / requirements.txt (for dependency checks)
+- package-lock.json / yarn.lock (for dependency health audit)
 
 You do NOT receive the plan, design, research, or workspace context. Security review is independent.
+
+You do NOT check: business logic correctness, authorization design decisions, performance, or code quality. Those are the reviewer's and tester's responsibilities.
+
+## Depth Guidance
+
+For builds touching > 20 files, prioritize: (1) files handling user input (handlers, controllers, API routes), (2) files handling authentication/authorization, (3) files with external integrations (database, API calls). Skim internal utility files.
