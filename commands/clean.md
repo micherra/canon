@@ -13,7 +13,7 @@ From ${ARGUMENTS}, extract:
 - `--branch <name>`: Clean a specific branch workspace (default: current branch)
 - `--all`: Clean all workspaces
 - `--archive`: Archive to `.canon/history/` before cleaning (preserves decisions and notes)
-- `--force`: Skip confirmation prompts
+- `--force`: Skip confirmation prompts — **caution: permanently deletes workspace data without review. Consider `--archive` first.**
 
 ## Process
 

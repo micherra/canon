@@ -50,16 +50,27 @@ Create `.canon/config.json` with sensible defaults:
 
 ### Step 4: Update CLAUDE.md
 
-Check if `CLAUDE.md` exists in the project root. If it does, check whether it already contains a "Canon" section. If not, append the following section:
+Check if `CLAUDE.md` exists in the project root. If it does, check whether it already contains a "Canon" section. If not, append the following sections:
 
 ```markdown
 
+## Canon Orchestration (MANDATORY)
+
+This project has Canon initialized. **You ARE the orchestrator.** Drive the build pipeline yourself using Canon's MCP harness tools — do NOT spawn a canon-orchestrator subagent. Call MCP tools directly and spawn only specialist agents as leaf workers.
+
+Classify every user message by intent:
+- **build/review/security** → Load flow with `load_flow`, init workspace with `init_workspace`, drive the state machine by calling `check_convergence` → `update_board` → `get_spawn_prompt` → spawn specialist agent → `report_result` for each state. Read `agents/canon-orchestrator.md` for the full protocol.
+- **question/status** → Spawn `canon:canon-guide`
+- **principle authoring** → Spawn `canon:canon-writer`
+- **learn** → Spawn `canon:canon-learner`
+- **git ops / read-only / chat** → Handle directly
+
 ## Canon Engineering Principles
 
-This project uses Canon for engineering principles. Before writing or modifying code, load relevant principles via the `get_principles` MCP tool. Principles are in `.canon/principles/`. Run `/canon:list` to browse them.
+This project uses Canon for engineering principles. Before writing or modifying code, load relevant principles via the `get_principles` MCP tool. Principles are in `.canon/principles/`. Severity levels: `rule` is non-negotiable, `strong-opinion` requires justification to skip, `convention` is noted but doesn't block.
 ```
 
-If `CLAUDE.md` doesn't exist, create it with just the Canon section above.
+If `CLAUDE.md` doesn't exist, create it with just the Canon sections above.
 
 ### Step 5: Auto-detect project conventions
 
@@ -102,4 +113,4 @@ If no conventions could be detected (empty project or unrecognizable stack), fal
 
 ### Step 6: Report what was done
 
-Tell the user what was created (principles, conventions, workspaces, CLAUDE.md) and suggest next steps: `/canon:list` to browse principles, edit `.canon/CONVENTIONS.md` to add conventions, and add `.canon/` to git tracking.
+Tell the user what was created (principles, conventions, workspaces, CLAUDE.md) and suggest next steps: ask Canon to list principles to browse them, edit `.canon/CONVENTIONS.md` to add conventions, and add `.canon/` to git tracking.

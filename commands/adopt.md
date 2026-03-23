@@ -1,11 +1,11 @@
 ---
 description: Scan codebase for principle coverage and produce a prioritized remediation plan
 argument-hint: [directory] [--top N] [--severity rule|strong-opinion|convention] [--fix]
-allowed-tools: [Read, Glob, Grep, Agent]
+allowed-tools: [Read, Bash, Glob, Grep, Agent]
 model: sonnet
 ---
 
-Scan a directory for Canon principle applicability across all source files. Identifies which principles apply most broadly, finds directories with the most violations, and produces a prioritized remediation plan. Optionally spawns canon-refactorer on the top violations.
+Thin launcher for the `adopt` flow. Scans the codebase for Canon principle applicability, identifies violations, and optionally spawns fixers on rule-severity violations.
 
 ## Instructions
 
@@ -15,107 +15,29 @@ From ${ARGUMENTS}, extract:
 - **Directory**: First non-flag argument, defaults to `.` if not provided
 - `--top N`: Number of top violation files to highlight (default: 10)
 - `--severity LEVEL`: Minimum severity to include (default: `convention` — includes everything)
-- `--fix`: If present, spawn canon-refactorer on Tier 1 files after generating the report
+- `--fix`: If present, automatically fix Tier 1 (rule-severity) violations after scan
 
-### Step 2: Discover source files
+### Step 2: Launch the adopt flow
 
-Glob for source files in the target directory: `**/*.{ts,tsx,js,jsx,py,java,go,rs,rb,tf,sql}`. Exclude `node_modules/`, `.git/`, `dist/`, `build/`, `.canon/`.
+Invoke the orchestrator with:
+- `flow: adopt`
+- `task: "Adoption scan of ${directory}"`
+- Metadata: `{ fix_requested: {bool}, severity_filter: "{level}", top_n: {N}, directory: "{path}" }`
 
-If the file count exceeds 500, warn the user and suggest narrowing the scan to a subdirectory.
+The flow will:
+1. **Scan**: Discover files, match principles, produce tiered adoption report
+2. **Fix** (if `--fix`): Spawn parallel fixers on Tier 1 violations
+3. **Rescan** (after fix): Regenerate the report to show progress
 
-### Step 3: Match principles to each file
+### Step 3: Present results
 
-First, read all principle files from `.canon/principles/` and its subdirectories `rules/`, `strong-opinions/`, `conventions/` (or fall back to `${CLAUDE_PLUGIN_ROOT}/principles/` and its subdirectories). Extract frontmatter for each: `id`, `severity`, `scope.layers`, `scope.file_patterns`.
+Read the adoption report from the workspace and display to the user.
 
-For each source file, infer the architectural layer from its path and match against principle scopes. Filter by `--severity` minimum if provided. Show progress to the user.
+If `--fix` was used, also show:
+- How many violations were fixed vs. remaining
+- Any violations that could not be fixed automatically
 
-### Step 4: Analyze results
-
-**By principle** — for each matched principle, count:
-- How many files it applies to
-- How many distinct directories
-- Its severity level
-
-Sort by: severity (rules first), then by file count (descending).
-
-**By directory** — for each directory, count:
-- Total rule-severity principle matches
-- Total strong-opinion matches
-- Total convention matches
-- Number of source files
-
-Sort by rule count (descending), then strong-opinion count.
-
-### Step 5: Produce the remediation plan
-
-Generate a tiered report:
-
-```markdown
-## Canon Adoption Report
-
-### Scan Summary
-- Directory: ${DIRECTORY}
-- Files scanned: N
-- Unique principles matched: N
-- Severity breakdown: N rules, N strong-opinions, N conventions
-
-### Tier 1: Rule-Severity Principles (Must Fix)
-Files where rule-severity principles apply. These must be addressed.
-
-| File | Rules | Principles |
-|------|-------|------------|
-| src/api/orders.ts | 1 | secrets-never-in-code |
-
-### Tier 2: Strong-Opinion Principles (Should Fix)
-Files where strong-opinion principles apply. Follow unless justified.
-
-| File | Count | Principles |
-|------|-------|------------|
-| ... | ... | ... |
-
-### Tier 3: Convention Principles (Nice to Have)
-Convention-level principles that could be adopted.
-
-| File | Count | Principles |
-|------|-------|------------|
-| ... | ... | ... |
-
-### Top Violation Directories
-Directories with the highest density of applicable principles:
-
-| Directory | Rules | Opinions | Conventions | Files |
-|-----------|-------|----------|-------------|-------|
-| src/api/ | 12 | 8 | 5 | 6 |
-
-### Most Broadly Applicable Principles
-Principles that apply across the most files:
-
-| Principle | Severity | Files | Directories |
-|-----------|----------|-------|-------------|
-| simplicity-first | strong-opinion | 45 | 12 |
-
-### Recommended Actions
-1. Start with Tier 1 — ask Canon to review files with rule-severity principles
-2. For Tier 2 — schedule a principle-by-principle sweep starting with the most broadly applicable
-3. For Tier 3 — adopt conventions incrementally during regular development
-4. Consider running `/canon:explain <principle-id>` on unfamiliar principles
-```
-
-### Step 6: Save the report
-
-```bash
-mkdir -p .canon
-```
-
-Save the report to `.canon/adoption-report.md`. Tell the user where it was saved.
-
-### Step 7: Optionally spawn refactorer
-
-If `--fix` was passed, spawn canon-refactorer on each Tier 1 file with its specific violations.
-
-For each file in Tier 1 (up to `--top N`), spawn a canon-refactorer agent:
-- Pass the file path, the applicable rule-severity principle IDs, the full principle body text, and a description of the expected violation
-- Include the matched principle bodies directly so refactorers do NOT need to re-load principles from disk
-- Each refactorer gets one file — this follows fresh context
-
-Report the refactorer results as they complete.
+Suggest next steps:
+- Ask Canon to explain any unfamiliar principles
+- Ask Canon for status to see drift data and compliance trends
+- Re-run with `--fix` to address remaining violations

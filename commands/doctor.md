@@ -29,11 +29,15 @@ Verify these directories exist:
 - `.canon/principles/rules/`
 - `.canon/principles/strong-opinions/`
 - `.canon/principles/conventions/`
+- `.canon/workspaces/` — build workspace storage
+- `.canon/history/` — archived workspace history
 
 If `--fix` and directories are missing, create them.
 
 **ERROR** if `.canon/` doesn't exist: "Canon is not initialized. Run `/canon:init`."
-**WARN** if subdirectories are missing: "Missing severity subdirectory: {dir}"
+**WARN** if severity subdirectories are missing: "Missing severity subdirectory: {dir}"
+**WARN** if `.canon/workspaces/` is missing: "No workspaces directory. Will be created on first build."
+**INFO** if `.canon/history/` is missing: optional, only exists after `clean --archive`.
 
 #### Check 2: Config file
 
@@ -118,7 +122,7 @@ If `.canon/CONVENTIONS.md` exists:
 - Count convention lines (bullets starting with `- **`)
 - If > 20 conventions: flag for compaction
 
-**WARN** if > 20: "CONVENTIONS.md has {N} conventions — consider consolidating similar entries to reduce agent context consumption."
+**WARN** if > 20: "CONVENTIONS.md has {N} conventions — consider consolidating similar entries. CONVENTIONS.md is loaded into agent context on every spawn, so bloat directly costs tokens."
 
 #### Check 11: Data file size
 
