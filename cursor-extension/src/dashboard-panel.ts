@@ -106,11 +106,32 @@ export class DashboardPanel {
   }
 
   /** Push PR review data to webview */
-  private pushPrReviews(workspaceRoot: string): void {
+  private async pushPrReviews(workspaceRoot: string): Promise<void> {
     try {
       const prPath = path.join(workspaceRoot, CANON_DIR, FILES.PR_REVIEWS);
-      const raw = fs.readFileSync(prPath, "utf-8");
-      const entries = raw.split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l));
+      const raw = await fs.promises.readFile(prPath, "utf-8");
+      const entries = raw
+        .split("\n")
+        .filter((l) => l.trim() !== "")
+        .flatMap((l) => {
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(l);
+          } catch {
+            console.warn("[Canon] Skipping invalid JSONL line in pr-reviews (parse error):", l.slice(0, 80));
+            return [];
+          }
+          if (
+            typeof parsed !== "object" ||
+            parsed === null ||
+            typeof (parsed as Record<string, unknown>).pr !== "number" ||
+            typeof (parsed as Record<string, unknown>).result !== "string"
+          ) {
+            console.warn("[Canon] Skipping pr-reviews entry with missing/invalid fields:", parsed);
+            return [];
+          }
+          return [parsed];
+        });
       this.panel.webview.postMessage({ type: "prReviews", data: entries });
     } catch (err) {
       if (!isEnoent(err)) console.warn("[Canon] Failed to read pr-reviews:", err);
@@ -264,7 +285,9 @@ export class DashboardPanel {
   }
 
   private onWebviewReady(workspaceRoot: string): void {
-    this.pushPrReviews(workspaceRoot);
+    this.pushPrReviews(workspaceRoot).catch((err) => {
+      console.warn("[Canon] Failed to push PR reviews:", err);
+    });
     const graphPath = path.join(workspaceRoot, CANON_DIR, FILES.GRAPH_DATA);
     if (fs.existsSync(graphPath)) {
       this.runSummariesIfNeeded(workspaceRoot, graphPath).catch((err) => {
@@ -299,12 +322,22 @@ export class DashboardPanel {
     try {
       const sumPath = path.join(workspaceRoot, CANON_DIR, FILES.SUMMARIES);
       const raw = fs.readFileSync(sumPath, "utf-8");
-      const summaries = JSON.parse(raw) as Record<string, string | { summary: string }>;
+      const summaries = JSON.parse(raw) as Record<string, unknown>;
       const entry = summaries[fileId];
-      if (entry) {
-        const summary = typeof entry === "string" ? entry : entry.summary || "";
-        this.panel.webview.postMessage({ responseId: id, data: { summary } });
-        return;
+      if (entry !== undefined) {
+        if (typeof entry === "string") {
+          this.panel.webview.postMessage({ responseId: id, data: { summary: entry } });
+          return;
+        } else if (
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof (entry as Record<string, unknown>).summary === "string"
+        ) {
+          this.panel.webview.postMessage({ responseId: id, data: { summary: (entry as { summary: string }).summary } });
+          return;
+        } else {
+          console.warn("[Canon] Skipping summary entry with unexpected shape for", fileId, ":", entry);
+        }
       }
     } catch (err) {
       if (!isEnoent(err)) console.warn("[Canon] Failed to read summaries.json:", err);
