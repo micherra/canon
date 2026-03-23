@@ -144,8 +144,13 @@ export class DashboardPanel {
   private async runSummariesIfNeeded(workspaceRoot: string, graphPath: string): Promise<void> {
     try {
       const graphRaw = await fs.promises.readFile(graphPath, "utf-8");
-      const nodes = JSON.parse(graphRaw).nodes || [];
-      const fileIds = new Set(nodes.map((n: { id: string }) => n.id));
+      const parsedGraph = JSON.parse(graphRaw) as { nodes?: Array<{ id?: unknown }> };
+      const nodes = Array.isArray(parsedGraph.nodes) ? parsedGraph.nodes : [];
+      const fileIds = new Set<string>(
+        nodes
+          .map((n) => n.id)
+          .filter((id): id is string => typeof id === "string")
+      );
       if (fileIds.size === 0) return;
 
       const sumPath = path.join(workspaceRoot, CANON_DIR, FILES.SUMMARIES);

@@ -124,7 +124,7 @@ export const FlowDefinitionSchema = z.object({
   review_threshold: z.enum(["blocking", "warning"]).optional(),
   gates: z.record(z.string(), z.string()).optional(),
   includes: z.array(FragmentIncludeSchema).optional(),
-  states: z.record(z.string(), StateDefinitionSchema),
+  states: z.record(z.string(), StateDefinitionSchema).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -185,6 +185,7 @@ export const ConsultationFragmentSchema = z.object({
 
 export const ResolvedFlowSchema = FlowDefinitionSchema.extend({
   entry: z.string(), // guaranteed after resolution
+  states: z.record(z.string(), StateDefinitionSchema), // required after resolution
   spawn_instructions: z.record(z.string(), z.string()),
   consultations: z.record(z.string(), ConsultationFragmentSchema).optional(),
 });

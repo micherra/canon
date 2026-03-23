@@ -163,6 +163,17 @@ describe("bulletin", () => {
       expect(instructions).toContain("get_wave_bulletin");
       expect(instructions).toContain("post_wave_bulletin");
     });
+
+    it("includes workspace path when provided", () => {
+      const instructions = buildBulletinInstructions(2, 3, "/tmp/workspace");
+      expect(instructions).toContain('workspace="/tmp/workspace"');
+      expect(instructions).toContain("wave=2");
+    });
+
+    it("omits workspace line when not provided", () => {
+      const instructions = buildBulletinInstructions(1, 2);
+      expect(instructions).not.toContain("Bulletin parameters");
+    });
   });
 
   describe("postWaveBulletin tool", () => {

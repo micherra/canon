@@ -156,10 +156,12 @@ export function resolveFragments(
   states: Record<string, StateDefinition>;
   consultations: Record<string, ConsultationFragment>;
   spawnInstructions: Record<string, string>;
+  firstFragmentEntry?: string;
 } {
   const mergedStates: Record<string, StateDefinition> = {};
   const consultations: Record<string, ConsultationFragment> = {};
   const mergedSpawnInstructions: Record<string, string> = {};
+  let firstFragmentEntry: string | undefined;
 
   for (const include of includes) {
     const found = fragments.find((f) => f.definition.fragment === include.fragment);
@@ -168,6 +170,11 @@ export function resolveFragments(
     }
 
     const { definition, spawnInstructions } = found;
+
+    // Track the first non-consultation fragment's entry for fallback
+    if (!firstFragmentEntry && definition.entry && definition.type !== "consultation") {
+      firstFragmentEntry = include.as ?? definition.entry;
+    }
 
     // Validate required params (those with null values in the fragment's params)
     const withParams = include.with ?? {};
@@ -277,6 +284,7 @@ export function resolveFragments(
     states: mergedStates,
     consultations,
     spawnInstructions: mergedSpawnInstructions,
+    firstFragmentEntry,
   };
 }
 
@@ -397,6 +405,7 @@ export async function loadAndResolveFlow(
   let resolvedStates = { ...inlineStates };
   let resolvedConsultations: Record<string, ConsultationFragment> = {};
   let resolvedSpawnInstructions = { ...spawnInstructions };
+  let fragmentEntry: string | undefined;
 
   // If includes exist, load all fragments and resolve
   if (flowDef.includes && flowDef.includes.length > 0) {
@@ -412,6 +421,7 @@ export async function loadAndResolveFlow(
     resolvedStates = { ...resolved.states, ...inlineStates };
     resolvedConsultations = resolved.consultations;
     resolvedSpawnInstructions = { ...resolved.spawnInstructions, ...spawnInstructions };
+    fragmentEntry = resolved.firstFragmentEntry;
   }
 
   // Re-validate all states through the strict schema after param substitution
@@ -428,9 +438,11 @@ export async function loadAndResolveFlow(
     }
   }
 
-  // Determine entry: explicit, or first state from the flow's own states
-  // (not fragment states, which are merged first and would wrongly take priority)
-  const entry = flowDef.entry ?? Object.keys(inlineStates)[0] ?? Object.keys(validatedStates)[0];
+  // Determine entry: explicit flow entry, first inline state, or first fragment's entry
+  const entry = flowDef.entry ?? Object.keys(inlineStates)[0] ?? fragmentEntry;
+  if (!entry) {
+    throw new Error(`Flow "${flowName}" has no entry state — set entry: in frontmatter or include a fragment with an entry`);
+  }
 
   const resolvedFlow: ResolvedFlow = {
     ...flowDef,

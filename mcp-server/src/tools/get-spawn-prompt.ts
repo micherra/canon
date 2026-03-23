@@ -241,7 +241,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
   // Inject bulletin coordination instructions for wave/parallel-per states
   if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null) {
     const peerCount = input.peer_count ?? prompts.length - 1;
-    const bulletinInstr = buildBulletinInstructions(input.wave, peerCount);
+    const bulletinInstr = buildBulletinInstructions(input.wave, peerCount, input.workspace);
     for (const entry of prompts) {
       entry.prompt += `\n\n${bulletinInstr}`;
     }

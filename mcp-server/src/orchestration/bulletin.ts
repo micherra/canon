@@ -85,20 +85,23 @@ export async function readBulletin(
  * Build wave coordination instructions to inject into agent prompts.
  * Used by get_spawn_prompt for wave/parallel-per states.
  */
-export function buildBulletinInstructions(wave: number, peerCount: number): string {
+export function buildBulletinInstructions(wave: number, peerCount: number, workspace?: string): string {
+  const wsNote = workspace
+    ? `\nBulletin parameters: workspace="${workspace}", wave=${wave}`
+    : "";
   return `## Wave Coordination
 
-You are in wave ${wave} with ${peerCount} other agents working in parallel.
+You are in wave ${wave} with ${peerCount} other agents working in parallel.${wsNote}
 
 Before creating a new shared utility, helper, or type:
-1. Call get_wave_bulletin to check if another agent already created it
+1. Call get_wave_bulletin (workspace, wave) to check if another agent already created it
 2. If it exists, import from their path instead of creating your own
 
 After creating a shared utility, type, or establishing a pattern:
 1. Call post_wave_bulletin with type "created_utility" or "established_pattern"
-2. Include the file path and exported names so peers can find it
+2. Include the file path and exported names in the detail so peers can find it
 
 If you discover a gotcha (unexpected behavior, env issue, breaking test):
 1. Call post_wave_bulletin with type "discovered_gotcha"
-2. Peers will see this on their next poll`;
+2. Include the issue in the detail — peers will see this on their next check`;
 }
