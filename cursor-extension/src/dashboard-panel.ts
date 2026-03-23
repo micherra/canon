@@ -286,6 +286,7 @@ export class DashboardPanel {
       case "getBranch": return this.onGetBranch(workspaceRoot, msg.id!);
       case "getFile": return this.onGetFile(workspaceRoot, msg.path as string, msg.id!);
       case "getSummary": return this.onGetSummary(workspaceRoot, msg.fileId as string, msg.id!);
+      case "getComplianceTrend": return this.onGetComplianceTrend(workspaceRoot, msg.principleId as string, msg.id!);
       case "nodeSelected": return this.onNodeSelected(msg.node as any);
       case "refreshGraph": return this.onRefreshGraph();
     }
@@ -357,6 +358,47 @@ export class DashboardPanel {
       this.panel.webview.postMessage({ responseId: id, data: { summary: lines ? `${lines}...` : null } });
     } catch {
       this.panel.webview.postMessage({ responseId: id, data: { summary: null } });
+    }
+  }
+
+  private onGetComplianceTrend(workspaceRoot: string, principleId: string, id: number): void {
+    try {
+      const reviewsPath = path.join(workspaceRoot, CANON_DIR, FILES.REVIEWS);
+      if (!fs.existsSync(reviewsPath)) {
+        this.panel.webview.postMessage({ responseId: id, data: { trend: [] } });
+        return;
+      }
+      const raw = fs.readFileSync(reviewsPath, "utf-8");
+      const lines = raw.split("\n").filter((l) => l.trim());
+
+      // Bucket reviews by ISO week
+      const weeks = new Map<string, { pass: number; total: number }>();
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line);
+          if (entry.principle_id !== principleId || !entry.timestamp) continue;
+          const d = new Date(entry.timestamp);
+          // ISO week key: year-Wxx
+          const jan4 = new Date(d.getFullYear(), 0, 4);
+          const weekNum = Math.ceil(((d.getTime() - jan4.getTime()) / 86400000 + jan4.getDay() + 1) / 7);
+          const weekKey = `${d.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+          const bucket = weeks.get(weekKey) || { pass: 0, total: 0 };
+          bucket.total++;
+          if (entry.passed || entry.verdict === "pass") bucket.pass++;
+          weeks.set(weekKey, bucket);
+        } catch { /* skip malformed lines */ }
+      }
+
+      // Sort by week key, compute pass rates
+      const sorted = [...weeks.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      const trend = sorted.map(([week, { pass, total }]) => ({
+        week,
+        pass_rate: total > 0 ? pass / total : 0,
+      }));
+
+      this.panel.webview.postMessage({ responseId: id, data: { trend } });
+    } catch {
+      this.panel.webview.postMessage({ responseId: id, data: { trend: [] } });
     }
   }
 

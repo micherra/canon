@@ -1,6 +1,7 @@
 import { LAYER_COLORS, NODE_DEFAULT, NODE_CHANGED, getLayerColor, truncate } from "./constants";
 import { escapeHtml } from "./escapeHtml";
-import type { GraphData, GraphNode } from "../stores/graphData";
+import type { GraphData, GraphNode, GraphEdge } from "../stores/graphData";
+import { clusterGraph, expandCluster, CLUSTER_THRESHOLD, type ClusterNode, type ClusteredGraph } from "./cluster";
 
 export interface GraphApi {
   applyFilters(opts: FilterOptions): void;
@@ -10,6 +11,7 @@ export interface GraphApi {
   highlightCascade(nodeId: string, cascadeFiles: Set<string>): void;
   clearHighlight(): void;
   getGraphState(): GraphState | null;
+  isClustered(): boolean;
   destroy(): void;
 }
 
@@ -54,6 +56,7 @@ export function buildD3Graph(
   opts: {
     onNodeClick: (node: GraphNode) => void;
     onBackgroundClick: () => void;
+    onClusterExpand?: (clusterKey: string) => void;
     edgeIn: Map<string, string[]>;
     edgeOut: Map<string, string[]>;
     summaries: Record<string, string>;
@@ -77,8 +80,12 @@ export function buildD3Graph(
   let width = canvas.clientWidth || 800;
   let height = canvas.clientHeight || 600;
 
-  const nodesCopy = data.nodes.map((n) => ({ ...n }));
-  const edgesCopy = data.edges.map((e) => ({
+  // Apply clustering for large graphs
+  const clustered = clusterGraph(data.nodes, data.edges);
+  const originalEdges = data.edges;
+
+  const nodesCopy = clustered.nodes.map((n) => ({ ...n }));
+  const edgesCopy = clustered.edges.map((e) => ({
     source: typeof e.source === "string" ? e.source : e.source.id,
     target: typeof e.target === "string" ? e.target : e.target.id,
   }));
@@ -144,6 +151,7 @@ export function buildD3Graph(
     .force("layerY", d3.forceY(height / 2).strength(0.04));
 
   function nodeRadius(d: any): number {
+    if (d.isCluster) return 14 + Math.sqrt(d.expandedFileCount || 4) * 3;
     return 6 + Math.min((d.violation_count || 0) * 2, 14);
   }
 
@@ -176,11 +184,13 @@ export function buildD3Graph(
     .selectAll(".node")
     .data(nodesCopy)
     .join("circle")
-    .attr("r", (d: any) => (d.changed ? nodeRadius(d) + 2 : nodeRadius(d)))
-    .attr("fill", (d: any) => (d.changed ? NODE_CHANGED : NODE_DEFAULT))
-    .attr("stroke", (d: any) => (d.changed ? "rgba(108,140,255,0.4)" : "rgba(255,255,255,0.08)"))
-    .attr("stroke-width", (d: any) => (d.changed ? 2.5 : 1))
-    .classed("pulse", (d: any) => d.changed)
+    .attr("r", (d: any) => (d.isCluster ? nodeRadius(d) : d.changed ? nodeRadius(d) + 2 : nodeRadius(d)))
+    .attr("fill", (d: any) => (d.isCluster ? getLayerColor(d.layer) : d.changed ? NODE_CHANGED : NODE_DEFAULT))
+    .attr("stroke", (d: any) => (d.isCluster ? "rgba(255,255,255,0.25)" : d.changed ? "rgba(108,140,255,0.4)" : "rgba(255,255,255,0.08)"))
+    .attr("stroke-width", (d: any) => (d.isCluster ? 2 : d.changed ? 2.5 : 1))
+    .attr("stroke-dasharray", (d: any) => (d.isCluster ? "4,2" : null))
+    .attr("opacity", (d: any) => (d.isCluster ? 0.7 : 1))
+    .classed("pulse", (d: any) => d.changed && !d.isCluster)
     .style("cursor", "pointer")
     .call(
       d3
@@ -202,7 +212,13 @@ export function buildD3Graph(
           const dy = event.y - (d._dragStartY ?? event.y);
           d.fx = null;
           d.fy = null;
-          if (dx * dx + dy * dy < 25) opts.onNodeClick(d);
+          if (dx * dx + dy * dy < 25) {
+            if (d.isCluster && opts.onClusterExpand) {
+              opts.onClusterExpand(d.clusterKey);
+            } else if (!d.isCluster) {
+              opts.onNodeClick(d);
+            }
+          }
         }) as any,
     );
 
@@ -211,14 +227,15 @@ export function buildD3Graph(
     .selectAll(".node-label")
     .data(nodesCopy)
     .join("text")
-    .attr("font-size", 9)
-    .attr("fill", "#8899bb")
+    .attr("font-size", (d: any) => (d.isCluster ? 10 : 9))
+    .attr("fill", (d: any) => (d.isCluster ? "#c8d0e0" : "#8899bb"))
+    .attr("font-weight", (d: any) => (d.isCluster ? "600" : "normal"))
     .attr("text-anchor", "middle")
     .attr("dy", (d: any) => nodeRadius(d) + 13)
-    .attr("opacity", 0)
+    .attr("opacity", (d: any) => (d.isCluster ? 0.85 : 0))
     .attr("pointer-events", "none")
     .attr("font-family", "'Inter', sans-serif")
-    .text((d: any) => d.id.split("/").pop());
+    .text((d: any) => d.isCluster ? `${d.clusterKey} (${d.expandedFileCount})` : d.id.split("/").pop());
 
   // Tooltip
   const tooltip = canvas.querySelector("#graph-tooltip") as HTMLElement;
@@ -236,33 +253,48 @@ export function buildD3Graph(
 
   nodeSelection
     .on("mouseover", (event: MouseEvent, d: any) => {
-      const summary = opts.summaries[d.id] || "";
-      let meta = `<span style="color:${getLayerColor(d.layer)}">${escapeHtml(d.layer)}</span>`;
-      if (d.violation_count) meta += ` \u00b7 <span style="color:var(--danger)">${d.violation_count} violations</span>`;
-      if (d.changed) meta += ' \u00b7 <span style="color:var(--info)">changed</span>';
-      const safeSummary = escapeHtml(summary);
-      tooltip.innerHTML =
-        `<strong>${escapeHtml(d.id)}</strong><div class="tt-meta">${meta}</div>` +
-        (safeSummary ? `<div class="tt-summary">${truncate(safeSummary, 140)}</div>` : "");
+      if (d.isCluster) {
+        let meta = `<span style="color:${getLayerColor(d.layer)}">${escapeHtml(d.layer)}</span>`;
+        if (d.violation_count) meta += ` \u00b7 <span style="color:var(--danger)">${d.violation_count} violations</span>`;
+        if (d.changed) meta += ' \u00b7 <span style="color:var(--info)">has changes</span>';
+        tooltip.innerHTML =
+          `<strong>${escapeHtml(d.clusterKey)}/</strong><div class="tt-meta">${meta}</div>` +
+          `<div class="tt-summary">${d.expandedFileCount} files — click to expand</div>`;
+      } else {
+        const summary = opts.summaries[d.id] || "";
+        let meta = `<span style="color:${getLayerColor(d.layer)}">${escapeHtml(d.layer)}</span>`;
+        if (d.violation_count) meta += ` \u00b7 <span style="color:var(--danger)">${d.violation_count} violations</span>`;
+        if (d.changed) meta += ' \u00b7 <span style="color:var(--info)">changed</span>';
+        const safeSummary = escapeHtml(summary);
+        tooltip.innerHTML =
+          `<strong>${escapeHtml(d.id)}</strong><div class="tt-meta">${meta}</div>` +
+          (safeSummary ? `<div class="tt-summary">${truncate(safeSummary, 140)}</div>` : "");
+      }
       tooltip.classList.add("visible");
       positionTooltip(event);
     })
     .on("mousemove", (event: MouseEvent) => positionTooltip(event))
     .on("mouseout", () => tooltip.classList.remove("visible"));
 
-  // Simulation tick
+  // Simulation tick — throttled via requestAnimationFrame for ~60fps
+  let tickScheduled = false;
   simulation.on("tick", () => {
-    linkSelection.attr("d", (d: any) => {
-      const dx = d.target.x - d.source.x;
-      const dy = d.target.y - d.source.y;
-      const dr = Math.sqrt(dx * dx + dy * dy) * 2;
-      // Guard: degenerate arc when source and target overlap
-      if (dr < 1) return `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`;
-      return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+    if (tickScheduled) return;
+    tickScheduled = true;
+    requestAnimationFrame(() => {
+      tickScheduled = false;
+      linkSelection.attr("d", (d: any) => {
+        const dx = d.target.x - d.source.x;
+        const dy = d.target.y - d.source.y;
+        const dr = Math.sqrt(dx * dx + dy * dy) * 2;
+        // Guard: degenerate arc when source and target overlap
+        if (dr < 1) return `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`;
+        return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+      });
+      nodeSelection.attr("cx", (d: any) => d.x).attr("cy", (d: any) => d.y);
+      ringSelection.attr("cx", (d: any) => d.x).attr("cy", (d: any) => d.y);
+      labelSelection.attr("x", (d: any) => d.x).attr("y", (d: any) => d.y);
     });
-    nodeSelection.attr("cx", (d: any) => d.x).attr("cy", (d: any) => d.y);
-    ringSelection.attr("cx", (d: any) => d.x).attr("cy", (d: any) => d.y);
-    labelSelection.attr("x", (d: any) => d.x).attr("y", (d: any) => d.y);
   });
 
   const nodesCopyMap = new Map<string, any>();
@@ -498,6 +530,7 @@ export function buildD3Graph(
     highlightCascade,
     clearHighlight,
     getGraphState: () => graphState,
+    isClustered: () => clustered.clustered,
     destroy() {
       resizeObserver.disconnect();
       simulation.stop();
@@ -516,6 +549,7 @@ function createNoopApi(): GraphApi {
     highlightCascade() {},
     clearHighlight() {},
     getGraphState() { return null; },
+    isClustered() { return false; },
     destroy() {},
   };
 }

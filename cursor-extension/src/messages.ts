@@ -17,6 +17,7 @@ export type WebviewRequestType =
   | "getBranch"
   | "getFile"
   | "getSummary"
+  | "getComplianceTrend"
   | "nodeSelected"
   | "refreshGraph";
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import ImpactCascade from "./ImpactCascade.svelte";
+  import Sparkline from "./Sparkline.svelte";
   import {getLayerColor, getRuleDescription, SEVERITY_COLORS} from "../lib/constants";
   import {basename, computeCascade, getNodeLayer} from "../lib/graph";
   import type {GraphNode} from "../stores/graphData";
@@ -44,6 +45,25 @@
       }
     }
     return map;
+  });
+
+  // Compliance trend sparkline — fetch for first violated principle
+  let trendData = $state<number[]>([]);
+  let trendPrinciple = $state<string>("");
+  $effect(() => {
+    trendData = [];
+    trendPrinciple = "";
+    const rules = node.top_violations || [];
+    if (rules.length === 0) return;
+    const principleId = rules[0];
+    trendPrinciple = principleId;
+    bridge.request("getComplianceTrend", { principleId })
+      .then((res: any) => {
+        if (res?.trend && Array.isArray(res.trend) && res.trend.length >= 2) {
+          trendData = res.trend.map((t: any) => t.pass_rate as number);
+        }
+      })
+      .catch(() => {});
   });
 
   // Violations — unified from node data (MCP folds layer + principle violations together)
@@ -109,6 +129,12 @@
           {/if}
           <span class="violation-count-badge">{totalViolationCount}</span>
         </div>
+        {#if trendData.length >= 2}
+          <div class="violation-trend">
+            <span class="trend-label">Compliance trend ({trendPrinciple})</span>
+            <Sparkline values={trendData} color="#4A90D9" label="Weekly pass rate" />
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -177,6 +203,18 @@
     font-size: 10px; font-weight: 700; color: var(--danger);
     background: rgba(231, 76, 60, 0.12);
     padding: 1px 7px; border-radius: 10px;
+  }
+  .violation-trend {
+    padding: 6px 10px 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .trend-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
   }
   .insight-back {
     background: none; border: none; padding: 0;

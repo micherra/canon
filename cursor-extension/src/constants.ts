@@ -7,6 +7,7 @@ export const FILES = {
   SUMMARIES: "summaries.json",
   DASHBOARD_STATE: "dashboard-state.json",
   PR_REVIEWS: "pr-reviews.jsonl",
+  REVIEWS: "reviews.jsonl",
 } as const;
 
 export const TIMEOUTS = {

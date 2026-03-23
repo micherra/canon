@@ -2,13 +2,15 @@
   import { onDestroy } from "svelte";
   import { buildD3Graph, type GraphApi, type FilterOptions } from "../lib/d3Graph";
   import { parseSearchQuery } from "../lib/graph";
-  import { graphData, edgeIn, edgeOut, type GraphNode } from "../stores/graphData";
+  import { graphData, edgeIn, edgeOut, type GraphNode, type GraphData } from "../stores/graphData";
+  import { expandCluster, clusterGraph, type ClusteredGraph } from "../lib/cluster";
   import { activeLayers, searchQuery, activeInsightFilter, prReviewFiles, showChangedOnly } from "../stores/filters";
   import { selectedNode, panelMode } from "../stores/selection";
   import { bridge } from "../stores/bridge";
 
   let container: HTMLDivElement;
   let graphApi: GraphApi | undefined;
+  let expandedClusters = new Set<string>();
 
   interface Props {
     onNodeClick: (node: GraphNode) => void;
@@ -17,12 +19,8 @@
 
   let { onNodeClick, onBackgroundClick }: Props = $props();
 
-  // Build/rebuild D3 graph whenever graphData changes (initial load or message push)
-  $effect(() => {
-    const data = $graphData;
-    if (!data || !container) return;
-
-    // Destroy previous graph if it exists (prevents memory leak)
+  function buildGraph(data: GraphData) {
+    if (!container) return;
     if (graphApi) {
       graphApi.destroy();
       graphApi = undefined;
@@ -35,10 +33,29 @@
     graphApi = buildD3Graph(container, data, {
       onNodeClick: (node) => onNodeClick(node),
       onBackgroundClick: () => onBackgroundClick(),
+      onClusterExpand: (clusterKey: string) => {
+        expandedClusters.add(clusterKey);
+        // Rebuild with expansion applied
+        const base = $graphData;
+        if (!base) return;
+        let clustered = clusterGraph(base.nodes, base.edges);
+        for (const key of expandedClusters) {
+          clustered = expandCluster(clustered, key, base.edges);
+        }
+        buildGraph({ ...base, nodes: clustered.nodes as GraphNode[], edges: clustered.edges });
+      },
       edgeIn: $edgeIn,
       edgeOut: $edgeOut,
       summaries: {},
     });
+  }
+
+  // Build/rebuild D3 graph whenever graphData changes (initial load or message push)
+  $effect(() => {
+    const data = $graphData;
+    if (!data || !container) return;
+    expandedClusters = new Set();
+    buildGraph(data);
   });
 
   onDestroy(() => {
