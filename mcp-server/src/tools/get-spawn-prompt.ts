@@ -1,6 +1,7 @@
 import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.js";
 import { loadAllOverlays, filterOverlaysForAgent, buildOverlayInjection, type OverlayDefinition } from "../orchestration/overlays.js";
 import { buildBulletinInstructions } from "../orchestration/bulletin.js";
+import { readWaveGuidance } from "../orchestration/wave-briefing.js";
 import type { ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.js";
 import { evaluateSkipWhen } from "../orchestration/skip-when.js";
 import { readBoard } from "../orchestration/board.js";
@@ -271,6 +272,16 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     const bulletinInstr = buildBulletinInstructions(input.wave, peerCount, input.workspace);
     for (const entry of prompts) {
       entry.prompt += `\n\n${bulletinInstr}`;
+    }
+  }
+
+  // Inject wave guidance for wave states
+  if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null) {
+    const guidance = await readWaveGuidance(input.workspace);
+    if (guidance) {
+      for (const entry of prompts) {
+        entry.prompt += `\n\n## Wave Guidance (from user)\n\n${guidance}`;
+      }
     }
   }
 

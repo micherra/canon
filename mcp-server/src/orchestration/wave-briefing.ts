@@ -10,6 +10,9 @@
  *   substituteVariables cannot expand them unintentionally.
  */
 
+import { readFile, appendFile, mkdir, access } from "fs/promises";
+import { join, dirname } from "path";
+
 /** Maximum character length of the assembled briefing before truncation. */
 const MAX_BRIEFING_CHARS = 2000;
 
@@ -120,4 +123,34 @@ function isGotchaLine(line: string): boolean {
     lower.includes("warning") ||
     lower.includes("unexpected")
   );
+}
+
+// ---------------------------------------------------------------------------
+// Wave guidance persistence
+// ---------------------------------------------------------------------------
+
+const GUIDANCE_FILE = "waves/guidance.md";
+
+/**
+ * Read wave guidance from ${workspace}/waves/guidance.md.
+ * Returns empty string if the file does not exist.
+ */
+export async function readWaveGuidance(workspace: string): Promise<string> {
+  const filePath = join(workspace, GUIDANCE_FILE);
+  try {
+    await access(filePath);
+    return await readFile(filePath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Append guidance to ${workspace}/waves/guidance.md, creating the file and
+ * directory if needed. Entries are separated by a markdown horizontal rule.
+ */
+export async function writeWaveGuidance(workspace: string, guidance: string): Promise<void> {
+  const filePath = join(workspace, GUIDANCE_FILE);
+  await mkdir(dirname(filePath), { recursive: true });
+  await appendFile(filePath, `\n\n---\n\n${guidance}`);
 }
