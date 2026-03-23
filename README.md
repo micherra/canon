@@ -371,6 +371,40 @@ Graph data enriches the entire review pipeline:
 - Violations carry optional `impact_score` — higher score = more dependents affected
 - The Canon Dashboard visualizes the graph with D3 force layout
 
+## Canon Dashboard
+
+The Canon Dashboard is a VS Code / Cursor extension that brings the codebase graph to life as an interactive visualization. It activates automatically when a `.canon` directory is detected in your workspace.
+
+**What it shows:**
+
+- **Interactive dependency graph** — D3 force-directed layout with nodes colored by architectural layer (api, ui, domain, data, infra, shared)
+- **Git overlay** — Changed files pulse on the graph so you can see what's in flux
+- **Violation context** — Violations enriched with fan-in, hub status, cycle membership, and impact scores
+- **Search and filter** — Find files by name, filter by layer, changed status, violations, or PR review scope
+
+**How it connects to Canon:**
+
+When you click a node in the graph, the selection is persisted to `.canon/dashboard-state.json`. The `get_dashboard_selection` MCP tool reads this state, so when you start a conversation Canon already knows which file you're focused on — along with its dependencies, matched principles, and graph metrics.
+
+**Commands:**
+
+| Command | Description |
+|---------|-------------|
+| `Canon: Open Dashboard` | Open the codebase graph visualization |
+| `Canon: Refresh Graph` | Regenerate and push updated graph data |
+
+**Install from a pre-built `.vsix`:**
+
+```bash
+code --install-extension canon-dashboard-0.1.0.vsix
+```
+
+Or build from source in `cursor-extension/`:
+
+```bash
+npm install && npm run build && npm run package
+```
+
 ## The Canon Template
 
 Principles, rules, and agent-rules all share the same markdown-with-YAML-frontmatter format. This is Canon's core building block — understanding it lets you extend Canon for your own projects and workflows.
