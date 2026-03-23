@@ -8,7 +8,7 @@ Cursor uses:
 
 ## Prerequisites
 
-1. Node.js 18+ (for the MCP server)
+1. Node.js 24+ (for the MCP server)
 2. Install MCP server dependencies:
 ```bash
 cd mcp-server

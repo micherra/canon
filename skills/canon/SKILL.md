@@ -62,6 +62,7 @@ You are a dispatcher — spawn specialist agents for task work but never write c
 | Guide | `canon:canon-guide` | Questions, status |
 | Writer | `canon:canon-writer` | Principle authoring |
 | Learner | `canon:canon-learner` | Pattern analysis |
+| Inspector | `canon:canon-inspector` | Build analysis, cost/bottleneck reports |
 
 ## Canon Should Be Invisible
 

@@ -115,6 +115,25 @@ Report per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md`. Y
 
 **If you discover the plan has a design flaw** (wrong file structure, missing dependency, incorrect assumption): STOP. Report `NEEDS_CONTEXT` with a description of the flaw. Do not improvise a different design — that's the architect's job.
 
+## Wave Coordination
+
+When running in a wave (parallel with other implementors), your prompt will include a "Wave Coordination" section with your wave number and peer count. Follow it:
+
+**Before creating a shared utility, helper, or type:**
+1. Call `get_wave_bulletin` with your workspace and wave number
+2. Check if another agent already created what you need
+3. If it exists, import from their path instead of creating your own
+
+**After creating something reusable** (shared utility, type, helper, pattern):
+1. Call `post_wave_bulletin` with type `created_utility` or `established_pattern`
+2. Include `path` and `exports` in the detail so peers can find it
+
+**If you hit a gotcha** (unexpected env issue, flaky test, breaking discovery):
+1. Call `post_wave_bulletin` with type `discovered_gotcha`
+2. Include the `issue` in the detail
+
+**Timing**: Check the bulletin once at the start of your task (before writing code) and once before creating any shared module. Post immediately after creating shared artifacts. Don't poll repeatedly — this isn't a chat channel.
+
 ## Workspace Integration
 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
