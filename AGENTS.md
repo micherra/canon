@@ -1,7 +1,7 @@
 # Canon Cursor Runner (Cursor-only)
 
 This project contains Canon’s “engineering principles as code” system, including:
-- A flow/state-machine specification (`flows/*.md`)
+- A flow/state-machine specification (`flows/*.md`) with reusable fragments (`flows/fragments/*.md`)
 - Specialist role implementations as prompt specs (`agents/*.md`)
 - Canon MCP tools (`mcp-server/src/index.ts`), wired to Cursor via `.cursor/mcp.json`
 
@@ -123,10 +123,20 @@ Read the flow template:
 - `flows/{flow-name}.md`
 
 Parse:
-- top-level flow frontmatter (`name`, `tier`, `progress`, etc.)
+- top-level flow frontmatter (`name`, `tier`, `progress`, `includes`, etc.)
 - `states:` map for state IDs, state types, agent names, templates, transitions, and settings (like `max_iterations`, `stuck_when`, `gate`)
 - spawn instructions from the markdown bodies:
   - each `### state-id` section is the agent prompt for that state
+
+**Fragment resolution**: If the flow has an `includes:` list, resolve fragments before walking the state machine:
+1. For each include, read `flows/fragments/{fragment}.md`
+2. Validate required params are provided in `with:`
+3. Substitute `${param}` values in the fragment's state definitions
+4. Apply `as:` rename and `overrides:` shallow merge if specified
+5. Merge fragment states into the flow's state map and append fragment spawn instructions
+6. After resolution, the merged flow looks like a monolithic file — proceed normally
+
+See `flows/SCHEMA.md` for the full fragment specification.
 
 ### Step B: Determine current state
 
@@ -152,10 +162,10 @@ Repeat until the current state is `terminal`:
    - increment `entries`, set `entered_at`, and write `board.json`
 4. Execute the state by role emulation:
    - Construct the resolved spawn prompt from the flow template:
-     - Read the flow’s `### {state-id}` section (the markdown body under the state)
+     - Read the `### {state-id}` section from the flow’s markdown body or from the fragment’s markdown body (after fragment resolution, all spawn instructions are available — inline states have their prompts in the flow file, fragment states have theirs in the fragment file)
      - Substitute variables conceptually (e.g. `${task}`, `${WORKSPACE}`, `${slug}`, `${task_id}`, `${base_commit}`, and any injected context)
    - Invoke the matching specialist subagent in *foreground*:
-     - Subagent name must equal `state.agent` (e.g. `canon-architect`, `canon-implementor`, `canon-tester`, `canon-security`, `canon-reviewer`, `canon-refactorer`, `canon-scribe`, `canon-researcher`)
+     - Subagent name must equal `state.agent` (e.g. `canon-architect`, `canon-implementor`, `canon-tester`, `canon-security`, `canon-reviewer`, `canon-fixer`, `canon-scribe`, `canon-researcher`, `canon-shipper`)
      - Use explicit subagent invocation syntax: `/{state.agent}`
    - Paste the resolved spawn prompt into the subagent invocation request as the primary instruction.
 5. Parse the specialist output for a status keyword:
@@ -344,7 +354,7 @@ When a flow state specifies `template: <name>` (or template list), you must:
 - Reads: task + assigned research dimension instructions + relevant Canon context.
 - Writes:
   - In `deep-build`, the state prompt specifies: `${WORKSPACE}/research/${role}.md`
-    where `${role}` is one of `codebase`, `architecture`, `risk`.
+    where `${role}` is one of `codebase`, `risk`.
 - Status keyword: one of the standard completion statuses (e.g. `DONE` / `BLOCKED` / `NEEDS_CONTEXT`).
 
 #### `canon-architect` (used in `feature` + `deep-build` design state)
@@ -361,16 +371,10 @@ When a flow state specifies `template: <name>` (or template list), you must:
 - Status keyword: `DONE` / `HAS_QUESTIONS` / `BLOCKED` / `NEEDS_CONTEXT`.
 
 #### `canon-implementor` (used in all “implement” states)
-- Two modes:
-  - **Plan/normal mode** (role not `fix`): execute a plan file and write summaries.
-  - **Fix mode** (`role: fix`): read tester failures and write FIX-SUMMARY.
+- **Plan/normal mode only** — executes a plan file and writes summaries.
 - Writes (exact paths as required by flow prompts):
-  - Normal/plan mode (wave states):
-    - Summary: `${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md`
-  - Normal/plan mode (quick-fix direct implement):
-    - Summary: `${WORKSPACE}/plans/${slug}/SUMMARY.md`
-  - Fix mode:
-    - Fix summary: `${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md`
+  - Wave states: Summary: `${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md`
+  - Quick-fix direct implement: Summary: `${WORKSPACE}/plans/${slug}/SUMMARY.md`
 - Verification:
   - Must run the flow’s verification steps (typically full test suite per plans/SCHEMA).
 - Status keyword:
@@ -406,16 +410,16 @@ When a flow state specifies `template: <name>` (or template list), you must:
 - Status keyword:
   - `CLEAN` / `WARNING` / `BLOCKING` (or `BLOCKED` for failures requiring HITL).
 
-#### `canon-refactorer` (used in `fix-security` and `fix-violations`)
-- Inputs:
-  - violation group items from the prior state artifact (or the state prompt’s `${item.*}` fields).
+#### `canon-fixer` (used in `fix-impl`, `fix-security`, and `fix-violations`)
+- Two modes:
+  - **test-fix** (`role: test-fix`): reads TEST-REPORT.md, fixes source bugs and flags test bugs, writes FIX-SUMMARY.md.
+  - **violation-fix** (`role: violation-fix`): reads violation details from `${item.*}` fields, refactors to comply with Canon principles.
 - Writes:
-  - This state is typically artifact-light in the flow templates.
-  - It must commit fixes atomically and report one of:
-    - `FIXED`
-    - `PARTIAL_FIX`
-    - `CANNOT_FIX`
-- If any template/summary artifact is required by a specific flow state, follow that flow’s spawn instruction paths; otherwise rely on git commits and runner logging.
+  - test-fix mode: `${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md`
+  - violation-fix mode: artifact-light — commits fixes atomically.
+- Status keyword:
+  - test-fix: `DONE` / `DONE_WITH_CONCERNS` / `BLOCKED` / `NEEDS_CONTEXT`
+  - violation-fix: `FIXED` / `PARTIAL_FIX` / `CANNOT_FIX` / `BLOCKED` / `NEEDS_CONTEXT`
 
 #### `canon-scribe` (used in context-sync stages)
 - Writes:
@@ -424,6 +428,16 @@ When a flow state specifies `template: <name>` (or template list), you must:
 - Updates docs only when the contract surface changes (NO_UPDATES vs UPDATED).
 - Status keyword:
   - `UPDATED` / `NO_UPDATES` (mapped by the flow’s transitions).
+
+#### `canon-shipper` (used in `ship` state in build flows)
+- Reads:
+  - `session.json`, `board.json`, all `*-SUMMARY.md`, `TEST-REPORT.md`, `REVIEW.md`, `SECURITY.md`, `DESIGN.md`
+- Writes:
+  - PR description: `${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md`
+  - Optionally creates PR via `gh pr create`
+  - Optionally appends to `CHANGELOG.md`
+- Status keyword:
+  - `DONE` / `DONE_WITH_CONCERNS` / `BLOCKED`
 
 #### `canon-writer` and `canon-learner` (used for principle/learn intents, not the main build flows)
 - Principle creation/edit:
@@ -434,34 +448,51 @@ When a flow state specifies `template: <name>` (or template list), you must:
 ### Flow-specific state mapping (supported flows)
 
 #### `deep-build` state map
-- `research` (parallel): `canon-researcher` -> `${WORKSPACE}/research/${role}.md` (role = codebase|architecture|risk)
+Inline states:
+- `research` (parallel): `canon-researcher` -> `${WORKSPACE}/research/${role}.md` (role = codebase|risk)
 - `design` (single): `canon-architect` -> `plans/${slug}/DESIGN.md`, `plans/${slug}/${task_id}-PLAN.md`, `plans/${slug}/INDEX.md`, `decisions/`, `context.md`
 - `implement` (wave): `canon-implementor` -> `plans/${slug}/${task_id}-SUMMARY.md`
-- `context-sync` (single): `canon-scribe` -> `plans/${slug}/CONTEXT-SYNC.md`
-- `test` (single): `canon-tester` -> `plans/${slug}/TEST-REPORT.md`
-- `fix-impl` (single role=fix): `canon-implementor` -> `plans/${slug}/FIX-SUMMARY.md`
-- `context-sync-fix` (single): `canon-scribe` -> `plans/${slug}/CONTEXT-SYNC-FIX.md`
 - `security` (single): `canon-security` -> `plans/${slug}/SECURITY.md`
-- `fix-security` (parallel-per): `canon-refactorer` -> git commits + FIXED/PARTIAL_FIX/CANNOT_FIX
-- `review` (single): `canon-reviewer` -> `plans/${slug}/REVIEW.md` and `reviews/`
-- `fix-violations` (parallel-per): `canon-refactorer` -> git commits + FIXED/PARTIAL_FIX/CANNOT_FIX
+- `fix-security` (parallel-per): `canon-fixer` (violation-fix) -> git commits + FIXED/PARTIAL_FIX/CANNOT_FIX
+
+From fragments:
+- `context-sync` (from `context-sync` fragment, next → test)
+- `test`, `fix-impl`, `context-sync-fix` (from `test-fix-loop` fragment, after_all_passing → security)
+- `review`, `fix-violations` (from `review-fix-loop` fragment, after_clean/warning → ship, + large_diff_threshold override)
+- `ship`, `done` (from `ship-done` fragment)
 
 #### `feature` state map
-- `design`, `implement`, `context-sync`, `test`, `fix-impl`, `context-sync-fix` same artifact conventions as `deep-build`
-- `review` -> `plans/${slug}/REVIEW.md` and `reviews/`
-- `fix-violations` -> `canon-refactorer` (parallel-per) -> git commits + FIXED/PARTIAL_FIX/CANNOT_FIX
+Inline states:
+- `design` (single): `canon-architect` -> same artifacts as deep-build
+- `implement` (wave): `canon-implementor` -> `plans/${slug}/${task_id}-SUMMARY.md`
+
+From fragments:
+- `context-sync` (from `context-sync` fragment, next → test)
+- `test`, `fix-impl`, `context-sync-fix` (from `test-fix-loop` fragment, after_all_passing → review)
+- `review`, `fix-violations` (from `review-fix-loop` fragment, after_clean/warning → ship)
+- `ship`, `done` (from `ship-done` fragment)
 
 #### `quick-fix` state map
+Inline states:
 - `implement` (single, direct mode): `canon-implementor` -> `plans/${slug}/SUMMARY.md`
-- `verify` (single): `canon-tester` but follow flow override: run test suite only, do not write new tests -> `plans/${slug}/TEST-REPORT.md`
-- `context-sync` -> `plans/${slug}/CONTEXT-SYNC.md`
-- `review` -> `plans/${slug}/REVIEW.md` and `reviews/`
-- `fix-violations` (parallel-per): `canon-refactorer` -> git commits + FIXED/PARTIAL_FIX/CANNOT_FIX
+- `verify` (single): `canon-tester` (run test suite only, do not write new tests) -> `plans/${slug}/TEST-REPORT.md`
 
-#### `review-only` state map
+From fragments:
+- `context-sync` (from `context-sync` fragment, next → review)
+- `review`, `fix-violations` (from `review-fix-loop` fragment, after_clean/warning → ship, max_iterations: 2)
+- `ship`, `done` (from `ship-done` fragment)
+
+#### `review-only` state map (no fragments)
 - `review` (single): `canon-reviewer` -> `plans/${slug}/REVIEW.md` and `reviews/`
+  - `large_diff_threshold: 300`, `cluster_by: layer` — auto-fans out parallel reviewers by architectural layer for large diffs
+  - Scope controlled by `${review_scope}` from orchestrator input contract
 
-#### `security-audit` state map
+#### `adopt` state map (no fragments)
+- `scan` (single): `canon-researcher` (role: adoption-scan) -> `plans/${slug}/ADOPTION-REPORT.md`
+- `fix` (parallel-per): `canon-fixer` (role: violation-fix) -> git commits (skipped if `no_fix_requested`)
+- `rescan` (single): `canon-researcher` (role: adoption-scan) -> updated `plans/${slug}/ADOPTION-REPORT.md`
+
+#### `security-audit` state map (no fragments)
 - `security` (single): `canon-security` -> `plans/${slug}/SECURITY.md`
 - `review` (single): `canon-reviewer` -> `plans/${slug}/REVIEW.md` and `reviews/`
 
@@ -508,9 +539,9 @@ Never transition to HITL solely because dashboard selection is unavailable.
 ## Developer references for the runner
 
 Use these files as the source of truth (read them as needed):
-- `agents/canon-intake.md`
 - `agents/canon-orchestrator.md`
 - `flows/SCHEMA.md`
 - `flows/{flow-name}.md`
+- `flows/fragments/{fragment-name}.md`
 - `agents/canon-*.md`
 
