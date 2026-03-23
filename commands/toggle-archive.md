@@ -41,4 +41,4 @@ If the entry is built-in (lives in plugin directory), warn:
 
 ### Step 4: Show context
 
-After toggling, show the entry's id, title, severity, and current state. Suggest `/canon:list` to verify.
+After toggling, show the entry's id, title, severity, and current state. Suggest asking Canon to list principles to verify.

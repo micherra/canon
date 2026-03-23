@@ -52,7 +52,7 @@ Verify the principle was matched and the violation was flagged:
   - "The principle's scope (layers: {layers}, file_patterns: {patterns}) may not match the test file path"
   - "The principle's severity may be too low to trigger in this context"
   - "The violation pattern may not be specific enough for the reviewer to catch"
-  Suggest: "Try `/canon:edit-principle {id}` to adjust the scope or `/canon:explain {id}` to see how it matches in your codebase."
+  Suggest: "Try `/canon:edit-principle {id}` to adjust the scope or ask Canon to explain `{id}` to see how it matches in your codebase."
 
 ### Step 5: Clean up
 

@@ -8,15 +8,5 @@ cursor-extension/media/dashboard.js
 .idea/
 .claude/
 
-# Canon local data (generated per-project)
-.canon/*.jsonl
-.canon/*.archive.jsonl
-.canon/graph-data.json
-.canon/summaries.json
-.canon/dashboard-state.json
-.canon/LEARNING-REPORT.md
-.canon/plans/
-.cursor/hooks/state/continual-learning.json
-.cursor/hooks/state/continual-learning-index.json
-# Keep config (user-edited)
-!.canon/config.json
+# Canon local data (dogfooding — ignore entire .canon directory)
+.canon/

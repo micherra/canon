@@ -84,7 +84,7 @@ Read the current CLAUDE.md. It follows a canonical template structure (see below
 
 **CLAUDE.md Canonical Template:**
 
-If CLAUDE.md exists but doesn't have the canonical sections, add only the sections you need — don't restructure the whole file. Preserve any existing content the user wrote.
+**Never restructure an existing CLAUDE.md.** If it doesn't have the canonical sections, add only the sections you need for your update. Preserve all existing user-written content, structure, and ordering.
 
 ```markdown
 # {Project Name} — Project Guidelines
@@ -125,7 +125,7 @@ If CLAUDE.md exists but doesn't have the canonical sections, add only the sectio
 - Update the Architecture Summary if structural changes occurred
 - Update Key Patterns if the implementor introduced a new pattern
 - Add to Known Issues if the implementor reported DONE_WITH_CONCERNS
-- Keep under 300 tokens — context.md is a quick-reference
+- Keep under 400 tokens — context.md is a quick-reference. If it exceeds 400 tokens after your edit, trim the oldest Known Issues entries first, then oldest Key Patterns entries, until under budget.
 
 **CONVENTIONS.md** (`.canon/CONVENTIONS.md`):
 - Only add a convention if the implementor explicitly established a new project-wide pattern (visible in the summary or diff)
@@ -138,10 +138,7 @@ Write a sync report to `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md`. The orchest
 
 ### Step 7: Log activity
 
-Append to `${WORKSPACE}/log.jsonl`:
-```json
-{"timestamp": "ISO-8601", "agent": "canon-scribe", "action": "complete", "detail": "Status: {status}, docs updated: {list or none}"}
-```
+Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
 
 ## Status Protocol
 

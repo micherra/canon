@@ -1,0 +1,54 @@
+import { PrStore } from "../drift/pr-store.js";
+import { generateId } from "../utils/id.js";
+import type { ReviewViolation } from "../schema.js";
+
+export interface StorePrReviewInput {
+  pr_number?: number;
+  branch?: string;
+  last_reviewed_sha?: string;
+  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  files: string[];
+  violations: Array<{
+    principle_id: string;
+    severity: string;
+    file_path?: string;
+    impact_score?: number;
+  }>;
+  honored: string[];
+  score: {
+    rules: { passed: number; total: number };
+    opinions: { passed: number; total: number };
+    conventions: { passed: number; total: number };
+  };
+  file_priorities?: Array<{ path: string; priority_score: number }>;
+}
+
+export interface StorePrReviewOutput {
+  recorded: boolean;
+  pr_review_id: string;
+}
+
+export async function storePrReview(
+  input: StorePrReviewInput,
+  projectDir: string
+): Promise<StorePrReviewOutput> {
+  const store = new PrStore(projectDir);
+  const pr_review_id = generateId("prr");
+  const timestamp = new Date().toISOString();
+
+  await store.appendReview({
+    pr_review_id,
+    timestamp,
+    ...(input.pr_number !== undefined ? { pr_number: input.pr_number } : {}),
+    ...(input.branch !== undefined ? { branch: input.branch } : {}),
+    ...(input.last_reviewed_sha !== undefined ? { last_reviewed_sha: input.last_reviewed_sha } : {}),
+    verdict: input.verdict,
+    files: input.files,
+    violations: input.violations as ReviewViolation[],
+    honored: input.honored,
+    score: input.score,
+    ...(input.file_priorities !== undefined ? { file_priorities: input.file_priorities } : {}),
+  });
+
+  return { recorded: true, pr_review_id };
+}

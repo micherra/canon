@@ -1,10 +1,12 @@
 {
-  "canon": {
-    "command": "npx",
-    "args": ["tsx", "${CLAUDE_PLUGIN_ROOT}/mcp-server/src/index.ts"],
-    "env": {
-      "CANON_PROJECT_DIR": ".",
-      "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}"
+  "mcpServers": {
+    "canon": {
+      "command": "npx",
+      "args": ["tsx", "${CLAUDE_PLUGIN_ROOT}/mcp-server/src/index.ts"],
+      "env": {
+        "CANON_PROJECT_DIR": ".",
+        "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}"
+      }
     }
   }
 }

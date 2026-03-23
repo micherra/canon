@@ -28,6 +28,8 @@ canon/
 ├── principles/          Built-in engineering principles
 ├── commands/            Slash commands
 ├── agents/              Specialist agents
+├── flows/               Workflow definitions
+├── templates/           Agent output templates
 ├── agent-rules/         Agent behavioral guidelines
 ├── hooks/               Automation hooks
 └── skills/              Skill definitions

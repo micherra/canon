@@ -1,10 +1,11 @@
 ---
-name: security-assessment
+template: security-assessment
 description: >-
   Standardized output for the canon-security agent. Records vulnerability
   findings ranked by severity, passed checks, and blocking status.
-used_by: [canon-security]
-token_limit: 500
+used-by: [canon-security]
+read-by: [canon-shipper]
+output-path: ${WORKSPACE}/plans/${slug}/SECURITY.md
 fields:
   status: "CLEAN | FINDINGS | CRITICAL"
   agent: canon-security
@@ -50,4 +51,3 @@ Findings: {N} ({X} critical, {X} high, {X} medium, {X} low)
 4. **Pattern field is required**: Use a recognized category (SQL injection, XSS, command injection, path traversal, prototype pollution, missing auth, hardcoded secret, weak token, missing CSRF, permissive CORS, sensitive data exposure, missing rate limit, debug mode, exposed port, dependency vulnerability).
 5. **File field must include line number** when identifiable.
 6. **Passed Checks section is required** even when findings exist — it shows what was verified clean.
-7. **Token budget**: Keep under 500 tokens. One paragraph per finding, not essays.

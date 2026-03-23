@@ -5,7 +5,7 @@ description: >-
   the single entry point for all Canon interactions. Activates for ANY
   user input in a Canon-enabled project: build requests, questions,
   reviews, principle management, or general project queries. Routes
-  everything through the canon-orchestrator which classifies intent and
+  everything through the orchestrator which classifies intent and
   decides whether to spin up the pipeline or just answer directly.
 
   MUST activate when: the user mentions "canon", "principles", "build",
@@ -16,54 +16,69 @@ description: >-
 
 # Canon
 
-Canon is an engineering principles system with an agent-driven build pipeline. All user interactions are routed through the **canon-orchestrator**, which classifies intent and decides the appropriate response.
+Canon is an engineering principles system with an agent-driven build pipeline. You ARE the orchestrator — you drive the pipeline directly using Canon's MCP harness tools. Do NOT spawn a canon-orchestrator subagent.
 
-## How It Works
+## Intent Classification
 
-The orchestrator handles everything:
+**Default to action.** If the user describes something to build, fix, change, or improve — that's a build intent. You don't need magic keywords. Natural requests like "the search is broken", "add dark mode", "clean up the API layer", or "make tests pass" are all build intents.
 
-- **Build tasks** ("create a dashboard", "add auth") → triage, tier detection, full agent pipeline
-- **Reviews** ("review my changes") → review-only flow
-- **Security** ("scan for vulnerabilities") → security-audit flow
-- **Questions** ("how does the order service work?") → reads codebase and answers directly
-- **Principles** ("create a rule about logging") → spawns canon-writer
-- **Learning** ("what patterns should we codify?") → spawns canon-learner
-- **Resume** ("continue where we left off") → resumes from board.json
+| Intent | Action |
+|--------|--------|
+| **build** | Auto-detect tier and flow (`hotfix`, `quick-fix`, `refactor`, `feature`, `migrate`, `deep-build`) → drive state machine |
+| **explore** | Load `explore` flow → drive state machine |
+| **test** | Load `test-gap` flow → drive state machine |
+| **review** | Load `review-only` flow → drive state machine |
+| **security** | Load `security-audit` flow → drive state machine |
+| **question** | Spawn `canon:canon-guide` |
+| **principle** | Spawn `canon:canon-writer` |
+| **learn** | Spawn `canon:canon-learner` |
+| **resume** | Read `board.json` → resume state machine |
+| **chat** | Respond directly |
 
-## Activation
+## Driving the Pipeline
 
-When Canon is initialized in a project (`.canon/` directory exists), spawn the **canon-intake** agent with the user's input. Intake classifies intent and either handles it directly (questions, status) or hands off to the orchestrator (builds, reviews, security scans).
+For build/review/security/explore/test intents, follow the orchestrator protocol in `${CLAUDE_PLUGIN_ROOT}/agents/canon-orchestrator.md`. The key loop:
 
-```
-Agent: canon-intake
-Prompt: {user's message}
-```
+1. `load_flow(flow_name)` → get flow definition
+2. `init_workspace(...)` → create or resume workspace
+3. For each state: `check_convergence` → `update_board(enter_state)` → `get_spawn_prompt` → spawn specialist agent → `report_result` → next state
+4. On terminal state: `update_board(complete_flow)`
 
-The intake definition is at `${CLAUDE_PLUGIN_ROOT}/agents/canon-intake.md`.
-The orchestrator definition is at `${CLAUDE_PLUGIN_ROOT}/agents/canon-orchestrator.md`.
+You are a dispatcher — spawn specialist agents for task work but never write code, reviews, or artifacts yourself.
+
+### Specialist Agents
+
+| Agent | subagent_type | When |
+|-------|---------------|------|
+| Researcher | `canon:canon-researcher` | Research states |
+| Architect | `canon:canon-architect` | Design states |
+| Implementor | `canon:canon-implementor` | Implementation states |
+| Tester | `canon:canon-tester` | Test states |
+| Reviewer | `canon:canon-reviewer` | Review states |
+| Security | `canon:canon-security` | Security states |
+| Fixer | `canon:canon-fixer` | Fix states |
+| Scribe | `canon:canon-scribe` | Context sync states |
+| Shipper | `canon:canon-shipper` | Ship states |
+| Guide | `canon:canon-guide` | Questions, status |
+| Writer | `canon:canon-writer` | Principle authoring |
+| Learner | `canon:canon-learner` | Pattern analysis |
+| Inspector | `canon:canon-inspector` | Build analysis, cost/bottleneck reports |
+
+## Canon Should Be Invisible
+
+- Don't ask which flow to use — auto-detect.
+- Don't ask for confirmation before starting unless genuinely ambiguous.
+- Don't expose Canon jargon (flows, tiers, workspaces, state machines).
+- Do give progress updates in plain language.
 
 ## Principle Loading (Inline Mode)
 
-When you are writing or modifying code **outside** of a Canon build pipeline (e.g., the user asks you to edit a file directly without going through `/canon`), you must still load and apply Canon principles:
+When writing or modifying code **outside** of a Canon build pipeline (e.g., a quick direct edit), still load and apply Canon principles:
 
-1. Use the `get_principles` MCP tool with the file path you're working on
-2. Follow each loaded principle's guidance
+1. Use the `get_principles` MCP tool with the file path
+2. Follow each principle's guidance
 3. `rule` severity is non-negotiable; `strong-opinion` requires justification to skip; `convention` is noted but doesn't block
-4. After generating code, self-review against loaded principles before presenting
-
-This inline mode ensures principles are always applied, even for quick edits that don't warrant the full pipeline.
 
 ## Dashboard Context
 
-When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation or task to pick up the user's current focus. It returns:
-
-- The **selected node** from the graph (the file the user clicked on)
-- The **active editor file** the user is viewing
-- **Matched principles** for the active file (summary-only, top 3)
-- **Dependencies and dependents** from the codebase graph
-
-This gives you immediate context about what the user is looking at without them having to explain it.
-
-## Principle Format Reference
-
-See `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md` for the full principle file schema.
+When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation to pick up the user's current focus — selected graph node, active editor file, matched principles, and dependency context.

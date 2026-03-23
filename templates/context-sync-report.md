@@ -1,10 +1,11 @@
 ---
-name: context-sync-report
+template: context-sync-report
 description: >-
   Standardized output for the canon-scribe agent. Records which files
   were classified, which documents were updated, and freshness stamps.
-used_by: [canon-scribe]
-token_limit: 300
+used-by: [canon-scribe]
+read-by: [canon-shipper]
+output-path: ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md
 fields:
   status: "UPDATED | NO_UPDATES"
   agent: canon-scribe
@@ -44,4 +45,3 @@ timestamp: "{ISO-8601}"
 3. **Doc Updated column**: If the file's category triggered a doc update, name the document and section. Otherwise `—`.
 4. **Documents Updated section**: List every managed document with what changed. If nothing changed, say "No updates needed" — never omit the line.
 5. **Freshness table**: Only include documents/sections that were actually updated in this sync. Omit the table entirely if status is NO_UPDATES.
-6. **Token budget**: Keep under 300 tokens. The classified table is the bulk — use short file paths and terse category labels.

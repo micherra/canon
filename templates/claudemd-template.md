@@ -1,11 +1,12 @@
 ---
-name: claudemd-template
+template: claudemd-template
 description: >-
   Canonical structure for CLAUDE.md files managed by the canon-scribe.
   Defines the sections the scribe maintains and the rules for editing them.
   Projects adopt this structure incrementally — the scribe adds sections
   as needed, never restructures the whole file at once.
-used_by: [canon-scribe]
+used-by: [canon-scribe]
+output-path: CLAUDE.md (project root)
 ---
 
 ## Template
@@ -57,8 +58,6 @@ used_by: [canon-scribe]
 
 4. **Freshness stamps**: Every section managed by the scribe has a `<!-- last-updated: YYYY-MM-DD -->` HTML comment on the line after the heading. The scribe updates this on every edit. This makes staleness visible to humans and agents.
 
-5. **No removal, only deprecation**: When a contract is removed from the code, the scribe marks it as `~~removed YYYY-MM-DD~~` rather than deleting the line. This preserves history for agents that may reference it. After 3 builds with no references, a future scribe pass may clean it up.
+5. **No removal, only deprecation**: When a contract is removed from the code, the scribe marks it as `~~removed YYYY-MM-DD~~` rather than deleting the line. This preserves history for agents that may reference it. After 30 days with no references, a future scribe pass may clean it up.
 
 6. **Section ordering**: Follow the template order when adding new sections. But if the user has a different order, respect it — don't reorder existing sections.
-
-7. **Token budget**: Total CLAUDE.md should stay under 1000 tokens. If it grows beyond that, the scribe should prefer conciseness over completeness. Agents read this file on every spawn — bloat costs tokens on every task.

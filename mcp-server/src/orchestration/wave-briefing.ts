@@ -1,0 +1,123 @@
+/**
+ * Wave briefing assembler — produces a human-readable briefing string
+ * summarising what prior-wave agents learned and any consultation outputs.
+ *
+ * INPUT CONTRACT:
+ *   All text in `summaries` and `consultationOutputs` must already be escaped
+ *   by the caller (e.g. via escapeDollarBrace from wave-variables.ts) before
+ *   being passed here. This module does NOT escape input — it trusts that
+ *   ${...} patterns in input have already been neutralised to \${...} so that
+ *   substituteVariables cannot expand them unintentionally.
+ */
+
+/** Maximum character length of the assembled briefing before truncation. */
+const MAX_BRIEFING_CHARS = 2000;
+
+export interface WaveBriefingInput {
+  wave: number;
+  summaries: string[]; // Previous wave's summary texts (must be pre-escaped)
+  consultationOutputs: Record<string, { section?: string; summary: string }>;
+  // section = heading from ConsultationFragment.section (must be pre-escaped)
+}
+
+/**
+ * Assemble a wave briefing string from pre-processed wave summaries and
+ * consultation outputs.
+ *
+ * Sections that contain no matching content are omitted entirely.
+ * The final output is truncated to ~2000 characters (~500 tokens) if needed.
+ *
+ * Input text must already be escaped by the caller — this function does NOT
+ * call escapeDollarBrace and does NOT sanitise ${...} patterns in input.
+ */
+export function assembleWaveBriefing(input: WaveBriefingInput): string {
+  const { wave, summaries, consultationOutputs } = input;
+
+  // Collect all lines from all summaries for pattern extraction
+  const allLines = summaries.flatMap((s) => s.split("\n"));
+
+  const newSharedCode = extractLines(allLines, isNewSharedCodeLine);
+  const patternsEstablished = extractLines(allLines, isPatternLine);
+  const gotchas = extractLines(allLines, isGotchaLine);
+
+  const sections: string[] = [];
+  sections.push(`## Wave Briefing (from wave ${wave})`);
+
+  if (newSharedCode.length > 0) {
+    sections.push(`\n### New shared code\n${newSharedCode.join("\n")}`);
+  }
+
+  if (patternsEstablished.length > 0) {
+    sections.push(`\n### Patterns established\n${patternsEstablished.join("\n")}`);
+  }
+
+  if (gotchas.length > 0) {
+    sections.push(`\n### Gotchas\n${gotchas.join("\n")}`);
+  }
+
+  // Append consultation output sections
+  for (const output of Object.values(consultationOutputs)) {
+    if (output.section) {
+      sections.push(`\n### ${output.section}\n${output.summary}`);
+    }
+  }
+
+  let result = sections.join("").trimEnd();
+
+  if (result.length > MAX_BRIEFING_CHARS) {
+    result = result.slice(0, MAX_BRIEFING_CHARS).trimEnd() + "\n\n[Briefing truncated]";
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Line-classification helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns lines from `allLines` that satisfy the predicate.
+ * Empty or whitespace-only lines are always skipped.
+ */
+function extractLines(allLines: string[], predicate: (line: string) => boolean): string[] {
+  return allLines.filter((line) => line.trim() !== "" && predicate(line));
+}
+
+/**
+ * True if the line mentions creating or adding shared code (file paths or keywords).
+ */
+function isNewSharedCodeLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  // "created" / "added" keywords OR presence of a file-path-like pattern
+  return (
+    lower.includes("created") ||
+    lower.includes("added") ||
+    /\bsrc\//.test(line) ||
+    /\.\w{2,4}/.test(line)
+  );
+}
+
+/**
+ * True if the line mentions a pattern or convention.
+ */
+function isPatternLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  return (
+    lower.includes("pattern") ||
+    lower.includes("convention") ||
+    lower.includes("approach")
+  );
+}
+
+/**
+ * True if the line mentions a concern, gotcha, or warning.
+ */
+function isGotchaLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  return (
+    lower.includes("concern") ||
+    lower.includes("gotcha") ||
+    lower.includes("warning") ||
+    lower.includes("unexpected")
+  );
+}

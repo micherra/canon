@@ -35,5 +35,5 @@ The orchestrator is responsible for passing these paths. Agents are responsible 
 
 ## Exceptions
 
-**canon-refactorer**: The refactorer produces a structured status report (FIXED/PARTIAL_FIX/CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The refactorer is exempt from template requirements — no template is defined for it in the flow states, and it should NOT report NEEDS_CONTEXT for a missing template.
+**canon-fixer (violation-fix mode)**: The fixer in violation-fix mode produces a structured status report (FIXED/PARTIAL_FIX/CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The fixer in violation-fix mode is exempt from template requirements — no template is defined for it in the flow states, and it should NOT report NEEDS_CONTEXT for a missing template.
 

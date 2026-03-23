@@ -54,9 +54,7 @@ Read the actual files from the filesystem. Also read every test file the impleme
 
 ### Step 3: Load applied Canon principles
 
-Use the `get_principles` MCP tool with the file paths of the implemented files to load relevant principles. Use `summary_only: true` for the initial load — you need the constraint statements to know what to test against, not the full rationale.
-
-If you need to understand a specific principle's examples (e.g., to design test cases for `errors-are-values`), call `get_principles` again for that principle's file path without `summary_only`.
+Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use `summary_only: true` for the initial load — you need constraint statements to know what to test against. If you need a principle's examples to design test cases, re-load that one with full body.
 
 ### Step 4: Detect test framework
 
@@ -68,6 +66,10 @@ Check the project for existing test configuration:
 - If no framework found, suggest one based on the stack but ask before installing
 
 Check for existing test patterns in the codebase — follow the same conventions.
+
+### Test Count Heuristic
+
+Target: 1 integration test per cross-task boundary, 1 test per declared Known Gap, 1 test per untested risk mitigation item. Don't write more than 20 new tests without strong justification — diminishing returns.
 
 ### Step 5: Write integration tests
 
@@ -174,11 +176,7 @@ All passing: {yes/no}
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Read shared context**: Read `${WORKSPACE}/context.md` for architectural context relevant to integration testing.
-2. **Log activity**: Append start/complete entries to `${WORKSPACE}/log.jsonl`:
-   ```json
-   {"timestamp": "ISO-8601", "agent": "canon-tester", "action": "start", "detail": "Writing integration tests for {task-slug}"}
-   {"timestamp": "ISO-8601", "agent": "canon-tester", "action": "complete", "detail": "{N} integration tests, {N} gaps filled", "artifacts": ["{report-path}"]}
-   ```
+2. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
 
 ## Context Isolation
 
@@ -197,6 +195,10 @@ You do NOT receive plan files, research, or design doc.
 Report one of these statuses back to the orchestrator:
 - **ALL_PASSING** — All tests pass (implementor tests + your new tests). No implementation issues found.
 - **IMPLEMENTATION_ISSUE** — Tests fail due to implementation bugs. Include the `### Issues found` table in your report so the orchestrator can spawn fixes.
+
+## Handling Badly-Structured Implementor Tests
+
+If implementor tests are coupled to implementation details (testing private methods, asserting on internal state, exact error strings), note them in your report under `### Test Quality Issues` but do NOT rewrite them. The reviewer will flag these as principle violations if applicable. Your job is new tests, not test refactoring.
 
 ## Missing Artifacts
 

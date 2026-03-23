@@ -1,0 +1,36 @@
+---
+fragment: implement-verify
+description: Direct-mode implement then verify — fast path for small changes with no plan file
+entry: implement
+params:
+  after_all_passing: ~
+
+states:
+  implement:
+    type: single
+    agent: canon-implementor
+    template: implementation-log
+    transitions:
+      done: verify
+      blocked: hitl
+
+  verify:
+    type: single
+    agent: canon-tester
+    role: verify
+    template: test-report
+    transitions:
+      all_passing: ${after_all_passing}
+      implementation_issue: hitl
+      blocked: hitl
+---
+
+## Spawn Instructions
+
+### implement
+Direct mode — no plan file. Task: ${task}. Treat the task description as your plan. Save summary to ${WORKSPACE}/plans/${slug}/SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
+
+${progress}
+
+### verify
+Lightweight verification gate — run the project test suite only (do NOT write new tests). Check ${WORKSPACE}/plans/${slug}/SUMMARY.md for implementation context. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Report all_passing or implementation_issue.
