@@ -423,3 +423,184 @@ describe("reportResult — HITL scenarios", () => {
     expect(result.hitl_required).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// parallel_results aggregation
+// ---------------------------------------------------------------------------
+
+describe("reportResult — parallel_results aggregation", () => {
+  function makeFlowWithParallelTransitions(): FlowType {
+    return makeMinimalFlow({
+      states: {
+        build: {
+          type: "single",
+          transitions: {
+            done: "review",
+            cannot_fix: "hitl",
+            blocked: "hitl",
+            failed: "hitl",
+          },
+        },
+        review: { type: "single", transitions: { done: "ship" } },
+        ship: { type: "terminal" },
+        hitl: { type: "terminal" },
+      },
+    });
+  }
+
+  it("all-done parallel_results produces 'done' condition", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithParallelTransitions();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE", // overridden by aggregation
+      flow,
+      parallel_results: [
+        { item: "file-a.ts", status: "done" },
+        { item: "file-b.ts", status: "done" },
+      ],
+    });
+
+    expect(result.transition_condition).toBe("done");
+    expect(result.next_state).toBe("review");
+  });
+
+  it("all-cannot_fix parallel_results produces 'cannot_fix' condition", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithParallelTransitions();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE", // overridden by aggregation
+      flow,
+      parallel_results: [
+        { item: "file-a.ts", status: "cannot_fix" },
+        { item: "file-b.ts", status: "cannot_fix" },
+      ],
+    });
+
+    expect(result.transition_condition).toBe("cannot_fix");
+    expect(result.next_state).toBe("hitl");
+  });
+
+  it("mixed done/cannot_fix parallel_results produces 'done' condition", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithParallelTransitions();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      parallel_results: [
+        { item: "file-a.ts", status: "done" },
+        { item: "file-b.ts", status: "cannot_fix" },
+      ],
+    });
+
+    expect(result.transition_condition).toBe("done");
+    expect(result.next_state).toBe("review");
+  });
+
+  it("any-blocked parallel_results produces 'blocked' condition", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithParallelTransitions();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE", // overridden by aggregation
+      flow,
+      parallel_results: [
+        { item: "file-a.ts", status: "done" },
+        { item: "file-b.ts", status: "blocked" },
+      ],
+    });
+
+    expect(result.transition_condition).toBe("blocked");
+    expect(result.hitl_required).toBe(true);
+  });
+
+  it("parallel_results is stored on BoardStateEntry", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithParallelTransitions();
+    await setupWorkspace(workspace, flow);
+
+    const parallelResults = [
+      { item: "file-a.ts", status: "done", artifacts: ["summary.md"] },
+      { item: "file-b.ts", status: "done" },
+    ];
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      parallel_results: parallelResults,
+    });
+
+    expect(result.board.states["build"].parallel_results).toEqual(parallelResults);
+  });
+
+  it("absent parallel_results does not override condition (existing behavior unchanged)", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithParallelTransitions();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      // no parallel_results
+    });
+
+    expect(result.transition_condition).toBe("done");
+    expect(result.next_state).toBe("review");
+    expect(result.board.states["build"].parallel_results).toBeUndefined();
+  });
+
+  it("empty parallel_results array does not override condition", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithParallelTransitions();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      parallel_results: [], // empty — should not trigger aggregation
+    });
+
+    expect(result.transition_condition).toBe("done");
+    expect(result.next_state).toBe("review");
+  });
+
+  it("aggregated condition overrides status_keyword for transition lookup", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithParallelTransitions();
+    await setupWorkspace(workspace, flow);
+
+    // status_keyword says DONE but all items are cannot_fix → should route to hitl
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      parallel_results: [
+        { item: "file-a.ts", status: "cannot_fix" },
+      ],
+    });
+
+    expect(result.transition_condition).toBe("cannot_fix");
+    expect(result.next_state).toBe("hitl");
+  });
+});

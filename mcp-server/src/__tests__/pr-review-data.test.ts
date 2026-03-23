@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, readFile, rm, mkdir } from "fs/promises";
+import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { getPrReviewData, recordPrReview } from "../tools/pr-review-data.js";
+import { getPrReviewData } from "../tools/pr-review-data.js";
 import { PrStore } from "../drift/pr-store.js";
 
 describe("getPrReviewData", () => {
@@ -20,8 +20,7 @@ describe("getPrReviewData", () => {
   it("generates diff command for PR number", async () => {
     const result = await getPrReviewData(
       { pr_number: 42 },
-      tmpDir,
-      "/nonexistent"
+      tmpDir
     );
     expect(result.diff_command).toContain("gh pr diff 42");
   });
@@ -29,14 +28,13 @@ describe("getPrReviewData", () => {
   it("generates diff command for branch", async () => {
     const result = await getPrReviewData(
       { branch: "feature/auth", diff_base: "main" },
-      tmpDir,
-      "/nonexistent"
+      tmpDir
     );
     expect(result.diff_command).toContain("git diff main..feature/auth");
   });
 
   it("defaults to main..HEAD without branch or PR", async () => {
-    const result = await getPrReviewData({}, tmpDir, "/nonexistent");
+    const result = await getPrReviewData({}, tmpDir);
     expect(result.diff_command).toContain("git diff main..HEAD");
   });
 
@@ -61,57 +59,11 @@ describe("getPrReviewData", () => {
 
     const result = await getPrReviewData(
       { pr_number: 42, incremental: true },
-      tmpDir,
-      "/nonexistent"
+      tmpDir
     );
     expect(result.incremental).toBe(true);
     expect(result.last_reviewed_sha).toBe("abc123");
     expect(result.diff_command).toContain("git diff abc123..HEAD");
-  });
-});
-
-describe("recordPrReview", () => {
-  let tmpDir: string;
-
-  beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-pr-record-test-"));
-  });
-
-  afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
-  });
-
-  it("records a PR review and writes to pr-reviews.jsonl", async () => {
-    const result = await recordPrReview(
-      {
-        pr_number: 42,
-        verdict: "CLEAN",
-        files: ["src/foo.ts"],
-        violations: [],
-        honored: ["p1"],
-        score: {
-          rules: { passed: 1, total: 1 },
-          opinions: { passed: 1, total: 1 },
-          conventions: { passed: 0, total: 0 },
-        },
-      },
-      tmpDir
-    );
-
-    expect(result.recorded).toBe(true);
-    expect(result.id).toMatch(/^prrev_\d{8}_[0-9a-f]{16}$/);
-
-    const content = await readFile(
-      join(tmpDir, ".canon", "pr-reviews.jsonl"),
-      "utf-8"
-    );
-    const entries = content
-      .split("\n")
-      .filter((l) => l.trim())
-      .map((l) => JSON.parse(l));
-    expect(entries).toHaveLength(1);
-    expect(entries[0].pr_number).toBe(42);
-    expect(entries[0].verdict).toBe("CLEAN");
   });
 });
 

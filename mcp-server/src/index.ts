@@ -348,6 +348,11 @@ server.registerTool(
       file_test_pairs: z.array(z.object({ file: z.string(), test: z.string() })).optional().describe("File/test pairs for same_file_test stuck detection"),
       commit_sha: z.string().optional().describe("Current commit SHA for no_progress stuck detection"),
       artifact_count: z.number().optional().describe("Current artifact count for no_progress stuck detection"),
+      parallel_results: z.array(z.object({
+        item: z.string(),
+        status: z.string(),
+        artifacts: z.array(z.string()).optional(),
+      })).optional().describe("Results from parallel-per execution — triggers aggregation"),
     },
   },
   async (input) => {

@@ -10,6 +10,7 @@ import {
   applyReviewThresholdToCondition,
   buildHistoryEntry,
   isStuck,
+  aggregateParallelPerResults,
 } from "../orchestration/transitions.js";
 import {
   readBoard,
@@ -19,7 +20,7 @@ import {
 } from "../orchestration/board.js";
 import { canEnterState } from "../orchestration/convergence.js";
 import { withBoardLock } from "../orchestration/workspace.js";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.js";
+import type { Board, ResolvedFlow, CannotFixItem } from "../orchestration/flow-schema.js";
 import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.js";
 import { flowEventBus } from "../orchestration/event-bus-instance.js";
 import { createJsonlLogger } from "../orchestration/events.js";
@@ -94,6 +95,42 @@ async function reportResultLocked(
       condition,
       stateDef.transitions,
     );
+  }
+
+  // Aggregate parallel-per results if present
+  if (input.parallel_results && input.parallel_results.length > 0) {
+    const aggregated = aggregateParallelPerResults(input.parallel_results);
+    condition = aggregated.condition; // Override condition with aggregated result
+
+    // Store parallel_results on board state entry
+    board = {
+      ...board,
+      states: {
+        ...board.states,
+        [input.state_id]: {
+          ...board.states[input.state_id],
+          parallel_results: input.parallel_results,
+        },
+      },
+    };
+
+    // Accumulate cannot_fix items in iteration record (as strings for now)
+    if (aggregated.cannotFixItems.length > 0 && board.iterations[input.state_id]) {
+      const iteration = board.iterations[input.state_id];
+      const existingCannotFix = iteration.cannot_fix ?? [];
+      // Convert string items to CannotFixItem format: item string is "principle_id:file_path" or just an identifier
+      // For now, store as-is in a separate field — the filterCannotFix path uses structured CannotFixItem from individual reports
+      board = {
+        ...board,
+        iterations: {
+          ...board.iterations,
+          [input.state_id]: {
+            ...iteration,
+            cannot_fix: existingCannotFix, // unchanged — structured items come from individual reports
+          },
+        },
+      };
+    }
   }
 
   // Evaluate transition
@@ -173,6 +210,43 @@ async function reportResultLocked(
       stuck = true;
       stuck_reason = `Agent is stuck in state '${input.state_id}' (${stateDef.stuck_when})`;
       nextState = null; // Override to hitl
+    }
+  }
+
+  // Accumulate cannot_fix items when agent reports cannot_fix status
+  if (condition === "cannot_fix" && board.iterations[input.state_id]) {
+    const iteration = board.iterations[input.state_id];
+    const newCannotFixItems: CannotFixItem[] = [];
+
+    // Build CannotFixItem entries from principle_ids x file_paths
+    if (input.principle_ids && input.file_paths) {
+      for (const principleId of input.principle_ids) {
+        for (const filePath of input.file_paths) {
+          newCannotFixItems.push({ principle_id: principleId, file_path: filePath });
+        }
+      }
+    }
+
+    if (newCannotFixItems.length > 0) {
+      const existingCannotFix = iteration.cannot_fix ?? [];
+      // Deduplicate: only add items not already in the list
+      const deduped = newCannotFixItems.filter(
+        (item) => !existingCannotFix.some(
+          (existing) => existing.principle_id === item.principle_id && existing.file_path === item.file_path
+        )
+      );
+      if (deduped.length > 0) {
+        board = {
+          ...board,
+          iterations: {
+            ...board.iterations,
+            [input.state_id]: {
+              ...iteration,
+              cannot_fix: [...existingCannotFix, ...deduped],
+            },
+          },
+        };
+      }
     }
   }
 
