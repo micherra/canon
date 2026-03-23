@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, readFile } from "fs/promises";
+import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { computeAnalytics, appendFlowRun, getFlowRuns, type FlowRunEntry } from "../drift/analytics.js";
+import { DriftStore } from "../drift/store.js";
+import type { ReviewEntry } from "../schema.js";
 
 function makeRun(overrides?: Partial<FlowRunEntry>): FlowRunEntry {
   return {
@@ -102,5 +104,88 @@ describe("appendFlowRun / getFlowRuns", () => {
   it("returns empty for missing file", async () => {
     const runs = await getFlowRuns(tmpDir);
     expect(runs).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Compliance trend
+// ---------------------------------------------------------------------------
+
+function makeReview(overrides: Partial<ReviewEntry>): ReviewEntry {
+  return {
+    review_id: "rev_test",
+    timestamp: "2026-03-10T10:00:00Z",
+    verdict: "CLEAN",
+    files: [],
+    violations: [],
+    honored: [],
+    score: { rules: { passed: 1, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 1, total: 1 } },
+    ...overrides,
+  };
+}
+
+describe("DriftStore.getComplianceTrend", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-trend-test-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns empty for no reviews", async () => {
+    const store = new DriftStore(tmpDir);
+    const trend = await store.getComplianceTrend("thin-handlers");
+    expect(trend).toEqual([]);
+  });
+
+  it("computes weekly pass rates", async () => {
+    const store = new DriftStore(tmpDir);
+
+    // Week 10: 1 violation
+    await store.appendReview(makeReview({
+      review_id: "r1",
+      timestamp: "2026-03-02T10:00:00Z",
+      violations: [{ principle_id: "thin-handlers", severity: "rule" }],
+    }));
+    // Week 10: 1 honored
+    await store.appendReview(makeReview({
+      review_id: "r2",
+      timestamp: "2026-03-03T10:00:00Z",
+      honored: ["thin-handlers"],
+    }));
+    // Week 12: 1 honored
+    await store.appendReview(makeReview({
+      review_id: "r3",
+      timestamp: "2026-03-16T10:00:00Z",
+      honored: ["thin-handlers"],
+    }));
+
+    const trend = await store.getComplianceTrend("thin-handlers");
+    expect(trend.length).toBeGreaterThanOrEqual(2);
+
+    // First week has 1 violation + 1 pass = 50% pass rate
+    const firstWeek = trend[0];
+    expect(firstWeek.pass_rate).toBe(0.5);
+    expect(firstWeek.violations).toBe(1);
+
+    // Last week has 1 pass = 100% pass rate
+    const lastWeek = trend[trend.length - 1];
+    expect(lastWeek.pass_rate).toBe(1);
+  });
+
+  it("limits to N most recent weeks", async () => {
+    const store = new DriftStore(tmpDir);
+
+    // Create reviews across 3 different weeks
+    await store.appendReview(makeReview({ review_id: "r1", timestamp: "2026-02-03T10:00:00Z", honored: ["p1"] }));
+    await store.appendReview(makeReview({ review_id: "r2", timestamp: "2026-02-10T10:00:00Z", honored: ["p1"] }));
+    await store.appendReview(makeReview({ review_id: "r3", timestamp: "2026-02-17T10:00:00Z", honored: ["p1"] }));
+
+    const trend = await store.getComplianceTrend("p1", 2);
+    expect(trend).toHaveLength(2);
   });
 });

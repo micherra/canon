@@ -1,4 +1,4 @@
-import { DriftStore } from "../drift/store.js";
+import { DriftStore, type WeeklyTrendPoint } from "../drift/store.js";
 import { analyzeDrift } from "../drift/analyzer.js";
 import { loadAllPrinciples } from "../matcher.js";
 
@@ -16,6 +16,7 @@ export interface GetComplianceOutput {
   times_honored: number;
   total_reviews: number;
   trend: "improving" | "stable" | "declining" | "insufficient_data";
+  weekly_trend: WeeklyTrendPoint[];
 }
 
 export async function getCompliance(
@@ -26,10 +27,11 @@ export async function getCompliance(
   const store = new DriftStore(projectDir);
 
   // Load principles (cached) and filter parsed JSONL entries to this principle only
-  const [reviews, decisions, principles] = await Promise.all([
+  const [reviews, decisions, principles, weeklyTrend] = await Promise.all([
     store.getReviews(input.principle_id),
     store.getDecisions(input.principle_id),
     loadAllPrinciples(projectDir, pluginDir),
+    store.getComplianceTrend(input.principle_id),
   ]);
 
   const allIds = principles.map((p) => p.id);
@@ -46,6 +48,7 @@ export async function getCompliance(
       times_honored: 0,
       total_reviews: 0,
       trend: "insufficient_data",
+      weekly_trend: [],
     };
   }
 
@@ -74,6 +77,7 @@ export async function getCompliance(
       times_honored: honored,
       total_reviews: report.total_reviews,
       trend: report.trend,
+      weekly_trend: weeklyTrend,
     };
   }
 
@@ -87,5 +91,6 @@ export async function getCompliance(
     times_honored: stats.times_honored,
     total_reviews: report.total_reviews,
     trend: report.trend,
+    weekly_trend: weeklyTrend,
   };
 }
