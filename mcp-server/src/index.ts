@@ -27,6 +27,7 @@ import { updateBoard } from "./tools/update-board.js";
 import { listOverlays } from "./tools/list-overlays.js";
 import { postWaveBulletin } from "./tools/post-wave-bulletin.js";
 import { getWaveBulletin } from "./tools/get-wave-bulletin.js";
+import { injectWaveEvent } from "./tools/inject-wave-event.js";
 import { storePrReview } from "./tools/store-pr-review.js";
 import { getFlowRuns, computeAnalytics } from "./drift/analytics.js";
 import { reportInputSchema } from "./schema.js";
@@ -446,10 +447,32 @@ server.registerTool(
       wave: z.number(),
       since: z.string().optional().describe("ISO timestamp — only return messages after this time"),
       type: z.string().optional().describe("Filter by message type"),
+      include_events: z.boolean().optional().describe("Also return pending wave events"),
     },
   },
   async (input) => {
     const result = await getWaveBulletin(input);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "inject_wave_event",
+  {
+    description: "Inject a user event into a running wave execution. Events are applied at wave boundaries (between waves). Use to add tasks, skip tasks, inject context, provide guidance, or pause execution.",
+    inputSchema: {
+      workspace: z.string(),
+      type: z.enum(["add_task", "skip_task", "reprioritize", "inject_context", "guidance", "pause"]),
+      payload: z.object({
+        task_id: z.string().optional().describe("Task ID to skip or reprioritize"),
+        description: z.string().optional().describe("Description for add_task, inject_context, or guidance"),
+        context: z.string().optional().describe("Additional context"),
+        wave: z.number().optional().describe("Target wave number (defaults to next wave)"),
+      }),
+    },
+  },
+  async (input) => {
+    const result = await injectWaveEvent(input);
     return jsonResponse(result);
   }
 );
