@@ -5,6 +5,7 @@ import type { ResolvedFlow, StateDefinition } from "../orchestration/flow-schema
 import { evaluateSkipWhen } from "../orchestration/skip-when.js";
 import { readBoard } from "../orchestration/board.js";
 import { resolveContextInjections } from "../orchestration/inject-context.js";
+import { clusterDiff, type FileCluster } from "../orchestration/diff-cluster.js";
 
 /** A task item passed to wave/parallel-per states — either a name or a structured plan. */
 export type TaskItem = string | Record<string, string | number | boolean | string[]>;
@@ -36,6 +37,8 @@ interface SpawnPromptResult {
   state_type: string;
   skip_reason?: string;
   warnings?: string[];
+  clusters?: FileCluster[];
+  timeout_ms?: number;
 }
 
 /**
@@ -149,13 +152,24 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     }
   }
 
-  // Warn about unimplemented fields that are present but not yet evaluated at runtime
-  // large_diff_threshold, cluster_by, and timeout remain unimplemented at runtime.
-  // gate and consultations are now implemented — they are no longer deferred.
-  const deferredFields = ["large_diff_threshold", "cluster_by", "timeout"] as const;
-  for (const field of deferredFields) {
-    if (state[field] !== undefined) {
-      warnings.push(`StateDefinition field "${field}" is present but not yet implemented at runtime`);
+  // Parse timeout override
+  let timeout_ms: number | undefined;
+  if (state.timeout) {
+    timeout_ms = parseTimeout(state.timeout);
+    if (timeout_ms === undefined) {
+      warnings.push(`Invalid timeout format "${state.timeout}" — expected e.g. "10m", "1h", "90s"`);
+    }
+  }
+
+  // Evaluate large_diff_threshold — cluster files when diff exceeds threshold
+  let clusters: FileCluster[] | undefined;
+  if (state.large_diff_threshold != null) {
+    const board = state.skip_when ? undefined : await readBoard(input.workspace);
+    const baseCommit = board?.base_commit ?? (await readBoard(input.workspace)).base_commit;
+    const strategy = state.cluster_by ?? "directory";
+    const result = clusterDiff(baseCommit, state.large_diff_threshold, strategy);
+    if (result) {
+      clusters = result;
     }
   }
 
@@ -202,10 +216,23 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
 
     case "parallel-per": {
       const agent = state.agent ?? "unknown";
-      const perItems = items ?? [];
-      for (const item of perItems) {
-        const prompt = substituteItem(basePrompt, item);
-        prompts.push({ agent, prompt, item, template_paths: paths });
+      // When clusters are available, use cluster items instead of the original items
+      if (clusters) {
+        for (const cluster of clusters) {
+          const clusterItem: TaskItem = {
+            cluster_key: cluster.key,
+            files: cluster.files.join(", "),
+            file_count: cluster.files.length,
+          };
+          const prompt = substituteItem(basePrompt, clusterItem);
+          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
+        }
+      } else {
+        const perItems = items ?? [];
+        for (const item of perItems) {
+          const prompt = substituteItem(basePrompt, item);
+          prompts.push({ agent, prompt, item, template_paths: paths });
+        }
       }
       break;
     }
@@ -251,5 +278,28 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     prompts,
     state_type: state.type,
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(clusters ? { clusters } : {}),
+    ...(timeout_ms != null ? { timeout_ms } : {}),
   };
+}
+
+/**
+ * Parse a human-readable timeout string into milliseconds.
+ * Supports: "30s", "10m", "1h", "1h30m".
+ */
+export function parseTimeout(timeout: string): number | undefined {
+  let totalMs = 0;
+  let matched = false;
+  const remaining = timeout.replace(/(\d+)\s*(h|m|s)/gi, (_, num, unit) => {
+    matched = true;
+    const n = parseInt(num, 10);
+    switch (unit.toLowerCase()) {
+      case "h": totalMs += n * 3600000; break;
+      case "m": totalMs += n * 60000; break;
+      case "s": totalMs += n * 1000; break;
+    }
+    return "";
+  });
+  if (!matched || remaining.trim()) return undefined;
+  return totalMs;
 }

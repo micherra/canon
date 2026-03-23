@@ -705,7 +705,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     // but if it were present it would not produce a deferred warning either.
   });
 
-  it("emits warning when state has 'timeout' field", async () => {
+  it("returns timeout_ms when state has valid 'timeout' field", async () => {
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
@@ -733,10 +733,13 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       variables: {},
     });
 
-    expect(result.warnings?.some((w) => w.includes("timeout"))).toBe(true);
+    expect(result.timeout_ms).toBe(1800000); // 30 minutes
+    // No deferred warning for timeout — it's now implemented
+    const deferredWarnings = result.warnings?.filter((w) => w.includes("not yet implemented")) ?? [];
+    expect(deferredWarnings.some((w) => w.includes("timeout"))).toBe(false);
   });
 
-  it("emits warnings for multiple deferred fields simultaneously", async () => {
+  it("no deferred-field warnings when timeout, large_diff_threshold, and gate are all set", async () => {
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
@@ -766,13 +769,11 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       variables: {},
     });
 
-    expect(result.warnings).toBeDefined();
+    // All three fields are now implemented — no deferred warnings
     const fieldWarnings = result.warnings?.filter((w) => w.includes("not yet implemented")) ?? [];
-    // gate is now implemented — only timeout and large_diff_threshold remain deferred
-    expect(fieldWarnings.length).toBe(2);
-    expect(fieldWarnings.some((w) => w.includes("timeout"))).toBe(true);
-    expect(fieldWarnings.some((w) => w.includes("large_diff_threshold"))).toBe(true);
-    expect(fieldWarnings.some((w) => w.includes("gate"))).toBe(false);
+    expect(fieldWarnings.length).toBe(0);
+    // timeout_ms should be set
+    expect(result.timeout_ms).toBe(900000); // 15 minutes
   });
 });
 
