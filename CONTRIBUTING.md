@@ -23,16 +23,22 @@ Thanks for your interest in contributing! Canon is open source under the MIT lic
 
 ```
 canon/
-├── mcp-server/          MCP server (TypeScript)
-├── cursor-extension/    VS Code/Cursor extension (Svelte + TypeScript)
-├── principles/          Built-in engineering principles
-├── commands/            Slash commands
-├── agents/              Specialist agents
-├── flows/               Workflow definitions
-├── templates/           Agent output templates
-├── agent-rules/         Agent behavioral guidelines
-├── hooks/               Automation hooks
-└── skills/              Skill definitions
+├── mcp-server/            MCP server (TypeScript) — 25 tools, drift tracking, orchestration
+│   └── src/
+│       ├── tools/           Tool implementations (one file per tool)
+│       ├── orchestration/   Flow runtime: board, effects, gates, variables, clustering
+│       ├── drift/           JSONL stores: decisions, patterns, reviews, analytics
+│       └── graph/           Dependency graph scanner and priority scoring
+├── cursor-extension/      VS Code/Cursor dashboard extension (Svelte + D3)
+├── principles/            Built-in engineering principles (markdown + YAML frontmatter)
+├── flows/                 Flow state machines (YAML frontmatter + spawn instructions)
+│   └── fragments/           Reusable state groups included by flows
+├── templates/             Agent output templates (review checklists, summaries, plans)
+├── agents/                Specialist agent definitions (13 agents + orchestrator)
+├── hooks/                 Pre/post tool-use interceptor scripts
+├── commands/              CLI command definitions
+├── skills/                Skill definitions for Claude Code / Cursor integration
+└── .canon/                Runtime data (workspaces, drift JSONL, config)
 ```
 
 ## Development Workflow
@@ -87,6 +93,29 @@ Use the [bug report template](https://github.com/micherra/canon/issues/new?templ
 ## Requesting Features
 
 Use the [feature request template](https://github.com/micherra/canon/issues/new?template=feature_request.yml) on GitHub. Describe the use case and why it would be valuable.
+
+## Key Subsystems
+
+### Effects System
+Effects run declaratively after flow states complete, parsing agent artifacts and persisting structured data to JSONL drift stores. Defined in flow YAML via `effects:` on a state:
+
+```yaml
+states:
+  review:
+    effects:
+      - type: persist_review
+        artifact: REVIEW.md
+      - type: persist_decisions
+      - type: persist_patterns
+```
+
+All effects are best-effort — parse failures are logged but never block the flow. Implementation: `mcp-server/src/orchestration/effects.ts`.
+
+### Flow Gates
+Gates are verification checkpoints (test suites, linters, type checkers) that run between states. See `flows/GATES.md` for the full guide on built-in and custom gates.
+
+### Flow Analytics
+Flow execution data is automatically persisted to `.canon/flow-runs.jsonl` on flow completion. Query via the `get_flow_analytics` MCP tool to identify bottleneck states, skip rates, and optimization opportunities.
 
 ## Code Style
 
