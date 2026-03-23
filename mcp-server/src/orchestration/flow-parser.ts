@@ -375,6 +375,11 @@ export async function loadAndResolveFlow(
   pluginDir: string,
   flowName: string,
 ): Promise<{ flow: ResolvedFlow; errors: string[] }> {
+  if (!/^[a-zA-Z0-9_-]+$/.test(flowName)) {
+    throw new Error(
+      `Invalid flow name "${flowName}": only alphanumeric characters, hyphens, and underscores are allowed`,
+    );
+  }
   const filePath = `${pluginDir}/flows/${flowName}.md`;
   const raw = await readFile(filePath, "utf-8");
   const { frontmatter, spawnInstructions } = parseFlowContent(raw);
@@ -382,7 +387,14 @@ export async function loadAndResolveFlow(
   // Validate frontmatter against FlowDefinitionSchema
   const flowDef = FlowDefinitionSchema.parse(frontmatter);
 
-  let resolvedStates = { ...flowDef.states };
+  const hasInlineStates = flowDef.states && Object.keys(flowDef.states).length > 0;
+  const hasIncludes = flowDef.includes && flowDef.includes.length > 0;
+  if (!hasInlineStates && !hasIncludes) {
+    throw new Error(`Flow "${flowName}" has no states and no includes — nothing to resolve`);
+  }
+
+  const inlineStates = flowDef.states ?? {};
+  let resolvedStates = { ...inlineStates };
   let resolvedConsultations: Record<string, ConsultationFragment> = {};
   let resolvedSpawnInstructions = { ...spawnInstructions };
 
@@ -397,7 +409,7 @@ export async function loadAndResolveFlow(
     const resolved = resolveFragments(flowDef, loadedFragments, flowDef.includes);
 
     // Merge fragment states with flow states (flow states take precedence)
-    resolvedStates = { ...resolved.states, ...flowDef.states };
+    resolvedStates = { ...resolved.states, ...inlineStates };
     resolvedConsultations = resolved.consultations;
     resolvedSpawnInstructions = { ...resolved.spawnInstructions, ...spawnInstructions };
   }
@@ -418,7 +430,7 @@ export async function loadAndResolveFlow(
 
   // Determine entry: explicit, or first state from the flow's own states
   // (not fragment states, which are merged first and would wrongly take priority)
-  const entry = flowDef.entry ?? Object.keys(flowDef.states ?? {})[0] ?? Object.keys(validatedStates)[0];
+  const entry = flowDef.entry ?? Object.keys(inlineStates)[0] ?? Object.keys(validatedStates)[0];
 
   const resolvedFlow: ResolvedFlow = {
     ...flowDef,
