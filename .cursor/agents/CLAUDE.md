@@ -20,10 +20,10 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 | `canon-implementor` | Writes code per plan; writes unit tests | sonnet |
 | `canon-tester` | Writes integration tests; fills coverage gaps | sonnet |
 | `canon-researcher` | Investigates single research dimensions | sonnet |
-| `canon-reviewer` | Reviews code for principle compliance | sonnet |
+| `canon-reviewer` | Reviews code for principle compliance | opus |
 | `canon-security` | Security assessments on implemented code | sonnet |
 | `canon-scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation | sonnet |
-| `canon-learner` | Analyzes patterns; suggests principle improvements | sonnet |
+| `canon-learner` | Analyzes patterns; suggests principle improvements | opus |
 | `canon-fixer` | Fixes principle violations identified by reviewers | sonnet |
 | `canon-shipper` | Handles final shipping decisions | sonnet |
 | `canon-writer` | Writes documentation and content | sonnet |
