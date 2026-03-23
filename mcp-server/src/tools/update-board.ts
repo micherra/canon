@@ -5,6 +5,8 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { flowEventBus } from "../orchestration/event-bus-instance.js";
 import { createJsonlLogger } from "../orchestration/events.js";
+import { appendFlowRun, type FlowRunEntry } from "../drift/analytics.js";
+import { generateId } from "../utils/id.js";
 
 interface UpdateBoardInput {
   workspace: string;
@@ -16,6 +18,7 @@ interface UpdateBoardInput {
   result?: string;
   artifacts?: string[];
   metadata?: Record<string, string | number | boolean>;
+  project_dir?: string;
 }
 
 interface UpdateBoardResult {
@@ -115,10 +118,12 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
       };
 
       // Update session status to completed
+      let sessionTier = "unknown";
       try {
         const sessionPath = join(input.workspace, "session.json");
         const sessionData = await readFile(sessionPath, "utf-8");
         const session = SessionSchema.parse(JSON.parse(sessionData));
+        sessionTier = session.tier;
         await writeSession(input.workspace, {
           ...session,
           status: "completed",
@@ -126,6 +131,39 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
         });
       } catch {
         // Best-effort — don't fail the board update if session can't be updated
+      }
+
+      // Persist flow-run analytics (best-effort)
+      const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
+      try {
+        const stateDurations: Record<string, number> = {};
+        const stateIterations: Record<string, number> = {};
+        let totalSpawns = 0;
+        for (const [stateId, stateEntry] of Object.entries(board.states)) {
+          if (stateEntry.metrics) {
+            stateDurations[stateId] = stateEntry.metrics.duration_ms;
+            totalSpawns += stateEntry.metrics.spawns;
+          }
+          if (board.iterations[stateId]) {
+            stateIterations[stateId] = board.iterations[stateId].count;
+          }
+        }
+        const flowRun: FlowRunEntry = {
+          run_id: generateId("run"),
+          flow: board.flow,
+          tier: sessionTier,
+          task: board.task,
+          started: board.started,
+          completed: now,
+          total_duration_ms: new Date(now).getTime() - new Date(board.started).getTime(),
+          state_durations: stateDurations,
+          state_iterations: stateIterations,
+          skipped_states: board.skipped,
+          total_spawns: totalSpawns,
+        };
+        await appendFlowRun(projectDir, flowRun);
+      } catch {
+        // Best-effort — analytics should never block flow completion
       }
       break;
     }

@@ -28,6 +28,7 @@ import { listOverlays } from "./tools/list-overlays.js";
 import { postWaveBulletin } from "./tools/post-wave-bulletin.js";
 import { getWaveBulletin } from "./tools/get-wave-bulletin.js";
 import { storePrReview } from "./tools/store-pr-review.js";
+import { getFlowRuns, computeAnalytics } from "./drift/analytics.js";
 import { reportInputSchema } from "./schema.js";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.js";
 
@@ -488,6 +489,21 @@ server.registerTool(
   async (input) => {
     const result = await storePrReview(input, projectDir);
     return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "get_flow_analytics",
+  {
+    description: "Get flow execution analytics — average durations, bottleneck states, skip rates, and spawn counts. Useful for identifying slow states and optimization opportunities.",
+    inputSchema: {
+      flow: z.string().optional().describe("Filter to a specific flow name"),
+    },
+  },
+  async (input) => {
+    const runs = await getFlowRuns(projectDir, input.flow);
+    const analytics = computeAnalytics(runs);
+    return jsonResponse(analytics);
   }
 );
 
