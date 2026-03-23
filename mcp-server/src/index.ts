@@ -356,7 +356,7 @@ server.registerTool(
     },
   },
   async (input) => {
-    const result = await reportResult(input);
+    const result = await reportResult({ ...input, project_dir: projectDir });
     return jsonResponse(result);
   }
 );

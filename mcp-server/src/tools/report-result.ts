@@ -24,6 +24,7 @@ import type { Board, ResolvedFlow, CannotFixItem } from "../orchestration/flow-s
 import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.js";
 import { flowEventBus } from "../orchestration/event-bus-instance.js";
 import { createJsonlLogger } from "../orchestration/events.js";
+import { executeEffects } from "../orchestration/effects.js";
 
 interface ReportResultInput {
   workspace: string;
@@ -45,6 +46,8 @@ interface ReportResultInput {
   file_test_pairs?: Array<{ file: string; test: string }>;
   commit_sha?: string;
   artifact_count?: number;
+  // Project directory for drift effect persistence
+  project_dir?: string;
 }
 
 interface LogEntry {
@@ -286,6 +289,12 @@ async function reportResultLocked(
 
   // Write board
   await writeBoard(input.workspace, board);
+
+  // Execute drift effects (best-effort — never blocks the flow)
+  if (stateDef?.effects?.length && input.artifacts?.length) {
+    const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
+    await executeEffects(stateDef, input.workspace, input.artifacts, projectDir).catch(() => {});
+  }
 
   // Emit events (best-effort — listeners must swallow errors).
   // once() auto-removes listeners on first fire; the finally block removes any

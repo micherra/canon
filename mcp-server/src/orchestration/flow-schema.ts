@@ -85,6 +85,17 @@ export const RoleEntrySchema = z.union([
   }),
 ]);
 
+export const EffectTypeSchema = z.enum([
+  "persist_review",
+  "persist_decisions",
+  "persist_patterns",
+]);
+
+export const EffectSchema = z.object({
+  type: EffectTypeSchema,
+  artifact: z.string().optional(),
+});
+
 export const StateDefinitionSchema = z.object({
   type: StateTypeSchema,
   agent: z.string().optional(),
@@ -104,6 +115,7 @@ export const StateDefinitionSchema = z.object({
   cluster_by: z.enum(["directory", "layer"]).optional(),
   timeout: z.string().optional(),
   overlays: z.array(z.string()).optional(),
+  effects: z.array(EffectSchema).optional(),
 });
 
 export const FragmentIncludeSchema = z.object({
@@ -151,6 +163,7 @@ export const FragmentStateDefinitionSchema = z.object({
   cluster_by: z.enum(["directory", "layer"]).optional(),
   timeout: z.string().optional(),
   overlays: z.array(z.string()).optional(),
+  effects: z.array(EffectSchema).optional(),
 });
 
 export const FragmentDefinitionSchema = z.object({
@@ -350,6 +363,8 @@ export const SessionSchema = z.object({
 // Inferred TypeScript types
 // ---------------------------------------------------------------------------
 
+export type EffectType = z.infer<typeof EffectTypeSchema>;
+export type Effect = z.infer<typeof EffectSchema>;
 export type StateType = z.infer<typeof StateTypeSchema>;
 export type StuckWhen = z.infer<typeof StuckWhenSchema>;
 export type SkipWhen = z.infer<typeof SkipWhenSchema>;
