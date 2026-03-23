@@ -1,6 +1,6 @@
 # Canon
 
-Engineering principles as code. Canon gives Claude Code a structured set of principles that are loaded before code generation, enforced during review, and refined through a data-driven learning loop.
+Canon is an engineering principles system and multi-agent build harness for Claude Code. You describe what you want in natural language — Canon classifies your intent, picks the right workflow, and runs specialist agents to research, design, implement, test, review, and ship. Your principles are loaded and enforced throughout. Canon is invisible; from your perspective, you just talk to Claude.
 
 > **Note:** Canon is a work in progress. The core enforcement loop, learning system, and MCP tools are functional, but rough edges remain. Principle coverage is opinionated and likely needs tuning for your stack. Expect breaking changes as the plugin format and MCP protocol evolve. Feedback and contributions welcome — open an issue or PR.
 
@@ -27,16 +27,14 @@ git clone https://github.com/micherra/canon.git
 /plugin install canon@canon
 ```
 
-After installing, Canon's slash commands, agents, hooks, and MCP tools are available in any Claude Code session within your project.
-
 ### Requirements
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- Node.js 24+ (for the MCP server; matches CI and release workflows)
+- Node.js 24+
 
-## Cursor-only Setup (no Claude Code plugin)
+## Cursor-only Setup
 
-Canon's full build/review pipeline can run in Cursor without installing the Claude Code plugin.
+Canon's full build and review pipeline can run in Cursor without installing the Claude Code plugin.
 
 1. In your project repo, run:
 ```bash
@@ -55,15 +53,13 @@ On first use, Cursor will start Canon's MCP server and auto-run `npm install` in
 
 ### Claude Max users
 
-Opus 4.6 uses a 1M context window which requires **extra usage** on Claude Max. If you see `"Extra usage is required for long context requests"`:
+Opus uses a 1M context window which requires **extra usage** on Claude Max. If you see `"Extra usage is required for long context requests"`:
 
 1. Enable extra usage in your Claude account settings
 2. Set a monthly spend limit (e.g. $5)
 3. Buy extra usage balance — even a few dollars is enough for testing
 
-Canon commands specify the right model tier for each task (haiku for simple ops, sonnet for code work, opus for architecture), so extra usage costs are minimized.
-
-If you don't want to enable extra usage, launch with Sonnet instead:
+Canon assigns the right model tier per task (haiku for simple ops, sonnet for code work, opus for architecture), so extra usage costs are minimized. If you don't want to enable extra usage, launch with Sonnet instead:
 
 ```bash
 claude --model sonnet
@@ -87,92 +83,86 @@ We also recommend enabling tool search to reduce context usage from MCP tools:
 /canon:init
 ```
 
-This creates `.canon/principles/` with 59 starter principles, a `CONVENTIONS.md` template, and integrates with your `CLAUDE.md`. Ask Canon for status to verify.
+This scans your source files to auto-detect project conventions, creates `.canon/principles/` with 59 starter principles, generates a `CONVENTIONS.md` pre-populated for your stack, and integrates with your `CLAUDE.md`.
 
 ## How It Works
 
-Canon operates on a three-tier severity model:
+You describe what you want. Canon classifies your intent, picks the appropriate workflow, and runs specialist agents to get it done — research, design, implement, test, review, ship. Principles are loaded and enforced at each phase. Your Claude session acts as the orchestrator; Canon never spawns a separate orchestrator subagent.
+
+### Severity model
+
+Canon principles operate on three enforcement levels:
 
 | Severity | Meaning | Enforcement |
 |----------|---------|-------------|
 | **rule** (4) | Hard constraint | Blocks commits. Reviewer verdict: BLOCKING. |
-| **strong-opinion** (36) | Default path | Warns. Deviations require justification via `report` tool. |
+| **strong-opinion** (36) | Default path | Warns. Deviations require justification. |
 | **convention** (19) | Stylistic preference | Noted in reports. Tracked for drift. |
 
-When you write code, Canon automatically loads principles matched to your file's architectural layer and path patterns. Agents self-review against them before presenting output.
+Principles are matched to files by architectural layer and path pattern. Rules are always loaded first; agents self-review against matched principles before presenting output.
 
-## Commands & Natural Language
+## Using Canon
 
-Canon uses a two-tier interface: **natural language** for common workflows and **slash commands** for specialized utilities.
+### Natural language
 
-### Natural Language
-
-Just describe what you want. Canon classifies your intent and routes to the right agent:
+Just describe what you want. Canon classifies your intent and routes to the right workflow:
 
 | What you say | What happens |
 |-------------|-------------|
-| "Add an order creation endpoint with Zod validation" | Build pipeline: auto-detects scope → research → architect → implement → test → review → ship |
-| "The login page is broken" | Hotfix or quick-fix flow depending on urgency |
-| "Refactor the auth middleware" | Refactor flow: analyze scope → implement with continuous test verification → review |
-| "Migrate from Express to Hono" | Migration flow: research scope + rollback plan → staged implementation → security → review |
-| "How does the payment system work?" | Explore flow: parallel research → synthesized analysis report |
-| "Improve test coverage for the API layer" | Test-gap flow: scan coverage → write tests → fix bugs tests reveal → review |
-| "Review my changes" / "Review PR 42" | Code review against Canon principles (supports staged, branch, PR, or file scoping) |
-| "Scan for vulnerabilities" | Security audit flow |
-| "What's the status?" | Health dashboard — principle counts, review scorecard, build progress |
-| "Create a new principle about error handling" | Interactive principle authoring via canon-writer |
-| "Skip tests, this is a small task" | Build with flags parsed from natural language |
+| "Add an order creation endpoint with Zod validation" | Feature workflow: research → design → implement → test → review → ship |
+| "The login page is broken" | Hotfix or quick-fix depending on urgency |
+| "Refactor the auth middleware" | Refactor workflow: analyze → implement with test verification → review → ship |
+| "Migrate from Express to Hono" | Migration workflow: research → design → staged implementation → security → review → ship |
+| "How does the payment system work?" | Explore workflow: parallel research → synthesized analysis report |
+| "Improve test coverage for the API layer" | Test-gap workflow: scan coverage → write tests → fix revealed bugs → review |
+| "Review my changes" | Code review against Canon principles |
+| "Scan for vulnerabilities" | Security audit workflow |
+| "What's the status?" | Health dashboard: principle counts, review scorecard, build progress |
+| "Create a new principle about error handling" | Interactive principle authoring |
 
 Build modifiers can be expressed naturally: "skip research", "just plan don't implement", "this is a large task", "use the quick-fix flow".
 
-### Slash Commands
+### Slash commands
 
 | Command | What it does |
 |---------|-------------|
-| `/canon:init` | Set up Canon in your project — auto-detects codebase conventions |
-| `/canon:learn` | Analyze data to suggest principle and convention improvements |
+| `/canon:init` | Set up Canon in your project — scans source files to auto-detect conventions |
+| `/canon:learn` | Analyze review data to suggest principle and convention improvements |
 | `/canon:adopt` | Scan for coverage gaps, produce a remediation plan, optionally auto-fix rule violations |
 | `/canon:check` | Lightweight pre-commit principle compliance check on staged or specified files |
 | `/canon:pr-review` | Review a PR or branch against principles with layer-parallel fan-out |
 | `/canon:edit-principle` | Edit an existing principle — change severity, scope, tags, or body |
 | `/canon:test-principle` | Verify a principle is detected during review by generating a violation |
-| `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped by the matcher |
-| `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health |
+| `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped without being deleted |
+| `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health (11 checks) |
 | `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
-| `/canon:create-flow` | Create a new flow definition |
-| `/canon:create-overlay` | Create a new role overlay |
+| `/canon:create-flow` | Create a new workflow definition |
+| `/canon:create-overlay` | Create a new role overlay (expertise lens for agent prompts) |
 | `/canon:workspaces` | List and manage Canon workspaces |
 
-## The Build Pipeline
+## Workflows
 
-Canon auto-selects the right pipeline based on what you're doing:
+Canon auto-selects the right workflow based on what you're doing. You can also steer it: "use the quick-fix flow", "this is a large task".
 
-| Flow | When | Pipeline |
-|------|------|----------|
-| **hotfix** | Production incidents, urgent fixes | implement → verify → ship (3 states, no review loop) |
-| **quick-fix** | Small bug fixes (1-3 files) | implement → verify → review → ship |
-| **refactor** | Restructuring, renaming, extracting | analyze scope → **checkpoint** → implement (waves, test gate per wave) → verify → review → ship |
-| **feature** | New features (4-10 files) | design → **checkpoint** → implement → test → review → ship |
-| **migrate** | Upgrades, migrations, version bumps | research (scope + rollback) → design → **checkpoint** → implement → verify → security → review → ship |
-| **deep-build** | Large cross-cutting changes (10+ files) | research → design → **checkpoint** → implement (waves + consultations) → test → security → review → ship |
-| **explore** | Research questions, investigations | research (parallel) → synthesize → report (no implementation) |
-| **test-gap** | Coverage improvement | scan gaps → write tests → fix revealed bugs → review |
-| **review-only** | Review existing changes | review with layer-parallel fan-out for large diffs |
-| **security-audit** | Security scanning | security scan → principle compliance review |
-| **adopt** | Onboarding Canon to a repo | scan violations → auto-fix → rescan |
+| Workflow | When to use |
+|----------|------------|
+| **hotfix** | Production incidents, urgent fixes |
+| **quick-fix** | Small bug fixes (1-3 files) |
+| **refactor** | Restructuring, renaming, extracting |
+| **feature** | New features (4-10 files) |
+| **migrate** | Upgrades, library swaps, version bumps |
+| **deep-build** | Large cross-cutting changes (10+ files) |
+| **explore** | Research questions, investigations (no implementation) |
+| **test-gap** | Coverage improvement |
+| **review-only** | Review existing changes or a PR |
+| **security-audit** | Dedicated security scanning |
+| **adopt** | Onboard Canon to a repo — scan violations and auto-fix |
 
-Each phase is handled by a specialized agent. The top-level Claude acts as the orchestrator — it calls MCP harness tools to manage state and spawns specialist agents as leaf workers. No intermediate orchestrator subagent is needed. Shared patterns (test-fix loops, review-fix loops, user checkpoints, shipping) are defined as **composable fragments** that flows include and wire together, eliminating duplication across pipelines.
-
-**User checkpoints** pause the pipeline after planning to present a summary of what's planned and collect your feedback. Approve to proceed, or share thoughts — the agent classifies your response semantically (no magic keywords) and routes revisions back to the planning phase with your notes attached.
-
-For wave-based implementation (multi-task parallel builds), the orchestrator runs **consultation fragments** at three breakpoints:
-- **Before wave**: Architect reviews upcoming plans, pre-answers likely questions, flags conflicts between parallel tasks
-- **Between waves**: Architect checks for pattern drift, security agent does a quick scan — outputs feed into the next wave's briefing
-- **After waves**: Architect produces an implementation overview artifact for downstream test, security, and review agents
+**User checkpoints** pause after planning to show you what's planned and collect your feedback. Approve to proceed, or share thoughts — Canon classifies your response semantically (no magic keywords needed) and routes revisions back to the planning phase with your notes attached.
 
 ## Principles
 
-Principles, rules, and agent-rules all share the same markdown-with-YAML-frontmatter format. This is Canon's core building block — understanding it lets you extend Canon for your own projects and workflows.
+Principles are Canon's core building block. They're markdown files with YAML frontmatter that tell agents what rules, preferences, and conventions to apply.
 
 ```yaml
 ---
@@ -192,55 +182,43 @@ Body goes here — rationale, examples, and anti-patterns.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | yes | Unique kebab-case identifier. Used for deduplication — a project-local entry with the same `id` overrides the built-in one. |
+| `id` | yes | Unique kebab-case identifier. A project-local entry with the same `id` overrides the built-in one. |
 | `title` | yes | Human-readable name shown in review output and dashboards. |
-| `severity` | yes | One of `rule`, `strong-opinion`, or `convention`. Controls enforcement level (see severity table above). |
-| `scope.layers` | no | Architectural layers this entry applies to. Recognized layers: `api`, `ui`, `domain`, `data`, `infra`, `shared`. Canon infers layers from file paths (e.g. `src/routes/` → `api`, `src/components/` → `ui`). An empty list means it applies to all layers. |
-| `scope.file_patterns` | no | Glob patterns to match specific files (e.g. `"**/*.tf"`, `"src/db/**"`). When set, the entry only activates for matching paths. |
-| `tags` | no | Freeform labels for filtering and grouping (e.g. `security`, `testing`, `agent-behavior`). Used by the `list_principles` MCP tool and when browsing principles via natural language. |
-| `archived` | no | Set to `true` to disable this entry without deleting it. Archived entries are skipped by the matcher and won't appear in reviews. |
-
-### Where the template is used
-
-| Location | What lives there | Examples |
-|----------|-----------------|----------|
-| `principles/rules/` | Hard constraints that block commits | `secrets-never-in-code`, `fail-closed-by-default` |
-| `principles/strong-opinions/` | Default paths that warn on deviation | `prefer-composition`, `explicit-error-handling` |
-| `principles/conventions/` | Stylistic preferences tracked for drift | `consistent-naming`, `file-length-limit` |
-| `agent-rules/` | Behavioral guidelines for Canon's agents | `agent-cold-review`, `agent-design-before-code` |
-
-Agent-rules use the same frontmatter fields but target agent behavior rather than application code. For example, `agent-cold-review` ensures the reviewer agent evaluates code without seeing prior feedback.
+| `severity` | yes | One of `rule`, `strong-opinion`, or `convention`. |
+| `scope.layers` | no | Architectural layers this applies to: `api`, `ui`, `domain`, `data`, `infra`, `shared`. Inferred from file paths. Empty = all layers. |
+| `scope.file_patterns` | no | Glob patterns to restrict to specific files (e.g. `"**/*.tf"`, `"src/db/**"`). |
+| `tags` | no | Labels for filtering and grouping (e.g. `security`, `testing`). |
+| `archived` | no | Set `true` to disable without deleting. Archived entries are skipped by the matcher. |
 
 ### How matching works
 
-When you edit a file, Canon infers its architectural layer from the path and selects entries whose `scope.layers` and `scope.file_patterns` match. Entries are loaded in severity order — rules first, then strong-opinions, then conventions — capped at `max_principles_per_review` per context (default 10, configurable in `.canon/config.json`). An entry with no `layers` and no `file_patterns` matches everything.
+When you edit a file, Canon infers its architectural layer from the path (e.g. `src/routes/` → `api`, `src/components/` → `ui`) and loads principles whose `scope.layers` and `scope.file_patterns` match. Results are sorted rules-first, then strong-opinions, then conventions — capped at `max_principles_per_review` per context (default 10). Project-local principles in `.canon/principles/` override plugin principles with the same ID.
 
-### Adding your own
+### Where principles live
 
-Place your file in the appropriate directory under `.canon/` (for project-local) or contribute directly to the Canon plugin:
+| Location | What lives there |
+|----------|-----------------|
+| `principles/rules/` | Hard constraints that block commits |
+| `principles/strong-opinions/` | Default paths that warn on deviation |
+| `principles/conventions/` | Stylistic preferences tracked for drift |
+| `agent-rules/` | Behavioral guidelines for Canon's agents (not application code) |
 
-```
-.canon/
-├── principles/
-│   ├── rules/              # Hard constraints — block commits
-│   ├── strong-opinions/    # Default path — warn on deviation
-│   └── conventions/        # Stylistic preferences — tracked for drift
-└── agent-rules/            # Behavioral constraints for Canon agents
-```
+### Writing your own
 
-Use guided authoring or create files directly:
-- Ask Canon to create a new principle — the orchestrator spawns canon-writer in new-principle mode
-- Ask Canon to create a new agent-rule — the orchestrator spawns canon-writer in new-agent-rule mode
+Place files under `.canon/principles/{rules,strong-opinions,conventions}/` for project-local principles. Use guided authoring or create files directly:
+
+- "Create a new principle about error handling" — Canon spawns an interactive author agent
+- "Create a new agent-rule about code review behavior" — same flow, agent-rule mode
 
 ## The Learning Loop
 
-Canon doesn't just enforce — it learns. As you review code, log decisions, and run builds, Canon accumulates data:
+Canon learns from your builds. As you review code, log decisions, and run builds, Canon accumulates data in `.canon/`:
 
 ```
-reviews.jsonl      ← review results (violations, honored, scores, verdict)
-decisions.jsonl    ← intentional deviations with justifications
-patterns.jsonl     ← agent-observed codebase patterns
-learning.jsonl     ← learning history (suggestions, actions, dismissals)
+reviews.jsonl      — review results (violations, honored, scores, verdict)
+decisions.jsonl    — intentional deviations with justifications
+patterns.jsonl     — agent-observed codebase patterns
+learning.jsonl     — learning history (suggestions, actions, dismissals)
 ```
 
 Run `/canon:learn` to analyze this data across six dimensions:
@@ -252,44 +230,22 @@ Run `/canon:learn` to analyze this data across six dimensions:
 5. **Convention graduation** — Identify mature conventions ready to become principles
 6. **Staleness detection** — Flag conventions the codebase no longer follows
 
-Use `--apply` to walk through suggestions interactively.
-
-## The Codebase Graph
-
-Canon builds a dependency graph of your codebase to power structural analysis:
-
-```bash
-# Generated automatically when the dashboard opens, or manually:
-# Call codebase_graph MCP tool
-```
-
-The graph includes:
-- **Nodes**: Every source file with layer, violation count, changed status
-- **Edges**: Import/dependency relationships
-- **Insights**: Most connected files, orphans, circular dependencies, layer boundary violations
-- **Reverse index**: Which files depend on each file (persisted as `reverse-deps.json`)
-
-Graph data enriches the entire review pipeline:
-- `review_code` auto-injects `bounded-context-boundaries` for files with layer violations
-- `review_code` auto-injects `architectural-fitness-functions` for files in cycles
-- `get_file_context` returns fan-in, fan-out, hub status, cycle membership, and impact score
-- Violations carry optional `impact_score` — higher score = more dependents affected
-- The Canon Dashboard visualizes the graph with D3 force layout
+Use `--apply` to walk through suggestions interactively. Dismissed suggestions are permanently suppressed — Canon won't re-suggest them.
 
 ## Canon Dashboard
 
-The Canon Dashboard is a VS Code / Cursor extension that brings the codebase graph to life as an interactive visualization. It activates automatically when a `.canon` directory is detected in your workspace.
+The Canon Dashboard is a VS Code / Cursor extension that visualizes your codebase as an interactive dependency graph. It activates automatically when a `.canon` directory is detected.
 
 **What it shows:**
 
-- **Interactive dependency graph** — D3 force-directed layout with nodes colored by architectural layer (api, ui, domain, data, infra, shared)
+- **Interactive dependency graph** — D3 force-directed layout with nodes colored by architectural layer
 - **Git overlay** — Changed files pulse on the graph so you can see what's in flux
 - **Violation context** — Violations enriched with fan-in, hub status, cycle membership, and impact scores
-- **Search and filter** — Find files by name, filter by layer, changed status, violations, or PR review scope
+- **Search and filter** — Find files by name; filter by layer, changed status, violations, or PR review scope
 
 **How it connects to Canon:**
 
-When you click a node in the graph, the selection is persisted to `.canon/dashboard-state.json`. The `get_dashboard_selection` MCP tool reads this state, so when you start a conversation Canon already knows which file you're focused on — along with its dependencies, matched principles, and graph metrics.
+When you click a node or switch files in your editor, the Dashboard writes your current focus to `.canon/dashboard-state.json`. When you start a conversation, Canon reads this state and already knows which file you're looking at — along with its dependencies, matched principles, and graph metrics. This makes principle lookups and reviews context-aware without any extra prompting.
 
 **Commands:**
 
@@ -310,200 +266,9 @@ Or build from source in `cursor-extension/`:
 npm install && npm run build && npm run package
 ```
 
-## The Agent Harness
+## Configuration
 
-The agent harness is Canon's orchestration runtime — the set of MCP tools and state machine logic that the top-level Claude (the orchestrator) uses to drive multi-agent builds. The orchestrator calls these tools directly; it never writes code or produces artifacts itself.
-
-### The execution loop
-
-For each build, the orchestrator runs this cycle:
-
-1. **`load_flow`** — Parse the flow definition: states, transitions, fragments, and spawn instructions
-2. **`init_workspace`** — Create a workspace for the task (`board.json` tracking state, `session.json` with metadata)
-3. For each state:
-   - **`check_convergence`** — Verify the loop hasn't exceeded its iteration limit
-   - **`update_board`** — Enter the state (record start time, mark active)
-   - **`get_spawn_prompt`** — Resolve the spawn prompt with variable substitution, overlays, and wave context
-   - **Spawn agent** — The orchestrator spawns the specialist agent (implementor, reviewer, etc.) as a subagent
-   - **`report_result`** — Record the agent's result, evaluate transition conditions, get `next_state`
-4. On terminal state: **`update_board(complete_flow)`** — Mark the flow done
-
-### Harness tools
-
-| Tool | Purpose |
-|------|---------|
-| `load_flow` | Parse a flow definition — resolves fragment includes, validates state graph |
-| `init_workspace` | Create or resume a workspace (`board.json`, `session.json`) |
-| `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress |
-| `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, overlays, wave context) |
-| `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state` |
-| `check_convergence` | Check iteration limits before re-entering a looping state |
-| `list_overlays` | List available role overlays (expertise lenses injected into prompts) |
-| `post_wave_bulletin` | Post inter-agent message during parallel wave execution |
-| `get_wave_bulletin` | Read wave bulletin messages from other agents in the same wave |
-| `validate_flows` | Validate flow definitions (parse, fragment resolution, reachability) |
-
-### State types
-
-Flows are composed of states, each with a type that controls how agents are spawned:
-
-| Type | Behavior |
-|------|----------|
-| `single` | One agent runs to completion, then transitions |
-| `parallel` | Multiple agents run concurrently; all must complete before transitioning |
-| `wave` | Parallel agents in isolated git worktrees, with gate checks between waves |
-| `parallel-per` | Fan-out: one agent per item produced by the previous state |
-
-### Convergence and stuck detection
-
-Looping states (test-fix loops, review-fix loops) have a maximum iteration count. Before re-entering a loop, `check_convergence` verifies the limit hasn't been hit. If an agent produces the same result across multiple iterations — indicating it's not making progress — stuck detection triggers and the pipeline blocks for human input.
-
-### HITL (Human-in-the-Loop)
-
-When the pipeline blocks — due to stuck detection, a gate failure, or an explicit checkpoint — the orchestrator surfaces the situation to you with options:
-
-- **Retry** — Re-run the current state (e.g. after manually fixing something)
-- **Skip** — Move past the blocking state
-- **Rollback** — Revert to a prior state in the flow
-- **Abort** — Stop the build entirely
-- **Manual fix** — Apply a fix yourself, then resume
-
-See `agents/canon-orchestrator.md` for the full orchestrator protocol.
-
-## MCP Tools
-
-Canon exposes 14 tools via its MCP server for agents to use during normal work:
-
-| Tool | Purpose |
-|------|---------|
-| `get_principles` | Get principles relevant to a file/layer context, enriched with graph metrics |
-| `list_principles` | Browse the full principle index with filters |
-| `review_code` | Get matched principles for code review — auto-injects graph-derived principles for layer violations and cycles |
-| `get_compliance` | Query compliance stats and trend for a specific principle |
-| `report` | Log a decision, pattern, or review result for drift tracking and the learning loop |
-| `get_drift_report` | Get drift report — compliance rates, violations, hotspots, and trends |
-| `get_decisions` | Query logged decisions for a principle or file |
-| `get_patterns` | Query observed codebase patterns |
-| `get_pr_review_data` | Get PR file list, layers, and graph-aware priority scores |
-| `codebase_graph` | Generate dependency graph with compliance overlay, insights, and reverse-dep index |
-| `get_file_context` | Get file content, imports, dependents, violations, and graph metrics (fan-in, hub status, cycles) |
-| `store_summaries` | Persist file summaries incrementally for dashboard display |
-| `store_pr_review` | Store a PR review result for drift tracking |
-| `get_dashboard_selection` | Get selected node context with graph metrics and downstream impact |
-
-## Agents
-
-Canon uses 13 specialist agents, each with a focused role. The top-level Claude acts as the orchestrator (using MCP harness tools), spawning these agents as leaf workers:
-
-| Agent | Role |
-|-------|------|
-| `canon-researcher` | Investigate codebase patterns, architecture, and risk |
-| `canon-architect` | Design approach, graph-informed wave assignment, break into task plans |
-| `canon-implementor` | Write code against plans and principles |
-| `canon-tester` | Generate integration tests |
-| `canon-security` | Scan for vulnerabilities |
-| `canon-reviewer` | Two-stage review: compliance + graph-aware code quality |
-| `canon-fixer` | Fix test failures and violations using graph-aware caller discovery |
-| `canon-learner` | Analyze patterns and suggest principle refinements |
-| `canon-writer` | Create and edit principles, conventions, and agent-rules |
-| `canon-shipper` | Post-build PR description, changelog, and optional PR creation |
-| `canon-scribe` | Post-implementation documentation sync (CLAUDE.md, context.md, CONVENTIONS.md) |
-| `canon-guide` | Answer questions, browse principles, show status |
-| `canon-inspector` | Analyze completed builds, produce cost/bottleneck reports |
-
-### Graph-Aware Agents
-
-The reviewer, fixer, and architect agents are graph-aware — they use the codebase dependency graph to make better decisions:
-
-- **Reviewer**: When `review_code` returns `graph_context`, the reviewer factors in fan-in (blast radius), cycle membership, and layer boundary violations. Violations in hub files are flagged as higher-impact.
-- **Fixer**: Calls `get_file_context` to discover callers via the dependency graph before fixing. High fan-in files get extra caution — prefer internal-only changes that preserve the external API.
-- **Architect**: Uses `get_file_context` to verify wave assignments against the real dependency graph. Files in dependency cycles are placed in the same wave.
-
-## Agent Workspaces
-
-Canon agents share context through **task-scoped workspaces** — structured folders where agents write research, decisions, logs, and plans that other agents can read. Multiple tasks can run independently on the same branch, each in its own workspace.
-
-```
-.canon/workspaces/{sanitized-branch}/{task-slug}/
-├── session.json              # Session metadata (branch, task, tier, status)
-├── log.jsonl                 # Chronological agent activity log
-├── context.md                # Living shared context (architect-owned)
-├── research/                 # Research findings (one per dimension)
-├── decisions/                # Design decisions with rationale
-├── plans/                    # Task plans and build artifacts
-│   └── {task-slug}/
-├── reviews/                  # Review outputs
-└── notes/                    # Freeform notes
-```
-
-### How it works
-
-1. When a build starts, the orchestrator creates a workspace for the task (scoped by branch + task slug)
-2. Each agent reads and writes to scoped areas — the researcher writes to `research/`, the architect writes to `decisions/` and `plans/`, etc.
-3. All agents append to `log.jsonl` for a shared activity timeline
-4. The architect owns `context.md` — a living document with key decisions and patterns that downstream agents read
-
-### Agent permissions
-
-Agents have scoped read/write access to preserve existing isolation principles:
-- **Reviewer never reads research or plans** — cold review is preserved
-- **Implementor only reads its own plan** + shared context — fresh context is preserved
-- **Researcher never reads other researchers** — scoped research is preserved
-
-### Templates
-
-Standardized output templates in the plugin's `templates/` directory ensure consistent structure. Each template declares which agents produce it (`used-by`), which agents consume it (`read-by`), and where the artifact is saved (`output-path`).
-
-| Template | Produced by | Consumed by | Output path |
-|----------|-------------|-------------|-------------|
-| `research-finding.md` | canon-researcher | canon-architect | orchestrator-provided |
-| `design-decision.md` | canon-architect | canon-implementor | `${WORKSPACE}/decisions/` |
-| `implementation-log.md` | canon-implementor, canon-fixer | canon-tester, canon-reviewer, canon-scribe, canon-shipper | `${WORKSPACE}/plans/${slug}/SUMMARY.md` |
-| `review-checklist.md` | canon-reviewer | canon-shipper | `${WORKSPACE}/reviews/` |
-| `session-context.md` | canon-architect | canon-implementor | `${WORKSPACE}/context.md` |
-| `security-assessment.md` | canon-security | canon-shipper | `${WORKSPACE}/plans/${slug}/SECURITY.md` |
-| `context-sync-report.md` | canon-scribe | canon-shipper | `${WORKSPACE}/plans/${slug}/CONTEXT-SYNC.md` |
-| `test-report.md` | canon-tester | canon-shipper | `${WORKSPACE}/plans/${slug}/TEST-REPORT.md` |
-| `wave-briefing.md` | canon-orchestrator | canon-implementor | injected as `${wave_briefing}` |
-| `claudemd-template.md` | canon-scribe | — | project root `CLAUDE.md` |
-
-### Lifecycle
-
-Workspaces are ephemeral by default — scoped to a branch's active development:
-- **Create**: Automatically when a build starts
-- **Archive**: Run `/canon:clean --archive` to save decisions and notes to `.canon/history/`
-- **Delete**: Run `/canon:clean` to remove workspace artifacts after branch merge
-
-## Hooks
-
-Canon includes 9 automation hooks:
-
-- **Pre-commit secrets check** — Blocks commits containing hardcoded secrets (API keys, private keys, connection strings)
-- **Pre-push review guard** — Warns before pushing if no Canon review covers the unpushed commits
-- **Large file guard** — Warns before writing or editing files that exceed a line threshold (default 500, configurable via `max_file_lines` in `.canon/config.json`)
-- **Compaction check** — Warns when `.jsonl` data files or `CONVENTIONS.md` grow past thresholds
-- **Learn nudge** — Suggests `/canon:learn` after 10+ reviews accumulate
-- **Principle injection** — Injects relevant Canon principles into context before Write/Edit operations
-- **Agent cost tracker** — Logs every agent spawn to `.canon/agent-costs.jsonl` for cost observability
-- **Destructive git guard** — Blocks destructive git operations (reset --hard, clean -f, checkout --, branch -D) for user confirmation
-- **Workspace lock guard** — Warns before git commit/merge if the workspace has an active lock from another session
-
-## Context Management
-
-As your project grows — more principles, more reviews, more conventions — Canon manages context consumption to prevent rot:
-
-| Mechanism | What it does |
-|-----------|-------------|
-| **Principle cap** | `get_principles` returns at most `max_principles_per_review` entries (default 10, configurable in `.canon/config.json`). Rules are always prioritized. |
-| **Review cap** | `review_code` always includes every matched rule (they block commits and are never dropped), then fills remaining budget with strong-opinions and conventions up to `max_review_principles` (default 15, configurable). Total may exceed the cap when many rules match. |
-| **Summary-only mode** | `get_principles` accepts `summary_only: true` to return just the first paragraph (~60% less context) instead of full rationale/examples. |
-| **Data rotation** | `.jsonl` files auto-rotate at 500 entries — older entries move to `*.archive.jsonl`, keeping the active file lean. |
-| **Principle archiving** | Add `archived: true` to a principle's frontmatter to disable it without deleting. Archived principles are skipped by the matcher. |
-| **Compaction hook** | Warns after commits if data files or `CONVENTIONS.md` have grown past thresholds. |
-
-### Configuration
-
-All configuration lives in `.canon/config.json` in your project root. Every key is optional — Canon uses sensible defaults when a key is missing.
+All configuration lives in `.canon/config.json`. Every key is optional — Canon uses sensible defaults.
 
 ```json
 {
@@ -526,76 +291,41 @@ All configuration lives in `.canon/config.json` in your project root. Every key 
 
 | Key | Default | What it controls |
 |-----|---------|-----------------|
-| `source_dirs` | — | Directories to scan for the codebase graph. When not set, tools require an explicit `source_dirs` or `root_dir` parameter. |
-| `max_file_lines` | 500 | Line threshold for the large file guard hook. Files exceeding this trigger a warning on write/edit. |
-| `layers` | See defaults above | Maps layer names to directory patterns for architectural layer inference. Files in matching directories are assigned that layer. Override to match your project's structure. |
-| `review.max_principles_per_review` | 10 | Cap for `get_principles` (used during code generation). Rules are always included first. |
-| `review.max_review_principles` | 15 | Cap for `review_code` (used during reviews). Rules are never dropped — the total may exceed this cap when many rules match. |
+| `source_dirs` | — | Directories to scan for the codebase graph. |
+| `max_file_lines` | 500 | Line threshold for the large file guard. Files exceeding this trigger a warning on write/edit. |
+| `layers` | See above | Maps layer names to directory patterns for architectural layer inference. Override to match your project's structure. |
+| `review.max_principles_per_review` | 10 | Cap for principles loaded during code generation. Rules are always included first. |
+| `review.max_review_principles` | 15 | Cap for principles loaded during reviews. Rules are never dropped — total may exceed cap when many rules match. |
 
 Run `/canon:doctor` to check for configuration issues.
 
-## Project Structure
+**Automation hooks:** Canon includes 9 hooks that run automatically: secrets checking on pre-commit, a review guard before push, large file warnings, data file compaction checks, a nudge to run `/canon:learn` after reviews accumulate, principle injection before edits, agent cost tracking, a destructive git guard, and a workspace lock guard. All are configurable.
 
-```
-canon/
-├── principles/          59 engineering principles organized by severity
-│   ├── rules/           Hard constraints (4 principles)
-│   ├── strong-opinions/ Default path (36 principles)
-│   └── conventions/     Stylistic preferences (19 principles)
-├── commands/            13 slash command specs
-├── agents/              14 specialist agent prompts
-├── agent-rules/         13 agent behavior guidelines
-├── templates/           10 standardized output templates for agent artifacts
-├── hooks/               9 automation hooks
-├── flows/               11 workflow definitions + 12 reusable fragments
-│   └── fragments/       Composable state groups + consultation fragments
-├── mcp-server/          TypeScript MCP server (24 tools)
-│   └── src/
-│       ├── index.ts     Server + tool registration
-│       ├── constants.ts Shared constants (layer centrality, extensions, extractSummary)
-│       ├── matcher.ts   Principle matching logic
-│       ├── parser.ts    Principle parsing and frontmatter extraction
-│       ├── schema.ts    Zod input validation schemas
-│       ├── tools/       Individual tool implementations
-│       ├── graph/       Dependency graph: scanner, import/export parsers, insights, query cache, priority scoring
-│       ├── drift/       JSONL stores, analyzer, PR tracking
-│       ├── utils/       Atomic writes, config loader, error helpers, ID generation
-│       └── __tests__/   Tests
-├── cursor-extension/    VS Code / Cursor extension (Canon Dashboard)
-│   └── src/
-│       ├── extension.ts       Extension activation, active file tracking
-│       ├── constants.ts       Shared paths and timeouts
-│       ├── messages.ts        Typed extension ↔ webview message protocol
-│       ├── dashboard-panel.ts Webview panel, message-based data push, file watching
-│       ├── services/          Graph data loading, git integration
-│       ├── webview/           Svelte app: stores, components, D3 graph, filters
-│       └── __tests__/         Tests
-└── skills/canon/        Skill definition + references
-```
-
-## Data Files
+## Data & Privacy
 
 All Canon data lives in `.canon/` in your project root:
 
 | File | Purpose | Written by |
 |------|---------|-----------|
 | `principles/{rules,strong-opinions,conventions}/*.md` | Principle definitions | `/canon:init`, canon-writer agent |
-| `CONVENTIONS.md` | Project conventions | `/canon:init` (auto-detected), `/canon:learn --apply`, or edit directly |
+| `CONVENTIONS.md` | Project conventions | `/canon:init`, `/canon:learn --apply`, or edit directly |
 | `config.json` | Project configuration | `/canon:init` |
-| `reviews.jsonl` | Review results | `report` MCP tool (type=review) |
-| `decisions.jsonl` | Intentional deviations | `report` MCP tool (type=decision) |
-| `patterns.jsonl` | Observed patterns | `report` MCP tool (type=pattern) |
+| `reviews.jsonl` | Review results | `report` MCP tool |
+| `decisions.jsonl` | Intentional deviations | `report` MCP tool |
+| `patterns.jsonl` | Observed patterns | `report` MCP tool |
 | `learning.jsonl` | Learning history | `/canon:learn` |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
-| `workspaces/{branch}/` | Branch-scoped agent workspace (research, decisions, plans, logs) | Build pipeline (orchestrator) |
-| `plans/{task-slug}/` | Task plans and build artifacts inside the workspace | Build pipeline |
-| `history/{branch}/` | Archived workspace artifacts (decisions, notes, summary) | `/canon:clean --archive` |
-| `graph-data.json` | Codebase dependency graph with insights | `codebase_graph` MCP tool |
-| `reverse-deps.json` | Reverse dependency index (who imports each file) | `codebase_graph` MCP tool |
-| `summaries.json` | One-line file summaries for dashboard tooltips | `store_summaries` MCP tool |
-| `pr-reviews.jsonl` | PR review history | `get_pr_review_data` MCP tool |
+| `workspaces/{branch}/` | Branch-scoped agent workspace (research, decisions, plans, logs) | Build pipeline |
+| `history/{branch}/` | Archived workspace artifacts | `/canon:clean --archive` |
+| `graph-data.json` | Codebase dependency graph | Dashboard / `codebase_graph` MCP tool |
+| `reverse-deps.json` | Reverse dependency index | `codebase_graph` MCP tool |
+| `summaries.json` | File summaries for dashboard tooltips | `store_summaries` MCP tool |
 | `dashboard-state.json` | Dashboard selection state (ephemeral) | Canon Dashboard extension |
 
-## Privacy
+**Privacy:** Canon does not collect, transmit, or share any data. There is no telemetry, no analytics, and no background network calls to external services from Canon. All data — principles, reviews, decisions, and patterns — is stored locally in your project's `.canon/` directory and never leaves your machine. Optional workflows you run alongside Canon (for example, using `gh pr diff` via the GitHub CLI) may make their own network requests according to those tools' behavior.
 
-Canon itself does not collect, transmit, or share any data. There is no telemetry, no analytics, and no background network calls to external services from Canon. All data — principles, reviews, decisions, and patterns — is stored locally in your project's `.canon/` directory and never leaves your machine. Optional workflows that you run alongside Canon (for example, using `gh pr diff` via the GitHub CLI for PR review) may make their own network requests according to those tools' behavior.
+## Architecture
+
+Canon uses 13 specialist agents (researcher, architect, implementor, tester, reviewer, security, fixer, learner, writer, shipper, scribe, guide, inspector) orchestrated by your Claude session. Your Claude session IS the orchestrator — not a separate subagent. Builds run as state machines defined in flow files, with shared state in `.canon/workspaces/`. Canon uses MCP tools under the hood to manage workflow state, load principles, and track drift.
+
+For details on the orchestration protocol, see `agents/canon-orchestrator.md`. For contributing, see the project structure in `CONTRIBUTING.md`.
