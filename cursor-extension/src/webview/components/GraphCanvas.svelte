@@ -19,6 +19,14 @@
 
   let { onNodeClick, onBackgroundClick }: Props = $props();
 
+  function getClusteredData(base: GraphData): GraphData {
+    let clustered = clusterGraph(base.nodes, base.edges);
+    for (const key of expandedClusters) {
+      clustered = expandCluster(clustered, key, base.edges);
+    }
+    return { ...base, nodes: clustered.nodes as GraphNode[], edges: clustered.edges };
+  }
+
   function buildGraph(data: GraphData) {
     if (!container) return;
     if (graphApi) {
@@ -26,23 +34,21 @@
       graphApi = undefined;
     }
 
+    // Cluster the data, respecting any expanded clusters
+    const displayData = getClusteredData(data);
+
     // Initialize active layers with all layers present in data
-    const allLayers = [...new Set(data.nodes.map((n) => n.layer))];
+    const allLayers = [...new Set(displayData.nodes.map((n) => n.layer))];
     activeLayers.set(allLayers);
 
-    graphApi = buildD3Graph(container, data, {
+    graphApi = buildD3Graph(container, displayData, {
       onNodeClick: (node) => onNodeClick(node),
       onBackgroundClick: () => onBackgroundClick(),
       onClusterExpand: (clusterKey: string) => {
         expandedClusters.add(clusterKey);
-        // Rebuild with expansion applied
         const base = $graphData;
         if (!base) return;
-        let clustered = clusterGraph(base.nodes, base.edges);
-        for (const key of expandedClusters) {
-          clustered = expandCluster(clustered, key, base.edges);
-        }
-        buildGraph({ ...base, nodes: clustered.nodes as GraphNode[], edges: clustered.edges });
+        buildGraph(base);
       },
       edgeIn: $edgeIn,
       edgeOut: $edgeOut,

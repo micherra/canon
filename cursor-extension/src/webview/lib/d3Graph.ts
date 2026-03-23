@@ -1,7 +1,6 @@
 import { LAYER_COLORS, NODE_DEFAULT, NODE_CHANGED, getLayerColor, truncate } from "./constants";
 import { escapeHtml } from "./escapeHtml";
 import type { GraphData, GraphNode, GraphEdge } from "../stores/graphData";
-import { clusterGraph, expandCluster, CLUSTER_THRESHOLD, type ClusterNode, type ClusteredGraph } from "./cluster";
 
 export interface GraphApi {
   applyFilters(opts: FilterOptions): void;
@@ -80,12 +79,9 @@ export function buildD3Graph(
   let width = canvas.clientWidth || 800;
   let height = canvas.clientHeight || 600;
 
-  // Apply clustering for large graphs
-  const clustered = clusterGraph(data.nodes, data.edges);
-  const originalEdges = data.edges;
-
-  const nodesCopy = clustered.nodes.map((n) => ({ ...n }));
-  const edgesCopy = clustered.edges.map((e) => ({
+  // Data is pre-clustered by the caller (GraphCanvas) when needed
+  const nodesCopy = data.nodes.map((n) => ({ ...n }));
+  const edgesCopy = data.edges.map((e) => ({
     source: typeof e.source === "string" ? e.source : e.source.id,
     target: typeof e.target === "string" ? e.target : e.target.id,
   }));
@@ -530,7 +526,7 @@ export function buildD3Graph(
     highlightCascade,
     clearHighlight,
     getGraphState: () => graphState,
-    isClustered: () => clustered.clustered,
+    isClustered: () => nodesCopy.some((n: any) => n.isCluster),
     destroy() {
       resizeObserver.disconnect();
       simulation.stop();
