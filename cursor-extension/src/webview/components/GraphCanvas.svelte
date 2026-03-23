@@ -10,7 +10,8 @@
 
   let container: HTMLDivElement;
   let graphApi: GraphApi | undefined;
-  let expandedClusters = new Set<string>();
+  let expandedClusters = $state(new Set<string>());
+  let hasExpanded = $derived(expandedClusters.size > 0);
 
   interface Props {
     onNodeClick: (node: GraphNode) => void;
@@ -45,7 +46,9 @@
       onNodeClick: (node) => onNodeClick(node),
       onBackgroundClick: () => onBackgroundClick(),
       onClusterExpand: (clusterKey: string) => {
-        expandedClusters.add(clusterKey);
+        const next = new Set(expandedClusters);
+        next.add(clusterKey);
+        expandedClusters = next;
         const base = $graphData;
         if (!base) return;
         buildGraph(base);
@@ -54,6 +57,13 @@
       edgeOut: $edgeOut,
       summaries: {},
     });
+  }
+
+  function collapseAll() {
+    expandedClusters = new Set();
+    const base = $graphData;
+    if (!base) return;
+    buildGraph(base);
   }
 
   // Build/rebuild D3 graph whenever graphData changes (initial load or message push)
@@ -88,6 +98,11 @@
 </script>
 
 <div class="graph-canvas" bind:this={container}>
+  {#if hasExpanded}
+    <button class="collapse-pill" onclick={collapseAll}>
+      Re-cluster
+    </button>
+  {/if}
 </div>
 
 <style>
@@ -120,4 +135,21 @@
   .graph-canvas :global(.graph-tooltip strong) { color: var(--text-bright); font-size: 12px; display: block; margin-bottom: 4px; }
   .graph-canvas :global(.graph-tooltip .tt-meta) { color: var(--text-muted); font-size: 11px; }
   .graph-canvas :global(.graph-tooltip .tt-summary) { color: var(--text); font-size: 11px; margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
+  .collapse-pill {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 40;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 500;
+    font-family: inherit;
+    padding: 4px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .collapse-pill:hover { color: var(--accent); border-color: var(--accent); }
 </style>
