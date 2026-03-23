@@ -382,13 +382,14 @@ server.registerTool(
     description: "Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress.",
     inputSchema: {
       workspace: z.string(),
-      action: z.enum(["enter_state", "skip_state", "block", "unblock", "complete_flow", "set_wave_progress"]),
+      action: z.enum(["enter_state", "skip_state", "block", "unblock", "complete_flow", "set_wave_progress", "set_metadata"]),
       state_id: z.string().optional(),
       next_state_id: z.string().optional().describe("Next state to advance to (used with skip_state)"),
       blocked_reason: z.string().optional(),
       wave_data: z.object({ wave: z.number(), wave_total: z.number(), tasks: z.array(z.string()) }).optional(),
       result: z.string().optional(),
       artifacts: z.array(z.string()).optional(),
+      metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe("Key-value metadata to merge into board (used with set_metadata)"),
     },
   },
   async (input) => {

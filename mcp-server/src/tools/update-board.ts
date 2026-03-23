@@ -8,13 +8,14 @@ import { createJsonlLogger } from "../orchestration/events.js";
 
 interface UpdateBoardInput {
   workspace: string;
-  action: "enter_state" | "skip_state" | "block" | "unblock" | "complete_flow" | "set_wave_progress";
+  action: "enter_state" | "skip_state" | "block" | "unblock" | "complete_flow" | "set_wave_progress" | "set_metadata";
   state_id?: string;
   next_state_id?: string;
   blocked_reason?: string;
   wave_data?: { wave: number; wave_total: number; tasks: string[] };
   result?: string;
   artifacts?: string[];
+  metadata?: Record<string, string | number | boolean>;
 }
 
 interface UpdateBoardResult {
@@ -155,6 +156,18 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
             },
           },
         },
+        last_updated: new Date().toISOString(),
+      };
+      break;
+    }
+
+    case "set_metadata": {
+      if (!input.metadata) {
+        throw new Error("set_metadata requires metadata");
+      }
+      board = {
+        ...board,
+        metadata: { ...(board.metadata ?? {}), ...input.metadata },
         last_updated: new Date().toISOString(),
       };
       break;

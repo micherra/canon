@@ -73,9 +73,13 @@ function evaluateNoContractChanges(baseCommit: string): SkipResult {
 }
 
 function evaluateNoFixRequested(board: Board): SkipResult {
-  // Board does not currently have a fix_requested metadata field.
-  // This condition is not met unless explicitly set — always returns false for now.
-  return { skip: false };
+  if (board.metadata?.fix_requested === true) {
+    return { skip: false };
+  }
+  return {
+    skip: true,
+    reason: "No fix requested — user has not flagged issues for fixing",
+  };
 }
 
 /** Simple glob matching for contract patterns. */

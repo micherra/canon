@@ -338,6 +338,7 @@ export const BoardSchema = z.object({
   blocked: BlockedInfoSchema,
   concerns: z.array(ConcernEntrySchema),
   skipped: z.array(z.string()),
+  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 // ---------------------------------------------------------------------------

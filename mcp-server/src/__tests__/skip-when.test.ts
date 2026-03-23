@@ -80,10 +80,28 @@ describe("matchGlob", () => {
 // ---------------------------------------------------------------------------
 
 describe("evaluateSkipWhen — no_fix_requested", () => {
-  it("always returns skip: false (no fix_requested field on board yet)", async () => {
+  it("skips when board has no metadata", async () => {
     const board = makeBoard();
     const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
-    expect(result).toEqual({ skip: false });
+    expect(result.skip).toBe(true);
+  });
+
+  it("skips when fix_requested is not set in metadata", async () => {
+    const board = makeBoard({ metadata: { some_other_key: "value" } });
+    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+  });
+
+  it("does not skip when fix_requested is true", async () => {
+    const board = makeBoard({ metadata: { fix_requested: true } });
+    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("skips when fix_requested is false", async () => {
+    const board = makeBoard({ metadata: { fix_requested: false } });
+    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
   });
 });
 
