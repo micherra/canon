@@ -34,7 +34,9 @@ src/
 ## Contracts
 <!-- last-updated: 2026-03-22 -->
 
-Exposes 14 MCP tools:
+Exposes 24 MCP tools (14 principle/review + 10 orchestration harness):
+
+**Principle and review tools:**
 
 | Tool | Purpose |
 |------|---------|
@@ -51,6 +53,22 @@ Exposes 14 MCP tools:
 | `get_drift_report` | Full drift analysis (violations, trends, stats) |
 | `get_decisions` | Grouped intentional deviations |
 | `get_patterns` | Observed codebase patterns (grouped) |
+| `store_pr_review` | Store a PR review result for drift tracking |
+
+**Orchestration harness tools:**
+
+| Tool | Purpose |
+|------|---------|
+| `load_flow` | Load and resolve a flow definition |
+| `validate_flows` | Validate flow definitions |
+| `init_workspace` | Create or resume a workspace |
+| `update_board` | Mutate board state |
+| `get_spawn_prompt` | Resolve spawn prompt for a state |
+| `report_result` | Record agent result and evaluate transitions |
+| `check_convergence` | Check iteration limits |
+| `list_overlays` | List available role overlays |
+| `post_wave_bulletin` | Post inter-agent message during parallel waves |
+| `get_wave_bulletin` | Read wave bulletin messages |
 
 ## Dependencies
 <!-- last-updated: 2026-03-22 -->
