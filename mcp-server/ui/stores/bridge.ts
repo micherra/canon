@@ -77,6 +77,18 @@ export const bridge = {
         const result = await app.callServerTool({ name: "codebase_graph", arguments: {} });
         return extractToolJson(result);
       }
+      case "getGraphData": {
+        const result = await app.callServerTool({
+          name: "get_file_content",
+          arguments: { file_path: ".canon/graph-data.json" },
+        });
+        const parsed = extractToolJson(result);
+        // get_file_content returns { content, path } — parse content as graph JSON
+        if (parsed?.content) {
+          return JSON.parse(parsed.content);
+        }
+        return null;
+      }
       default:
         console.warn(`[Canon] Unknown bridge request type: ${type}`);
         return {};

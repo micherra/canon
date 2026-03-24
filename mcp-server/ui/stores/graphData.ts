@@ -155,12 +155,20 @@ export const communityMap = derived(graphData, ($g) => {
   return map;
 });
 
-/** Load graph data via the MCP bridge (calls codebase_graph tool) */
+/** Load graph data via the MCP bridge.
+ *  Step 1: trigger codebase_graph to regenerate graph-data.json.
+ *  Step 2: read the cached graph-data.json via get_file_content.
+ */
 export async function loadGraphData() {
   graphStatus.set("generating");
   try {
-    const result = await bridge.request("refreshGraph");
-    // The codebase_graph tool returns graph data in its text content
+    // Trigger graph generation (writes .canon/graph-data.json as a side-effect)
+    await bridge.request("refreshGraph");
+
+    graphStatus.set("refreshing");
+
+    // Read the materialized graph file — this has the full nodes/edges arrays
+    const result = await bridge.request("getGraphData");
     if (result && result.nodes && result.edges) {
       graphData.set(result);
       graphStatus.set("ready");
