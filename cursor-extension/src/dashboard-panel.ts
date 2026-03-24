@@ -462,10 +462,8 @@ export class DashboardPanel {
 
     const nonce = getNonce();
 
-    const d3Uri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "d3.v7.min.js"));
     const markedUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "marked.min.js"));
     const dashboardJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "dashboard.js"));
-    html = html.replaceAll("__D3_URI__", d3Uri.toString());
     html = html.replaceAll("__MARKED_URI__", markedUri.toString());
     html = html.replaceAll("__DASHBOARD_JS_URI__", dashboardJsUri.toString());
 
