@@ -1,17 +1,14 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { buildD3Graph, type GraphApi, type FilterOptions } from "../lib/d3Graph";
+  import { buildSigmaGraph, type SigmaGraphApi, type FilterOptions } from "../lib/sigmaGraph";
   import { parseSearchQuery } from "../lib/graph";
-  import { graphData, edgeIn, edgeOut, type GraphNode, type GraphData } from "../stores/graphData";
-  import { expandCluster, clusterGraph, type ClusteredGraph } from "../lib/cluster";
+  import { graphData, edgeIn, edgeOut, layerColors, type GraphNode, type GraphData } from "../stores/graphData";
   import { activeLayers, searchQuery, activeInsightFilter, prReviewFiles, showChangedOnly } from "../stores/filters";
   import { selectedNode, panelMode } from "../stores/selection";
   import { bridge } from "../stores/bridge";
 
   let container: HTMLDivElement;
-  let graphApi: GraphApi | undefined;
-  let expandedClusters = $state(new Set<string>());
-  let hasExpanded = $derived(expandedClusters.size > 0);
+  let graphApi: SigmaGraphApi | undefined;
 
   interface Props {
     onNodeClick: (node: GraphNode) => void;
@@ -20,14 +17,6 @@
 
   let { onNodeClick, onBackgroundClick }: Props = $props();
 
-  function getClusteredData(base: GraphData): GraphData {
-    let clustered = clusterGraph(base.nodes, base.edges);
-    for (const key of expandedClusters) {
-      clustered = expandCluster(clustered, key, base.edges);
-    }
-    return { ...base, nodes: clustered.nodes as GraphNode[], edges: clustered.edges };
-  }
-
   function buildGraph(data: GraphData) {
     if (!container) return;
     if (graphApi) {
@@ -35,42 +24,23 @@
       graphApi = undefined;
     }
 
-    // Cluster the data, respecting any expanded clusters
-    const displayData = getClusteredData(data);
-
     // Initialize active layers with all layers present in data
-    const allLayers = [...new Set(displayData.nodes.map((n) => n.layer))];
+    const allLayers = [...new Set(data.nodes.map((n) => n.layer))];
     activeLayers.set(allLayers);
 
-    graphApi = buildD3Graph(container, displayData, {
+    graphApi = buildSigmaGraph(container, data, {
       onNodeClick: (node) => onNodeClick(node),
       onBackgroundClick: () => onBackgroundClick(),
-      onClusterExpand: (clusterKey: string) => {
-        const next = new Set(expandedClusters);
-        next.add(clusterKey);
-        expandedClusters = next;
-        const base = $graphData;
-        if (!base) return;
-        buildGraph(base);
-      },
       edgeIn: $edgeIn,
       edgeOut: $edgeOut,
-      summaries: {},
+      layerColors: $layerColors,
     });
   }
 
-  function collapseAll() {
-    expandedClusters = new Set();
-    const base = $graphData;
-    if (!base) return;
-    buildGraph(base);
-  }
-
-  // Build/rebuild D3 graph whenever graphData changes (initial load or message push)
+  // Build/rebuild Sigma graph whenever graphData changes (initial load or message push)
   $effect(() => {
     const data = $graphData;
     if (!data || !container) return;
-    expandedClusters = new Set();
     buildGraph(data);
   });
 
@@ -92,17 +62,13 @@
   });
 
   // Expose graph API for parent to call
-  export function getApi(): GraphApi | undefined {
+  export function getApi(): SigmaGraphApi | undefined {
     return graphApi;
   }
 </script>
 
-<div class="graph-canvas" bind:this={container}>
-  {#if hasExpanded}
-    <button class="collapse-pill" onclick={collapseAll}>
-      Re-cluster
-    </button>
-  {/if}
+<div class="graph-canvas">
+  <div class="graph-sigma" bind:this={container}></div>
 </div>
 
 <style>
@@ -112,11 +78,11 @@
     overflow: hidden;
     position: relative;
   }
-  .graph-canvas :global(svg) {
+  .graph-sigma {
     width: 100%;
     height: 100%;
   }
-  .graph-canvas :global(.graph-tooltip) {
+  :global(.graph-tooltip) {
     position: absolute;
     pointer-events: none;
     z-index: 50;
@@ -128,28 +94,8 @@
     max-width: 320px;
     line-height: 1.5;
     box-shadow: var(--shadow-lg);
-    opacity: 0;
-    transition: opacity 0.12s;
   }
-  .graph-canvas :global(.graph-tooltip.visible) { opacity: 1; }
-  .graph-canvas :global(.graph-tooltip strong) { color: var(--text-bright); font-size: 12px; display: block; margin-bottom: 4px; }
-  .graph-canvas :global(.graph-tooltip .tt-meta) { color: var(--text-muted); font-size: 11px; }
-  .graph-canvas :global(.graph-tooltip .tt-summary) { color: var(--text); font-size: 11px; margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
-  .collapse-pill {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    z-index: 40;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 500;
-    font-family: inherit;
-    padding: 4px 12px;
-    border-radius: 20px;
-    cursor: pointer;
-    transition: color 0.15s, border-color 0.15s;
-  }
-  .collapse-pill:hover { color: var(--accent); border-color: var(--accent); }
+  :global(.graph-tooltip strong) { color: var(--text-bright); font-size: 12px; display: block; margin-bottom: 4px; }
+  :global(.graph-tooltip .tt-meta) { color: var(--text-muted); font-size: 11px; }
+  :global(.graph-tooltip .tt-summary) { color: var(--text); font-size: 11px; margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
 </style>

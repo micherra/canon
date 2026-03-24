@@ -5,7 +5,7 @@
   import { activeInsightFilter, searchQuery } from "./stores/filters";
   import { selectedNode, panelMode } from "./stores/selection";
   import { getCascadeFiles, getInsightFiles } from "./lib/graph";
-  import type { GraphApi } from "./lib/d3Graph";
+  import type { SigmaGraphApi } from "./lib/sigmaGraph";
 
   import Toolbar from "./components/Toolbar.svelte";
   import PrBanner from "./components/PrBanner.svelte";
@@ -26,7 +26,7 @@
     mounted = true;
   });
 
-  function getGraphApi(): GraphApi | undefined {
+  function getGraphApi(): SigmaGraphApi | undefined {
     return graphCanvas?.getApi();
   }
 
@@ -34,6 +34,7 @@
     selectedNode.set(node);
     panelMode.set("focus");
     bridge.notifyNodeSelected(node as any);
+    bridge.openFile(node.id);
     getGraphApi()?.focusNode(node);
   }
 
@@ -71,7 +72,6 @@
     }
 
     activeInsightFilter.set(insightFiles);
-    getGraphApi()?.getGraphState()?.nodeSelection.classed("insight-glow", (d: any) => insightFiles.has(d.id));
   }
 
   function handleClearHighlight() {
