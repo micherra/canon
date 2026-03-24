@@ -34,6 +34,12 @@ export interface PipelineOptions {
   incremental?: boolean;
   /** Called after each phase with progress info */
   onProgress?: (phase: string, current: number, total: number) => void;
+  /**
+   * Limit the scan to these subdirectories (relative to projectDir).
+   * When provided, only files under these directories are indexed.
+   * When omitted, the full projectDir is scanned.
+   */
+  sourceDirs?: string[];
 }
 
 export interface PipelineResult {
@@ -322,6 +328,7 @@ export async function runPipeline(
   const dbPath =
     options?.dbPath ?? path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   const progress = options?.onProgress ?? (() => {});
+  const sourceDirs = options?.sourceDirs;
 
   // Open DB
   const db = initDatabase(dbPath);
@@ -332,7 +339,26 @@ export async function runPipeline(
     // Phase 1: File scan
     // -----------------------------------------------------------------------
     progress('scan', 0, 0);
-    const relPaths = await scanSourceFiles(projectDir);
+    // When sourceDirs is provided, scan each subdirectory and produce relative
+    // paths from projectDir so the rest of the pipeline is path-consistent.
+    let relPaths: string[];
+    if (sourceDirs && sourceDirs.length > 0) {
+      const allFiles: string[] = [];
+      for (const dir of sourceDirs) {
+        const absDir = path.join(projectDir, dir);
+        try {
+          const files = await scanSourceFiles(absDir);
+          for (const f of files) {
+            allFiles.push(path.posix.join(dir.replace(/\\/g, '/'), f.replace(/\\/g, '/')));
+          }
+        } catch {
+          // Directory may not exist — skip silently
+        }
+      }
+      relPaths = allFiles;
+    } else {
+      relPaths = await scanSourceFiles(projectDir);
+    }
     const allRelPathsSet = new Set(relPaths);
     const filesScanned = relPaths.length;
 

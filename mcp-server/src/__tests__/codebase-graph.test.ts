@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { codebaseGraph, LAYER_COLORS } from "../tools/codebase-graph.js";
+import { codebaseGraph } from "../tools/codebase-graph.js";
 
 describe("codebaseGraph", () => {
   let tmpDir: string;
@@ -13,6 +13,16 @@ describe("codebaseGraph", () => {
     await mkdir(join(tmpDir, "src", "api"), { recursive: true });
     await mkdir(join(tmpDir, "src", "services"), { recursive: true });
     await mkdir(join(tmpDir, "src", "utils"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({
+        layers: {
+          api: ["api"],
+          domain: ["services"],
+          shared: ["utils"],
+        },
+      }),
+    );
   });
 
   afterEach(async () => {
@@ -65,7 +75,7 @@ describe("codebaseGraph", () => {
     const apiLayer = result.layers.find((l) => l.name === "api");
     if (apiLayer) {
       expect(apiLayer.file_count).toBe(2);
-      expect(apiLayer.color).toBe(LAYER_COLORS.api);
+      expect(apiLayer.color).toMatch(/^hsl\(/);
     }
   });
 
@@ -85,6 +95,12 @@ describe("codebaseGraph", () => {
   it("returns empty graph when no source_dirs configured", async () => {
     const emptyDir = await mkdtemp(join(tmpdir(), "canon-empty-"));
     await mkdir(join(emptyDir, ".canon"), { recursive: true });
+    await writeFile(
+      join(emptyDir, ".canon", "config.json"),
+      JSON.stringify({
+        layers: { backend: ["src"] },
+      }),
+    );
 
     const result = await codebaseGraph({}, emptyDir, "/nonexistent");
     expect(result.nodes).toHaveLength(0);
@@ -96,7 +112,10 @@ describe("codebaseGraph", () => {
   it("reads source_dirs from .canon/config.json", async () => {
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ source_dirs: ["src"] })
+      JSON.stringify({
+        source_dirs: ["src"],
+        layers: { api: ["api"], domain: ["services"], shared: ["utils"] },
+      })
     );
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
 
@@ -116,7 +135,10 @@ describe("codebaseGraph", () => {
     // Config says scan "src" only
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ source_dirs: ["src"] })
+      JSON.stringify({
+        source_dirs: ["src"],
+        layers: { api: ["api"], domain: ["services"], shared: ["utils"] },
+      })
     );
     // File inside src
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
@@ -159,6 +181,15 @@ describe("codebaseGraph", () => {
 
   it("classifies app/ directory files as ui layer", async () => {
     await mkdir(join(tmpDir, "src", "app"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({
+        layers: {
+          ui: ["app"],
+          shared: ["utils"],
+        },
+      }),
+    );
     await writeFile(join(tmpDir, "src", "app", "page.tsx"), `export default function Page() { return <div/>; }`);
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
@@ -166,6 +197,82 @@ describe("codebaseGraph", () => {
     const appNode = result.nodes.find((n) => n.id === "src/app/page.tsx");
     expect(appNode).toBeDefined();
     expect(appNode!.layer).toBe("ui");
+  });
+
+  it("falls back to default layers when layers are missing from config", async () => {
+    // Previously this would throw — now it should produce output using default layer mappings
+    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ source_dirs: ["src"] }));
+    const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
+    // Should succeed and produce a graph (possibly with default layer inference)
+    expect(result).toBeDefined();
+    expect(Array.isArray(result.nodes)).toBe(true);
+    expect(Array.isArray(result.edges)).toBe(true);
+  });
+
+  it("merges inferred composition edges from llm-style references", async () => {
+    await mkdir(join(tmpDir, "src", "templates"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({
+        source_dirs: ["src"],
+        layers: { llm: ["templates"] },
+        graph: {
+          composition: {
+            enabled: true,
+            file_patterns: [".md"],
+            min_confidence: 0.7,
+          },
+        },
+      })
+    );
+    await writeFile(
+      join(tmpDir, "src", "templates", "planner.md"),
+      "uses: ./summarizer.md\n"
+    );
+    await writeFile(
+      join(tmpDir, "src", "templates", "summarizer.md"),
+      "name: summarizer\n"
+    );
+
+    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+    const compositionEdge = result.edges.find(
+      (e) =>
+        e.source === "src/templates/planner.md" &&
+        e.target === "src/templates/summarizer.md" &&
+        e.type === "composition"
+    );
+    expect(compositionEdge).toBeDefined();
+    expect(compositionEdge?.origin).toBe("inferred-llm");
+    expect(compositionEdge?.confidence).toBeGreaterThanOrEqual(0.7);
+  });
+
+  it("respects composition config when disabled", async () => {
+    await mkdir(join(tmpDir, "src", "templates"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({
+        source_dirs: ["src"],
+        layers: { llm: ["templates"] },
+        graph: {
+          composition: {
+            enabled: false,
+            file_patterns: [".md"],
+          },
+        },
+      })
+    );
+    await writeFile(
+      join(tmpDir, "src", "templates", "planner.md"),
+      "uses: ./summarizer.md\n"
+    );
+    await writeFile(
+      join(tmpDir, "src", "templates", "summarizer.md"),
+      "name: summarizer\n"
+    );
+
+    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+    const compositionEdge = result.edges.find((e) => e.type === "composition");
+    expect(compositionEdge).toBeUndefined();
   });
 });
 

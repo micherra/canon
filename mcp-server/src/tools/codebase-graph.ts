@@ -9,6 +9,7 @@ import { DriftStore } from "../drift/store.js";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
 import {
   loadSourceDirs,
+  loadLayerMappings,
   loadLayerMappingsStrict,
   buildLayerInferrer,
   loadGraphCompositionConfig,
@@ -443,7 +444,14 @@ export async function codebaseGraph(
   projectDir: string,
   pluginDir: string
 ): Promise<CodebaseGraphOutput> {
-  const layerMappings = await loadLayerMappingsStrict(projectDir);
+  // Load layer mappings — fall back to non-strict defaults when layers are not
+  // configured so the tool always produces output instead of hanging.
+  let layerMappings: Awaited<ReturnType<typeof loadLayerMappingsStrict>>;
+  try {
+    layerMappings = await loadLayerMappingsStrict(projectDir);
+  } catch {
+    layerMappings = await loadLayerMappings(projectDir);
+  }
   const layerEntries = Object.keys(layerMappings);
   const layerColors: Record<string, string> = {};
   for (const layer of layerEntries) {
@@ -465,9 +473,14 @@ export async function codebaseGraph(
   let nodes: GraphNode[];
   let edges: GraphEdge[];
 
+  // Resolve source_dirs for pipeline scoping
+  const explicitSourceDirs = input.source_dirs;
+  const configSourceDirs = await loadSourceDirs(projectDir);
+  const pipelineSourceDirs = explicitSourceDirs || configSourceDirs || undefined;
+
   try {
     const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-    await runPipeline(projectDir, { dbPath });
+    await runPipeline(projectDir, { dbPath, sourceDirs: pipelineSourceDirs });
 
     const db = initDatabase(dbPath);
     let graphData: ReturnType<typeof materialize>;
