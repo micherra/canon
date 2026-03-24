@@ -30,6 +30,7 @@ import { getWaveBulletin } from "./tools/get-wave-bulletin.js";
 import { injectWaveEvent } from "./tools/inject-wave-event.js";
 import { storePrReview } from "./tools/store-pr-review.js";
 import { graphQuery } from "./tools/graph-query.js";
+import { reindexFileTool } from "./tools/reindex-file.js";
 import { getFlowRuns, computeAnalytics } from "./drift/analytics.js";
 import { reportInputSchema } from "./schema.js";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.js";
@@ -539,6 +540,20 @@ server.registerTool(
   },
   async (input) => {
     const result = graphQuery(input, projectDir);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "reindex_file",
+  {
+    description: "Incrementally reindex a single file in the knowledge graph. Updates entity and edge data for the given file, then rematerializes graph-data.json. Handles missing files (deletion), path traversal rejection, and DB initialization.",
+    inputSchema: {
+      file_path: z.string().describe("Project-relative path to the file to reindex (e.g. 'src/tools/my-tool.ts')"),
+    },
+  },
+  async (input) => {
+    const result = await reindexFileTool(input, projectDir);
     return jsonResponse(result);
   }
 );
