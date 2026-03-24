@@ -53,6 +53,22 @@ This installs Cursor configuration and the Cursor-side runner into the repo (inc
 
 On first use, Cursor will start Canon’s MCP server and auto-run `npm install` inside `mcp-server/` if dependencies are missing.
 
+### MCP Permissions
+
+Since the Cursor-only setup registers Canon’s MCP server directly (not via the plugin system), you need to allow its tools explicitly. Add this to your user settings (`~/.claude/settings.json`):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__canon__*"
+    ]
+  }
+}
+```
+
+Without this, each MCP tool call will prompt for approval — which blocks non-interactive usage like `claude -p`.
+
 ### Claude Max users
 
 Opus 4.6 uses a 1M context window which requires **extra usage** on Claude Max. If you see `"Extra usage is required for long context requests"`:
@@ -224,6 +240,7 @@ Workspaces are ephemeral by default — scoped to a branch's active development:
 - **Create**: Automatically when a build starts
 - **Archive**: Run `/canon:clean --archive` to save decisions and notes to `.canon/history/`
 - **Delete**: Run `/canon:clean` to remove workspace artifacts after branch merge
+- **Auto-cleanup**: Install the post-merge git hook (`./hooks/install-git-hooks.sh`) — after merging a PR on GitHub and pulling main, it automatically archives the workspace and deletes the local branch
 
 ## The Learning Loop
 
@@ -249,7 +266,7 @@ Use `--apply` to walk through suggestions interactively.
 
 ## MCP Tools
 
-Canon exposes 14 tools via its MCP server for agents to use during normal work:
+Canon exposes 16 tools via its MCP server for agents to use during normal work:
 
 | Tool | Purpose |
 |------|---------|
@@ -262,8 +279,10 @@ Canon exposes 14 tools via its MCP server for agents to use during normal work:
 | `get_decisions` | Query logged decisions for a principle or file |
 | `get_patterns` | Query observed codebase patterns |
 | `get_pr_review_data` | Get PR file list, layers, and graph-aware priority scores |
-| `codebase_graph` | Generate dependency graph with compliance overlay, insights, and reverse-dep index |
-| `get_file_context` | Get file content, imports, dependents, violations, and graph metrics (fan-in, hub status, cycles) |
+| `codebase_graph` | Build the knowledge graph via Tree-sitter AST parsing and generate dependency graph with compliance overlay, insights, and reverse-dep index |
+| `get_file_context` | Get file content, imports, dependents, violations, graph metrics, and optionally entity-level details and blast radius |
+| `reindex_file` | Incrementally reindex a single file in the knowledge graph after edits — updates entities, edges, and materializes graph-data.json |
+| `graph_query` | Query the knowledge graph directly — callers, callees, blast radius, dead code detection, entity search, and ancestor traversal |
 | `store_summaries` | Persist file summaries incrementally for dashboard display |
 | `store_pr_review` | Store a PR review result for drift tracking |
 | `get_dashboard_selection` | Get selected node context with graph metrics and downstream impact |
@@ -298,7 +317,7 @@ The reviewer, fixer, and architect agents are graph-aware — they use the codeb
 
 ## Hooks
 
-Canon includes 9 automation hooks:
+Canon includes 9 session hooks and a git post-merge hook:
 
 - **Pre-commit secrets check** — Blocks commits containing hardcoded secrets (API keys, private keys, connection strings)
 - **Pre-push review guard** — Warns before pushing if no Canon review covers the unpushed commits
@@ -309,6 +328,13 @@ Canon includes 9 automation hooks:
 - **Agent cost tracker** — Logs every agent spawn to `.canon/agent-costs.jsonl` for cost observability
 - **Destructive git guard** — Blocks destructive git operations (reset --hard, clean -f, checkout --, branch -D) for user confirmation
 - **Workspace lock guard** — Warns before git commit/merge if the workspace has an active lock from another session
+- **Post-merge cleanup** — After `git pull` on main, automatically archives workspaces for merged branches (decisions and notes to `.canon/history/`), deletes the workspace, and removes the local branch
+
+To install the git hook:
+
+```bash
+./hooks/install-git-hooks.sh
+```
 
 ## Project Structure
 
@@ -325,7 +351,7 @@ canon/
 ├── hooks/               9 automation hooks
 ├── flows/               11 workflow definitions + 12 reusable fragments
 │   └── fragments/       Composable state groups + consultation fragments
-├── mcp-server/          TypeScript MCP server (24 tools)
+├── mcp-server/          TypeScript MCP server (26 tools)
 │   └── src/
 │       ├── index.ts     Server + tool registration
 │       ├── constants.ts Shared constants (layer centrality, extensions, extractSummary)
@@ -333,7 +359,7 @@ canon/
 │       ├── parser.ts    Principle parsing and frontmatter extraction
 │       ├── schema.ts    Zod input validation schemas
 │       ├── tools/       Individual tool implementations
-│       ├── graph/       Dependency graph: scanner, import/export parsers, insights, query cache, priority scoring
+│       ├── graph/       Knowledge graph: SQLite store, Tree-sitter adapters, pipeline, materializer, dead code, blast radius, insights
 │       ├── drift/       JSONL stores, analyzer, PR tracking
 │       ├── utils/       Atomic writes, config loader, error helpers, ID generation
 │       └── __tests__/   Tests
@@ -342,45 +368,55 @@ canon/
 │       ├── extension.ts       Extension activation, active file tracking
 │       ├── constants.ts       Shared paths and timeouts
 │       ├── messages.ts        Typed extension ↔ webview message protocol
-│       ├── dashboard-panel.ts Webview panel, message-based data push, file watching
+│       ├── dashboard-panel.ts Webview panel, message-based data push, file watching, reindex trigger
 │       ├── services/          Graph data loading, git integration
-│       ├── webview/           Svelte app: stores, components, D3 graph, filters
+│       ├── webview/           Svelte app: stores, components, Sigma.js graph, entity panel, filters
 │       └── __tests__/         Tests
 └── skills/canon/        Skill definition + references
 ```
 
-## The Codebase Graph
+## The Codebase Knowledge Graph
 
-Canon builds a dependency graph of your codebase to power structural analysis:
+Canon builds a persistent knowledge graph of your codebase, backed by SQLite, to power structural analysis and entity-level queries:
 
 ```bash
 # Generated automatically when the dashboard opens, or manually:
 # Call codebase_graph MCP tool
 ```
 
-The graph includes:
-- **Nodes**: Every source file with layer, violation count, changed status
-- **Edges**: Import/dependency relationships
-- **Insights**: Most connected files, orphans, circular dependencies, layer boundary violations
-- **Reverse index**: Which files depend on each file (persisted as `reverse-deps.json`)
+The knowledge graph stores:
+- **Files**: Every source file with layer, language, mtime, content hash
+- **Entities**: Functions, classes, methods, interfaces, type aliases, enums, variables — extracted via Tree-sitter AST parsing (TypeScript/JavaScript, Python, Bash) and remark Markdown ingestion
+- **Edges**: Import/dependency relationships between files, call/extends/implements relationships between entities, and Canon-specific links (principle applies-to, flow includes/spawns)
+- **Full-text search**: FTS5 index over entity names, qualified names, and signatures
+
+Analysis features built on the graph:
+- **Dead code detection** — Finds unexported, unreferenced entities across the codebase
+- **Blast radius analysis** — Recursive CTE traversal to find all entities affected by a change, with depth breakdown
+- **Insights** — Most connected files, orphans, circular dependencies, layer violations, entity overview, blast radius hotspots
+- **Incremental updates** — `reindex_file` re-parses a single file on save (mtime + content hash check), updating only changed entities and edges
 
 Graph data enriches the entire review pipeline:
 - `review_code` auto-injects `bounded-context-boundaries` for files with layer violations
 - `review_code` auto-injects `architectural-fitness-functions` for files in cycles
-- `get_file_context` returns fan-in, fan-out, hub status, cycle membership, and impact score
+- `get_file_context` returns fan-in, fan-out, hub status, cycle membership, impact score, and optionally entity details and blast radius
+- `graph_query` provides direct access to callers, callees, blast radius, dead code, and entity search
 - Violations carry optional `impact_score` — higher score = more dependents affected
-- The Canon Dashboard visualizes the graph with D3 force layout
+- The Canon Dashboard visualizes the graph with Sigma.js WebGL rendering
 
 ## Canon Dashboard
 
-The Canon Dashboard is a VS Code / Cursor extension that brings the codebase graph to life as an interactive visualization. It activates automatically when a `.canon` directory is detected in your workspace.
+The Canon Dashboard is a VS Code / Cursor extension that brings the codebase knowledge graph to life as an interactive visualization. It activates automatically when a `.canon` directory is detected in your workspace.
 
 **What it shows:**
 
-- **Interactive dependency graph** — D3 force-directed layout with nodes colored by architectural layer (api, ui, domain, data, infra, shared)
+- **Interactive dependency graph** — Sigma.js WebGL rendering with Graphology, ForceAtlas2 layout, and Louvain community detection. Nodes colored by architectural layer, sized by entity count.
+- **Entity drill-down** — Click a file node to see its functions, classes, interfaces, and types with export status and dead code markers
 - **Git overlay** — Changed files pulse on the graph so you can see what's in flux
 - **Violation context** — Violations enriched with fan-in, hub status, cycle membership, and impact scores
+- **Knowledge graph insights** — Dead code summary, entity overview, blast radius hotspots alongside existing compliance insights
 - **Search and filter** — Find files by name, filter by layer, changed status, violations, or PR review scope
+- **Incremental updates** — File saves trigger debounced reindexing, keeping the graph current as you edit
 
 **How it connects to Canon:**
 
@@ -482,19 +518,17 @@ As your project grows — more principles, more reviews, more conventions — Ca
 
 ### Configuration
 
-All configuration lives in `.canon/config.json` in your project root. Every key is optional — Canon uses sensible defaults when a key is missing.
+All configuration lives in `.canon/config.json` in your project root.
 
 ```json
 {
-  "source_dirs": ["src", "lib"],
+  "source_dirs": ["mcp-server/src", "cursor-extension/src"],
   "max_file_lines": 500,
   "layers": {
-    "api": ["api", "routes", "controllers"],
-    "ui": ["app", "components", "pages", "views"],
-    "domain": ["services", "domain", "models"],
-    "data": ["db", "data", "repositories", "prisma"],
-    "infra": ["infra", "deploy", "terraform", "docker"],
-    "shared": ["utils", "lib", "shared", "types"]
+    "backend": ["tools", "orchestration", "graph"],
+    "frontend": ["webview", "components"],
+    "platform": ["hooks", "templates", "build"],
+    "shared": ["utils", "constants", "messages"]
   },
   "review": {
     "max_principles_per_review": 10,
@@ -505,9 +539,9 @@ All configuration lives in `.canon/config.json` in your project root. Every key 
 
 | Key | Default | What it controls |
 |-----|---------|-----------------|
-| `source_dirs` | — | Directories to scan for the codebase graph. When not set, tools require an explicit `source_dirs` or `root_dir` parameter. |
+| `source_dirs` | — | Directories to scan for the codebase graph. |
 | `max_file_lines` | 500 | Line threshold for the large file guard hook. Files exceeding this trigger a warning on write/edit. |
-| `layers` | See defaults above | Maps layer names to directory patterns for architectural layer inference. Files in matching directories are assigned that layer. Override to match your project's structure. |
+| `layers` | **Required** for `codebase_graph` | Maps user-defined layer names to directory/path tokens. Files in matching paths are assigned that layer. Any names are allowed (for example `backend`, `frontend`, `platform`, `shared`). |
 | `review.max_principles_per_review` | 10 | Cap for `get_principles` (used during code generation). Rules are always included first. |
 | `review.max_review_principles` | 15 | Cap for `review_code` (used during reviews). Rules are never dropped — the total may exceed this cap when many rules match. |
 
@@ -534,7 +568,8 @@ All Canon data lives in `.canon/` in your project root:
 | `workspaces/{branch}/` | Branch-scoped agent workspace (research, decisions, plans, logs) | Build pipeline (orchestrator) |
 | `plans/{task-slug}/` | Task plans and build artifacts inside the workspace | Build pipeline |
 | `history/{branch}/` | Archived workspace artifacts (decisions, notes, summary) | `/canon:clean --archive` |
-| `graph-data.json` | Codebase dependency graph with insights | `codebase_graph` MCP tool |
+| `knowledge-graph.db` | SQLite knowledge graph database (entities, edges, FTS5 index) | `codebase_graph`, `reindex_file` MCP tools |
+| `graph-data.json` | Materialized view of the knowledge graph for the dashboard | `codebase_graph`, `reindex_file` MCP tools |
 | `reverse-deps.json` | Reverse dependency index (who imports each file) | `codebase_graph` MCP tool |
 | `summaries.json` | One-line file summaries for dashboard tooltips | `store_summaries` MCP tool |
 | `pr-reviews.jsonl` | PR review history | `get_pr_review_data` MCP tool |
