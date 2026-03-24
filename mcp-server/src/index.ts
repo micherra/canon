@@ -531,8 +531,8 @@ server.registerTool(
         .describe('Target entity name or file path (not needed for dead_code)'),
       options: z
         .object({
-          max_depth: z.number().optional().describe('Max depth for blast_radius (default 3)'),
-          limit: z.number().optional().describe('Max results for search (default 50)'),
+          max_depth: z.number().int().min(1).max(10).optional().describe('Max depth for blast_radius (default 3)'),
+          limit: z.number().int().min(1).max(500).optional().describe('Max results for search (default 50)'),
           include_tests: z.boolean().optional().describe('Include test files in dead_code results'),
         })
         .optional(),

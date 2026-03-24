@@ -263,11 +263,20 @@ export class KgQuery {
    * Returns up to `limit` results ordered by BM25 rank (lower = better).
    */
   search(query: string, limit: number = 50): SearchResult[] {
-    const rows = this.stmtSearch.all(query, limit) as Array<
-      Record<string, unknown> & { is_exported?: number; is_default_export?: number }
-    >;
-    // SearchResult doesn't include boolean fields from EntityRow, cast directly
-    return rows as unknown as SearchResult[];
+    try {
+      const rows = this.stmtSearch.all(query, limit) as Array<
+        Record<string, unknown> & { is_exported?: number; is_default_export?: number }
+      >;
+      // SearchResult doesn't include boolean fields from EntityRow, cast directly
+      return rows as unknown as SearchResult[];
+    } catch (err: unknown) {
+      // FTS5 throws on malformed query syntax (bare AND, trailing OR, etc.)
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('fts5') || msg.includes('syntax')) {
+        return [];
+      }
+      throw err;
+    }
   }
 
   // --------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import Sigma from "sigma";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import louvain from "graphology-communities-louvain";
 import { getLayerColor, NODE_DEFAULT, NODE_CHANGED } from "./constants";
+import { escapeHtml } from "./escapeHtml";
 import type { GraphData, GraphNode } from "../stores/graphData";
 
 // ── Filter options (mirrors GraphApi's FilterOptions) ────────────────────────
@@ -223,7 +224,7 @@ export function buildSigmaGraph(
     const gn = nodeIndex.get(node);
     if (!gn) return;
     const color = getLayerColor(gn.layer, opts.layerColors);
-    let meta = `<span style="color:${color}">${gn.layer}</span>`;
+    let meta = `<span style="color:${color}">${escapeHtml(gn.layer)}</span>`;
     if (gn.violation_count) {
       meta += ` · <span style="color:var(--danger,#ef4444)">${gn.violation_count} violations</span>`;
     }
@@ -238,7 +239,7 @@ export function buildSigmaGraph(
       container,
       event.clientX,
       event.clientY,
-      `<strong>${gn.id}</strong><div class="tt-meta">${meta}</div>`,
+      `<strong>${escapeHtml(gn.id)}</strong><div class="tt-meta">${meta}</div>`,
     );
   });
 
