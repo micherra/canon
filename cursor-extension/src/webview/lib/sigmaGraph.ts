@@ -2,7 +2,20 @@ import Graph from "graphology";
 import Sigma from "sigma";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import louvain from "graphology-communities-louvain";
-import { getLayerColor, NODE_DEFAULT, NODE_CHANGED } from "./constants";
+import {
+  getLayerColor,
+  NODE_DEFAULT,
+  NODE_CHANGED,
+  NODE_UNFOCUSED,
+  NODE_DIM,
+  NODE_HIGHLY_DIM,
+  EDGE_DEFAULT,
+  EDGE_HIGHLIGHTED,
+  EDGE_SEMI_DIM,
+  EDGE_DIM,
+  EDGE_VERY_DIM,
+  EDGE_ADJACENT_FOCUS,
+} from "./constants";
 import { escapeHtml } from "./escapeHtml";
 import type { GraphData, GraphNode } from "../stores/graphData";
 
@@ -50,28 +63,25 @@ interface NodeAttrs {
   community: number;
   // Rendering state
   hidden: boolean;
-  highlighted: boolean;
-  originalColor: string;
 }
 
 interface EdgeAttrs {
   color: string;
   size: number;
   hidden: boolean;
-  originalColor: string;
   confidence: number;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function nodeSize(node: GraphNode): number {
-  return Math.max(3, Math.sqrt(node.entity_count || 1) * 2);
+  return Math.max(2, Math.sqrt(node.entity_count || 1) * 1.5);
 }
 
 function edgeSize(confidence?: number): number {
-  if (!confidence || confidence >= 1) return 1.5;
-  if (confidence >= 0.7) return 1;
-  return 0.6;
+  if (!confidence || confidence >= 1) return 0.4;
+  if (confidence >= 0.7) return 0.25;
+  return 0.15;
 }
 
 /** Sanitize a node id so it can be used as a graphology key (must be a string). */
@@ -85,8 +95,7 @@ function makeTooltip(container: HTMLElement): HTMLElement {
   const el = document.createElement("div");
   el.className = "graph-tooltip";
   el.id = "sigma-graph-tooltip";
-  el.style.cssText =
-    "position:absolute;pointer-events:none;display:none;z-index:100;";
+  el.style.display = "none"; // position, pointer-events, z-index handled by .graph-tooltip CSS
   container.style.position = "relative";
   container.appendChild(el);
   return el;
@@ -147,15 +156,13 @@ export function buildSigmaGraph(
       x: Math.random() * 1000,
       y: Math.random() * 1000,
       size: nodeSize(node),
-      color: node.changed ? NODE_CHANGED : (node.color || color),
+      color: node.changed ? NODE_CHANGED : color,
       layer: node.layer || "unknown",
       changed: node.changed || false,
       violation_count: node.violation_count || 0,
       dead_code_count: node.dead_code_count || 0,
       community: node.community ?? -1,
       hidden: false,
-      highlighted: false,
-      originalColor: node.changed ? NODE_CHANGED : (node.color || color),
     } satisfies NodeAttrs);
   }
 
@@ -170,10 +177,9 @@ export function buildSigmaGraph(
     seenEdges.add(key);
     try {
       graph.addEdge(safeKey(s), safeKey(t), {
-        color: "#8899bb55",
+        color: EDGE_DEFAULT,
         size: edgeSize(edge.confidence),
         hidden: false,
-        originalColor: "#8899bb55",
         confidence: edge.confidence ?? 1,
       } satisfies EdgeAttrs);
     } catch {
@@ -187,9 +193,10 @@ export function buildSigmaGraph(
     forceAtlas2.assign(graph, {
       iterations: 100,
       settings: {
-        gravity: 1,
-        scalingRatio: 2,
+        gravity: 0.5,
+        scalingRatio: 5,
         barnesHutOptimize: true,
+        slowDown: 2,
       },
     });
   } catch {
@@ -206,17 +213,200 @@ export function buildSigmaGraph(
     // Community detection is optional — non-fatal
   }
 
-  // ── 4. Create Sigma renderer ─────────────────────────────────────────────
+  // ── Rendering state (closure-scoped) ─────────────────────────────────────
+
+  let currentFilters: FilterOptions | null = null;
+  let focusedNodeId: string | null = null;
+  let focusedConnected: Set<string> | null = null; // pre-computed neighbor set
+  let cascadeRoot: string | null = null;
+  let cascadeFiles: Set<string> | null = null;
+
+  // ── Helpers for filter logic ──────────────────────────────────────────────
+
+  function matchesSearch(gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string): boolean {
+    if (parsed.filterLayer && !gn.layer.toLowerCase().includes(parsed.filterLayer)) return false;
+    if (parsed.filterChanged && !gn.changed) return false;
+    if (parsed.filterViolation && !(gn.violation_count && gn.violation_count > 0)) return false;
+    if (q.length >= 2 && !gn.id.toLowerCase().includes(q)) return false;
+    return true;
+  }
+
+  function nodeVisible(nodeId: string, f: FilterOptions): boolean {
+    const gn = nodeIndex.get(nodeId);
+    if (!gn) return false;
+    if (!f.activeLayers.has(gn.layer)) return false;
+    if (f.showChangedOnly && !gn.changed) return false;
+    const hasPrFilter = f.prReviewFiles !== null;
+    if (hasPrFilter && !f.prReviewFiles!.has(nodeId)) return false;
+    const hasInsightFilter = f.insightFilter !== null;
+    if (hasInsightFilter && !f.insightFilter!.has(nodeId)) return false;
+    const parsed = f.parsedSearch;
+    const q = (parsed.textQuery || "").toLowerCase();
+    const hasSearch =
+      q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
+    if (hasSearch && !matchesSearch(gn, parsed, q)) return false;
+    return true;
+  }
+
+  // ── nodeReducer — computes visual props from rendering state ─────────────
+
+  function nodeReducer(nodeId: string, data: NodeAttrs): Partial<NodeAttrs> {
+    const gn = nodeIndex.get(nodeId);
+    if (!gn) return data;
+
+    // CASCADE mode — highest precedence
+    if (cascadeRoot && cascadeFiles) {
+      if (nodeId === cascadeRoot) return { ...data, color: "#60a5fa", highlighted: true };
+      if (cascadeFiles.has(nodeId)) return { ...data, color: "#fbbf24", highlighted: true };
+      return { ...data, color: NODE_UNFOCUSED, highlighted: false };
+    }
+
+    // FOCUS mode
+    if (focusedNodeId && focusedConnected) {
+      if (nodeId === focusedNodeId) return { ...data, color: "#6c8cff", size: nodeSize(gn) + 3 };
+      if (focusedConnected.has(nodeId))
+        return { ...data, color: getLayerColor(gn.layer, opts.layerColors), size: nodeSize(gn) };
+      return { ...data, color: NODE_UNFOCUSED, size: nodeSize(gn) };
+    }
+
+    // FILTER mode
+    if (currentFilters) {
+      const f = currentFilters;
+      if (!f.activeLayers.has(gn.layer)) return { ...data, hidden: true };
+
+      const parsed = f.parsedSearch;
+      const q = (parsed.textQuery || "").toLowerCase();
+      const hasSearch =
+        q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
+      const hasPrFilter = f.prReviewFiles !== null;
+      const hasInsightFilter = f.insightFilter !== null;
+
+      const layerColor = getLayerColor(gn.layer, opts.layerColors);
+      const isSearchMatch = hasSearch && matchesSearch(gn, parsed, q);
+      const isPrMatch = hasPrFilter && f.prReviewFiles!.has(nodeId);
+      const isInsightMatch = hasInsightFilter && f.insightFilter!.has(nodeId);
+
+      if (isInsightMatch || isPrMatch || isSearchMatch) {
+        return { ...data, hidden: false, color: layerColor, size: nodeSize(gn) + 2 };
+      } else if (f.showChangedOnly && !gn.changed) {
+        return { ...data, hidden: false, color: NODE_HIGHLY_DIM, size: nodeSize(gn) };
+      } else if (
+        (hasPrFilter && !isPrMatch) ||
+        (hasInsightFilter && !isInsightMatch) ||
+        (hasSearch && !isSearchMatch)
+      ) {
+        return { ...data, hidden: false, color: NODE_DIM, size: nodeSize(gn) };
+      } else {
+        return {
+          ...data,
+          hidden: false,
+          color: gn.changed ? NODE_CHANGED : layerColor,
+          size: nodeSize(gn) + (gn.changed ? 1 : 0),
+        };
+      }
+    }
+
+    // DEFAULT — return data as-is (initial graph attributes applied)
+    return data;
+  }
+
+  // ── edgeReducer — computes visual props from rendering state ─────────────
+
+  function edgeReducer(edgeId: string, data: EdgeAttrs): Partial<EdgeAttrs> {
+    const [s, t] = graph.extremities(edgeId);
+
+    // CASCADE mode — highest precedence
+    if (cascadeRoot && cascadeFiles) {
+      const bothIn = cascadeFiles.has(s) && cascadeFiles.has(t);
+      return { ...data, color: bothIn ? EDGE_HIGHLIGHTED : EDGE_VERY_DIM };
+    }
+
+    // FOCUS mode
+    if (focusedNodeId) {
+      const adjacent = s === focusedNodeId || t === focusedNodeId;
+      return { ...data, color: adjacent ? EDGE_ADJACENT_FOCUS : EDGE_DIM, size: adjacent ? 0.8 : 0.2 };
+    }
+
+    // FILTER mode
+    if (currentFilters) {
+      const f = currentFilters;
+      const sVisible = nodeVisible(s, f);
+      const tVisible = nodeVisible(t, f);
+      if (!sVisible && !tVisible) return { ...data, hidden: true };
+
+      const hasPrFilter = f.prReviewFiles !== null;
+      const hasInsightFilter = f.insightFilter !== null;
+      const parsed = f.parsedSearch;
+      const q = (parsed.textQuery || "").toLowerCase();
+      const hasSearch =
+        q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
+
+      let color: string;
+      if (hasPrFilter) {
+        const sIn = f.prReviewFiles!.has(s);
+        const tIn = f.prReviewFiles!.has(t);
+        color = sIn && tIn ? EDGE_HIGHLIGHTED : sIn || tIn ? EDGE_SEMI_DIM : EDGE_DIM;
+      } else if (hasInsightFilter) {
+        const sIn = f.insightFilter!.has(s);
+        const tIn = f.insightFilter!.has(t);
+        color = sIn && tIn ? EDGE_HIGHLIGHTED : sIn || tIn ? EDGE_SEMI_DIM : EDGE_DIM;
+      } else if (hasSearch) {
+        const sGn = nodeIndex.get(s);
+        const tGn = nodeIndex.get(t);
+        const sMatch = sGn ? matchesSearch(sGn, parsed, q) : false;
+        const tMatch = tGn ? matchesSearch(tGn, parsed, q) : false;
+        color = sMatch || tMatch ? EDGE_HIGHLIGHTED : EDGE_DIM;
+      } else {
+        color = EDGE_DEFAULT;
+      }
+      return { ...data, hidden: false, color };
+    }
+
+    // DEFAULT
+    return data;
+  }
+
+  // ── 4. Create Sigma renderer with reducers ────────────────────────────────
 
   const sigma = new Sigma(graph as any, container, {
     renderEdgeLabels: false,
-    defaultEdgeColor: "#8899bb55",
-    labelRenderedSizeThreshold: 8,
+    defaultEdgeColor: EDGE_DEFAULT,
+    labelRenderedSizeThreshold: 14,
     labelFont: "'Inter', sans-serif",
+    labelSize: 11,
+    labelColor: { color: "#9ca3af" },
     defaultNodeColor: NODE_DEFAULT,
+    nodeReducer: nodeReducer as any,
+    edgeReducer: edgeReducer as any,
   });
 
-  // ── 5. Tooltip ───────────────────────────────────────────────────────────
+  // ── 5. Drag support ────────────────────────────────────────────────────
+
+  let draggedNode: string | null = null;
+  let isDragging = false;
+
+  sigma.on("downNode", ({ node, event }: { node: string; event: MouseEvent }) => {
+    draggedNode = node;
+    isDragging = false;
+    sigma.getCamera().disable();
+  });
+
+  sigma.getMouseCaptor().on("mousemovebody", (event: { original: MouseEvent }) => {
+    if (!draggedNode) return;
+    isDragging = true;
+    const pos = sigma.viewportToGraph({ x: event.original.offsetX, y: event.original.offsetY });
+    graph.setNodeAttribute(draggedNode, "x", pos.x);
+    graph.setNodeAttribute(draggedNode, "y", pos.y);
+  });
+
+  sigma.getMouseCaptor().on("mouseup", () => {
+    if (draggedNode) {
+      sigma.getCamera().enable();
+      draggedNode = null;
+    }
+  });
+
+  // ── 6. Tooltip ────────────────────────────────────────────────────────────
 
   const tooltip = makeTooltip(container);
 
@@ -246,9 +436,10 @@ export function buildSigmaGraph(
   sigma.on("leaveNode", () => hideTooltip(tooltip));
   sigma.on("leaveStage", () => hideTooltip(tooltip));
 
-  // ── 6. Event handlers ────────────────────────────────────────────────────
+  // ── 7. Event handlers ────────────────────────────────────────────────────
 
   sigma.on("clickNode", ({ node }: { node: string }) => {
+    if (isDragging) return; // don't fire click after drag
     const gn = nodeIndex.get(node);
     if (gn) opts.onNodeClick(gn);
   });
@@ -257,142 +448,18 @@ export function buildSigmaGraph(
     opts.onBackgroundClick();
   });
 
-  // ── Internal state ───────────────────────────────────────────────────────
-
-  let lastFilters: FilterOptions | null = null;
-
-  // ── Helpers for filter logic ──────────────────────────────────────────────
-
-  function matchesSearch(gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string): boolean {
-    if (parsed.filterLayer && !gn.layer.toLowerCase().includes(parsed.filterLayer)) return false;
-    if (parsed.filterChanged && !gn.changed) return false;
-    if (parsed.filterViolation && !(gn.violation_count && gn.violation_count > 0)) return false;
-    if (q.length >= 2 && !gn.id.toLowerCase().includes(q)) return false;
-    return true;
-  }
-
-  function nodeVisible(nodeId: string, f: FilterOptions): boolean {
-    const gn = nodeIndex.get(nodeId);
-    if (!gn) return false;
-    if (!f.activeLayers.has(gn.layer)) return false;
-    if (f.showChangedOnly && !gn.changed) return false;
-    const hasPrFilter = f.prReviewFiles !== null;
-    if (hasPrFilter && !f.prReviewFiles!.has(nodeId)) return false;
-    const hasInsightFilter = f.insightFilter !== null;
-    if (hasInsightFilter && !f.insightFilter!.has(nodeId)) return false;
-    const parsed = f.parsedSearch;
-    const q = (parsed.textQuery || "").toLowerCase();
-    const hasSearch =
-      q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
-    if (hasSearch && !matchesSearch(gn, parsed, q)) return false;
-    return true;
-  }
-
   // ── API methods ────────────────────────────────────────────────────────────
 
   function applyFilters(f: FilterOptions): void {
-    lastFilters = f;
-    const parsed = f.parsedSearch;
-    const q = (parsed.textQuery || "").toLowerCase();
-    const hasSearch =
-      q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
-    const hasPrFilter = f.prReviewFiles !== null;
-    const hasInsightFilter = f.insightFilter !== null;
-
-    graph.forEachNode((nodeId) => {
-      const gn = nodeIndex.get(nodeId);
-      if (!gn) return;
-      const visible = f.activeLayers.has(gn.layer);
-
-      if (!visible) {
-        graph.setNodeAttribute(nodeId, "hidden", true);
-        return;
-      }
-
-      graph.setNodeAttribute(nodeId, "hidden", false);
-
-      // Determine highlight color for matched nodes
-      const layerColor = getLayerColor(gn.layer, opts.layerColors);
-      const isSearchMatch = hasSearch && matchesSearch(gn, parsed, q);
-      const isPrMatch = hasPrFilter && f.prReviewFiles!.has(nodeId);
-      const isInsightMatch = hasInsightFilter && f.insightFilter!.has(nodeId);
-
-      let color: string;
-      let size: number;
-
-      if (isInsightMatch || isPrMatch || isSearchMatch) {
-        color = layerColor;
-        size = nodeSize(gn) + 2;
-      } else if (f.showChangedOnly && !gn.changed) {
-        color = NODE_DEFAULT + "22"; // highly dimmed
-        size = nodeSize(gn);
-      } else if ((hasPrFilter && !isPrMatch) || (hasInsightFilter && !isInsightMatch) || (hasSearch && !isSearchMatch)) {
-        color = NODE_DEFAULT + "33"; // dimmed
-        size = nodeSize(gn);
-      } else {
-        color = gn.changed ? NODE_CHANGED : (gn.color || getLayerColor(gn.layer, opts.layerColors));
-        size = nodeSize(gn) + (gn.changed ? 1 : 0);
-      }
-
-      graph.setNodeAttribute(nodeId, "color", color);
-      graph.setNodeAttribute(nodeId, "size", size);
-    });
-
-    graph.forEachEdge((edgeId) => {
-      const [s, t] = graph.extremities(edgeId);
-      const sVisible = nodeVisible(s, f);
-      const tVisible = nodeVisible(t, f);
-      graph.setEdgeAttribute(edgeId, "hidden", !sVisible && !tVisible);
-
-      if (hasPrFilter) {
-        const sIn = f.prReviewFiles!.has(s);
-        const tIn = f.prReviewFiles!.has(t);
-        graph.setEdgeAttribute(edgeId, "color", sIn && tIn ? "#8899bbcc" : sIn || tIn ? "#8899bb44" : "#8899bb11");
-      } else if (hasInsightFilter) {
-        const sIn = f.insightFilter!.has(s);
-        const tIn = f.insightFilter!.has(t);
-        graph.setEdgeAttribute(edgeId, "color", sIn && tIn ? "#8899bbcc" : sIn || tIn ? "#8899bb44" : "#8899bb11");
-      } else if (hasSearch) {
-        const sGn = nodeIndex.get(s);
-        const tGn = nodeIndex.get(t);
-        const sMatch = sGn ? matchesSearch(sGn, parsed, q) : false;
-        const tMatch = tGn ? matchesSearch(tGn, parsed, q) : false;
-        graph.setEdgeAttribute(edgeId, "color", sMatch || tMatch ? "#8899bbcc" : "#8899bb11");
-      } else {
-        graph.setEdgeAttribute(edgeId, "color", "#8899bb55");
-      }
-    });
-
+    currentFilters = f;
     sigma.refresh();
   }
 
   function focusNode(node: GraphNode): void {
-    const connected = new Set([node.id]);
-    for (const f of opts.edgeOut.get(node.id) || []) connected.add(f);
-    for (const f of opts.edgeIn.get(node.id) || []) connected.add(f);
-
-    graph.forEachNode((nodeId) => {
-      const isConnected = connected.has(nodeId);
-      const gn = nodeIndex.get(nodeId);
-      if (!gn) return;
-      if (nodeId === node.id) {
-        graph.setNodeAttribute(nodeId, "color", "#e8eaf0");
-        graph.setNodeAttribute(nodeId, "size", nodeSize(gn) + 3);
-      } else if (isConnected) {
-        graph.setNodeAttribute(nodeId, "color", getLayerColor(gn.layer, opts.layerColors));
-        graph.setNodeAttribute(nodeId, "size", nodeSize(gn));
-      } else {
-        graph.setNodeAttribute(nodeId, "color", NODE_DEFAULT + "11");
-        graph.setNodeAttribute(nodeId, "size", nodeSize(gn));
-      }
-    });
-
-    graph.forEachEdge((edgeId) => {
-      const [s, t] = graph.extremities(edgeId);
-      const adjacent = s === node.id || t === node.id;
-      graph.setEdgeAttribute(edgeId, "color", adjacent ? "#ffffff66" : "#8899bb11");
-      graph.setEdgeAttribute(edgeId, "size", adjacent ? 2 : 0.5);
-    });
+    focusedNodeId = node.id;
+    focusedConnected = new Set([node.id]);
+    for (const f of opts.edgeOut.get(node.id) || []) focusedConnected.add(f);
+    for (const f of opts.edgeIn.get(node.id) || []) focusedConnected.add(f);
 
     sigma.refresh();
 
@@ -407,24 +474,9 @@ export function buildSigmaGraph(
   }
 
   function unfocusNode(): void {
-    if (lastFilters) {
-      applyFilters(lastFilters);
-    } else {
-      // Reset to defaults
-      graph.forEachNode((nodeId) => {
-        const gn = nodeIndex.get(nodeId);
-        if (!gn) return;
-        const orig = graph.getNodeAttribute(nodeId, "originalColor") as string || NODE_DEFAULT;
-        graph.setNodeAttribute(nodeId, "color", orig);
-        graph.setNodeAttribute(nodeId, "size", nodeSize(gn));
-      });
-      graph.forEachEdge((edgeId) => {
-        const orig = graph.getEdgeAttribute(edgeId, "originalColor") as string || "#8899bb55";
-        graph.setEdgeAttribute(edgeId, "color", orig);
-        graph.setEdgeAttribute(edgeId, "size", 1.5);
-      });
-      sigma.refresh();
-    }
+    focusedNodeId = null;
+    focusedConnected = null;
+    sigma.refresh();
   }
 
   function zoomToNode(nodeId: string): GraphNode | null {
@@ -439,49 +491,18 @@ export function buildSigmaGraph(
     return gn;
   }
 
-  function highlightCascade(nodeId: string, cascadeFiles: Set<string>): void {
+  function highlightCascade(nodeId: string, files: Set<string>): void {
+    // Copy the caller's set and add the root — never mutate caller's data
+    cascadeRoot = nodeId;
+    cascadeFiles = new Set(files);
     cascadeFiles.add(nodeId);
-
-    graph.forEachNode((nId) => {
-      const inCascade = cascadeFiles.has(nId);
-      if (nId === nodeId) {
-        graph.setNodeAttribute(nId, "color", "#60a5fa");
-        graph.setNodeAttribute(nId, "highlighted", true);
-      } else if (inCascade) {
-        graph.setNodeAttribute(nId, "color", "#fbbf24");
-        graph.setNodeAttribute(nId, "highlighted", true);
-      } else {
-        graph.setNodeAttribute(nId, "color", NODE_DEFAULT + "11");
-        graph.setNodeAttribute(nId, "highlighted", false);
-      }
-    });
-
-    graph.forEachEdge((edgeId) => {
-      const [s, t] = graph.extremities(edgeId);
-      const bothInCascade = cascadeFiles.has(s) && cascadeFiles.has(t);
-      graph.setEdgeAttribute(edgeId, "color", bothInCascade ? "#8899bbcc" : "#8899bb0a");
-    });
-
     sigma.refresh();
   }
 
   function clearHighlight(): void {
-    graph.forEachNode((nodeId) => {
-      graph.setNodeAttribute(nodeId, "highlighted", false);
-    });
-    if (lastFilters) {
-      applyFilters(lastFilters);
-    } else {
-      graph.forEachNode((nodeId) => {
-        const orig = graph.getNodeAttribute(nodeId, "originalColor") as string || NODE_DEFAULT;
-        graph.setNodeAttribute(nodeId, "color", orig);
-      });
-      graph.forEachEdge((edgeId) => {
-        const orig = graph.getEdgeAttribute(edgeId, "originalColor") as string || "#8899bb55";
-        graph.setEdgeAttribute(edgeId, "color", orig);
-      });
-      sigma.refresh();
-    }
+    cascadeRoot = null;
+    cascadeFiles = null;
+    sigma.refresh();
   }
 
   function destroy(): void {
