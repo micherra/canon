@@ -1,19 +1,37 @@
 import { writable, derived } from "svelte/store";
 
+export interface EntityInfo {
+  name: string;
+  kind: string;
+  is_exported: boolean;
+  line_start?: number;
+  line_end?: number;
+}
+
 export interface GraphNode {
   id: string;
   layer: string;
+  color?: string;
   violation_count?: number;
   top_violations?: string[];
   changed?: boolean;
   summary?: string;
   exports?: string[];
+  kind?: string;
+  entity_count?: number;
+  export_count?: number;
+  dead_code_count?: number;
+  community?: number;
+  entities?: EntityInfo[];
 }
 
 export interface GraphEdge {
   source: string | { id: string };
   target: string | { id: string };
   kind?: string;
+  relation?: string;
+  confidence?: number;
+  type?: string;
 }
 
 export interface PrincipleInfo {
@@ -25,6 +43,7 @@ export interface PrincipleInfo {
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  layers?: Array<{ name: string; color: string; file_count: number; index?: number }>;
   insights?: any;
   principles?: Record<string, PrincipleInfo>;
 }
@@ -83,6 +102,18 @@ export const layerMap = derived(graphData, ($g) => {
   return map;
 });
 
+export const layerColors = derived(graphData, ($g) => {
+  const map: Record<string, string> = {};
+  if (!$g) return map;
+  for (const layer of $g.layers || []) {
+    if (layer?.name && layer?.color) map[layer.name] = layer.color;
+  }
+  for (const n of $g.nodes || []) {
+    if (n.layer && n.color && !map[n.layer]) map[n.layer] = n.color;
+  }
+  return map;
+});
+
 
 // Derived insight counts (shared between HealthStrip and InsightsPanel)
 export const violationCount = derived(graphData, ($g) => {
@@ -101,6 +132,26 @@ export const orphanCount = derived(graphData, ($g) =>
 export const principles = derived(graphData, ($g) =>
   $g?.principles || {},
 );
+
+export const entityCount = derived(graphData, ($g) =>
+  ($g?.nodes || []).reduce((sum, n) => sum + (n.entity_count || 0), 0)
+);
+
+export const deadCodeCount = derived(graphData, ($g) =>
+  ($g?.nodes || []).reduce((sum, n) => sum + (n.dead_code_count || 0), 0)
+);
+
+export const communityMap = derived(graphData, ($g) => {
+  const map = new Map<number, string[]>();
+  for (const n of $g?.nodes || []) {
+    if (n.community !== undefined) {
+      const list = map.get(n.community) || [];
+      list.push(n.id);
+      map.set(n.community, list);
+    }
+  }
+  return map;
+});
 
 /** Read JSON from embedded script tags and populate stores */
 export function loadEmbeddedData() {
