@@ -52,10 +52,6 @@ cp -R "${REPO_ROOT}/principles" "$STAGE_DIR/"
 cp -R "${REPO_ROOT}/templates" "$STAGE_DIR/"
 cp -R "${REPO_ROOT}/hooks" "$STAGE_DIR/"
 cp -R "${REPO_ROOT}/commands" "$STAGE_DIR/"
-# `cursor-extension` is optional in this repo; don't fail release when absent.
-if [ -d "${REPO_ROOT}/cursor-extension" ]; then
-  cp -R "${REPO_ROOT}/cursor-extension" "$STAGE_DIR/"
-fi
 cp -R "${REPO_ROOT}/CLAUDE.md" "$STAGE_DIR/"
 if [ -f "${REPO_ROOT}/.mcp.json" ]; then
   cp -R "${REPO_ROOT}/.mcp.json" "$STAGE_DIR/"

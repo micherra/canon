@@ -40,7 +40,7 @@ npx -y canon-cursor --bundle-path /path/to/file.tgz
 npx -y canon-cursor --bundle-url https://...
 ```
 
-**Installed items:** AGENTS.md, CURSOR.md, CLAUDE.md, .cursor/mcp.json, .mcp.json, .cursor/agents, .cursor/hooks, mcp-server/, flows/, agents/, agent-rules/, principles/, templates/, hooks/, commands/, cursor-extension/
+**Installed items:** AGENTS.md, CURSOR.md, CLAUDE.md, .cursor/mcp.json, .mcp.json, .cursor/agents, .cursor/hooks, mcp-server/, flows/, agents/, agent-rules/, principles/, templates/, hooks/, commands/
 
 ## Dependencies
 <!-- last-updated: 2026-03-22 -->

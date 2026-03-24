@@ -8,15 +8,14 @@ Thanks for your interest in contributing! Canon is open source under the MIT lic
 2. Install dependencies:
    ```bash
    cd mcp-server && npm install
-   cd ../cursor-extension && npm install
    ```
 3. Run tests:
    ```bash
    cd mcp-server && npm test
    ```
-4. Build the extension:
+4. Build the dashboard UI:
    ```bash
-   cd cursor-extension && npm run build
+   cd mcp-server && npm run build:ui
    ```
 
 ## Project Layout
@@ -29,7 +28,7 @@ canon/
 │       ├── orchestration/   Flow runtime: board, effects, gates, variables, clustering
 │       ├── drift/           JSONL stores: decisions, patterns, reviews, analytics
 │       └── graph/           Dependency graph scanner and priority scoring
-├── cursor-extension/      VS Code/Cursor dashboard extension (Svelte + D3)
+├── mcp-server/ui/         Svelte/Sigma.js dashboard UI (builds to single HTML for MCP App)
 ├── principles/            Built-in engineering principles (markdown + YAML frontmatter)
 ├── flows/                 Flow state machines (YAML frontmatter + spawn instructions)
 │   └── fragments/           Reusable state groups included by flows
