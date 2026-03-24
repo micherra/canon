@@ -8,17 +8,36 @@ export interface GraphNode {
   changed?: boolean;
   summary?: string;
   exports?: string[];
+  // Fields present in actual graph-data.json emitted by view-materializer
+  color?: string;
+  extension?: string;
+  kind?: string;
+  top_violations?: string[];
+  last_verdict?: string | null;
+  compliance_score?: number | null;
+  entity_count?: number;
+  export_count?: number;
+  dead_code_count?: number;
+  community?: number;
 }
 
 export interface GraphEdge {
   source: string;
   target: string;
   kind?: string;
+  type?: "import" | "re-export" | "composition";
+  confidence?: number;
+  evidence?: string;
+  relation?: string;
 }
 
 export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  layers?: Array<{ name: string; color: string; file_count: number; index?: number }>;
+  principles?: Record<string, { title: string; severity: string; summary: string }>;
+  insights?: any;
+  generated_at?: string;
 }
 
 /** Read the pre-generated graph data and merge in summaries */
