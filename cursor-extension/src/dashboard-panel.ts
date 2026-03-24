@@ -35,6 +35,8 @@ export class DashboardPanel {
   private fileWatcher: vscode.FileSystemWatcher | undefined;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
+  private saveDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
   private graphTerminal: vscode.Terminal | undefined;
   private summaryPollTimer?: ReturnType<typeof setTimeout>;
   private summaryPollTimeout?: ReturnType<typeof setTimeout>;
@@ -55,6 +57,7 @@ export class DashboardPanel {
     );
 
     this.setupFileWatcher();
+    this.setupSaveListener();
     this.initDashboard();
   }
 
@@ -288,6 +291,7 @@ export class DashboardPanel {
       case "getSummary": return this.onGetSummary(workspaceRoot, msg.fileId as string, msg.id!);
       case "getComplianceTrend": return this.onGetComplianceTrend(workspaceRoot, msg.principleId as string, msg.id!);
       case "nodeSelected": return this.onNodeSelected(msg.node as any);
+      case "openFile": return this.onOpenFile(workspaceRoot, msg.path as string);
       case "refreshGraph": return this.onRefreshGraph();
     }
   }
@@ -406,6 +410,16 @@ export class DashboardPanel {
     setSelectedNode(node);
   }
 
+  private onOpenFile(workspaceRoot: string, filePath: string): void {
+    try {
+      const fullPath = safeResolvePath(workspaceRoot, filePath);
+      const uri = vscode.Uri.file(fullPath);
+      vscode.window.showTextDocument(uri, { preview: true });
+    } catch {
+      // Invalid path — ignore silently
+    }
+  }
+
   private onRefreshGraph(): void {
     this.postToWebview({ type: "graphStatus", status: "refreshing" });
     this.runGraphGeneration();
@@ -517,8 +531,9 @@ export class DashboardPanel {
       this.generationTimeout = undefined;
     }, TIMEOUTS.GENERATION_TIMEOUT_MS);
     const pf = this.getPluginFlag();
-    const graphCmd = `claude ${pf}-p "Call the codebase_graph MCP tool with no arguments."`;
-    const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
+    const allow = `--allowedTools "mcp__canon__*,Read,Grep,Glob"`;
+    const graphCmd = `claude ${pf}${allow} -p "Call the codebase_graph MCP tool with no arguments."`;
+    const summaryCmd = `claude ${pf}${allow} -p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
 
     const term = this.getOrCreateTerminal();
     term.sendText(graphCmd);
@@ -528,7 +543,8 @@ export class DashboardPanel {
     if (this.generationInProgress) return;
     this.generationInProgress = true;
     const pf = this.getPluginFlag();
-    const summaryCmd = `claude ${pf}-p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
+    const allow = `--allowedTools "mcp__canon__*,Read,Grep,Glob"`;
+    const summaryCmd = `claude ${pf}${allow} -p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
 
     const term = this.getOrCreateTerminal();
     term.sendText(summaryCmd);
@@ -601,11 +617,37 @@ export class DashboardPanel {
     }
   }
 
+  // ── Save Listener ──
+
+  /** Watch for source file saves and notify the webview that a reindex may be pending. */
+  private setupSaveListener(): void {
+    const listener = vscode.workspace.onDidSaveTextDocument((doc) => {
+      const filePath = doc.uri.fsPath;
+      // Skip non-source files: node_modules, .git internals, and .canon data files
+      if (
+        filePath.includes(`${path.sep}node_modules${path.sep}`) ||
+        filePath.includes(`${path.sep}.git${path.sep}`) ||
+        filePath.includes(`${path.sep}.canon${path.sep}`)
+      ) {
+        return;
+      }
+
+      // Debounce — only post once per burst of rapid saves
+      if (this.saveDebounceTimer) clearTimeout(this.saveDebounceTimer);
+      this.saveDebounceTimer = setTimeout(() => {
+        this.saveDebounceTimer = undefined;
+        this.postToWebview({ type: "graphStatus", status: "reindexing" });
+      }, 500);
+    });
+    this.disposables.push(listener);
+  }
+
   private dispose(): void {
     this.disposed = true;
     DashboardPanel.instance = undefined;
     setSelectedNode(null);
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    if (this.saveDebounceTimer) clearTimeout(this.saveDebounceTimer);
     if (this.generationTimeout) clearTimeout(this.generationTimeout);
     this.clearSummaryPolling();
     for (const d of this.disposables) {

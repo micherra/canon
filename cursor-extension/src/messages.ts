@@ -6,7 +6,7 @@ import type { SelectedNode } from "./extension";
 
 export type ExtensionPushMessage =
   | { type: "graphData"; data: unknown }
-  | { type: "graphStatus"; status: "ready" | "generating" | "refreshing" | "error" | "empty" }
+  | { type: "graphStatus"; status: "ready" | "generating" | "refreshing" | "reindexing" | "error" | "empty" }
   | { type: "prReviews"; data: unknown[] }
   | { type: "summaryProgress"; completed: number; total: number };
 
@@ -19,6 +19,7 @@ export type WebviewRequestType =
   | "getSummary"
   | "getComplianceTrend"
   | "nodeSelected"
+  | "openFile"
   | "refreshGraph";
 
 export interface WebviewRequest {
