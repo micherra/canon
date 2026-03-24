@@ -3,6 +3,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
+import { readFile } from "fs/promises";
 import { getPrinciples } from "./tools/get-principles.js";
 import { listPrinciples } from "./tools/list-principles.js";
 import { reviewCode } from "./tools/review-code.js";
@@ -41,7 +43,7 @@ import { getFlowRuns, computeAnalytics } from "./drift/analytics.js";
 import { reportInputSchema } from "./schema.js";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.js";
 
-import { dirname, resolve } from "path";
+import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
 // Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
@@ -64,6 +66,48 @@ const server = new McpServer({
 function jsonResponse(result: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
 }
+
+// --- MCP App: open_dashboard tool + ui://canon/dashboard resource ---
+
+const dashboardResourceUri = "ui://canon/dashboard";
+
+registerAppTool(
+  server,
+  "open_dashboard",
+  {
+    title: "Canon Dashboard",
+    description:
+      "Opens the Canon dependency graph dashboard with architecture insights, compliance overlay, and impact analysis.",
+    inputSchema: {},
+    _meta: { ui: { resourceUri: dashboardResourceUri } },
+  },
+  async () => {
+    // Return cached graph summary from disk if available; otherwise a status prompt.
+    try {
+      const graphJson = await readFile(join(projectDir, ".canon", "graph-data.json"), "utf-8");
+      const graph = JSON.parse(graphJson);
+      return jsonResponse(summarizeGraph(graph));
+    } catch {
+      return jsonResponse({ status: "no_graph", message: "Run codebase_graph first to generate the dependency graph." });
+    }
+  },
+);
+
+registerAppResource(
+  server,
+  "Canon Dashboard",
+  dashboardResourceUri,
+  { mimeType: RESOURCE_MIME_TYPE },
+  async () => {
+    const html = await readFile(
+      join(mcpServerRoot, "dist", "ui", "mcp-app.html"),
+      "utf-8",
+    );
+    return {
+      contents: [{ uri: dashboardResourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }],
+    };
+  },
+);
 
 server.registerTool(
   "get_principles",
@@ -581,7 +625,8 @@ server.registerTool(
 
 // --- Dashboard support tools (called by MCP App iframe via app.callServerTool()) ---
 
-server.registerTool(
+registerAppTool(
+  server,
   "update_dashboard_state",
   {
     description:
@@ -598,26 +643,30 @@ server.registerTool(
         .optional()
         .describe("The selected node, or null to clear the selection"),
     },
+    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
   },
   async (input) => {
     const result = await updateDashboardState(input, projectDir);
     return jsonResponse(result);
-  }
+  },
 );
 
-server.registerTool(
+registerAppTool(
+  server,
   "get_branch",
   {
     description: "Returns the current git branch name. Used by the Canon dashboard to display context.",
     inputSchema: {},
+    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
   },
   async () => {
     const result = await getBranch(projectDir);
     return jsonResponse(result);
-  }
+  },
 );
 
-server.registerTool(
+registerAppTool(
+  server,
   "get_file_content",
   {
     description:
@@ -625,14 +674,16 @@ server.registerTool(
     inputSchema: {
       file_path: z.string().min(1).describe("Project-relative file path (e.g. 'src/tools/my-tool.ts')"),
     },
+    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
   },
   async (input) => {
     const result = await getFileContent(input, projectDir);
     return jsonResponse(result);
-  }
+  },
 );
 
-server.registerTool(
+registerAppTool(
+  server,
   "get_summary",
   {
     description:
@@ -643,14 +694,16 @@ server.registerTool(
         .min(1)
         .describe("Project-relative file path (key used in summaries.json)"),
     },
+    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
   },
   async (input) => {
     const result = await getSummary(input, projectDir);
     return jsonResponse(result);
-  }
+  },
 );
 
-server.registerTool(
+registerAppTool(
+  server,
   "get_compliance_trend",
   {
     description:
@@ -658,24 +711,28 @@ server.registerTool(
     inputSchema: {
       principle_id: z.string().min(1).describe("ID of the principle to compute trend for"),
     },
+    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
   },
   async (input) => {
     const result = await getComplianceTrend(input, projectDir);
     return jsonResponse(result);
-  }
+  },
 );
 
-server.registerTool(
+// get_pr_reviews: dual visibility — LLM-visible AND app-callable (user decision)
+registerAppTool(
+  server,
   "get_pr_reviews",
   {
     description:
       "Return stored PR reviews from .canon/pr-reviews.jsonl. Each entry includes verdict, violations, score, and file list. Use this to review Canon's audit history for pull requests.",
     inputSchema: {},
+    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app", "model"] } },
   },
   async () => {
     const result = await getPrReviews(projectDir);
     return jsonResponse(result);
-  }
+  },
 );
 
 // Start the server
