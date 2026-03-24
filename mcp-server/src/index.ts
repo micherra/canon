@@ -39,6 +39,7 @@ import { getFileContent } from "./tools/get-file-content.js";
 import { getSummary } from "./tools/get-summary.js";
 import { getComplianceTrend } from "./tools/get-compliance-trend.js";
 import { getPrReviews } from "./tools/get-pr-reviews.js";
+import { showPrImpact } from "./tools/show-pr-impact.js";
 import { getFlowRuns, computeAnalytics } from "./drift/analytics.js";
 import { reportInputSchema } from "./schema.js";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.js";
@@ -105,6 +106,46 @@ registerAppResource(
     );
     return {
       contents: [{ uri: dashboardResourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }],
+    };
+  },
+);
+
+// --- MCP App: show_pr_impact tool + ui://canon/pr-impact resource ---
+
+const prImpactResourceUri = "ui://canon/pr-impact";
+
+registerAppTool(
+  server,
+  "show_pr_impact",
+  {
+    title: "PR Impact Analysis",
+    description:
+      "Opens the PR Impact View showing blast radius, hotspots, violations, and dependency subgraph for the most recent Canon PR review.",
+    inputSchema: {},
+    _meta: { ui: { resourceUri: prImpactResourceUri } },
+  },
+  async () => {
+    try {
+      const payload = await showPrImpact(projectDir);
+      return jsonResponse(payload);
+    } catch (e) {
+      return jsonResponse({ status: "error", message: String(e) });
+    }
+  },
+);
+
+registerAppResource(
+  server,
+  "PR Impact Analysis",
+  prImpactResourceUri,
+  { mimeType: RESOURCE_MIME_TYPE },
+  async () => {
+    const html = await readFile(
+      join(mcpServerRoot, "dist", "ui", "pr-impact.html"),
+      "utf-8",
+    );
+    return {
+      contents: [{ uri: prImpactResourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }],
     };
   },
 );
@@ -545,6 +586,7 @@ server.registerTool(
           severity: z.string(),
           file_path: z.string().optional().describe("Specific file where violation occurred"),
           impact_score: z.number().optional().describe("Graph-derived impact score"),
+          message: z.string().optional().describe("Human-readable violation reason"),
         })
       ).describe("Principle violations found"),
       honored: z.array(z.string()).describe("IDs of principles honored"),

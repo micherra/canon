@@ -89,6 +89,34 @@ export const bridge = {
         }
         return null;
       }
+      case "getPrImpact": {
+        const result = await app.callServerTool({
+          name: "show_pr_impact",
+          arguments: {},
+        });
+        return extractToolJson(result);
+      }
+      case "graphQuery": {
+        const result = await app.callServerTool({
+          name: "graph_query",
+          arguments: {
+            query_type: payload?.queryType as string,
+            target: payload?.target as string,
+            options: payload?.options as Record<string, unknown> | undefined,
+          },
+        });
+        return extractToolJson(result);
+      }
+      case "getDecisions": {
+        const result = await app.callServerTool({
+          name: "get_decisions",
+          arguments: {
+            principle_id: payload?.principleId as string | undefined,
+            limit: payload?.limit as number | undefined,
+          },
+        });
+        return extractToolJson(result);
+      }
       default:
         console.warn(`[Canon] Unknown bridge request type: ${type}`);
         return {};

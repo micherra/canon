@@ -28,6 +28,7 @@ export const reportInputSchema = z.discriminatedUnion("type", [
         severity: z.string(),
         file_path: z.string().optional().describe("Specific file where violation occurred"),
         impact_score: z.number().optional().describe("Graph-derived impact score (higher = more dependents affected)"),
+        message: z.string().optional().describe("Human-readable violation reason"),
       }))
       .max(1000)
       .describe("Principle violations found"),

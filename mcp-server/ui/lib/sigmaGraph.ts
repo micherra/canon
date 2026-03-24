@@ -136,6 +136,7 @@ export function buildSigmaGraph(
     edgeIn: Map<string, string[]>;
     edgeOut: Map<string, string[]>;
     layerColors: Record<string, string>;
+    fa2Iterations?: number;  // default 100; SubGraph passes 60 for smaller graphs
   },
 ): SigmaGraphApi {
   // ── 1. Build Graphology graph ────────────────────────────────────────────
@@ -191,7 +192,7 @@ export function buildSigmaGraph(
 
   try {
     forceAtlas2.assign(graph, {
-      iterations: 100,
+      iterations: opts.fa2Iterations ?? 100,
       settings: {
         gravity: 0.5,
         scalingRatio: 5,

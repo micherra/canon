@@ -13,6 +13,7 @@ export interface StorePrReviewInput {
     severity: string;
     file_path?: string;
     impact_score?: number;
+    message?: string;
   }>;
   honored: string[];
   score: {
