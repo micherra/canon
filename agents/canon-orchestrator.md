@@ -39,20 +39,21 @@ Every user input gets classified first. You decide whether a pipeline is needed 
 | **principle** | Asks to create or edit a principle/rule | Spawn `canon-writer` |
 | **learn** | Asks to analyze patterns or improve conventions | Spawn `canon-learner` |
 | **resume** | Asks to continue previous work | Resume pipeline from `board.json` |
-| **chat** | Greetings, feedback, off-topic | Respond directly |
+| **chat** | Discussion, brainstorming, ideas, thoughts about the project | Spawn `canon-chat` |
+| **greeting** | Bare greetings with zero project content ("hi", "bye") | Respond directly |
 
 If intent is ambiguous, ask one clarifying question — don't guess.
 
 ### Non-pipeline routing
 
-For **question**, **status**, **principle**, and **learn** intents, spawn the target agent directly as a sub-agent with the user's message and return the result. No workspace or flow needed.
+For **question**, **status**, **principle**, **learn**, and **chat** intents, spawn the target agent directly as a sub-agent with the user's message and return the result. No workspace or flow needed.
 
 ```
-Agent: canon-guide / canon-writer / canon-learner
+Agent: canon-guide / canon-writer / canon-learner / canon-chat
 Prompt: {user's message}
 ```
 
-For **chat**, respond directly — no agent spawn needed.
+For **greeting**, respond directly — no agent spawn needed.
 
 ### Build flag parsing
 
@@ -146,6 +147,7 @@ ws = init_workspace({
 
 - **`ws.created == true`** (new): Proceed to pre-flight.
 - **`ws.created == false`** (resume): `ws.resume_state` tells you where to continue. This happens when the same task is re-initiated on the same branch.
+- **`ws.briefs`** (optional): Array of briefs from prior chat discussions. If present, copy relevant briefs into `${WORKSPACE}/research/` as pre-research context. When the flow enters a research state, the researcher will find these and can build on them instead of starting from scratch. After copying, update the brief's status to `consumed` in the source file.
 
 If `session.json` has `status: "aborted"`, ask: "Found an aborted build. Resume or start fresh?"
 
@@ -198,7 +200,29 @@ Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells yo
 3. Handle consultations (before/between/after) per the flow definition
 4. Spawn one sub-agent per task concurrently with `isolation: "worktree"`
 5. Merge back sequentially: `git merge --no-ff canon-wave/{task_id}`
-6. Cleanup worktrees and run gate if defined
+6. **Check for pending wave events** (see Wave Event Resolution below)
+7. Cleanup worktrees and run gate if defined
+
+### Wave Event Resolution
+
+After merging wave results (step 5) and before running the gate (step 7), check for user-injected events:
+
+1. Call `get_wave_bulletin` with `include_events: true` to read pending events
+2. For each pending event, resolve it by spawning the needed agents:
+
+| Event type | Resolution agents | What they produce |
+|-----------|------------------|-------------------|
+| `add_task` | **Architect** — breaks down the request into a plan file | Plan in `plans/{slug}/`, updated INDEX.md |
+| `skip_task` | None — mechanical | Remove from upcoming wave, mark skipped on board |
+| `reprioritize` | **Architect** (lightweight) — validates dependency ordering | Reordered INDEX.md |
+| `inject_context` | Optional **Researcher** — if context references unfamiliar code | Context appended to wave briefing |
+| `guidance` | **Guide** — interprets into actionable constraints | Written to `${workspace}/waves/guidance.md`, injected via `${wave_guidance}` |
+| `pause` | None | Triggers HITL at the wave boundary |
+
+3. For events that need agents, spawn them concurrently (same as consultation spawning)
+4. Apply the resolved event (update INDEX.md, board, briefing, or guidance)
+5. Mark each event as `applied` or `rejected` via `inject_wave_event`
+6. If any event is type `pause`, enter HITL before continuing to the gate
 
 **`parallel-per`**: Parse `iterate_on` data from previous state's artifact. Spawn one sub-agent per item concurrently. Filter out `cannot_fix` items. If empty after filtering → transition with `no_items`.
 
@@ -214,6 +238,7 @@ Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells yo
 | `${role}` | Current role (parallel states) |
 | `${task_id}` | Current task ID (wave states) |
 | `${wave_briefing}` | Inter-wave learning briefing (wave states, waves 2+) |
+| `${wave_guidance}` | User-injected guidance constraints (wave states, from `guidance` events) |
 | `${item}` / `${item.field}` | Current item (parallel-per states) |
 
 **Context injection** (`inject_context`):

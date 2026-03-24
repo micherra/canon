@@ -15,6 +15,7 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 | Agent | Role | Model |
 |-------|------|-------|
 | `canon-orchestrator` | Single entry point; classifies intent, drives flow state machine, spawns agents | opus |
+| `canon-chat` | Project-aware conversational agent; discusses ideas, brainstorms, writes briefs for build handoff | sonnet |
 | `canon-guide` | Answers questions, browses principles, shows status dashboards (read-only) | sonnet |
 | `canon-architect` | Designs solutions; produces design decisions and task decomposition | opus |
 | `canon-implementor` | Writes code per plan; writes unit tests | sonnet |
