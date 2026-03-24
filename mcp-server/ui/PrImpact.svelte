@@ -3,12 +3,7 @@
    * PrImpact.svelte
    *
    * Root component for the PR Impact View.
-   * Three-panel layout: left (HotspotList) | center (SubGraph — prtool-06) | right (DetailPanel — prtool-07)
-   *
-   * Canon principles:
-   *   - compose-from-small-to-large: composes VerdictStrip + HotspotList + placeholders
-   *   - validate-at-trust-boundaries: checks payload.status before rendering, handles all empty states
-   *   - functions-do-one-thing: loads data and coordinates layout; components render their own piece
+   * Three-panel layout: left (HotspotList) | center (SubGraph) | right (PrDetailPanel)
    */
 
   import { onMount } from "svelte";
@@ -16,6 +11,7 @@
   import VerdictStrip from "./components/VerdictStrip.svelte";
   import HotspotList from "./components/HotspotList.svelte";
   import PrDetailPanel from "./components/PrDetailPanel.svelte";
+  import SubGraph from "./components/SubGraph.svelte";
   import type { PrImpactPayload } from "./stores/pr-impact";
 
   let status = $state<"loading" | "ready" | "error">("loading");
@@ -23,24 +19,18 @@
   let selectedFile = $state<string | null>(null);
   let errorMsg = $state("");
 
-  onMount(async () => {
-    try {
-      await bridge.init();
-      const result = await bridge.request("getPrImpact");
-      payload = result as PrImpactPayload;
-      status = "ready";
-    } catch (e) {
-      status = "error";
-      errorMsg = e instanceof Error ? e.message : "Failed to load PR impact data";
+  // Derived state for SubGraph
+  let seedNodeIds = $derived(new Set<string>(payload?.review?.files ?? []));
+
+  let subgraphLayerColors = $derived.by(() => {
+    const map: Record<string, string> = {};
+    for (const layer of payload?.subgraph?.layers ?? []) {
+      if (layer?.name && layer?.color) map[layer.name] = layer.color;
     }
+    return map;
   });
 
-  function handleFileSelect(file: string) {
-    selectedFile = file;
-  }
-
-  // ── Derived state for DetailPanel (prtool-07) ──────────────────────────────
-
+  // Derived state for DetailPanel
   let selectedFileViolations = $derived(
     (payload?.review?.violations ?? []).filter(
       (v: any) => v.file_path === selectedFile,
@@ -59,6 +49,30 @@
       violatedPrinciples.has(d.principle_id),
     );
   });
+
+  onMount(async () => {
+    try {
+      await bridge.init();
+      const result = await bridge.request("getPrImpact");
+      payload = result as PrImpactPayload;
+      status = "ready";
+    } catch (e) {
+      status = "error";
+      errorMsg = e instanceof Error ? e.message : "Failed to load PR impact data";
+    }
+  });
+
+  function handleFileSelect(file: string) {
+    selectedFile = file;
+  }
+
+  function handleGraphNodeClick(node: any) {
+    selectedFile = node.id;
+  }
+
+  function handleGraphBackgroundClick() {
+    // no-op
+  }
 </script>
 
 <div class="pr-impact">
@@ -97,10 +111,27 @@
         />
       </div>
 
-      <!-- Center panel: SubGraph placeholder — prtool-06 will replace this div -->
-      <div class="panel-center" data-placeholder="subgraph" data-task="prtool-06">
-        <!-- SubGraph placeholder — prtool-06 -->
-        <div class="empty-state">Subgraph panel</div>
+      <!-- Center panel: SubGraph — changed files + dependency neighborhood -->
+      <div class="panel-center">
+        {#if payload?.subgraph?.nodes?.length > 0}
+          <SubGraph
+            nodes={payload.subgraph.nodes}
+            edges={payload.subgraph.edges}
+            {seedNodeIds}
+            layerColors={subgraphLayerColors}
+            onNodeClick={handleGraphNodeClick}
+            onBackgroundClick={handleGraphBackgroundClick}
+            fa2Iterations={60}
+          />
+        {:else}
+          <div class="empty-state">
+            {#if !payload?.blastRadius}
+              No knowledge graph available for subgraph visualization.
+            {:else}
+              No graph data to display.
+            {/if}
+          </div>
+        {/if}
       </div>
 
       <!-- Right panel: PrDetailPanel — per-file violations, blast radius, decisions -->
@@ -120,7 +151,6 @@
     </div>
 
   {:else}
-    <!-- Fallback for unexpected payload shape -->
     <div class="empty-state">Unexpected response from server.</div>
   {/if}
 </div>
