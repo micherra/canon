@@ -2,6 +2,7 @@
  * Designed to give Claude everything needed to write a meaningful summary. */
 
 import { readFile } from "fs/promises";
+import { existsSync } from "fs";
 import { join, resolve, sep } from "path";
 import { extractImports, resolveImport } from "../graph/import-parser.js";
 import { extractExports } from "../graph/export-parser.js";
@@ -12,6 +13,10 @@ import { isNotFound } from "../utils/errors.js";
 import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.js";
 import { toPosix, loadPathAliases } from "../utils/paths.js";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.js";
+import { initDatabase } from "../graph/kg-schema.js";
+import { KgStore } from "../graph/kg-store.js";
+import { KgQuery } from "../graph/kg-query.js";
+import type { EntityKind } from "../graph/kg-types.js";
 
 export interface GetFileContextInput {
   file_path: string;
@@ -21,6 +26,23 @@ export type FileGraphMetrics = Pick<
   GraphMetrics,
   "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "cycle_peers" | "layer_violation_count" | "impact_score"
 >;
+
+/** Concise entity descriptor returned alongside file context. */
+export interface FileEntitySummary {
+  name: string;
+  kind: EntityKind;
+  is_exported: boolean;
+  line_start: number;
+  line_end: number;
+}
+
+/** One reachable entity in the blast radius of this file's exports. */
+export interface FileBlastRadiusEntry {
+  name: string;
+  qualified_name: string;
+  kind: EntityKind;
+  depth: number;
+}
 
 export interface FileContextOutput {
   file_path: string;
@@ -32,6 +54,8 @@ export interface FileContextOutput {
   violation_count: number;
   last_verdict: string | null;
   graph_metrics?: FileGraphMetrics;
+  entities?: FileEntitySummary[];
+  blast_radius?: FileBlastRadiusEntry[];
 }
 
 
@@ -186,6 +210,53 @@ export async function getFileContext(
     }
   }
 
+  // Load entity data from the knowledge graph DB if it exists
+  let entities: FileEntitySummary[] | undefined;
+  let blast_radius: FileBlastRadiusEntry[] | undefined;
+  const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  if (existsSync(dbPath)) {
+    let db: ReturnType<typeof initDatabase> | undefined;
+    try {
+      db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const query = new KgQuery(db);
+
+      const fileRow = store.getFile(filePath);
+      if (fileRow?.file_id !== undefined) {
+        const entityRows = store.getEntitiesByFile(fileRow.file_id);
+
+        entities = entityRows.map((e) => ({
+          name: e.name,
+          kind: e.kind,
+          is_exported: e.is_exported,
+          line_start: e.line_start,
+          line_end: e.line_end,
+        }));
+
+        // Blast radius from exported entities only
+        const exportedIds = entityRows
+          .filter((e) => e.is_exported && e.entity_id !== undefined)
+          .map((e) => e.entity_id as number);
+
+        if (exportedIds.length > 0) {
+          const blastRows = query.getBlastRadius(exportedIds);
+          blast_radius = blastRows.map((r) => ({
+            name: r.name,
+            qualified_name: r.qualified_name,
+            kind: r.kind,
+            depth: r.depth,
+          }));
+        } else {
+          blast_radius = [];
+        }
+      }
+    } catch {
+      // KG unavailable — skip entity data gracefully
+    } finally {
+      db?.close();
+    }
+  }
+
   return {
     file_path: filePath,
     layer,
@@ -196,5 +267,7 @@ export async function getFileContext(
     violation_count,
     last_verdict,
     graph_metrics,
+    ...(entities !== undefined && { entities }),
+    ...(blast_radius !== undefined && { blast_radius }),
   };
 }
