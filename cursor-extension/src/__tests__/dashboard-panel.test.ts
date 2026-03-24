@@ -8,6 +8,7 @@ vi.mock("vscode", () => ({
 }));
 
 import { isValidRelativePath, getNonce } from "../dashboard-panel";
+import type { ExtensionPushMessage } from "../messages";
 
 describe("isValidRelativePath", () => {
   const root = "/workspace/project";
@@ -56,5 +57,29 @@ describe("getNonce", () => {
     const a = getNonce();
     const b = getNonce();
     expect(a).not.toBe(b);
+  });
+});
+
+// ── Message protocol type-level tests ──
+// These verify that the ExtensionPushMessage union includes the expected shapes.
+// TypeScript's assignability rules catch protocol drift at compile time.
+
+describe("ExtensionPushMessage protocol", () => {
+  it("accepts a generationProgress message", () => {
+    // If this assignment compiles, the type is present in the union
+    const msg: ExtensionPushMessage = { type: "generationProgress", elapsed: 42 };
+    expect(msg.type).toBe("generationProgress");
+    expect((msg as { type: string; elapsed: number }).elapsed).toBe(42);
+  });
+
+  it("accepts elapsed value of 0", () => {
+    const msg: ExtensionPushMessage = { type: "generationProgress", elapsed: 0 };
+    expect((msg as { type: string; elapsed: number }).elapsed).toBe(0);
+  });
+
+  it("accepts a graphStatus error message", () => {
+    // Verifies the error status (posted when plugin dir is missing) is in the union
+    const msg: ExtensionPushMessage = { type: "graphStatus", status: "error" };
+    expect(msg.type).toBe("graphStatus");
   });
 });

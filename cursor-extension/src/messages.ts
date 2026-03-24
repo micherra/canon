@@ -8,7 +8,8 @@ export type ExtensionPushMessage =
   | { type: "graphData"; data: unknown }
   | { type: "graphStatus"; status: "ready" | "generating" | "refreshing" | "reindexing" | "error" | "empty" }
   | { type: "prReviews"; data: unknown[] }
-  | { type: "summaryProgress"; completed: number; total: number };
+  | { type: "summaryProgress"; completed: number; total: number }
+  | { type: "generationProgress"; elapsed: number };
 
 // ── Webview → Extension (requests via bridge) ──
 

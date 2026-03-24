@@ -44,6 +44,8 @@ export class DashboardPanel {
   private disposed = false;
   private generationInProgress = false;
   private generationTimeout?: ReturnType<typeof setTimeout>;
+  private generationStartTime?: number;
+  private generationProgressTimer?: ReturnType<typeof setTimeout>;
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this.panel = panel;
@@ -504,11 +506,6 @@ export class DashboardPanel {
     return null;
   }
 
-  private getPluginFlag(): string {
-    const pluginDir = this.findPluginDir();
-    return pluginDir ? `--plugin-dir "${pluginDir}" ` : "";
-  }
-
   private getOrCreateTerminal(): vscode.Terminal {
     if (!this.graphTerminal || this.graphTerminal.exitStatus !== undefined) {
       this.graphTerminal = vscode.window.createTerminal({ name: "Canon" });
@@ -519,31 +516,84 @@ export class DashboardPanel {
 
   private runGraphGeneration(): void {
     if (this.generationInProgress) return;
+
+    const pluginDir = this.findPluginDir();
+    if (!pluginDir) {
+      // Fail closed: don't run a command that will fail silently
+      console.error("[Canon] Cannot find Canon plugin directory (mcp-server). Graph generation aborted.");
+      this.postToWebview({ type: "graphStatus", status: "error" });
+      vscode.window.showWarningMessage(
+        "Canon: Cannot locate the Canon plugin directory. Ensure the Canon extension is properly installed.",
+        "Retry"
+      ).then((choice) => {
+        if (choice === "Retry") this.runGraphGeneration();
+      });
+      return;
+    }
+
     this.generationInProgress = true;
     // Safety timeout: reset flag after 10 minutes if generation never completes
     if (this.generationTimeout) clearTimeout(this.generationTimeout);
     this.generationTimeout = setTimeout(() => {
       this.generationInProgress = false;
       this.generationTimeout = undefined;
+      this.clearGenerationProgress();
     }, TIMEOUTS.GENERATION_TIMEOUT_MS);
-    const pf = this.getPluginFlag();
+    const pluginFlag = `--plugin-dir "${pluginDir}" `;
     const allow = `--allowedTools "mcp__canon__*,Read,Grep,Glob"`;
-    const graphCmd = `claude ${pf}${allow} -p "Call the codebase_graph MCP tool with no arguments."`;
-    const summaryCmd = `claude ${pf}${allow} -p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
+    const graphCmd = `claude ${pluginFlag}${allow} -p "Call the codebase_graph MCP tool with no arguments."`;
 
     const term = this.getOrCreateTerminal();
     term.sendText(graphCmd);
+    this.generationStartTime = Date.now();
+    this.startGenerationProgress();
   }
 
   private runSummaryGeneration(): void {
     if (this.generationInProgress) return;
+
+    const pluginDir = this.findPluginDir();
+    if (!pluginDir) {
+      // Fail closed: don't run a summary command that will fail silently
+      console.error("[Canon] Cannot find Canon plugin directory (mcp-server). Summary generation aborted.");
+      this.postToWebview({ type: "graphStatus", status: "error" });
+      vscode.window.showWarningMessage(
+        "Canon: Cannot locate the Canon plugin directory. Ensure the Canon extension is properly installed.",
+        "Retry"
+      ).then((choice) => {
+        if (choice === "Retry") this.runSummaryGeneration();
+      });
+      return;
+    }
+
     this.generationInProgress = true;
-    const pf = this.getPluginFlag();
+    const pluginFlag = `--plugin-dir "${pluginDir}" `;
     const allow = `--allowedTools "mcp__canon__*,Read,Grep,Glob"`;
-    const summaryCmd = `claude ${pf}${allow} -p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
+    const summaryCmd = `claude ${pluginFlag}${allow} -p "Read .canon/graph-data.json to get the list of files. Also read .canon/summaries.json if it exists to see which files already have summaries. For each file that has no summary, read the file and write a 1-2 sentence summary describing the file's purpose and its architectural role. Call store_summaries after each file so progress is saved incrementally."`;
 
     const term = this.getOrCreateTerminal();
     term.sendText(summaryCmd);
+  }
+
+  private startGenerationProgress(): void {
+    this.clearGenerationProgress();
+    const tick = () => {
+      if (this.disposed || !this.generationInProgress) {
+        this.clearGenerationProgress();
+        return;
+      }
+      const elapsed = Math.round((Date.now() - (this.generationStartTime || Date.now())) / 1000);
+      this.postToWebview({ type: "generationProgress", elapsed });
+      this.generationProgressTimer = setTimeout(tick, 3000);
+    };
+    this.generationProgressTimer = setTimeout(tick, 3000);
+  }
+
+  private clearGenerationProgress(): void {
+    if (this.generationProgressTimer) {
+      clearTimeout(this.generationProgressTimer);
+      this.generationProgressTimer = undefined;
+    }
   }
 
   private sendSummaryProgress(workspaceRoot: string): void {
@@ -577,7 +627,10 @@ export class DashboardPanel {
         if (uri.fsPath.endsWith("summaries.json")) {
           this.sendSummaryProgress(workspaceRoot);
         } else {
-          if (uri.fsPath.endsWith("graph-data.json")) this.generationInProgress = false;
+          if (uri.fsPath.endsWith("graph-data.json")) {
+            this.generationInProgress = false;
+            this.clearGenerationProgress();
+          }
           if (this.generationTimeout) { clearTimeout(this.generationTimeout); this.generationTimeout = undefined; }
           console.log("[Canon] File watcher triggered, pushing graph data");
           this.pushGraphDataAndCheckSummaries().catch((err) => {
@@ -598,6 +651,7 @@ export class DashboardPanel {
         if (fs.existsSync(graphPath)) {
           clearInterval(pollInterval);
           this.generationInProgress = false;
+          this.clearGenerationProgress();
           if (this.generationTimeout) { clearTimeout(this.generationTimeout); this.generationTimeout = undefined; }
           console.log("[Canon] graph-data.json detected via polling, pushing data");
           this.pushGraphDataAndCheckSummaries().catch((err) => {
@@ -645,6 +699,7 @@ export class DashboardPanel {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     if (this.saveDebounceTimer) clearTimeout(this.saveDebounceTimer);
     if (this.generationTimeout) clearTimeout(this.generationTimeout);
+    this.clearGenerationProgress();
     this.clearSummaryPolling();
     for (const d of this.disposables) {
       d.dispose();
