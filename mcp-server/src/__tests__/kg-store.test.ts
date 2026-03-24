@@ -23,7 +23,7 @@ function makeFileRow(overrides: Partial<Omit<FileRow, 'file_id'>> = {}): Omit<Fi
     content_hash: 'abc123',
     language: 'typescript',
     layer: 'domain',
-    last_indexed_at: String(Date.now()),
+    last_indexed_at: Date.now(),
     ...overrides,
   };
 }
