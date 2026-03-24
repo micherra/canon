@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { graphData, graphStatus, loadEmbeddedData, edgeIn, nodeMap, type GraphNode } from "./stores/graphData";
+  import { graphData, graphStatus, generationProgress, loadEmbeddedData, edgeIn, nodeMap, type GraphNode } from "./stores/graphData";
   import { bridge } from "./stores/bridge";
   import { activeInsightFilter, searchQuery } from "./stores/filters";
   import { selectedNode, panelMode } from "./stores/selection";
@@ -105,6 +105,8 @@
   {#if mounted && $graphData}
     {#if $graphStatus === "refreshing"}
       <div class="refresh-bar">Refreshing graph...</div>
+    {:else if $graphStatus === "reindexing"}
+      <div class="refresh-bar reindexing">Reindexing...</div>
     {/if}
     <Toolbar onZoomToNode={handleZoomToNode} onRefreshGraph={handleRefreshGraph} />
     <PrBanner />
@@ -131,9 +133,13 @@
       {#if $graphStatus === "generating"}
         <p class="loading-title">Mapping your codebase</p>
         <p class="loading-subtitle">Scanning files, resolving imports, and inferring layers...</p>
+        {#if $generationProgress}
+          <p class="loading-progress">{$generationProgress.elapsed}s elapsed</p>
+        {/if}
       {:else if $graphStatus === "error"}
         <p class="loading-title">Failed to load graph</p>
         <p class="loading-subtitle">Check the Canon terminal for errors, then click refresh to retry.</p>
+        <button class="retry-btn" onclick={handleRefreshGraph}>Retry</button>
       {:else}
         <p class="loading-title">No graph data</p>
         <p class="loading-subtitle">Click refresh to generate your codebase graph.</p>
@@ -199,5 +205,23 @@
     text-align: center;
     max-width: 320px;
     line-height: 1.6;
+  }
+  .loading-progress {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .retry-btn {
+    margin-top: 8px;
+    padding: 6px 16px;
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .retry-btn:hover {
+    opacity: 0.9;
   }
 </style>

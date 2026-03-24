@@ -38,11 +38,12 @@ export interface PrReview {
   files: string[];
 }
 
-export type GraphStatus = "ready" | "generating" | "refreshing" | "error" | "empty";
+export type GraphStatus = "ready" | "generating" | "refreshing" | "reindexing" | "error" | "empty";
 export const graphData = writable<GraphData | null>(null);
 export const graphStatus = writable<GraphStatus>("empty");
 export const prReviews = writable<PrReview[] | null>(null);
 export const summaryProgress = writable<{ completed: number; total: number } | null>(null);
+export const generationProgress = writable<{ elapsed: number } | null>(null);
 
 // Derived edge maps
 export const edgeIn = derived(graphData, ($g) => {
@@ -152,10 +153,18 @@ export function loadEmbeddedData() {
         graphData.set(data as GraphData);
         graphStatus.set("ready");
       }
+    } else if (msg.type === "generationProgress") {
+      if (typeof msg.elapsed === "number") {
+        generationProgress.set({ elapsed: msg.elapsed });
+      }
     } else if (msg.type === "graphStatus") {
-      const valid: GraphStatus[] = ["ready", "generating", "refreshing", "error", "empty"];
+      const valid: GraphStatus[] = ["ready", "generating", "refreshing", "reindexing", "error", "empty"];
       if (valid.includes(msg.status)) {
         graphStatus.set(msg.status as GraphStatus);
+        // Reset generation progress when leaving generating state
+        if (msg.status !== "generating") {
+          generationProgress.set(null);
+        }
       }
     } else if (msg.type === "prReviews") {
       if (Array.isArray(msg.data)) {
