@@ -930,13 +930,13 @@ describe('KgStore — coverage gaps', () => {
     expect(first.entity_id).toBeDefined();
 
     // Duplicate insert — same file_id + qualified_name.
-    // NOTE: This is a known implementation gap (see Issues Found in TEST-REPORT.md):
-    // kg-store.ts:202 calls toEntityRow(undefined) when OR IGNORE fires (RETURNING * returns
-    // nothing on a conflict), causing a TypeError crash. The pipeline wraps calls in try/catch
-    // so this does not surface in pipeline tests, but the public insertEntity API throws.
-    expect(() => store.insertEntity(makeEntityRow(file.file_id!))).toThrow();
+    // The fixed implementation falls back to getEntityByQualifiedName when OR IGNORE fires
+    // (RETURNING * emits no rows on conflict), so the call returns the existing row instead
+    // of crashing with TypeError.
+    const second = store.insertEntity(makeEntityRow(file.file_id!));
+    expect(second.entity_id).toBe(first.entity_id);
 
-    // Despite the crash, only one entity should be in the DB (OR IGNORE succeeded)
+    // Only one entity should be in the DB (OR IGNORE did not insert a duplicate)
     const entities = store.getEntitiesByFile(file.file_id!);
     expect(entities).toHaveLength(1);
   });

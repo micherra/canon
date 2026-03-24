@@ -198,8 +198,19 @@ export class KgStore {
       is_exported: entity.is_exported ? 1 : 0,
       is_default_export: entity.is_default_export ? 1 : 0,
     };
-    const row = this.stmtInsertEntity.get(params) as Record<string, unknown>;
-    return toEntityRow(row);
+    const row = this.stmtInsertEntity.get(params) as Record<string, unknown> | undefined;
+    if (row !== undefined) {
+      return toEntityRow(row);
+    }
+    // INSERT OR IGNORE fired a conflict — RETURNING * emits no rows. Fall back to
+    // fetching the existing row by qualified_name so callers always get a valid EntityRow.
+    const existing = this.getEntityByQualifiedName(entity.file_id, entity.qualified_name);
+    if (existing === undefined) {
+      throw new Error(
+        `insertEntity: conflict on (file_id=${entity.file_id}, qualified_name=${entity.qualified_name}) but existing row not found`,
+      );
+    }
+    return existing;
   }
 
   getEntitiesByFile(fileId: number): EntityRow[] {
