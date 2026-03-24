@@ -10,12 +10,12 @@ const ctx = await esbuild.context({
   format: "iife",
   platform: "browser",
   target: "es2020",
-  // D3 and marked are loaded as globals via <script> tags in the HTML shell
   plugins: [
     sveltePlugin({
       compilerOptions: { css: "injected" },
     }),
   ],
+  minify: true,
   define: {
     "process.env.NODE_ENV": '"production"',
   },

@@ -3,12 +3,12 @@
 <!-- Managed by Canon. Manual edits are preserved. -->
 
 ## Purpose
-VS Code/Cursor extension that visualizes a project's dependency graph as an interactive D3 force-directed layout and feeds architectural insights to Claude via the Canon MCP server.
+VS Code/Cursor extension that visualizes a project's dependency graph as an interactive Sigma.js graph and feeds architectural insights to Claude via the Canon MCP server.
 
 ## Architecture
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-23 -->
 
-Two-part architecture: Node.js extension host + Svelte/D3 webview.
+Two-part architecture: Node.js extension host + Svelte/Sigma.js webview.
 
 ```
 src/
@@ -25,19 +25,17 @@ src/
 │   ├── stores/               # Svelte stores (graphData, filters, selection, bridge)
 │   ├── components/           # UI: GraphCanvas, Toolbar, DetailPanel, InsightsPanel, etc.
 │   └── lib/
-│       ├── d3Graph.ts        # D3 force graph rendering (521 lines)
+│       ├── sigmaGraph.ts     # Sigma.js/Graphology graph rendering
 │       ├── graph.ts          # Graph utilities (cascade, filtering)
 │       └── constants.ts      # Layer colors, node styling
 ├── __tests__/                # Vitest tests (path validation, git, graph loading)
 media/
-├── dashboard.html            # HTML shell with data placeholders
-├── d3.v7.min.js              # Bundled D3 library
-└── marked.min.js             # Markdown parser for tooltips
+└── dashboard.html            # HTML shell with data placeholders
 ```
 
 **Extension host** manages panel lifecycle, spawns Claude CLI for graph generation, watches `.canon/graph-data.json` and `.canon/summaries.json`, persists node selection to `.canon/dashboard-state.json`.
 
-**Webview** renders the D3 force graph with layer coloring, changed-file pulse animations, PR review scope filtering, and impact cascade visualization.
+**Webview** renders the Sigma.js/Graphology graph with layer coloring, changed-file highlighting, PR review scope filtering, and impact cascade visualization.
 
 ## Contracts
 <!-- last-updated: 2026-03-22 -->
@@ -54,13 +52,15 @@ Webview → Extension: `webviewReady`, `getBranch`, `getFile`, `getSummary`, `no
 **Activation:** Triggers when `.canon` directory exists in workspace.
 
 ## Dependencies
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-23 -->
 
 | Package | Purpose |
 |---------|---------|
-| `d3` ^7.4.3 | Force-directed graph rendering |
+| `sigma` | Graph rendering (WebGL/Canvas) |
+| `graphology` | Graph data structure |
+| `graphology-layout-forceatlas2` | ForceAtlas2 layout algorithm |
+| `graphology-communities-louvain` | Community detection |
 | `svelte` ^5.54.0 | Webview UI framework |
-| `marked` | Markdown rendering in tooltips |
 | `esbuild` + `esbuild-svelte` | Build tooling (dev) |
 | `vitest` | Testing (dev) |
 | `vsce` | VS Code packaging (dev) |

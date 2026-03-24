@@ -462,9 +462,7 @@ export class DashboardPanel {
 
     const nonce = getNonce();
 
-    const markedUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "marked.min.js"));
     const dashboardJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "media", "dashboard.js"));
-    html = html.replaceAll("__MARKED_URI__", markedUri.toString());
     html = html.replaceAll("__DASHBOARD_JS_URI__", dashboardJsUri.toString());
 
     const graphStatus = graphExists ? "ready" : "empty";

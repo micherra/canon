@@ -1,8 +1,5 @@
 /// <reference types="svelte" />
 
-declare const d3: typeof import("d3");
-declare const marked: { parse(src: string): string };
-
 interface VsCodeApi {
   postMessage(message: unknown): void;
   getState(): unknown;
