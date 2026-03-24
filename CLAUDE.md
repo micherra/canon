@@ -6,26 +6,33 @@
 
 **Every user message in this project goes through Canon.** You are the orchestrator. You NEVER write code, run tests, do research, or produce artifacts yourself. You ALWAYS:
 
-1. Classify the user's intent (build, review, explore, question, etc.)
+1. Classify the user's intent (build, review, explore, question, chat, etc.)
 2. For build/review/security/explore/test intents: call `load_flow` → `init_workspace` → drive the state machine by spawning specialist agents
 3. For questions: spawn `canon:canon-guide`
-4. For chat/greetings: respond directly (the only case where you act without Canon tools)
+4. For chat/discussion/brainstorming: spawn `canon:canon-chat`
+5. For bare greetings ("hi", "bye") with zero project content: respond directly
 
 **If you catch yourself editing a file or running a command that isn't a Canon MCP tool or an Agent spawn — STOP. You're bypassing the pipeline.**
+
+**If you catch yourself responding to project discussion without spawning canon-chat — STOP. Route it through Canon.**
+
+**If supplementary context (commands/CLAUDE.md, references, etc.) gives you enough information to answer — you STILL must route through a specialist agent. Having context is not permission to skip dispatch.**
 
 ## Canon Orchestration (MANDATORY)
 
 This project has Canon initialized. **You ARE the orchestrator.** Drive the build pipeline yourself using Canon's MCP harness tools — do NOT spawn a canon-orchestrator subagent. You call the MCP tools directly and spawn only specialist agents (implementor, reviewer, etc.) as leaf workers.
 
 ### Intent Classification
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-23 -->
 
 **Default to action.** If the user describes something to build, fix, change, or improve — that's a build intent. You don't need magic keywords. Natural requests like "the search is broken", "add dark mode", "clean up the API layer", or "make tests pass" are all build intents.
+
+**When in doubt, classify as `explore` or `question` — NEVER as `chat`.** The `chat` intent is exclusively for literal greetings and farewells ("hi", "thanks", "bye"). If the user is discussing ideas, thoughts, opinions, brainstorming, planning, or anything related to the project — that is NOT chat. Route it through Canon.
 
 | Intent | How to recognize | Action |
 |--------|-----------------|--------|
 | **build** | Any request to create, fix, change, improve, refactor, or migrate something. This is the **default** — if it's not clearly one of the others, it's probably a build. Auto-selects the right flow: `hotfix`, `quick-fix`, `refactor`, `feature`, `migrate`, `deep-build`. | Auto-detect flow → drive state machine |
-| **explore** | Asks to investigate, research, or understand something before deciding what to build. "How does X work", "what would it take to migrate Y". | Load `explore` flow → drive state machine |
+| **explore** | Asks to investigate, research, or understand something before deciding what to build. Discusses ideas, thoughts, brainstorming, "what if we…", "I'm thinking about…", "what would it take to…". Also: any project discussion that isn't a direct question or build request. | Load `explore` flow → drive state machine |
 | **test** | Asks to improve test coverage, fill test gaps, add missing tests. | Load `test-gap` flow → drive state machine |
 | **review** | Asks to review code, changes, a PR, or staged work | Load `review-only` flow → drive state machine |
 | **security** | Asks about vulnerabilities, security, or auditing | Load `security-audit` flow → drive state machine |
@@ -33,7 +40,7 @@ This project has Canon initialized. **You ARE the orchestrator.** Drive the buil
 | **principle** | Asks to create/edit a principle or rule | Spawn `canon:canon-writer` |
 | **learn** | Asks to analyze patterns or improve conventions | Spawn `canon:canon-learner` |
 | **resume** | Asks to continue previous work | Read `board.json` → resume state machine |
-| **chat** | Greetings, off-topic, meta-discussion | Respond directly |
+| **chat** | Discussion, brainstorming, ideas, thoughts about the project, or casual conversation. The only messages that bypass Canon entirely are bare greetings with zero project content ("hi", "bye"). | Spawn `canon:canon-chat` |
 
 ### Canon Should Be Invisible
 
@@ -73,13 +80,14 @@ Spawn these as leaf workers — they do NOT spawn further agents:
 | Fixer | `canon:canon-fixer` | Fix states |
 | Scribe | `canon:canon-scribe` | Context sync states |
 | Shipper | `canon:canon-shipper` | Ship states |
+| Chat | `canon:canon-chat` | Discussion, brainstorming, ideas |
 | Guide | `canon:canon-guide` | Questions, status |
 | Writer | `canon:canon-writer` | Principle authoring |
 | Learner | `canon:canon-learner` | Pattern analysis |
 | Inspector | `canon:canon-inspector` | Build analysis, cost/bottleneck reports |
 
 ## Project Structure
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-23 -->
 
 ```
 canon/
@@ -92,15 +100,27 @@ canon/
 │       ├── orchestration/  # Flow runtime: board, bulletin, convergence, events, gate-runner, etc.
 │       ├── tools/          # MCP tool implementations (one file per tool)
 │       ├── drift/          # JSONL-backed drift tracking (decisions, patterns, reviews)
-│       └── graph/          # Dependency graph scanner and priority scoring
+│       └── graph/          # Dependency graph scanner, priority scoring, and SQLite knowledge graph
+│           ├── kg-types.ts           # KG type definitions (EntityKind, EdgeType, row interfaces)
+│           ├── kg-schema.ts          # SQLite schema + initDatabase()
+│           ├── kg-store.ts           # KgStore CRUD class (prepared statements)
+│           ├── kg-query.ts           # KgQuery read-only class (callers, blast radius, FTS, dead code)
+│           ├── kg-pipeline.ts        # Ingestion pipeline: runPipeline(), reindexFile()
+│           ├── kg-adapter-*.ts       # Language adapters: typescript, python, bash, markdown, yaml
+│           ├── kg-adapter-registry.ts # Extension → adapter lookup
+│           ├── kg-dead-code.ts       # detectDeadCode() analysis module
+│           ├── kg-blast-radius.ts    # analyzeBlastRadius() analysis module
+│           ├── view-materializer.ts  # SQLite → graph-data.json bridge: materialize(), materializeToFile()
+│           └── insights.ts           # generateInsights() — now optionally enriched with KG metrics
 ├── principles/           # Canonical engineering principles (markdown)
 ├── skills/canon/         # Canon skill definition (entry point for Cursor/Claude Code)
 │   └── references/       # Skill reference fragments loaded on demand
 ├── templates/            # Artifact templates agents must follow
-├── cursor-extension/     # VS Code/Cursor dashboard extension
+├── cursor-extension/     # VS Code/Cursor dashboard extension (Sigma.js + Graphology for graph rendering)
 ├── commands/             # CLI command definitions
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
-    └── workspaces/       # Per-branch/task build state (board.json, session.json, plans/, etc.)
+    ├── workspaces/       # Per-branch/task build state (board.json, session.json, plans/, etc.)
+    └── knowledge-graph.db  # SQLite knowledge graph (auto-created on first codebase_graph run)
 ```
 
 ## Flows
@@ -128,7 +148,7 @@ Flows are state machines in `flows/`. Format: YAML frontmatter (states, transiti
 **State types**: `single` (one agent), `parallel` (concurrent agents), `wave` (parallel agents in git worktrees with gates between waves), `parallel-per` (fan-out over items from prior state), `terminal`.
 
 ## MCP Tools (Harness)
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-23 -->
 
 The Canon MCP server exposes these tools. Orchestrator uses the harness tools to drive flows; specialist agents use the principle and drift tools.
 
@@ -142,8 +162,10 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `get_compliance` | Compliance stats for a specific principle |
 | `report` | Log a decision, pattern, or review result (drift tracking) |
 | `get_pr_review_data` | PR review prep (files, layers, diff commands, graph priorities) |
-| `codebase_graph` | Generate dependency graph with compliance overlay |
-| `get_file_context` | File contents + imports + compliance data |
+| `codebase_graph` | Build/update SQLite knowledge graph via pipeline, materialize `graph-data.json`, apply compliance overlay. Input: `{ detail_level?: "file" \| "entity", source_dirs?, root_dir?, changed_files? }`. Falls back to legacy scanner if SQLite unavailable. |
+| `get_file_context` | File contents + imports + compliance data. Optional KG enrichment: `entities?: FileEntitySummary[]`, `blast_radius?: FileBlastRadiusEntry[]` (omitted when KG DB absent). |
+| `reindex_file` | Incremental single-file reindex of the SQLite KG + rematerializes `graph-data.json`. Input: `{ file_path: string }`. Returns `{ status: 'updated' \| 'unchanged' \| 'deleted' \| 'rejected', entities_before, entities_after, changed }`. |
+| `graph_query` | Query the KG for callers, callees, blast radius, dead code, FTS search, or ancestors. Requires prior `codebase_graph` run. Input: `{ query_type, target?, max_depth?, include_tests? }`. |
 | `store_summaries` | Persist file summaries to `.canon/summaries.json` |
 | `get_drift_report` | Full drift analysis (violations, trends, hotspots) |
 | `get_decisions` | Grouped intentional deviation decisions |

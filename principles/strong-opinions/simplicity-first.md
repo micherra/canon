@@ -54,8 +54,10 @@ await notifier.send(user, "Welcome!");
 await sendEmail(user.email, "Welcome!");
 ```
 
+This includes dead abstractions: every interface, base class, and generic type parameter must have more than one concrete user *today*. If an interface has a single implementation, it's not an abstraction — it's indirection. Don't create `IUserRepository` with a single `PrismaUserRepository`. Just export the functions directly and add the interface when the second implementation arrives.
+
 ## Exceptions
 
-Security-critical paths (auth, payment, data access control) deserve explicit layering even when it feels heavy. Also, if you're building a module that genuinely has multiple implementations today (not hypothetically), an interface is earned.
+Security-critical paths (auth, payment, data access control) deserve explicit layering even when it feels heavy. Also, if you're building a module that genuinely has multiple implementations today (not hypothetically), an interface is earned. Interfaces required by DI frameworks are acceptable.
 
-**Related:** `no-dead-abstractions` and `patterns-need-justification` are specific manifestations of this principle — the first targets interfaces with single implementations, the second targets design patterns that the language already solves natively.
+**Related:** `patterns-need-justification` applies the same lens to design patterns rather than interfaces.
