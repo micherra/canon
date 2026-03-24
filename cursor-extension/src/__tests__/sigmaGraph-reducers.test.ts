@@ -1067,3 +1067,213 @@ describe("FilterOptions interface structural contract", () => {
     expect(opts.parsedSearch.filterLayer).toBeNull();
   });
 });
+
+// ── Style signatures — visual contract ───────────────────────────────────────
+
+describe("style signatures — visual contract", () => {
+  // ── Node color constants ──────────────────────────────────────────────────
+
+  describe("node color constants", () => {
+    it("NODE_DEFAULT is #6b7394", () => {
+      expect(NODE_DEFAULT).toBe("#6b7394");
+    });
+
+    it("NODE_CHANGED is #6c8cff", () => {
+      expect(NODE_CHANGED).toBe("#6c8cff");
+    });
+
+    it("NODE_UNFOCUSED is rgba(107, 115, 148, 0.07)", () => {
+      expect(NODE_UNFOCUSED).toBe("rgba(107, 115, 148, 0.07)");
+    });
+
+    it("NODE_DIM is rgba(107, 115, 148, 0.2)", () => {
+      expect(NODE_DIM).toBe("rgba(107, 115, 148, 0.2)");
+    });
+
+    it("NODE_HIGHLY_DIM is rgba(107, 115, 148, 0.13)", () => {
+      expect(NODE_HIGHLY_DIM).toBe("rgba(107, 115, 148, 0.13)");
+    });
+  });
+
+  // ── Edge color constants ──────────────────────────────────────────────────
+
+  describe("edge color constants", () => {
+    it("EDGE_DEFAULT is rgba(136, 153, 187, 0.2)", () => {
+      expect(EDGE_DEFAULT).toBe("rgba(136, 153, 187, 0.2)");
+    });
+
+    it("EDGE_HIGHLIGHTED is rgba(136, 153, 187, 0.6)", () => {
+      expect(EDGE_HIGHLIGHTED).toBe("rgba(136, 153, 187, 0.6)");
+    });
+
+    it("EDGE_SEMI_DIM is rgba(136, 153, 187, 0.15)", () => {
+      expect(EDGE_SEMI_DIM).toBe("rgba(136, 153, 187, 0.15)");
+    });
+
+    it("EDGE_DIM is rgba(136, 153, 187, 0.05)", () => {
+      expect(EDGE_DIM).toBe("rgba(136, 153, 187, 0.05)");
+    });
+
+    it("EDGE_VERY_DIM is rgba(136, 153, 187, 0.03)", () => {
+      expect(EDGE_VERY_DIM).toBe("rgba(136, 153, 187, 0.03)");
+    });
+
+    it("EDGE_ADJACENT_FOCUS is rgba(255, 255, 255, 0.3)", () => {
+      expect(EDGE_ADJACENT_FOCUS).toBe("rgba(255, 255, 255, 0.3)");
+    });
+  });
+
+  // ── Inline style colors used in reducers ─────────────────────────────────
+
+  describe("inline reducer colors", () => {
+    it("cascade root color is #60a5fa (blue)", () => {
+      const nodeIndex = new Map([["root.ts", makeNode({ id: "root.ts" })]]);
+      const state: ReducerState = {
+        ...makeNoFilterState(nodeIndex),
+        cascadeRoot: "root.ts",
+        cascadeFiles: new Set(["root.ts"]),
+      };
+      const result = runNodeReducer("root.ts", makeNodeAttrs(), state);
+      expect((result as any).color).toBe("#60a5fa");
+    });
+
+    it("cascade member color is #fbbf24 (amber)", () => {
+      const nodeIndex = new Map([
+        ["root.ts", makeNode({ id: "root.ts" })],
+        ["member.ts", makeNode({ id: "member.ts" })],
+      ]);
+      const state: ReducerState = {
+        ...makeNoFilterState(nodeIndex),
+        cascadeRoot: "root.ts",
+        cascadeFiles: new Set(["root.ts", "member.ts"]),
+      };
+      const result = runNodeReducer("member.ts", makeNodeAttrs(), state);
+      expect((result as any).color).toBe("#fbbf24");
+    });
+
+    it("focused node color is #6c8cff (same as NODE_CHANGED)", () => {
+      const nodeIndex = new Map([["focus.ts", makeNode({ id: "focus.ts" })]]);
+      const state: ReducerState = {
+        ...makeNoFilterState(nodeIndex),
+        focusedNodeId: "focus.ts",
+        focusedConnected: new Set(["focus.ts"]),
+      };
+      const result = runNodeReducer("focus.ts", makeNodeAttrs(), state);
+      expect(result.color).toBe("#6c8cff");
+      expect(result.color).toBe(NODE_CHANGED);
+    });
+  });
+
+  // ── Size boost signatures ─────────────────────────────────────────────────
+
+  describe("size boost signatures", () => {
+    const baseNode = makeNode({ id: "a.ts", layer: "api", entity_count: 4 });
+    const nodeIndex = new Map([["a.ts", baseNode]]);
+
+    it("focused node gets nodeSize + 3", () => {
+      const state: ReducerState = {
+        ...makeNoFilterState(nodeIndex),
+        focusedNodeId: "a.ts",
+        focusedConnected: new Set(["a.ts"]),
+      };
+      const result = runNodeReducer("a.ts", makeNodeAttrs(), state);
+      expect(result.size).toBe(nodeSize(baseNode) + 3);
+    });
+
+    it("filter match (PR/insight/search) gets nodeSize + 2", () => {
+      const state: ReducerState = {
+        ...makeNoFilterState(nodeIndex),
+        currentFilters: makeBaseFilters({
+          activeLayers: new Set(["api"]),
+          prReviewFiles: new Set(["a.ts"]),
+        }),
+      };
+      const result = runNodeReducer("a.ts", makeNodeAttrs(), state);
+      expect(result.size).toBe(nodeSize(baseNode) + 2);
+    });
+
+    it("changed node in default filter gets nodeSize + 1", () => {
+      const changedNode = makeNode({ id: "a.ts", layer: "api", entity_count: 4, changed: true });
+      const idx = new Map([["a.ts", changedNode]]);
+      const state: ReducerState = {
+        ...makeNoFilterState(idx),
+        currentFilters: makeBaseFilters({ activeLayers: new Set(["api"]) }),
+      };
+      const result = runNodeReducer("a.ts", makeNodeAttrs({ changed: true }), state);
+      expect(result.size).toBe(nodeSize(changedNode) + 1);
+    });
+
+    it("normal (unchanged, no filter match) node gets base nodeSize with no boost", () => {
+      const state: ReducerState = {
+        ...makeNoFilterState(nodeIndex),
+        currentFilters: makeBaseFilters({ activeLayers: new Set(["api"]) }),
+      };
+      const result = runNodeReducer("a.ts", makeNodeAttrs(), state);
+      expect(result.size).toBe(nodeSize(baseNode));
+    });
+
+    it("focus mode adjacent edge gets size 0.8", () => {
+      const state: EdgeReducerState = {
+        ...makeNoFilterState(nodeIndex),
+        focusedNodeId: "a.ts",
+        focusedConnected: new Set(["a.ts"]),
+        extremities: () => ["a.ts", "b.ts"],
+      };
+      const result = runEdgeReducer("e1", makeEdgeAttrs(), state);
+      expect(result.size).toBe(0.8);
+    });
+
+    it("focus mode non-adjacent edge gets size 0.2", () => {
+      const extIndex = new Map([
+        ["a.ts", makeNode({ id: "a.ts" })],
+        ["b.ts", makeNode({ id: "b.ts" })],
+        ["c.ts", makeNode({ id: "c.ts" })],
+      ]);
+      const state: EdgeReducerState = {
+        ...makeNoFilterState(extIndex),
+        focusedNodeId: "a.ts",
+        focusedConnected: new Set(["a.ts"]),
+        extremities: () => ["b.ts", "c.ts"],
+      };
+      const result = runEdgeReducer("e1", makeEdgeAttrs(), state);
+      expect(result.size).toBe(0.2);
+    });
+  });
+
+  // ── Opacity hierarchy ─────────────────────────────────────────────────────
+
+  describe("opacity hierarchy", () => {
+    /** Extract the alpha value from an rgba(...) string. */
+    function alpha(rgba: string): number {
+      const m = rgba.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
+      if (!m) throw new Error(`Not an rgba string: ${rgba}`);
+      return parseFloat(m[1]);
+    }
+
+    it("edge opacity order: HIGHLIGHTED > DEFAULT > SEMI_DIM > DIM > VERY_DIM", () => {
+      expect(alpha(EDGE_HIGHLIGHTED)).toBeGreaterThan(alpha(EDGE_DEFAULT));
+      expect(alpha(EDGE_DEFAULT)).toBeGreaterThan(alpha(EDGE_SEMI_DIM));
+      expect(alpha(EDGE_SEMI_DIM)).toBeGreaterThan(alpha(EDGE_DIM));
+      expect(alpha(EDGE_DIM)).toBeGreaterThan(alpha(EDGE_VERY_DIM));
+    });
+
+    it("edge opacity exact values: HIGHLIGHTED=0.6, DEFAULT=0.2, SEMI_DIM=0.15, DIM=0.05, VERY_DIM=0.03", () => {
+      expect(alpha(EDGE_HIGHLIGHTED)).toBeCloseTo(0.6);
+      expect(alpha(EDGE_DEFAULT)).toBeCloseTo(0.2);
+      expect(alpha(EDGE_SEMI_DIM)).toBeCloseTo(0.15);
+      expect(alpha(EDGE_DIM)).toBeCloseTo(0.05);
+      expect(alpha(EDGE_VERY_DIM)).toBeCloseTo(0.03);
+    });
+
+    it("node dim opacity order: DIM > HIGHLY_DIM > UNFOCUSED", () => {
+      expect(alpha(NODE_DIM)).toBeGreaterThan(alpha(NODE_HIGHLY_DIM));
+      expect(alpha(NODE_HIGHLY_DIM)).toBeGreaterThan(alpha(NODE_UNFOCUSED));
+    });
+
+    it("node dim opacity exact values: DIM=0.2, HIGHLY_DIM=0.13, UNFOCUSED=0.07", () => {
+      expect(alpha(NODE_DIM)).toBeCloseTo(0.2);
+      expect(alpha(NODE_HIGHLY_DIM)).toBeCloseTo(0.13);
+      expect(alpha(NODE_UNFOCUSED)).toBeCloseTo(0.07);
+    });
+  });
+});
