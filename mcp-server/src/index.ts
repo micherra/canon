@@ -31,6 +31,12 @@ import { injectWaveEvent } from "./tools/inject-wave-event.js";
 import { storePrReview } from "./tools/store-pr-review.js";
 import { graphQuery } from "./tools/graph-query.js";
 import { reindexFileTool } from "./tools/reindex-file.js";
+import { updateDashboardState } from "./tools/update-dashboard-state.js";
+import { getBranch } from "./tools/get-branch.js";
+import { getFileContent } from "./tools/get-file-content.js";
+import { getSummary } from "./tools/get-summary.js";
+import { getComplianceTrend } from "./tools/get-compliance-trend.js";
+import { getPrReviews } from "./tools/get-pr-reviews.js";
 import { getFlowRuns, computeAnalytics } from "./drift/analytics.js";
 import { reportInputSchema } from "./schema.js";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.js";
@@ -387,7 +393,7 @@ server.registerTool(
     inputSchema: {
       workspace: z.string(),
       action: z.enum(["enter_state", "skip_state", "block", "unblock", "complete_flow", "set_wave_progress", "set_metadata"]),
-      state_id: z.string().optional(),
+      state_id: z.string().optional().describe("Required for enter_state, skip_state, block, unblock, set_wave_progress"),
       next_state_id: z.string().optional().describe("Next state to advance to (used with skip_state)"),
       blocked_reason: z.string().optional(),
       wave_data: z.object({ wave: z.number(), wave_total: z.number(), tasks: z.array(z.string()) }).optional(),
@@ -570,6 +576,105 @@ server.registerTool(
     const runs = await getFlowRuns(projectDir, input.flow);
     const analytics = computeAnalytics(runs);
     return jsonResponse(analytics);
+  }
+);
+
+// --- Dashboard support tools (called by MCP App iframe via app.callServerTool()) ---
+
+server.registerTool(
+  "update_dashboard_state",
+  {
+    description:
+      "Write the currently selected graph node to .canon/dashboard-state.json. Called by the Canon dashboard to persist user selection so get_dashboard_selection can read it.",
+    inputSchema: {
+      selectedNode: z
+        .object({
+          id: z.string().min(1).describe("Project-relative file path of the selected node"),
+          layer: z.string(),
+          summary: z.string(),
+          violation_count: z.number().int().min(0),
+        })
+        .nullable()
+        .optional()
+        .describe("The selected node, or null to clear the selection"),
+    },
+  },
+  async (input) => {
+    const result = await updateDashboardState(input, projectDir);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "get_branch",
+  {
+    description: "Returns the current git branch name. Used by the Canon dashboard to display context.",
+    inputSchema: {},
+  },
+  async () => {
+    const result = await getBranch(projectDir);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "get_file_content",
+  {
+    description:
+      "Read the content of a file within the project directory. Rejects path traversal attempts. Returns null content with an error message when the file is missing or the path is invalid.",
+    inputSchema: {
+      file_path: z.string().min(1).describe("Project-relative file path (e.g. 'src/tools/my-tool.ts')"),
+    },
+  },
+  async (input) => {
+    const result = await getFileContent(input, projectDir);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "get_summary",
+  {
+    description:
+      "Return the stored summary for a file from .canon/summaries.json. Falls back to the first 5 lines of the file when no summary is stored.",
+    inputSchema: {
+      file_id: z
+        .string()
+        .min(1)
+        .describe("Project-relative file path (key used in summaries.json)"),
+    },
+  },
+  async (input) => {
+    const result = await getSummary(input, projectDir);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "get_compliance_trend",
+  {
+    description:
+      "Compute the weekly compliance pass rate for a principle from .canon/reviews.jsonl. Returns an array of { week, pass_rate } points sorted by week.",
+    inputSchema: {
+      principle_id: z.string().min(1).describe("ID of the principle to compute trend for"),
+    },
+  },
+  async (input) => {
+    const result = await getComplianceTrend(input, projectDir);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "get_pr_reviews",
+  {
+    description:
+      "Return stored PR reviews from .canon/pr-reviews.jsonl. Each entry includes verdict, violations, score, and file list. Use this to review Canon's audit history for pull requests.",
+    inputSchema: {},
+  },
+  async () => {
+    const result = await getPrReviews(projectDir);
+    return jsonResponse(result);
   }
 );
 
