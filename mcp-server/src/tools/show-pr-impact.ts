@@ -27,6 +27,7 @@ import { DriftStore } from "../drift/store.js";
 import { initDatabase } from "../graph/kg-schema.js";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.js";
 import { CANON_DIR, CANON_FILES } from "../constants.js";
+import { safeResolvePath } from "./get-file-content.js";
 import type { PrReviewEntry, ReviewViolation } from "../schema.js";
 
 // ---------------------------------------------------------------------------
@@ -297,6 +298,14 @@ export async function showPrImpact(projectDir: string): Promise<PrImpactPayload>
       empty_state: "No PR review stored. Run the Canon reviewer first.",
     };
   }
+
+  // 1b. Validate file paths from stored review (trust boundary)
+  latestReview.files = latestReview.files.filter(
+    (f) => safeResolvePath(projectDir, f) !== null,
+  );
+  latestReview.violations = latestReview.violations.filter(
+    (v) => !v.file_path || safeResolvePath(projectDir, v.file_path) !== null,
+  );
 
   // 2. Check KG availability
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);

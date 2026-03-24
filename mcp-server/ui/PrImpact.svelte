@@ -38,7 +38,9 @@
   );
 
   let selectedFileBlastRadius = $derived(
-    (payload?.blastRadius?.affected ?? []).filter((a: any) => a.depth > 0),
+    (payload?.blastRadius?.affected ?? []).filter(
+      (a: any) => a.depth > 0 && a.file_path === selectedFile,
+    ),
   );
 
   let selectedFileDecisions = $derived.by(() => {

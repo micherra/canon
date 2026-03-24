@@ -1,26 +1,9 @@
 /**
  * stores/pr-impact.ts
  *
- * Reactive state for the PR Impact View.
- *
- * Uses Svelte writable stores (not module-level $state runes) because
- * Svelte 5 module-level $state only works in .svelte.ts files, not plain .ts
- * files. This matches the pattern used by other stores in this directory.
- *
- * Canon principles:
- *   - functions-do-one-thing: each exported function does one thing
- *   - information-hiding: hides bridge call details from components
- *   - validate-at-trust-boundaries: structured empty states, never throws
+ * Type definitions for the PR Impact View payload.
+ * Mirrored from src/tools/show-pr-impact.ts to avoid server/UI boundary coupling.
  */
-
-import { writable } from "svelte/store";
-import { bridge } from "./bridge";
-
-// ---------------------------------------------------------------------------
-// Types (mirrored from src/tools/show-pr-impact.ts to avoid server/UI boundary)
-// ---------------------------------------------------------------------------
-
-export type PrImpactStatus = "loading" | "ready" | "error";
 
 export interface PrImpactHotspot {
   file: string;
@@ -84,42 +67,4 @@ export interface PrImpactPayload {
     category?: string;
   }>;
   empty_state?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Reactive state
-// ---------------------------------------------------------------------------
-
-export const status = writable<PrImpactStatus>("loading");
-export const payload = writable<PrImpactPayload | null>(null);
-export const selectedFile = writable<string | null>(null);
-export const error = writable<string>("");
-
-// ---------------------------------------------------------------------------
-// Actions
-// ---------------------------------------------------------------------------
-
-/**
- * Load PR impact data from the server via bridge.
- * Updates status, payload, and error stores.
- */
-export async function loadPrImpact(): Promise<void> {
-  status.set("loading");
-  error.set("");
-  try {
-    const result = await bridge.request("getPrImpact");
-    payload.set(result as PrImpactPayload);
-    status.set("ready");
-  } catch (e) {
-    status.set("error");
-    error.set(e instanceof Error ? e.message : "Failed to load PR impact data");
-  }
-}
-
-/**
- * Select a file in the hotspot list.
- * Pass null to deselect.
- */
-export function selectFile(file: string | null): void {
-  selectedFile.set(file);
 }
