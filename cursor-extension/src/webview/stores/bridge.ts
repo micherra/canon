@@ -43,4 +43,8 @@ export const bridge = {
       node: node ? { id: node.id, layer: node.layer, summary: node.summary || "", violation_count: node.violation_count || 0 } : null,
     });
   },
+
+  openFile(filePath: string) {
+    ensureApi().postMessage({ type: "openFile", path: filePath });
+  },
 };

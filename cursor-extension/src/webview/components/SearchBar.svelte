@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { graphData } from "../stores/graphData";
+  import { graphData, layerColors } from "../stores/graphData";
   import { activeLayers, searchQuery } from "../stores/filters";
   import { parseSearchQuery } from "../lib/graph";
-  import { LAYER_COLORS } from "../lib/constants";
+  import { getLayerColor } from "../lib/constants";
   import { escapeHtml } from "../lib/escapeHtml";
 
   interface Props {
@@ -130,7 +130,7 @@
     <div class="search-results open">
       {#each results as r}
         <button class="search-result-item" onclick={() => selectResult(r.id)}>
-          <span class="chip-dot" style="background:{LAYER_COLORS[r.layer] || LAYER_COLORS.unknown}"></span>
+          <span class="chip-dot" style="background:{getLayerColor(r.layer, $layerColors)}"></span>
           <span class="match-path">{@html r.pathHtml}</span>
         </button>
       {/each}
