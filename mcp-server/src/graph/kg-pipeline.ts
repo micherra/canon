@@ -345,7 +345,11 @@ export async function runPipeline(
     if (sourceDirs && sourceDirs.length > 0) {
       const allFiles: string[] = [];
       for (const dir of sourceDirs) {
-        const absDir = path.join(projectDir, dir);
+        const absDir = path.resolve(projectDir, dir);
+        // Guard against path traversal: skip any entry that escapes the project root
+        if (!absDir.startsWith(projectDir + path.sep) && absDir !== projectDir) {
+          continue;
+        }
         try {
           const files = await scanSourceFiles(absDir);
           for (const f of files) {

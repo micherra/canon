@@ -512,6 +512,7 @@ export class DashboardPanel {
       this.graphTerminal = vscode.window.createTerminal({
         name: "Canon",
         ...(workspaceRoot ? { cwd: workspaceRoot } : {}),
+        ...(workspaceRoot ? { env: { ...process.env, CANON_PROJECT_DIR: workspaceRoot } } : {}),
       });
     }
     this.graphTerminal.show();
@@ -543,11 +544,9 @@ export class DashboardPanel {
       this.generationTimeout = undefined;
       this.clearGenerationProgress();
     }, TIMEOUTS.GENERATION_TIMEOUT_MS);
-    const workspaceRoot = getWorkspaceRoot();
-    const projectDirEnv = workspaceRoot ? `CANON_PROJECT_DIR="${workspaceRoot}" ` : "";
     const pluginFlag = `--plugin-dir "${pluginDir}" `;
     const allow = `--allowedTools "mcp__canon__*,Read,Grep,Glob"`;
-    const graphCmd = `${projectDirEnv}claude ${pluginFlag}${allow} -p "Call the codebase_graph MCP tool with no arguments."`;
+    const graphCmd = `claude ${pluginFlag}${allow} -p "Call the codebase_graph MCP tool with no arguments."`;
 
     const term = this.getOrCreateTerminal();
     term.sendText(graphCmd);
