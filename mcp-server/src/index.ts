@@ -29,6 +29,7 @@ import { postWaveBulletin } from "./tools/post-wave-bulletin.js";
 import { getWaveBulletin } from "./tools/get-wave-bulletin.js";
 import { injectWaveEvent } from "./tools/inject-wave-event.js";
 import { storePrReview } from "./tools/store-pr-review.js";
+import { graphQuery } from "./tools/graph-query.js";
 import { getFlowRuns, computeAnalytics } from "./drift/analytics.js";
 import { reportInputSchema } from "./schema.js";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.js";
@@ -511,6 +512,33 @@ server.registerTool(
   },
   async (input) => {
     const result = await storePrReview(input, projectDir);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "graph_query",
+  {
+    description: "Query the codebase knowledge graph for callers, callees, blast radius, dead code, search, and more. Requires the knowledge graph to be built first via codebase_graph.",
+    inputSchema: {
+      query_type: z
+        .enum(['callers', 'callees', 'blast_radius', 'dead_code', 'search', 'ancestors'])
+        .describe('Type of query to perform'),
+      target: z
+        .string()
+        .optional()
+        .describe('Target entity name or file path (not needed for dead_code)'),
+      options: z
+        .object({
+          max_depth: z.number().optional().describe('Max depth for blast_radius (default 3)'),
+          limit: z.number().optional().describe('Max results for search (default 50)'),
+          include_tests: z.boolean().optional().describe('Include test files in dead_code results'),
+        })
+        .optional(),
+    },
+  },
+  async (input) => {
+    const result = graphQuery(input, projectDir);
     return jsonResponse(result);
   }
 );
