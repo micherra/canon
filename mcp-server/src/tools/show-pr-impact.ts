@@ -1,7 +1,7 @@
 /**
  * show_pr_impact — Server-side tool handler
  *
- * Assembles a PrImpactPayload by orchestrating multiple data sources:
+ * Assembles a PrImpactOutput by orchestrating multiple data sources:
  *   1. Latest PR review from PrStore
  *   2. Blast radius analysis via analyzeBlastRadius (when KG is available)
  *   3. Subgraph extraction from graph-data.json (filtered to blast radius affected files)
@@ -15,20 +15,28 @@
  *
  * Canon principles:
  *   - functions-do-one-thing: showPrImpact assembles one payload; helpers handle sub-tasks
- *   - deep-modules: simple (projectDir) → (PrImpactPayload) interface; complexity hidden
+ *   - deep-modules: simple (projectDir) → (PrImpactOutput) interface; complexity hidden
  *   - validate-at-trust-boundaries: structured errors/empty states, never throws to caller
  */
 
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
-import { join } from "path";
+import { join, resolve, isAbsolute } from "path";
 import { PrStore } from "../drift/pr-store.js";
 import { DriftStore } from "../drift/store.js";
 import { initDatabase } from "../graph/kg-schema.js";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.js";
 import { CANON_DIR, CANON_FILES } from "../constants.js";
-import { safeResolvePath } from "./get-file-content.js";
 import type { PrReviewEntry, ReviewViolation } from "../schema.js";
+
+/** Resolve a project-relative path safely. Returns null on traversal attempts. */
+function safeResolvePath(projectDir: string, filePath: string): string | null {
+  if (isAbsolute(filePath)) return null;
+  if (filePath.includes("..")) return null;
+  const resolved = resolve(projectDir, filePath);
+  if (!resolved.startsWith(projectDir + "/") && resolved !== projectDir) return null;
+  return resolved;
+}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -61,7 +69,7 @@ export interface PrImpactSubgraph {
   layers: Array<{ name: string; color: string; file_count: number }>;
 }
 
-export interface PrImpactPayload {
+export interface PrImpactOutput {
   status: "ok" | "no_review" | "no_kg";
   review?: {
     verdict: "BLOCKING" | "WARNING" | "CLEAN";
@@ -115,7 +123,7 @@ function severityWeight(severity: string): number {
 
 function buildHotspots(
   review: PrReviewEntry,
-  blastRadius: PrImpactPayload["blastRadius"] | undefined,
+  blastRadius: PrImpactOutput["blastRadius"] | undefined,
 ): PrImpactHotspot[] {
   // Index violations by file
   const violationsByFile = new Map<string, ReviewViolation[]>();
@@ -213,7 +221,7 @@ const LAYER_COLORS: Record<string, string> = {
 async function buildSubgraph(
   projectDir: string,
   changedFiles: string[],
-  blastRadius: PrImpactPayload["blastRadius"] | undefined,
+  blastRadius: PrImpactOutput["blastRadius"] | undefined,
 ): Promise<PrImpactSubgraph> {
   const graphDataPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
 
@@ -283,7 +291,7 @@ async function buildSubgraph(
  *
  * Returns structured empty states for missing data — never throws to the caller.
  */
-export async function showPrImpact(projectDir: string): Promise<PrImpactPayload> {
+export async function showPrImpact(projectDir: string): Promise<PrImpactOutput> {
   // 1. Load latest PR review
   const prStore = new PrStore(projectDir);
   const reviews = await prStore.getReviews();
@@ -312,7 +320,7 @@ export async function showPrImpact(projectDir: string): Promise<PrImpactPayload>
   const hasKg = existsSync(dbPath);
 
   // 3. Compute blast radius (if KG available)
-  let blastRadius: PrImpactPayload["blastRadius"] = undefined;
+  let blastRadius: PrImpactOutput["blastRadius"] = undefined;
   if (hasKg) {
     const db = initDatabase(dbPath);
     try {

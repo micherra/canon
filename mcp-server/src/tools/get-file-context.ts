@@ -18,7 +18,7 @@ import { KgStore } from "../graph/kg-store.js";
 import { KgQuery } from "../graph/kg-query.js";
 import type { EntityKind } from "../graph/kg-types.js";
 
-export interface GetFileContextInput {
+export interface FileContextInput {
   file_path: string;
 }
 
@@ -60,7 +60,7 @@ export interface FileContextOutput {
 
 
 export async function getFileContext(
-  input: GetFileContextInput,
+  input: FileContextInput,
   projectDir: string,
 ): Promise<FileContextOutput> {
   // Normalize to POSIX separators — graph IDs and layer patterns use '/' consistently

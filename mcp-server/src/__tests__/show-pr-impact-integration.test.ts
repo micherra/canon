@@ -13,8 +13,8 @@
  *   - Empty review.files list produces zero hotspots
  *
  * And cross-task integration gaps:
- *   - PrImpactPayload shape returned by showPrImpact matches the type consumed by
- *     stores/pr-impact.ts (PrImpactPayload): required fields always present
+ *   - PrImpactOutput shape returned by showPrImpact matches the type consumed by
+ *     stores/pr-impact.ts (PrImpactOutput): required fields always present
  *   - Bridge argument contract: show_pr_impact called with empty arguments object
  */
 
@@ -643,10 +643,10 @@ describe("showPrImpact — decision cross-reference gaps", () => {
 });
 
 // ---------------------------------------------------------------------------
-// PrImpactPayload contract — shape matches what stores/pr-impact.ts expects
+// PrImpactOutput contract — shape matches what stores/pr-impact.ts expects
 // ---------------------------------------------------------------------------
 
-describe("showPrImpact — PrImpactPayload contract", () => {
+describe("showPrImpact — PrImpactOutput contract", () => {
   let tmpDir: string;
 
   beforeEach(async () => {

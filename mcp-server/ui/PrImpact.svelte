@@ -12,10 +12,10 @@
   import HotspotList from "./components/HotspotList.svelte";
   import PrDetailPanel from "./components/PrDetailPanel.svelte";
   import SubGraph from "./components/SubGraph.svelte";
-  import type { PrImpactPayload } from "./stores/pr-impact";
+  import type { PrImpactOutput } from "./stores/pr-impact";
 
   let status = $state<"loading" | "ready" | "error">("loading");
-  let payload = $state<PrImpactPayload | null>(null);
+  let payload = $state<PrImpactOutput | null>(null);
   let selectedFile = $state<string | null>(null);
   let errorMsg = $state("");
 
@@ -55,8 +55,8 @@
   onMount(async () => {
     try {
       await bridge.init();
-      const result = await bridge.request("getPrImpact");
-      payload = result as PrImpactPayload;
+      const result = await bridge.callTool("show_pr_impact");
+      payload = result as PrImpactOutput;
       status = "ready";
     } catch (e) {
       status = "error";

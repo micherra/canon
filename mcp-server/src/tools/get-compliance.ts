@@ -2,11 +2,11 @@ import { DriftStore, type WeeklyTrendPoint } from "../drift/store.js";
 import { analyzeDrift } from "../drift/analyzer.js";
 import { loadAllPrinciples } from "../matcher.js";
 
-export interface GetComplianceInput {
+export interface ComplianceInput {
   principle_id: string;
 }
 
-export interface GetComplianceOutput {
+export interface ComplianceOutput {
   principle_id: string;
   found: boolean;
   compliance_rate: number;
@@ -20,10 +20,10 @@ export interface GetComplianceOutput {
 }
 
 export async function getCompliance(
-  input: GetComplianceInput,
+  input: ComplianceInput,
   projectDir: string,
   pluginDir: string
-): Promise<GetComplianceOutput> {
+): Promise<ComplianceOutput> {
   const store = new DriftStore(projectDir);
 
   // Load principles (cached) and filter parsed JSONL entries to this principle only

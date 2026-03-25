@@ -32,7 +32,7 @@ export interface PrImpactSubgraph {
   layers: Array<{ name: string; color: string; file_count: number }>;
 }
 
-export interface PrImpactPayload {
+export interface PrImpactOutput {
   status: "ok" | "no_review" | "no_kg";
   review?: {
     verdict: "BLOCKING" | "WARNING" | "CLEAN";
