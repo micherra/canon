@@ -59,15 +59,70 @@ export async function loadLayerMappings(projectDir: string): Promise<LayerMappin
   return DEFAULT_LAYER_MAPPINGS;
 }
 
+/**
+ * Convert a single glob pattern to a RegExp anchored at the start of the path.
+ * Supports:
+ *   `**`  — any sequence of characters including path separators
+ *   `*`   — any sequence of characters except path separators (/ or \)
+ *   `?`   — a single character that is not a path separator
+ * All other regex special characters are escaped.
+ */
+function globToRegex(glob: string): RegExp {
+  // Escape all regex metacharacters except * and ?, which we handle ourselves.
+  // We process the string character-by-character so we can handle ** before *.
+  let regexStr = "^";
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === "*") {
+      if (glob[i + 1] === "*") {
+        // ** — match anything including separators
+        regexStr += ".*";
+        i++; // consume the second *
+      } else {
+        // * — match anything except separators
+        regexStr += "[^\\/\\\\]*";
+      }
+    } else if (ch === "?") {
+      regexStr += "[^\\/\\\\]";
+    } else {
+      // Escape regex special characters
+      regexStr += ch.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+  regexStr += "$";
+  return new RegExp(regexStr);
+}
+
+/** Return true if the pattern string contains glob metacharacters. */
+function isGlobPattern(pattern: string): boolean {
+  return pattern.includes("*") || pattern.includes("?");
+}
+
 /** Build a layer inference function from a layer mappings object. */
 export function buildLayerInferrer(mappings: LayerMappings): (filePath: string) => string {
   const compiled: Array<[RegExp, string]> = [];
-  for (const [layer, dirs] of Object.entries(mappings)) {
-    if (!Array.isArray(dirs) || dirs.length === 0) continue;
-    const escaped = dirs.map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    // Match both '/' and '\\' separators so it works on Windows paths too
-    const pattern = new RegExp(`(^|[\\/\\\\])(${escaped.join("|")})([\\/\\\\]|$)`);
-    compiled.push([pattern, layer]);
+  for (const [layer, patterns] of Object.entries(mappings)) {
+    if (!Array.isArray(patterns) || patterns.length === 0) continue;
+
+    // Separate glob patterns from simple directory name segments so each
+    // can be compiled into the appropriate regex.
+    const globs = patterns.filter(isGlobPattern);
+    const simples = patterns.filter((p) => !isGlobPattern(p));
+
+    // One regex per glob pattern (each is anchored to the path start).
+    for (const glob of globs) {
+      compiled.push([globToRegex(glob), layer]);
+    }
+
+    // Simple directory name segments use the original segment-matching regex,
+    // which matches the name as a full path component anywhere in the path.
+    // This preserves the existing behavior for configs like ["api", "routes"].
+    if (simples.length > 0) {
+      const escaped = simples.map((d) => d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      // Match both '/' and '\\' separators so it works on Windows paths too
+      const pattern = new RegExp(`(^|[\\/\\\\])(${escaped.join("|")})([\\/\\\\]|$)`);
+      compiled.push([pattern, layer]);
+    }
   }
   return (filePath: string) => {
     for (const [pattern, layer] of compiled) {
@@ -84,6 +139,50 @@ export async function loadSourceDirs(projectDir: string): Promise<string[] | nul
     return config.source_dirs;
   }
   return null;
+}
+
+/**
+ * Load layer mappings from config, throwing if not configured.
+ * Falls back to defaults via loadLayerMappings if caller catches.
+ */
+export async function loadLayerMappingsStrict(projectDir: string): Promise<LayerMappings> {
+  const config = await loadCanonConfig(projectDir);
+  if (config?.layers && typeof config.layers === "object" && !Array.isArray(config.layers)) {
+    return config.layers as LayerMappings;
+  }
+  throw new Error("No layer mappings configured in .canon/config.json");
+}
+
+export interface GraphCompositionConfig {
+  enabled: boolean;
+  markers: string[];
+  file_patterns: string[];
+  min_confidence: number;
+  max_refs_per_file: number;
+}
+
+const DEFAULT_MARKERS = ["uses", "includes", "extends", "imports", "references", "source"];
+
+const DEFAULT_COMPOSITION_CONFIG: GraphCompositionConfig = {
+  enabled: false,
+  markers: DEFAULT_MARKERS,
+  file_patterns: [],
+  min_confidence: 0.5,
+  max_refs_per_file: 50,
+};
+
+/** Load graph composition config from .canon/config.json. */
+export async function loadGraphCompositionConfig(projectDir: string): Promise<GraphCompositionConfig> {
+  const config = await loadCanonConfig(projectDir);
+  if (!config?.graph?.composition) return DEFAULT_COMPOSITION_CONFIG;
+  const c = config.graph.composition;
+  return {
+    enabled: c.enabled ?? false,
+    markers: Array.isArray(c.markers) ? c.markers : DEFAULT_MARKERS,
+    file_patterns: Array.isArray(c.file_patterns) ? c.file_patterns : [],
+    min_confidence: typeof c.min_confidence === "number" ? c.min_confidence : 0.5,
+    max_refs_per_file: typeof c.max_refs_per_file === "number" ? c.max_refs_per_file : 50,
+  };
 }
 
 /** Read a numeric config value at a dotted path (e.g. "review.max_principles_per_review"). */
