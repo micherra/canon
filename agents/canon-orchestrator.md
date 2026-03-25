@@ -184,6 +184,11 @@ Loop until the current state is `terminal`:
    → If hitl_required → HITL
    → current_state = result.next_state
    → If terminal → break
+
+7. Append progress: After report_result, append a one-line summary to progress.md:
+   `- [{state_id}] {status}: {one-sentence summary of what happened}`
+   Write to: `${WORKSPACE}/progress.md`
+   This is a simple file append -- do NOT overwrite the file.
 ```
 
 ### Spawning Agents

@@ -16,7 +16,7 @@ import { loadAndResolveFlow } from "../orchestration/flow-parser.js";
 import type { Board, Session } from "../orchestration/flow-schema.js";
 import { BoardSchema, SessionSchema } from "../orchestration/flow-schema.js";
 import { z } from "zod";
-import { readFile, mkdir } from "fs/promises";
+import { readFile, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 
 interface InitWorkspaceInput {
@@ -145,6 +145,10 @@ export async function initWorkspaceFlow(
 
     // Create plans/${slug}/ directory
     await mkdir(join(workspace, "plans", slug), { recursive: true });
+
+    // Seed progress.md
+    const progressContent = `## Progress: ${input.task}\n\n`;
+    await writeFile(join(workspace, "progress.md"), progressContent, "utf-8");
 
     // Init board from resolved flow
     const board = initBoard(flow, input.task, input.base_commit);

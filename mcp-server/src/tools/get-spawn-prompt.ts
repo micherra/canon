@@ -1,3 +1,4 @@
+import { readFile } from "fs/promises";
 import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.js";
 import { loadAllOverlays, filterOverlaysForAgent, buildOverlayInjection, type OverlayDefinition } from "../orchestration/overlays.js";
 import { buildBulletinInstructions } from "../orchestration/bulletin.js";
@@ -135,6 +136,21 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
 
     // Merge injection variables into the variables map for substitution
     mergedVariables = { ...mergedVariables, ...injectionResult.variables };
+  }
+
+  // Resolve progress.md if the flow declares a progress path
+  if (input.flow.progress) {
+    const progressPath = input.flow.progress.replace(
+      /\$\{WORKSPACE\}/g,
+      input.workspace
+    );
+    try {
+      const progressContent = await readFile(progressPath, "utf-8");
+      mergedVariables = { ...mergedVariables, progress: progressContent };
+    } catch {
+      // progress.md may not exist yet -- degrade gracefully
+      mergedVariables = { ...mergedVariables, progress: "" };
+    }
   }
 
   // Substitute flow-level variables (using merged variables that include injected context)
