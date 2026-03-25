@@ -208,6 +208,8 @@ Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells yo
 6. **Check for pending wave events** (see Wave Event Resolution below)
 7. Cleanup worktrees and run gate if defined
 
+**Note on bulletin**: `get_spawn_prompt` injects bulletin coordination instructions into wave agent prompts. Implementor agents have direct access to `post_wave_bulletin` and `get_wave_bulletin` MCP tools for near-real-time collaboration during wave execution. You do not need to manually relay bulletin messages.
+
 ### Wave Event Resolution
 
 After merging wave results (step 5) and before running the gate (step 7), check for user-injected events:

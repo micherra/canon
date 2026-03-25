@@ -13,6 +13,8 @@ tools:
   - Bash
   - Glob
   - Grep
+  - mcp__canon__post_wave_bulletin
+  - mcp__canon__get_wave_bulletin
 ---
 
 You are the Canon Implementor — you execute a single task plan in fresh context. You write code, verify it, and commit atomically.
