@@ -2,15 +2,23 @@ import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { execFile } from "child_process";
 import { PrStore } from "../drift/pr-store.ts";
+import { DriftStore } from "../drift/store.ts";
 import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
+import type { ReviewEntry } from "../schema.ts";
 
 export interface PrReviewDataInput {
   pr_number?: number;
   branch?: string;
   diff_base?: string;
   incremental?: boolean;
+}
+
+export interface PrViolation {
+  principle_id: string;
+  severity: "rule" | "strong-opinion" | "convention";
+  message?: string;
 }
 
 export interface PrFileInfo {
@@ -21,6 +29,7 @@ export interface PrFileInfo {
   priority_factors?: FilePriorityScore["factors"];
   bucket: "needs-attention" | "worth-a-look" | "low-risk";
   reason: string;
+  violations?: PrViolation[];
 }
 
 export interface BlastRadiusEntry {
@@ -159,6 +168,44 @@ export function generateNarrative(
 }
 
 /**
+ * Build a per-file violation map from DriftStore review entries.
+ * Pure function — takes reviews, returns a Map. No I/O.
+ *
+ * Each violation is placed under:
+ *   - `violation.file_path` when present
+ *   - `review.files[0]` as fallback when `file_path` is absent
+ *
+ * Violations accumulate across reviews — later reviews do not overwrite earlier ones.
+ */
+export function buildFileViolationMap(
+  reviews: ReviewEntry[],
+): Map<string, PrViolation[]> {
+  const map = new Map<string, PrViolation[]>();
+
+  for (const review of reviews) {
+    for (const v of review.violations) {
+      const targetFile = v.file_path ?? review.files[0];
+      if (!targetFile) continue;
+
+      const entry = map.get(targetFile);
+      const violation: PrViolation = {
+        principle_id: v.principle_id,
+        severity: v.severity as PrViolation["severity"],
+        ...(v.message !== undefined ? { message: v.message } : {}),
+      };
+
+      if (entry) {
+        entry.push(violation);
+      } else {
+        map.set(targetFile, [violation]);
+      }
+    }
+  }
+
+  return map;
+}
+
+/**
  * Get PR review data — file list grouped by layer with diff command.
  *
  * Runs the git diff command server-side, parses the output, infers layers,
@@ -259,6 +306,21 @@ export async function getPrReviewData(
     const { bucket, reason } = classifyFile(file);
     file.bucket = bucket;
     file.reason = reason;
+  }
+
+  // Attach per-file violations from DriftStore general reviews
+  try {
+    const driftStore = new DriftStore(projectDir);
+    const reviews = await driftStore.getReviews();
+    const fileViolationMap = buildFileViolationMap(reviews);
+    for (const file of files) {
+      file.violations = fileViolationMap.get(file.path) ?? [];
+    }
+  } catch {
+    // DriftStore unavailable — violations skipped, each file gets empty array
+    for (const file of files) {
+      file.violations = [];
+    }
   }
 
   // Generate plain-English narrative
