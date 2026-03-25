@@ -9,6 +9,8 @@
     path: string;
     layer: string;
     status: "added" | "modified" | "deleted" | "renamed";
+    bucket: "needs-attention" | "worth-a-look" | "low-risk";
+    reason: string;
     priority_score?: number;
     priority_factors?: {
       in_degree: number;
@@ -19,6 +21,11 @@
     };
   }
 
+  interface BlastRadiusEntry {
+    file: string;
+    affected: Array<{ path: string; depth: number }>;
+  }
+
   interface PrReviewData {
     files: PrFileInfo[];
     layers: Array<{ name: string; file_count: number }>;
@@ -26,71 +33,30 @@
     incremental: boolean;
     last_reviewed_sha?: string;
     diff_command: string;
-    prioritized_files?: Array<{ path: string; priority_score: number; factors: any }>;
+    narrative: string;
+    blast_radius: BlastRadiusEntry[];
     graph_data_age_ms?: number;
     error?: string;
   }
-
-  // ── Constants ─────────────────────────────────────────────────────────────
-
-  const HIGH_PRIORITY_THRESHOLD = 10;
-  const MEDIUM_PRIORITY_THRESHOLD = 5;
-  const MAX_REVIEW_ORDER = 8;
 
   // ── State ─────────────────────────────────────────────────────────────────
 
   let status = $state<"loading" | "ready" | "error">("loading");
   let data = $state<PrReviewData | null>(null);
   let errorMsg = $state("");
-  let collapsedLayers = $state<Set<string>>(new Set());
-  let sortBy = $state<"priority" | "path">("priority");
-  let strategyExpanded = $state(true);
+  let activeLayer = $state<string | null>(null);
+  let collapsedBuckets = $state<Set<string>>(new Set(["low-risk"]));
+  let expandedBlastRadius = $state<Set<string>>(new Set());
 
   // ── Derived state ─────────────────────────────────────────────────────────
 
-  let filesGroupedByLayer = $derived.by(() => {
-    const map = new Map<string, PrFileInfo[]>();
-    if (!data) return map;
-
-    for (const file of data.files) {
-      if (!map.has(file.layer)) map.set(file.layer, []);
-      map.get(file.layer)!.push(file);
-    }
-
-    // Sort files within each layer
-    for (const [layer, files] of map) {
-      if (sortBy === "priority") {
-        files.sort((a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0));
-      } else {
-        files.sort((a, b) => a.path.localeCompare(b.path));
-      }
-      map.set(layer, files);
-    }
-
-    return map;
-  });
-
-  // Layers sorted by file count descending
-  let sortedLayers = $derived.by(() => {
-    if (!data) return [];
-    return [...(data.layers ?? [])].sort((a, b) => b.file_count - a.file_count);
-  });
-
-  let riskFiles = $derived(
-    (data?.files ?? []).filter(
-      (f) =>
-        (f.priority_factors?.violation_count ?? 0) > 0 ||
-        (f.priority_score ?? 0) >= HIGH_PRIORITY_THRESHOLD,
-    ),
+  let filteredFiles = $derived(
+    activeLayer ? (data?.files ?? []).filter(f => f.layer === activeLayer) : (data?.files ?? [])
   );
 
-  let reviewOrder = $derived.by(() => {
-    if (!data) return [];
-    return [...data.files]
-      .filter((f) => (f.priority_score ?? 0) > 0)
-      .sort((a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0))
-      .slice(0, MAX_REVIEW_ORDER);
-  });
+  let needsAttention = $derived(filteredFiles.filter(f => f.bucket === "needs-attention"));
+  let worthALook = $derived(filteredFiles.filter(f => f.bucket === "worth-a-look"));
+  let lowRisk = $derived(filteredFiles.filter(f => f.bucket === "low-risk"));
 
   // ── Event handlers ────────────────────────────────────────────────────────
 
@@ -105,35 +71,34 @@
     }
   });
 
-  function toggleLayer(layerName: string) {
-    const next = new Set(collapsedLayers);
-    if (next.has(layerName)) {
-      next.delete(layerName);
+  function toggleBucket(bucket: string) {
+    const next = new Set(collapsedBuckets);
+    if (next.has(bucket)) {
+      next.delete(bucket);
     } else {
-      next.add(layerName);
+      next.add(bucket);
     }
-    collapsedLayers = next;
+    collapsedBuckets = next;
   }
 
-  function toggleSort() {
-    sortBy = sortBy === "priority" ? "path" : "priority";
+  function toggleBlastRadius(filePath: string) {
+    const next = new Set(expandedBlastRadius);
+    if (next.has(filePath)) {
+      next.delete(filePath);
+    } else {
+      next.add(filePath);
+    }
+    expandedBlastRadius = next;
   }
 
-  function toggleStrategy() {
-    strategyExpanded = !strategyExpanded;
+  function setActiveLayer(layer: string | null) {
+    activeLayer = activeLayer === layer ? null : layer;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  function priorityClass(score: number | undefined): string {
-    if (score === undefined) return "priority-none";
-    if (score >= HIGH_PRIORITY_THRESHOLD) return "priority-high";
-    if (score >= MEDIUM_PRIORITY_THRESHOLD) return "priority-medium";
-    return "priority-low";
-  }
-
-  function statusIcon(status: PrFileInfo["status"]): string {
-    switch (status) {
+  function statusIcon(fileStatus: PrFileInfo["status"]): string {
+    switch (fileStatus) {
       case "added":    return "+";
       case "deleted":  return "−";
       case "renamed":  return "→";
@@ -141,8 +106,8 @@
     }
   }
 
-  function statusClass(status: PrFileInfo["status"]): string {
-    switch (status) {
+  function statusClass(fileStatus: PrFileInfo["status"]): string {
+    switch (fileStatus) {
       case "added":    return "status-added";
       case "deleted":  return "status-deleted";
       case "renamed":  return "status-renamed";
@@ -151,20 +116,9 @@
   }
 
   function shortPath(path: string): string {
-    // Show the last 2 segments for readability
     const parts = path.split("/");
     if (parts.length <= 2) return path;
     return "…/" + parts.slice(-2).join("/");
-  }
-
-  function rationale(file: PrFileInfo): string {
-    const parts: string[] = [];
-    const inDeg = file.priority_factors?.in_degree ?? 0;
-    const viol = file.priority_factors?.violation_count ?? 0;
-    if (inDeg > 0) parts.push(`${inDeg} importer${inDeg === 1 ? "" : "s"}`);
-    if (viol > 0) parts.push(`${viol} violation${viol === 1 ? "" : "s"}`);
-    if (parts.length === 0 && (file.priority_score ?? 0) > 0) return "High priority";
-    return parts.join(" · ");
   }
 
   function formatAge(ms: number): string {
@@ -173,6 +127,21 @@
     const hours = Math.round(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.round(hours / 24)}d ago`;
+  }
+
+  // Get blast radius entry for a given file path (if any)
+  function getBlastRadius(filePath: string): BlastRadiusEntry | undefined {
+    return data?.blast_radius.find(br => br.file === filePath);
+  }
+
+  // Group affected files by depth for display
+  function groupByDepth(affected: Array<{ path: string; depth: number }>): Map<number, string[]> {
+    const map = new Map<number, string[]>();
+    for (const { path, depth } of affected) {
+      if (!map.has(depth)) map.set(depth, []);
+      map.get(depth)!.push(path);
+    }
+    return map;
   }
 </script>
 
@@ -213,35 +182,121 @@
       {/if}
     </div>
 
+    <!-- ── Narrative banner ──────────────────────────────────────────────── -->
+    {#if data.narrative}
+      <div class="narrative-banner">
+        <p class="narrative-text">{data.narrative}</p>
+      </div>
+    {/if}
+
+    <!-- ── Layer navigation tabs ─────────────────────────────────────────── -->
+    {#if data.layers.length > 0}
+      <div class="layer-tabs">
+        <button
+          class="layer-tab"
+          class:active={activeLayer === null}
+          onclick={() => setActiveLayer(null)}
+        >
+          All
+          <span class="tab-count">{data.total_files}</span>
+        </button>
+        {#each data.layers as layer (layer.name)}
+          <button
+            class="layer-tab"
+            class:active={activeLayer === layer.name}
+            onclick={() => setActiveLayer(layer.name)}
+          >
+            <span class="layer-dot" style="background: {getLayerColor(layer.name)}"></span>
+            {layer.name}
+            <span class="tab-count">{layer.file_count}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+
     <div class="content-area">
-      <!-- ── Review Strategy panel ───────────────────────────────────────── -->
-      {#if reviewOrder.length > 0}
-        <div class="panel strategy-panel" style="animation: fadeIn 0.2s ease">
-          <button class="panel-header" onclick={toggleStrategy}>
-            <span class="panel-title">Review Strategy</span>
-            <span class="panel-toggle">{strategyExpanded ? "▾" : "▸"}</span>
+      <!-- ── Needs Attention bucket ────────────────────────────────────── -->
+      {#if needsAttention.length > 0}
+        <div class="bucket-section">
+          <button class="panel-header" onclick={() => toggleBucket("needs-attention")}>
+            <span class="bucket-accent danger"></span>
+            <span class="panel-title danger-title">Needs attention</span>
+            <span class="count-badge danger-badge">{needsAttention.length}</span>
+            <span class="panel-toggle">{collapsedBuckets.has("needs-attention") ? "▸" : "▾"}</span>
           </button>
 
-          {#if strategyExpanded}
-            <div class="strategy-list">
-              {#each reviewOrder as file, i}
-                <div class="strategy-row">
-                  <span class="strategy-rank">{i + 1}</span>
-                  <span class="file-path" title={file.path}>{shortPath(file.path)}</span>
-                  <div class="badges">
-                    {#if file.priority_score !== undefined}
-                      <span class="priority-badge {priorityClass(file.priority_score)}">
-                        {file.priority_score.toFixed(1)}
-                      </span>
+          {#if !collapsedBuckets.has("needs-attention")}
+            <div class="file-rows">
+              {#each needsAttention as file (file.path)}
+                {@const blastEntry = getBlastRadius(file.path)}
+                <div class="file-row">
+                  <span class="status-icon {statusClass(file.status)}" title={file.status}>
+                    {statusIcon(file.status)}
+                  </span>
+                  <span class="file-mono" title={file.path}>{shortPath(file.path)}</span>
+                  <span
+                    class="layer-chip"
+                    style="--chip-color: {getLayerColor(file.layer)}"
+                  >{file.layer}</span>
+                  <span class="reason-text">{file.reason}</span>
+                </div>
+                {#if blastEntry && blastEntry.affected.length > 0}
+                  <div class="blast-radius-panel">
+                    <button
+                      class="blast-radius-header"
+                      onclick={() => toggleBlastRadius(file.path)}
+                    >
+                      <span class="blast-file">{shortPath(blastEntry.file)}</span>
+                      <span class="blast-affects">affects {blastEntry.affected.length} file{blastEntry.affected.length === 1 ? "" : "s"}</span>
+                      <span class="panel-toggle">{expandedBlastRadius.has(file.path) ? "▾" : "▸"}</span>
+                    </button>
+                    {#if expandedBlastRadius.has(file.path)}
+                      <div class="blast-body">
+                        {#each [...groupByDepth(blastEntry.affected)] as [depth, paths] (depth)}
+                          <div class="blast-depth-group">
+                            <span class="blast-depth-label">
+                              {depth === 1 ? "Direct dependents:" : `Transitive (depth ${depth}):`}
+                            </span>
+                            {#each paths as affectedPath (affectedPath)}
+                              <div class="blast-path" style="padding-left: {depth * 16}px">
+                                {shortPath(affectedPath)}
+                              </div>
+                            {/each}
+                          </div>
+                        {/each}
+                      </div>
                     {/if}
-                    <span
-                      class="layer-chip"
-                      style="--chip-color: {getLayerColor(file.layer)}"
-                    >{file.layer}</span>
                   </div>
-                  {#if rationale(file)}
-                    <span class="rationale">{rationale(file)}</span>
-                  {/if}
+                {/if}
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- ── Worth a Look bucket ───────────────────────────────────────── -->
+      {#if worthALook.length > 0}
+        <div class="bucket-section">
+          <button class="panel-header" onclick={() => toggleBucket("worth-a-look")}>
+            <span class="bucket-accent warning"></span>
+            <span class="panel-title warning-title">Worth a look</span>
+            <span class="count-badge warning-badge">{worthALook.length}</span>
+            <span class="panel-toggle">{collapsedBuckets.has("worth-a-look") ? "▸" : "▾"}</span>
+          </button>
+
+          {#if !collapsedBuckets.has("worth-a-look")}
+            <div class="file-rows">
+              {#each worthALook as file (file.path)}
+                <div class="file-row">
+                  <span class="status-icon {statusClass(file.status)}" title={file.status}>
+                    {statusIcon(file.status)}
+                  </span>
+                  <span class="file-mono" title={file.path}>{shortPath(file.path)}</span>
+                  <span
+                    class="layer-chip"
+                    style="--chip-color: {getLayerColor(file.layer)}"
+                  >{file.layer}</span>
+                  <span class="reason-text">{file.reason}</span>
                 </div>
               {/each}
             </div>
@@ -249,99 +304,72 @@
         </div>
       {/if}
 
-      <!-- ── Risk Areas panel ────────────────────────────────────────────── -->
-      {#if riskFiles.length > 0}
-        <div class="panel risk-panel" style="animation: fadeIn 0.2s ease">
-          <div class="panel-header-static">
-            <span class="panel-title risk-title">Risk Areas</span>
-            <span class="count-badge">{riskFiles.length}</span>
-          </div>
-          <div class="risk-list">
-            {#each riskFiles as file}
-              <div class="risk-row">
-                <span class="file-path" title={file.path}>{shortPath(file.path)}</span>
-                <div class="badges">
-                  {#if (file.priority_factors?.violation_count ?? 0) > 0}
-                    <span class="violation-badge">
-                      {file.priority_factors!.violation_count} violation{file.priority_factors!.violation_count === 1 ? "" : "s"}
-                    </span>
-                  {/if}
-                  {#if (file.priority_factors?.in_degree ?? 0) > 0}
-                    <span class="indegree-badge">
-                      ↙ {file.priority_factors!.in_degree}
-                    </span>
-                  {/if}
-                  {#if file.priority_score !== undefined}
-                    <span class="priority-badge {priorityClass(file.priority_score)}">
-                      {file.priority_score.toFixed(1)}
-                    </span>
-                  {/if}
+      <!-- ── Low Risk bucket ───────────────────────────────────────────── -->
+      {#if lowRisk.length > 0}
+        <div class="bucket-section">
+          <button class="panel-header" onclick={() => toggleBucket("low-risk")}>
+            <span class="bucket-accent muted"></span>
+            <span class="panel-title">Low risk</span>
+            <span class="count-badge muted-badge">{lowRisk.length}</span>
+            <span class="panel-toggle">{collapsedBuckets.has("low-risk") ? "▸" : "▾"}</span>
+          </button>
+
+          {#if !collapsedBuckets.has("low-risk")}
+            <div class="file-rows">
+              {#each lowRisk as file (file.path)}
+                <div class="file-row">
+                  <span class="status-icon {statusClass(file.status)}" title={file.status}>
+                    {statusIcon(file.status)}
+                  </span>
+                  <span class="file-mono" title={file.path}>{shortPath(file.path)}</span>
+                  <span
+                    class="layer-chip"
+                    style="--chip-color: {getLayerColor(file.layer)}"
+                  >{file.layer}</span>
+                  <span class="reason-text">{file.reason}</span>
                 </div>
-              </div>
-            {/each}
-          </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
 
-      <!-- ── File list by layer ──────────────────────────────────────────── -->
-      <div class="file-list-section" style="animation: fadeIn 0.2s ease">
-        <div class="file-list-header">
-          <span class="section-title">Files by Layer</span>
-          <button class="sort-toggle" onclick={toggleSort}>
-            Sort: <span class="sort-active">{sortBy}</span>
-          </button>
-        </div>
-
-        {#if data.files.length === 0}
-          <div class="empty-files">No files matched the diff.</div>
-        {:else}
-          <div class="layer-groups">
-            {#each sortedLayers as layer (layer.name)}
-              {@const layerFiles = filesGroupedByLayer.get(layer.name) ?? []}
-              {@const isCollapsed = collapsedLayers.has(layer.name)}
-              {@const layerColor = getLayerColor(layer.name)}
-
-              <div class="layer-group">
-                <button
-                  class="layer-header"
-                  onclick={() => toggleLayer(layer.name)}
-                  title="{isCollapsed ? 'Expand' : 'Collapse'} {layer.name}"
-                >
-                  <span class="layer-dot" style="background: {layerColor}"></span>
-                  <span class="layer-name">{layer.name}</span>
-                  <span class="layer-count">{layer.file_count}</span>
-                  <span class="layer-chevron">{isCollapsed ? "▸" : "▾"}</span>
-                </button>
-
-                {#if !isCollapsed}
-                  <div class="file-rows">
-                    {#each layerFiles as file (file.path)}
-                      <div class="file-row">
-                        <span class="status-icon {statusClass(file.status)}" title={file.status}>
-                          {statusIcon(file.status)}
-                        </span>
-                        <span class="file-mono" title={file.path}>{shortPath(file.path)}</span>
-                        <div class="file-badges">
-                          {#if file.priority_score !== undefined}
-                            <span class="priority-badge {priorityClass(file.priority_score)}">
-                              {file.priority_score.toFixed(1)}
-                            </span>
-                          {/if}
-                          {#if (file.priority_factors?.in_degree ?? 0) > 0}
-                            <span class="indegree-small" title="Imported by {file.priority_factors!.in_degree} files">
-                              ↙{file.priority_factors!.in_degree}
-                            </span>
-                          {/if}
+      <!-- ── Standalone blast radius panels (files not in needs-attention) ── -->
+      {#if data.blast_radius.length > 0}
+        {@const standaloneBlast = data.blast_radius.filter(
+          br => !needsAttention.some(f => f.path === br.file)
+        )}
+        {#each standaloneBlast as blastEntry (blastEntry.file)}
+          {#if blastEntry.affected.length > 0}
+            <div class="blast-standalone">
+              <button
+                class="blast-radius-header"
+                onclick={() => toggleBlastRadius(blastEntry.file)}
+              >
+                <span class="blast-file">{shortPath(blastEntry.file)}</span>
+                <span class="blast-affects">affects {blastEntry.affected.length} file{blastEntry.affected.length === 1 ? "" : "s"}</span>
+                <span class="panel-toggle">{expandedBlastRadius.has(blastEntry.file) ? "▾" : "▸"}</span>
+              </button>
+              {#if expandedBlastRadius.has(blastEntry.file)}
+                <div class="blast-body">
+                  {#each [...groupByDepth(blastEntry.affected)] as [depth, paths] (depth)}
+                    <div class="blast-depth-group">
+                      <span class="blast-depth-label">
+                        {depth === 1 ? "Direct dependents:" : `Transitive (depth ${depth}):`}
+                      </span>
+                      {#each paths as affectedPath (affectedPath)}
+                        <div class="blast-path" style="padding-left: {depth * 16}px">
+                          {shortPath(affectedPath)}
                         </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
+                      {/each}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        {/each}
+      {/if}
     </div>
   {/if}
 </div>
@@ -400,6 +428,77 @@
     color: var(--warning, #fbbf24);
   }
 
+  /* ── Narrative banner ────────────────────────────────────────────────────── */
+
+  .narrative-banner {
+    padding: 10px 12px;
+    background: var(--bg-surface, rgba(255,255,255,0.04));
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
+    flex-shrink: 0;
+  }
+
+  .narrative-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-bright, #e8eaf0);
+    margin: 0;
+  }
+
+  /* ── Layer tabs ──────────────────────────────────────────────────────────── */
+
+  .layer-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+  }
+
+  .layer-tab {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    color: var(--text-muted, #636a80);
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+    border-radius: 2px 2px 0 0;
+  }
+
+  .layer-tab:hover {
+    color: var(--text, #b4b8c8);
+    background: var(--bg-card, rgba(255,255,255,0.06));
+  }
+
+  .layer-tab.active {
+    color: var(--accent, #6c8cff);
+    border-bottom-color: var(--accent, #6c8cff);
+  }
+
+  .tab-count {
+    font-size: 10px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: var(--bg-card, rgba(255,255,255,0.06));
+    color: var(--text-muted, #636a80);
+  }
+
+  .layer-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
   /* ── Content area ────────────────────────────────────────────────────────── */
 
   .content-area {
@@ -411,9 +510,9 @@
     min-height: 0;
   }
 
-  /* ── Panels (Strategy, Risk) ─────────────────────────────────────────────── */
+  /* ── Bucket sections ─────────────────────────────────────────────────────── */
 
-  .panel {
+  .bucket-section {
     border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
     flex-shrink: 0;
   }
@@ -438,12 +537,16 @@
     background: var(--bg-card-hover, rgba(255,255,255,0.09));
   }
 
-  .panel-header-static {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
+  .bucket-accent {
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    flex-shrink: 0;
   }
+
+  .bucket-accent.danger { background: var(--danger, #ff6b6b); }
+  .bucket-accent.warning { background: var(--warning, #fbbf24); }
+  .bucket-accent.muted { background: var(--text-muted, #636a80); }
 
   .panel-title {
     font-size: 11px;
@@ -454,9 +557,8 @@
     flex: 1;
   }
 
-  .risk-title {
-    color: var(--danger, #ff6b6b);
-  }
+  .danger-title { color: var(--danger, #ff6b6b); }
+  .warning-title { color: var(--warning, #fbbf24); }
 
   .panel-toggle {
     color: var(--text-muted, #636a80);
@@ -468,182 +570,22 @@
     font-size: 10px;
     padding: 1px 5px;
     border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .danger-badge {
     background: rgba(255, 107, 107, 0.15);
     color: var(--danger, #ff6b6b);
   }
 
-  /* ── Strategy list ───────────────────────────────────────────────────────── */
-
-  .strategy-list {
-    display: flex;
-    flex-direction: column;
-    padding: 0 12px 10px;
-    gap: 5px;
+  .warning-badge {
+    background: rgba(251, 191, 36, 0.12);
+    color: var(--warning, #fbbf24);
   }
 
-  .strategy-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 22px;
-  }
-
-  .strategy-rank {
-    font-size: 10px;
-    color: var(--text-muted, #636a80);
-    width: 14px;
-    text-align: right;
-    flex-shrink: 0;
-  }
-
-  .rationale {
-    font-size: 10px;
-    color: var(--text-muted, #636a80);
-    margin-left: auto;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-
-  /* ── Risk list ───────────────────────────────────────────────────────────── */
-
-  .risk-list {
-    display: flex;
-    flex-direction: column;
-    padding: 0 12px 10px;
-    gap: 4px;
-  }
-
-  .risk-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 22px;
-  }
-
-  .violation-badge {
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: rgba(255, 107, 107, 0.12);
-    color: var(--danger, #ff6b6b);
-    flex-shrink: 0;
-  }
-
-  .indegree-badge {
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 3px;
+  .muted-badge {
     background: var(--bg-card, rgba(255,255,255,0.06));
     color: var(--text-muted, #636a80);
-    flex-shrink: 0;
-  }
-
-  /* ── File list section ───────────────────────────────────────────────────── */
-
-  .file-list-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-
-  .file-list-header {
-    display: flex;
-    align-items: center;
-    padding: 8px 12px 6px;
-    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
-    flex-shrink: 0;
-  }
-
-  .section-title {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted, #636a80);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    flex: 1;
-  }
-
-  .sort-toggle {
-    background: none;
-    border: none;
-    font: inherit;
-    font-size: 11px;
-    color: var(--text-muted, #636a80);
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 3px;
-    transition: background 0.15s, color 0.15s;
-  }
-
-  .sort-toggle:hover {
-    background: var(--bg-card, rgba(255,255,255,0.06));
-    color: var(--text, #b4b8c8);
-  }
-
-  .sort-active {
-    color: var(--accent, #6c8cff);
-  }
-
-  /* ── Layer groups ────────────────────────────────────────────────────────── */
-
-  .layer-groups {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-  }
-
-  .layer-group {
-    border-bottom: 1px solid var(--border, rgba(255,255,255,0.04));
-  }
-
-  .layer-header {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    width: 100%;
-    padding: 6px 12px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    color: inherit;
-    font: inherit;
-    transition: background 0.15s;
-  }
-
-  .layer-header:hover {
-    background: var(--bg-card, rgba(255,255,255,0.06));
-  }
-
-  .layer-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .layer-name {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text, #b4b8c8);
-    flex: 1;
-  }
-
-  .layer-count {
-    font-size: 10px;
-    color: var(--text-muted, #636a80);
-    background: var(--bg-card, rgba(255,255,255,0.06));
-    padding: 1px 5px;
-    border-radius: 3px;
-  }
-
-  .layer-chevron {
-    font-size: 10px;
-    color: var(--text-muted, #636a80);
-    opacity: 0.6;
-    width: 10px;
-    text-align: center;
   }
 
   /* ── File rows ───────────────────────────────────────────────────────────── */
@@ -694,29 +636,60 @@
     min-width: 0;
   }
 
-  .file-badges {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+  .layer-chip {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--chip-color, #6b7394);
+    color: var(--chip-color, #6b7394);
     flex-shrink: 0;
   }
 
-  .indegree-small {
-    font-size: 9px;
+  .reason-text {
+    font-size: 10px;
     color: var(--text-muted, #636a80);
-    font-family: monospace;
+    margin-left: auto;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
   }
 
-  /* ── Shared: badges & chips ─────────────────────────────────────────────── */
+  /* ── Blast radius panels ─────────────────────────────────────────────────── */
 
-  .badges {
+  .blast-radius-panel {
+    margin: 2px 12px 4px 28px;
+    border: 1px solid var(--border, rgba(255,255,255,0.06));
+    border-radius: 4px;
+    background: var(--bg-card, rgba(255,255,255,0.06));
+  }
+
+  .blast-standalone {
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
+  }
+
+  .blast-radius-header {
     display: flex;
     align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 10px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    transition: background 0.15s;
+    border-radius: 4px;
   }
 
-  .file-path {
+  .blast-radius-header:hover {
+    background: var(--bg-card-hover, rgba(255,255,255,0.09));
+  }
+
+  .blast-file {
     font-family: monospace;
     font-size: 11px;
     color: var(--text, #b4b8c8);
@@ -727,40 +700,39 @@
     min-width: 0;
   }
 
-  .priority-badge {
+  .blast-affects {
     font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-family: monospace;
-    flex-shrink: 0;
-  }
-
-  .priority-high {
-    background: rgba(255, 107, 107, 0.15);
-    color: var(--danger, #ff6b6b);
-  }
-
-  .priority-medium {
-    background: rgba(251, 191, 36, 0.12);
-    color: var(--warning, #fbbf24);
-  }
-
-  .priority-low {
-    background: var(--bg-card, rgba(255,255,255,0.06));
     color: var(--text-muted, #636a80);
-  }
-
-  .priority-none {
-    display: none;
-  }
-
-  .layer-chip {
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    border: 1px solid var(--chip-color, #6b7394);
-    color: var(--chip-color, #6b7394);
     flex-shrink: 0;
+  }
+
+  .blast-body {
+    padding: 4px 10px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .blast-depth-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .blast-depth-label {
+    font-size: 10px;
+    color: var(--text-muted, #636a80);
+    font-weight: 600;
+    padding-top: 2px;
+  }
+
+  .blast-path {
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text, #b4b8c8);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* ── Empty states ────────────────────────────────────────────────────────── */
@@ -774,12 +746,6 @@
     font-size: 13px;
     padding: 32px;
     text-align: center;
-  }
-
-  .empty-files {
-    padding: 16px 12px;
-    font-size: 12px;
-    color: var(--text-muted, #636a80);
   }
 
   .error { color: var(--danger, #e05252); }

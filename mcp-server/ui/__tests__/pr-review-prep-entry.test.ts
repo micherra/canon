@@ -4,10 +4,8 @@
  * Verifies that the PR Review Prep MCP App entry files exist and are wired
  * correctly — parallel to the pr-impact-entry.test.ts pattern.
  *
- * Covers the declared known gap from pr-review-02-SUMMARY.md:
- *   "No Playwright visual/interaction tests" — these static content tests
- *   provide the structural baseline (entry point wiring, Svelte 5 patterns,
- *   bridge integration, required UI states).
+ * Updated for Wave 2 redesign: narrative banner, bucket sections, layer tabs,
+ * blast radius panels replace the old strategy/risk/file-by-layer layout.
  */
 
 import { describe, it, expect } from "vitest";
@@ -116,40 +114,95 @@ describe("PrReviewPrep.svelte component", () => {
     expect(content).toContain("No changed files");
   });
 
-  it("renders layer-grouped file list", () => {
-    // The component renders files grouped by layer — key structural section
+  it("renders narrative banner with data.narrative", () => {
+    // Wave 2: narrative banner replaces old review strategy description
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("filesGroupedByLayer");
-    expect(content).toContain("sortedLayers");
+    expect(content).toContain("narrative");
+    expect(content).toContain("data.narrative");
   });
 
-  it("renders review strategy section (reviewOrder)", () => {
+  it("renders layer navigation tabs", () => {
+    // Wave 2: horizontal layer tabs replace old collapsed layer groups
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("reviewOrder");
+    expect(content).toContain("layer-tabs");
+    expect(content).toContain("activeLayer");
   });
 
-  it("renders risk areas section (riskFiles)", () => {
+  it("has All tab that resets activeLayer to null", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("riskFiles");
+    expect(content).toContain("All");
+    expect(content).toContain("null");
   });
 
-  it("uses HIGH_PRIORITY_THRESHOLD of 10", () => {
+  it("renders needs-attention bucket section", () => {
+    // Wave 2: three bucket sections replace strategy/risk/layer panels
     const content = readFileSync(sveltePath, "utf-8");
-    // Priority thresholds defined in context.md: high >= 10, medium >= 5
-    expect(content).toContain("10");
+    expect(content).toContain("needs-attention");
+    expect(content).toContain("needsAttention");
   });
 
-  it("has sort toggle (priority / path)", () => {
+  it("renders worth-a-look bucket section", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("sortBy");
-    expect(content).toContain("priority");
-    expect(content).toContain("path");
+    expect(content).toContain("worth-a-look");
+    expect(content).toContain("worthALook");
   });
 
-  it("has collapsible layer sections (toggleLayer)", () => {
+  it("renders low-risk bucket section", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("toggleLayer");
-    expect(content).toContain("collapsedLayers");
+    expect(content).toContain("low-risk");
+    expect(content).toContain("lowRisk");
+  });
+
+  it("low-risk bucket is collapsed by default", () => {
+    // collapsedBuckets is initialized with "low-risk" already in the set
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain('new Set(["low-risk"])');
+  });
+
+  it("uses filteredFiles derived state for layer filtering", () => {
+    // Layer tabs filter files across all buckets via filteredFiles
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("filteredFiles");
+  });
+
+  it("renders reason text on each file row", () => {
+    // Wave 2: file.reason replaces numeric priority score display
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("file.reason");
+    expect(content).toContain("reason-text");
+  });
+
+  it("does NOT display priority_score values", () => {
+    // priority_score is internal — not shown to users
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).not.toContain("priority_score.toFixed");
+    expect(content).not.toContain("priority-badge");
+  });
+
+  it("renders blast radius panels", () => {
+    // Wave 2: expandable blast radius panels for high-impact files
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("blast_radius");
+    expect(content).toContain("blast-radius");
+    expect(content).toContain("expandedBlastRadius");
+  });
+
+  it("blast radius shows affected file count", () => {
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("affects");
+    expect(content).toContain("affected.length");
+  });
+
+  it("blast radius groups by depth", () => {
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("depth");
+    expect(content).toContain("Direct dependents");
+  });
+
+  it("has collapsible bucket sections (collapsedBuckets)", () => {
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("collapsedBuckets");
+    expect(content).toContain("toggleBucket");
   });
 
   it("shows incremental badge when data.incremental is true", () => {
@@ -161,7 +214,6 @@ describe("PrReviewPrep.svelte component", () => {
   it("shows error warning when data.error is set", () => {
     // The header bar shows a warning if the tool returned an error (partial data case)
     const content = readFileSync(sveltePath, "utf-8");
-    // The template conditionally renders an error warning in the header
     expect(content).toContain("data.error");
   });
 
@@ -170,5 +222,30 @@ describe("PrReviewPrep.svelte component", () => {
     const content = readFileSync(sveltePath, "utf-8");
     expect(content).toContain("getLayerColor");
     expect(content).toContain("lib/constants");
+  });
+
+  it("preserves status icon helpers", () => {
+    // statusIcon and statusClass helpers are kept from old component
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("statusIcon");
+    expect(content).toContain("statusClass");
+  });
+
+  it("preserves shortPath helper", () => {
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("shortPath");
+  });
+
+  it("preserves formatAge helper", () => {
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("formatAge");
+  });
+
+  it("does NOT have old review strategy or risk areas", () => {
+    // Old panels removed; buckets are the new model
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).not.toContain("Review Strategy");
+    expect(content).not.toContain("Risk Areas");
+    expect(content).not.toContain("sortBy");
   });
 });
