@@ -29,6 +29,7 @@ import { listOverlays } from "./tools/list-overlays.ts";
 import { postWaveBulletin } from "./tools/post-wave-bulletin.ts";
 import { getWaveBulletin } from "./tools/get-wave-bulletin.ts";
 import { injectWaveEvent } from "./tools/inject-wave-event.ts";
+import { enterAndPrepareState } from "./tools/enter-and-prepare-state.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
 import { graphQuery } from "./tools/graph-query.ts";
 import { showPrImpact } from "./tools/show-pr-impact.ts";
@@ -507,6 +508,28 @@ server.registerTool(
   },
   async (input) => {
     const result = await injectWaveEvent(input);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "enter_and_prepare_state",
+  {
+    description: "Combined tool: checks convergence, evaluates skip conditions, enters state, and resolves spawn prompts in a single call. Use this instead of separate check_convergence + update_board(enter_state) + get_spawn_prompt calls.",
+    inputSchema: {
+      workspace: z.string(),
+      state_id: z.string(),
+      flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
+      variables: z.record(z.string(), z.string()),
+      items: z.array(z.any()).optional(),
+      role: z.string().optional(),
+      overlays: z.array(z.string()).optional().describe("Role overlay names to inject"),
+      wave: z.number().optional().describe("Current wave number (enables bulletin instructions)"),
+      peer_count: z.number().optional().describe("Number of peer agents in the wave"),
+    },
+  },
+  async (input) => {
+    const result = await enterAndPrepareState({ ...input, project_dir: projectDir });
     return jsonResponse(result);
   }
 );

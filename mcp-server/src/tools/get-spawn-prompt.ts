@@ -24,9 +24,15 @@ interface SpawnPromptInput {
   wave?: number;
   peer_count?: number;
   loaded_overlays?: OverlayDefinition[];
+  /**
+   * Pre-read board — if provided, skips the internal readBoard call.
+   * Use this when the caller has already read the board (e.g., enterAndPrepareState)
+   * to avoid a redundant round-trip.
+   */
+  _board?: import("../orchestration/flow-schema.ts").Board;
 }
 
-interface SpawnPromptEntry {
+export interface SpawnPromptEntry {
   agent: string;
   prompt: string;
   role?: string;
@@ -126,12 +132,14 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     return { prompts: [], state_type: "terminal" };
   }
 
-  // Read board once if any board-dependent feature is active
+  // Read board once if any board-dependent feature is active.
+  // If a pre-read board is provided (e.g., from enterAndPrepareState), use it directly
+  // to avoid a redundant readBoard call.
   const needsBoard =
     !!state.skip_when ||
     (state.inject_context != null && state.inject_context.length > 0) ||
     state.large_diff_threshold != null;
-  const board = needsBoard ? await readBoard(input.workspace) : undefined;
+  const board = input._board ?? (needsBoard ? await readBoard(input.workspace) : undefined);
 
   // Evaluate skip_when condition before spawning
   if (state.skip_when) {
