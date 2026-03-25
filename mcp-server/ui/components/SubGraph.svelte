@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { buildSigmaGraph, type SigmaGraphApi } from "../lib/sigmaGraph";
-  import type { GraphNode, GraphEdge } from "../stores/graphData";
+  import { buildSigmaGraph, type SigmaGraphApi, type FilterOptions } from "../lib/sigmaGraph";
+  import type { GraphNode, GraphEdge } from "../lib/types";
 
   // ── Props interface ───────────────────────────────────────────────────────
 
@@ -13,6 +13,7 @@
     onNodeClick: (node: GraphNode) => void;
     onBackgroundClick: () => void;
     fa2Iterations?: number;
+    filterOptions?: FilterOptions | null;
   }
 
   let {
@@ -23,6 +24,7 @@
     onNodeClick,
     onBackgroundClick,
     fa2Iterations = 60,
+    filterOptions = null,
   }: SubGraphProps = $props();
 
   // ── Internal state ───────────────────────────────────────────────────────
@@ -89,6 +91,33 @@
     if (seedArray.length > 0) {
       const firstSeed = seedArray[0];
       graphApi.highlightCascade(firstSeed, currentSeedNodeIds);
+    }
+  });
+
+  // ── $effect: apply filters when filterOptions changes (post-build only) ──
+
+  let hadFilters = false;
+
+  $effect(() => {
+    const opts = filterOptions;
+    if (!graphApi) return;
+
+    if (opts) {
+      graphApi.applyFilters(opts);
+      hadFilters = true;
+    } else if (hadFilters) {
+      // Filters were cleared — reset to show everything
+      const allLayers = new Set<string>();
+      for (const n of nodes) allLayers.add(n.layer);
+      graphApi.applyFilters({
+        activeLayers: allLayers,
+        searchQuery: "",
+        parsedSearch: { textQuery: "", filterLayer: null, filterChanged: false, filterViolation: false },
+        prReviewFiles: null,
+        insightFilter: null,
+        showChangedOnly: false,
+      });
+      hadFilters = false;
     }
   });
 
