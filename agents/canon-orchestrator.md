@@ -164,32 +164,29 @@ Workspace path structure: `.canon/workspaces/{branch}/{slug}/`
 Loop until the current state is `terminal`:
 
 ```
-1. convergence = check_convergence(workspace, current_state)
-   → If !can_enter → HITL (max iterations reached)
-
-2. update_board(workspace, "enter_state", state_id)
-
-3. prompts = get_spawn_prompt(workspace, state_id, flow, variables, {
+1. result = enter_and_prepare_state(workspace, state_id, flow, variables, {
      items, overlays, wave, peer_count
    })
+   → If !can_enter → HITL (max iterations reached)
    → If skip_reason → report_result(workspace, state_id, "skipped", flow)
+     then continue to next state
 
-4. Check skip_when conditions (e.g., no_contract_changes)
+2. Spawn agents using result.prompts (see Spawning below)
 
-5. Spawn agents using the Agent tool (see Spawning below)
-
-6. result = report_result(workspace, state_id, status_keyword, flow, {
+3. result = report_result(workspace, state_id, status_keyword, flow, {
      artifacts, concern_text, metrics
    })
    → If hitl_required → HITL
    → current_state = result.next_state
    → If terminal → break
 
-7. Append progress: After report_result, append a one-line summary to progress.md:
+4. Append progress: After report_result, append a one-line summary to progress.md:
    `- [{state_id}] {status}: {one-sentence summary of what happened}`
    Write to: `${WORKSPACE}/progress.md`
    This is a simple file append -- do NOT overwrite the file.
 ```
+
+**Note on legacy tools**: `check_convergence`, `update_board`, and `get_spawn_prompt` remain available and registered. Use them directly for non-enter operations: `update_board` for `skip_state`, `block`, `unblock`, `complete_flow`, `set_wave_progress`; `check_convergence` standalone when needed outside the main loop.
 
 ### Spawning Agents
 

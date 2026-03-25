@@ -34,6 +34,13 @@ src/
 ## Contracts
 <!-- last-updated: 2026-03-25 -->
 
+**File Context** (`src/tools/get-file-context.ts`):
+- `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`
+- `imported_by_layer: Record<string, string[]>` — mirrors `imports_by_layer`; groups reverse-dependency paths by their inferred layer
+- `shape: { label: string; description: string }` — derived by `deriveShape(metrics)`: Sink (`in_degree>8, out_degree<4`), High fan-out hub (`in_degree<3, out_degree>8`), Central hub (`in_degree>5, out_degree>5`), Leaf (`in_degree===0`), Internal (default); label prefixed with `"Cycle member — "` when `in_cycle` is true
+- `project_max_impact: number` — max `computeImpactScore()` across all graph nodes; `0` when no cached graph
+- `FileBlastRadiusEntry` interface — fields: `name`, `qualified_name`, `kind`, `depth`, `file_path` (path of the file containing the entity; `""` if lookup fails)
+
 **PR Review Data** (`src/tools/pr-review-data.ts`):
 - `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`
 - `PrReviewDataOutput` interface — fields: `files`, `layers`, `total_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `prioritized_files?`, `graph_data_age_ms?`, `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
@@ -78,7 +85,8 @@ src/
 | `load_flow` | Load and resolve a flow definition |
 | `validate_flows` | Validate flow definitions |
 | `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation |
-| `update_board` | Mutate board state |
+| `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop |
+| `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress) |
 | `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
 | `report_result` | Record agent result and evaluate transitions |
 | `check_convergence` | Check iteration limits |

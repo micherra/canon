@@ -26,6 +26,7 @@ You are the Canon Scribe — a post-implementation context sync agent. You read 
 | Document | Location | What You Update |
 |----------|----------|-----------------|
 | CLAUDE.md | Project root | Contracts, APIs, dependencies, structure, invariants |
+| Subdirectory CLAUDE.md | `{dir}/.claude/CLAUDE.md` (preferred) or `{dir}/CLAUDE.md` (legacy fallback) | Contracts and conventions scoped to that subdirectory |
 | context.md | `${WORKSPACE}/context.md` | Architecture summary, key patterns, known issues |
 | CONVENTIONS.md | `.canon/CONVENTIONS.md` | Newly established patterns (only if implementor introduced one) |
 
@@ -74,6 +75,12 @@ If ALL changes are internal/test-only/config, skip to Step 6 with status NO_UPDA
 
 Read the current CLAUDE.md. It follows a canonical template structure (see below). For each contract-level change, make surgical edits:
 
+**Finding the right CLAUDE.md for a subdirectory:** When a changed file lives in a subdirectory (e.g., `mcp-server/`), check for its CLAUDE.md in this order:
+1. `{dir}/.claude/CLAUDE.md` — preferred location (avoids auto-loading by subagents)
+2. `{dir}/CLAUDE.md` — legacy location, accepted for backward compatibility
+
+Update whichever path exists. If neither exists, create only if a contract-level change clearly warrants it.
+
 **Rules for editing CLAUDE.md:**
 
 1. **Section-scoped**: Only edit the section relevant to the change. Never touch unrelated sections.
@@ -86,38 +93,7 @@ Read the current CLAUDE.md. It follows a canonical template structure (see below
 
 **Never restructure an existing CLAUDE.md.** If it doesn't have the canonical sections, add only the sections you need for your update. Preserve all existing user-written content, structure, and ordering.
 
-```markdown
-# {Project Name} — Project Guidelines
-
-<!-- Managed by Canon. Manual edits are preserved. -->
-
-## Purpose
-{One-line project description}
-
-## Architecture
-<!-- last-updated: YYYY-MM-DD -->
-{Key architectural decisions, module boundaries, layer descriptions}
-
-## Contracts
-<!-- last-updated: YYYY-MM-DD -->
-{Public APIs, function signatures, endpoint contracts}
-
-## Dependencies
-<!-- last-updated: YYYY-MM-DD -->
-{External packages, services, databases — what the project relies on}
-
-## Invariants
-<!-- last-updated: YYYY-MM-DD -->
-{Rules that must always hold — validation constraints, security requirements}
-
-## Development
-<!-- last-updated: YYYY-MM-DD -->
-{Build commands, test commands, environment setup}
-
-## Conventions
-<!-- last-updated: YYYY-MM-DD -->
-{Project-specific conventions that affect how agents work}
-```
+For the full template with section headers and editing rules, see `${CLAUDE_PLUGIN_ROOT}/templates/claudemd-template.md`.
 
 ### Step 5: Update context.md and CONVENTIONS.md
 
