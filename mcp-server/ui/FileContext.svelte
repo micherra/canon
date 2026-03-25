@@ -81,7 +81,9 @@
   onMount(async () => {
     try {
       await bridge.init();
-      data = await bridge.callTool("get_file_context");
+      // The host delivers the tool result via ontoolresult after connection
+      data = await bridge.waitForToolResult();
+      if (!data) throw new Error("No data received from tool");
       status = "ready";
     } catch (e) {
       status = "error";
