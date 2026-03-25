@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { bridge } from "./stores/bridge";
-  import { getLayerColor, VERDICT_COLORS } from "./lib/constants";
+  import { getLayerColor, SEVERITY_COLORS, VERDICT_COLORS } from "./lib/constants";
 
   // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -15,19 +15,17 @@
     impact_score: number;
   }
 
-  interface FileEntitySummary {
-    name: string;
-    kind: string;
-    is_exported: boolean;
-    line_start: number;
-    line_end: number;
-  }
-
   interface FileBlastRadiusEntry {
     name: string;
     qualified_name: string;
     kind: string;
     depth: number;
+  }
+
+  interface FileViolationDetail {
+    principle_id: string;
+    severity: string;
+    message?: string;
   }
 
   interface FileContextOutput {
@@ -39,8 +37,19 @@
     exports: string[];
     violation_count: number;
     last_verdict: string | null;
+    summary: string | null;
+    violations: FileViolationDetail[];
+    imports_by_layer: Record<string, string[]>;
+    layer_stack: string[];
+    role: string;
     graph_metrics?: FileGraphMetrics;
-    entities?: FileEntitySummary[];
+    entities?: Array<{
+      name: string;
+      kind: string;
+      is_exported: boolean;
+      line_start: number;
+      line_end: number;
+    }>;
     blast_radius?: FileBlastRadiusEntry[];
   }
 
@@ -50,30 +59,26 @@
   let data = $state<FileContextOutput | null>(null);
   let errorMsg = $state("");
 
-  // Collapsible panel state
-  let entitiesExpanded = $state(true);
-  let blastRadiusExpanded = $state(true);
-  let importsExpanded = $state(true);
-  let importedByExpanded = $state(true);
-
   // ── Derived state ─────────────────────────────────────────────────────────
 
-  let blastRadiusByDepth = $derived.by(() => {
-    if (!data?.blast_radius?.length) return new Map<number, FileBlastRadiusEntry[]>();
-    const map = new Map<number, FileBlastRadiusEntry[]>();
-    for (const entry of data.blast_radius) {
-      if (!map.has(entry.depth)) map.set(entry.depth, []);
-      map.get(entry.depth)!.push(entry);
+  let fileName = $derived(data?.file_path.split("/").pop() ?? "");
+
+  let blastRadiusLabel = $derived.by(() => {
+    if (!data) return "none";
+    const br = data.blast_radius;
+    if (!br || br.length === 0) {
+      if (data.imports.length > 0) return `all ${data.imports.length} imports`;
+      return "none";
     }
-    return map;
+    return `${br.length} downstream`;
   });
 
-  let sortedDepths = $derived(
-    [...blastRadiusByDepth.keys()].sort((a, b) => a - b),
+  let dependentsLabel = $derived(
+    data?.imported_by.length ? `${data.imported_by.length}` : "none"
   );
 
-  let verdictColor = $derived(
-    data?.last_verdict ? (VERDICT_COLORS[data.last_verdict] ?? "#636a80") : "#636a80",
+  let sortedImportLayers = $derived(
+    data ? Object.keys(data.imports_by_layer).sort() : []
   );
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -81,7 +86,6 @@
   onMount(async () => {
     try {
       await bridge.init();
-      // The host delivers the tool result via ontoolresult after connection
       data = await bridge.waitForToolResult();
       if (!data) throw new Error("No data received from tool");
       status = "ready";
@@ -93,45 +97,26 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  function shortPath(path: string): string {
-    const parts = path.split("/");
-    if (parts.length <= 2) return path;
-    return ".../" + parts.slice(-2).join("/");
+  function shortName(path: string): string {
+    return path.split("/").pop() ?? path;
   }
 
-  function entityKindIcon(kind: string): string {
-    switch (kind) {
-      case "function":   return "fn";
-      case "class":      return "cls";
-      case "interface":  return "if";
-      case "type":       return "typ";
-      case "variable":   return "var";
-      case "constant":   return "cst";
-      case "enum":       return "enum";
-      default:           return kind.slice(0, 3);
+  function formatPrincipleTitle(id: string): string {
+    return id.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function severityColor(severity: string): string {
+    return SEVERITY_COLORS[severity] ?? "#636a80";
+  }
+
+  function roleColor(role: string): string {
+    switch (role) {
+      case "entry point": return "var(--success, #34d399)";
+      case "hub":         return "var(--accent, #6c8cff)";
+      case "leaf":        return "var(--text-muted, #636a80)";
+      case "cycle member": return "var(--warning, #fbbf24)";
+      default:            return "var(--text, #b4b8c8)";
     }
-  }
-
-  function entityKindClass(kind: string): string {
-    switch (kind) {
-      case "function":   return "kind-fn";
-      case "class":      return "kind-cls";
-      case "interface":  return "kind-if";
-      case "type":       return "kind-typ";
-      default:           return "kind-other";
-    }
-  }
-
-  function impactBarWidth(score: number): string {
-    // Clamp to 0-100%
-    const pct = Math.min(100, Math.max(0, score));
-    return `${pct}%`;
-  }
-
-  function impactBarColor(score: number): string {
-    if (score >= 75) return "var(--danger, #ff6b6b)";
-    if (score >= 40) return "var(--warning, #fbbf24)";
-    return "var(--accent, #6c8cff)";
   }
 </script>
 
@@ -143,202 +128,178 @@
     <div class="empty-state error">{errorMsg}</div>
 
   {:else if data}
-    <!-- ── Header bar ───────────────────────────────────────────────────── -->
-    <div class="header-bar">
-      <span class="file-path-header" title={data.file_path}>{data.file_path}</span>
-      <span
-        class="layer-chip"
-        style="--chip-color: {getLayerColor(data.layer)}"
-      >{data.layer}</span>
+    <!-- ── Hero Header ──────────────────────────────────────────────────── -->
+    <div class="hero">
+      <div class="hero-top">
+        <div class="hero-left">
+          <span class="hero-path">{data.file_path}</span>
+          <span class="hero-title">{data.summary ? fileName : fileName}</span>
+        </div>
+        <div class="hero-badges">
+          {#if data.graph_metrics?.is_hub}
+            <span class="badge badge-hub">hub</span>
+          {/if}
+          <span
+            class="badge badge-layer"
+            style="--chip-color: {getLayerColor(data.layer)}"
+          >{data.layer}</span>
+          {#if data.violation_count === 0}
+            <span class="badge badge-clean">no violations</span>
+          {:else}
+            <span class="badge badge-violation">{data.violation_count} violation{data.violation_count === 1 ? "" : "s"}</span>
+          {/if}
+        </div>
+      </div>
 
-      {#if data.violation_count > 0}
-        <span class="violation-badge">
-          {data.violation_count} violation{data.violation_count === 1 ? "" : "s"}
-        </span>
-      {/if}
-
-      {#if data.last_verdict}
-        <span class="verdict-badge" style="--verdict-color: {verdictColor}">
-          {data.last_verdict}
-        </span>
+      {#if data.summary}
+        <div class="hero-summary">
+          <p>{data.summary}</p>
+        </div>
       {/if}
     </div>
 
+    <!-- ── Stat Bar ─────────────────────────────────────────────────────── -->
+    <div class="stat-bar">
+      <div class="stat">
+        <span class="stat-label">Imports</span>
+        <span class="stat-value">{data.imports.length}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Imported by</span>
+        <span class="stat-value">{data.imported_by.length}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Violations</span>
+        <span class="stat-value" class:danger-text={data.violation_count > 0}>{data.violation_count}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Layer</span>
+        <span class="stat-value">{data.layer}</span>
+      </div>
+    </div>
+
     <div class="content-area">
-
-      <!-- ── Graph Metrics panel ──────────────────────────────────────── -->
-      {#if data.graph_metrics}
-        {@const m = data.graph_metrics}
-        <div class="panel metrics-panel">
-          <div class="panel-header-static">
-            <span class="panel-title">Graph Metrics</span>
+      <!-- ── Two-column cards ─────────────────────────────────────────── -->
+      <div class="card-row">
+        <!-- Position in Architecture -->
+        <div class="card">
+          <div class="card-header">POSITION IN ARCHITECTURE</div>
+          <div class="layer-stack">
+            {#each data.layer_stack as stackLayer (stackLayer)}
+              <div class="layer-row" class:layer-active={stackLayer === data.layer}>
+                {#if stackLayer === data.layer}
+                  <span class="layer-arrow">→</span>
+                {:else}
+                  <span class="layer-arrow-spacer"></span>
+                {/if}
+                <span class="layer-name" class:layer-name-active={stackLayer === data.layer}>{stackLayer}</span>
+                <span class="layer-dot" style="background: {getLayerColor(stackLayer)}"></span>
+              </div>
+            {/each}
+            {#if data.layer_stack.length === 0}
+              <div class="card-empty">No layer configuration</div>
+            {/if}
           </div>
-          <div class="metrics-grid">
-            <div class="metric-row">
-              <span class="metric-label">Imported by</span>
-              <span class="metric-value">{m.in_degree}</span>
+        </div>
+
+        <!-- Risk & Impact -->
+        <div class="card">
+          <div class="card-header">RISK & IMPACT</div>
+          <div class="risk-list">
+            <div class="risk-row">
+              <span class="risk-icon">↑</span>
+              <span class="risk-label">Blast radius</span>
+              <span class="risk-badge" class:risk-badge-accent={data.blast_radius && data.blast_radius.length > 0}>{blastRadiusLabel}</span>
             </div>
-            <div class="metric-row">
-              <span class="metric-label">Imports</span>
-              <span class="metric-value">{m.out_degree}</span>
+            <div class="risk-row">
+              <span class="risk-icon">↙</span>
+              <span class="risk-label">Dependents</span>
+              <span class="risk-badge" class:risk-badge-accent={data.imported_by.length > 0}>{dependentsLabel}</span>
             </div>
-            {#if m.is_hub}
-              <div class="metric-row">
-                <span class="metric-label">Role</span>
-                <span class="badge-hub">Hub</span>
-              </div>
-            {/if}
-            {#if m.layer_violation_count > 0}
-              <div class="metric-row">
-                <span class="metric-label">Layer violations</span>
-                <span class="metric-warn">{m.layer_violation_count}</span>
-              </div>
-            {/if}
-            {#if m.in_cycle}
-              <div class="metric-row">
-                <span class="metric-label">Cycle</span>
-                <span class="badge-cycle">In cycle ({m.cycle_peers.length} peer{m.cycle_peers.length === 1 ? "" : "s"})</span>
-              </div>
-              {#if m.cycle_peers.length > 0}
-                <div class="cycle-peers">
-                  {#each m.cycle_peers as peer}
-                    <span class="peer-path" title={peer}>{shortPath(peer)}</span>
-                  {/each}
-                </div>
+            <div class="risk-row">
+              <span class="risk-icon">◎</span>
+              <span class="risk-label">In cycle</span>
+              {#if data.graph_metrics?.in_cycle}
+                <span class="risk-badge risk-badge-warn">yes</span>
+              {:else}
+                <span class="risk-badge risk-badge-ok">no</span>
               {/if}
-            {/if}
-            <div class="metric-row impact-row">
-              <span class="metric-label">Impact score</span>
-              <div class="impact-bar-wrap">
-                <div
-                  class="impact-bar"
-                  style="width: {impactBarWidth(m.impact_score)}; background: {impactBarColor(m.impact_score)}"
-                ></div>
-              </div>
-              <span class="metric-value">{m.impact_score.toFixed(0)}</span>
+            </div>
+            <div class="risk-row">
+              <span class="risk-icon">✦</span>
+              <span class="risk-label">Role</span>
+              <span class="risk-badge" style="color: {roleColor(data.role)}; border-color: {roleColor(data.role)}">{data.role}</span>
             </div>
           </div>
         </div>
-      {/if}
+      </div>
 
-      <!-- ── Entities list ────────────────────────────────────────────── -->
-      {#if data.entities && data.entities.length > 0}
-        <div class="panel">
-          <button
-            class="panel-header"
-            onclick={() => (entitiesExpanded = !entitiesExpanded)}
-          >
-            <span class="panel-title">Entities</span>
-            <span class="count-badge">{data.entities.length}</span>
-            <span class="panel-toggle">{entitiesExpanded ? "▾" : "▸"}</span>
-          </button>
-
-          {#if entitiesExpanded}
-            <div class="entity-list">
-              {#each data.entities as entity}
-                <div class="entity-row">
-                  <span class="kind-chip {entityKindClass(entity.kind)}">{entityKindIcon(entity.kind)}</span>
-                  <span class="entity-name" title="{entity.name} ({entity.kind})">{entity.name}</span>
-                  {#if entity.is_exported}
-                    <span class="export-badge">export</span>
-                  {/if}
-                  <span class="line-range">L{entity.line_start}–{entity.line_end}</span>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      {/if}
-
-      <!-- ── Blast Radius ─────────────────────────────────────────────── -->
-      {#if data.blast_radius !== undefined}
-        <div class="panel">
-          <button
-            class="panel-header"
-            onclick={() => (blastRadiusExpanded = !blastRadiusExpanded)}
-          >
-            <span class="panel-title">Blast Radius</span>
-            <span class="count-badge">{data.blast_radius.length}</span>
-            <span class="panel-toggle">{blastRadiusExpanded ? "▾" : "▸"}</span>
-          </button>
-
-          {#if blastRadiusExpanded}
-            {#if data.blast_radius.length === 0}
-              <div class="empty-panel">No downstream dependents found.</div>
-            {:else}
-              <div class="blast-list">
-                {#each sortedDepths as depth}
-                  {@const entries = blastRadiusByDepth.get(depth) ?? []}
-                  <div class="depth-group">
-                    <div class="depth-label">Depth {depth}</div>
-                    {#each entries as entry}
-                      <div class="blast-row">
-                        <span class="kind-chip {entityKindClass(entry.kind)}">{entityKindIcon(entry.kind)}</span>
-                        <span class="blast-name" title={entry.qualified_name}>{entry.name}</span>
-                        <span class="blast-qname">{shortPath(entry.qualified_name)}</span>
-                      </div>
-                    {/each}
-                  </div>
+      <!-- ── Imports — Grouped by Layer ──────────────────────────────── -->
+      {#if data.imports.length > 0}
+        <div class="section">
+          <div class="section-header">IMPORTS — GROUPED BY LAYER</div>
+          {#each sortedImportLayers as layerName (layerName)}
+            {@const files = data.imports_by_layer[layerName]}
+            <div class="import-layer-group">
+              <div class="import-layer-label">
+                {layerName.toUpperCase()}
+                <span class="import-layer-count">({files.length})</span>
+              </div>
+              <div class="import-chips">
+                {#each files as imp (imp)}
+                  <span class="import-chip" title={imp}>{shortName(imp)}</span>
                 {/each}
               </div>
-            {/if}
-          {/if}
+            </div>
+          {/each}
         </div>
       {/if}
 
-      <!-- ── Dependencies ────────────────────────────────────────────── -->
-      <div class="panel">
-        <button
-          class="panel-header"
-          onclick={() => (importsExpanded = !importsExpanded)}
-        >
-          <span class="panel-title">Imports</span>
-          <span class="count-badge">{data.imports.length}</span>
-          <span class="panel-toggle">{importsExpanded ? "▾" : "▸"}</span>
-        </button>
-
-        {#if importsExpanded}
-          {#if data.imports.length === 0}
-            <div class="empty-panel">No imports.</div>
-          {:else}
-            <div class="path-list">
-              {#each data.imports as imp}
-                <div class="path-row">
-                  <span class="dep-arrow out-arrow">→</span>
-                  <span class="dep-path" title={imp}>{imp}</span>
-                </div>
-              {/each}
+      <!-- ── Violations Section ──────────────────────────────────────── -->
+      {#if data.violations.length === 0}
+        <div class="section">
+          <div class="compliance-card compliance-clean">
+            <span class="compliance-icon">✓</span>
+            <div class="compliance-text">
+              <span class="compliance-title ok">No violations</span>
+              <span class="compliance-sub">This file complies with all Canon principles</span>
             </div>
-          {/if}
-        {/if}
-      </div>
-
-      <div class="panel">
-        <button
-          class="panel-header"
-          onclick={() => (importedByExpanded = !importedByExpanded)}
-        >
-          <span class="panel-title">Imported By</span>
-          <span class="count-badge">{data.imported_by.length}</span>
-          <span class="panel-toggle">{importedByExpanded ? "▾" : "▸"}</span>
-        </button>
-
-        {#if importedByExpanded}
-          {#if data.imported_by.length === 0}
-            <div class="empty-panel">Not imported by any file.</div>
-          {:else}
-            <div class="path-list">
-              {#each data.imported_by as imp}
-                <div class="path-row">
-                  <span class="dep-arrow in-arrow">←</span>
-                  <span class="dep-path" title={imp}>{imp}</span>
-                </div>
-              {/each}
+          </div>
+        </div>
+      {:else}
+        <div class="section">
+          <div class="section-header">VIOLATIONS PRESENT — {data.violations.length} VIOLATION{data.violations.length === 1 ? "" : "S"}</div>
+          <div class="violations-container">
+            <div class="violations-header">
+              <span class="violations-count"><span class="count-num danger-text">{data.violations.length}</span> violations found</span>
+              <button class="fix-all-btn">Fix all ↗</button>
             </div>
-          {/if}
-        {/if}
-      </div>
-
+            {#each data.violations as v (v.principle_id)}
+              <div class="violation-card">
+                <div class="violation-top">
+                  <span
+                    class="severity-badge"
+                    style="background: {severityColor(v.severity)}20; color: {severityColor(v.severity)}; border-color: {severityColor(v.severity)}40"
+                  >{v.severity}</span>
+                  <div class="violation-principle">
+                    <span class="violation-principle-title">{formatPrincipleTitle(v.principle_id)}</span>
+                    <span class="violation-principle-id">{v.principle_id}</span>
+                  </div>
+                </div>
+                {#if v.message}
+                  <div class="violation-bottom">
+                    <span class="violation-warn-icon">⚠</span>
+                    <div class="violation-detail">
+                      <span class="violation-message">{v.message}</span>
+                      <span class="violation-fix-link">Show me how to fix this ↗</span>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="empty-state">No file context available.</div>
@@ -355,409 +316,517 @@
     min-height: 600px;
   }
 
-  /* ── Header bar ──────────────────────────────────────────────────────────── */
+  /* ── Hero Header ──────────────────────────────────────────────────────────── */
 
-  .header-bar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    font-size: 12px;
+  .hero {
+    padding: 16px 16px 12px;
     border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
     flex-shrink: 0;
-    flex-wrap: wrap;
   }
 
-  .file-path-header {
-    font-family: monospace;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-bright, #e8eaf0);
+  .hero-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .hero-left {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .hero-path {
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text-muted, #636a80);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 0;
   }
 
-  .layer-chip {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    border: 1px solid var(--chip-color, #6b7394);
-    color: var(--chip-color, #6b7394);
-    flex-shrink: 0;
+  .hero-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-bright, #e8eaf0);
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .violation-badge {
+  .hero-badges {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .badge {
     font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+
+  .badge-hub {
+    background: rgba(108, 140, 255, 0.15);
+    color: var(--accent, #6c8cff);
+    border-color: rgba(108, 140, 255, 0.3);
+  }
+
+  .badge-layer {
+    border-color: var(--chip-color, #6b7394);
+    color: var(--chip-color, #6b7394);
+    background: transparent;
+  }
+
+  .badge-clean {
+    background: rgba(52, 211, 153, 0.12);
+    color: var(--success, #34d399);
+    border-color: rgba(52, 211, 153, 0.25);
+  }
+
+  .badge-violation {
     background: rgba(255, 107, 107, 0.12);
     color: var(--danger, #ff6b6b);
-    flex-shrink: 0;
-    white-space: nowrap;
+    border-color: rgba(255, 107, 107, 0.25);
   }
 
-  .verdict-badge {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    background: rgba(from var(--verdict-color, #636a80) r g b / 0.12);
-    color: var(--verdict-color, #636a80);
-    border: 1px solid rgba(from var(--verdict-color, #636a80) r g b / 0.25);
-    flex-shrink: 0;
-    white-space: nowrap;
-    font-weight: 600;
+  .hero-summary {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--accent, #6c8cff);
+    background: var(--bg-surface, rgba(255,255,255,0.03));
+    border-radius: 0 4px 4px 0;
   }
 
-  /* ── Content area ────────────────────────────────────────────────────────── */
+  .hero-summary p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text, #b4b8c8);
+  }
+
+  /* ── Stat Bar ─────────────────────────────────────────────────────────────── */
+
+  .stat-bar {
+    display: flex;
+    padding: 12px 16px;
+    gap: 24px;
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
+    flex-shrink: 0;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-muted, #636a80);
+  }
+
+  .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-bright, #e8eaf0);
+    line-height: 1;
+  }
+
+  .danger-text {
+    color: var(--danger, #ff6b6b);
+  }
+
+  /* ── Content area ─────────────────────────────────────────────────────────── */
 
   .content-area {
     flex: 1;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px;
     min-height: 0;
   }
 
-  /* ── Panels ──────────────────────────────────────────────────────────────── */
+  /* ── Two-column card row ──────────────────────────────────────────────────── */
 
-  .panel {
-    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
-    flex-shrink: 0;
-  }
-
-  .panel-header {
+  .card-row {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    color: inherit;
-    font: inherit;
-    border-radius: 0;
-    transition: background 0.15s;
+    gap: 12px;
   }
 
-  .panel-header:hover {
-    background: var(--bg-card-hover, rgba(255,255,255,0.09));
+  .card {
+    flex: 1;
+    border: 1px solid var(--border, rgba(255,255,255,0.06));
+    border-radius: 6px;
+    background: var(--bg-card, rgba(255,255,255,0.03));
+    overflow: hidden;
+    min-width: 0;
   }
 
-  .panel-header-static {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-  }
-
-  .panel-title {
-    font-size: 11px;
+  .card-header {
+    font-size: 10px;
     font-weight: 600;
     color: var(--text-muted, #636a80);
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    flex: 1;
+    padding: 10px 12px 6px;
   }
 
-  .panel-toggle {
-    color: var(--text-muted, #636a80);
-    font-size: 10px;
-    opacity: 0.6;
-  }
-
-  .count-badge {
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: var(--bg-card, rgba(255,255,255,0.06));
-    color: var(--text-muted, #636a80);
-  }
-
-  .empty-panel {
-    padding: 6px 12px 10px;
+  .card-empty {
+    padding: 8px 12px;
     font-size: 12px;
     color: var(--text-muted, #636a80);
     font-style: italic;
   }
 
-  /* ── Graph Metrics ───────────────────────────────────────────────────────── */
+  /* ── Layer stack (left card) ──────────────────────────────────────────────── */
 
-  .metrics-panel {
-    background: var(--bg-card, rgba(255,255,255,0.03));
-  }
-
-  .metrics-grid {
-    padding: 4px 12px 10px;
+  .layer-stack {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    padding: 4px 0 8px;
   }
 
-  .metric-row {
+  .layer-row {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 20px;
+    padding: 4px 12px;
+    transition: background 0.12s;
   }
 
-  .metric-label {
-    font-size: 11px;
-    color: var(--text-muted, #636a80);
-    width: 110px;
+  .layer-active {
+    background: rgba(108, 140, 255, 0.08);
+  }
+
+  .layer-arrow {
+    font-size: 12px;
+    color: var(--accent, #6c8cff);
+    font-weight: 700;
+    width: 14px;
     flex-shrink: 0;
   }
 
-  .metric-value {
-    font-size: 12px;
-    font-family: monospace;
-    color: var(--text, #b4b8c8);
-    font-weight: 600;
+  .layer-arrow-spacer {
+    width: 14px;
+    flex-shrink: 0;
   }
 
-  .metric-warn {
+  .layer-name {
     font-size: 12px;
-    font-family: monospace;
-    color: var(--warning, #fbbf24);
-    font-weight: 600;
+    color: var(--text-muted, #636a80);
+    flex: 1;
   }
 
-  .badge-hub {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    background: rgba(108, 140, 255, 0.15);
+  .layer-name-active {
     color: var(--accent, #6c8cff);
     font-weight: 600;
   }
 
-  .badge-cycle {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    background: rgba(251, 191, 36, 0.12);
-    color: var(--warning, #fbbf24);
+  .layer-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
-  .cycle-peers {
-    padding-left: 118px;
+  /* ── Risk & Impact (right card) ───────────────────────────────────────────── */
+
+  .risk-list {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding-bottom: 2px;
-  }
-
-  .peer-path {
-    font-size: 10px;
-    font-family: monospace;
-    color: var(--text-muted, #636a80);
-    background: var(--bg-card, rgba(255,255,255,0.06));
-    padding: 1px 4px;
-    border-radius: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
-  }
-
-  .impact-row {
+    flex-direction: column;
+    padding: 4px 12px 8px;
     gap: 8px;
   }
 
-  .impact-bar-wrap {
-    flex: 1;
-    height: 5px;
-    background: var(--bg-card, rgba(255,255,255,0.08));
-    border-radius: 3px;
-    overflow: hidden;
-    min-width: 40px;
-    max-width: 120px;
-  }
-
-  .impact-bar {
-    height: 100%;
-    border-radius: 3px;
-    transition: width 0.3s ease;
-  }
-
-  /* ── Entity list ─────────────────────────────────────────────────────────── */
-
-  .entity-list {
-    display: flex;
-    flex-direction: column;
-    padding: 2px 12px 10px;
-    gap: 3px;
-  }
-
-  .entity-row {
+  .risk-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-height: 22px;
-    border-radius: 3px;
-    padding: 1px 4px;
-    transition: background 0.12s;
+    gap: 8px;
   }
 
-  .entity-row:hover {
-    background: var(--bg-card, rgba(255,255,255,0.06));
-  }
-
-  .kind-chip {
-    font-size: 9px;
-    font-family: monospace;
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-weight: 700;
-    flex-shrink: 0;
-    width: 30px;
+  .risk-icon {
+    font-size: 13px;
+    color: var(--accent, #6c8cff);
+    width: 18px;
     text-align: center;
+    flex-shrink: 0;
   }
 
-  .kind-fn   { background: rgba(108,140,255,0.15); color: var(--accent, #6c8cff); }
-  .kind-cls  { background: rgba(52,211,153,0.12); color: var(--success, #34d399); }
-  .kind-if   { background: rgba(251,191,36,0.12); color: var(--warning, #fbbf24); }
-  .kind-typ  { background: rgba(168,85,247,0.12); color: #c084fc; }
-  .kind-other { background: var(--bg-card, rgba(255,255,255,0.06)); color: var(--text-muted, #636a80); }
-
-  .entity-name {
-    font-family: monospace;
-    font-size: 11px;
+  .risk-label {
+    font-size: 12px;
     color: var(--text, #b4b8c8);
     flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
   }
 
-  .export-badge {
-    font-size: 9px;
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: rgba(52,211,153,0.1);
-    color: var(--success, #34d399);
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-
-  .line-range {
-    font-size: 9px;
-    font-family: monospace;
+  .risk-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    border: 1px solid var(--border, rgba(255,255,255,0.1));
     color: var(--text-muted, #636a80);
-    flex-shrink: 0;
     white-space: nowrap;
   }
 
-  /* ── Blast radius ────────────────────────────────────────────────────────── */
+  .risk-badge-accent {
+    color: var(--accent, #6c8cff);
+    border-color: rgba(108, 140, 255, 0.3);
+    background: rgba(108, 140, 255, 0.08);
+  }
 
-  .blast-list {
+  .risk-badge-ok {
+    color: var(--success, #34d399);
+    border-color: rgba(52, 211, 153, 0.3);
+    background: rgba(52, 211, 153, 0.08);
+  }
+
+  .risk-badge-warn {
+    color: var(--warning, #fbbf24);
+    border-color: rgba(251, 191, 36, 0.3);
+    background: rgba(251, 191, 36, 0.08);
+  }
+
+  /* ── Section headers ──────────────────────────────────────────────────────── */
+
+  .section {
     display: flex;
     flex-direction: column;
-    padding: 2px 12px 10px;
-    gap: 2px;
+    gap: 8px;
   }
 
-  .depth-group {
-    margin-bottom: 4px;
-  }
-
-  .depth-label {
+  .section-header {
     font-size: 10px;
     font-weight: 600;
     color: var(--text-muted, #636a80);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 4px 0 2px;
+    letter-spacing: 0.06em;
   }
 
-  .blast-row {
+  /* ── Imports grouped by layer ─────────────────────────────────────────────── */
+
+  .import-layer-group {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 6px;
-    min-height: 21px;
-    border-radius: 3px;
-    padding: 1px 4px;
+  }
+
+  .import-layer-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted, #636a80);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .import-layer-count {
+    font-weight: 400;
+    opacity: 0.7;
+  }
+
+  .import-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .import-chip {
+    font-family: monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border, rgba(255,255,255,0.08));
+    color: var(--text, #b4b8c8);
+    background: var(--bg-card, rgba(255,255,255,0.03));
+    white-space: nowrap;
+    cursor: default;
     transition: background 0.12s;
   }
 
-  .blast-row:hover {
-    background: var(--bg-card, rgba(255,255,255,0.06));
+  .import-chip:hover {
+    background: rgba(255,255,255,0.08);
   }
 
-  .blast-name {
-    font-family: monospace;
-    font-size: 11px;
-    color: var(--text, #b4b8c8);
+  /* ── Compliance / Violations ──────────────────────────────────────────────── */
+
+  .compliance-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border, rgba(255,255,255,0.06));
+    background: var(--bg-card, rgba(255,255,255,0.03));
+  }
+
+  .compliance-icon {
+    font-size: 20px;
+    color: var(--success, #34d399);
     flex-shrink: 0;
-    max-width: 140px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(52, 211, 153, 0.12);
   }
 
-  .blast-qname {
-    font-family: monospace;
-    font-size: 10px;
-    color: var(--text-muted, #636a80);
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-  }
-
-  /* ── Dependency paths ────────────────────────────────────────────────────── */
-
-  .path-list {
+  .compliance-text {
     display: flex;
     flex-direction: column;
-    padding: 2px 12px 10px;
     gap: 2px;
   }
 
-  .path-row {
+  .compliance-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .compliance-title.ok {
+    color: var(--success, #34d399);
+  }
+
+  .compliance-sub {
+    font-size: 12px;
+    color: var(--text-muted, #636a80);
+  }
+
+  .violations-container {
+    border: 1px solid var(--border, rgba(255,255,255,0.06));
+    border-radius: 6px;
+    background: var(--bg-card, rgba(255,255,255,0.03));
+    overflow: hidden;
+  }
+
+  .violations-header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-height: 20px;
-    border-radius: 3px;
-    padding: 1px 4px;
-    transition: background 0.12s;
+    justify-content: space-between;
+    padding: 10px 14px;
   }
 
-  .path-row:hover {
-    background: var(--bg-card, rgba(255,255,255,0.06));
-  }
-
-  .dep-arrow {
-    font-size: 11px;
-    font-family: monospace;
-    flex-shrink: 0;
-    width: 14px;
-    text-align: center;
-  }
-
-  .out-arrow { color: var(--accent, #6c8cff); }
-  .in-arrow  { color: var(--success, #34d399); }
-
-  .dep-path {
-    font-family: monospace;
-    font-size: 11px;
+  .violations-count {
+    font-size: 13px;
     color: var(--text, #b4b8c8);
-    flex: 1;
-    white-space: nowrap;
+  }
+
+  .count-num {
+    font-size: 18px;
+    font-weight: 700;
+    margin-right: 4px;
+  }
+
+  .fix-all-btn {
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border, rgba(255,255,255,0.15));
+    background: transparent;
+    color: var(--text, #b4b8c8);
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .fix-all-btn:hover {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.25);
+  }
+
+  .violation-card {
+    margin: 0 10px 10px;
+    border: 1px solid var(--border, rgba(255,255,255,0.06));
+    border-radius: 6px;
     overflow: hidden;
-    text-overflow: ellipsis;
+  }
+
+  .violation-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(0,0,0,0.15);
+  }
+
+  .severity-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .violation-principle {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     min-width: 0;
   }
 
-  /* ── Empty states ────────────────────────────────────────────────────────── */
+  .violation-principle-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright, #e8eaf0);
+  }
+
+  .violation-principle-id {
+    font-family: monospace;
+    font-size: 10px;
+    color: var(--text-muted, #636a80);
+  }
+
+  .violation-bottom {
+    display: flex;
+    gap: 10px;
+    padding: 10px 12px;
+    align-items: flex-start;
+  }
+
+  .violation-warn-icon {
+    font-size: 14px;
+    color: var(--text-muted, #636a80);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .violation-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .violation-message {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text, #b4b8c8);
+  }
+
+  .violation-fix-link {
+    font-size: 12px;
+    color: var(--accent, #6c8cff);
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .violation-fix-link:hover {
+    opacity: 0.8;
+  }
+
+  /* ── Empty states ─────────────────────────────────────────────────────────── */
 
   .empty-state {
     display: flex;

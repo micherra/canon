@@ -17,6 +17,7 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import { KgQuery } from "../graph/kg-query.ts";
 import type { EntityKind } from "../graph/kg-types.ts";
+import { loadSummariesFile } from "./store-summaries.ts";
 
 export interface FileContextInput {
   file_path: string;
@@ -44,6 +45,13 @@ export interface FileBlastRadiusEntry {
   depth: number;
 }
 
+/** Violation detail from the most recent review that includes this file. */
+export interface FileViolationDetail {
+  principle_id: string;
+  severity: string;
+  message?: string;
+}
+
 export interface FileContextOutput {
   file_path: string;
   layer: string;
@@ -53,6 +61,16 @@ export interface FileContextOutput {
   exports: string[];
   violation_count: number;
   last_verdict: string | null;
+  /** Plain-English summary from .canon/summaries.json, or null if not available. */
+  summary: string | null;
+  /** Violation details from the most recent review that includes this file. */
+  violations: FileViolationDetail[];
+  /** Imports grouped by their inferred layer. */
+  imports_by_layer: Record<string, string[]>;
+  /** All unique layer names from project config, sorted alphabetically. */
+  layer_stack: string[];
+  /** Derived role based on graph metrics. */
+  role: string;
   graph_metrics?: FileGraphMetrics;
   entities?: FileEntitySummary[];
   blast_radius?: FileBlastRadiusEntry[];
@@ -79,6 +97,11 @@ export async function getFileContext(
     exports: [],
     violation_count: 0,
     last_verdict: null,
+    summary: null,
+    violations: [],
+    imports_by_layer: {},
+    layer_stack: [],
+    role: "internal",
   });
 
   // Prevent path traversal outside the project directory
@@ -168,6 +191,7 @@ export async function getFileContext(
   // Load compliance data
   let violation_count = 0;
   let last_verdict: string | null = null;
+  let violations: FileViolationDetail[] = [];
   let lastReviewedAt: string | null = null;
   try {
     const store = new DriftStore(projectDir);
@@ -177,6 +201,23 @@ export async function getFileContext(
         if (!lastReviewedAt || review.timestamp > lastReviewedAt) {
           lastReviewedAt = review.timestamp;
           last_verdict = review.verdict;
+          // Extract violation details from this review for the file
+          const hasPerFile = review.violations.some((v) => v.file_path);
+          if (hasPerFile) {
+            violations = review.violations
+              .filter((v) => v.file_path === filePath)
+              .map((v) => ({
+                principle_id: v.principle_id,
+                severity: v.severity,
+                ...(v.message !== undefined && { message: v.message }),
+              }));
+          } else {
+            violations = review.violations.map((v) => ({
+              principle_id: v.principle_id,
+              severity: v.severity,
+              ...(v.message !== undefined && { message: v.message }),
+            }));
+          }
         }
         // Count only violations attributed to this specific file.
         // Falls back to counting all violations if none have file_path (legacy data).
@@ -257,6 +298,43 @@ export async function getFileContext(
     }
   }
 
+  // Load summary from summaries.json
+  let summary: string | null = null;
+  try {
+    const summaries = await loadSummariesFile(projectDir);
+    const entry = summaries[filePath];
+    if (entry) {
+      summary = entry.summary;
+    }
+  } catch {
+    // no summaries file
+  }
+
+  // Group imports by layer
+  const imports_by_layer: Record<string, string[]> = {};
+  for (const imp of imports) {
+    const impLayer = inferLayer(imp) || "unknown";
+    if (!imports_by_layer[impLayer]) imports_by_layer[impLayer] = [];
+    imports_by_layer[impLayer].push(imp);
+  }
+
+  // Derive layer_stack from layer mappings config
+  const layer_stack: string[] = Object.keys(layerMappings).sort();
+
+  // Derive role from graph metrics
+  let role = "internal";
+  if (graph_metrics) {
+    if (graph_metrics.in_degree === 0) {
+      role = "entry point";
+    } else if (graph_metrics.out_degree === 0) {
+      role = "leaf";
+    } else if (graph_metrics.is_hub) {
+      role = "hub";
+    } else if (graph_metrics.in_cycle) {
+      role = "cycle member";
+    }
+  }
+
   return {
     file_path: filePath,
     layer,
@@ -266,6 +344,11 @@ export async function getFileContext(
     exports,
     violation_count,
     last_verdict,
+    summary,
+    violations,
+    imports_by_layer,
+    layer_stack,
+    role,
     graph_metrics,
     ...(entities !== undefined && { entities }),
     ...(blast_radius !== undefined && { blast_radius }),
