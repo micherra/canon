@@ -32,25 +32,34 @@ src/
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, wave bulletin, variable resolution, gate execution, consultation preparation, wave briefing assembly
 
 ## Contracts
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-24 -->
 
-Exposes 24 MCP tools (14 principle/review + 10 orchestration harness):
+**Config utilities** (`src/utils/config.ts`):
+- `buildLayerInferrer(mappings)` — now supports glob patterns (`*`, `**`, `?`) in addition to plain directory name segments; globs are anchored to path start
+- `loadLayerMappingsStrict(projectDir)` — throws if no layer mappings configured in `.canon/config.json` (strict variant of `loadLayerMappings`)
+- `loadGraphCompositionConfig(projectDir)` — reads `config.graph.composition` block; returns typed `GraphCompositionConfig` with defaults (`enabled: false`, `min_confidence: 0.5`, `max_refs_per_file: 50`)
 
-**Principle and review tools:**
+**Tools with MCP App UIs** (each has its own `ui://canon/*` resource):
+
+| Tool | UI Resource | Purpose |
+|------|-------------|---------|
+| `show_pr_impact` | `ui://canon/pr-impact` | PR blast radius, hotspots, violations, subgraph |
+| `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
+| `get_drift_report` | `ui://canon/drift-report` | Drift analysis: violations, trends, hotspots, PR reviews |
+| `get_compliance` | `ui://canon/compliance` | Per-principle compliance stats, trend chart |
+| `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
+| `get_pr_review_data` | `ui://canon/pr-review-prep` | PR file list by layer, priority scores, diff metadata |
+| `graph_query` | `ui://canon/graph-query` | Call trees, blast radius, dead code, search |
+
+**Text-only principle/review tools:**
 
 | Tool | Purpose |
 |------|---------|
 | `get_principles` | Find applicable principles for context (file, layer, task) |
 | `list_principles` | Browse principle index (metadata only) |
 | `review_code` | Surface principles for code review + code content |
-| `get_compliance` | Compliance stats for a specific principle |
 | `report` | Log decisions/patterns/reviews (drift tracking) |
-| `get_pr_review_data` | PR review prep (files, layers, diff commands, priorities) |
-| `codebase_graph` | Generate dependency graph with compliance overlay |
-| `get_file_context` | Rich file context (contents, imports, compliance) |
 | `store_summaries` | Persist file summaries to disk |
-| `get_dashboard_selection` | Current user focus from dashboard |
-| `get_drift_report` | Full drift analysis (violations, trends, stats) |
 | `get_decisions` | Grouped intentional deviations |
 | `get_patterns` | Observed codebase patterns (grouped) |
 | `store_pr_review` | Store a PR review result for drift tracking |
@@ -61,14 +70,16 @@ Exposes 24 MCP tools (14 principle/review + 10 orchestration harness):
 |------|---------|
 | `load_flow` | Load and resolve a flow definition |
 | `validate_flows` | Validate flow definitions |
-| `init_workspace` | Create or resume a workspace |
+| `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation |
 | `update_board` | Mutate board state |
-| `get_spawn_prompt` | Resolve spawn prompt for a state |
+| `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
 | `report_result` | Record agent result and evaluate transitions |
 | `check_convergence` | Check iteration limits |
 | `list_overlays` | List available role overlays |
 | `post_wave_bulletin` | Post inter-agent message during parallel waves |
 | `get_wave_bulletin` | Read wave bulletin messages |
+| `inject_wave_event` | Inject user events into running wave execution |
+| `get_flow_analytics` | Flow execution analytics and bottleneck identification |
 
 ## Dependencies
 <!-- last-updated: 2026-03-22 -->
@@ -81,13 +92,15 @@ Exposes 24 MCP tools (14 principle/review + 10 orchestration harness):
 | `vitest` | Unit testing (dev) |
 
 ## Invariants
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-24 -->
 
 - All data persists to `.canon/` directory (decisions.jsonl, patterns.jsonl, reviews.jsonl, graph-data.json, summaries.json)
 - JSONL files auto-rotate when exceeding size limits
 - Atomic file writes prevent corruption on concurrent access
 - `CANON_PROJECT_DIR` env var sets project root (defaults to `process.cwd()`)
 - `CANON_PLUGIN_DIR` env var sets plugin directory (defaults to parent of mcp-server)
+- Workspace subdirectories created by `initWorkspace`: `research/`, `decisions/`, `plans/`, `reviews/` — `notes/` is NOT created (removed 2026-03-24)
+- `progress.md` is seeded at workspace creation and appended by the orchestrator after each `report_result`; agents treat it as read-only
 
 ## Development
 <!-- last-updated: 2026-03-22 -->

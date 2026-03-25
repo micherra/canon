@@ -51,7 +51,7 @@ For build/review/security intents, follow the orchestrator protocol in `agents/c
 
 1. `load_flow(flow_name)` → get flow definition
 2. `init_workspace(...)` → create or resume workspace
-3. For each state: `check_convergence` → `update_board(enter_state)` → `get_spawn_prompt` → spawn specialist agent → `report_result` → next state
+3. For each state: `check_convergence` → `update_board(enter_state)` → `get_spawn_prompt` → spawn specialist agent → `report_result` → append one-line summary to `progress.md` → next state
 4. On terminal state: `update_board(complete_flow)`
 
 You are a dispatcher — you spawn specialist agents for task work but never write code, reviews, or artifacts yourself.
@@ -80,7 +80,7 @@ Spawn these as leaf workers — they do NOT spawn further agents:
 | Inspector | `canon:canon-inspector` | Build analysis, cost/bottleneck reports |
 
 ## Project Structure
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-24 -->
 
 ```
 canon/
@@ -101,11 +101,11 @@ canon/
 ├── mcp-server/ui/        # Svelte/Sigma.js dashboard UI (builds to single HTML for MCP App)
 ├── commands/             # CLI command definitions
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
-    └── workspaces/       # Per-branch/task build state (board.json, session.json, plans/, etc.)
+    └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)
 ```
 
 ## Flows
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-24 -->
 
 Flows are state machines in `flows/`. Format: YAML frontmatter (states, transitions, constraints) + markdown spawn instructions. See `flows/SCHEMA.md` for the full schema.
 
@@ -128,10 +128,27 @@ Flows are state machines in `flows/`. Format: YAML frontmatter (states, transiti
 
 **State types**: `single` (one agent), `parallel` (concurrent agents), `wave` (parallel agents in git worktrees with gates between waves), `parallel-per` (fan-out over items from prior state), `terminal`.
 
-## MCP Tools (Harness)
-<!-- last-updated: 2026-03-22 -->
+**State `effects:` field** — Optional list of drift extraction operations that run automatically after a state completes. Declared on the state definition in fragment or flow YAML, sibling to `transitions:`. Effect types:
+- `persist_decisions` — extracts JUSTIFIED_DEVIATION entries from agent summaries into drift store (active on `implement` and `ship` states)
+- `persist_patterns` — extracts observed patterns from agent summaries into drift store (active on `ship` state)
+- `persist_review` — stores a reviewer artifact file into drift store; requires `artifact:` field naming the file (active on `review` state, artifact: `REVIEW.md`)
 
-The Canon MCP server exposes these tools. Orchestrator uses the harness tools to drive flows; specialist agents use the principle and drift tools.
+## MCP Tools (Harness)
+<!-- last-updated: 2026-03-24 -->
+
+The Canon MCP server exposes these tools. Orchestrator uses the harness tools to drive flows; specialist agents use the principle and drift tools. Tools with UIs open as MCP Apps in compatible clients (Claude Desktop).
+
+**Tools with MCP App UIs:**
+
+| Tool | Purpose |
+|------|---------|
+| `show_pr_impact` | PR blast radius, hotspots, violations, dependency subgraph |
+| `codebase_graph` | Interactive dependency graph with compliance overlay |
+| `get_drift_report` | Full drift analysis (violations, trends, hotspots, PR reviews) |
+| `get_compliance` | Per-principle compliance stats, weekly trend chart |
+| `get_file_context` | File dependencies, entities, blast radius, metrics |
+| `get_pr_review_data` | PR file list by layer, priority scores, diff metadata |
+| `graph_query` | Call trees, blast radius, dead code, search |
 
 **Principle & review tools:**
 
@@ -140,18 +157,11 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `get_principles` | Find applicable principles for a file/layer/task |
 | `list_principles` | Browse principle index (metadata only) |
 | `review_code` | Surface principles matched to a specific file for review |
-| `get_compliance` | Compliance stats for a specific principle |
 | `report` | Log a decision, pattern, or review result (drift tracking) |
-| `get_pr_review_data` | PR review prep (files, layers, diff commands, graph priorities) |
-| `codebase_graph` | Generate dependency graph with compliance overlay |
-| `get_file_context` | File contents + imports + compliance data |
 | `store_summaries` | Persist file summaries to `.canon/summaries.json` |
-| `get_drift_report` | Full drift analysis (violations, trends, hotspots) |
 | `get_decisions` | Grouped intentional deviation decisions |
 | `get_patterns` | Observed codebase patterns (grouped, deduplicated) |
 | `store_pr_review` | Store a PR review result for drift tracking |
-| `get_dashboard_selection` | Current user focus from Canon Dashboard (MCP App) |
-| `open_dashboard` | Open the Canon Dashboard as an MCP App (app-only: supported in Claude Desktop and compatible clients) |
 
 **Orchestration harness tools:**
 
@@ -159,14 +169,16 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 |------|---------|
 | `load_flow` | Load and resolve a flow definition (fragments, spawn instructions, state graph) |
 | `validate_flows` | Validate flow definitions (parse, fragment resolution, reachability) |
-| `init_workspace` | Create or resume a workspace (`board.json`, `session.json`) |
+| `init_workspace` | Create or resume a workspace (`board.json`, `session.json`, `progress.md`); seeds `progress.md` with task header on creation |
 | `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress |
-| `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, overlays, wave context) |
+| `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, overlays, wave context); reads `progress.md` from disk and injects as `${progress}` when flow declares `progress:` field |
 | `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state` |
 | `check_convergence` | Check iteration limits before re-entering a looping state |
 | `list_overlays` | List available role overlays (expertise lenses injected into prompts) |
 | `post_wave_bulletin` | Post inter-agent message during parallel wave execution |
 | `get_wave_bulletin` | Read wave bulletin messages from other agents in the same wave |
+| `inject_wave_event` | Inject user events into running wave execution |
+| `get_flow_analytics` | Flow execution analytics and bottleneck identification |
 
 ## Canon Engineering Principles
 
@@ -185,6 +197,3 @@ All agent spawns may encounter API rate limits. When any agent spawn fails with 
 - If spawning multiple agents in parallel and some succeed while others are rate-limited, keep the successful results and only retry the failed ones.
 - If all retries for a given agent fail, inform the user and pause. Do NOT skip the phase — wait for the user to confirm retry or abort.
 
-## Dashboard Context
-
-When the Canon Dashboard is active, call `get_dashboard_selection` at the start of a conversation to pick up the user's current focus — selected graph node, matched principles, and dependency context. To open the dashboard, call `open_dashboard` (MCP App — supported in Claude Desktop and compatible clients).
