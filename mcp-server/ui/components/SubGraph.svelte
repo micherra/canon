@@ -83,20 +83,13 @@
       },
     );
 
-    // ── Highlight seed nodes immediately after construction ───────────────
-    // Pick first seed node as cascade root; all seed nodes are highlighted.
-    // If no seed nodes provided, skip highlighting.
-
-    const seedArray = [...currentSeedNodeIds];
-    if (seedArray.length > 0) {
-      const firstSeed = seedArray[0];
-      graphApi.highlightCascade(firstSeed, currentSeedNodeIds);
-    }
+    // NOTE: No cascade highlight on initial build for CodebaseGraph.
+    // Changed nodes are already colored blue by the nodeReducer's default path.
+    // Cascade highlighting is only used by SubGraph when embedded in PR Impact view
+    // where an explicit highlightCascade call is made by the parent.
   });
 
   // ── $effect: apply filters when filterOptions changes (post-build only) ──
-
-  let hadFilters = false;
 
   $effect(() => {
     const opts = filterOptions;
@@ -104,20 +97,9 @@
 
     if (opts) {
       graphApi.applyFilters(opts);
-      hadFilters = true;
-    } else if (hadFilters) {
-      // Filters were cleared — reset to show everything
-      const allLayers = new Set<string>();
-      for (const n of nodes) allLayers.add(n.layer);
-      graphApi.applyFilters({
-        activeLayers: allLayers,
-        searchQuery: "",
-        parsedSearch: { textQuery: "", filterLayer: null, filterChanged: false, filterViolation: false },
-        prReviewFiles: null,
-        insightFilter: null,
-        showChangedOnly: false,
-      });
-      hadFilters = false;
+    } else {
+      // Filters cleared — reset all state and return to default (natural colors) view.
+      graphApi.resetView();
     }
   });
 

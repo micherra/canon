@@ -6,6 +6,7 @@ import {
   getLayerColor,
   NODE_DEFAULT,
   NODE_CHANGED,
+  NODE_VIOLATION,
   NODE_UNFOCUSED,
   NODE_DIM,
   NODE_HIGHLY_DIM,
@@ -17,7 +18,7 @@ import {
   EDGE_ADJACENT_FOCUS,
 } from "./constants";
 import { escapeHtml } from "./escapeHtml";
-import type { GraphData, GraphNode } from "../stores/graphData";
+import type { GraphData, GraphNode } from "./types";
 
 // ── Filter options (mirrors GraphApi's FilterOptions) ────────────────────────
 
@@ -39,6 +40,8 @@ export interface FilterOptions {
 
 export interface SigmaGraphApi {
   applyFilters(opts: FilterOptions): void;
+  /** Reset all filters and cascade state — returns graph to default view. */
+  resetView(): void;
   focusNode(node: GraphNode): void;
   unfocusNode(): void;
   zoomToNode(nodeId: string): GraphNode | null;
@@ -157,7 +160,7 @@ export function buildSigmaGraph(
       x: Math.random() * 1000,
       y: Math.random() * 1000,
       size: nodeSize(node),
-      color: node.changed ? NODE_CHANGED : color,
+      color: node.changed ? NODE_CHANGED : (node.violation_count ?? 0) > 0 ? NODE_VIOLATION : color,
       layer: node.layer || "unknown",
       changed: node.changed || false,
       violation_count: node.violation_count || 0,
@@ -219,6 +222,8 @@ export function buildSigmaGraph(
   let currentFilters: FilterOptions | null = null;
   let focusedNodeId: string | null = null;
   let focusedConnected: Set<string> | null = null; // pre-computed neighbor set
+  // CASCADE state — only used by SubGraph for PR Impact subgraph highlighting.
+  // CodebaseGraph does NOT call highlightCascade; it uses filter mode instead.
   let cascadeRoot: string | null = null;
   let cascadeFiles: Set<string> | null = null;
 
@@ -249,30 +254,53 @@ export function buildSigmaGraph(
     return true;
   }
 
+  // ── Node base color — layer/violation/changed precedence ─────────────────
+
+  /** Compute the "natural" color for a node (violation wins over changed, both win over layer). */
+  function nodeBaseColor(gn: GraphNode): string {
+    if ((gn.violation_count ?? 0) > 0) return NODE_VIOLATION;
+    if (gn.changed) return NODE_CHANGED;
+    return getLayerColor(gn.layer, opts.layerColors);
+  }
+
   // ── nodeReducer — computes visual props from rendering state ─────────────
 
   function nodeReducer(nodeId: string, data: NodeAttrs): Partial<NodeAttrs> {
     const gn = nodeIndex.get(nodeId);
     if (!gn) return data;
 
-    // CASCADE mode — highest precedence
+    // CASCADE mode — highest precedence.
+    // Only used by SubGraph for PR Impact highlighting; CodebaseGraph does NOT
+    // call highlightCascade so this branch is a no-op in the codebase graph view.
     if (cascadeRoot && cascadeFiles) {
-      if (nodeId === cascadeRoot) return { ...data, color: "#60a5fa", highlighted: true };
-      if (cascadeFiles.has(nodeId)) return { ...data, color: "#fbbf24", highlighted: true };
-      return { ...data, color: NODE_UNFOCUSED, highlighted: false };
+      if (nodeId === cascadeRoot) return { ...data, color: "#60a5fa", hidden: false };
+      if (cascadeFiles.has(nodeId)) return { ...data, color: "#fbbf24", hidden: false };
+      return { ...data, color: NODE_UNFOCUSED, hidden: false };
     }
 
     // FOCUS mode
     if (focusedNodeId && focusedConnected) {
-      if (nodeId === focusedNodeId) return { ...data, color: "#6c8cff", size: nodeSize(gn) + 3 };
-      if (focusedConnected.has(nodeId))
-        return { ...data, color: getLayerColor(gn.layer, opts.layerColors), size: nodeSize(gn) };
-      return { ...data, color: NODE_UNFOCUSED, size: nodeSize(gn) };
+      const baseColor = nodeBaseColor(gn);
+      if (nodeId === focusedNodeId) {
+        return { ...data, color: baseColor, size: nodeSize(gn) + 3, hidden: false };
+      }
+      if (focusedConnected.has(nodeId)) {
+        return { ...data, color: baseColor, size: nodeSize(gn), hidden: false };
+      }
+      // Non-connected nodes: keep violations visible (dimmer red), others very dim
+      return {
+        ...data,
+        color: (gn.violation_count ?? 0) > 0 ? "rgba(255,107,107,0.25)" : NODE_UNFOCUSED,
+        size: nodeSize(gn),
+        hidden: false,
+      };
     }
 
-    // FILTER mode
+    // FILTER mode — non-matching nodes get hidden: true (not dimmed)
     if (currentFilters) {
       const f = currentFilters;
+
+      // Layer filter: hide nodes not in active layers
       if (!f.activeLayers.has(gn.layer)) return { ...data, hidden: true };
 
       const parsed = f.parsedSearch;
@@ -282,33 +310,43 @@ export function buildSigmaGraph(
       const hasPrFilter = f.prReviewFiles !== null;
       const hasInsightFilter = f.insightFilter !== null;
 
-      const layerColor = getLayerColor(gn.layer, opts.layerColors);
-      const isSearchMatch = hasSearch && matchesSearch(gn, parsed, q);
-      const isPrMatch = hasPrFilter && f.prReviewFiles!.has(nodeId);
-      const isInsightMatch = hasInsightFilter && f.insightFilter!.has(nodeId);
-
-      if (isInsightMatch || isPrMatch || isSearchMatch) {
-        return { ...data, hidden: false, color: layerColor, size: nodeSize(gn) + 2 };
-      } else if (f.showChangedOnly && !gn.changed) {
-        return { ...data, hidden: false, color: NODE_HIGHLY_DIM, size: nodeSize(gn) };
-      } else if (
-        (hasPrFilter && !isPrMatch) ||
-        (hasInsightFilter && !isInsightMatch) ||
-        (hasSearch && !isSearchMatch)
-      ) {
-        return { ...data, hidden: false, color: NODE_DIM, size: nodeSize(gn) };
-      } else {
-        return {
-          ...data,
-          hidden: false,
-          color: gn.changed ? NODE_CHANGED : layerColor,
-          size: nodeSize(gn) + (gn.changed ? 1 : 0),
-        };
+      // Insight filter (violations/changed toggles): hide non-matching nodes
+      if (hasInsightFilter && !f.insightFilter!.has(nodeId)) {
+        return { ...data, hidden: true };
       }
+
+      // PR filter: hide non-matching nodes
+      if (hasPrFilter && !f.prReviewFiles!.has(nodeId)) {
+        return { ...data, hidden: true };
+      }
+
+      // Show-changed-only: hide non-changed nodes
+      if (f.showChangedOnly && !gn.changed) {
+        return { ...data, hidden: true };
+      }
+
+      // Search filter: hide non-matching nodes
+      if (hasSearch && !matchesSearch(gn, parsed, q)) {
+        return { ...data, hidden: true };
+      }
+
+      // Visible — render with natural violation/changed/layer color
+      return {
+        ...data,
+        hidden: false,
+        color: nodeBaseColor(gn),
+        size: nodeSize(gn),
+      };
     }
 
-    // DEFAULT — return data as-is (initial graph attributes applied)
-    return data;
+    // DEFAULT — no filters, no focus, no cascade.
+    // Return node's natural color (already set during graph construction, but
+    // reducer runs on every frame so keep it consistent).
+    return {
+      ...data,
+      hidden: false,
+      color: nodeBaseColor(gn),
+    };
   }
 
   // ── edgeReducer — computes visual props from rendering state ─────────────
@@ -331,10 +369,13 @@ export function buildSigmaGraph(
     // FILTER mode
     if (currentFilters) {
       const f = currentFilters;
+      // Hide edge if either endpoint is not visible (node will be hidden: true).
+      // This keeps edges consistent with the "hide non-matching" filter model.
       const sVisible = nodeVisible(s, f);
       const tVisible = nodeVisible(t, f);
-      if (!sVisible && !tVisible) return { ...data, hidden: true };
+      if (!sVisible || !tVisible) return { ...data, hidden: true };
 
+      // Both endpoints visible — color by filter type
       const hasPrFilter = f.prReviewFiles !== null;
       const hasInsightFilter = f.insightFilter !== null;
       const parsed = f.parsedSearch;
@@ -346,17 +387,17 @@ export function buildSigmaGraph(
       if (hasPrFilter) {
         const sIn = f.prReviewFiles!.has(s);
         const tIn = f.prReviewFiles!.has(t);
-        color = sIn && tIn ? EDGE_HIGHLIGHTED : sIn || tIn ? EDGE_SEMI_DIM : EDGE_DIM;
+        color = sIn && tIn ? EDGE_HIGHLIGHTED : sIn || tIn ? EDGE_SEMI_DIM : EDGE_DEFAULT;
       } else if (hasInsightFilter) {
         const sIn = f.insightFilter!.has(s);
         const tIn = f.insightFilter!.has(t);
-        color = sIn && tIn ? EDGE_HIGHLIGHTED : sIn || tIn ? EDGE_SEMI_DIM : EDGE_DIM;
+        color = sIn && tIn ? EDGE_HIGHLIGHTED : sIn || tIn ? EDGE_SEMI_DIM : EDGE_DEFAULT;
       } else if (hasSearch) {
         const sGn = nodeIndex.get(s);
         const tGn = nodeIndex.get(t);
         const sMatch = sGn ? matchesSearch(sGn, parsed, q) : false;
         const tMatch = tGn ? matchesSearch(tGn, parsed, q) : false;
-        color = sMatch || tMatch ? EDGE_HIGHLIGHTED : EDGE_DIM;
+        color = sMatch && tMatch ? EDGE_HIGHLIGHTED : EDGE_DEFAULT;
       } else {
         color = EDGE_DEFAULT;
       }
@@ -371,8 +412,8 @@ export function buildSigmaGraph(
 
   const sigma = new Sigma(graph as any, container, {
     renderEdgeLabels: false,
+    renderLabels: false,
     defaultEdgeColor: EDGE_DEFAULT,
-    labelRenderedSizeThreshold: 14,
     labelFont: "'Inter', sans-serif",
     labelSize: 11,
     labelColor: { color: "#9ca3af" },
@@ -453,6 +494,11 @@ export function buildSigmaGraph(
 
   function applyFilters(f: FilterOptions): void {
     currentFilters = f;
+    // Clear cascade/focus so filter mode takes precedence
+    cascadeRoot = null;
+    cascadeFiles = null;
+    focusedNodeId = null;
+    focusedConnected = null;
     sigma.refresh();
   }
 
@@ -500,6 +546,16 @@ export function buildSigmaGraph(
     sigma.refresh();
   }
 
+  function resetView(): void {
+    // Clear all rendering state — returns graph to the default (natural colors) view.
+    currentFilters = null;
+    focusedNodeId = null;
+    focusedConnected = null;
+    cascadeRoot = null;
+    cascadeFiles = null;
+    sigma.refresh();
+  }
+
   function clearHighlight(): void {
     cascadeRoot = null;
     cascadeFiles = null;
@@ -513,8 +569,9 @@ export function buildSigmaGraph(
     graph.clear();
   }
 
-  return {
+  const api: SigmaGraphApi = {
     applyFilters,
+    resetView,
     focusNode,
     unfocusNode,
     zoomToNode,
@@ -522,4 +579,13 @@ export function buildSigmaGraph(
     clearHighlight,
     destroy,
   };
+
+  // Expose graph internals on window for Playwright integration tests.
+  // This allows tests to inspect node display data, colors, and hidden state
+  // without trying to read WebGL pixel colors from the canvas.
+  if (typeof window !== "undefined") {
+    (window as any).__SIGMA_GRAPH__ = { graph, sigma, api, nodeIndex };
+  }
+
+  return api;
 }

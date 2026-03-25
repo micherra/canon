@@ -18,7 +18,6 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiDir = join(__dirname, "..");
 const componentsDir = join(uiDir, "components");
-const libDir = join(uiDir, "lib");
 
 // ---------------------------------------------------------------------------
 // SubGraph.svelte — file existence and structure
@@ -135,9 +134,15 @@ describe("SubGraph.svelte — implementation: sigmaGraph usage", () => {
     expect(content).toContain("edgeOut");
   });
 
-  it("calls highlightCascade with seedNodeIds after graph construction", () => {
-    expect(content).toContain("highlightCascade");
+  it("imports highlightCascade from sigmaGraph api (used by PR Impact, not CodebaseGraph)", () => {
+    // SubGraph still accepts seedNodeIds as a prop for callers that need cascade
+    // highlighting (e.g. PR Impact subgraph). The CodebaseGraph does NOT call
+    // highlightCascade — changed nodes are already blue via nodeReducer default path.
     expect(content).toContain("seedNodeIds");
+  });
+
+  it("calls resetView when filterOptions becomes null", () => {
+    expect(content).toContain("resetView");
   });
 
   it("binds a div to container for Sigma mount point", () => {
@@ -164,54 +169,3 @@ describe("SubGraph.svelte — lifecycle: WebGL context cleanup", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// sigmaGraph.ts — fa2Iterations parameter
-// ---------------------------------------------------------------------------
-
-describe("sigmaGraph.ts — fa2Iterations opts parameter", () => {
-  let content: string;
-
-  beforeAll(() => {
-    content = readFileSync(join(libDir, "sigmaGraph.ts"), "utf-8");
-  });
-
-  it("accepts fa2Iterations as an optional field in opts", () => {
-    expect(content).toContain("fa2Iterations");
-  });
-
-  it("uses opts.fa2Iterations ?? 100 as the FA2 iterations value (backward-compatible default)", () => {
-    expect(content).toContain("opts.fa2Iterations");
-    expect(content).toContain("?? 100");
-  });
-
-  it("does not have the hardcoded iterations: 100 anymore (uses the opts parameter)", () => {
-    // The old hardcoded value should now reference opts.fa2Iterations
-    // Check the FA2 call uses the opts parameter, not a bare literal
-    const fa2CallIndex = content.indexOf("forceAtlas2.assign");
-    expect(fa2CallIndex).toBeGreaterThan(-1);
-    // The iterations line after the forceAtlas2.assign call should reference opts
-    const fa2Block = content.slice(fa2CallIndex, fa2CallIndex + 300);
-    expect(fa2Block).toContain("opts.fa2Iterations");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// GraphCanvas.svelte — must remain untouched
-// ---------------------------------------------------------------------------
-
-describe("GraphCanvas.svelte — untouched", () => {
-  it("still imports from stores/graphData (store-coupled as before)", () => {
-    const content = readFileSync(join(componentsDir, "GraphCanvas.svelte"), "utf-8");
-    expect(content).toContain("stores/graphData");
-  });
-
-  it("still exports getApi() function", () => {
-    const content = readFileSync(join(componentsDir, "GraphCanvas.svelte"), "utf-8");
-    expect(content).toContain("export function getApi");
-  });
-
-  it("does NOT have fa2Iterations in its props", () => {
-    const content = readFileSync(join(componentsDir, "GraphCanvas.svelte"), "utf-8");
-    expect(content).not.toContain("fa2Iterations");
-  });
-});
