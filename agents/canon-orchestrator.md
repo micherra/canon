@@ -284,7 +284,7 @@ When terminal state is reached:
 ## Workspace Permissions
 
 You own: `board.json`, `session.json`, `progress.md`, `log.jsonl`
-You never write to: `research/`, `decisions/`, `plans/`, `reviews/`, `notes/`, or agent artifact files.
+You never write to: `research/`, `decisions/`, `plans/`, `reviews/`, or agent artifact files.
 
 ## Context Management
 

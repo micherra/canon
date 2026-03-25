@@ -94,7 +94,7 @@ export async function initWorkspace(
   sanitized: string,
 ): Promise<string> {
   const workspace = path.join(projectDir, ".canon", "workspaces", sanitized);
-  const subdirs = ["research", "decisions", "plans", "reviews", "notes"];
+  const subdirs = ["research", "decisions", "plans", "reviews"];
   await Promise.all(
     subdirs.map((dir) => mkdir(path.join(workspace, dir), { recursive: true })),
   );
