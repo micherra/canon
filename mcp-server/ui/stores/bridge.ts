@@ -84,4 +84,12 @@ export const bridge = {
     const result = await app.callServerTool({ name, arguments: args });
     return extractToolJson(result);
   },
+
+  async sendMessage(text: string): Promise<void> {
+    if (!app) throw new Error("Bridge not initialized");
+    await app.sendMessage({
+      role: "user",
+      content: [{ type: "text", text }],
+    });
+  },
 };
