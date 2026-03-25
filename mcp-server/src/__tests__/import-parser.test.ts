@@ -152,6 +152,64 @@ describe("resolveImport", () => {
   });
 });
 
+describe("resolveImport — TS ESM .js extension convention", () => {
+  // TypeScript ESM projects write `.js` in import specifiers even though the
+  // actual source files are `.ts`. `tryResolve` must strip the fake JS
+  // extension and probe TS equivalents.
+  const allFiles = new Set([
+    "src/drift/store.ts",
+    "src/utils/helper.tsx",
+    "src/module/index.ts",
+    "src/esm/pure.mts",
+  ]);
+
+  it("resolves .js import to .ts file", () => {
+    // import { DriftStore } from "../drift/store.js"
+    const result = resolveImport("../drift/store.js", "src/tools/my-tool.ts", allFiles);
+    expect(result).toBe("src/drift/store.ts");
+  });
+
+  it("resolves .js import to .tsx file", () => {
+    // import { Helper } from "../utils/helper.js"
+    const result = resolveImport("../utils/helper.js", "src/tools/my-tool.ts", allFiles);
+    expect(result).toBe("src/utils/helper.tsx");
+  });
+
+  it("resolves .jsx import to .tsx file", () => {
+    // import { Helper } from "../utils/helper.jsx"
+    const result = resolveImport("../utils/helper.jsx", "src/tools/my-tool.ts", allFiles);
+    expect(result).toBe("src/utils/helper.tsx");
+  });
+
+  it("resolves .mjs import to .mts file", () => {
+    // import { pure } from "../esm/pure.mjs"
+    const result = resolveImport("../esm/pure.mjs", "src/tools/my-tool.ts", allFiles);
+    expect(result).toBe("src/esm/pure.mts");
+  });
+
+  it("resolves .js import that points to index.ts via directory", () => {
+    // This case: the specifier has .js but the real file is index.ts in a directory.
+    // After stripping .js we get "src/module" and index resolution finds "src/module/index.ts".
+    const result = resolveImport("../module/index.js", "src/tools/my-tool.ts", allFiles);
+    expect(result).toBe("src/module/index.ts");
+  });
+
+  it("does not break when .js file actually exists", () => {
+    const filesWithJs = new Set([
+      "src/legacy.js",
+      "src/drift/store.ts",
+    ]);
+    // exact match should win before the TS fallback is tried
+    const result = resolveImport("./legacy.js", "src/main.ts", filesWithJs);
+    expect(result).toBe("src/legacy.js");
+  });
+
+  it("returns null when neither .js nor .ts equivalent exists", () => {
+    const result = resolveImport("../nonexistent.js", "src/tools/my-tool.ts", allFiles);
+    expect(result).toBeNull();
+  });
+});
+
 describe("parseTsconfigPaths", () => {
   it("parses standard @/* alias", () => {
     const aliases = parseTsconfigPaths({ "@/*": ["./src/*"] });

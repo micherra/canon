@@ -103,6 +103,17 @@ export function parseTsconfigPaths(
   return aliases;
 }
 
+/**
+ * Mapping from JS-family extensions used in TS ESM import specifiers to the
+ * TypeScript source extensions that should be tried instead.
+ * e.g. `./store.js` → try `./store.ts` then `./store.tsx`
+ */
+const ESM_JS_TO_TS: Record<string, string[]> = {
+  ".js":  [".ts", ".tsx"],
+  ".jsx": [".tsx", ".ts"],
+  ".mjs": [".mts", ".ts"],
+};
+
 /** Try to find a file in the set with extension and index resolution */
 function tryResolve(candidate: string, allFiles: Set<string>): string | null {
   const posix = toPosix(candidate);
@@ -114,6 +125,23 @@ function tryResolve(candidate: string, allFiles: Set<string>): string | null {
     const indexPath = toPosix(join(candidate, "index" + ext));
     if (allFiles.has(indexPath)) return indexPath;
   }
+
+  // TS ESM convention: import specifiers use `.js` even though source files
+  // are `.ts`. Strip the JS extension and retry with TS equivalents.
+  for (const [jsExt, tsExts] of Object.entries(ESM_JS_TO_TS)) {
+    if (posix.endsWith(jsExt)) {
+      const base = posix.slice(0, -jsExt.length);
+      for (const tsExt of tsExts) {
+        if (allFiles.has(base + tsExt)) return base + tsExt;
+      }
+      // Also try index resolution after stripping the JS extension
+      for (const tsExt of tsExts) {
+        const indexPath = toPosix(join(base, "index" + tsExt));
+        if (allFiles.has(indexPath)) return indexPath;
+      }
+    }
+  }
+
   return null;
 }
 
