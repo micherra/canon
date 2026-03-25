@@ -969,34 +969,37 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiDir = pathJoin(__dirname, "../../ui");
 
-describe("PrReviewPrep.svelte — lib/constants import contract", () => {
+describe("PrReviewPrep.svelte — v2 container structural contract", () => {
   const sveltePath = pathJoin(uiDir, "PrReviewPrep.svelte");
 
-  it("imports truncate from lib/constants (used in error display)", () => {
+  it("v2: does NOT import truncate (error display moved to header simplification)", () => {
+    // v2 rewrite: thin container removed the truncate import — error display
+    // simplified (no partial-data error in header bar in v2 design).
+    // This test replaces the v1 truncate import assertion.
     const content = readFileSync(sveltePath, "utf-8");
-    // truncate is used for error display in header bar: truncate(data.error, 60)
-    expect(content).toContain("truncate");
-    expect(content).toContain("lib/constants");
+    // The container should NOT contain blast-standalone (moved to ImpactTabs child)
+    expect(content).not.toContain("blast-standalone");
   });
 
-  it("uses truncate() with the error field in the header bar", () => {
+  it("v2: blast_radius passed to ImpactTabs child component", () => {
+    // v2 rewrite: blast radius rendering delegated to ImpactTabs (Tab C: Critical Deps)
+    // instead of standalone panel in the container.
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("truncate(data.error");
+    expect(content).toContain("blastRadius={data.blast_radius}");
   });
 
-  it("standalone blast radius section exists for files NOT in needs-attention", () => {
-    // The Wave 2 component has a separate blast-standalone section for files
-    // whose blast radius entry is not already shown inside a needs-attention row.
+  it("v2: does NOT contain standalone blast section (moved to ImpactTabs)", () => {
+    // The Wave 2 standalone blast-standalone section is removed in v2.
+    // ImpactTabs Tab C now renders critical deps from blast_radius.
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("blast-standalone");
-    expect(content).toContain("standaloneBlast");
+    expect(content).not.toContain("standaloneBlast");
   });
 
-  it("blast radius toggle tracks expanded state by file path (not by index)", () => {
+  it("v2: does NOT contain expandedBlastRadius (moved to ImpactTabs child)", () => {
+    // v2 rewrite: blast radius toggle state now lives in ImpactTabs/DepRow.
+    // Container only passes blastRadius prop down.
     const content = readFileSync(sveltePath, "utf-8");
-    // expandedBlastRadius is a Set<string> keyed by file.path
-    expect(content).toContain("expandedBlastRadius");
-    expect(content).toContain("toggleBlastRadius");
-    expect(content).toContain("file.path");
+    expect(content).not.toContain("expandedBlastRadius");
+    expect(content).not.toContain("toggleBlastRadius");
   });
 });
