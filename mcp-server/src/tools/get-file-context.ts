@@ -324,14 +324,14 @@ export async function getFileContext(
   // Derive role from graph metrics
   let role = "internal";
   if (graph_metrics) {
-    if (graph_metrics.in_degree === 0) {
-      role = "entry point";
-    } else if (graph_metrics.out_degree === 0) {
-      role = "leaf";
-    } else if (graph_metrics.is_hub) {
+    if (graph_metrics.is_hub) {
       role = "hub";
     } else if (graph_metrics.in_cycle) {
       role = "cycle member";
+    } else if (graph_metrics.in_degree === 0) {
+      role = "entry point";
+    } else if (graph_metrics.out_degree === 0) {
+      role = "leaf";
     }
   }
 
