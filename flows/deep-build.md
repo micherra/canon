@@ -65,6 +65,8 @@ states:
     type: wave
     agent: canon-implementor
     template: implementation-log
+    effects:
+      - type: persist_decisions
     gate: test-suite
     consultations:
       before: [plan-review]

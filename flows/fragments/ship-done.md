@@ -7,6 +7,9 @@ states:
   ship:
     type: single
     agent: canon-shipper
+    effects:
+      - type: persist_decisions
+      - type: persist_patterns
     transitions:
       done: done
       blocked: hitl

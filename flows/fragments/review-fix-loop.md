@@ -12,6 +12,9 @@ states:
     type: single
     agent: canon-reviewer
     template: review-checklist
+    effects:
+      - type: persist_review
+        artifact: REVIEW.md
     transitions:
       clean: ${after_clean}
       warning: ${after_warning}

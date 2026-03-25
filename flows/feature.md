@@ -39,6 +39,8 @@ states:
     type: wave
     agent: canon-implementor
     template: implementation-log
+    effects:
+      - type: persist_decisions
     gate: test-suite
     transitions:
       done: context-sync
