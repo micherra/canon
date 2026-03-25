@@ -10,7 +10,7 @@ import { scanSourceFiles } from "../graph/scanner.ts";
 import { DriftStore } from "../drift/store.ts";
 import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.ts";
 import { isNotFound } from "../utils/errors.ts";
-import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.ts";
+import { loadCachedGraph, getNodeMetrics, computeImpactScore, type GraphMetrics } from "../graph/query.ts";
 import { toPosix, loadPathAliases } from "../utils/paths.ts";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
@@ -43,6 +43,7 @@ export interface FileBlastRadiusEntry {
   qualified_name: string;
   kind: EntityKind;
   depth: number;
+  file_path: string;
 }
 
 /** Violation detail from the most recent review that includes this file. */
@@ -67,15 +68,56 @@ export interface FileContextOutput {
   violations: FileViolationDetail[];
   /** Imports grouped by their inferred layer. */
   imports_by_layer: Record<string, string[]>;
+  /** imported_by files grouped by their inferred layer. */
+  imported_by_layer: Record<string, string[]>;
   /** All unique layer names from project config, sorted alphabetically. */
   layer_stack: string[];
   /** Derived role based on graph metrics. */
   role: string;
+  /** Shape characterization derived from graph metrics. */
+  shape: { label: string; description: string };
+  /** Maximum impact score across all nodes in the cached graph. Used for relative comparison. */
+  project_max_impact: number;
   graph_metrics?: FileGraphMetrics;
   entities?: FileEntitySummary[];
   blast_radius?: FileBlastRadiusEntry[];
 }
 
+
+/** Derive a human-readable shape characterization from graph metrics. */
+function deriveShape(metrics: FileGraphMetrics | undefined): { label: string; description: string } {
+  if (!metrics) {
+    return { label: "Internal", description: "Moderate connectivity, typical file." };
+  }
+
+  const { in_degree, out_degree, in_cycle } = metrics;
+
+  let label: string;
+  let description: string;
+
+  if (in_degree > 8 && out_degree < 4) {
+    label = "Sink";
+    description = "Many things depend on this, it depends on few. Wide blast radius.";
+  } else if (in_degree < 3 && out_degree > 8) {
+    label = "High fan-out hub";
+    description = "Depends on many, depended on by few. Changes propagate outward.";
+  } else if (in_degree > 5 && out_degree > 5) {
+    label = "Central hub";
+    description = "High connectivity in both directions. Highest-risk change surface.";
+  } else if (in_degree === 0) {
+    label = "Leaf";
+    description = "Nothing depends on this. Safe to change.";
+  } else {
+    label = "Internal";
+    description = "Moderate connectivity, typical file.";
+  }
+
+  if (in_cycle) {
+    label = `Cycle member — ${label}`;
+  }
+
+  return { label, description };
+}
 
 export async function getFileContext(
   input: FileContextInput,
@@ -100,8 +142,11 @@ export async function getFileContext(
     summary: null,
     violations: [],
     imports_by_layer: {},
+    imported_by_layer: {},
     layer_stack: [],
     role: "internal",
+    shape: { label: "Internal", description: "Moderate connectivity, typical file." },
+    project_max_impact: 0,
   });
 
   // Prevent path traversal outside the project directory
@@ -235,6 +280,7 @@ export async function getFileContext(
 
   // Load graph metrics if graph data exists
   let graph_metrics: FileGraphMetrics | undefined;
+  let project_max_impact = 0;
   const graph = await loadCachedGraph(projectDir);
   if (graph) {
     const metrics = getNodeMetrics(graph, filePath);
@@ -248,6 +294,14 @@ export async function getFileContext(
         layer_violation_count: metrics.layer_violation_count,
         impact_score: metrics.impact_score,
       };
+    }
+    // Compute the max impact score across all nodes for relative comparison
+    for (const [nodeId, inDeg] of graph.inDegree) {
+      const violations = graph.nodeViolations.get(nodeId) ?? 0;
+      const changed = graph.nodeChanged.get(nodeId) ?? false;
+      const layer = graph.nodeLayer.get(nodeId) ?? "unknown";
+      const score = computeImpactScore(inDeg, violations, changed, layer);
+      if (score > project_max_impact) project_max_impact = score;
     }
   }
 
@@ -281,12 +335,16 @@ export async function getFileContext(
 
         if (exportedIds.length > 0) {
           const blastRows = query.getBlastRadius(exportedIds);
-          blast_radius = blastRows.map((r) => ({
-            name: r.name,
-            qualified_name: r.qualified_name,
-            kind: r.kind,
-            depth: r.depth,
-          }));
+          blast_radius = blastRows.map((r) => {
+            const fileRow = store.getFileById(r.file_id);
+            return {
+              name: r.name,
+              qualified_name: r.qualified_name,
+              kind: r.kind,
+              depth: r.depth,
+              file_path: fileRow?.path ?? "",
+            };
+          });
         } else {
           blast_radius = [];
         }
@@ -318,6 +376,14 @@ export async function getFileContext(
     imports_by_layer[impLayer].push(imp);
   }
 
+  // Group imported_by by layer
+  const imported_by_layer: Record<string, string[]> = {};
+  for (const dep of imported_by) {
+    const depLayer = inferLayer(dep) || "unknown";
+    if (!imported_by_layer[depLayer]) imported_by_layer[depLayer] = [];
+    imported_by_layer[depLayer].push(dep);
+  }
+
   // Derive layer_stack from layer mappings config
   const layer_stack: string[] = Object.keys(layerMappings).sort();
 
@@ -335,6 +401,9 @@ export async function getFileContext(
     }
   }
 
+  // Derive shape characterization from graph metrics
+  const shape = deriveShape(graph_metrics);
+
   return {
     file_path: filePath,
     layer,
@@ -347,8 +416,11 @@ export async function getFileContext(
     summary,
     violations,
     imports_by_layer,
+    imported_by_layer,
     layer_stack,
     role,
+    shape,
+    project_max_impact,
     graph_metrics,
     ...(entities !== undefined && { entities }),
     ...(blast_radius !== undefined && { blast_radius }),

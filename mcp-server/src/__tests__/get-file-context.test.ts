@@ -373,4 +373,213 @@ describe("getFileContext", () => {
       expect(result.role).toBe("internal");
     });
   });
+
+  describe("imported_by_layer field", () => {
+    it("returns empty object when nothing imports this file", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.imported_by_layer).toEqual({});
+    });
+
+    it("groups imported_by files by their inferred layer", async () => {
+      await writeFile(
+        join(tmpDir, ".canon", "config.json"),
+        JSON.stringify({ source_dirs: ["src"], layers: { api: ["src/api"], services: ["src/services"], utils: ["src/utils"] } }),
+      );
+      await writeFile(
+        join(tmpDir, "src", "utils", "helper.ts"),
+        `export function helper() {}`,
+      );
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `import { helper } from '../utils/helper';`,
+      );
+      await writeFile(
+        join(tmpDir, "src", "services", "svc.ts"),
+        `import { helper } from '../utils/helper';`,
+      );
+
+      const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
+
+      expect(result.imported_by_layer).toBeDefined();
+      const layers = Object.keys(result.imported_by_layer);
+      expect(layers).toContain("api");
+      expect(layers).toContain("services");
+      expect(result.imported_by_layer["api"]).toContain("src/api/handler.ts");
+      expect(result.imported_by_layer["services"]).toContain("src/services/svc.ts");
+    });
+
+    it("keeps the flat imported_by array alongside imported_by_layer", async () => {
+      await writeFile(
+        join(tmpDir, ".canon", "config.json"),
+        JSON.stringify({ source_dirs: ["src"], layers: { api: ["src/api"], utils: ["src/utils"] } }),
+      );
+      await writeFile(
+        join(tmpDir, "src", "utils", "helper.ts"),
+        `export function helper() {}`,
+      );
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `import { helper } from '../utils/helper';`,
+      );
+
+      const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
+
+      expect(result.imported_by).toContain("src/api/handler.ts");
+      expect(result.imported_by_layer["api"]).toContain("src/api/handler.ts");
+    });
+  });
+
+  describe("shape field", () => {
+    it("returns Internal shape when no graph metrics available", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.shape).toBeDefined();
+      expect(result.shape.label).toBe("Internal");
+      expect(result.shape.description).toBeTruthy();
+    });
+
+    it("always returns a shape with label and description fields", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(typeof result.shape.label).toBe("string");
+      expect(typeof result.shape.description).toBe("string");
+      expect(result.shape.label.length).toBeGreaterThan(0);
+      expect(result.shape.description.length).toBeGreaterThan(0);
+    });
+
+    it("returns Sink shape for high in_degree, low out_degree node", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+      // Build a graph where handler.ts has in_degree=10, out_degree=1
+      const nodes = [
+        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
+        ...Array.from({ length: 10 }, (_, i) => ({ id: `src/services/svc${i}.ts`, layer: "services", violation_count: 0, changed: false })),
+        { id: "src/utils/helper.ts", layer: "utils", violation_count: 0, changed: false },
+      ];
+      const edges = [
+        // 10 files depend on handler.ts (in_degree=10)
+        ...Array.from({ length: 10 }, (_, i) => ({ source: `src/services/svc${i}.ts`, target: "src/api/handler.ts" })),
+        // handler.ts depends on 1 file (out_degree=1)
+        { source: "src/api/handler.ts", target: "src/utils/helper.ts" },
+      ];
+      await writeFile(
+        join(tmpDir, ".canon", "graph-data.json"),
+        JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.shape.label).toBe("Sink");
+    });
+
+    it("returns High fan-out hub shape for low in_degree, high out_degree node", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+      // Build a graph where handler.ts has in_degree=1, out_degree=10
+      const nodes = [
+        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
+        { id: "src/services/caller.ts", layer: "services", violation_count: 0, changed: false },
+        ...Array.from({ length: 10 }, (_, i) => ({ id: `src/utils/dep${i}.ts`, layer: "utils", violation_count: 0, changed: false })),
+      ];
+      const edges = [
+        // 1 file depends on handler.ts (in_degree=1)
+        { source: "src/services/caller.ts", target: "src/api/handler.ts" },
+        // handler.ts depends on 10 files (out_degree=10)
+        ...Array.from({ length: 10 }, (_, i) => ({ source: "src/api/handler.ts", target: `src/utils/dep${i}.ts` })),
+      ];
+      await writeFile(
+        join(tmpDir, ".canon", "graph-data.json"),
+        JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.shape.label).toBe("High fan-out hub");
+    });
+
+    it("returns Leaf shape for in_degree=0 node", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+      // Build a graph where handler.ts has in_degree=0
+      const nodes = [
+        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
+        { id: "src/utils/helper.ts", layer: "utils", violation_count: 0, changed: false },
+      ];
+      const edges = [
+        // handler.ts imports helper (out_degree=1 for handler, in_degree=0 still since nothing imports handler)
+        { source: "src/api/handler.ts", target: "src/utils/helper.ts" },
+      ];
+      await writeFile(
+        join(tmpDir, ".canon", "graph-data.json"),
+        JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.shape.label).toBe("Leaf");
+    });
+
+    it("prefixes shape label with 'Cycle member — ' when in cycle", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+      const nodes = [
+        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
+        { id: "src/services/svc.ts", layer: "services", violation_count: 0, changed: false },
+      ];
+      const edges = [
+        { source: "src/api/handler.ts", target: "src/services/svc.ts" },
+        { source: "src/services/svc.ts", target: "src/api/handler.ts" },
+      ];
+      await writeFile(
+        join(tmpDir, ".canon", "graph-data.json"),
+        JSON.stringify({
+          nodes,
+          edges,
+          insights: { circular_dependencies: [["src/api/handler.ts", "src/services/svc.ts"]] },
+          generated_at: new Date().toISOString(),
+        }),
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.shape.label).toMatch(/^Cycle member — /);
+    });
+  });
+
+  describe("project_max_impact field", () => {
+    it("returns 0 when no graph data available", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.project_max_impact).toBe(0);
+    });
+  });
 });
