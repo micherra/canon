@@ -11,11 +11,10 @@ import { reviewCode } from "./tools/review-code.js";
 import { getCompliance } from "./tools/get-compliance.js";
 import { report } from "./tools/report.js";
 import { getPrReviewData } from "./tools/pr-review-data.js";
-import { codebaseGraph, summarizeGraph } from "./tools/codebase-graph.js";
+import { codebaseGraph } from "./tools/codebase-graph.js";
 import { getFileContext } from "./tools/get-file-context.js";
 import { storeSummaries } from "./tools/store-summaries.js";
 
-import { getDashboardSelection } from "./tools/get-dashboard-selection.js";
 import { getDriftReport } from "./tools/get-drift-report.js";
 import { getDecisions } from "./tools/get-decisions.js";
 import { getPatterns } from "./tools/get-patterns.js";
@@ -32,13 +31,6 @@ import { getWaveBulletin } from "./tools/get-wave-bulletin.js";
 import { injectWaveEvent } from "./tools/inject-wave-event.js";
 import { storePrReview } from "./tools/store-pr-review.js";
 import { graphQuery } from "./tools/graph-query.js";
-import { reindexFileTool } from "./tools/reindex-file.js";
-import { updateDashboardState } from "./tools/update-dashboard-state.js";
-import { getBranch } from "./tools/get-branch.js";
-import { getFileContent } from "./tools/get-file-content.js";
-import { getSummary } from "./tools/get-summary.js";
-import { getComplianceTrend } from "./tools/get-compliance-trend.js";
-import { getPrReviews } from "./tools/get-pr-reviews.js";
 import { showPrImpact } from "./tools/show-pr-impact.js";
 import { getFlowRuns, computeAnalytics } from "./drift/analytics.js";
 import { reportInputSchema } from "./schema.js";
@@ -68,85 +60,41 @@ function jsonResponse(result: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
 }
 
-// --- MCP App: open_dashboard tool + ui://canon/dashboard resource ---
+/** Helper to register a tool + resource pair for an MCP App UI. */
+function registerToolWithUi(
+  toolName: string,
+  resourceUri: string,
+  title: string,
+  description: string,
+  inputSchema: any,
+  htmlFile: string,
+  handler: (input: any) => Promise<ReturnType<typeof jsonResponse>>,
+) {
+  registerAppTool(server, toolName, {
+    title,
+    description,
+    inputSchema,
+    _meta: { ui: { resourceUri } },
+  }, handler);
 
-const dashboardResourceUri = "ui://canon/dashboard";
+  registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
+    const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
+    return { contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }] };
+  });
+}
 
-registerAppTool(
-  server,
-  "open_dashboard",
-  {
-    title: "Canon Dashboard",
-    description:
-      "Opens the Canon dependency graph dashboard with architecture insights, compliance overlay, and impact analysis.",
-    inputSchema: {},
-    _meta: { ui: { resourceUri: dashboardResourceUri } },
-  },
-  async () => {
-    // Return cached graph summary from disk if available; otherwise a status prompt.
-    try {
-      const graphJson = await readFile(join(projectDir, ".canon", "graph-data.json"), "utf-8");
-      const graph = JSON.parse(graphJson);
-      return jsonResponse(summarizeGraph(graph));
-    } catch {
-      return jsonResponse({ status: "no_graph", message: "Run codebase_graph first to generate the dependency graph." });
-    }
-  },
-);
+// --- MCP App tool UIs ---
 
-registerAppResource(
-  server,
-  "Canon Dashboard",
-  dashboardResourceUri,
-  { mimeType: RESOURCE_MIME_TYPE },
-  async () => {
-    const html = await readFile(
-      join(mcpServerRoot, "dist", "ui", "mcp-app.html"),
-      "utf-8",
-    );
-    return {
-      contents: [{ uri: dashboardResourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }],
-    };
-  },
-);
-
-// --- MCP App: show_pr_impact tool + ui://canon/pr-impact resource ---
-
-const prImpactResourceUri = "ui://canon/pr-impact";
-
-registerAppTool(
-  server,
+registerToolWithUi(
   "show_pr_impact",
-  {
-    title: "PR Impact Analysis",
-    description:
-      "Opens the PR Impact View showing blast radius, hotspots, violations, and dependency subgraph for the most recent Canon PR review.",
-    inputSchema: {},
-    _meta: { ui: { resourceUri: prImpactResourceUri } },
-  },
-  async () => {
-    try {
-      const payload = await showPrImpact(projectDir);
-      return jsonResponse(payload);
-    } catch (e) {
-      return jsonResponse({ status: "error", message: String(e) });
-    }
-  },
-);
-
-registerAppResource(
-  server,
+  "ui://canon/pr-impact",
   "PR Impact Analysis",
-  prImpactResourceUri,
-  { mimeType: RESOURCE_MIME_TYPE },
+  "Opens the PR Impact View showing blast radius, hotspots, violations, and dependency subgraph for the most recent Canon PR review.",
+  {},
+  "pr-impact.html",
   async () => {
-    const html = await readFile(
-      join(mcpServerRoot, "dist", "ui", "pr-impact.html"),
-      "utf-8",
-    );
-    return {
-      contents: [{ uri: prImpactResourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }],
-    };
+    const result = await showPrImpact(projectDir);
+    return jsonResponse(result);
   },
 );
 
@@ -203,18 +151,19 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+registerToolWithUi(
   "get_compliance",
+  "ui://canon/compliance",
+  "Compliance",
+  "Returns compliance stats for a specific Canon principle. Shows violation counts, compliance rate, trend, and weekly history.",
   {
-    description: "Returns compliance stats for a specific Canon principle. Shows violation counts, compliance rate, and trend.",
-    inputSchema: {
-      principle_id: z.string().describe("ID of the principle to check compliance for"),
-    },
+    principle_id: z.string().describe("ID of the principle to check compliance for"),
   },
+  "compliance.html",
   async (input) => {
     const result = await getCompliance(input, projectDir, pluginDir);
     return jsonResponse(result);
-  }
+  },
 );
 
 // Tool: report (unified — decisions, patterns, and reviews)
@@ -231,54 +180,57 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+registerToolWithUi(
   "get_pr_review_data",
+  "ui://canon/pr-review-prep",
+  "PR Review Prep",
+  "Get PR review data — file list, layer grouping, diff command, and graph-aware review priority for a pull request or branch review.",
   {
-    description: "Get PR review data — file list, layer grouping, diff command, and graph-aware review priority for a pull request or branch review.",
-    inputSchema: {
-      pr_number: z.number().optional().describe("GitHub PR number"),
-      branch: z.string().optional().describe("Branch name to review"),
-      diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
-      incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
-    },
+    pr_number: z.number().optional().describe("GitHub PR number"),
+    branch: z.string().optional().describe("Branch name to review"),
+    diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
+    incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
   },
+  "pr-review-prep.html",
   async (input) => {
     const result = await getPrReviewData(input, projectDir);
     return jsonResponse(result);
-  }
+  },
 );
 
-server.registerTool(
+registerToolWithUi(
   "codebase_graph",
+  "ui://canon/codebase-graph",
+  "Codebase Graph",
+  "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, violations, insights).",
   {
-    description: "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, violations, insights).",
-    inputSchema: {
-      root_dir: z.string().optional().describe("Fallback root directory to scan when no source_dirs are configured. Ignored if source_dirs exist in input or .canon/config.json."),
-      source_dirs: z.array(z.string()).optional().describe("Directories to scan (e.g. ['src', 'lib']). Overrides .canon/config.json source_dirs."),
-      include_extensions: z.array(z.string()).optional().describe("File extensions to include (default: ts, js, py, go, rs)"),
-      exclude_dirs: z.array(z.string()).optional().describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
-      diff_base: z.string().optional().describe("Git ref to diff against — marks changed files in the graph"),
-      changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
-    },
+    root_dir: z.string().optional().describe("Fallback root directory to scan when no source_dirs are configured. Ignored if source_dirs exist in input or .canon/config.json."),
+    source_dirs: z.array(z.string()).optional().describe("Directories to scan (e.g. ['src', 'lib']). Overrides .canon/config.json source_dirs."),
+    include_extensions: z.array(z.string()).optional().describe("File extensions to include (default: ts, js, py, go, rs)"),
+    exclude_dirs: z.array(z.string()).optional().describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
+    diff_base: z.string().optional().describe("Git ref to diff against — marks changed files in the graph"),
+    changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
   },
+  "codebase-graph.html",
   async (input) => {
     const result = await codebaseGraph(input, projectDir, pluginDir);
-    return jsonResponse(summarizeGraph(result));
-  }
+    return jsonResponse(result);
+  },
 );
 
-server.registerTool(
+registerToolWithUi(
   "get_file_context",
+  "ui://canon/file-context",
+  "File Context",
+  "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data.",
   {
-    description: "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data. Use this to understand a file before generating a summary.",
-    inputSchema: {
-      file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
-    },
+    file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
   },
+  "file-context.html",
   async (input) => {
     const result = await getFileContext(input, projectDir);
     return jsonResponse(result);
-  }
+  },
 );
 
 server.registerTool(
@@ -298,32 +250,21 @@ server.registerTool(
   }
 );
 
-server.registerTool(
-  "get_dashboard_selection",
-  {
-    description: "Returns the user's current focus from the Canon dashboard — the selected graph node AND the active editor file with matched principles. Call this at the start of a conversation to understand what the user is working on. Returns layer, summary, dependencies, dependents, content preview, and top 3 principles for the active file.",
-    inputSchema: {},
-  },
-  async () => {
-    const result = await getDashboardSelection(projectDir, pluginDir);
-    return jsonResponse(result);
-  }
-);
-
-server.registerTool(
+registerToolWithUi(
   "get_drift_report",
+  "ui://canon/drift-report",
+  "Drift Report",
+  "Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, and PR review history.",
   {
-    description: "Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, and recommendations. Covers all principles across all reviews.",
-    inputSchema: {
-      last_n: z.number().optional().describe("Only analyze the last N reviews"),
-      principle_id: z.string().optional().describe("Filter to a specific principle"),
-      directory: z.string().optional().describe("Filter to files in a specific directory"),
-    },
+    last_n: z.number().optional().describe("Only analyze the last N reviews"),
+    principle_id: z.string().optional().describe("Filter to a specific principle"),
+    directory: z.string().optional().describe("Filter to files in a specific directory"),
   },
+  "drift-report.html",
   async (input) => {
     const result = await getDriftReport(input, projectDir, pluginDir);
     return jsonResponse(result);
-  }
+  },
 );
 
 server.registerTool(
@@ -609,45 +550,32 @@ server.registerTool(
   }
 );
 
-server.registerTool(
+registerToolWithUi(
   "graph_query",
+  "ui://canon/graph-query",
+  "Graph Query",
+  "Query the codebase knowledge graph for callers, callees, blast radius, dead code, search, and more. Requires the knowledge graph to be built first via codebase_graph.",
   {
-    description: "Query the codebase knowledge graph for callers, callees, blast radius, dead code, search, and more. Requires the knowledge graph to be built first via codebase_graph.",
-    inputSchema: {
-      query_type: z
-        .enum(['callers', 'callees', 'blast_radius', 'dead_code', 'search', 'ancestors'])
-        .describe('Type of query to perform'),
-      target: z
-        .string()
-        .optional()
-        .describe('Target entity name or file path (not needed for dead_code)'),
-      options: z
-        .object({
-          max_depth: z.number().int().min(1).max(10).optional().describe('Max depth for blast_radius (default 3)'),
-          limit: z.number().int().min(1).max(500).optional().describe('Max results for search (default 50)'),
-          include_tests: z.boolean().optional().describe('Include test files in dead_code results'),
-        })
-        .optional(),
-    },
+    query_type: z
+      .enum(['callers', 'callees', 'blast_radius', 'dead_code', 'search', 'ancestors'])
+      .describe('Type of query to perform'),
+    target: z
+      .string()
+      .optional()
+      .describe('Target entity name or file path (not needed for dead_code)'),
+    options: z
+      .object({
+        max_depth: z.number().int().min(1).max(10).optional().describe('Max depth for blast_radius (default 3)'),
+        limit: z.number().int().min(1).max(500).optional().describe('Max results for search (default 50)'),
+        include_tests: z.boolean().optional().describe('Include test files in dead_code results'),
+      })
+      .optional(),
   },
+  "graph-query.html",
   async (input) => {
     const result = graphQuery(input, projectDir);
     return jsonResponse(result);
-  }
-);
-
-server.registerTool(
-  "reindex_file",
-  {
-    description: "Incrementally reindex a single file in the knowledge graph. Updates entity and edge data for the given file, then rematerializes graph-data.json. Handles missing files (deletion), path traversal rejection, and DB initialization.",
-    inputSchema: {
-      file_path: z.string().describe("Project-relative path to the file to reindex (e.g. 'src/tools/my-tool.ts')"),
-    },
   },
-  async (input) => {
-    const result = await reindexFileTool(input, projectDir);
-    return jsonResponse(result);
-  }
 );
 
 server.registerTool(
@@ -663,118 +591,6 @@ server.registerTool(
     const analytics = computeAnalytics(runs);
     return jsonResponse(analytics);
   }
-);
-
-// --- Dashboard support tools (called by MCP App iframe via app.callServerTool()) ---
-
-registerAppTool(
-  server,
-  "update_dashboard_state",
-  {
-    description:
-      "Write the currently selected graph node to .canon/dashboard-state.json. Called by the Canon dashboard to persist user selection so get_dashboard_selection can read it.",
-    inputSchema: {
-      selectedNode: z
-        .object({
-          id: z.string().min(1).describe("Project-relative file path of the selected node"),
-          layer: z.string(),
-          summary: z.string(),
-          violation_count: z.number().int().min(0),
-        })
-        .nullable()
-        .optional()
-        .describe("The selected node, or null to clear the selection"),
-    },
-    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
-  },
-  async (input) => {
-    const result = await updateDashboardState(input, projectDir);
-    return jsonResponse(result);
-  },
-);
-
-registerAppTool(
-  server,
-  "get_branch",
-  {
-    description: "Returns the current git branch name. Used by the Canon dashboard to display context.",
-    inputSchema: {},
-    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
-  },
-  async () => {
-    const result = await getBranch(projectDir);
-    return jsonResponse(result);
-  },
-);
-
-registerAppTool(
-  server,
-  "get_file_content",
-  {
-    description:
-      "Read the content of a file within the project directory. Rejects path traversal attempts. Returns null content with an error message when the file is missing or the path is invalid.",
-    inputSchema: {
-      file_path: z.string().min(1).describe("Project-relative file path (e.g. 'src/tools/my-tool.ts')"),
-    },
-    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
-  },
-  async (input) => {
-    const result = await getFileContent(input, projectDir);
-    return jsonResponse(result);
-  },
-);
-
-registerAppTool(
-  server,
-  "get_summary",
-  {
-    description:
-      "Return the stored summary for a file from .canon/summaries.json. Falls back to the first 5 lines of the file when no summary is stored.",
-    inputSchema: {
-      file_id: z
-        .string()
-        .min(1)
-        .describe("Project-relative file path (key used in summaries.json)"),
-    },
-    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
-  },
-  async (input) => {
-    const result = await getSummary(input, projectDir);
-    return jsonResponse(result);
-  },
-);
-
-registerAppTool(
-  server,
-  "get_compliance_trend",
-  {
-    description:
-      "Compute the weekly compliance pass rate for a principle from .canon/reviews.jsonl. Returns an array of { week, pass_rate } points sorted by week.",
-    inputSchema: {
-      principle_id: z.string().min(1).describe("ID of the principle to compute trend for"),
-    },
-    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app"] } },
-  },
-  async (input) => {
-    const result = await getComplianceTrend(input, projectDir);
-    return jsonResponse(result);
-  },
-);
-
-// get_pr_reviews: dual visibility — LLM-visible AND app-callable (user decision)
-registerAppTool(
-  server,
-  "get_pr_reviews",
-  {
-    description:
-      "Return stored PR reviews from .canon/pr-reviews.jsonl. Each entry includes verdict, violations, score, and file list. Use this to review Canon's audit history for pull requests.",
-    inputSchema: {},
-    _meta: { ui: { resourceUri: dashboardResourceUri, visibility: ["app", "model"] } },
-  },
-  async () => {
-    const result = await getPrReviews(projectDir);
-    return jsonResponse(result);
-  },
 );
 
 // Start the server
