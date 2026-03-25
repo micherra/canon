@@ -116,6 +116,10 @@ export function truncateProgress(content: string, maxEntries: number): string {
     return content;
   }
 
+  if (maxEntries <= 0) {
+    return [...headerLines, ...trailingLines].join("\n");
+  }
+
   const keptEntries = entryLines.slice(-maxEntries);
   return [...headerLines, ...keptEntries, ...trailingLines].join("\n");
 }
