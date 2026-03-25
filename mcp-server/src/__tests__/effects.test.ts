@@ -6,8 +6,8 @@ import {
   executeEffects,
   parseReviewArtifact,
   parseDecisionsFromSummary,
-} from "../orchestration/effects.js";
-import type { StateDefinition } from "../orchestration/flow-schema.js";
+} from "../orchestration/effects.ts";
+import type { StateDefinition } from "../orchestration/flow-schema.ts";
 
 const SAMPLE_REVIEW = `---
 verdict: "WARNING"

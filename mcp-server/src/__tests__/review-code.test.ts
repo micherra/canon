@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { reviewCode } from "../tools/review-code.js";
+import { reviewCode } from "../tools/review-code.ts";
 
 describe("reviewCode", () => {
   let tmpDir: string;

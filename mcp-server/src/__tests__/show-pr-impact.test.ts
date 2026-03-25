@@ -38,12 +38,12 @@ vi.mock("../graph/kg-blast-radius.js", () => ({
 }));
 
 import { existsSync } from "fs";
-import { initDatabase } from "../graph/kg-schema.js";
-import { analyzeBlastRadius } from "../graph/kg-blast-radius.js";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 
-import { showPrImpact } from "../tools/show-pr-impact.js";
-import { PrStore } from "../drift/pr-store.js";
-import { DriftStore } from "../drift/store.js";
+import { showPrImpact } from "../tools/show-pr-impact.ts";
+import { PrStore } from "../drift/pr-store.ts";
+import { DriftStore } from "../drift/store.ts";
 
 // ---------------------------------------------------------------------------
 // Shared test fixtures

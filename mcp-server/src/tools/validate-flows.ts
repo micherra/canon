@@ -1,7 +1,7 @@
-import { loadAndResolveFlow, buildStateGraph } from "../orchestration/flow-parser.js";
+import { loadAndResolveFlow, buildStateGraph } from "../orchestration/flow-parser.ts";
 import { readdir } from "fs/promises";
 import { resolve } from "path";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 export interface ValidateFlowsInput {
   flow_name?: string;

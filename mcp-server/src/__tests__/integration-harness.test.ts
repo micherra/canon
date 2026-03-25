@@ -29,16 +29,16 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { reportResult } from "../tools/report-result.js";
-import { updateBoard } from "../tools/update-board.js";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.js";
-import { checkConvergence } from "../tools/check-convergence.js";
-import { filterCannotFix } from "../orchestration/convergence.js";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { writeBoard, initBoard, readBoard } from "../orchestration/board.js";
-import { BoardSchema } from "../orchestration/flow-schema.js";
-import type { FlowEventMap } from "../orchestration/events.js";
-import type { ResolvedFlow, Board } from "../orchestration/flow-schema.js";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { checkConvergence } from "../tools/check-convergence.ts";
+import { filterCannotFix } from "../orchestration/convergence.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { writeBoard, initBoard, readBoard } from "../orchestration/board.ts";
+import { BoardSchema } from "../orchestration/flow-schema.ts";
+import type { FlowEventMap } from "../orchestration/events.ts";
+import type { ResolvedFlow, Board } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,7 +1,7 @@
 import { join } from "path";
-import type { PrReviewEntry } from "../schema.js";
-import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.js";
-import { CANON_DIR } from "../constants.js";
+import type { PrReviewEntry } from "../schema.ts";
+import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.ts";
+import { CANON_DIR } from "../constants.ts";
 
 export class PrStore {
   private reviewsPath: string;

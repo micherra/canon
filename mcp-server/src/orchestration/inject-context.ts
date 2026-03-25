@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { Board, ContextInjection } from "./flow-schema.js";
+import type { Board, ContextInjection } from "./flow-schema.ts";
 
 interface InjectionResult {
   variables: Record<string, string>;

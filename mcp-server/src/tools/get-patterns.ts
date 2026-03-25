@@ -1,4 +1,4 @@
-import { DriftStore } from "../drift/store.js";
+import { DriftStore } from "../drift/store.ts";
 
 export interface GetPatternsInput {
   limit?: number;

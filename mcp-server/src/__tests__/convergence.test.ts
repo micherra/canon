@@ -2,11 +2,11 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { canEnterState, filterCannotFix } from "../orchestration/convergence.js";
-import { reportResult } from "../tools/report-result.js";
-import { checkConvergence } from "../tools/check-convergence.js";
-import { writeBoard, initBoard } from "../orchestration/board.js";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.js";
+import { canEnterState, filterCannotFix } from "../orchestration/convergence.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { checkConvergence } from "../tools/check-convergence.ts";
+import { writeBoard, initBoard } from "../orchestration/board.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {

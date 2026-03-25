@@ -49,20 +49,20 @@ vi.mock("node:fs", () => ({
 // Imports after mocks
 // ---------------------------------------------------------------------------
 
-import { resolveGateCommand, runGate } from "../orchestration/gate-runner.js";
+import { resolveGateCommand, runGate } from "../orchestration/gate-runner.ts";
 import {
   initBoard,
   recordConsultationResult,
   recordGateResult,
-} from "../orchestration/board.js";
+} from "../orchestration/board.ts";
 import {
   executeConsultations,
   resolveConsultationPrompt,
   type ConsultationInput,
-} from "../orchestration/consultation-executor.js";
-import { assembleWaveBriefing } from "../orchestration/wave-briefing.js";
-import { escapeDollarBrace } from "../orchestration/wave-variables.js";
-import type { ResolvedFlow, Board, ConsultationResult } from "../orchestration/flow-schema.js";
+} from "../orchestration/consultation-executor.ts";
+import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
+import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
+import type { ResolvedFlow, Board, ConsultationResult } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,4 +1,4 @@
-import { type DriftReport } from "./analyzer.js";
+import { type DriftReport } from "./analyzer.ts";
 
 export function formatDriftReport(report: DriftReport): string {
   const lines: string[] = [];

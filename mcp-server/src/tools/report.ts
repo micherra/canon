@@ -1,7 +1,7 @@
-import { DriftStore } from "../drift/store.js";
-import { generateId } from "../utils/id.js";
-import type { ReportInput, DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
-export { reportInputSchema, type ReportInput } from "../schema.js";
+import { DriftStore } from "../drift/store.ts";
+import { generateId } from "../utils/id.ts";
+import type { ReportInput, DecisionEntry, PatternEntry, ReviewEntry } from "../schema.ts";
+export { reportInputSchema, type ReportInput } from "../schema.ts";
 
 export interface ReportOutput {
   recorded: boolean;

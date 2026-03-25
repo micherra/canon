@@ -1,5 +1,5 @@
-import { DriftStore } from "../drift/store.js";
-import type { DecisionEntry } from "../schema.js";
+import { DriftStore } from "../drift/store.ts";
+import type { DecisionEntry } from "../schema.ts";
 
 export interface GetDecisionsInput {
   principle_id?: string;

@@ -13,8 +13,8 @@
  * but this module does not enforce it.
  */
 
-import type { ConsultationFragment, ConsultationResult, ResolvedFlow } from "./flow-schema.js";
-import { substituteVariables } from "./variables.js";
+import type { ConsultationFragment, ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
+import { substituteVariables } from "./variables.ts";
 
 export interface ConsultationInput {
   consultationNames: string[];

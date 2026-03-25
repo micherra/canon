@@ -10,8 +10,8 @@ import {
   acquireLock,
   releaseLock,
   writeSession,
-} from "../orchestration/workspace.js";
-import type { Session } from "../orchestration/flow-schema.js";
+} from "../orchestration/workspace.ts";
+import type { Session } from "../orchestration/flow-schema.ts";
 
 let tmpDir: string;
 

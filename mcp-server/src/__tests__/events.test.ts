@@ -6,8 +6,8 @@ import {
   FlowEventBus,
   createMetricsAccumulator,
   createJsonlLogger,
-} from "../orchestration/events.js";
-import type { FlowEventMap } from "../orchestration/events.js";
+} from "../orchestration/events.ts";
+import type { FlowEventMap } from "../orchestration/events.ts";
 
 describe("FlowEventBus", () => {
   let bus: FlowEventBus;

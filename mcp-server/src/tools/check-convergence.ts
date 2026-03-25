@@ -4,9 +4,9 @@
  * and surfaces cannot-fix items and history.
  */
 
-import { readBoard } from "../orchestration/board.js";
-import { canEnterState } from "../orchestration/convergence.js";
-import type { CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.js";
+import { readBoard } from "../orchestration/board.ts";
+import { canEnterState } from "../orchestration/convergence.ts";
+import type { CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
 
 interface CheckConvergenceInput {
   workspace: string;

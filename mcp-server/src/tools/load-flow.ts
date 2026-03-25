@@ -1,5 +1,5 @@
-import { loadAndResolveFlow, buildStateGraph } from "../orchestration/flow-parser.js";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+import { loadAndResolveFlow, buildStateGraph } from "../orchestration/flow-parser.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 export interface LoadFlowInput {
   flow_name: string;

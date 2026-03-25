@@ -1,7 +1,7 @@
 import { join } from "path";
-import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
-import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.js";
-import { CANON_DIR } from "../constants.js";
+import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.ts";
+import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.ts";
+import { CANON_DIR } from "../constants.ts";
 
 export interface WeeklyTrendPoint {
   week: string; // ISO week: "2026-W12"
@@ -99,7 +99,7 @@ export class DriftStore {
 }
 
 /** Convert an ISO timestamp to ISO week string (e.g., "2026-W12"). */
-function toISOWeek(timestamp: string): string {
+export function toISOWeek(timestamp: string): string {
   const date = new Date(timestamp);
   // Thursday-based ISO week calculation
   const jan4 = new Date(date.getFullYear(), 0, 4);

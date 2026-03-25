@@ -9,11 +9,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { reportResult } from "../tools/report-result.js";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { writeBoard, initBoard } from "../orchestration/board.js";
-import type { FlowEventMap } from "../orchestration/events.js";
-import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.js";
+import { reportResult } from "../tools/report-result.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { writeBoard, initBoard } from "../orchestration/board.ts";
+import type { FlowEventMap } from "../orchestration/events.ts";
+import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

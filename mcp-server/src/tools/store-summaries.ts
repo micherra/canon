@@ -2,9 +2,9 @@
 
 import { readFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
-import { atomicWriteFile } from "../utils/atomic-write.js";
-import { CANON_DIR, CANON_FILES } from "../constants.js";
-import { isNotFound } from "../utils/errors.js";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { isNotFound } from "../utils/errors.ts";
 
 export interface SummaryEntry {
   summary: string;

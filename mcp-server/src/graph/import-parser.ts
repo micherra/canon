@@ -1,6 +1,6 @@
 import { dirname, join, normalize } from "path";
-import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../constants.js";
-import { toPosix } from "../utils/paths.js";
+import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../constants.ts";
+import { toPosix } from "../utils/paths.ts";
 
 /** Registry of import extractors by file extension. Add new languages here. */
 const importExtractors = new Map<string, (content: string) => string[]>();

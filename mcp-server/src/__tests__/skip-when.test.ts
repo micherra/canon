@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Board } from "../orchestration/flow-schema.js";
-import { evaluateSkipWhen, matchGlob } from "../orchestration/skip-when.js";
+import type { Board } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen, matchGlob } from "../orchestration/skip-when.ts";
 
 // Hoist the mock factory so it runs before module import.
 // spawnSyncImpl is a mutable reference we swap per test.

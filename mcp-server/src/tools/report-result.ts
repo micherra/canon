@@ -11,20 +11,20 @@ import {
   buildHistoryEntry,
   isStuck,
   aggregateParallelPerResults,
-} from "../orchestration/transitions.js";
+} from "../orchestration/transitions.ts";
 import {
   readBoard,
   writeBoard,
   completeState,
   setBlocked,
-} from "../orchestration/board.js";
-import { canEnterState } from "../orchestration/convergence.js";
-import { withBoardLock } from "../orchestration/workspace.js";
-import type { Board, ResolvedFlow, CannotFixItem } from "../orchestration/flow-schema.js";
-import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.js";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { createJsonlLogger } from "../orchestration/events.js";
-import { executeEffects } from "../orchestration/effects.js";
+} from "../orchestration/board.ts";
+import { canEnterState } from "../orchestration/convergence.ts";
+import { withBoardLock } from "../orchestration/workspace.ts";
+import type { Board, ResolvedFlow, CannotFixItem } from "../orchestration/flow-schema.ts";
+import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { createJsonlLogger } from "../orchestration/events.ts";
+import { executeEffects } from "../orchestration/effects.ts";
 
 interface ReportResultInput {
   workspace: string;

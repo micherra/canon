@@ -1,12 +1,12 @@
-import { readBoard, writeBoard, enterState, completeState, setBlocked } from "../orchestration/board.js";
-import { withBoardLock, writeSession } from "../orchestration/workspace.js";
-import { SessionSchema, type Board } from "../orchestration/flow-schema.js";
+import { readBoard, writeBoard, enterState, completeState, setBlocked } from "../orchestration/board.ts";
+import { withBoardLock, writeSession } from "../orchestration/workspace.ts";
+import { SessionSchema, type Board } from "../orchestration/flow-schema.ts";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { createJsonlLogger } from "../orchestration/events.js";
-import { appendFlowRun, type FlowRunEntry } from "../drift/analytics.js";
-import { generateId } from "../utils/id.js";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { createJsonlLogger } from "../orchestration/events.ts";
+import { appendFlowRun, type FlowRunEntry } from "../drift/analytics.ts";
+import { generateId } from "../utils/id.ts";
 
 interface UpdateBoardInput {
   workspace: string;

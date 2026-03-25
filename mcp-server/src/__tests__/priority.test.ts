@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeFilePriorities } from "../graph/priority.js";
+import { computeFilePriorities } from "../graph/priority.ts";
 
 function makeNode(id: string, overrides: Record<string, any> = {}) {
   return { id, layer: "domain", violation_count: 0, changed: true, ...overrides };

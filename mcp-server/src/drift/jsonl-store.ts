@@ -2,8 +2,8 @@
 
 import { readFile, appendFile, mkdir } from "fs/promises";
 import { dirname } from "path";
-import { isNotFound } from "../utils/errors.js";
-import { atomicWriteFile } from "../utils/atomic-write.js";
+import { isNotFound } from "../utils/errors.ts";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
 
 const MAX_ENTRIES = 500;
 

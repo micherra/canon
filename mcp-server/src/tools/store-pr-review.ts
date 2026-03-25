@@ -1,6 +1,6 @@
-import { PrStore } from "../drift/pr-store.js";
-import { generateId } from "../utils/id.js";
-import type { ReviewViolation } from "../schema.js";
+import { PrStore } from "../drift/pr-store.ts";
+import { generateId } from "../utils/id.ts";
+import type { ReviewViolation } from "../schema.ts";
 
 export interface StorePrReviewInput {
   pr_number?: number;

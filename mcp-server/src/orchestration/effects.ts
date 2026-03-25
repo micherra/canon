@@ -6,10 +6,10 @@
 
 import { readFile, readdir } from "fs/promises";
 import { join, basename } from "path";
-import { DriftStore } from "../drift/store.js";
-import { generateId } from "../utils/id.js";
-import type { StateDefinition, Effect } from "./flow-schema.js";
-import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
+import { DriftStore } from "../drift/store.ts";
+import { generateId } from "../utils/id.ts";
+import type { StateDefinition, Effect } from "./flow-schema.ts";
+import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.ts";
 
 export interface EffectResult {
   type: string;

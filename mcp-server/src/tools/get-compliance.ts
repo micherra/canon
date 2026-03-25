@@ -1,6 +1,6 @@
-import { DriftStore, type WeeklyTrendPoint } from "../drift/store.js";
-import { analyzeDrift } from "../drift/analyzer.js";
-import { loadAllPrinciples } from "../matcher.js";
+import { DriftStore, type WeeklyTrendPoint } from "../drift/store.ts";
+import { analyzeDrift } from "../drift/analyzer.ts";
+import { loadAllPrinciples } from "../matcher.ts";
 
 export interface ComplianceInput {
   principle_id: string;

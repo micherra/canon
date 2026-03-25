@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractExports } from "../graph/export-parser.js";
+import { extractExports } from "../graph/export-parser.ts";
 
 describe("extractExports", () => {
   describe("JavaScript/TypeScript", () => {

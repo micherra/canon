@@ -3,10 +3,10 @@ import { mkdirSync, rmSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateInsights } from "../graph/insights.js";
-import { initDatabase } from "../graph/kg-schema.js";
-import { KgStore } from "../graph/kg-store.js";
-import { CANON_DIR, CANON_FILES } from "../constants.js";
+import { generateInsights } from "../graph/insights.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { KgStore } from "../graph/kg-store.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 describe("generateInsights", () => {
   it("returns zeroed insights for empty graph", () => {

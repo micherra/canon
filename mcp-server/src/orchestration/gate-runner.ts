@@ -9,7 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ResolvedFlow } from "./flow-schema.js";
+import type { ResolvedFlow } from "./flow-schema.ts";
 
 export interface GateResult {
   passed: boolean;

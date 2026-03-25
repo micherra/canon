@@ -17,7 +17,7 @@ import {
   type StateDefinition,
   type ConsultationFragment,
   type ResolvedFlow,
-} from "./flow-schema.js";
+} from "./flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // parseFlowContent

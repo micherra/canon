@@ -22,12 +22,12 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { join, resolve, isAbsolute } from "path";
-import { PrStore } from "../drift/pr-store.js";
-import { DriftStore } from "../drift/store.js";
-import { initDatabase } from "../graph/kg-schema.js";
-import { analyzeBlastRadius } from "../graph/kg-blast-radius.js";
-import { CANON_DIR, CANON_FILES } from "../constants.js";
-import type { PrReviewEntry, ReviewViolation } from "../schema.js";
+import { PrStore } from "../drift/pr-store.ts";
+import { DriftStore } from "../drift/store.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import type { PrReviewEntry, ReviewViolation } from "../schema.ts";
 
 /** Resolve a project-relative path safely. Returns null on traversal attempts. */
 function safeResolvePath(projectDir: string, filePath: string): string | null {

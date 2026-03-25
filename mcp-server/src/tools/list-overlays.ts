@@ -2,7 +2,7 @@ import {
   loadAllOverlays,
   filterOverlaysForAgent,
   type OverlayDefinition,
-} from "../orchestration/overlays.js";
+} from "../orchestration/overlays.ts";
 
 export interface ListOverlaysInput {
   agent?: string;

@@ -1,4 +1,4 @@
-import { postBulletin, type BulletinMessage } from "../orchestration/bulletin.js";
+import { postBulletin, type BulletinMessage } from "../orchestration/bulletin.ts";
 
 export interface PostWaveBulletinInput {
   workspace: string;

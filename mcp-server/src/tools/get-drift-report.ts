@@ -1,9 +1,9 @@
-import { DriftStore } from "../drift/store.js";
-import { PrStore } from "../drift/pr-store.js";
-import { analyzeDrift, type DriftReport } from "../drift/analyzer.js";
-import { formatDriftReport } from "../drift/reporter.js";
-import { loadAllPrinciples } from "../matcher.js";
-import type { PrReviewEntry } from "../schema.js";
+import { DriftStore } from "../drift/store.ts";
+import { PrStore } from "../drift/pr-store.ts";
+import { analyzeDrift, type DriftReport } from "../drift/analyzer.ts";
+import { formatDriftReport } from "../drift/reporter.ts";
+import { loadAllPrinciples } from "../matcher.ts";
+import type { PrReviewEntry } from "../schema.ts";
 
 export interface DriftReportInput {
   last_n?: number;

@@ -1,3 +1,3 @@
-import { FlowEventBus } from "./events.js";
+import { FlowEventBus } from "./events.ts";
 
 export const flowEventBus = new FlowEventBus();

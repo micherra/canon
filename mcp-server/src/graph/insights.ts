@@ -2,11 +2,11 @@
 
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { buildDegreeMaps } from "./degree.js";
-import { initDatabase } from "./kg-schema.js";
-import { KgStore } from "./kg-store.js";
-import { detectDeadCode } from "./kg-dead-code.js";
-import { CANON_DIR, CANON_FILES } from "../constants.js";
+import { buildDegreeMaps } from "./degree.ts";
+import { initDatabase } from "./kg-schema.ts";
+import { KgStore } from "./kg-store.ts";
+import { detectDeadCode } from "./kg-dead-code.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 export interface CodebaseInsights {
   overview: {

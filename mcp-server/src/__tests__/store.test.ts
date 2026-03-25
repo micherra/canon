@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, readFile, rm, writeFile, mkdir, access } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { DriftStore } from "../drift/store.js";
-import { report } from "../tools/report.js";
+import { DriftStore } from "../drift/store.ts";
+import { report } from "../tools/report.ts";
 
 describe("DriftStore", () => {
   let tmpDir: string;

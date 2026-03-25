@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { computeAnalytics, appendFlowRun, getFlowRuns, type FlowRunEntry } from "../drift/analytics.js";
-import { DriftStore } from "../drift/store.js";
-import type { ReviewEntry } from "../schema.js";
+import { computeAnalytics, appendFlowRun, getFlowRuns, type FlowRunEntry } from "../drift/analytics.ts";
+import { DriftStore } from "../drift/store.ts";
+import type { ReviewEntry } from "../schema.ts";
 
 function makeRun(overrides?: Partial<FlowRunEntry>): FlowRunEntry {
   return {

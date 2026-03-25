@@ -10,7 +10,7 @@ import {
   markEventApplied,
   markEventRejected,
   resolveEventAgents,
-} from "../orchestration/wave-events.js";
+} from "../orchestration/wave-events.ts";
 
 describe("wave-events", () => {
   let workspace: string;

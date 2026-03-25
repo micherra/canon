@@ -4,19 +4,19 @@
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import { join, resolve, sep } from "path";
-import { extractImports, resolveImport } from "../graph/import-parser.js";
-import { extractExports } from "../graph/export-parser.js";
-import { scanSourceFiles } from "../graph/scanner.js";
-import { DriftStore } from "../drift/store.js";
-import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.js";
-import { isNotFound } from "../utils/errors.js";
-import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.js";
-import { toPosix, loadPathAliases } from "../utils/paths.js";
-import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.js";
-import { initDatabase } from "../graph/kg-schema.js";
-import { KgStore } from "../graph/kg-store.js";
-import { KgQuery } from "../graph/kg-query.js";
-import type { EntityKind } from "../graph/kg-types.js";
+import { extractImports, resolveImport } from "../graph/import-parser.ts";
+import { extractExports } from "../graph/export-parser.ts";
+import { scanSourceFiles } from "../graph/scanner.ts";
+import { DriftStore } from "../drift/store.ts";
+import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.ts";
+import { isNotFound } from "../utils/errors.ts";
+import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.ts";
+import { toPosix, loadPathAliases } from "../utils/paths.ts";
+import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { KgStore } from "../graph/kg-store.ts";
+import { KgQuery } from "../graph/kg-query.ts";
+import type { EntityKind } from "../graph/kg-types.ts";
 
 export interface FileContextInput {
   file_path: string;

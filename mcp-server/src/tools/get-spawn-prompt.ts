@@ -1,13 +1,13 @@
 import { readFile } from "fs/promises";
-import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.js";
-import { loadAllOverlays, filterOverlaysForAgent, buildOverlayInjection, type OverlayDefinition } from "../orchestration/overlays.js";
-import { buildBulletinInstructions } from "../orchestration/bulletin.js";
-import { readWaveGuidance } from "../orchestration/wave-briefing.js";
-import type { ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.js";
-import { evaluateSkipWhen } from "../orchestration/skip-when.js";
-import { readBoard } from "../orchestration/board.js";
-import { resolveContextInjections } from "../orchestration/inject-context.js";
-import { clusterDiff, type FileCluster } from "../orchestration/diff-cluster.js";
+import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.ts";
+import { loadAllOverlays, filterOverlaysForAgent, buildOverlayInjection, type OverlayDefinition } from "../orchestration/overlays.ts";
+import { buildBulletinInstructions } from "../orchestration/bulletin.ts";
+import { readWaveGuidance } from "../orchestration/wave-briefing.ts";
+import type { ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { readBoard } from "../orchestration/board.ts";
+import { resolveContextInjections } from "../orchestration/inject-context.ts";
+import { clusterDiff, type FileCluster } from "../orchestration/diff-cluster.ts";
 
 /** A task item passed to wave/parallel-per states — either a name or a structured plan. */
 export type TaskItem = string | Record<string, string | number | boolean | string[]>;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { clusterByDirectory, clusterByLayer } from "../orchestration/diff-cluster.js";
-import { parseTimeout } from "../tools/get-spawn-prompt.js";
+import { clusterByDirectory, clusterByLayer } from "../orchestration/diff-cluster.ts";
+import { parseTimeout } from "../tools/get-spawn-prompt.ts";
 
 describe("clusterByDirectory", () => {
   it("groups files by first two path segments", () => {

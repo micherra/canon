@@ -2,7 +2,7 @@
  * Pure functions for convergence checking.
  */
 
-import type { Board, CannotFixItem } from "./flow-schema.js";
+import type { Board, CannotFixItem } from "./flow-schema.ts";
 
 /**
  * Check if a state can be entered based on iteration limits.

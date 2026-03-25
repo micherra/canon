@@ -1,8 +1,8 @@
-import { postWaveEvent, readPendingEvents } from "../orchestration/wave-events.js";
-import { readBoard } from "../orchestration/board.js";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { createJsonlLogger } from "../orchestration/events.js";
-import type { WaveEvent, WaveEventType } from "../orchestration/flow-schema.js";
+import { postWaveEvent, readPendingEvents } from "../orchestration/wave-events.ts";
+import { readBoard } from "../orchestration/board.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { createJsonlLogger } from "../orchestration/events.ts";
+import type { WaveEvent, WaveEventType } from "../orchestration/flow-schema.ts";
 
 export interface InjectWaveEventInput {
   workspace: string;

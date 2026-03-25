@@ -6,7 +6,7 @@
 
 import { spawnSync } from "node:child_process";
 import { dirname } from "path";
-import { inferLayer } from "../matcher.js";
+import { inferLayer } from "../matcher.ts";
 
 export interface FileCluster {
   key: string;

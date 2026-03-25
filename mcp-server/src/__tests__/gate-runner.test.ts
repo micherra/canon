@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -32,7 +32,7 @@ vi.mock("node:fs", () => ({
 // Import after mocks are registered
 // ---------------------------------------------------------------------------
 
-import { resolveGateCommand, runGate } from "../orchestration/gate-runner.js";
+import { resolveGateCommand, runGate } from "../orchestration/gate-runner.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

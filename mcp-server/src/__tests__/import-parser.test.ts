@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractImports, resolveImport, parseTsconfigPaths } from "../graph/import-parser.js";
+import { extractImports, resolveImport, parseTsconfigPaths } from "../graph/import-parser.ts";
 
 describe("extractImports — JS/TS", () => {
   it("extracts ES module imports", () => {
@@ -164,13 +164,13 @@ describe("resolveImport — TS ESM .js extension convention", () => {
   ]);
 
   it("resolves .js import to .ts file", () => {
-    // import { DriftStore } from "../drift/store.js"
+    // import { DriftStore } from "../drift/store.ts"
     const result = resolveImport("../drift/store.js", "src/tools/my-tool.ts", allFiles);
     expect(result).toBe("src/drift/store.ts");
   });
 
   it("resolves .js import to .tsx file", () => {
-    // import { Helper } from "../utils/helper.js"
+    // import { Helper } from "../utils/helper.ts"
     const result = resolveImport("../utils/helper.js", "src/tools/my-tool.ts", allFiles);
     expect(result).toBe("src/utils/helper.tsx");
   });

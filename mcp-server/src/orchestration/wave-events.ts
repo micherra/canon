@@ -1,7 +1,7 @@
 import { appendFile, readFile, mkdir, access, writeFile } from "fs/promises";
 import { join, dirname } from "path";
-import { generateId } from "../utils/id.js";
-import type { WaveEvent, WaveEventType, WaveEventResolution } from "./flow-schema.js";
+import { generateId } from "../utils/id.ts";
+import type { WaveEvent, WaveEventType, WaveEventResolution } from "./flow-schema.ts";
 
 /**
  * Compute the events file path for a given workspace.
@@ -163,6 +163,10 @@ export function resolveEventAgents(eventType: WaveEventType): {
       };
     case "pause":
       return { agents: [], descriptions: {} };
+    default: {
+      const _exhaustive: never = eventType;
+      return { agents: [], descriptions: {} };
+    }
   }
 }
 

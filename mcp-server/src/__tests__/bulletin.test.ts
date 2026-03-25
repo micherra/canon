@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { bulletinPath, postBulletin, readBulletin, buildBulletinInstructions } from "../orchestration/bulletin.js";
-import { postWaveBulletin } from "../tools/post-wave-bulletin.js";
-import { getWaveBulletin } from "../tools/get-wave-bulletin.js";
+import { bulletinPath, postBulletin, readBulletin, buildBulletinInstructions } from "../orchestration/bulletin.ts";
+import { postWaveBulletin } from "../tools/post-wave-bulletin.ts";
+import { getWaveBulletin } from "../tools/get-wave-bulletin.ts";
 
 describe("bulletin", () => {
   let workspace: string;

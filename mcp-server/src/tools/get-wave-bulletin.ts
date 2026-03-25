@@ -1,6 +1,6 @@
-import { readBulletin, type BulletinMessage } from "../orchestration/bulletin.js";
-import { readPendingEvents } from "../orchestration/wave-events.js";
-import type { WaveEvent } from "../orchestration/flow-schema.js";
+import { readBulletin, type BulletinMessage } from "../orchestration/bulletin.ts";
+import { readPendingEvents } from "../orchestration/wave-events.ts";
+import type { WaveEvent } from "../orchestration/flow-schema.ts";
 
 export interface GetWaveBulletinInput {
   workspace: string;

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import type { Board } from "./flow-schema.js";
+import type { Board } from "./flow-schema.ts";
 
 interface SkipResult {
   skip: boolean;

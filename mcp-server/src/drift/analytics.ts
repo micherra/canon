@@ -4,8 +4,8 @@
  */
 
 import { join } from "path";
-import { CANON_DIR } from "../constants.js";
-import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.js";
+import { CANON_DIR } from "../constants.ts";
+import { readJsonl, appendJsonl, rotateIfNeeded } from "./jsonl-store.ts";
 
 export interface FlowRunEntry {
   run_id: string;

@@ -1,5 +1,5 @@
 import { dirname } from "path";
-import type { DecisionEntry, ReviewEntry } from "../schema.js";
+import type { DecisionEntry, ReviewEntry } from "../schema.ts";
 
 export interface PrincipleStats {
   principle_id: string;

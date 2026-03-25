@@ -32,14 +32,14 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { spawnSync } from "node:child_process";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.js";
-import { resolveWaveVariables } from "../orchestration/wave-variables.js";
-import { updateBoard } from "../tools/update-board.js";
-import { reportResult } from "../tools/report-result.js";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { writeBoard, initBoard } from "../orchestration/board.js";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import { resolveWaveVariables } from "../orchestration/wave-variables.ts";
+import { updateBoard } from "../tools/update-board.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { writeBoard, initBoard } from "../orchestration/board.ts";
 import { mkdir, writeFile } from "node:fs/promises";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 const mockSpawnSync = vi.mocked(spawnSync);
 

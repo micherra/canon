@@ -5,8 +5,8 @@
 
 import { access, mkdir, open, readFile, rename, unlink } from "fs/promises";
 import path from "path";
-import type { Session } from "./flow-schema.js";
-import { atomicWriteFile } from "../utils/atomic-write.js";
+import type { Session } from "./flow-schema.ts";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 

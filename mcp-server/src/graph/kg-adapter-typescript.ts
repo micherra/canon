@@ -8,17 +8,11 @@
  */
 
 import { extname } from "path";
-import type { LanguageAdapter, AdapterResult, IntraFileEdge, ImportSpecifier } from "./kg-types.js";
-import type { EntityRow, EntityKind } from "./kg-types.js";
+import type { LanguageAdapter, AdapterResult, IntraFileEdge, ImportSpecifier } from "./kg-types.ts";
+import type { EntityRow, EntityKind } from "./kg-types.ts";
 
-// Use require for tree-sitter native bindings (no ESM support)
-// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
 import Parser from "tree-sitter";
-// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-const TypeScriptLang = require("tree-sitter-typescript") as {
-  typescript: Parser.Language;
-  tsx: Parser.Language;
-};
+import TypeScriptLang from "tree-sitter-typescript";
 
 // Lazy-initialised parsers (one per language to avoid repeated setLanguage calls)
 let tsParser: Parser | null = null;

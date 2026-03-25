@@ -6,8 +6,8 @@ import {
   buildHistoryEntry,
   isStuck,
   aggregateParallelPerResults,
-} from "../orchestration/transitions.js";
-import type { StateDefinition, StuckWhen } from "../orchestration/flow-schema.js";
+} from "../orchestration/transitions.ts";
+import type { StateDefinition, StuckWhen } from "../orchestration/flow-schema.ts";
 
 describe("normalizeStatus", () => {
   it("maps DONE to done (case insensitive)", () => {

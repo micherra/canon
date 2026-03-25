@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { loadConfigNumber, buildLayerInferrer } from "../utils/config.js";
+import { loadConfigNumber, buildLayerInferrer } from "../utils/config.ts";
 
 let tmpDir: string;
 

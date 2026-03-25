@@ -6,9 +6,9 @@
 import { readFile, copyFile } from "fs/promises";
 import { join } from "path";
 import { z } from "zod";
-import type { Board, ConsultationResult, ResolvedFlow } from "./flow-schema.js";
-import { BoardSchema } from "./flow-schema.js";
-import { atomicWriteFile } from "../utils/atomic-write.js";
+import type { Board, ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
+import { BoardSchema } from "./flow-schema.ts";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
 
 const BOARD_FILE = "board.json";
 const BOARD_BACKUP = "board.json.bak";

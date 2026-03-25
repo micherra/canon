@@ -1,26 +1,26 @@
 import { readFile, mkdir } from "fs/promises";
-import { atomicWriteFile } from "../utils/atomic-write.js";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
 import { join, isAbsolute } from "path";
 import { execFile } from "child_process";
-import { scanSourceFiles } from "../graph/scanner.js";
-import { extractImports, resolveImport, type PathAlias } from "../graph/import-parser.js";
-import { loadAllPrinciples } from "../matcher.js";
-import { DriftStore } from "../drift/store.js";
-import { generateInsights, type CodebaseInsights } from "../graph/insights.js";
+import { scanSourceFiles } from "../graph/scanner.ts";
+import { extractImports, resolveImport, type PathAlias } from "../graph/import-parser.ts";
+import { loadAllPrinciples } from "../matcher.ts";
+import { DriftStore } from "../drift/store.ts";
+import { generateInsights, type CodebaseInsights } from "../graph/insights.ts";
 import {
   loadSourceDirs,
   loadLayerMappings,
   loadLayerMappingsStrict,
   buildLayerInferrer,
   loadGraphCompositionConfig,
-} from "../utils/config.js";
-import { isNotFound } from "../utils/errors.js";
-import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.js";
-import { toPosix, loadPathAliases } from "../utils/paths.js";
-import { classifyMdNode, buildNameMaps, inferMdRelations } from "../graph/md-relations.js";
-import { runPipeline } from "../graph/kg-pipeline.js";
-import { materialize } from "../graph/view-materializer.js";
-import { initDatabase } from "../graph/kg-schema.js";
+} from "../utils/config.ts";
+import { isNotFound } from "../utils/errors.ts";
+import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.ts";
+import { toPosix, loadPathAliases } from "../utils/paths.ts";
+import { classifyMdNode, buildNameMaps, inferMdRelations } from "../graph/md-relations.ts";
+import { runPipeline } from "../graph/kg-pipeline.ts";
+import { materialize } from "../graph/view-materializer.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 
 const FALLBACK_LAYER_COLOR = "#BDC3C7";
 
@@ -317,7 +317,7 @@ async function buildCompositionEdges(
   if (!compositionConfig.enabled) return [];
 
   const markerAlternation = compositionConfig.markers
-    .map((marker) => marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .map((marker: string) => marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|");
   const markerRegex = markerAlternation.length > 0
     ? new RegExp(`(?:${markerAlternation})\\s*[:=]\\s*["']?([\\w./-]+)["']?`, "gi")
@@ -411,8 +411,17 @@ function mergeEdges(baseEdges: GraphEdge[], inferredEdges: GraphEdge[]): GraphEd
   return Array.from(byKey.values());
 }
 
+interface StructuralPrincipleIds {
+  layerBoundary: string;
+  circularDep: string;
+}
+
 /** Fold structural violations (layer crossings, cycles) into node violation counts. */
-function enrichNodesWithInsights(nodes: GraphNode[], insights: CodebaseInsights): void {
+function enrichNodesWithInsights(
+  nodes: GraphNode[],
+  insights: CodebaseInsights,
+  principleIds: StructuralPrincipleIds,
+): void {
   const layerViolationsBySource = new Map<string, number>();
   for (const lv of insights.layer_violations) {
     layerViolationsBySource.set(lv.source, (layerViolationsBySource.get(lv.source) || 0) + 1);
@@ -425,13 +434,14 @@ function enrichNodesWithInsights(nodes: GraphNode[], insights: CodebaseInsights)
     const lvCount = layerViolationsBySource.get(node.id) || 0;
     if (lvCount > 0) {
       node.violation_count += lvCount;
-      if (!node.top_violations.includes("bounded-context-boundaries")) {
-        node.top_violations.push("bounded-context-boundaries");
+      if (!node.top_violations.includes(principleIds.layerBoundary)) {
+        node.top_violations.push(principleIds.layerBoundary);
       }
     }
     if (cycleMembers.has(node.id)) {
-      if (!node.top_violations.includes("architectural-fitness-functions")) {
-        node.top_violations.push("architectural-fitness-functions");
+      node.violation_count += 1;
+      if (!node.top_violations.includes(principleIds.circularDep)) {
+        node.top_violations.push(principleIds.circularDep);
       }
     }
   }
@@ -582,14 +592,24 @@ export async function codebaseGraph(
     edges = mergeEdges(importEdges, mergeEdges(compositionEdges, mdEdges));
   }
 
-  // Step 4: Generate insights and enrich nodes with structural violations
+  // Step 4: Load principles and derive structural violation IDs
+  const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
+
+  const boundaryPrinciple = allPrinciples.find((p) => p.tags.includes("boundaries"));
+  const cyclePrinciple = allPrinciples.find((p) => p.tags.includes("architecture"));
+  const structuralIds: StructuralPrincipleIds = {
+    layerBoundary: boundaryPrinciple?.id ?? "layer-boundary-crossing",
+    circularDep: cyclePrinciple?.id ?? "circular-dependency",
+  };
+
+  // Step 5: Generate insights and enrich nodes with structural violations
   const insights = generateInsights(
     nodes.map((n) => ({ id: n.id, layer: n.layer })),
     edges.map((e) => ({ source: e.source, target: e.target })),
   );
-  enrichNodesWithInsights(nodes, insights);
+  enrichNodesWithInsights(nodes, insights, structuralIds);
 
-  // Step 5: Build layer metadata
+  // Step 6: Build layer metadata
   const layerCounts = new Map<string, number>();
   for (const node of nodes) {
     layerCounts.set(node.layer, (layerCounts.get(node.layer) || 0) + 1);
@@ -609,7 +629,6 @@ export async function codebaseGraph(
     }))
     .sort((a, b) => a.index - b.index || b.file_count - a.file_count);
 
-  const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
   const principles: Record<string, { title: string; severity: string; summary: string }> = {};
   for (const p of allPrinciples) {
     principles[p.id] = { title: p.title, severity: p.severity, summary: extractSummary(p.body) };

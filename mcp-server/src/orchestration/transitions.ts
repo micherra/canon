@@ -10,8 +10,8 @@ import type {
   FileTestHistoryEntry,
   StatusHistoryEntry,
   ProgressHistoryEntry,
-} from "./flow-schema.js";
-import { STATUS_ALIASES } from "./flow-schema.js";
+} from "./flow-schema.ts";
+import { STATUS_ALIASES } from "./flow-schema.ts";
 
 /**
  * Lowercase the input and apply alias mapping to produce a normalized

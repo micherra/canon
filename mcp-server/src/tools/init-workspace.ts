@@ -10,11 +10,11 @@ import {
   initWorkspace as createWorkspace,
   writeSession,
   withBoardLock,
-} from "../orchestration/workspace.js";
-import { initBoard, readBoard, writeBoard } from "../orchestration/board.js";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.js";
-import type { Board, Session } from "../orchestration/flow-schema.js";
-import { BoardSchema, SessionSchema } from "../orchestration/flow-schema.js";
+} from "../orchestration/workspace.ts";
+import { initBoard, readBoard, writeBoard } from "../orchestration/board.ts";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import type { Board, Session } from "../orchestration/flow-schema.ts";
+import { BoardSchema, SessionSchema } from "../orchestration/flow-schema.ts";
 import { z } from "zod";
 import { readFile, mkdir, writeFile } from "fs/promises";
 import { join } from "path";

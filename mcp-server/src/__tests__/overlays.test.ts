@@ -8,8 +8,8 @@ import {
   loadAllOverlays,
   filterOverlaysForAgent,
   buildOverlayInjection,
-} from "../orchestration/overlays.js";
-import { listOverlays } from "../tools/list-overlays.js";
+} from "../orchestration/overlays.ts";
+import { listOverlays } from "../tools/list-overlays.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

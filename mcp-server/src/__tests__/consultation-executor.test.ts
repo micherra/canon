@@ -3,8 +3,8 @@ import {
   executeConsultations,
   resolveConsultationPrompt,
   type ConsultationInput,
-} from "../orchestration/consultation-executor.js";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+} from "../orchestration/consultation-executor.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

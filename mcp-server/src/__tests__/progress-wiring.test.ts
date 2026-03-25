@@ -22,10 +22,10 @@ vi.mock("../orchestration/flow-parser.js", () => ({
   loadAndResolveFlow: vi.fn(),
 }));
 
-import { loadAndResolveFlow } from "../orchestration/flow-parser.js";
-import { initWorkspaceFlow } from "../tools/init-workspace.js";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.js";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import { initWorkspaceFlow } from "../tools/init-workspace.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

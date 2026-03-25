@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, readFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { reportInputSchema } from "../schema.js";
-import { report } from "../tools/report.js";
+import { reportInputSchema } from "../schema.ts";
+import { report } from "../tools/report.ts";
 
 // --- Schema validation ---
 
