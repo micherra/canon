@@ -7,6 +7,15 @@ canon-cursor-cli/bundle/*.tgz
 cursor-extension/media/dashboard.js
 .idea/
 .claude/
+# Subdirectory scoped CLAUDE.md files (opt-mcp-02: scoped out of root agent context)
+!mcp-server/.claude/
+!agents/.claude/
+!templates/.claude/
+!flows/.claude/
+!principles/.claude/
+!commands/.claude/
+!hooks/.claude/
+!canon-cursor-cli/.claude/
 
 # Canon local data (dogfooding — ignore entire .canon directory)
 .canon/

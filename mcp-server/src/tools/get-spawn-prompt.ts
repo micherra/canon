@@ -83,6 +83,37 @@ function substituteItem(prompt: string, item: TaskItem): string {
   return result;
 }
 
+/**
+ * Truncate progress.md content to at most maxEntries entry lines.
+ * Header lines (lines before the first "- [" entry) are always preserved.
+ * If entry count is within the cap, content is returned unchanged.
+ */
+export function truncateProgress(content: string, maxEntries: number): string {
+  const lines = content.split("\n");
+
+  // Find the index of the first entry line (starts with "- [")
+  const firstEntryIndex = lines.findIndex((l) => l.startsWith("- ["));
+  if (firstEntryIndex === -1) {
+    // No entries found — return content unchanged
+    return content;
+  }
+
+  const headerLines = lines.slice(0, firstEntryIndex);
+  const entryAndTrailing = lines.slice(firstEntryIndex);
+
+  // Separate actual entry lines from any trailing non-entry lines
+  // Entry lines are those matching /^- \[/; trailing blank lines may follow
+  const entryLines = entryAndTrailing.filter((l) => l.startsWith("- ["));
+  const trailingLines = entryAndTrailing.filter((l) => !l.startsWith("- ["));
+
+  if (entryLines.length <= maxEntries) {
+    return content;
+  }
+
+  const keptEntries = entryLines.slice(-maxEntries);
+  return [...headerLines, ...keptEntries, ...trailingLines].join("\n");
+}
+
 export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnPromptResult> {
   const { state_id, flow, variables, items } = input;
 
@@ -95,10 +126,16 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     return { prompts: [], state_type: "terminal" };
   }
 
+  // Read board once if any board-dependent feature is active
+  const needsBoard =
+    !!state.skip_when ||
+    (state.inject_context != null && state.inject_context.length > 0) ||
+    state.large_diff_threshold != null;
+  const board = needsBoard ? await readBoard(input.workspace) : undefined;
+
   // Evaluate skip_when condition before spawning
   if (state.skip_when) {
-    const board = await readBoard(input.workspace);
-    const skipResult = await evaluateSkipWhen(state.skip_when, input.workspace, board);
+    const skipResult = await evaluateSkipWhen(state.skip_when, input.workspace, board!);
     if (skipResult.skip) {
       return {
         prompts: [],
@@ -118,8 +155,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
   const warnings: string[] = [];
 
   if (state.inject_context && state.inject_context.length > 0) {
-    const board = await readBoard(input.workspace);
-    const injectionResult = await resolveContextInjections(state.inject_context, board, input.workspace);
+    const injectionResult = await resolveContextInjections(state.inject_context, board!, input.workspace);
 
     // Add injection warnings
     warnings.push(...injectionResult.warnings);
@@ -145,7 +181,8 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
       input.workspace
     );
     try {
-      const progressContent = await readFile(progressPath, "utf-8");
+      const rawProgress = await readFile(progressPath, "utf-8");
+      const progressContent = truncateProgress(rawProgress, 8);
       mergedVariables = { ...mergedVariables, progress: progressContent };
     } catch {
       // progress.md may not exist yet -- degrade gracefully
@@ -181,8 +218,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
   // Evaluate large_diff_threshold — cluster files when diff exceeds threshold
   let clusters: FileCluster[] | undefined;
   if (state.large_diff_threshold != null) {
-    const board = state.skip_when ? undefined : await readBoard(input.workspace);
-    const baseCommit = board?.base_commit ?? (await readBoard(input.workspace)).base_commit;
+    const baseCommit = board?.base_commit ?? "";
     const strategy = state.cluster_by ?? "directory";
     const result = clusterDiff(baseCommit, state.large_diff_threshold, strategy);
     if (result) {
