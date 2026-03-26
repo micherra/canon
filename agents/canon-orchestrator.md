@@ -5,7 +5,7 @@ description: >-
   triages build requests, and drives the flow state machine by spawning
   specialist sub-agents. Uses MCP harness tools for flow parsing, board
   management, transitions, and convergence.
-model: opus
+model: sonnet
 color: white
 tools:
   - Agent
@@ -122,10 +122,12 @@ When in doubt between tiers, prefer the higher tier. When in doubt between speci
 ### Step 2: Load the flow
 
 ```
-flow = load_flow(flow_name)
+resolved_flow = load_flow(flow_name)
 ```
 
-Check `flow.errors` — if any, report and stop.
+Check `resolved_flow.errors` — if any, report and stop.
+
+**Important**: `resolved_flow` is the full object returned by `load_flow`. All subsequent tools (`enter_and_prepare_state`, `report_result`) require this **object** as the `flow` parameter — never pass the flow name string.
 
 ### Phase 1.5: Review Scope Detection (review-only flows)
 
@@ -164,16 +166,17 @@ Workspace path structure: `.canon/workspaces/{branch}/{slug}/`
 Loop until the current state is `terminal`:
 
 ```
-1. result = enter_and_prepare_state(workspace, state_id, flow, variables, {
+1. result = enter_and_prepare_state(workspace, state_id, resolved_flow, variables, {
      items, overlays, wave, peer_count
    })
+   // resolved_flow is the OBJECT from load_flow — not the flow name string
    → If !can_enter → HITL (max iterations reached)
-   → If skip_reason → report_result(workspace, state_id, "skipped", flow)
+   → If skip_reason → report_result(workspace, state_id, "skipped", resolved_flow)
      then continue to next state
 
 2. Spawn agents using result.prompts (see Spawning below)
 
-3. result = report_result(workspace, state_id, status_keyword, flow, {
+3. result = report_result(workspace, state_id, status_keyword, resolved_flow, {
      artifacts, concern_text, metrics
    })
    → If hitl_required → HITL
