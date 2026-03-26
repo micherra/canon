@@ -27,6 +27,7 @@ import { listOverlays } from "./tools/list-overlays.ts";
 import { postWaveBulletin } from "./tools/post-wave-bulletin.ts";
 import { getWaveBulletin } from "./tools/get-wave-bulletin.ts";
 import { injectWaveEvent } from "./tools/inject-wave-event.ts";
+import { resolveWaveEvent } from "./tools/resolve-wave-event.ts";
 import { enterAndPrepareState } from "./tools/enter-and-prepare-state.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
 import { graphQuery } from "./tools/graph-query.ts";
@@ -486,6 +487,24 @@ server.registerTool(
   },
   async (input) => {
     const result = await injectWaveEvent(input);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "resolve_wave_event",
+  {
+    description: "Resolve a pending wave event by applying or rejecting it. Returns agent routing from resolveEventAgents so the orchestrator knows which agents to spawn. Use after processing events from get_wave_bulletin.",
+    inputSchema: {
+      workspace: z.string(),
+      event_id: z.string().describe("ID of the pending event to resolve"),
+      action: z.enum(["apply", "reject"]).describe("Whether to apply or reject the event"),
+      resolution: z.record(z.string(), z.unknown()).optional().describe("Resolution data to attach (apply only)"),
+      reason: z.string().optional().describe("Reason for rejection (required when action is reject)"),
+    },
+  },
+  async (input) => {
+    const result = await resolveWaveEvent(input);
     return jsonResponse(result);
   }
 );
