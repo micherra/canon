@@ -7,7 +7,7 @@ import {
   parseReviewArtifact,
   parseDecisionsFromSummary,
 } from "../orchestration/effects.ts";
-import type { StateDefinition } from "../orchestration/flow-schema.ts";
+import type { StateDefinition, Board } from "../orchestration/flow-schema.ts";
 
 const SAMPLE_REVIEW = `---
 verdict: "WARNING"
@@ -318,5 +318,182 @@ describe("executeEffects", () => {
 
     expect(results).toHaveLength(3);
     expect(results.every((r) => r.recorded > 0)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// check_postconditions effect integration
+// ---------------------------------------------------------------------------
+
+/** Minimal valid board.json fixture */
+function makeBoard(overrides: Partial<Board> = {}): Board {
+  const now = new Date().toISOString();
+  return {
+    flow: "test-flow",
+    task: "test-task",
+    entry: "review",
+    current_state: "review",
+    base_commit: "abc123",
+    started: now,
+    last_updated: now,
+    states: { review: { status: "in_progress", entries: 1 } },
+    iterations: {},
+    blocked: null,
+    concerns: [],
+    skipped: [],
+    ...overrides,
+  };
+}
+
+describe("executeEffects — check_postconditions", () => {
+  let tmpDir: string;
+  let workspace: string;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-postcond-test-"));
+    workspace = join(tmpDir, "workspace");
+    projectDir = join(tmpDir, "project");
+    await mkdir(workspace, { recursive: true });
+    await mkdir(projectDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("passes with explicit YAML file_exists postcondition that passes", async () => {
+    // Create the file the postcondition checks
+    await writeFile(join(projectDir, "output.ts"), "export const x = 1;");
+
+    // Write a minimal board.json
+    const board = makeBoard();
+    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
+
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "check_postconditions" }],
+      postconditions: [{ type: "file_exists", target: "output.ts" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], projectDir, "review");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].type).toBe("check_postconditions");
+    expect(results[0].recorded).toBe(1);
+    expect(results[0].errors).toHaveLength(0);
+  });
+
+  it("records failure with explicit YAML file_exists postcondition that fails", async () => {
+    // Do NOT create the file — postcondition should fail
+    const board = makeBoard();
+    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
+
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "check_postconditions" }],
+      postconditions: [{ type: "file_exists", target: "missing.ts" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], projectDir, "review");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].type).toBe("check_postconditions");
+    expect(results[0].recorded).toBe(1);
+    expect(results[0].errors).toHaveLength(1);
+    expect(results[0].errors[0]).toMatch(/missing\.ts/);
+  });
+
+  it("uses discovered_postconditions from board state when no explicit YAML postconditions", async () => {
+    // Create the file the discovered postcondition checks
+    await writeFile(join(projectDir, "discovered.ts"), "export const x = 1;");
+
+    // Board with discovered_postconditions on state "review"
+    const board = makeBoard({
+      states: {
+        review: {
+          status: "in_progress",
+          entries: 1,
+          discovered_postconditions: [
+            { type: "file_exists", target: "discovered.ts" },
+          ],
+        },
+      },
+    });
+    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
+
+    // stateDef has NO explicit postconditions — only discovered
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "check_postconditions" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], projectDir, "review");
+
+    expect(results[0].type).toBe("check_postconditions");
+    expect(results[0].recorded).toBe(1);
+    expect(results[0].errors).toHaveLength(0);
+  });
+
+  it("explicit YAML postconditions take priority over discovered", async () => {
+    // Only the explicit file exists, not the discovered one
+    await writeFile(join(projectDir, "explicit.ts"), "export const x = 1;");
+    // discovered.ts does NOT exist
+
+    const board = makeBoard({
+      states: {
+        review: {
+          status: "in_progress",
+          entries: 1,
+          discovered_postconditions: [
+            { type: "file_exists", target: "discovered.ts" },
+          ],
+        },
+      },
+    });
+    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
+
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "check_postconditions" }],
+      postconditions: [{ type: "file_exists", target: "explicit.ts" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], projectDir, "review");
+
+    // Should pass — explicit file exists; discovered is ignored
+    expect(results[0].recorded).toBe(1);
+    expect(results[0].errors).toHaveLength(0);
+  });
+
+  it("returns recorded: 0 when no postconditions declared anywhere", async () => {
+    const board = makeBoard();
+    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
+
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "check_postconditions" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], projectDir);
+
+    expect(results[0].type).toBe("check_postconditions");
+    expect(results[0].recorded).toBe(0);
+    expect(results[0].errors).toHaveLength(0);
+  });
+
+  it("returns recorded: 0 when board is not readable (no crash)", async () => {
+    // No board.json written — workspace doesn't have one
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "check_postconditions" }],
+    };
+
+    // Should not throw — best-effort
+    const results = await executeEffects(stateDef, workspace, [], projectDir);
+
+    expect(results[0].type).toBe("check_postconditions");
+    expect(results[0].recorded).toBe(0);
+    expect(results[0].errors).toHaveLength(0);
   });
 });

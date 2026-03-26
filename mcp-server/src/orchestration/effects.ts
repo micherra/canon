@@ -10,6 +10,8 @@ import { DriftStore } from "../drift/store.ts";
 import { generateId } from "../utils/id.ts";
 import type { StateDefinition, Effect } from "./flow-schema.ts";
 import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.ts";
+import { readBoard } from "./board.ts";
+import { resolvePostconditions, evaluatePostconditions } from "./contract-checker.ts";
 
 export interface EffectResult {
   type: string;
@@ -20,12 +22,16 @@ export interface EffectResult {
 /**
  * Execute all effects declared on a state definition.
  * Called by report_result after board write.
+ *
+ * @param stateName - Optional state name used to look up discovered postconditions on the board.
+ *                    Required when check_postconditions effect is used.
  */
 export async function executeEffects(
   stateDef: StateDefinition,
   workspace: string,
   artifacts: string[],
   projectDir: string,
+  stateName?: string,
 ): Promise<EffectResult[]> {
   if (!stateDef.effects?.length) return [];
 
@@ -34,7 +40,7 @@ export async function executeEffects(
 
   for (const effect of stateDef.effects) {
     try {
-      const result = await executeOneEffect(effect, store, workspace, artifacts);
+      const result = await executeOneEffect(effect, store, workspace, artifacts, projectDir, stateName, stateDef);
       results.push(result);
     } catch (err) {
       results.push({
@@ -53,6 +59,9 @@ async function executeOneEffect(
   store: DriftStore,
   workspace: string,
   artifacts: string[],
+  projectDir: string,
+  stateName?: string,
+  stateDef?: StateDefinition,
 ): Promise<EffectResult> {
   switch (effect.type) {
     case "persist_review":
@@ -62,9 +71,45 @@ async function executeOneEffect(
     case "persist_patterns":
       return persistPatterns(store, workspace);
     case "check_postconditions":
-      // Placeholder — full implementation in qg-02 (contract-checker)
-      return Promise.resolve({ type: "check_postconditions", recorded: 0, errors: ["Not yet implemented"] });
+      return checkPostconditions(stateDef, workspace, projectDir, stateName);
   }
+}
+
+// ---------------------------------------------------------------------------
+// check_postconditions — resolve and evaluate assertions from YAML or board
+// ---------------------------------------------------------------------------
+
+async function checkPostconditions(
+  stateDef: StateDefinition | undefined,
+  workspace: string,
+  projectDir: string,
+  stateName?: string,
+): Promise<EffectResult> {
+  // Read the board to get base_commit and discovered_postconditions
+  let baseCommit: string | undefined;
+  let discoveredPostconditions: import("./flow-schema.ts").PostconditionAssertion[] | undefined;
+
+  try {
+    const board = await readBoard(workspace);
+    baseCommit = board.base_commit;
+    if (stateName) {
+      const stateEntry = board.states[stateName];
+      discoveredPostconditions = stateEntry?.discovered_postconditions;
+    }
+  } catch {
+    // Board not readable — continue with no discovered postconditions
+  }
+
+  // Explicit YAML postconditions take priority; discovered are the fallback.
+  const resolved = resolvePostconditions(stateDef?.postconditions, discoveredPostconditions);
+  const results = evaluatePostconditions(resolved, projectDir, baseCommit);
+  const errors = results.filter((r) => !r.passed).map((r) => r.output);
+
+  return {
+    type: "check_postconditions",
+    recorded: results.length,
+    errors,
+  };
 }
 
 // ---------------------------------------------------------------------------
