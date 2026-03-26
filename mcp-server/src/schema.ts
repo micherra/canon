@@ -65,22 +65,10 @@ export type ReviewEntry = Omit<ReviewInput, "type" | "verdict"> & {
   review_id: string;
   timestamp: string;
   verdict: "BLOCKING" | "WARNING" | "CLEAN"; // required in storage (derived if omitted in input)
-};
-
-export type ReviewViolation = ReviewEntry["violations"][number];
-
-// --- PR Review entry: tracks per-PR review history ---
-
-export type PrReviewEntry = {
-  pr_review_id: string;
-  timestamp: string;
   pr_number?: number;
   branch?: string;
   last_reviewed_sha?: string;
-  verdict: "BLOCKING" | "WARNING" | "CLEAN";
-  files: string[];
-  violations: ReviewViolation[];
-  honored: string[];
-  score: ReviewEntry["score"];
   file_priorities?: Array<{ path: string; priority_score: number }>;
 };
+
+export type ReviewViolation = ReviewEntry["violations"][number];

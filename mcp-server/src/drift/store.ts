@@ -33,13 +33,33 @@ export class DriftStore {
     return readJsonl<PatternEntry>(this.patternsPath);
   }
 
-  async getReviews(principleId?: string): Promise<ReviewEntry[]> {
-    const filter = principleId
-      ? (r: ReviewEntry) =>
-          r.violations.some((v) => v.principle_id === principleId) ||
-          r.honored.includes(principleId)
+  async getReviews(options?: { principleId?: string; branch?: string; prNumber?: number }): Promise<ReviewEntry[]> {
+    const { principleId, branch, prNumber } = options ?? {};
+    const hasFilter = principleId !== undefined || branch !== undefined || prNumber !== undefined;
+    const filter = hasFilter
+      ? (r: ReviewEntry) => {
+          if (principleId !== undefined) {
+            const matchesPrinciple =
+              r.violations.some((v) => v.principle_id === principleId) ||
+              r.honored.includes(principleId);
+            if (!matchesPrinciple) return false;
+          }
+          if (branch !== undefined && r.branch !== branch) return false;
+          if (prNumber !== undefined && r.pr_number !== prNumber) return false;
+          return true;
+        }
       : undefined;
     return readJsonl<ReviewEntry>(this.reviewsPath, filter);
+  }
+
+  async getLastReviewForPr(prNumber: number): Promise<ReviewEntry | null> {
+    const reviews = await this.getReviews({ prNumber });
+    return reviews.length > 0 ? reviews[reviews.length - 1] : null;
+  }
+
+  async getLastReviewForBranch(branch: string): Promise<ReviewEntry | null> {
+    const reviews = await this.getReviews({ branch });
+    return reviews.length > 0 ? reviews[reviews.length - 1] : null;
   }
 
   async appendDecision(entry: DecisionEntry): Promise<void> {
@@ -62,7 +82,7 @@ export class DriftStore {
    * Buckets reviews by ISO week and computes pass rate per bucket.
    */
   async getComplianceTrend(principleId: string, weeks?: number): Promise<WeeklyTrendPoint[]> {
-    const reviews = await this.getReviews(principleId);
+    const reviews = await this.getReviews({ principleId });
     if (reviews.length === 0) return [];
 
     const weekBuckets = new Map<string, { violations: number; passes: number }>();
