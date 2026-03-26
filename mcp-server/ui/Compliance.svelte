@@ -3,12 +3,16 @@
   import EmptyState from "./components/EmptyState.svelte";
   import { useDataLoader } from "./lib/useDataLoader.svelte";
 
-  const { status, data, errorMsg } = useDataLoader(async () => {
+  const loader = useDataLoader(async () => {
     await bridge.init();
     // The tool requires a principle_id — the MCP App receives it as tool input
     // For now, show a placeholder until the tool call provides the principle_id
     return { placeholder: true };
   });
+
+  let status = $derived(loader.status);
+  let data = $derived(loader.data);
+  let errorMsg = $derived(loader.errorMsg);
 </script>
 
 <div class="compliance">

@@ -6,11 +6,17 @@
  * composable handles the status transitions (loading → done | error) and
  * exposes the result as reactive rune state.
  *
- * Usage:
- *   const state = useDataLoader(() => bridge.callTool("get_drift_report"));
- *   // state.status: "loading" | "done" | "error"
- *   // state.data: T | null
- *   // state.errorMsg: string
+ * Canonical usage (use $derived aliasing so all reactive reads are explicit):
+ *
+ *   const loader = useDataLoader(() => bridge.callTool("get_drift_report"));
+ *   let status = $derived(loader.status);
+ *   let data   = $derived(loader.data);
+ *   let errorMsg = $derived(loader.errorMsg);
+ *
+ * Then read `status`, `data`, and `errorMsg` directly in templates and other
+ * $derived expressions. This pattern makes reactivity boundaries obvious and
+ * composes cleanly with additional $derived/$state declarations in the same
+ * component.
  *
  * The loader is invoked once immediately on composable creation. For
  * Svelte 5 rune reactivity this file must use the `.svelte.ts` extension.

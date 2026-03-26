@@ -37,6 +37,20 @@ describe("splitFilePath()", () => {
   it("handles deeply nested path", () => {
     expect(splitFilePath("a/b/c/d.ts")).toEqual({ dir: "a/b/c/", name: "d.ts" });
   });
+
+  it("handles root-level path with leading slash", () => {
+    expect(splitFilePath("/foo.ts")).toEqual({ dir: "/", name: "foo.ts" });
+  });
+
+  it("returns falsy dir for bare filename (FilePath.svelte {#if parts.dir} guard)", () => {
+    const result = splitFilePath("README.md");
+    expect(Boolean(result.dir)).toBe(false);
+  });
+
+  it("returns truthy dir for nested path (FilePath.svelte dir-part will render)", () => {
+    const result = splitFilePath("src/index.ts");
+    expect(Boolean(result.dir)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -3,11 +3,15 @@
   import EmptyState from "./components/EmptyState.svelte";
   import { useDataLoader } from "./lib/useDataLoader.svelte";
 
-  const { status, data, errorMsg } = useDataLoader(async () => {
+  const loader = useDataLoader(async () => {
     await bridge.init();
     // The tool requires query_type and target — the MCP App receives them as tool input
     return { placeholder: true };
   });
+
+  let status = $derived(loader.status);
+  let data = $derived(loader.data);
+  let errorMsg = $derived(loader.errorMsg);
 </script>
 
 <div class="graph-query">

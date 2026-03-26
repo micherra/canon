@@ -3,10 +3,22 @@
   import EmptyState from "./components/EmptyState.svelte";
   import { useDataLoader } from "./lib/useDataLoader.svelte";
 
-  const { status, data, errorMsg } = useDataLoader(async () => {
+  interface DriftReportResponse {
+    report?: {
+      total_reviews: number;
+      most_violated?: Array<{ principle_id: string; count: number }>;
+    };
+    pr_reviews?: Array<{ review_id: string }>;
+  }
+
+  const loader = useDataLoader(async () => {
     await bridge.init();
-    return bridge.callTool("get_drift_report");
+    return bridge.callTool("get_drift_report") as Promise<DriftReportResponse>;
   });
+
+  let status = $derived(loader.status);
+  let data = $derived(loader.data);
+  let errorMsg = $derived(loader.errorMsg);
 </script>
 
 <div class="drift-report">
@@ -17,8 +29,8 @@
   {:else if data}
     <div class="placeholder">
       <h2>Drift Report</h2>
-      <p>{(data as any).report?.total_reviews ?? 0} reviews &middot; {(data as any).report?.most_violated?.length ?? 0} violated principles</p>
-      <p>{(data as any).pr_reviews?.length ?? 0} PR reviews</p>
+      <p>{data.report?.total_reviews ?? 0} reviews &middot; {data.report?.most_violated?.length ?? 0} violated principles</p>
+      <p>{data.pr_reviews?.length ?? 0} PR reviews</p>
       <p class="muted">Drift visualization coming soon</p>
     </div>
   {/if}
