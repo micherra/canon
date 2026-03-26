@@ -18,7 +18,6 @@ import { getDriftReport } from "./tools/get-drift-report.ts";
 import { getDecisions } from "./tools/get-decisions.ts";
 import { getPatterns } from "./tools/get-patterns.ts";
 import { loadFlow } from "./tools/load-flow.ts";
-import { validateFlows } from "./tools/validate-flows.ts";
 import { initWorkspaceFlow } from "./tools/init-workspace.ts";
 import { getSpawnPrompt } from "./tools/get-spawn-prompt.ts";
 import { reportResult } from "./tools/report-result.ts";
@@ -299,20 +298,6 @@ server.registerTool(
   },
   async (input) => {
     const result = await loadFlow(input, pluginDir);
-    return jsonResponse(result);
-  }
-);
-
-server.registerTool(
-  "validate_flows",
-  {
-    description: "Validate Canon flow definitions. Checks parsing, fragment resolution, transition targets, reachability, and terminal state accessibility.",
-    inputSchema: {
-      flow_name: z.string().optional().describe("Validate a specific flow (omit to validate all)"),
-    },
-  },
-  async (input) => {
-    const result = await validateFlows(input, pluginDir);
     return jsonResponse(result);
   }
 );

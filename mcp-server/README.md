@@ -1,6 +1,6 @@
 # Canon MCP Server
 
-TypeScript MCP server providing 28 tools for principle enforcement and build orchestration. This is the runtime core of Canon — it powers principle matching, drift tracking, codebase graph analysis, and the flow state machine that drives multi-agent builds.
+TypeScript MCP server providing 27 tools for principle enforcement and build orchestration. This is the runtime core of Canon — it powers principle matching, drift tracking, codebase graph analysis, and the flow state machine that drives multi-agent builds.
 
 This document is for contributors and power users. The main project README links here for internals.
 
@@ -10,7 +10,7 @@ ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for sch
 
 ```
 src/
-├── index.ts              # Entry point — registers all 28 MCP tools
+├── index.ts              # Entry point — registers all 27 MCP tools
 ├── parser.ts             # Frontmatter parsing for principle markdown files
 ├── matcher.ts            # Principle matching by layer, file pattern, and tags
 ├── schema.ts             # Zod schemas for the report tool input
@@ -74,12 +74,11 @@ src/
 |------|-------------|
 | `graph_query` | Query the dependency graph — call trees, blast radius, dead code detection, and entity search. |
 
-### Orchestration harness tools (14)
+### Orchestration harness tools (13)
 
 | Tool | Description |
 |------|-------------|
 | `load_flow` | Load and resolve a Canon flow definition. Returns the resolved flow with fragment resolution, spawn instructions, and a state adjacency graph. |
-| `validate_flows` | Validate Canon flow definitions. Checks parsing, fragment resolution, transition targets, reachability, and terminal state accessibility. |
 | `init_workspace` | Initialize a Canon workspace for flow execution. Creates workspace directory, `session.json`, `board.json`, and `progress.md`. Resumes from existing board if present. |
 | `update_board` | Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress. |
 | `get_spawn_prompt` | Resolve spawn prompts for a flow state. Substitutes variables, applies templates, reads `progress.md` when the flow declares it, and fans out by state type (single/parallel/wave/parallel-per). |
