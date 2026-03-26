@@ -53,35 +53,7 @@ Do NOT write a brief for:
 
 ### Brief Format
 
-Briefs go in `.canon/briefs/` (create the directory if needed). File name: `{topic-slug}.md`.
-
-```markdown
----
-topic: "{concise topic description}"
-created: "{ISO-8601}"
-status: ready
-participants: [user, canon-chat]
----
-
-## Context
-{What prompted this discussion — the problem or opportunity}
-
-## Key Decisions
-- {Decision 1}: {chosen approach} — because {rationale}
-- {Decision 2}: {chosen approach} — because {rationale}
-
-## Constraints
-- {Constraint the build must respect}
-
-## Approach
-{The agreed-upon approach in enough detail for an architect to skip discovery}
-
-## Open Questions
-- {Anything unresolved that research/design should address}
-
-## Relevant Code
-- `path/to/file.ts` — {why it's relevant}
-```
+Briefs go in `.canon/briefs/` (create the directory if needed). File name: `{topic-slug}.md`. Use the chat-brief template at `${CLAUDE_PLUGIN_ROOT}/templates/chat-brief.md`.
 
 ### Signaling the Brief
 

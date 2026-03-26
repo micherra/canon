@@ -4,7 +4,7 @@ description: >-
   Reviews code for security vulnerabilities, unsafe patterns, and
   compliance issues. Produces a security assessment with findings
   ranked by severity.
-model: sonnet
+model: opus
 color: red
 tools:
   - Read
@@ -39,65 +39,13 @@ Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loa
 
 ### Step 3: Scan for vulnerabilities
 
-Check each file for these patterns:
-
-**Input handling:**
-- SQL injection (raw string concatenation in queries)
-- XSS (unescaped user input in HTML/JSX)
-- Command injection (user input in shell commands)
-- Path traversal (user input in file paths)
-- Prototype pollution (object spread from untrusted input)
-
-**Authentication/Authorization:**
-- Missing auth checks on routes
-- Hardcoded secrets, API keys, or tokens
-- Weak token generation (Math.random, predictable seeds)
-- Missing CSRF protection on state-changing endpoints
-- Overly permissive CORS
-
-**Data handling:**
-- Sensitive data in logs (passwords, tokens, PII)
-- Sensitive data in error messages returned to clients
-- Missing rate limiting on auth endpoints
-- Unencrypted storage of sensitive fields
-
-**Dependency risks:**
-- Check `npm audit` or `pip audit` for known vulnerabilities
-- Unnecessary dependencies that expand attack surface
-
-**Infrastructure:**
-- Exposed ports or services
-- Missing environment variable validation
-- Debug mode enabled in production configs
-- Permissive file permissions
+Check each file against the vulnerability categories in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/security-checklist.md`. Categories cover: input handling, auth/authz, data handling, dependencies, and infrastructure.
 
 **False positive verification**: Before reporting a finding, verify it's exploitable. For SQL injection: confirm the string reaches a query executor, not just a log line. For hardcoded secrets: confirm the value is a real credential, not a test fixture or placeholder. If uncertain, report as `info` severity with a verification note.
 
 ### Step 3.5: Dependency health audit
 
-Beyond vulnerability scanning, assess the project's dependency health:
-
-**Outdated dependencies:**
-- Run `npm outdated --json` (Node) or `pip list --outdated --format=json` (Python) or equivalent
-- Flag dependencies more than 2 major versions behind as `medium`
-- Flag dependencies more than 1 major version behind as `low`
-- Skip this check if the command is unavailable or errors out
-
-**License compliance:**
-- Run `npx license-checker --json` (Node) or `pip-licenses --format=json` (Python) or equivalent
-- Flag any copyleft licenses (GPL, AGPL) in a project not already using that license as `high`
-- Flag unknown or missing licenses as `medium`
-- If the license checker tool is not installed, skip with a note: "License check skipped — install license-checker for compliance analysis"
-
-**Unnecessary dependencies:**
-- Check `package.json` dependencies against actual imports in source files using Grep
-- Flag dependencies imported by zero source files as `low` — "unused dependency: {name}"
-- Do NOT flag devDependencies that are only used in build/test tooling (eslint, prettier, vitest, jest, typescript, etc.)
-
-**New dependency justification (build pipeline only):**
-- If `${base_commit}` is available, compare current `package.json`/`requirements.txt` against `git show ${base_commit}:package.json`
-- For each newly added dependency, flag as `info`: "New dependency: {name} — verify it's necessary and actively maintained"
-- Skip this check for standalone scans (no base_commit)
+Run the dependency health checks per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/security-checklist.md` (outdated deps, license compliance, unused deps, new dep justification).
 
 ### Step 4: Assess severity
 

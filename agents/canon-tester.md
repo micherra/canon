@@ -89,19 +89,7 @@ Start with the implementor's **declared Known Gaps** — these are the gaps the 
 
 Then review each implementor's test file against its source file:
 
-**Principle-driven gaps:**
-
-If **errors-are-values** was applied:
-- Check that EVERY error branch in result types is tested
-- If any are missing, write the missing error branch tests
-
-If **thin-handlers** was applied:
-- Verify handlers are tested with mocked services, not real ones
-- If missing, write delegation-only handler tests
-
-If **test-the-sad-path** applies:
-- Check that failure modes and edge cases are tested
-- Fill in missing sad-path tests
+**Principle-driven gaps**: Check applied principles against test coverage per the patterns in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/tester-report-template.md`.
 
 **Structural gaps:**
 - Untested public functions/exports
@@ -127,43 +115,7 @@ Canon test patterns: {principle-id} ({what was tested})
 
 ### Step 9: Produce test report
 
-```markdown
-## Test Report: {task-slug}
-
-### Summary
-Implementor tests: {N} | Integration tests written: {N} | Coverage gaps filled: {N}
-All passing: {yes/no}
-
-### Integration tests
-| Test | Tasks covered | What it verifies |
-|------|---------------|------------------|
-| {test name} | {slug}-01 + {slug}-03 | {cross-task interaction} |
-
-### Coverage gaps filled
-| Task | Gap | Source | Tests added |
-|------|-----|--------|-------------|
-| {slug}-01 | Missing error branch for {case} | implementor-declared | 1 |
-| {slug}-02 | No sad-path tests | tester-discovered | 3 |
-| {slug}-01 | Timeout handling | risk-mitigation | 2 |
-
-### Risk mitigations verified
-<!-- Track whether all risk items from implementor summaries are now tested. -->
-| Risk Item | Implementor Status | Tester Status |
-|-----------|-------------------|---------------|
-| {risk} | tested — PASS | confirmed |
-| {risk} | NOT tested | now tested — PASS |
-| {risk} | NOT tested | still untested — {reason / IMPLEMENTATION_ISSUE} |
-
-### Principle compliance
-- {principle-id}: tested {what} — {result}
-
-### Issues found
-<!-- If no issues: "None" -->
-<!-- If IMPLEMENTATION_ISSUE: use this structured format so the orchestrator can parse it -->
-| File | Failing Test | Root Cause | Suggested Fix |
-|------|-------------|------------|---------------|
-| `path/to/file.ts` | `test name or describe block` | {what the code does wrong — be specific} | {concrete fix suggestion} |
-```
+Write a test report following the template at `${CLAUDE_PLUGIN_ROOT}/templates/test-report.md`.
 
 **IMPLEMENTATION_ISSUE format rule**: The `### Issues found` table is the contract between tester and orchestrator. The orchestrator parses this table to spawn the refactorer. Every column is required:
 - **File**: exact path to the source file (not the test file) with the bug

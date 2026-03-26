@@ -14,7 +14,7 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 
 | Agent | Role | Model |
 |-------|------|-------|
-| `canon-orchestrator` | Single entry point; classifies intent, drives flow state machine, spawns agents | opus |
+| `canon-orchestrator` | Single entry point; classifies intent, drives flow state machine, spawns agents | sonnet |
 | `canon-chat` | Project-aware conversational agent; discusses ideas, brainstorms, writes briefs for build handoff | sonnet |
 | `canon-guide` | Answers questions, browses principles, shows status dashboards (read-only) | sonnet |
 | `canon-architect` | Designs solutions; produces design decisions and task decomposition | opus |
@@ -22,9 +22,9 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 | `canon-tester` | Writes integration tests; fills coverage gaps | sonnet |
 | `canon-researcher` | Investigates single research dimensions | sonnet |
 | `canon-reviewer` | Reviews code for principle compliance | opus |
-| `canon-security` | Security assessments on implemented code | sonnet |
+| `canon-security` | Security assessments on implemented code | opus |
 | `canon-scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation | sonnet |
-| `canon-learner` | Analyzes patterns; suggests principle improvements | opus |
+| `canon-learner` | Analyzes patterns; suggests principle improvements | sonnet |
 | `canon-fixer` | Fixes principle violations identified by reviewers | sonnet |
 | `canon-shipper` | Handles final shipping decisions | sonnet |
 | `canon-writer` | Writes documentation and content | sonnet |

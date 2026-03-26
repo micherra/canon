@@ -56,30 +56,7 @@ Recommend one approach with clear rationale tied to Canon principles.
 
 ### Step 5: Produce design document
 
-Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/DESIGN.md`):
-
-```markdown
-## Design: {task description}
-
-### Approach
-[Description of the chosen approach]
-
-### Canon alignment
-- [principle-id] ✓ — how it's honored
-- [principle-id] ✓ — how it's honored
-- [principle-id] ⚠ — tension noted and justified
-
-### File structure
-- path/to/file.ts — purpose
-- path/to/file.ts — purpose
-
-### Decisions made
-- [decision 1 and rationale, tied to principle]
-- [decision 2 and rationale, tied to principle]
-
-### Open questions for user
-- [any questions that need human input before implementation]
-```
+Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/DESIGN.md`) using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`.
 
 ### Step 6: Extract task conventions
 
@@ -128,46 +105,7 @@ Assign wave numbers based on dependencies:
 
 **Wave count heuristic**: Default to 1 wave if all tasks can be independently committed with no shared new types or utilities. Add waves only when tasks have true data dependencies (Task B imports a type that Task A creates). Over-waving adds merge overhead for no benefit.
 
-For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md`:
-
-```markdown
----
-task_id: "{slug}-{NN}"
-wave: N
-depends_on: []
-decisions:
-  - "{decision-id}"
-files:
-  - path/to/file.ts
-principles:
-  - principle-id-1
----
-
-## Task: {brief description}
-
-### Action
-[Specific instructions: exact function signatures, patterns to follow, imports needed]
-
-### Canon principles to apply
-- **{principle-id}**: How to apply it specifically to this task
-
-### Risk mitigations
-<!-- Extracted from risk research. Each item becomes a required test or acceptance criterion. -->
-<!-- Omit this section only if no risk findings apply to this task's files. -->
-- {risk finding}: {how to mitigate — specific test to write or guard to implement}
-
-### Tests to write
-- {test file path}: {what to test}
-- {test file path}: {risk mitigation test — from risk research}
-
-### Verify
-1. All new tests pass: `{test command}`
-2. Existing tests still pass: `{project test command}`
-3. All risk mitigations verified: {specific checks}
-
-### Done when
-[Clear, testable completion criteria — must include "all tests pass" and "all risk mitigations addressed"]
-```
+For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md` using the task-plan template at `${CLAUDE_PLUGIN_ROOT}/templates/task-plan.md`.
 
 **Risk flow rule**: Every finding from the risk researcher MUST map to at least one task plan's `### Risk mitigations` section. If a risk finding doesn't naturally belong to any task, create a dedicated task for it or add it to the most relevant task. After producing all plans, verify: every risk finding has a home. If any risk finding is unaccounted for, flag it in the design doc's "Open questions" section.
 
@@ -175,15 +113,7 @@ principles:
 
 ### Step 8: Produce plan index
 
-Create an index at `.canon/plans/{task-slug}/INDEX.md`:
-
-```markdown
-## Plan Index: {task description}
-
-| Task | Wave | Depends on | Files | Principles |
-|------|------|------------|-------|------------|
-| {slug}-01 | 1 | — | path/to/file.ts | principle-id |
-```
+Create an index at `.canon/plans/{task-slug}/INDEX.md` using the plan-index template at `${CLAUDE_PLUGIN_ROOT}/templates/plan-index.md`.
 
 ## Workspace Integration
 

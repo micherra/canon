@@ -45,35 +45,7 @@ Run `git log --oneline ${base_commit}..HEAD` to get the list of commits from thi
 
 ### Step 3: Generate PR description
 
-Produce a structured PR description:
-
-```markdown
-## Summary
-{1-3 sentence description synthesized from task + design approach. Focus on WHAT and WHY, not HOW.}
-
-## Changes
-{Bulleted list of concrete changes, grouped by area. Extract from implementation summaries.}
-- **{area}**: {what changed}
-- **{area}**: {what changed}
-
-## Design Decisions
-{Only if DESIGN.md exists. 1-2 key decisions with brief rationale. Omit if quick-fix flow.}
-
-## Testing
-- Tests written: {count from summaries + test report}
-- Integration tests: {count from test report, or "N/A"}
-- Coverage gaps filled: {count, or "N/A"}
-- Review verdict: **{CLEAN/WARNING}**
-
-## Security
-{Only if SECURITY.md exists. "Clean" or brief summary of findings and resolutions.}
-
-## Notes
-{Any concerns from board.json. Any skipped states. Anything a reviewer should watch for.}
-{Omit this section entirely if there are no notes.}
-```
-
-**Tone**: Write for a human reviewer who hasn't seen the build process. Be concrete and specific. No filler.
+Produce a structured PR description using the pr-description template at `${CLAUDE_PLUGIN_ROOT}/templates/pr-description.md`. Write for a human reviewer who hasn't seen the build process. Be concrete and specific. No filler.
 
 ### Step 4: Generate changelog entry (if applicable)
 
