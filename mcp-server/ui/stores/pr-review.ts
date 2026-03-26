@@ -1,9 +1,49 @@
 /**
- * stores/pr-impact.ts
+ * stores/pr-review.ts
  *
- * Type definitions for the PR Impact View payload.
+ * Type definitions for the unified PR Review View payload.
  * Mirrored from src/tools/show-pr-impact.ts to avoid server/UI boundary coupling.
+ * Replaces stores/pr-impact.ts (deleted 2026-03-25 — merged into unified show_pr_impact).
  */
+
+export interface PrFileInfo {
+  path: string;
+  layer: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+  bucket: "needs-attention" | "worth-a-look" | "low-risk";
+  reason: string;
+  priority_score?: number;
+  priority_factors?: {
+    in_degree: number;
+    violation_count: number;
+    is_changed: boolean;
+    layer: string;
+    layer_centrality: number;
+  };
+  violations?: Array<{
+    principle_id: string;
+    severity: "rule" | "strong-opinion" | "convention";
+    message?: string;
+  }>;
+}
+
+export interface BlastRadiusEntry {
+  file: string;
+  affected: Array<{ path: string; depth: number }>;
+}
+
+export interface PrepData {
+  files: PrFileInfo[];
+  layers: Array<{ name: string; file_count: number }>;
+  total_files: number;
+  incremental: boolean;
+  last_reviewed_sha?: string;
+  diff_command: string;
+  narrative: string;
+  blast_radius: BlastRadiusEntry[];
+  graph_data_age_ms?: number;
+  error?: string;
+}
 
 export interface PrImpactHotspot {
   file: string;
@@ -32,8 +72,9 @@ export interface PrImpactSubgraph {
   layers: Array<{ name: string; color: string; file_count: number }>;
 }
 
-export interface PrImpactOutput {
-  status: "ok" | "no_review" | "no_kg";
+export interface UnifiedPrOutput {
+  status: "ok" | "no_diff_error";
+  prep: PrepData;
   review?: {
     verdict: "BLOCKING" | "WARNING" | "CLEAN";
     branch?: string;
@@ -66,5 +107,6 @@ export interface PrImpactOutput {
     justification: string;
     category?: string;
   }>;
+  has_review: boolean;
   empty_state?: string;
 }

@@ -400,8 +400,8 @@ describe("DepRow prompt template", () => {
 
 // ── Staleness warning structural contract ─────────────────────────────────────
 
-describe("PrReviewPrep staleness warning — structural contract", () => {
-  const sveltePath = join(uiDir, "PrReviewPrep.svelte");
+describe("PrReview staleness warning — structural contract", () => {
+  const sveltePath = join(uiDir, "PrReview.svelte");
 
   it("contains staleness-warning class", () => {
     const content = readFileSync(sveltePath, "utf-8");
@@ -427,8 +427,8 @@ describe("PrReviewPrep staleness warning — structural contract", () => {
 
 // ── Container composition contract ────────────────────────────────────────────
 
-describe("PrReviewPrep container composition", () => {
-  const sveltePath = join(uiDir, "PrReviewPrep.svelte");
+describe("PrReview container composition", () => {
+  const sveltePath = join(uiDir, "PrReview.svelte");
 
   it("exists", () => {
     expect(existsSync(sveltePath)).toBe(true);
@@ -461,24 +461,24 @@ describe("PrReviewPrep container composition", () => {
     expect(content).toContain("onPrompt={handlePrompt}");
   });
 
-  it("passes narrative, totalFiles, layerCount, netNewFiles, violationCount to NarrativeSummary", () => {
+  it("passes narrative, totalFiles, layerCount, netNewFiles, violationCount to NarrativeSummary (via data.prep)", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("narrative={data.narrative}");
-    expect(content).toContain("totalFiles={data.total_files}");
-    expect(content).toContain("layerCount={data.layers.length}");
+    expect(content).toContain("narrative={data.prep.narrative}");
+    expect(content).toContain("totalFiles={data.prep.total_files}");
+    expect(content).toContain("layerCount={data.prep.layers.length}");
     expect(content).toContain("netNewFiles={netNewFiles}");
     expect(content).toContain("violationCount={totalViolations}");
   });
 
-  it("passes files and onPrompt to ChangeStoryGrid", () => {
+  it("passes files and onPrompt to ChangeStoryGrid (via data.prep.files)", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("files={data.files}");
+    expect(content).toContain("files={data.prep.files}");
     expect(content).toContain("onPrompt={handlePrompt}");
   });
 
-  it("passes files, blastRadius, and onPrompt to ImpactTabs", () => {
+  it("passes files, blastRadius, and onPrompt to ImpactTabs (via data.prep)", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("blastRadius={data.blast_radius}");
+    expect(content).toContain("blastRadius={data.prep.blast_radius}");
   });
 
   it("does NOT contain old bucket-section markup", () => {
@@ -515,11 +515,11 @@ describe("Acceptance criteria: 0 violations, 0 blast_radius, single file", () =>
 
   it("ImpactTabs receives empty blastRadius gracefully (0 blast_radius)", () => {
     // When blastRadius = [], Tab C should show empty state
-    // We verify the container passes blast_radius correctly
-    const sveltePath = join(uiDir, "PrReviewPrep.svelte");
+    // We verify the container passes blast_radius correctly (via data.prep.blast_radius)
+    const sveltePath = join(uiDir, "PrReview.svelte");
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("blastRadius={data.blast_radius}");
-    // blast_radius is always an array (never undefined in PrReviewData)
+    expect(content).toContain("blastRadius={data.prep.blast_radius}");
+    // blast_radius is always an array (never undefined in PrepData)
   });
 
   it("totalViolations is 0 for section 1 empty violations display", () => {

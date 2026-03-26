@@ -970,7 +970,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiDir = pathJoin(__dirname, "../../ui");
 
 describe("PrReviewPrep.svelte — v2 container structural contract", () => {
-  const sveltePath = pathJoin(uiDir, "PrReviewPrep.svelte");
+  // Updated 2026-03-25: PrReviewPrep.svelte merged into PrReview.svelte (unified view)
+  const sveltePath = pathJoin(uiDir, "PrReview.svelte");
 
   it("v2: does NOT import truncate (error display moved to header simplification)", () => {
     // v2 rewrite: thin container removed the truncate import — error display
@@ -984,8 +985,9 @@ describe("PrReviewPrep.svelte — v2 container structural contract", () => {
   it("v2: blast_radius passed to ImpactTabs child component", () => {
     // v2 rewrite: blast radius rendering delegated to ImpactTabs (Tab C: Critical Deps)
     // instead of standalone panel in the container.
+    // In unified PrReview, data is at data.prep.blast_radius
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("blastRadius={data.blast_radius}");
+    expect(content).toContain("blastRadius={data.prep.blast_radius}");
   });
 
   it("v2: does NOT contain standalone blast section (moved to ImpactTabs)", () => {

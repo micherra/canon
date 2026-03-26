@@ -1,11 +1,12 @@
 /**
- * pr-review-prep-entry.test.ts
+ * pr-review-entry.test.ts
  *
- * Verifies that the PR Review Prep MCP App entry files exist and are wired
- * correctly — parallel to the pr-impact-entry.test.ts pattern.
+ * Verifies that pr-review.html exists, contains the correct <script> tag
+ * pointing to pr-review.ts, and has the #app mount target.
  *
- * Updated for v2 redesign (Wave 4): thin container composing NarrativeSummary,
- * ChangeStoryGrid, ImpactTabs — replaces old bucket-based monolithic layout.
+ * Also verifies that old split entry points no longer exist (merged into unified view).
+ *
+ * This is a simple file-existence and content test — no browser runtime needed.
  */
 
 import { describe, it, expect } from "vitest";
@@ -18,8 +19,8 @@ const uiDir = join(__dirname, "..");
 
 // ── HTML entry point ──
 
-describe("pr-review-prep.html entry point", () => {
-  const htmlPath = join(uiDir, "pr-review-prep.html");
+describe("pr-review.html entry point", () => {
+  const htmlPath = join(uiDir, "pr-review.html");
 
   it("exists", () => {
     expect(existsSync(htmlPath)).toBe(true);
@@ -27,12 +28,12 @@ describe("pr-review-prep.html entry point", () => {
 
   it("has correct <title>", () => {
     const content = readFileSync(htmlPath, "utf-8");
-    expect(content).toContain("<title>Canon PR Review Prep</title>");
+    expect(content).toContain("<title>Canon PR Review</title>");
   });
 
-  it("has a <script> tag pointing to ./pr-review-prep.ts", () => {
+  it("has a <script> tag pointing to ./pr-review.ts", () => {
     const content = readFileSync(htmlPath, "utf-8");
-    expect(content).toContain('src="./pr-review-prep.ts"');
+    expect(content).toContain('src="./pr-review.ts"');
   });
 
   it("has the #app mount target", () => {
@@ -48,17 +49,17 @@ describe("pr-review-prep.html entry point", () => {
 
 // ── TypeScript entry point ──
 
-describe("pr-review-prep.ts entry point", () => {
-  const tsPath = join(uiDir, "pr-review-prep.ts");
+describe("pr-review.ts entry point", () => {
+  const tsPath = join(uiDir, "pr-review.ts");
 
   it("exists", () => {
     expect(existsSync(tsPath)).toBe(true);
   });
 
-  it("imports PrReviewPrep from ./PrReviewPrep.svelte", () => {
+  it("imports PrReview from ./PrReview.svelte", () => {
     const content = readFileSync(tsPath, "utf-8");
-    expect(content).toContain("PrReviewPrep");
-    expect(content).toContain("./PrReviewPrep.svelte");
+    expect(content).toContain("PrReview");
+    expect(content).toContain("./PrReview.svelte");
   });
 
   it("uses mount() from svelte", () => {
@@ -68,10 +69,10 @@ describe("pr-review-prep.ts entry point", () => {
   });
 });
 
-// ── Svelte component structural contract (v2 thin container) ──
+// ── PrReview.svelte unified component ──
 
-describe("PrReviewPrep.svelte component (v2 container)", () => {
-  const sveltePath = join(uiDir, "PrReviewPrep.svelte");
+describe("PrReview.svelte unified component", () => {
+  const sveltePath = join(uiDir, "PrReview.svelte");
 
   it("exists", () => {
     expect(existsSync(sveltePath)).toBe(true);
@@ -93,9 +94,9 @@ describe("PrReviewPrep.svelte component (v2 container)", () => {
     expect(content).toContain("stores/bridge");
   });
 
-  it("calls get_pr_review_data tool via bridge", () => {
+  it("calls show_pr_impact tool via bridge", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("get_pr_review_data");
+    expect(content).toContain("show_pr_impact");
   });
 
   it("handles loading state", () => {
@@ -131,52 +132,63 @@ describe("PrReviewPrep.svelte component (v2 container)", () => {
     expect(content).toContain("./components/ImpactTabs.svelte");
   });
 
-  it("passes narrative to NarrativeSummary", () => {
+  it("imports VerdictStrip child component", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("narrative={data.narrative}");
+    expect(content).toContain("VerdictStrip");
+    expect(content).toContain("./components/VerdictStrip.svelte");
   });
 
-  it("passes totalFiles to NarrativeSummary", () => {
+  it("imports HotspotList child component", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("totalFiles={data.total_files}");
+    expect(content).toContain("HotspotList");
+    expect(content).toContain("./components/HotspotList.svelte");
   });
 
-  it("passes violationCount to NarrativeSummary", () => {
+  it("imports SubGraph child component", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("violationCount={totalViolations}");
+    expect(content).toContain("SubGraph");
+    expect(content).toContain("./components/SubGraph.svelte");
   });
 
-  it("passes netNewFiles to NarrativeSummary", () => {
+  it("imports PrDetailPanel child component", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("netNewFiles={netNewFiles}");
+    expect(content).toContain("PrDetailPanel");
+    expect(content).toContain("./components/PrDetailPanel.svelte");
   });
 
-  it("computes totalViolations via $derived", () => {
+  it("imports UnifiedPrOutput type from stores/pr-review", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("totalViolations");
-    expect(content).toContain("violations?.length");
+    expect(content).toContain("UnifiedPrOutput");
+    expect(content).toContain("./stores/pr-review");
   });
 
-  it("computes netNewFiles via $derived", () => {
+  it("reads prep data from data.prep (not data directly)", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("netNewFiles");
+    expect(content).toContain("data.prep");
   });
 
-  it("passes onPrompt={handlePrompt} to child components", () => {
+  it("shows VerdictStrip when hasReview is true", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("onPrompt={handlePrompt}");
+    expect(content).toContain("hasReview");
+    expect(content).toContain("VerdictStrip");
   });
 
-  it("handlePrompt calls bridge.sendMessage", () => {
+  it("shows Run Review button when hasReview is false", () => {
     const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("Run Review");
+    expect(content).toContain("handleRunReview");
+  });
+
+  it("handleRunReview sends message to bridge", () => {
+    const content = readFileSync(sveltePath, "utf-8");
+    expect(content).toContain("handleRunReview");
     expect(content).toContain("bridge.sendMessage");
-    expect(content).toContain("handlePrompt");
   });
 
   it("renders staleness warning when isStale is true", () => {
     const content = readFileSync(sveltePath, "utf-8");
     expect(content).toContain("staleness-warning");
-    expect(content).toContain("isStale");
+    expect(content).toContain("{#if isStale}");
   });
 
   it("isStale threshold is 3_600_000ms (1 hour)", () => {
@@ -184,42 +196,38 @@ describe("PrReviewPrep.svelte component (v2 container)", () => {
     expect(content).toContain("3_600_000");
   });
 
-  it("shows incremental badge when data.incremental is true", () => {
+  it("renders review impact panels section when hasReview", () => {
     const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("incremental");
-    expect(content).toContain("last_reviewed_sha");
+    expect(content).toContain("panel-left");
+    expect(content).toContain("panel-center");
+    expect(content).toContain("panel-right");
+  });
+});
+
+// ── Deleted files — old split entry points must NOT exist ──
+
+describe("old split entry points are deleted", () => {
+  it("PrReviewPrep.svelte does NOT exist", () => {
+    expect(existsSync(join(uiDir, "PrReviewPrep.svelte"))).toBe(false);
   });
 
-  it("passes blast_radius to ImpactTabs", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("blast_radius");
-    expect(content).toContain("blastRadius={data.blast_radius}");
+  it("PrImpact.svelte does NOT exist", () => {
+    expect(existsSync(join(uiDir, "PrImpact.svelte"))).toBe(false);
   });
 
-  it("does NOT contain old bucket-section markup (removed in v2)", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("bucket-section");
+  it("pr-review-prep.html does NOT exist", () => {
+    expect(existsSync(join(uiDir, "pr-review-prep.html"))).toBe(false);
   });
 
-  it("does NOT contain old layer-tabs markup (removed in v2)", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("layer-tabs");
+  it("pr-impact.html does NOT exist", () => {
+    expect(existsSync(join(uiDir, "pr-impact.html"))).toBe(false);
   });
 
-  it("does NOT contain toggleBucket helper (removed in v2)", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("toggleBucket");
+  it("pr-review-prep.ts does NOT exist", () => {
+    expect(existsSync(join(uiDir, "pr-review-prep.ts"))).toBe(false);
   });
 
-  it("does NOT contain expandedBlastRadius state (removed in v2)", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("expandedBlastRadius");
-  });
-
-  it("does NOT have old review strategy or risk areas", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("Review Strategy");
-    expect(content).not.toContain("Risk Areas");
-    expect(content).not.toContain("sortBy");
+  it("pr-impact.ts does NOT exist", () => {
+    expect(existsSync(join(uiDir, "pr-impact.ts"))).toBe(false);
   });
 });

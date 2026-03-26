@@ -305,14 +305,14 @@ describe("HotspotList.svelte — stats display", () => {
 });
 
 // ===========================================================================
-// PrImpact.svelte — cross-panel data flow
+// PrReview.svelte — cross-panel data flow (unified component, replaces PrImpact.svelte)
 // ===========================================================================
 
 describe("PrImpact.svelte — cross-component data flow", () => {
   let content: string;
 
   beforeAll(() => {
-    content = readFileSync(join(__dirname, "..", "PrImpact.svelte"), "utf-8");
+    content = readFileSync(join(__dirname, "..", "PrReview.svelte"), "utf-8");
   });
 
   it("derives selectedFileViolations by filtering violations to matching file_path", () => {
@@ -376,7 +376,7 @@ describe("PrImpact.svelte — subgraph seed nodes", () => {
   let content: string;
 
   beforeAll(() => {
-    content = readFileSync(join(__dirname, "..", "PrImpact.svelte"), "utf-8");
+    content = readFileSync(join(__dirname, "..", "PrReview.svelte"), "utf-8");
   });
 
   it("derives seedNodeIds from review.files (changed files become seed nodes)", () => {
