@@ -10,7 +10,6 @@ import { listPrinciples } from "./tools/list-principles.ts";
 import { reviewCode } from "./tools/review-code.ts";
 import { getCompliance } from "./tools/get-compliance.ts";
 import { report } from "./tools/report.ts";
-import { getPrReviewData } from "./tools/pr-review-data.ts";
 import { codebaseGraph } from "./tools/codebase-graph.ts";
 import { getFileContext } from "./tools/get-file-context.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
@@ -88,18 +87,22 @@ function registerToolWithUi(
 
 registerToolWithUi(
   "show_pr_impact",
-  "ui://canon/pr-impact",
-  "PR Impact Analysis",
-  "Opens the PR Impact View showing blast radius, hotspots, violations, and dependency subgraph for the most recent Canon PR review.",
+  "ui://canon/pr-review",
+  "PR Review",
+  "Opens the PR Review view — change analysis, impact assessment, and review violations for a pull request or branch.",
   {
     branch: z.string().optional().describe("Filter to reviews for this branch"),
     pr_number: z.number().optional().describe("Filter to reviews for this PR number"),
+    diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
+    incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
   },
-  "pr-impact.html",
+  "pr-review.html",
   async (input) => {
     const result = await showPrImpact(projectDir, {
       branch: input.branch,
       pr_number: input.pr_number,
+      diff_base: input.diff_base,
+      incremental: input.incremental,
     });
     return jsonResponse(result);
   },
@@ -187,23 +190,6 @@ server.registerTool(
   }
 );
 
-registerToolWithUi(
-  "get_pr_review_data",
-  "ui://canon/pr-review-prep",
-  "PR Review Prep",
-  "Get PR review data — file list, layer grouping, diff command, and graph-aware review priority for a pull request or branch review.",
-  {
-    pr_number: z.number().optional().describe("GitHub PR number"),
-    branch: z.string().optional().describe("Branch name to review"),
-    diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
-    incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
-  },
-  "pr-review-prep.html",
-  async (input) => {
-    const result = await getPrReviewData(input, projectDir);
-    return jsonResponse(result);
-  },
-);
 
 registerToolWithUi(
   "codebase_graph",

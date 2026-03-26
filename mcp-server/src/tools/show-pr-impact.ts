@@ -1,21 +1,22 @@
 /**
  * show_pr_impact — Server-side tool handler
  *
- * Assembles a PrImpactOutput by orchestrating multiple data sources:
- *   1. Latest PR review from PrStore
- *   2. Blast radius analysis via analyzeBlastRadius (when KG is available)
- *   3. Subgraph extraction from graph-data.json (filtered to blast radius affected files)
- *   4. Drift decisions cross-referenced with violated principles
- *   5. Risk-ranked hotspot list (blast radius size × severity weight)
+ * Assembles a UnifiedPrOutput by orchestrating multiple data sources:
+ *   1. Live diff prep data via getPrReviewData (always present)
+ *   2. Latest PR review from DriftStore (optional — impact overlay)
+ *   3. Blast radius analysis via analyzeBlastRadius (when KG is available)
+ *   4. Subgraph extraction from graph-data.json (filtered to blast radius affected files)
+ *   5. Drift decisions cross-referenced with violated principles
+ *   6. Risk-ranked hotspot list (blast radius size × severity weight)
  *
  * Graceful degradation:
- *   - No PR review → status: "no_review"
+ *   - No stored review → prep data always present; review/hotspots/subgraph empty
  *   - KG absent → blast radius and subgraph empty, review data still returned
- *   - KG query throws → continues without blast radius (no_kg does not apply here)
+ *   - KG query throws → continues without blast radius
  *
  * Canon principles:
  *   - functions-do-one-thing: showPrImpact assembles one payload; helpers handle sub-tasks
- *   - deep-modules: simple (projectDir) → (PrImpactOutput) interface; complexity hidden
+ *   - deep-modules: simple (projectDir, options?) → (UnifiedPrOutput) interface; complexity hidden
  *   - validate-at-trust-boundaries: structured errors/empty states, never throws to caller
  */
 
@@ -27,6 +28,8 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import type { ReviewEntry, ReviewViolation } from "../schema.ts";
+import { getPrReviewData } from "./pr-review-data.ts";
+import type { PrReviewDataOutput } from "./pr-review-data.ts";
 
 /** Resolve a project-relative path safely. Returns null on traversal attempts. */
 function safeResolvePath(projectDir: string, filePath: string): string | null {
@@ -92,6 +95,28 @@ export interface PrImpactOutput {
     justification: string;
     category?: string;
   }>;
+  empty_state?: string;
+}
+
+/**
+ * Unified output type for show_pr_impact.
+ * prep is always present (live diff analysis).
+ * review/blastRadius/hotspots/subgraph/decisions are impact layer fields (present when a stored review exists).
+ */
+export interface UnifiedPrOutput {
+  status: "ok" | "no_diff_error";
+  /** Live diff prep data — always populated */
+  prep: PrReviewDataOutput;
+  /** Stored review data — only present when a Canon review exists in DriftStore */
+  review?: PrImpactOutput["review"];
+  /** Blast radius analysis — only when KG is available and review exists */
+  blastRadius?: PrImpactOutput["blastRadius"];
+  /** Risk-ranked hotspot list — empty when no stored review */
+  hotspots: PrImpactHotspot[];
+  /** Subgraph filtered to changed + affected files — empty when no stored review */
+  subgraph: PrImpactSubgraph;
+  /** Decisions cross-referenced with violated principles — empty when no stored review */
+  decisions: PrImpactOutput["decisions"];
   empty_state?: string;
 }
 
@@ -286,7 +311,11 @@ async function buildSubgraph(
 // ---------------------------------------------------------------------------
 
 /**
- * Assemble the PR impact payload for the most recent stored PR review.
+ * Assemble the unified PR review payload.
+ *
+ * Always calls getPrReviewData for live diff prep data.
+ * When a stored Canon review exists in DriftStore, overlays blast radius,
+ * hotspots, subgraph, and decisions on top of the prep data.
  *
  * When options.branch or options.pr_number are provided, filters to reviews
  * matching those criteria. Falls back to all reviews (latest) when no filter given.
@@ -295,9 +324,20 @@ async function buildSubgraph(
  */
 export async function showPrImpact(
   projectDir: string,
-  options?: { branch?: string; pr_number?: number },
-): Promise<PrImpactOutput> {
-  // 1. Load latest PR review (optionally filtered by branch/pr_number)
+  options?: { branch?: string; pr_number?: number; diff_base?: string; incremental?: boolean },
+): Promise<UnifiedPrOutput> {
+  // 1. Always gather live diff prep data
+  const prepResult = await getPrReviewData(
+    {
+      pr_number: options?.pr_number,
+      branch: options?.branch,
+      diff_base: options?.diff_base,
+      incremental: options?.incremental,
+    },
+    projectDir,
+  );
+
+  // 2. Load latest stored PR review (optionally filtered by branch/pr_number)
   const driftStore = new DriftStore(projectDir);
   const hasFilter = options?.branch !== undefined || options?.pr_number !== undefined;
   const reviews = await driftStore.getReviews({
@@ -310,17 +350,18 @@ export async function showPrImpact(
     : reviews.filter((r) => r.pr_number !== undefined || r.branch !== undefined);
   const latestReview = prReviews.length > 0 ? prReviews[prReviews.length - 1] : null;
 
+  // When no stored review, return prep data only
   if (!latestReview) {
     return {
-      status: "no_review",
+      status: "ok",
+      prep: prepResult,
       hotspots: [],
       subgraph: { nodes: [], edges: [], layers: [] },
       decisions: [],
-      empty_state: "No PR review stored. Run the Canon reviewer first.",
     };
   }
 
-  // 1b. Validate file paths from stored review (trust boundary)
+  // 2b. Validate file paths from stored review (trust boundary)
   latestReview.files = latestReview.files.filter(
     (f) => safeResolvePath(projectDir, f) !== null,
   );
@@ -328,11 +369,11 @@ export async function showPrImpact(
     (v) => !v.file_path || safeResolvePath(projectDir, v.file_path) !== null,
   );
 
-  // 2. Check KG availability
+  // 3. Check KG availability
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   const hasKg = existsSync(dbPath);
 
-  // 3. Compute blast radius (if KG available)
+  // 4. Compute blast radius (if KG available)
   let blastRadius: PrImpactOutput["blastRadius"] = undefined;
   if (hasKg) {
     const db = initDatabase(dbPath);
@@ -356,19 +397,20 @@ export async function showPrImpact(
     }
   }
 
-  // 4. Build hotspot list (ranked by risk_score)
+  // 5. Build hotspot list (ranked by risk_score)
   const hotspots = buildHotspots(latestReview, blastRadius);
 
-  // 5. Build subgraph from graph-data.json (filtered to changed + affected files)
+  // 6. Build subgraph from graph-data.json (filtered to changed + affected files)
   const subgraph = await buildSubgraph(projectDir, latestReview.files, blastRadius);
 
-  // 6. Load relevant decisions (cross-referenced with violated principles)
+  // 7. Load relevant decisions (cross-referenced with violated principles)
   const violatedPrinciples = new Set(latestReview.violations.map((v) => v.principle_id));
   const allDecisions = await driftStore.getDecisions();
   const relevantDecisions = allDecisions.filter((d) => violatedPrinciples.has(d.principle_id));
 
   return {
     status: "ok",
+    prep: prepResult,
     review: {
       verdict: latestReview.verdict,
       branch: latestReview.branch,

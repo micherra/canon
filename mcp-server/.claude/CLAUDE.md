@@ -46,7 +46,12 @@ src/
 - Output field: `review_id` (was `pr_review_id` until 2026-03-25); ID prefix is `rev_`
 
 **`show_pr_impact` tool** (`src/tools/show-pr-impact.ts`):
-- Accepts optional `options?: { branch?: string; pr_number?: number }` — passed to `DriftStore.getReviews()` for filtered last-review lookup; exposed in MCP schema as top-level `branch` and `pr_number` input fields
+- Unified tool — merges `show_pr_impact` and `get_pr_review_data` (removed 2026-03-25)
+- Accepts optional `options?: { branch?: string; pr_number?: number; diff_base?: string; incremental?: boolean }` — all four exposed as top-level MCP input fields
+- Always calls `getPrReviewData` internally for live diff analysis; optionally overlays stored review impact data when a Canon review exists in DriftStore
+- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), plus `review?`, `blastRadius?`, `hotspots`, `subgraph`, `decisions` (populated when stored review exists, empty when not)
+- `status` is always `"ok"` — no more `"no_review"` status; review field being absent signals no stored review
+- Resource URI: `ui://canon/pr-review` (was `ui://canon/pr-impact`); HTML entry: `pr-review.html`
 
 **`get_drift_report` tool** (`src/tools/get-drift-report.ts`):
 - Output field `pr_reviews` is `ReviewEntry[]` (was `PrReviewEntry[]` until 2026-03-25); entries are filtered by `pr_number !== undefined || branch !== undefined`
@@ -58,7 +63,7 @@ src/
 - `project_max_impact: number` — max `computeImpactScore()` across all graph nodes; `0` when no cached graph
 - `FileBlastRadiusEntry` interface — fields: `name`, `qualified_name`, `kind`, `depth`, `file_path` (path of the file containing the entity; `""` if lookup fails)
 
-**PR Review Data** (`src/tools/pr-review-data.ts`):
+**PR Review Data** (`src/tools/pr-review-data.ts`) — pure function module; `get_pr_review_data` MCP tool removed 2026-03-25 (absorbed into `show_pr_impact`); `getPrReviewData` function called internally by `showPrImpact`:
 - `PrViolation` interface — `{ principle_id: string; severity: "rule"|"strong-opinion"|"convention"; message?: string }`
 - `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`, `violations?: PrViolation[]`
 - `PrReviewDataOutput` interface — fields: `files`, `layers`, `total_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `prioritized_files?`, `graph_data_age_ms?`, `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
@@ -101,12 +106,11 @@ src/
 
 | Tool | UI Resource | Purpose |
 |------|-------------|---------|
-| `show_pr_impact` | `ui://canon/pr-impact` | PR blast radius, hotspots, violations, subgraph |
+| `show_pr_impact` | `ui://canon/pr-review` | PR Review — change analysis (always), blast radius, hotspots, violations, subgraph (when stored review exists) |
 | `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
 | `get_drift_report` | `ui://canon/drift-report` | Drift analysis: violations, trends, hotspots, PR reviews |
 | `get_compliance` | `ui://canon/compliance` | Per-principle compliance stats, trend chart |
 | `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
-| `get_pr_review_data` | `ui://canon/pr-review-prep` | PR story: narrative summary, change-story clusters (Section 2), impact/violations/critical-deps tabs (Section 3); v2 thin-container architecture |
 | `graph_query` | `ui://canon/graph-query` | Call trees, blast radius, dead code, search |
 
 **Text-only principle/review tools:**

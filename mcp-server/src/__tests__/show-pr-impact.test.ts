@@ -2,12 +2,14 @@
  * show-pr-impact tool — unit tests
  *
  * Tests:
- *   1. No PR review → status: "no_review", empty hotspots, empty subgraph
- *   2. PR review, no KG → status: "ok", review present, blastRadius undefined, hotspots from violations only
+ *   1. No stored review → status: "ok", prep always present, review undefined, empty hotspots/subgraph
+ *   2. PR review, no KG → status: "ok", review + prep present, blastRadius undefined
  *   3. PR review + KG → status: "ok", blast radius populated, hotspots ranked correctly
  *   4. Hotspot ranking → sorted by risk_score descending
  *   5. Decision cross-reference → only relevant decisions included
  *   6. Subgraph filtering → nodes/edges filtered to changed files + blast radius affected files
+ *   7. UnifiedPrOutput shape — prep field always present
+ *   8. diff_base and incremental params forwarded to getPrReviewData
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -37,9 +39,15 @@ vi.mock("../graph/kg-blast-radius.js", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
+// Mock getPrReviewData so tests don't need git/diff infrastructure
+vi.mock("../tools/pr-review-data.js", () => ({
+  getPrReviewData: vi.fn(),
+}));
+
 import { existsSync } from "fs";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
+import { getPrReviewData } from "../tools/pr-review-data.ts";
 
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 import { DriftStore } from "../drift/store.ts";
@@ -52,6 +60,17 @@ const SAMPLE_SCORE = {
   rules: { passed: 1, total: 2 },
   opinions: { passed: 2, total: 3 },
   conventions: { passed: 3, total: 3 },
+};
+
+// Minimal stub for PrReviewDataOutput returned by mocked getPrReviewData
+const SAMPLE_PREP = {
+  files: [],
+  layers: [],
+  total_files: 0,
+  incremental: false,
+  diff_command: "git diff main",
+  narrative: "No changed files.",
+  blast_radius: [],
 };
 
 const SAMPLE_REVIEW = {
@@ -123,6 +142,10 @@ describe("showPrImpact", () => {
     // Default: analyzeBlastRadius not called
     vi.mocked(initDatabase).mockReset();
     vi.mocked(analyzeBlastRadius).mockReset();
+
+    // Default: getPrReviewData returns minimal prep stub
+    vi.mocked(getPrReviewData).mockReset();
+    vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
 
   afterEach(async () => {
@@ -131,26 +154,29 @@ describe("showPrImpact", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 1. No PR review
+  // 1. No stored PR review — prep always present
   // -------------------------------------------------------------------------
 
-  it("returns no_review when no PR reviews exist", async () => {
+  it("returns ok with prep data when no stored PR review exists", async () => {
     const result = await showPrImpact(tmpDir);
 
-    expect(result.status).toBe("no_review");
+    expect(result.status).toBe("ok");
+    // prep is always populated
+    expect(result.prep).toBeDefined();
+    expect(result.prep).toMatchObject(SAMPLE_PREP);
+    // impact fields are empty/absent
     expect(result.hotspots).toEqual([]);
     expect(result.subgraph).toEqual({ nodes: [], edges: [], layers: [] });
     expect(result.decisions).toEqual([]);
     expect(result.review).toBeUndefined();
     expect(result.blastRadius).toBeUndefined();
-    expect(result.empty_state).toContain("No PR review");
   });
 
   // -------------------------------------------------------------------------
-  // 2. PR review present, no KG
+  // 2. Stored PR review present, no KG
   // -------------------------------------------------------------------------
 
-  it("returns ok with review data but no blast radius when KG is absent", async () => {
+  it("returns ok with review + prep data but no blast radius when KG is absent", async () => {
     // Write a PR review
     const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW);
@@ -161,6 +187,10 @@ describe("showPrImpact", () => {
     const result = await showPrImpact(tmpDir);
 
     expect(result.status).toBe("ok");
+    // prep is always populated
+    expect(result.prep).toBeDefined();
+    expect(result.prep).toMatchObject(SAMPLE_PREP);
+    // review is populated from stored data
     expect(result.review).toBeDefined();
     expect(result.review!.verdict).toBe("WARNING");
     expect(result.review!.branch).toBe("feat/my-feature");
@@ -398,6 +428,67 @@ describe("showPrImpact", () => {
     // DB should still be closed even on error
     expect(mockDb.close).toHaveBeenCalledOnce();
   });
+
+  // -------------------------------------------------------------------------
+  // 8. UnifiedPrOutput — prep field always present
+  // -------------------------------------------------------------------------
+
+  it("prep data is always populated even when no stored review exists", async () => {
+    // No review stored — getPrReviewData still returns prep data
+    const result = await showPrImpact(tmpDir);
+
+    expect(result.prep).toBeDefined();
+    expect(result.prep.narrative).toBe("No changed files.");
+    expect(result.prep.diff_command).toBe("git diff main");
+    expect(Array.isArray(result.prep.blast_radius)).toBe(true);
+  });
+
+  it("prep data includes files and narrative from getPrReviewData", async () => {
+    const customPrep = {
+      ...SAMPLE_PREP,
+      files: [
+        {
+          path: "src/foo.ts",
+          layer: "tools",
+          status: "modified",
+          bucket: "needs-attention",
+          reason: "Has violations",
+        },
+      ],
+      total_files: 1,
+      narrative: "This PR touches the tools layer.",
+    };
+    vi.mocked(getPrReviewData).mockResolvedValue(customPrep as never);
+
+    const result = await showPrImpact(tmpDir);
+
+    expect(result.prep.files).toHaveLength(1);
+    expect(result.prep.files[0].path).toBe("src/foo.ts");
+    expect(result.prep.narrative).toBe("This PR touches the tools layer.");
+  });
+
+  it("when stored review exists, review/hotspots/subgraph are populated alongside prep", async () => {
+    const store = new DriftStore(tmpDir);
+    await store.appendReview(SAMPLE_REVIEW);
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    const result = await showPrImpact(tmpDir);
+
+    // Both layers present
+    expect(result.prep).toBeDefined();
+    expect(result.review).toBeDefined();
+    expect(result.hotspots.length).toBeGreaterThan(0);
+    expect(result.subgraph).toBeDefined();
+  });
+
+  it("diff_base and incremental params are forwarded to getPrReviewData", async () => {
+    await showPrImpact(tmpDir, { diff_base: "origin/develop", incremental: true });
+
+    expect(getPrReviewData).toHaveBeenCalledWith(
+      expect.objectContaining({ diff_base: "origin/develop", incremental: true }),
+      tmpDir,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -416,16 +507,16 @@ describe("show_pr_impact registration", () => {
       },
     };
 
-    const prImpactResourceUri = "ui://canon/pr-impact";
+    const prReviewResourceUri = "ui://canon/pr-review";
 
     registerAppTool(
       mockServer,
       "show_pr_impact",
       {
-        title: "PR Impact Analysis",
-        description: "Opens the PR Impact View.",
+        title: "PR Review",
+        description: "Opens the PR Review view.",
         inputSchema: {},
-        _meta: { ui: { resourceUri: prImpactResourceUri } },
+        _meta: { ui: { resourceUri: prReviewResourceUri } },
       },
       async () => ({ content: [{ type: "text" as const, text: "{}" }] }),
     );
@@ -434,6 +525,6 @@ describe("show_pr_impact registration", () => {
     expect(tools[0].name).toBe("show_pr_impact");
 
     const meta = tools[0].config._meta as Record<string, unknown>;
-    expect(meta["ui/resourceUri"]).toBe(prImpactResourceUri);
+    expect(meta["ui/resourceUri"]).toBe(prReviewResourceUri);
   });
 });

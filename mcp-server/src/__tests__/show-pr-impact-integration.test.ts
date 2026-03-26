@@ -1,7 +1,7 @@
 /**
  * show-pr-impact integration tests — coverage gaps
  *
- * This file fills the gaps declared by prtool-04's implementor:
+ * This file fills the gaps declared by prtool-04's implementor (now updated for UnifiedPrOutput):
  *   - Hotspot risk scoring with blast radius present (blast_count × max_severity_weight)
  *   - severityWeight fallback for unknown severities
  *   - Unknown layer names → #888888 fallback in subgraph.layers
@@ -12,9 +12,9 @@
  *   - Decisions: multiple decisions for same principle are all included
  *   - Empty review.files list produces zero hotspots
  *
- * And cross-task integration gaps:
- *   - PrImpactOutput shape returned by showPrImpact matches the type consumed by
- *     stores/pr-impact.ts (PrImpactOutput): required fields always present
+ * And cross-task integration gaps (updated for UnifiedPrOutput):
+ *   - UnifiedPrOutput shape: prep always present, review optional
+ *   - status is always "ok" — no more "no_review" status
  *   - Bridge argument contract: show_pr_impact called with empty arguments object
  */
 
@@ -43,9 +43,14 @@ vi.mock("../graph/kg-blast-radius.js", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
+vi.mock("../tools/pr-review-data.js", () => ({
+  getPrReviewData: vi.fn(),
+}));
+
 import { existsSync } from "fs";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
+import { getPrReviewData } from "../tools/pr-review-data.ts";
 
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 import { DriftStore } from "../drift/store.ts";
@@ -58,6 +63,16 @@ const SAMPLE_SCORE = {
   rules: { passed: 2, total: 3 },
   opinions: { passed: 1, total: 2 },
   conventions: { passed: 3, total: 3 },
+};
+
+const SAMPLE_PREP = {
+  files: [],
+  layers: [],
+  total_files: 0,
+  incremental: false,
+  diff_command: "git diff main",
+  narrative: "No changed files.",
+  blast_radius: [],
 };
 
 function makeReview(overrides: Partial<{
@@ -91,6 +106,8 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(initDatabase).mockReset();
     vi.mocked(analyzeBlastRadius).mockReset();
+    vi.mocked(getPrReviewData).mockReset();
+    vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
 
   afterEach(async () => {
@@ -267,6 +284,8 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(initDatabase).mockReset();
     vi.mocked(analyzeBlastRadius).mockReset();
+    vi.mocked(getPrReviewData).mockReset();
+    vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
 
   afterEach(async () => {
@@ -510,6 +529,8 @@ describe("showPrImpact — multiple reviews", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(initDatabase).mockReset();
     vi.mocked(analyzeBlastRadius).mockReset();
+    vi.mocked(getPrReviewData).mockReset();
+    vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
 
   afterEach(async () => {
@@ -561,6 +582,8 @@ describe("showPrImpact — decision cross-reference gaps", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(initDatabase).mockReset();
     vi.mocked(analyzeBlastRadius).mockReset();
+    vi.mocked(getPrReviewData).mockReset();
+    vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
 
   afterEach(async () => {
@@ -642,10 +665,10 @@ describe("showPrImpact — decision cross-reference gaps", () => {
 });
 
 // ---------------------------------------------------------------------------
-// PrImpactOutput contract — shape matches what stores/pr-impact.ts expects
+// UnifiedPrOutput contract — shape always includes prep, review is optional
 // ---------------------------------------------------------------------------
 
-describe("showPrImpact — PrImpactOutput contract", () => {
+describe("showPrImpact — UnifiedPrOutput contract", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -654,6 +677,8 @@ describe("showPrImpact — PrImpactOutput contract", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(initDatabase).mockReset();
     vi.mocked(analyzeBlastRadius).mockReset();
+    vi.mocked(getPrReviewData).mockReset();
+    vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
 
   afterEach(async () => {
@@ -661,12 +686,14 @@ describe("showPrImpact — PrImpactOutput contract", () => {
     vi.restoreAllMocks();
   });
 
-  it("always includes hotspots, subgraph, and decisions keys even for no_review", async () => {
-    // This is the contract consumed by stores/pr-impact.ts loadPrImpact()
+  it("unified output shape matches UnifiedPrOutput — prep always present, review optional", async () => {
+    // No stored review — status is always ok and prep is always present
     const result = await showPrImpact(tmpDir);
 
-    // The store always expects these keys to exist
-    expect(result).toHaveProperty("status");
+    expect(result.status).toBe("ok");
+    expect(result).toHaveProperty("prep");
+    expect(result.prep).toMatchObject(SAMPLE_PREP);
+    // Impact fields present as empty defaults
     expect(result).toHaveProperty("hotspots");
     expect(result).toHaveProperty("subgraph");
     expect(result).toHaveProperty("decisions");
@@ -677,6 +704,15 @@ describe("showPrImpact — PrImpactOutput contract", () => {
       edges: expect.any(Array),
       layers: expect.any(Array),
     });
+    // review is absent when no stored review
+    expect(result.review).toBeUndefined();
+  });
+
+  it("status is always ok — no more no_review status", async () => {
+    // Even with no stored review, status is ok
+    const result = await showPrImpact(tmpDir);
+    expect(result.status).toBe("ok");
+    expect((result as { status: string }).status).not.toBe("no_review");
   });
 
   it("ok payload has all required fields consumed by the UI bridge", async () => {
@@ -693,6 +729,9 @@ describe("showPrImpact — PrImpactOutput contract", () => {
 
     // status field
     expect(result.status).toBe("ok");
+
+    // prep field (always present)
+    expect(result.prep).toMatchObject(SAMPLE_PREP);
 
     // review shape (consumed by VerdictStrip via bridge)
     expect(result.review).toMatchObject({
