@@ -44,6 +44,25 @@ function safeResolvePath(projectDir: string, filePath: string): string | null {
 // Public types
 // ---------------------------------------------------------------------------
 
+/**
+ * A detected subsystem — a directory with a significant number of added or
+ * removed files, signalling the emergence or retirement of a code area.
+ */
+export interface Subsystem {
+  directory: string;
+  label: "new" | "removed";
+  file_count: number;
+}
+
+/**
+ * Per-file blast radius summary — how many entities are affected by changes
+ * to a given file (derived from existing blastRadius.affected data).
+ */
+export interface BlastRadiusFileEntry {
+  file: string;
+  dep_count: number;
+}
+
 export interface PrImpactHotspot {
   file: string;
   blast_radius_count: number;
@@ -119,7 +138,106 @@ export interface UnifiedPrOutput {
   subgraph: PrImpactSubgraph;
   /** Decisions cross-referenced with violated principles — empty when no stored review */
   decisions: PrImpactOutput["decisions"];
+  /** Detected subsystems — directories with 3+ added (label: "new") or 3+ deleted (label: "removed") files */
+  subsystems: Subsystem[];
+  /** Per-file blast radius dep counts — derived from blastRadius.affected; top 15 by dep_count */
+  blast_radius_by_file: BlastRadiusFileEntry[];
   empty_state?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: detectSubsystems
+//
+// Groups files by their first two directory segments. Emits a Subsystem entry
+// for each group that has >= 3 added files (label: "new") or >= 3 deleted files
+// (label: "removed"). Results are sorted descending by file_count.
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect emerging or retiring subsystems from a list of changed files.
+ *
+ * @param files     - file paths (project-relative)
+ * @param statusMap - map from file path to git status (e.g., "added", "deleted", "modified")
+ * @returns list of detected subsystems sorted by file_count descending
+ */
+export function detectSubsystems(files: string[], statusMap: Map<string, string>): Subsystem[] {
+  // Group files by the first two directory segments
+  const addedByDir = new Map<string, number>();
+  const deletedByDir = new Map<string, number>();
+
+  for (const file of files) {
+    const segments = file.split("/");
+    // Derive the directory key: use first two segments if they exist and are not the file itself
+    let dir: string;
+    if (segments.length === 1) {
+      // Root-level file — no directory segment; group under the file's name prefix or "."
+      dir = ".";
+    } else if (segments.length === 2) {
+      // Only one directory level (e.g., "src/foo.ts" → "src")
+      dir = segments[0];
+    } else {
+      // Two or more directory levels: take first two (e.g., "src/tools/foo.ts" → "src/tools")
+      dir = `${segments[0]}/${segments[1]}`;
+    }
+
+    const status = statusMap.get(file);
+    if (status === "added") {
+      addedByDir.set(dir, (addedByDir.get(dir) ?? 0) + 1);
+    } else if (status === "deleted") {
+      deletedByDir.set(dir, (deletedByDir.get(dir) ?? 0) + 1);
+    }
+  }
+
+  const result: Subsystem[] = [];
+
+  for (const [directory, file_count] of addedByDir.entries()) {
+    if (file_count >= 3) {
+      result.push({ directory, label: "new", file_count });
+    }
+  }
+
+  for (const [directory, file_count] of deletedByDir.entries()) {
+    if (file_count >= 3) {
+      result.push({ directory, label: "removed", file_count });
+    }
+  }
+
+  result.sort((a, b) => b.file_count - a.file_count);
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Helper: buildBlastRadiusByFile
+//
+// Derives a per-file dependency count from the existing blastRadius.affected
+// data — no new KG queries needed. Groups entries by file_path, counts entities
+// per file, returns sorted descending by dep_count, limited to top 15.
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a per-file dependency count from blast radius affected entities.
+ *
+ * @param blastRadius - the blast radius analysis output (or undefined if unavailable)
+ * @returns top-15 entries sorted by dep_count descending
+ */
+export function buildBlastRadiusByFile(
+  blastRadius: PrImpactOutput["blastRadius"] | undefined,
+): BlastRadiusFileEntry[] {
+  if (!blastRadius) return [];
+
+  const countByFile = new Map<string, number>();
+  for (const entry of blastRadius.affected) {
+    if (entry.file_path) {
+      countByFile.set(entry.file_path, (countByFile.get(entry.file_path) ?? 0) + 1);
+    }
+  }
+
+  const entries: BlastRadiusFileEntry[] = Array.from(countByFile.entries()).map(
+    ([file, dep_count]) => ({ file, dep_count }),
+  );
+
+  entries.sort((a, b) => b.dep_count - a.dep_count);
+  return entries.slice(0, 15);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +479,8 @@ export async function showPrImpact(
       hotspots: [],
       subgraph: { nodes: [], edges: [], layers: [] },
       decisions: [],
+      subsystems: [],
+      blast_radius_by_file: [],
     };
   }
 
@@ -411,6 +531,16 @@ export async function showPrImpact(
   const allDecisions = await driftStore.getDecisions();
   const relevantDecisions = allDecisions.filter((d) => violatedPrinciples.has(d.principle_id));
 
+  // 8. Detect subsystems — cross-reference review files with prep file statuses
+  const statusMap = new Map<string, string>();
+  for (const prepFile of prepResult.files) {
+    statusMap.set(prepFile.path, prepFile.status);
+  }
+  const subsystems = detectSubsystems(latestReview.files, statusMap);
+
+  // 9. Build per-file blast radius counts (top 15 by dep_count)
+  const blast_radius_by_file = buildBlastRadiusByFile(blastRadius);
+
   return {
     status: "ok",
     prep: prepResult,
@@ -432,5 +562,7 @@ export async function showPrImpact(
       justification: d.justification,
       category: d.category,
     })),
+    subsystems,
+    blast_radius_by_file,
   };
 }
