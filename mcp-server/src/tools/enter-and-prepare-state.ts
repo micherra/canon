@@ -195,7 +195,7 @@ export async function enterAndPrepareState(
       for (const [_waveKey, waveResult] of Object.entries(stateEntry.wave_results)) {
         const consultations = waveResult.consultations;
         if (!consultations) continue;
-        for (const bp of ["before", "between"] as const) {
+        for (const bp of ["before", "between", "after"] as const) {
           const bpMap = consultations[bp];
           if (!bpMap) continue;
           for (const [cName, cResult] of Object.entries(bpMap)) {

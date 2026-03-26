@@ -651,6 +651,76 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
 //    when summaries exist — no spurious injection on empty board
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// 8. after-02: enterAndPrepareState collects "after" breakpoint summaries
+//    from wave_results and injects them into the next state's briefing
+// ---------------------------------------------------------------------------
+
+describe("enterAndPrepareState — collects after-consultation summaries from wave_results", () => {
+  it("after-consultation summary from wave_results flows into next state briefing", async () => {
+    const workspace = makeTmpDir();
+
+    // Board has a completed "after" consultation from a synthetic "after" wave key
+    const boardWithAfterResults = makeBoard({
+      states: {
+        implement: {
+          status: "in_progress",
+          entries: 1,
+          wave_results: {
+            "after": {
+              tasks: [],
+              status: "done",
+              consultations: {
+                after: {
+                  "security-review": {
+                    status: "done",
+                    summary: "Post-implementation security check passed.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        done: { status: "pending", entries: 0 },
+      },
+    });
+
+    const enteredBoard = makeBoard({
+      states: {
+        implement: {
+          status: "in_progress",
+          entries: 2,
+          wave_results: boardWithAfterResults.states["implement"].wave_results,
+        },
+        done: { status: "pending", entries: 0 },
+      },
+    });
+
+    vi.mocked(readBoard).mockResolvedValue(boardWithAfterResults);
+    vi.mocked(enterState).mockReturnValue(enteredBoard);
+
+    // Flow declares security-review as a consultation with a section
+    const flow = makeFlowWithBeforeConsultation();
+
+    // Wave 1 — the "after" summary from wave_results should be picked up
+    const result = await enterAndPrepareState({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      items: ["task-a"],
+      wave: 1,
+    });
+
+    expect(result.prompts).toHaveLength(1);
+
+    // The "after" consultation summary must appear in the wave prompt briefing
+    const prompt = result.prompts[0].prompt;
+    expect(prompt).toContain("Security Review");
+    expect(prompt).toContain("Post-implementation security check passed.");
+  });
+});
+
 describe("enterAndPrepareState — consultation_outputs absent when no completed summaries", () => {
   beforeEach(() => {
     // Board with NO wave_results (fresh start, wave 1)
