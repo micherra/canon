@@ -324,28 +324,23 @@ describe("UnifiedPrOutput — has_review field contract", () => {
   beforeEach(setupTmpDir);
   afterEach(teardownTmpDir);
 
-  it("server output does NOT include has_review when review exists", async () => {
-    // This is a documented contract gap: the UI store type declares has_review:boolean
-    // but showPrImpact() never emits it. The UI reads !!data?.has_review which
-    // always evaluates to false.
+  it("server output includes has_review: true when review exists", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({ pr_number: 1, verdict: "WARNING" }));
 
     const result = await showPrImpact(tmpDir);
 
-    // review IS present in the output (correct signal that a review exists)
+    // review IS present in the output
     expect(result.review).toBeDefined();
-
-    // but has_review key is absent from the server response
-    // This means the UI must use !!data?.review instead of !!data?.has_review
-    expect("has_review" in result).toBe(false);
+    // has_review: true — drives the UI review-mode three-panel layout
+    expect(result.has_review).toBe(true);
   });
 
-  it("server output does NOT include has_review when no review exists", async () => {
+  it("server output includes has_review: false when no review exists", async () => {
     const result = await showPrImpact(tmpDir);
 
     expect(result.review).toBeUndefined();
-    expect("has_review" in result).toBe(false);
+    expect(result.has_review).toBe(false);
   });
 });
 

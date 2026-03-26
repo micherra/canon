@@ -107,6 +107,8 @@ export interface UnifiedPrOutput {
   status: "ok" | "no_diff_error";
   /** Live diff prep data — always populated */
   prep: PrReviewDataOutput;
+  /** Whether a stored Canon review exists for this PR/branch — drives UI review-mode layout */
+  has_review: boolean;
   /** Stored review data — only present when a Canon review exists in DriftStore */
   review?: PrImpactOutput["review"];
   /** Blast radius analysis — only when KG is available and review exists */
@@ -355,6 +357,7 @@ export async function showPrImpact(
     return {
       status: "ok",
       prep: prepResult,
+      has_review: false,
       hotspots: [],
       subgraph: { nodes: [], edges: [], layers: [] },
       decisions: [],
@@ -411,6 +414,7 @@ export async function showPrImpact(
   return {
     status: "ok",
     prep: prepResult,
+    has_review: true,
     review: {
       verdict: latestReview.verdict,
       branch: latestReview.branch,
