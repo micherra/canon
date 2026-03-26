@@ -2,7 +2,7 @@ import { readFile } from "fs/promises";
 import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.ts";
 import { loadAllOverlays, filterOverlaysForAgent, buildOverlayInjection, type OverlayDefinition } from "../orchestration/overlays.ts";
 import { buildBulletinInstructions } from "../orchestration/bulletin.ts";
-import { readWaveGuidance } from "../orchestration/wave-briefing.ts";
+import { readWaveGuidance, assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import type { ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { readBoard } from "../orchestration/board.ts";
@@ -24,6 +24,13 @@ interface SpawnPromptInput {
   wave?: number;
   peer_count?: number;
   loaded_overlays?: OverlayDefinition[];
+  /**
+   * Completed consultation outputs to inject into the wave briefing.
+   * When provided alongside `wave`, assembleWaveBriefing is called and the
+   * result is appended to each wave/parallel-per prompt entry.
+   * Must be pre-escaped by the caller (e.g. via escapeDollarBrace).
+   */
+  consultation_outputs?: Record<string, { section?: string; summary: string }>;
   /**
    * Pre-read board — if provided, skips the internal readBoard call.
    * Use this when the caller has already read the board (e.g., enterAndPrepareState)
@@ -345,6 +352,20 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     if (guidance) {
       for (const entry of prompts) {
         entry.prompt += `\n\n## Wave Guidance (from user)\n\n${guidance}`;
+      }
+    }
+  }
+
+  // Inject wave briefing for wave/parallel-per states
+  if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null && input.consultation_outputs) {
+    const briefing = assembleWaveBriefing({
+      wave: input.wave,
+      summaries: [],  // Summaries from prior agents — caller provides via separate mechanism
+      consultationOutputs: input.consultation_outputs,
+    });
+    if (briefing) {
+      for (const entry of prompts) {
+        entry.prompt += `\n\n${briefing}`;
       }
     }
   }

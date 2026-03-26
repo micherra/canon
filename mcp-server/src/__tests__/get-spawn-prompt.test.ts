@@ -4,6 +4,7 @@
  * Covers:
  * 1. truncateProgress — pure function, all branches
  * 2. getSpawnPrompt calls readBoard exactly once (consolidation)
+ * 3. getSpawnPrompt wave briefing injection via consultation_outputs
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -21,7 +22,17 @@ vi.mock("../orchestration/board.js", () => ({
   writeBoard: vi.fn(),
 }));
 
+// ---------------------------------------------------------------------------
+// Hoist mock for wave-briefing before module import
+// ---------------------------------------------------------------------------
+
+vi.mock("../orchestration/wave-briefing.js", () => ({
+  readWaveGuidance: vi.fn().mockResolvedValue(""),
+  assembleWaveBriefing: vi.fn(),
+}));
+
 import { readBoard } from "../orchestration/board.ts";
+import { assembleWaveBriefing, readWaveGuidance } from "../orchestration/wave-briefing.ts";
 import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
@@ -65,6 +76,20 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
       done: { type: "terminal" },
     },
     spawn_instructions: { implement: "Implement ${task}." },
+    ...overrides,
+  };
+}
+
+function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
+  return {
+    name: "test-wave-flow",
+    description: "Test wave flow",
+    entry: "build",
+    states: {
+      build: { type: "wave", agent: "canon-implementor" },
+      done: { type: "terminal" },
+    },
+    spawn_instructions: { build: "Build ${item}." },
     ...overrides,
   };
 }
@@ -216,6 +241,174 @@ describe("getSpawnPrompt — progress truncation", () => {
     const prompt = result.prompts[0].prompt;
     for (let i = 0; i < 5; i++) {
       expect(prompt).toContain(`- [state-${i}] done: step ${i}`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getSpawnPrompt — wave briefing injection via consultation_outputs
+// ---------------------------------------------------------------------------
+
+describe("getSpawnPrompt — wave briefing injection", () => {
+  it("injects assembleWaveBriefing output into wave-type prompts when consultation_outputs is provided", async () => {
+    const workspace = makeTmpDir();
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\n### Security\nUse parameterized queries.");
+
+    const flow = makeWaveFlow();
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "build",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      items: ["task-a", "task-b"],
+      wave: 1,
+      consultation_outputs: {
+        security: { section: "Security", summary: "Use parameterized queries." },
+      },
+    });
+
+    expect(vi.mocked(assembleWaveBriefing)).toHaveBeenCalledWith({
+      wave: 1,
+      summaries: [],
+      consultationOutputs: {
+        security: { section: "Security", summary: "Use parameterized queries." },
+      },
+    });
+
+    // Both items get the briefing
+    expect(result.prompts).toHaveLength(2);
+    for (const entry of result.prompts) {
+      expect(entry.prompt).toContain("## Wave Briefing (from wave 1)");
+      expect(entry.prompt).toContain("Use parameterized queries.");
+    }
+  });
+
+  it("does not inject briefing when consultation_outputs is undefined", async () => {
+    const workspace = makeTmpDir();
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n");
+
+    const flow = makeWaveFlow();
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "build",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      items: ["task-a"],
+      wave: 1,
+      // consultation_outputs intentionally omitted
+    });
+
+    expect(vi.mocked(assembleWaveBriefing)).not.toHaveBeenCalled();
+    expect(result.prompts[0].prompt).not.toContain("Wave Briefing");
+  });
+
+  it("does not inject briefing for single-type states even when consultation_outputs is provided", async () => {
+    const workspace = makeTmpDir();
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n");
+
+    const flow = makeFlow(); // single-type state
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      wave: 1,
+      consultation_outputs: {
+        security: { section: "Security", summary: "Some advice." },
+      },
+    });
+
+    expect(vi.mocked(assembleWaveBriefing)).not.toHaveBeenCalled();
+    expect(result.prompts[0].prompt).not.toContain("Wave Briefing");
+  });
+
+  it("pre-escaped \\${ patterns in consultation summaries survive unchanged in assembled prompt", async () => {
+    const workspace = makeTmpDir();
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+
+    // Simulate caller pre-escaping ${VAR} → \${VAR} and assembleWaveBriefing
+    // returning it as-is (as it should — no double-escaping)
+    const escapedSummary = "Use \\${PARAM} in queries.";
+    vi.mocked(assembleWaveBriefing).mockReturnValue(`## Wave Briefing (from wave 1)\n\n### Security\n${escapedSummary}`);
+
+    const flow = makeWaveFlow();
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "build",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      items: ["task-a"],
+      wave: 2,
+      consultation_outputs: {
+        security: { section: "Security", summary: escapedSummary },
+      },
+    });
+
+    // The escaped pattern must appear in the final prompt unchanged
+    expect(result.prompts[0].prompt).toContain("\\${PARAM}");
+  });
+
+  it("does not inject briefing when assembleWaveBriefing returns an empty string", async () => {
+    const workspace = makeTmpDir();
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    // assembleWaveBriefing returns header-only or empty string
+    vi.mocked(assembleWaveBriefing).mockReturnValue("");
+
+    const flow = makeWaveFlow();
+    const basePromptText = "Build task-a.";
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "build",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      items: ["task-a"],
+      wave: 1,
+      consultation_outputs: {},
+    });
+
+    // Prompt should not get extra newlines or blank content from empty briefing
+    expect(result.prompts[0].prompt).not.toContain("\n\n\n\n");
+  });
+
+  it("injects briefing into parallel-per state prompts when consultation_outputs is provided", async () => {
+    const workspace = makeTmpDir();
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\n### Arch\nUse services.");
+
+    const flow: ResolvedFlow = {
+      name: "test-parallel-per-flow",
+      description: "Test parallel-per flow",
+      entry: "review",
+      states: {
+        review: { type: "parallel-per", agent: "canon-reviewer" },
+        done: { type: "terminal" },
+      },
+      spawn_instructions: { review: "Review ${item}." },
+    };
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "review",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      items: ["file-a.ts", "file-b.ts"],
+      wave: 1,
+      consultation_outputs: {
+        arch: { section: "Arch", summary: "Use services." },
+      },
+    });
+
+    expect(result.prompts).toHaveLength(2);
+    for (const entry of result.prompts) {
+      expect(entry.prompt).toContain("## Wave Briefing (from wave 1)");
     }
   });
 });
