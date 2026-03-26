@@ -29,6 +29,7 @@ import { getWaveBulletin } from "./tools/get-wave-bulletin.ts";
 import { injectWaveEvent } from "./tools/inject-wave-event.ts";
 import { resolveWaveEvent } from "./tools/resolve-wave-event.ts";
 import { enterAndPrepareState } from "./tools/enter-and-prepare-state.ts";
+import { resolveAfterConsultations } from "./tools/resolve-after-consultations.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
 import { graphQuery } from "./tools/graph-query.ts";
 import { showPrImpact } from "./tools/show-pr-impact.ts";
@@ -527,6 +528,23 @@ server.registerTool(
   },
   async (input) => {
     const result = await enterAndPrepareState({ ...input, project_dir: projectDir });
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "resolve_after_consultations",
+  {
+    description: "Resolve 'after' consultation prompts for a state. Call after the last wave completes and before report_result. Returns consultation prompt entries for the orchestrator to spawn.",
+    inputSchema: {
+      workspace: z.string(),
+      state_id: z.string(),
+      flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
+      variables: z.record(z.string(), z.string()),
+    },
+  },
+  async (input) => {
+    const result = await resolveAfterConsultations(input);
     return jsonResponse(result);
   }
 );
