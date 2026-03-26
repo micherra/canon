@@ -22,7 +22,7 @@ import {
 } from "../orchestration/board.ts";
 import { canEnterState } from "../orchestration/convergence.ts";
 import { withBoardLock } from "../orchestration/workspace.ts";
-import type { Board, ResolvedFlow, CannotFixItem } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow, CannotFixItem, GateResult, PostconditionResult, DiscoveredGate, PostconditionAssertion, ViolationSeverities, TestResults } from "../orchestration/flow-schema.ts";
 import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { createJsonlLogger } from "../orchestration/events.ts";
@@ -48,6 +48,16 @@ interface ReportResultInput {
   file_test_pairs?: Array<{ file: string; test: string }>;
   commit_sha?: string;
   artifact_count?: number;
+  // Quality gate results reported by the agent
+  gate_results?: GateResult[];
+  postcondition_results?: PostconditionResult[];
+  violation_count?: number;
+  violation_severities?: ViolationSeverities;
+  test_results?: TestResults;
+  files_changed?: number;
+  // Discovery fields — agents report what gate commands and postconditions they discovered
+  discovered_gates?: DiscoveredGate[];
+  discovered_postconditions?: PostconditionAssertion[];
   // Optional progress line to append to progress.md (saves a separate Write call)
   progress_line?: string;
   // Project directory for drift effect persistence
@@ -67,6 +77,15 @@ interface LogEntry {
   metrics?: { duration_ms: number; spawns: number; model: string };
   stuck_reason?: string;
   hitl_reason?: string;
+  // Quality signal fields
+  gate_results?: GateResult[];
+  postcondition_results?: PostconditionResult[];
+  violation_count?: number;
+  violation_severities?: ViolationSeverities;
+  test_results?: TestResults;
+  files_changed?: number;
+  discovered_gates_count?: number;
+  discovered_postconditions_count?: number;
 }
 
 interface ReportResultResult {
@@ -171,15 +190,99 @@ async function reportResultLocked(
     input.artifacts,
   );
 
-  // Record metrics if provided
-  if (input.metrics && board.states[input.state_id]) {
+  // Enrich metrics with all new signals and auto-computed revision_count.
+  // Only record metrics when the caller provided at least one metric field or signal.
+  // This preserves backward compat: callers that provide no metrics get no metrics entry.
+  const hasCallerMetrics =
+    input.metrics != null ||
+    input.gate_results?.length ||
+    input.postcondition_results?.length ||
+    input.violation_count != null ||
+    input.violation_severities != null ||
+    input.test_results != null ||
+    input.files_changed != null;
+
+  const currentMetrics = board.states[input.state_id]?.metrics ?? {};
+  const enrichedMetrics = {
+    ...currentMetrics,
+    ...(input.metrics ?? {}),
+    ...(input.gate_results?.length ? { gate_results: input.gate_results } : {}),
+    ...(input.postcondition_results?.length ? { postcondition_results: input.postcondition_results } : {}),
+    ...(input.violation_count != null ? { violation_count: input.violation_count } : {}),
+    ...(input.violation_severities ? { violation_severities: input.violation_severities } : {}),
+    ...(input.test_results ? { test_results: input.test_results } : {}),
+    ...(input.files_changed != null ? { files_changed: input.files_changed } : {}),
+    // Auto-compute revision_count from iterations when recording any metrics
+    ...(hasCallerMetrics && board.iterations[input.state_id] ? { revision_count: board.iterations[input.state_id].count } : {}),
+  };
+
+  // Record enriched metrics only when caller provided at least one metric or signal field
+  if (hasCallerMetrics && board.states[input.state_id]) {
     board = {
       ...board,
       states: {
         ...board.states,
         [input.state_id]: {
           ...board.states[input.state_id],
-          metrics: input.metrics,
+          metrics: enrichedMetrics,
+        },
+      },
+    };
+  }
+
+  // Store gate results on board state entry (top-level for quick access)
+  if (input.gate_results?.length && board.states[input.state_id]) {
+    board = {
+      ...board,
+      states: {
+        ...board.states,
+        [input.state_id]: {
+          ...board.states[input.state_id],
+          gate_results: input.gate_results,
+        },
+      },
+    };
+  }
+
+  // Store postcondition results on board state entry (top-level for quick access)
+  if (input.postcondition_results?.length && board.states[input.state_id]) {
+    board = {
+      ...board,
+      states: {
+        ...board.states,
+        [input.state_id]: {
+          ...board.states[input.state_id],
+          postcondition_results: input.postcondition_results,
+        },
+      },
+    };
+  }
+
+  // Accumulate discovered gates (append, not replace — multiple agents may discover gates)
+  if (input.discovered_gates?.length && board.states[input.state_id]) {
+    const existing = board.states[input.state_id].discovered_gates ?? [];
+    board = {
+      ...board,
+      states: {
+        ...board.states,
+        [input.state_id]: {
+          ...board.states[input.state_id],
+          discovered_gates: [...existing, ...input.discovered_gates],
+        },
+      },
+    };
+  }
+
+  // Accumulate discovered postconditions (append, not replace)
+  if (input.discovered_postconditions?.length && board.states[input.state_id]) {
+    const existing = board.states[input.state_id].discovered_postconditions ?? [];
+    board = {
+      ...board,
+      states: {
+        ...board.states,
+        [input.state_id]: {
+          ...board.states[input.state_id],
+          discovered_postconditions: [...existing, ...input.discovered_postconditions],
         },
       },
     };
@@ -325,6 +428,14 @@ async function reportResultLocked(
       duration_ms: input.metrics?.duration_ms ?? 0,
       artifacts: input.artifacts ?? [],
       timestamp: new Date().toISOString(),
+      ...(input.gate_results?.length ? { gate_results: input.gate_results } : {}),
+      ...(input.postcondition_results?.length ? { postcondition_results: input.postcondition_results } : {}),
+      ...(input.violation_count != null ? { violation_count: input.violation_count } : {}),
+      ...(input.violation_severities ? { violation_severities: input.violation_severities } : {}),
+      ...(input.test_results ? { test_results: input.test_results } : {}),
+      ...(input.files_changed != null ? { files_changed: input.files_changed } : {}),
+      ...(input.discovered_gates?.length ? { discovered_gates_count: input.discovered_gates.length } : {}),
+      ...(input.discovered_postconditions?.length ? { discovered_postconditions_count: input.discovered_postconditions.length } : {}),
     });
     flowEventBus.emit("transition_evaluated", {
       stateId: input.state_id,
@@ -359,6 +470,14 @@ async function reportResultLocked(
     ...(input.metrics ? { metrics: input.metrics } : {}),
     ...(stuck_reason ? { stuck_reason } : {}),
     ...(hitl_reason ? { hitl_reason } : {}),
+    ...(input.gate_results?.length ? { gate_results: input.gate_results } : {}),
+    ...(input.postcondition_results?.length ? { postcondition_results: input.postcondition_results } : {}),
+    ...(input.violation_count != null ? { violation_count: input.violation_count } : {}),
+    ...(input.violation_severities ? { violation_severities: input.violation_severities } : {}),
+    ...(input.test_results ? { test_results: input.test_results } : {}),
+    ...(input.files_changed != null ? { files_changed: input.files_changed } : {}),
+    ...(input.discovered_gates?.length ? { discovered_gates_count: input.discovered_gates.length } : {}),
+    ...(input.discovered_postconditions?.length ? { discovered_postconditions_count: input.discovered_postconditions.length } : {}),
   };
 
   return {

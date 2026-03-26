@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { appendFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { HistoryEntry, ConcernEntry } from "./flow-schema.ts";
+import type { HistoryEntry, ConcernEntry, GateResult, PostconditionResult, ViolationSeverities, TestResults } from "./flow-schema.ts";
 
 export type FlowEventType =
   | "state_entered"
@@ -28,6 +28,14 @@ export interface FlowEventMap {
     duration_ms: number;
     artifacts: string[];
     timestamp: string;
+    gate_results?: GateResult[];
+    postcondition_results?: PostconditionResult[];
+    violation_count?: number;
+    violation_severities?: ViolationSeverities;
+    test_results?: TestResults;
+    files_changed?: number;
+    discovered_gates_count?: number;
+    discovered_postconditions_count?: number;
   };
   agent_spawned: {
     stateId: string;
