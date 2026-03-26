@@ -34,6 +34,23 @@ src/
 ## Contracts
 <!-- last-updated: 2026-03-25 -->
 
+**Drift Store** (`src/drift/store.ts`):
+- `ReviewEntry` — unified type for all reviews (principle and PR); optional PR fields: `pr_number?: number`, `branch?: string`, `last_reviewed_sha?: string`, `file_priorities?: Array<{ path: string; priority_score: number }>`
+- `PrReviewEntry` — DELETED 2026-03-25; callers use `ReviewEntry` with optional PR fields
+- `DriftStore.getReviews(options?: { principleId?: string; branch?: string; prNumber?: number }): Promise<ReviewEntry[]>` — all options AND-filter; old positional-string signature removed
+- `DriftStore.getLastReviewForPr(prNumber: number): Promise<ReviewEntry | null>` — returns last matching entry or null
+- `DriftStore.getLastReviewForBranch(branch: string): Promise<ReviewEntry | null>` — returns last matching entry or null
+- `PrStore` class — DELETED 2026-03-25; all review persistence unified under `DriftStore` via `reviews.jsonl`
+
+**`store_pr_review` tool** (`src/tools/store-pr-review.ts`):
+- Output field: `review_id` (was `pr_review_id` until 2026-03-25); ID prefix is `rev_`
+
+**`show_pr_impact` tool** (`src/tools/show-pr-impact.ts`):
+- Accepts optional `options?: { branch?: string; pr_number?: number }` — passed to `DriftStore.getReviews()` for filtered last-review lookup; exposed in MCP schema as top-level `branch` and `pr_number` input fields
+
+**`get_drift_report` tool** (`src/tools/get-drift-report.ts`):
+- Output field `pr_reviews` is `ReviewEntry[]` (was `PrReviewEntry[]` until 2026-03-25); entries are filtered by `pr_number !== undefined || branch !== undefined`
+
 **File Context** (`src/tools/get-file-context.ts`):
 - `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`
 - `imported_by_layer: Record<string, string[]>` — mirrors `imports_by_layer`; groups reverse-dependency paths by their inferred layer
@@ -42,11 +59,38 @@ src/
 - `FileBlastRadiusEntry` interface — fields: `name`, `qualified_name`, `kind`, `depth`, `file_path` (path of the file containing the entity; `""` if lookup fails)
 
 **PR Review Data** (`src/tools/pr-review-data.ts`):
-- `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`
+- `PrViolation` interface — `{ principle_id: string; severity: "rule"|"strong-opinion"|"convention"; message?: string }`
+- `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`, `violations?: PrViolation[]`
 - `PrReviewDataOutput` interface — fields: `files`, `layers`, `total_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `prioritized_files?`, `graph_data_age_ms?`, `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
 - `BlastRadiusEntry` interface — `{ file: string; affected: Array<{ path: string; depth: number }> }`
 - `classifyFile(file: Omit<PrFileInfo, "bucket"|"reason">)` — pure function; returns `{ bucket, reason }`; thresholds: needs-attention = `violation_count > 0` OR (`in_degree >= 5` AND `is_changed`); worth-a-look = `priority_score >= 5`; low-risk = else
 - `generateNarrative(files, layers)` — pure function; returns human-readable summary string
+- `buildFileViolationMap(reviews: ReviewEntry[]): Map<string, PrViolation[]>` — pure function; maps per-file violation lists from drift store reviews; no I/O
+
+**UI clustering** (`ui/lib/clustering.ts`):
+- `ClusterInput` type — `{ path: string; status: "added"|"modified"|"deleted"|"renamed"; layer?: string }`
+- `Cluster` type — `{ id: string; title: string; description: string; type: "new-feature"|"removal"|"prefix-group"|"layer-group"|"other"; files: ClusterInput[] }`
+- `clusterFiles(files: ClusterInput[]): Cluster[]` — pure function; groups files into <= 30-file clusters via 6-step algorithm (new-feature, removal, prefix, layer, merge-small, split-large); no cluster exceeds 30 files
+- `findCommonPrefix(names: string[]): string | null` — pure; detects shared prefix up to `-`, `_`, or `.` boundary
+- `synthesizeDescription(cluster: Cluster): string` — pure; returns human-readable cluster description
+- `clusterIcon(type: Cluster["type"]): string` — returns emoji icon for cluster type
+
+**UI bridge** (`ui/stores/bridge.ts`):
+- `bridge.sendMessage(text: string): Promise<void>` — sends a user-role message via `app.sendMessage()`; throws if bridge not initialized; added 2026-03-25
+
+**UI components** (`ui/components/`):
+- `NarrativeSummary.svelte` — props: `narrative`, `totalFiles`, `layerCount`, `netNewFiles`, `violationCount`; pure display, no interactivity
+- `ImpactRow.svelte` — props: `file` (PrFileInfo), `maxScore`, `onPrompt`; click fires `"Show me {filePath} and explain what changed"`
+- `ViolationCard.svelte` — props: `file` (path), `violation` (PrViolation), `onPrompt`; severity pill colors from `SEVERITY_COLORS` in `constants.ts`; click fires `"Explain the {principleId} violation in {filePath} and how to fix it"`
+- `DepRow.svelte` — props: `dep` (path), `relationship`, `riskAnnotation?`, `onPrompt`; click fires `"What breaks if {filePath} regresses? Show me the dependents"`
+- `ChangeStoryGrid.svelte` — props: `files` (ClusterInput[]), `onPrompt`; computes `clusterFiles()` via `$derived`; renders 2-col card grid
+- `ImpactTabs.svelte` — props: `files` (PrFileInfo[]), `blastRadius` (BlastRadiusEntry[]), `onPrompt`; three tabs: High Impact (`priority_score >= 15`), Violations (sorted rule > strong-opinion > convention), Critical Deps (files not in diff appearing in blast radius)
+
+**PrReviewPrep.svelte** (`ui/PrReviewPrep.svelte`):
+- v2 thin container (~150 lines); composes `NarrativeSummary`, `ChangeStoryGrid`, `ImpactTabs`
+- Owns: `totalViolations`, `netNewFiles`, `isStale` derived values; `handlePrompt` callback routing to `bridge.sendMessage()`
+- Staleness warning banner shown when `graph_data_age_ms > 3_600_000`
+- v1 bucket-section, layer-tabs, and toggleBucket removed as of 2026-03-25
 
 **Config utilities** (`src/utils/config.ts`):
 - `buildLayerInferrer(mappings)` — now supports glob patterns (`*`, `**`, `?`) in addition to plain directory name segments; globs are anchored to path start
@@ -62,7 +106,7 @@ src/
 | `get_drift_report` | `ui://canon/drift-report` | Drift analysis: violations, trends, hotspots, PR reviews |
 | `get_compliance` | `ui://canon/compliance` | Per-principle compliance stats, trend chart |
 | `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
-| `get_pr_review_data` | `ui://canon/pr-review-prep` | PR story: narrative, attention buckets (needs-attention/worth-a-look/low-risk), blast radius, layer navigation |
+| `get_pr_review_data` | `ui://canon/pr-review-prep` | PR story: narrative summary, change-story clusters (Section 2), impact/violations/critical-deps tabs (Section 3); v2 thin-container architecture |
 | `graph_query` | `ui://canon/graph-query` | Call trees, blast radius, dead code, search |
 
 **Text-only principle/review tools:**
