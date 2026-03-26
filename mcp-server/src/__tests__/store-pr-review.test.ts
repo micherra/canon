@@ -3,7 +3,7 @@ import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { storePrReview } from "../tools/store-pr-review.ts";
-import { PrStore } from "../drift/pr-store.ts";
+import { DriftStore } from "../drift/store.ts";
 
 describe("storePrReview", () => {
   let tmpDir: string;
@@ -17,7 +17,7 @@ describe("storePrReview", () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("calls PrStore.appendReview with server-generated id and timestamp", async () => {
+  it("calls DriftStore.appendReview with server-generated id and timestamp", async () => {
     const before = Date.now();
 
     const result = await storePrReview(
@@ -38,15 +38,15 @@ describe("storePrReview", () => {
     const after = Date.now();
 
     expect(result.recorded).toBe(true);
-    expect(result.pr_review_id).toMatch(/^prr_/);
+    expect(result.review_id).toMatch(/^rev_/);
 
     // Verify it was actually persisted
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     const reviews = await store.getReviews();
     expect(reviews).toHaveLength(1);
 
     const stored = reviews[0];
-    expect(stored.pr_review_id).toBe(result.pr_review_id);
+    expect(stored.review_id).toBe(result.review_id);
     expect(stored.verdict).toBe("CLEAN");
 
     // Timestamp should be a valid ISO date within our test window
@@ -55,7 +55,7 @@ describe("storePrReview", () => {
     expect(storedTime).toBeLessThanOrEqual(after + 1000); // allow 1s buffer
   });
 
-  it("returned pr_review_id matches prr_ prefix pattern", async () => {
+  it("returned review_id matches rev_ prefix pattern", async () => {
     const result = await storePrReview(
       {
         verdict: "WARNING",
@@ -71,8 +71,8 @@ describe("storePrReview", () => {
       tmpDir
     );
 
-    // Format: prr_YYYYMMDD_<16 hex chars>
-    expect(result.pr_review_id).toMatch(/^prr_\d{8}_[0-9a-f]{16}$/);
+    // Format: rev_YYYYMMDD_<16 hex chars>
+    expect(result.review_id).toMatch(/^rev_\d{8}_[0-9a-f]{16}$/);
   });
 
   it("stores with minimal required fields only", async () => {
@@ -92,9 +92,9 @@ describe("storePrReview", () => {
     );
 
     expect(result.recorded).toBe(true);
-    expect(result.pr_review_id).toBeTruthy();
+    expect(result.review_id).toBeTruthy();
 
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     const reviews = await store.getReviews();
     expect(reviews).toHaveLength(1);
     expect(reviews[0].pr_number).toBeUndefined();
@@ -135,8 +135,8 @@ describe("storePrReview", () => {
 
     expect(result.recorded).toBe(true);
 
-    const store = new PrStore(tmpDir);
-    const reviews = await store.getReviews(42);
+    const store = new DriftStore(tmpDir);
+    const reviews = await store.getReviews({ prNumber: 42 });
     expect(reviews).toHaveLength(1);
 
     const stored = reviews[0];
@@ -171,6 +171,6 @@ describe("storePrReview", () => {
     const r1 = await storePrReview(minimalInput, tmpDir);
     const r2 = await storePrReview(minimalInput, tmpDir);
 
-    expect(r1.pr_review_id).not.toBe(r2.pr_review_id);
+    expect(r1.review_id).not.toBe(r2.review_id);
   });
 });

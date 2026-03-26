@@ -48,7 +48,6 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 
 import { showPrImpact } from "../tools/show-pr-impact.ts";
-import { PrStore } from "../drift/pr-store.ts";
 import { DriftStore } from "../drift/store.ts";
 
 // ---------------------------------------------------------------------------
@@ -67,7 +66,7 @@ function makeReview(overrides: Partial<{
   verdict: "BLOCKING" | "WARNING" | "CLEAN";
 }> = {}) {
   return {
-    pr_review_id: "prr_test_" + Math.random().toString(36).slice(2),
+    review_id: "rev_test_" + Math.random().toString(36).slice(2),
     timestamp: new Date().toISOString(),
     verdict: overrides.verdict ?? ("WARNING" as const),
     branch: "feat/test",
@@ -106,7 +105,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
   // -------------------------------------------------------------------------
 
   it("computes risk_score as blast_radius_count × max_severity_weight when KG present", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/core.ts", "src/utils.ts"],
       violations: [
@@ -159,7 +158,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
   // -------------------------------------------------------------------------
 
   it("assigns risk_score=0 to clean files even when they have blast radius", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/clean.ts"],
       violations: [], // no violations for clean.ts
@@ -194,7 +193,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
   // -------------------------------------------------------------------------
 
   it("treats unknown severity as weight 1 in risk_score calculation", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/a.ts", "src/b.ts"],
       violations: [
@@ -222,7 +221,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
   // -------------------------------------------------------------------------
 
   it("uses max severity weight (not sum) when KG blast radius is present", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/mixed.ts"],
       violations: [
@@ -280,7 +279,7 @@ describe("showPrImpact — subgraph building gaps", () => {
   // -------------------------------------------------------------------------
 
   it("assigns #888888 color to unknown layer names in subgraph layers", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/exotic.ts"],
       violations: [],
@@ -316,7 +315,7 @@ describe("showPrImpact — subgraph building gaps", () => {
   // -------------------------------------------------------------------------
 
   it("uses correct palette colors for known layer names", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/tools/foo.ts", "src/utils/bar.ts"],
       violations: [],
@@ -350,7 +349,7 @@ describe("showPrImpact — subgraph building gaps", () => {
   // -------------------------------------------------------------------------
 
   it("marks only changed files as changed=true, blast radius nodes as changed=false", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/changed.ts"],
       violations: [],
@@ -395,7 +394,7 @@ describe("showPrImpact — subgraph building gaps", () => {
   // -------------------------------------------------------------------------
 
   it("excludes edges where one endpoint is outside the subgraph", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/a.ts"],
       violations: [],
@@ -436,7 +435,7 @@ describe("showPrImpact — subgraph building gaps", () => {
   // -------------------------------------------------------------------------
 
   it("returns empty subgraph when no graph nodes match review files", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/missing-from-graph.ts"],
       violations: [],
@@ -467,7 +466,7 @@ describe("showPrImpact — subgraph building gaps", () => {
   // -------------------------------------------------------------------------
 
   it("counts file_count per layer correctly in subgraph layers", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/a.ts", "src/b.ts", "src/c.ts"],
       violations: [],
@@ -519,7 +518,7 @@ describe("showPrImpact — multiple reviews", () => {
   });
 
   it("uses the most recent review when multiple exist", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
 
     // Older review
     await store.appendReview(makeReview({
@@ -570,7 +569,7 @@ describe("showPrImpact — decision cross-reference gaps", () => {
   });
 
   it("includes multiple decisions for the same violated principle", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/a.ts", "src/b.ts"],
       violations: [
@@ -604,7 +603,7 @@ describe("showPrImpact — decision cross-reference gaps", () => {
   });
 
   it("returns empty decisions array when no decisions exist at all", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/a.ts"],
       violations: [
@@ -620,7 +619,7 @@ describe("showPrImpact — decision cross-reference gaps", () => {
   });
 
   it("returns empty decisions when review has no violations (no violated principles to match)", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/clean.ts"],
       violations: [],
@@ -681,7 +680,7 @@ describe("showPrImpact — PrImpactOutput contract", () => {
   });
 
   it("ok payload has all required fields consumed by the UI bridge", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/foo.ts"],
       verdict: "WARNING",
@@ -731,7 +730,7 @@ describe("showPrImpact — PrImpactOutput contract", () => {
   });
 
   it("violation message is forwarded from review to hotspot violations list", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/foo.ts"],
       violations: [
@@ -746,7 +745,7 @@ describe("showPrImpact — PrImpactOutput contract", () => {
   });
 
   it("violation without message has undefined message in hotspot (not empty string)", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/foo.ts"],
       violations: [

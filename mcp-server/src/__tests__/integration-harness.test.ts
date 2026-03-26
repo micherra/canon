@@ -887,7 +887,7 @@ describe("backward compatibility: board.json without new fields", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Integration: store_pr_review → PrStore round-trip with pr_number filtering
+// Integration: store_pr_review → DriftStore round-trip with pr_number filtering
 // (harness-01 gap: store + retrieve with filter)
 // ---------------------------------------------------------------------------
 
@@ -897,7 +897,7 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
     await mkdir(join(workspace, ".canon"), { recursive: true });
 
     const { storePrReview } = await import("../tools/store-pr-review.js");
-    const { PrStore } = await import("../drift/pr-store.js");
+    const { DriftStore } = await import("../drift/store.js");
 
     // Store two reviews for PR #1 and one for PR #2
     await storePrReview(
@@ -934,9 +934,9 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
       workspace
     );
 
-    const store = new PrStore(workspace);
-    const pr1Reviews = await store.getReviews(1);
-    const pr2Reviews = await store.getReviews(2);
+    const store = new DriftStore(workspace);
+    const pr1Reviews = await store.getReviews({ prNumber: 1 });
+    const pr2Reviews = await store.getReviews({ prNumber: 2 });
     const allReviews = await store.getReviews();
 
     expect(pr1Reviews).toHaveLength(2);
@@ -945,7 +945,7 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
     expect(allReviews).toHaveLength(3);
 
     // All have unique IDs
-    const ids = allReviews.map((r) => r.pr_review_id);
+    const ids = allReviews.map((r) => r.review_id);
     expect(new Set(ids).size).toBe(3);
   });
 });

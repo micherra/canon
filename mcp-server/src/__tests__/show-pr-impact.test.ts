@@ -42,7 +42,6 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 
 import { showPrImpact } from "../tools/show-pr-impact.ts";
-import { PrStore } from "../drift/pr-store.ts";
 import { DriftStore } from "../drift/store.ts";
 
 // ---------------------------------------------------------------------------
@@ -56,7 +55,7 @@ const SAMPLE_SCORE = {
 };
 
 const SAMPLE_REVIEW = {
-  pr_review_id: "prr_test_001",
+  review_id: "rev_test_001",
   timestamp: new Date().toISOString(),
   verdict: "WARNING" as const,
   branch: "feat/my-feature",
@@ -153,7 +152,7 @@ describe("showPrImpact", () => {
 
   it("returns ok with review data but no blast radius when KG is absent", async () => {
     // Write a PR review
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW);
 
     // KG not present (default mock: existsSync → false)
@@ -184,7 +183,7 @@ describe("showPrImpact", () => {
   // -------------------------------------------------------------------------
 
   it("returns ok with blast radius when KG is available", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW);
 
     // KG present
@@ -228,7 +227,7 @@ describe("showPrImpact", () => {
         { principle_id: "p3", severity: "rule", file_path: "src/a.ts" },           // weight 3
       ],
     };
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(review);
 
     // No KG — blast radius from review only
@@ -254,7 +253,7 @@ describe("showPrImpact", () => {
         { principle_id: "p1", severity: "rule", file_path: "src/a.ts" },
       ],
     };
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(review);
 
     vi.mocked(existsSync).mockReturnValue(false);
@@ -277,7 +276,7 @@ describe("showPrImpact", () => {
   // -------------------------------------------------------------------------
 
   it("includes only decisions relevant to violated principles", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW);
 
     // Write some decisions — only functions-do-one-thing and deep-modules are violated
@@ -314,7 +313,7 @@ describe("showPrImpact", () => {
   // -------------------------------------------------------------------------
 
   it("filters subgraph to changed files + blast radius affected files", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW); // files: foo.ts, bar.ts
 
     // Write graph-data.json
@@ -364,7 +363,7 @@ describe("showPrImpact", () => {
   });
 
   it("returns empty subgraph when graph-data.json is absent", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW);
 
     vi.mocked(existsSync).mockReturnValue(false);
@@ -381,7 +380,7 @@ describe("showPrImpact", () => {
   // -------------------------------------------------------------------------
 
   it("continues without blast radius when analyzeBlastRadius throws", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW);
 
     vi.mocked(existsSync).mockReturnValue(true);

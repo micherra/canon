@@ -3,7 +3,7 @@ import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
-import { PrStore } from "../drift/pr-store.ts";
+import { DriftStore } from "../drift/store.ts";
 
 // ── helpers ──
 
@@ -434,9 +434,9 @@ describe("getPrReviewData — incremental mode", () => {
   });
 
   it("uses last_reviewed_sha as base when incremental=true", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview({
-      pr_review_id: "prrev_test",
+      review_id: "rev_test",
       timestamp: "2026-03-16T00:00:00Z",
       pr_number: 42,
       last_reviewed_sha: "abc123",
@@ -505,13 +505,13 @@ describe("getPrReviewData — git ref sanitization", () => {
   });
 });
 
-// ── PrStore tests (unchanged from original) ──
+// ── DriftStore review tests (migrated from PrStore) ──
 
-describe("PrStore", () => {
+describe("DriftStore — review methods", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "canon-pr-store-test-"));
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-drift-store-review-test-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
   });
 
@@ -520,9 +520,9 @@ describe("PrStore", () => {
   });
 
   it("filters reviews by PR number", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview({
-      pr_review_id: "prrev_1",
+      review_id: "rev_1",
       timestamp: "2026-03-16T00:00:00Z",
       pr_number: 42,
       verdict: "CLEAN",
@@ -536,7 +536,7 @@ describe("PrStore", () => {
       },
     });
     await store.appendReview({
-      pr_review_id: "prrev_2",
+      review_id: "rev_2",
       timestamp: "2026-03-16T01:00:00Z",
       pr_number: 99,
       verdict: "WARNING",
@@ -553,15 +553,15 @@ describe("PrStore", () => {
     const all = await store.getReviews();
     expect(all).toHaveLength(2);
 
-    const pr42 = await store.getReviews(42);
+    const pr42 = await store.getReviews({ prNumber: 42 });
     expect(pr42).toHaveLength(1);
-    expect(pr42[0].pr_review_id).toBe("prrev_1");
+    expect(pr42[0].review_id).toBe("rev_1");
   });
 
   it("gets last review for a PR", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview({
-      pr_review_id: "prrev_1",
+      review_id: "rev_1",
       timestamp: "2026-03-16T00:00:00Z",
       pr_number: 42,
       last_reviewed_sha: "sha1",
@@ -576,7 +576,7 @@ describe("PrStore", () => {
       },
     });
     await store.appendReview({
-      pr_review_id: "prrev_2",
+      review_id: "rev_2",
       timestamp: "2026-03-16T01:00:00Z",
       pr_number: 42,
       last_reviewed_sha: "sha2",
@@ -593,12 +593,12 @@ describe("PrStore", () => {
 
     const last = await store.getLastReviewForPr(42);
     expect(last).not.toBeNull();
-    expect(last!.pr_review_id).toBe("prrev_2");
+    expect(last!.review_id).toBe("rev_2");
     expect(last!.last_reviewed_sha).toBe("sha2");
   });
 
   it("returns null for PR with no reviews", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     const last = await store.getLastReviewForPr(999);
     expect(last).toBeNull();
   });

@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { PrStore } from "../drift/pr-store.ts";
+import { DriftStore } from "../drift/store.ts";
 
 // ── helpers ──
 
@@ -141,9 +141,9 @@ describe("getPrReviewData — incremental mode without prior review", () => {
 
   it("incremental mode is false when store has no last_reviewed_sha for the PR", async () => {
     // Store a review WITHOUT a last_reviewed_sha field
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview({
-      pr_review_id: "prrev_no_sha",
+      review_id: "rev_no_sha",
       timestamp: "2026-03-25T00:00:00Z",
       pr_number: 7,
       verdict: "CLEAN",
@@ -367,9 +367,9 @@ describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () =>
 
   it("rejects a stored last_reviewed_sha containing shell-injection chars", async () => {
     // Simulate a tampered store entry where the SHA contains dangerous characters
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview({
-      pr_review_id: "prrev_tampered",
+      review_id: "rev_tampered",
       timestamp: "2026-03-25T00:00:00Z",
       pr_number: 42,
       last_reviewed_sha: "abc123; rm -rf /",
@@ -391,9 +391,9 @@ describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () =>
   });
 
   it("valid hex SHA as last_reviewed_sha passes sanitizeGitRef", async () => {
-    const store = new PrStore(tmpDir);
+    const store = new DriftStore(tmpDir);
     await store.appendReview({
-      pr_review_id: "prrev_valid_sha",
+      review_id: "rev_valid_sha",
       timestamp: "2026-03-25T00:00:00Z",
       pr_number: 42,
       last_reviewed_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
