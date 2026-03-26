@@ -14,6 +14,8 @@
    *   - props-are-the-component-contract: no bridge access, no global state
    */
 
+  import FilePath from "./FilePath.svelte";
+
   interface ImpactRowProps {
     filePath: string;
     priorityScore: number;
@@ -24,10 +26,6 @@
   }
 
   let { filePath, priorityScore, maxScore, depCount, bucket, onPrompt }: ImpactRowProps = $props();
-
-  /** Split on last "/" to get directory prefix and filename */
-  let dirPart = $derived(filePath.includes("/") ? filePath.slice(0, filePath.lastIndexOf("/") + 1) : "");
-  let fileName = $derived(filePath.includes("/") ? filePath.slice(filePath.lastIndexOf("/") + 1) : filePath);
 
   /** Score bar width clamped to [0, 100]% */
   let barWidth = $derived(
@@ -61,14 +59,9 @@
   }
 </script>
 
-<button class="impact-row" onclick={handleClick} title={filePath}>
+<button class="impact-row btn-reset" onclick={handleClick} title={filePath}>
   <!-- File path: directory prefix muted, filename bold -->
-  <span class="file-path">
-    {#if dirPart}
-      <span class="dir-part">{dirPart}</span>
-    {/if}
-    <span class="file-name">{fileName}</span>
-  </span>
+  <FilePath path={filePath} />
 
   <!-- Score bar -->
   <span class="score-bar-wrap" title="Priority score: {priorityScore}">
@@ -94,14 +87,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 100%;
     padding: 5px 12px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    font: inherit;
-    color: inherit;
     transition: background 0.12s;
     border-radius: 0;
     min-height: 28px;
@@ -109,27 +95,6 @@
 
   .impact-row:hover {
     background: var(--bg-card-hover, rgba(255,255,255,0.09));
-  }
-
-  /* ── File path ─────────────────────────────────────────────────────────── */
-
-  .file-path {
-    font-family: monospace;
-    font-size: 11px;
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-  }
-
-  .dir-part {
-    color: var(--text-muted, #636a80);
-  }
-
-  .file-name {
-    font-weight: 700;
-    color: var(--text-bright, #e8eaf0);
   }
 
   /* ── Score bar ─────────────────────────────────────────────────────────── */

@@ -14,7 +14,8 @@
    *   - props-are-the-component-contract: no bridge access, no global state
    */
 
-  import { SEVERITY_COLORS } from "../lib/constants";
+  import FilePath from "./FilePath.svelte";
+  import { getSeverityColor } from "../lib/utils";
 
   interface ViolationCardProps {
     filePath: string;
@@ -26,12 +27,8 @@
 
   let { filePath, principleId, severity, description, onPrompt }: ViolationCardProps = $props();
 
-  /** Split on last "/" to get directory prefix and filename */
-  let dirPart = $derived(filePath.includes("/") ? filePath.slice(0, filePath.lastIndexOf("/") + 1) : "");
-  let fileName = $derived(filePath.includes("/") ? filePath.slice(filePath.lastIndexOf("/") + 1) : filePath);
-
   /** Color for the severity pill */
-  let severityColor = $derived(SEVERITY_COLORS[severity] ?? "#888888");
+  let severityColor = $derived(getSeverityColor(severity));
 
   /** Human-readable severity label */
   let severityLabel = $derived(
@@ -48,15 +45,10 @@
   }
 </script>
 
-<button class="violation-card" onclick={handleClick} title={filePath}>
+<button class="violation-card btn-reset" onclick={handleClick} title={filePath}>
   <!-- File path: directory prefix muted, filename bold -->
   <div class="card-header">
-    <span class="file-path">
-      {#if dirPart}
-        <span class="dir-part">{dirPart}</span>
-      {/if}
-      <span class="file-name">{fileName}</span>
-    </span>
+    <FilePath path={filePath} />
 
     <!-- Severity pill -->
     <span
@@ -79,15 +71,9 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    width: 100%;
     padding: 8px 12px;
     background: var(--bg-card, rgba(255,255,255,0.04));
-    border: none;
     border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
-    cursor: pointer;
-    text-align: left;
-    font: inherit;
-    color: inherit;
     transition: background 0.12s;
   }
 
@@ -102,25 +88,6 @@
     align-items: center;
     gap: 8px;
     justify-content: space-between;
-  }
-
-  .file-path {
-    font-family: monospace;
-    font-size: 11px;
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-  }
-
-  .dir-part {
-    color: var(--text-muted, #636a80);
-  }
-
-  .file-name {
-    font-weight: 700;
-    color: var(--text-bright, #e8eaf0);
   }
 
   .severity-pill {

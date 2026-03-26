@@ -545,17 +545,17 @@ describe("SEVERITY_COLORS contract (cross-task: constants → ViolationCard)", (
     expect(SEVERITY_COLORS).toHaveProperty("convention");
   });
 
-  it("ViolationCard.svelte imports SEVERITY_COLORS from lib/constants", () => {
+  it("ViolationCard.svelte uses getSeverityColor from lib/utils for the severity pill color", () => {
     const path = join(uiDir, "components/ViolationCard.svelte");
     const content = readFileSync(path, "utf-8");
-    expect(content).toContain("SEVERITY_COLORS");
-    expect(content).toContain("../lib/constants");
+    expect(content).toContain("getSeverityColor");
+    expect(content).toContain("../lib/utils");
   });
 
-  it("ViolationCard.svelte uses SEVERITY_COLORS[severity] for the severity pill color", () => {
+  it("ViolationCard.svelte passes severity to getSeverityColor for the severity pill color", () => {
     const path = join(uiDir, "components/ViolationCard.svelte");
     const content = readFileSync(path, "utf-8");
-    expect(content).toContain("SEVERITY_COLORS[severity]");
+    expect(content).toContain("getSeverityColor(severity)");
   });
 });
 
