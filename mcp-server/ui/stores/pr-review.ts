@@ -32,6 +32,17 @@ export interface BlastRadiusEntry {
   affected: Array<{ path: string; depth: number }>;
 }
 
+export interface Subsystem {
+  directory: string;
+  label: "new" | "removed";
+  file_count: number;
+}
+
+export interface BlastRadiusFileEntry {
+  file: string;
+  dep_count: number;
+}
+
 export interface PrepData {
   files: PrFileInfo[];
   layers: Array<{ name: string; file_count: number }>;
@@ -109,4 +120,6 @@ export interface UnifiedPrOutput {
   }>;
   has_review: boolean;
   empty_state?: string;
+  subsystems: Subsystem[];
+  blast_radius_by_file: BlastRadiusFileEntry[];
 }
