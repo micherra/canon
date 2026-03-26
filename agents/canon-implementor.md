@@ -136,6 +136,19 @@ When running in a wave (parallel with other implementors), your prompt will incl
 
 **Timing**: Check the bulletin once at the start of your task (before writing code) and once before creating any shared module. Post immediately after creating shared artifacts. Don't poll repeatedly — this isn't a chat channel.
 
+## Wave Events
+
+When you call `get_wave_bulletin` and see pending wave events, handle them based on type:
+
+| Event type | Your action |
+|-----------|-------------|
+| `skip_task` | If the event's `target_task_id` matches YOUR `task_id`: stop work immediately. Produce a summary noting "Task skipped by wave event" and report status DONE. Do not commit partial work. |
+| `guidance` | Read the guidance text from the event detail. Apply it as a constraint on your in-flight work. If the guidance contradicts your plan, follow the guidance and note the deviation in your summary. |
+| `inject_context` | Read the injected context from the event detail. Incorporate it into your current task — it may contain information about APIs, patterns, or constraints discovered after your plan was written. |
+| `pause` | No action needed. The orchestrator handles pause events at the wave boundary. Continue your work normally. |
+
+**Timing**: Check for wave events once at the start of your task (during your initial `get_wave_bulletin` call). You do not need to poll for events during execution.
+
 ## Workspace Integration
 
 When the orchestrator provides a workspace path (`${WORKSPACE}`):
