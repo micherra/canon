@@ -80,7 +80,7 @@ export function resolveConsultationPrompt(
   name: string,
   flow: ResolvedFlow,
   variables: Record<string, string>,
-): { agent: string; prompt: string; role: string } | null {
+): { agent: string; prompt: string; role: string; timeout?: string; section?: string } | null {
   const fragment = flow.consultations?.[name];
   if (!fragment) {
     return null;
@@ -95,5 +95,7 @@ export function resolveConsultationPrompt(
     agent: fragment.agent,
     prompt: substituteVariables(spawnInstruction, variables),
     role: fragment.role,
+    ...(fragment.timeout ? { timeout: fragment.timeout } : {}),
+    ...(fragment.section ? { section: fragment.section } : {}),
   };
 }
