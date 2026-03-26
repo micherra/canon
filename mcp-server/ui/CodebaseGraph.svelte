@@ -1,14 +1,25 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { bridge } from "./stores/bridge";
+  import { useDataLoader } from "./lib/useDataLoader.svelte";
+  import EmptyState from "./components/EmptyState.svelte";
   import SubGraph from "./components/SubGraph.svelte";
   import type { GraphData, GraphNode, GraphEdge } from "./lib/types";
   import type { FilterOptions } from "./lib/sigmaGraph";
 
-  let status = $state<"loading" | "ready" | "error">("loading");
-  let graphData = $state<GraphData | null>(null);
+  // ── Data loading ──────────────────────────────────────────────────────────
+
+  const loader = useDataLoader(async () => {
+    await bridge.init();
+    return bridge.callTool("codebase_graph") as Promise<GraphData>;
+  });
+
+  let status = $derived(loader.status);
+  let graphData = $derived(loader.data);
+  let errorMsg = $derived(loader.errorMsg);
+
+  // ── View state ────────────────────────────────────────────────────────────
+
   let selectedNode = $state<GraphNode | null>(null);
-  let errorMsg = $state("");
 
   // ── Filter state ──────────────────────────────────────────────────────────
 
@@ -18,6 +29,13 @@
   let activeLayers = $state<Set<string>>(new Set());
   // whether layer chips are expanded
   let layersExpanded = $state(false);
+
+  // Initialise activeLayers once data is loaded
+  $effect(() => {
+    if (graphData) {
+      activeLayers = new Set((graphData.layers ?? []).map((l) => l.name));
+    }
+  });
 
   // allLayerNames: derived set of every layer name in the graph data
   let allLayerNames = $derived(
@@ -119,19 +137,6 @@
 
   // ── Event handlers ────────────────────────────────────────────────────────
 
-  onMount(async () => {
-    try {
-      await bridge.init();
-      const result = await bridge.callTool("codebase_graph");
-      graphData = result as GraphData;
-      activeLayers = new Set((graphData.layers ?? []).map((l) => l.name));
-      status = "ready";
-    } catch (e) {
-      status = "error";
-      errorMsg = e instanceof Error ? e.message : "Failed to load graph";
-    }
-  });
-
   function handleNodeClick(node: GraphNode) {
     selectedNode = node;
   }
@@ -165,9 +170,9 @@
 
 <div class="codebase-graph">
   {#if status === "loading"}
-    <div class="empty-state">Generating codebase graph...</div>
+    <EmptyState message="Generating codebase graph..." />
   {:else if status === "error"}
-    <div class="empty-state error">{errorMsg}</div>
+    <EmptyState message={errorMsg} isError />
   {:else if graphData && graphData.nodes.length > 0}
     <div class="stats-bar">
       <span>{stats?.nodes} nodes</span>
@@ -344,7 +349,7 @@
       {/if}
     </div>
   {:else}
-    <div class="empty-state">No graph data. Run <code>codebase_graph</code> first.</div>
+    <EmptyState message="No graph data. Run codebase_graph first." />
   {/if}
 </div>
 
@@ -354,8 +359,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    height: 100%;
-    min-height: 600px;
   }
 
   .stats-bar {
@@ -682,24 +685,4 @@
     border-left: 2px solid var(--danger, #ff6b6b);
     line-height: 1.4;
   }
-
-  /* ── Empty state ────────────────────────────────────────────────────────── */
-
-  .empty-state {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    color: var(--text-muted, #888);
-    font-size: 13px;
-  }
-
-  .empty-state code {
-    font-family: monospace;
-    background: var(--bg-card, rgba(255,255,255,0.06));
-    padding: 1px 4px;
-    border-radius: 3px;
-  }
-
-  .error { color: var(--danger, #e05252); }
 </style>

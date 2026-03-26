@@ -16,8 +16,9 @@
    *   - functions-do-one-thing: each handler does one thing only
    */
 
-  import { onMount } from "svelte";
   import { bridge } from "./stores/bridge";
+  import { useDataLoader } from "./lib/useDataLoader.svelte";
+  import EmptyState from "./components/EmptyState.svelte";
   import NarrativeSummary from "./components/NarrativeSummary.svelte";
   import ChangeStoryGrid from "./components/ChangeStoryGrid.svelte";
   import ImpactTabs from "./components/ImpactTabs.svelte";
@@ -27,11 +28,19 @@
   import PrDetailPanel from "./components/PrDetailPanel.svelte";
   import type { UnifiedPrOutput } from "./stores/pr-review";
 
+  // ── Data loading ──────────────────────────────────────────────────────────
+
+  const loader = useDataLoader(async () => {
+    await bridge.init();
+    return bridge.callTool("show_pr_impact") as Promise<UnifiedPrOutput>;
+  });
+
+  let status = $derived(loader.status);
+  let data = $derived(loader.data);
+  let errorMsg = $derived(loader.errorMsg);
+
   // ── State ─────────────────────────────────────────────────────────────────
 
-  let status = $state<"loading" | "ready" | "error">("loading");
-  let data = $state<UnifiedPrOutput | null>(null);
-  let errorMsg = $state("");
   let selectedFile = $state<string | null>(null);
 
   // ── Derived: prep-level ────────────────────────────────────────────────────
@@ -84,19 +93,6 @@
     );
   });
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
-
-  onMount(async () => {
-    try {
-      await bridge.init();
-      data = await bridge.callTool("show_pr_impact") as UnifiedPrOutput;
-      status = "ready";
-    } catch (e) {
-      status = "error";
-      errorMsg = e instanceof Error ? e.message : "Failed to load PR data";
-    }
-  });
-
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function handlePrompt(text: string) {
@@ -122,13 +118,13 @@
 
 <div class="pr-review">
   {#if status === "loading"}
-    <div class="empty-state">Loading PR review data...</div>
+    <EmptyState message="Loading PR review data..." />
 
   {:else if status === "error"}
-    <div class="empty-state error">{errorMsg}</div>
+    <EmptyState message={errorMsg} isError />
 
   {:else if data && data.prep.total_files === 0}
-    <div class="empty-state">No changed files found.</div>
+    <EmptyState message="No changed files found." />
 
   {:else if data}
     <!-- Verdict strip (review mode only) -->
@@ -211,13 +207,7 @@
                 fa2Iterations={60}
               />
             {:else}
-              <div class="empty-state">
-                {#if !data.blastRadius}
-                  No knowledge graph available for subgraph visualization.
-                {:else}
-                  No graph data to display.
-                {/if}
-              </div>
+              <EmptyState message={!data.blastRadius ? "No knowledge graph available for subgraph visualization." : "No graph data to display."} />
             {/if}
           </div>
 
@@ -232,7 +222,7 @@
                 onFileClick={handleFileSelect}
               />
             {:else}
-              <div class="empty-state">Select a file to see details</div>
+              <EmptyState message="Select a file to see details" />
             {/if}
           </div>
         </div>
@@ -247,8 +237,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    height: 100%;
-    min-height: 600px;
   }
 
   /* ── Run Review banner ────────────────────────────────────────────────────── */
@@ -377,20 +365,4 @@
     background: var(--bg, #1a1a1a);
     flex-shrink: 0;
   }
-
-  /* ── Empty states ────────────────────────────────────────────────────────── */
-
-  .empty-state {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    height: 100%;
-    color: var(--text-muted, #888);
-    font-size: 13px;
-    padding: 32px;
-    text-align: center;
-  }
-
-  .error { color: var(--danger, #e05252); }
 </style>

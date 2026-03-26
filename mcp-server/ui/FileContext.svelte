@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { bridge } from "./stores/bridge";
-  import { getLayerColor, SEVERITY_COLORS, truncate } from "./lib/constants";
+  import { useDataLoader } from "./lib/useDataLoader.svelte";
+  import EmptyState from "./components/EmptyState.svelte";
+  import { getLayerColor, truncate } from "./lib/constants";
+  import { getSeverityColor, pluralize } from "./lib/utils";
 
   // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -57,11 +59,21 @@
     blast_radius?: FileBlastRadiusEntry[];
   }
 
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ── Data loading (push-mode — waits for tool to push result) ─────────────
 
-  let status = $state<"loading" | "ready" | "error">("loading");
-  let data = $state<FileContextOutput | null>(null);
-  let errorMsg = $state("");
+  const loader = useDataLoader(async () => {
+    await bridge.init();
+    const result = await bridge.waitForToolResult() as FileContextOutput;
+    if (!result) throw new Error("No data received from tool");
+    return result;
+  });
+
+  let status = $derived(loader.status);
+  let data = $derived(loader.data);
+  let errorMsg = $derived(loader.errorMsg);
+
+  // ── Canvas state ──────────────────────────────────────────────────────────
+
   let canvasEl = $state<HTMLCanvasElement | null>(null);
 
   // ── Derived state ─────────────────────────────────────────────────────────
@@ -134,23 +146,8 @@
     if (br.length === 0) return "Nothing depends on this file's exports. Changes are fully contained.";
     const depth1 = br.filter(e => e.depth === 1).length;
     const depth2plus = br.filter(e => e.depth >= 2).length;
-    if (depth1 <= 3 && depth2plus === 0) return `Low blast radius — ${depth1} direct dependent${depth1 === 1 ? "" : "s"}. Well-contained.`;
-    const total = br.length;
-    return `Moderate blast radius — changes affect ${depth1} file${depth1 === 1 ? "" : "s"} directly and propagate further.`;
-  });
-
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
-
-  onMount(async () => {
-    try {
-      await bridge.init();
-      data = await bridge.waitForToolResult();
-      if (!data) throw new Error("No data received from tool");
-      status = "ready";
-    } catch (e) {
-      status = "error";
-      errorMsg = e instanceof Error ? e.message : "Failed to load file context";
-    }
+    if (depth1 <= 3 && depth2plus === 0) return `Low blast radius — ${depth1} direct ${pluralize(depth1, "dependent")}. Well-contained.`;
+    return `Moderate blast radius — changes affect ${depth1} ${pluralize(depth1, "file")} directly and propagate further.`;
   });
 
   // ── Canvas graph ──────────────────────────────────────────────────────────
@@ -173,8 +170,26 @@
 
     const CX = W / 2;
     const CY = H / 2;
-    const LEFT_X = 80;
-    const RIGHT_X = W - 80;
+    const NODE_R = 5;
+    const LABEL_GAP = 9;
+    const EDGE_PAD = 6; // minimum padding from canvas edge
+
+    // Measure the widest label on each side to size margins dynamically
+    ctx.font = "10px monospace";
+    const maxLabelChars = 28;
+    let maxLeftLabel = 0;
+    for (const imp of imports) {
+      const label = truncate(shortName(imp), maxLabelChars);
+      maxLeftLabel = Math.max(maxLeftLabel, ctx.measureText(label).width);
+    }
+    let maxRightLabel = 0;
+    for (const dep of dependents) {
+      const label = truncate(shortName(dep), maxLabelChars);
+      maxRightLabel = Math.max(maxRightLabel, ctx.measureText(label).width);
+    }
+
+    const LEFT_X = Math.max(EDGE_PAD + maxLeftLabel + LABEL_GAP + NODE_R, 60);
+    const RIGHT_X = Math.min(W - EDGE_PAD - maxRightLabel - LABEL_GAP - NODE_R, W - 60);
 
     // Node positions
     const importPositions: Array<{ x: number; y: number; path: string }> = imports.map((imp, i) => ({
@@ -286,7 +301,7 @@
   }
 
   $effect(() => {
-    if (status !== "ready" || !canvasEl) return;
+    if (status !== "done" || !canvasEl) return;
     const canvas = canvasEl;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -302,10 +317,6 @@
 
   function shortName(path: string): string {
     return path.split("/").pop() ?? path;
-  }
-
-  function severityColor(severity: string): string {
-    return SEVERITY_COLORS[severity] ?? "#636a80";
   }
 
   function kindBadgeColor(kind: string): string {
@@ -327,10 +338,10 @@
 
 <div class="file-context">
   {#if status === "loading"}
-    <div class="empty-state">Loading file context...</div>
+    <EmptyState message="Loading file context..." />
 
   {:else if status === "error"}
-    <div class="empty-state error">{errorMsg}</div>
+    <EmptyState message={errorMsg} isError />
 
   {:else if data}
     <!-- ── Section 1: Hero ──────────────────────────────────────────────── -->
@@ -354,7 +365,7 @@
         {#if data.violation_count === 0}
           <span class="badge badge-clean">no violations</span>
         {:else}
-          <span class="badge badge-violation">{data.violation_count} violation{data.violation_count === 1 ? "" : "s"}</span>
+          <span class="badge badge-violation">{data.violation_count} {pluralize(data.violation_count, "violation")}</span>
         {/if}
       </div>
     </div>
@@ -364,7 +375,7 @@
       <div class="metric-card">
         <span class="metric-value">{data.imports.length}</span>
         <span class="metric-label">Imports</span>
-        <span class="metric-sub">{uniqueImportLayers} layer{uniqueImportLayers === 1 ? "" : "s"}</span>
+        <span class="metric-sub">{uniqueImportLayers} {pluralize(uniqueImportLayers, "layer")}</span>
       </div>
       <div class="metric-card">
         <span class="metric-value">{data.imported_by.length}</span>
@@ -489,12 +500,12 @@
             {#each sortedViolations as v (v.principle_id)}
               <div
                 class="violation-card"
-                style="border-left-color: {severityColor(v.severity)}"
+                style="border-left-color: {getSeverityColor(v.severity)}"
               >
                 <div class="violation-top">
                   <span
                     class="severity-pill"
-                    style="background: {severityColor(v.severity)}22; color: {severityColor(v.severity)}; border-color: {severityColor(v.severity)}44"
+                    style="background: {getSeverityColor(v.severity)}22; color: {getSeverityColor(v.severity)}; border-color: {getSeverityColor(v.severity)}44"
                   >{v.severity}</span>
                   <strong class="violation-id">{v.principle_id}</strong>
                 </div>
@@ -513,7 +524,7 @@
     </div>
 
   {:else}
-    <div class="empty-state">No file context available.</div>
+    <EmptyState message="No file context available." />
   {/if}
 </div>
 
@@ -525,10 +536,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    height: 100%;
-    min-height: 600px;
-    background: var(--bg, #0c0f1a);
-    color: var(--text, #b4b8c8);
   }
 
   /* ── Hero ──────────────────────────────────────────────────────────────────── */
@@ -957,19 +964,4 @@
     margin: 0;
     font-style: italic;
   }
-
-  /* ── Empty states ──────────────────────────────────────────────────────────── */
-
-  .empty-state {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    color: var(--text-muted, #888);
-    font-size: 13px;
-    padding: 32px;
-    text-align: center;
-  }
-
-  .error { color: var(--danger, #e05252); }
 </style>
