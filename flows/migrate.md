@@ -59,7 +59,6 @@ states:
     type: wave
     agent: canon-implementor
     template: implementation-log
-    gate: test-suite
     transitions:
       done: verify
       blocked: hitl

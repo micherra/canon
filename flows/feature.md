@@ -41,7 +41,7 @@ states:
     template: implementation-log
     effects:
       - type: persist_decisions
-    gate: test-suite
+      - type: check_postconditions
     transitions:
       done: context-sync
       blocked: hitl

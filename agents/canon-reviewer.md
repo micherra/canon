@@ -106,6 +106,21 @@ When the orchestrator provides implementor summary paths (`${WORKSPACE}/plans/{s
 
 Stage 3 does NOT change the verdict. Discrepancies are addenda for the next review cycle.
 
+## Discover Lint/Format Gate Commands
+
+While inspecting the codebase for code quality, note any linting or formatting tools that are configured. Report these as discovered gates so the gate runner can use them for automated quality checks. Include in your `report_result` call:
+
+- `discovered_gates`: An array of lint/format commands you verified are configured. Only include commands for tools that have configuration files present. Format: `[{ command: "npx eslint .", source: "reviewer" }]`
+
+Discovery heuristics:
+- `.eslintrc*` or `eslint.config.*` present → `{ command: "npx eslint .", source: "reviewer" }`
+- `pyproject.toml` with `[tool.ruff]` → `{ command: "ruff check .", source: "reviewer" }`
+- `Cargo.toml` present → `{ command: "cargo clippy", source: "reviewer" }`
+- `.golangci.yml` present → `{ command: "golangci-lint run", source: "reviewer" }`
+- `Makefile` with `lint` target → `{ command: "make lint", source: "reviewer" }`
+
+Only report commands for tools that have visible configuration. Do not guess or assume tools are installed.
+
 ## Verdict
 
 Based on the most severe Stage 1 finding:

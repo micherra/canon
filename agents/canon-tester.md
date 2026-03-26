@@ -96,6 +96,21 @@ Then review each implementor's test file against its source file:
 - Missing boundary condition tests (empty arrays, null values, max values)
 - Missing validation tests for input boundaries
 
+### Step 6.5: Report discovered gate commands
+
+After detecting the test framework (Step 4) and running the test suite, report the discovered test commands so the gate runner can use them for automated quality gates. Include these in your `report_result` call:
+
+- `discovered_gates`: An array of gate commands you verified work in this project. Only include commands you actually ran successfully. Format: `[{ command: "npm test", source: "tester" }]`
+
+Examples by ecosystem:
+- Node.js with Vitest: `[{ command: "npx vitest run", source: "tester" }]`
+- Node.js with Jest: `[{ command: "npx jest", source: "tester" }]`
+- Python with pytest: `[{ command: "pytest", source: "tester" }]`
+- Go: `[{ command: "go test ./...", source: "tester" }]`
+- Rust: `[{ command: "cargo test", source: "tester" }]`
+
+Only report commands that actually exist and work in this project. Do not guess.
+
 ### Step 7: Run full test suite
 
 Run the complete test suite (implementor tests + your new tests). If tests fail:
