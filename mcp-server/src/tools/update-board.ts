@@ -141,8 +141,8 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
         let totalSpawns = 0;
         for (const [stateId, stateEntry] of Object.entries(board.states)) {
           if (stateEntry.metrics) {
-            stateDurations[stateId] = stateEntry.metrics.duration_ms;
-            totalSpawns += stateEntry.metrics.spawns;
+            stateDurations[stateId] = stateEntry.metrics.duration_ms ?? 0;
+            totalSpawns += stateEntry.metrics.spawns ?? 0;
           }
           if (board.iterations[stateId]) {
             stateIterations[stateId] = board.iterations[stateId].count;

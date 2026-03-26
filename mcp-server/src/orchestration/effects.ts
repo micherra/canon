@@ -61,6 +61,9 @@ async function executeOneEffect(
       return persistDecisions(store, workspace);
     case "persist_patterns":
       return persistPatterns(store, workspace);
+    case "check_postconditions":
+      // Placeholder — full implementation in qg-02 (contract-checker)
+      return Promise.resolve({ type: "check_postconditions", recorded: 0, errors: ["Not yet implemented"] });
   }
 }
 

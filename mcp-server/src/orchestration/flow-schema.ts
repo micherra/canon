@@ -89,11 +89,60 @@ export const EffectTypeSchema = z.enum([
   "persist_review",
   "persist_decisions",
   "persist_patterns",
+  "check_postconditions",
 ]);
 
 export const EffectSchema = z.object({
   type: EffectTypeSchema,
   artifact: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Quality gate result schemas
+// ---------------------------------------------------------------------------
+
+/** Gate result stored on board state (source of truth imported from here, not local interfaces). */
+export const GateResultSchema = z.object({
+  passed: z.boolean(),
+  gate: z.string(),
+  command: z.string(),
+  output: z.string(),
+  exitCode: z.number(),
+});
+
+/** Discovered gate command reported by agents (e.g. tester, reviewer). */
+export const DiscoveredGateSchema = z.object({
+  command: z.string(),
+  source: z.string(), // agent that discovered it, e.g. "tester", "reviewer"
+});
+
+/** Postcondition assertion declaration (for flow YAML or agent-discovered). */
+export const PostconditionAssertionSchema = z.object({
+  type: z.enum(["file_exists", "file_changed", "pattern_match", "no_pattern", "bash_check"]),
+  target: z.string(),
+  pattern: z.string().optional(),
+  command: z.string().optional(),
+});
+
+/** Postcondition evaluation result. */
+export const PostconditionResultSchema = z.object({
+  passed: z.boolean(),
+  name: z.string(),
+  type: z.string(),
+  output: z.string(),
+});
+
+/** Violation severity counts. */
+export const ViolationSeveritiesSchema = z.object({
+  blocking: z.number(),
+  warning: z.number(),
+});
+
+/** Test result counts. */
+export const TestResultsSchema = z.object({
+  passed: z.number(),
+  failed: z.number(),
+  skipped: z.number(),
 });
 
 export const StateDefinitionSchema = z.object({
@@ -107,6 +156,8 @@ export const StateDefinitionSchema = z.object({
   max_iterations: z.coerce.number().optional(),
   stuck_when: StuckWhenSchema.optional(),
   gate: z.string().optional(),
+  gates: z.array(z.string()).optional(),
+  postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   iterate_on: z.string().optional(),
   inject_context: z.array(ContextInjectionSchema).optional(),
@@ -155,6 +206,8 @@ export const FragmentStateDefinitionSchema = z.object({
   max_iterations: z.union([z.coerce.number(), z.string()]).optional(),
   stuck_when: z.union([StuckWhenSchema, z.string()]).optional(),
   gate: z.string().optional(),
+  gates: z.array(z.string()).optional(),
+  postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   iterate_on: z.string().optional(),
   inject_context: z.array(ContextInjectionSchema).optional(),
@@ -242,9 +295,16 @@ export const WaveResultSchema = z.object({
 });
 
 export const StateMetricsSchema = z.object({
-  duration_ms: z.number(),
-  spawns: z.number(),
-  model: z.string(),
+  duration_ms: z.number().optional(),
+  spawns: z.number().optional(),
+  model: z.string().optional(),
+  gate_results: z.array(GateResultSchema).optional(),
+  postcondition_results: z.array(PostconditionResultSchema).optional(),
+  violation_count: z.number().optional(),
+  violation_severities: ViolationSeveritiesSchema.optional(),
+  test_results: TestResultsSchema.optional(),
+  files_changed: z.number().optional(),
+  revision_count: z.number().optional(),
 });
 
 export const ArtifactHistoryEntrySchema = z.object({
@@ -265,6 +325,10 @@ export const BoardStateEntrySchema = z.object({
   wave_total: z.number().optional(),
   wave_results: z.record(z.string(), WaveResultSchema).optional(),
   metrics: StateMetricsSchema.optional(),
+  gate_results: z.array(GateResultSchema).optional(),
+  postcondition_results: z.array(PostconditionResultSchema).optional(),
+  discovered_gates: z.array(DiscoveredGateSchema).optional(),
+  discovered_postconditions: z.array(PostconditionAssertionSchema).optional(),
   parallel_results: z.array(z.object({
     item: z.string(),
     status: z.string(),
@@ -366,6 +430,12 @@ export const SessionSchema = z.object({
 
 export type EffectType = z.infer<typeof EffectTypeSchema>;
 export type Effect = z.infer<typeof EffectSchema>;
+export type GateResult = z.infer<typeof GateResultSchema>;
+export type DiscoveredGate = z.infer<typeof DiscoveredGateSchema>;
+export type PostconditionAssertion = z.infer<typeof PostconditionAssertionSchema>;
+export type PostconditionResult = z.infer<typeof PostconditionResultSchema>;
+export type ViolationSeverities = z.infer<typeof ViolationSeveritiesSchema>;
+export type TestResults = z.infer<typeof TestResultsSchema>;
 export type StateType = z.infer<typeof StateTypeSchema>;
 export type StuckWhen = z.infer<typeof StuckWhenSchema>;
 export type SkipWhen = z.infer<typeof SkipWhenSchema>;

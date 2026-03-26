@@ -343,12 +343,12 @@ describe("integration: runGate result → recordGateResult on board", () => {
     expect(waveResult?.gate_output).toBe("3 tests failed");
   });
 
-  it("skipped gate result (not configured) stores skip message on board", () => {
+  it("unconfigured gate result (fail-closed) stores fail-closed message on board", () => {
     const flow = makeFlow(); // no gates
     const gateResult = runGate("nonexistent-gate", flow, "/project");
 
-    expect(gateResult.passed).toBe(true); // skipped = graceful pass
-    expect(gateResult.output).toBe("Gate not configured — skipped");
+    expect(gateResult.passed).toBe(false); // fail-closed — unconfigured gate fails
+    expect(gateResult.output).toContain("fail-closed");
 
     const board = makeBoard();
     const updatedBoard = recordGateResult(
@@ -356,7 +356,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
     );
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
-    expect(waveResult?.gate_output).toBe("Gate not configured — skipped");
+    expect(waveResult?.gate_output).toContain("fail-closed");
   });
 });
 
