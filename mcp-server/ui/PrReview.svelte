@@ -7,13 +7,13 @@
    * Two-mode layout:
    *   - prep-only mode (has_review === false): single-column view — NarrativeSummary,
    *     ChangeStoryGrid, ImpactTabs, plus a "Run Review" banner.
-   *   - review mode (has_review === true): VerdictStrip at top, then prep columns,
-   *     then three-panel impact view: HotspotList | SubGraph | PrDetailPanel.
+   *   - review mode (has_review === true): scrollable dashboard of 8 panels:
+   *     VerdictBanner, StatsRow, FixBeforeMerge, ViolationsByPrinciple,
+   *     ComplianceScore, BlastRadiusChart, LayerChart, SubsystemsPanel.
    *
    * Canon principles:
-   *   - compose-from-small-to-large: pure composition container; no new leaf components
+   *   - compose-from-small-to-large: pure composition container; no leaf logic
    *   - deep-modules: minimal interface — no props; all state internal
-   *   - functions-do-one-thing: each handler does one thing only
    */
 
   import { bridge } from "./stores/bridge";
@@ -22,10 +22,14 @@
   import NarrativeSummary from "./components/NarrativeSummary.svelte";
   import ChangeStoryGrid from "./components/ChangeStoryGrid.svelte";
   import ImpactTabs from "./components/ImpactTabs.svelte";
-  import VerdictStrip from "./components/VerdictStrip.svelte";
-  import HotspotList from "./components/HotspotList.svelte";
-  import SubGraph from "./components/SubGraph.svelte";
-  import PrDetailPanel from "./components/PrDetailPanel.svelte";
+  import VerdictBanner from "./components/VerdictBanner.svelte";
+  import StatsRow from "./components/StatsRow.svelte";
+  import FixBeforeMerge from "./components/FixBeforeMerge.svelte";
+  import ViolationsByPrinciple from "./components/ViolationsByPrinciple.svelte";
+  import ComplianceScore from "./components/ComplianceScore.svelte";
+  import BlastRadiusChart from "./components/BlastRadiusChart.svelte";
+  import LayerChart from "./components/LayerChart.svelte";
+  import SubsystemsPanel from "./components/SubsystemsPanel.svelte";
   import type { UnifiedPrOutput } from "./stores/pr-review";
 
   // ── Data loading ──────────────────────────────────────────────────────────
@@ -38,10 +42,6 @@
   let status = $derived(loader.status);
   let data = $derived(loader.data);
   let errorMsg = $derived(loader.errorMsg);
-
-  // ── State ─────────────────────────────────────────────────────────────────
-
-  let selectedFile = $state<string | null>(null);
 
   // ── Derived: prep-level ────────────────────────────────────────────────────
 
@@ -60,55 +60,28 @@
 
   let hasReview = $derived(!!data?.has_review);
 
-  // ── Derived: impact-level (only meaningful when review exists) ──────────────
+  // ── Derived: review-level (only meaningful when review exists) ─────────────
 
-  let seedNodeIds = $derived(new Set<string>(data?.review?.files ?? []));
-
-  let subgraphLayerColors = $derived.by(() => {
-    const map: Record<string, string> = {};
-    for (const layer of data?.subgraph?.layers ?? []) {
-      if (layer?.name && layer?.color) map[layer.name] = layer.color;
-    }
-    return map;
-  });
-
-  let selectedFileViolations = $derived(
-    (data?.review?.violations ?? []).filter(
-      (v: { file_path?: string }) => v.file_path === selectedFile
-    )
+  let ruleViolationCount = $derived(
+    (data?.review?.violations ?? []).filter(v => v.severity === "rule").length
   );
 
-  let selectedFileBlastRadius = $derived(
-    (data?.blastRadius?.affected ?? []).filter(
-      (a: { depth: number; file_path: string }) => a.depth > 0 && a.file_path === selectedFile
-    )
+  let highestBlastRadius = $derived(
+    (data?.blast_radius_by_file ?? []).length > 0
+      ? data!.blast_radius_by_file[0]
+      : null
   );
 
-  let selectedFileDecisions = $derived.by(() => {
-    const violatedPrinciples = new Set(
-      selectedFileViolations.map((v: { principle_id: string }) => v.principle_id)
-    );
-    return (data?.decisions ?? []).filter((d: { principle_id: string }) =>
-      violatedPrinciples.has(d.principle_id)
-    );
+  let honoredPrinciples = $derived.by(() => {
+    if (!data?.review) return [];
+    // For now return empty — can be enhanced when full principle list is available
+    return [] as string[];
   });
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   function handlePrompt(text: string) {
     bridge.sendMessage(text);
-  }
-
-  function handleFileSelect(file: string) {
-    selectedFile = file;
-  }
-
-  function handleGraphNodeClick(node: { id: string }) {
-    selectedFile = node.id;
-  }
-
-  function handleGraphBackgroundClick() {
-    // no-op — deselect on background click not needed
   }
 
   function handleRunReview() {
@@ -127,14 +100,14 @@
     <EmptyState message="No changed files found." />
 
   {:else if data}
-    <!-- Verdict strip (review mode only) -->
+    <!-- Verdict banner (review mode) or Run Review prompt (prep-only mode) -->
     {#if hasReview && data.review}
-      <VerdictStrip
+      <VerdictBanner
         verdict={data.review.verdict}
         fileCount={data.review.files.length}
-        blastRadiusTotal={data.blastRadius?.total_affected ?? 0}
+        layerCount={data.prep.layers.length}
         violationCount={data.review.violations.length}
-        score={data.review.score}
+        {ruleViolationCount}
       />
     {:else}
       <!-- Run Review banner (prep-only mode) -->
@@ -180,52 +153,22 @@
       onPrompt={handlePrompt}
     />
 
-    <!-- Review Impact section (review mode only) -->
-    {#if hasReview}
-      <div class="review-impact-section">
-        <div class="section-header">Review Impact</div>
-        <div class="panels">
-          <!-- Left panel: HotspotList — risk-ranked changed files -->
-          <div class="panel-left">
-            <HotspotList
-              hotspots={data.hotspots}
-              {selectedFile}
-              onFileSelect={handleFileSelect}
-            />
-          </div>
+    <!-- Dashboard panels (review mode only) -->
+    {#if hasReview && data.review}
+      <div class="dashboard-panels">
+        <StatsRow
+          filesChanged={data.review.files.length}
+          violationCount={data.review.violations.length}
+          ruleCount={ruleViolationCount}
+          {highestBlastRadius}
+        />
 
-          <!-- Center panel: SubGraph — changed files + dependency neighborhood -->
-          <div class="panel-center">
-            {#if data.subgraph?.nodes?.length > 0}
-              <SubGraph
-                nodes={data.subgraph.nodes}
-                edges={data.subgraph.edges}
-                {seedNodeIds}
-                layerColors={subgraphLayerColors}
-                onNodeClick={handleGraphNodeClick}
-                onBackgroundClick={handleGraphBackgroundClick}
-                fa2Iterations={60}
-              />
-            {:else}
-              <EmptyState message={!data.blastRadius ? "No knowledge graph available for subgraph visualization." : "No graph data to display."} />
-            {/if}
-          </div>
-
-          <!-- Right panel: PrDetailPanel — per-file violations, blast radius, decisions -->
-          <div class="panel-right">
-            {#if selectedFile}
-              <PrDetailPanel
-                file={selectedFile}
-                violations={selectedFileViolations}
-                blastRadiusAffected={selectedFileBlastRadius}
-                decisions={selectedFileDecisions}
-                onFileClick={handleFileSelect}
-              />
-            {:else}
-              <EmptyState message="Select a file to see details" />
-            {/if}
-          </div>
-        </div>
+        <FixBeforeMerge violations={data.review.violations} />
+        <ViolationsByPrinciple violations={data.review.violations} />
+        <ComplianceScore score={data.review.score} {honoredPrinciples} />
+        <BlastRadiusChart entries={data.blast_radius_by_file ?? []} />
+        <LayerChart layers={data.prep.layers} />
+        <SubsystemsPanel subsystems={data.subsystems ?? []} />
       </div>
     {/if}
   {/if}
@@ -312,57 +255,14 @@
     flex-shrink: 0;
   }
 
-  /* ── Review Impact section ───────────────────────────────────────────────── */
+  /* ── Dashboard panels ────────────────────────────────────────────────────── */
 
-  .review-impact-section {
+  .dashboard-panels {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    overflow: hidden;
-    min-height: 300px;
-    border-top: 1px solid var(--border, rgba(255,255,255,0.06));
-    margin-top: 4px;
-  }
-
-  .section-header {
-    padding: 6px 12px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted, #636a80);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
-    flex-shrink: 0;
-  }
-
-  .panels {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-    gap: 1px;
-    background: var(--border, #333);
-  }
-
-  .panel-left {
-    width: 220px;
-    min-width: 180px;
+    gap: 2px;
     overflow-y: auto;
-    background: var(--bg, #1a1a1a);
-    flex-shrink: 0;
-  }
-
-  .panel-center {
     flex: 1;
-    overflow: hidden;
-    background: var(--bg, #1a1a1a);
-    min-width: 0;
-  }
-
-  .panel-right {
-    width: 280px;
-    min-width: 220px;
-    overflow-y: auto;
-    background: var(--bg, #1a1a1a);
-    flex-shrink: 0;
+    padding: 0 0 16px;
   }
 </style>
