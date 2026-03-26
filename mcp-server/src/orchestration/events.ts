@@ -13,7 +13,8 @@ export type FlowEventType =
   | "flow_started"
   | "flow_completed"
   | "board_updated"
-  | "wave_event_injected";
+  | "wave_event_injected"
+  | "wave_event_resolved";
 
 export interface FlowEventMap {
   state_entered: {
@@ -82,6 +83,13 @@ export interface FlowEventMap {
   wave_event_injected: {
     eventId: string;
     eventType: string;
+    workspace: string;
+    timestamp: string;
+  };
+  wave_event_resolved: {
+    eventId: string;
+    eventType: string;
+    action: "apply" | "reject";
     workspace: string;
     timestamp: string;
   };
