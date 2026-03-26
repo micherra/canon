@@ -72,11 +72,7 @@
       : null
   );
 
-  let honoredPrinciples = $derived.by(() => {
-    if (!data?.review) return [];
-    // For now return empty — can be enhanced when full principle list is available
-    return [] as string[];
-  });
+  let honoredPrinciples = $derived(data?.review?.honored ?? []);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 

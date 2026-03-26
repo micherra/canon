@@ -99,6 +99,7 @@ export interface PrImpactOutput {
     files: string[];
     violations: ReviewViolation[];
     score: ReviewEntry["score"];
+    honored: string[];
   };
   blastRadius?: {
     total_affected: number;
@@ -552,6 +553,7 @@ export async function showPrImpact(
       files: latestReview.files,
       violations: latestReview.violations,
       score: latestReview.score,
+      honored: latestReview.honored ?? [],
     },
     blastRadius,
     hotspots,

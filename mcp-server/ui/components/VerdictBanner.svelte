@@ -42,7 +42,7 @@
         : `${ruleViolationCount} ${pluralize(ruleViolationCount, "violation")} to fix before merge`;
 
     if (ruleViolationCount === 0 && violationCount > 0) {
-      return `${filePart} — ${violationCount} ${pluralize(violationCount, "violation")}. No blocking issues, but ${violationCount} ${pluralize(violationCount, "rule-level violation")} need${violationCount === 1 ? "s" : ""} addressing.`;
+      return `${filePart} — ${violationCount} ${pluralize(violationCount, "violation")}. No blocking issues, but ${violationCount} ${pluralize(violationCount, "violation")} need${violationCount === 1 ? "s" : ""} addressing.`;
     }
 
     return `${filePart} — ${fixPart}.`;

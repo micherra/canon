@@ -103,6 +103,7 @@ export interface UnifiedPrOutput {
       opinions: { passed: number; total: number };
       conventions: { passed: number; total: number };
     };
+    honored: string[];
   };
   blastRadius?: {
     total_affected: number;

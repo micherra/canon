@@ -5,7 +5,7 @@
  * resolves fragment includes, and produces a fully validated ResolvedFlow.
  */
 
-import { readFile } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { parse as parseYaml } from "yaml";
 import {
   FlowDefinitionSchema,
@@ -389,7 +389,25 @@ export async function loadAndResolveFlow(
     );
   }
   const filePath = `${pluginDir}/flows/${flowName}.md`;
-  const raw = await readFile(filePath, "utf-8");
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf-8");
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      const flowsDir = `${pluginDir}/flows`;
+      let available: string[] = [];
+      try {
+        const entries = await readdir(flowsDir);
+        available = entries
+          .filter((e) => e.endsWith(".md") && !e.startsWith(".") && e !== "README.md" && e !== "SCHEMA.md" && e !== "GATES.md")
+          .map((e) => e.replace(/\.md$/, ""))
+          .sort();
+      } catch { /* flows dir missing — leave empty */ }
+      const list = available.length > 0 ? `: ${available.join(", ")}` : "";
+      throw new Error(`Flow "${flowName}" not found (no file at ${filePath}). Available flows${list}`);
+    }
+    throw err;
+  }
   const { frontmatter, spawnInstructions } = parseFlowContent(raw);
 
   // Validate frontmatter against FlowDefinitionSchema

@@ -32,7 +32,7 @@ src/
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, wave bulletin, variable resolution, gate execution, consultation preparation, wave briefing assembly
 
 ## Contracts
-<!-- last-updated: 2026-03-25 -->
+<!-- last-updated: 2026-03-26 -->
 
 **Drift Store** (`src/drift/store.ts`):
 - `ReviewEntry` — unified type for all reviews (principle and PR); optional PR fields: `pr_number?: number`, `branch?: string`, `last_reviewed_sha?: string`, `file_priorities?: Array<{ path: string; priority_score: number }>`
@@ -129,6 +129,54 @@ src/
 | `get_patterns` | Observed codebase patterns (grouped) |
 | `store_pr_review` | Store a PR review result for drift tracking |
 
+**`resolve_wave_event` tool** (`src/tools/resolve-wave-event.ts`) — added 2026-03-26:
+- Input: `ResolveWaveEventInput` — `{ workspace: string; event_id: string; action: "apply"|"reject"; resolution?: Record<string, unknown>; reason?: string }`
+- Output: `ResolveWaveEventResult` — `{ event_id, action, agents: string[], descriptions: Record<string, string>, pending_count: number }`
+- Validates: `action === "reject"` requires `reason`; throws `"Event not found"` if `event_id` absent; throws `"Event {id} is already {status}"` if event is not pending
+- Calls `markEventApplied` (with optional `resolution`) or `markEventRejected` (with `reason`) then `resolveEventAgents(event.type)`
+- Emits `wave_event_resolved` on event bus after mutation; acquires board lock for full duration
+- `resolveEventAgents("guidance")` returns `{ agents: [], descriptions: {} }` — guidance events are mechanical orchestrator operations, no agent spawn needed (changed from `["canon-guide"]` 2026-03-26)
+
+**Event bus** (`src/orchestration/events.ts`):
+- `FlowEventType` union includes `"wave_event_resolved"` (added 2026-03-26, after `"wave_event_injected"`)
+- `FlowEventMap["wave_event_resolved"]` — `{ eventId, eventType, action: "apply"|"reject", workspace, timestamp }`
+
+**Gate runner** (`src/orchestration/gate-runner.ts`):
+- `normalizeGates(stateDef, flow, cwd, boardState?)` — resolves gate commands via 3-tier priority: `stateDef.gates[]` (direct shell commands) > `stateDef.gate` (named reference via `resolveGateCommand()`) > `boardState.discovered_gates[]` (agent-reported); returns `{ commands, source }` where source ∈ `"gates"|"gate"|"discovered"|"none"`
+- `runGates(stateDef, flow, cwd, boardState?)` — executes all normalized gates via `spawnSync`; returns `GateResult[]`; empty array when no gates declared
+- `runGate(gateName, flow, cwd)` — run a single named gate; **fail-closed**: unresolved gate name returns `{ passed: false, exitCode: 1 }` (changed from `passed: true` 2026-03-26)
+- `GateResult` type — re-exported from `flow-schema.ts`; `{ passed, gate, command, output, exitCode }`
+
+**Contract checker** (`src/orchestration/contract-checker.ts`) — added 2026-03-26:
+- `resolvePostconditions(explicit?, discovered?)` — explicit YAML array takes priority over agent-discovered; returns empty array when neither present
+- `evaluatePostconditions(assertions, cwd, baseCommit?)` — evaluates all assertions deterministically; returns `PostconditionResult[]`; never throws
+- Assertion types: `file_exists`, `file_changed`, `pattern_match`, `no_pattern`, `bash_check`
+- `bash_check` denylist: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd` — blocked before execution
+
+**Flow schema types** (`src/orchestration/flow-schema.ts`) — added 2026-03-26:
+- `GateResultSchema` / `GateResult` — gate execution result; source of truth (replaces former local interface in gate-runner)
+- `DiscoveredGateSchema` / `DiscoveredGate` — `{ command: string; source: string }` for agent-reported gate discovery
+- `PostconditionAssertionSchema` / `PostconditionAssertion` — typed assertion `{ type, target, pattern?, command? }`
+- `PostconditionResultSchema` / `PostconditionResult` — `{ passed, name, type, output }`
+- `ViolationSeveritiesSchema` / `ViolationSeverities` — `{ blocking: number; warning: number }`
+- `TestResultsSchema` / `TestResults` — `{ passed: number; failed: number; skipped: number }`
+- `StateDefinitionSchema` now accepts `gates?: string[]` and `postconditions?: PostconditionAssertion[]`
+- `EffectTypeSchema` now includes `"check_postconditions"` — triggers contract checker on the state's postconditions
+- `StateMetricsSchema` fields (`duration_ms`, `spawns`, `model`) are now `.optional()`; 7 new optional fields: `gate_results`, `postcondition_results`, `violation_count`, `violation_severities`, `test_results`, `files_changed`, `revision_count`
+- `BoardStateEntrySchema` new optional fields: `gate_results`, `postcondition_results`, `discovered_gates`, `discovered_postconditions`
+
+**Analytics** (`src/drift/analytics.ts`) — added 2026-03-26:
+- `FlowAnalytics` interface — `{ avg_gate_pass_rate?, avg_postcondition_pass_rate?, total_runs, runs_with_gate_data }`
+- `computeAnalytics(entries: FlowRunEntry[])` — pure function; aggregates metrics across flow run entries; skips entries without gate data when computing averages
+- `FlowRunEntry` new optional fields: `gate_pass_rate`, `postcondition_pass_rate`, `total_violations`, `total_test_results`, `total_files_changed`
+
+**`report_result` tool** (`src/tools/report-result.ts`) — new optional input fields added 2026-03-26:
+- Quality signal fields: `gate_results?: GateResult[]`, `postcondition_results?: PostconditionResult[]`, `violation_count?: number`, `violation_severities?: ViolationSeverities`, `test_results?: TestResults`, `files_changed?: number`
+- Discovery fields: `discovered_gates?: DiscoveredGate[]`, `discovered_postconditions?: PostconditionAssertion[]` — accumulated (append, not replace) on `BoardStateEntry`
+- `gate_results` and `postcondition_results` stored both in `metrics` and top-level `BoardStateEntry` for quick access
+- `revision_count` auto-computed from `board.iterations[state_id].count` — not caller-supplied
+- Backward compat: callers providing no new fields get exactly the old behavior (no `metrics` entry written)
+
 **Orchestration harness tools:**
 
 | Tool | Purpose |
@@ -136,14 +184,15 @@ src/
 | `load_flow` | Load and resolve a flow definition |
 | `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status, locks, and stale sessions before creating |
 | `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop |
-| `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress) |
+| `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress); at `complete_flow` aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
 | `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
-| `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side |
+| `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
 | `check_convergence` | Check iteration limits |
 | `list_overlays` | List available role overlays |
 | `post_wave_bulletin` | Post inter-agent message during parallel waves |
 | `get_wave_bulletin` | Read wave bulletin messages |
 | `inject_wave_event` | Inject user events into running wave execution |
+| `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
 
 ## Dependencies
 <!-- last-updated: 2026-03-26 -->
@@ -157,7 +206,7 @@ src/
 | `vitest` | Unit testing (dev) |
 
 ## Invariants
-<!-- last-updated: 2026-03-24 -->
+<!-- last-updated: 2026-03-26 -->
 
 - All data persists to `.canon/` directory (decisions.jsonl, patterns.jsonl, reviews.jsonl, graph-data.json, summaries.json)
 - JSONL files auto-rotate when exceeding size limits
@@ -166,6 +215,11 @@ src/
 - `CANON_PLUGIN_DIR` env var sets plugin directory (defaults to parent of mcp-server)
 - Workspace subdirectories created by `initWorkspace`: `research/`, `decisions/`, `plans/`, `reviews/` — `notes/` is NOT created (removed 2026-03-24)
 - `progress.md` is seeded at workspace creation and appended server-side by `report_result` via its `progress_line` parameter; agents treat it as read-only
+- Gate runner is **fail-closed**: a named gate that cannot be resolved returns `{ passed: false }` — never silently passes (changed from fail-open 2026-03-26)
+- `bash_check` postconditions are filtered against a denylist before shell execution: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd`; blocked commands return `passed: false`
+- All new schema fields in `flow-schema.ts` MUST be `.optional()` — `BoardSchema.parse()` must not throw on existing workspace `board.json` files
+- `discovered_gates` and `discovered_postconditions` on `BoardStateEntry` accumulate across multiple `report_result` calls (append, not replace)
+- `EffectTypeSchema` switch in `effects.ts` has no `default` case — TypeScript enforces exhaustiveness when new effect types are added
 
 ## Development
 <!-- last-updated: 2026-03-22 -->
