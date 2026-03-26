@@ -318,12 +318,7 @@
   /* ── Empty state ─────────────────────────────────────────────────────────── */
 
   .empty-state {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     padding: 32px;
-    color: var(--text-muted, #636a80);
-    font-size: 13px;
     text-align: center;
   }
 </style>

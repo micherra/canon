@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SEVERITY_COLORS } from "../lib/constants";
+  import { getSeverityColor } from "../lib/utils";
   import { basename } from "../lib/graph";
 
   // ── Types ─────────────────────────────────────────────────────────────────
@@ -74,12 +74,6 @@
   /** Human-readable filename */
   let fileName = $derived(basename(file));
 
-  /** Severity color helper */
-  function severityColor(severity: string): string {
-    return (
-      SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS] ?? "#7f8c8d"
-    );
-  }
 </script>
 
 <div class="pr-detail-panel">
@@ -111,7 +105,7 @@
             <div class="violation-card-top">
               <span
                 class="severity-badge"
-                style="background:{severityColor(violation.severity)}"
+                style="background:{getSeverityColor(violation.severity)}"
               >{violation.severity}</span>
               <span class="principle-id">{violation.principle_id}</span>
             </div>
@@ -249,11 +243,6 @@
   }
 
   .section-header {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
     margin: 0 0 8px 0;
   }
 

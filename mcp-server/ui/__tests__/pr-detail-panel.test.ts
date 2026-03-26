@@ -95,9 +95,9 @@ describe("PrDetailPanel.svelte — violations section", () => {
     expect(content).toContain("No details available");
   });
 
-  it("uses SEVERITY_COLORS from lib/constants for badge colors", () => {
+  it("uses getSeverityColor from lib/utils for badge colors", () => {
     const content = readFileSync(componentPath, "utf-8");
-    expect(content).toContain("SEVERITY_COLORS");
+    expect(content).toContain("getSeverityColor");
   });
 });
 

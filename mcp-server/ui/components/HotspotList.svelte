@@ -48,7 +48,7 @@
   {:else}
     {#each hotspots as hotspot (hotspot.file)}
       <button
-        class="hotspot-row"
+        class="btn-reset hotspot-row"
         class:selected={selectedFile === hotspot.file}
         aria-current={selectedFile === hotspot.file ? "true" : undefined}
         onclick={() => onFileSelect(hotspot.file)}
@@ -112,11 +112,6 @@
     align-items: center;
     gap: 6px;
     padding: 5px 10px;
-    cursor: pointer;
-    border: none;
-    background: transparent;
-    width: 100%;
-    text-align: left;
     font-size: 12px;
     color: var(--text, #e0e0e0);
     border-radius: 0;
