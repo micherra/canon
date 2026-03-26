@@ -146,12 +146,13 @@ src/
 | `inject_wave_event` | Inject user events into running wave execution |
 
 ## Dependencies
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-26 -->
 
 | Package | Purpose |
 |---------|---------|
 | `@modelcontextprotocol/sdk` | MCP server/client implementation |
 | `zod` | Runtime schema validation |
+| `gray-matter` | YAML frontmatter parsing in `parser.ts` (replaced hand-rolled parser 2026-03-26) |
 | `tsx` | TypeScript execution (dev) |
 | `vitest` | Unit testing (dev) |
 
