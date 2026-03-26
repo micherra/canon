@@ -114,7 +114,7 @@ All effects are best-effort — parse failures are logged but never block the fl
 Gates are verification checkpoints (test suites, linters, type checkers) that run between states. See `flows/GATES.md` for the full guide on built-in and custom gates.
 
 ### Flow Analytics
-Flow execution data is automatically persisted to `.canon/flow-runs.jsonl` on flow completion. Query via the `get_flow_analytics` MCP tool to identify bottleneck states, skip rates, and optimization opportunities.
+Flow execution data is automatically persisted to `.canon/flow-runs.jsonl` on flow completion.
 
 ## Code Style
 

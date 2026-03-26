@@ -31,7 +31,6 @@ import { enterAndPrepareState } from "./tools/enter-and-prepare-state.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
 import { graphQuery } from "./tools/graph-query.ts";
 import { showPrImpact } from "./tools/show-pr-impact.ts";
-import { getFlowRuns, computeAnalytics } from "./drift/analytics.ts";
 import { reportInputSchema } from "./schema.ts";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
 
@@ -578,21 +577,6 @@ registerToolWithUi(
     const result = graphQuery(input, projectDir);
     return jsonResponse(result);
   },
-);
-
-server.registerTool(
-  "get_flow_analytics",
-  {
-    description: "Get flow execution analytics — average durations, bottleneck states, skip rates, and spawn counts. Useful for identifying slow states and optimization opportunities.",
-    inputSchema: {
-      flow: z.string().optional().describe("Filter to a specific flow name"),
-    },
-  },
-  async (input) => {
-    const runs = await getFlowRuns(projectDir, input.flow);
-    const analytics = computeAnalytics(runs);
-    return jsonResponse(analytics);
-  }
 );
 
 // Start the server

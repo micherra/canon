@@ -88,7 +88,6 @@ src/
 | `post_wave_bulletin` | Post a message to the wave bulletin for near-real-time inter-agent communication during parallel wave execution. Implementor agents have direct access to this tool. |
 | `get_wave_bulletin` | Read messages from the wave bulletin. Returns messages posted by other agents in the same wave, optionally filtered by timestamp or type. Used by implementors for real-time coordination. |
 | `inject_wave_event` | Inject a user event into a running wave execution. Allows the user to steer, pause, or redirect agents mid-wave. |
-| `get_flow_analytics` | Flow execution analytics and bottleneck identification. Analyzes workspace logs to surface cost breakdowns and timing data. |
 
 ## Data persistence
 

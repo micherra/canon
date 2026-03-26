@@ -98,7 +98,6 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `post_wave_bulletin` | Post inter-agent message during parallel wave execution |
 | `get_wave_bulletin` | Read wave bulletin messages from other agents in the same wave |
 | `inject_wave_event` | Inject user events into running wave execution |
-| `get_flow_analytics` | Flow execution analytics and bottleneck identification |
 
 ## Canon Engineering Principles
 

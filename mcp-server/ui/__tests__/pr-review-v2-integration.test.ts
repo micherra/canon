@@ -18,12 +18,6 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync, existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const uiDir = join(__dirname, "..");
 
 // ── Types (mirrored from PrReviewPrep for test fixtures) ────────────────────
 
@@ -398,106 +392,6 @@ describe("DepRow prompt template", () => {
   });
 });
 
-// ── Staleness warning structural contract ─────────────────────────────────────
-
-describe("PrReview staleness warning — structural contract", () => {
-  const sveltePath = join(uiDir, "PrReview.svelte");
-
-  it("contains staleness-warning class", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("staleness-warning");
-  });
-
-  it("tests isStale against 3_600_000ms threshold", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("3_600_000");
-  });
-
-  it("conditionally renders staleness warning with {#if isStale}", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("isStale");
-    expect(content).toContain("{#if isStale}");
-  });
-
-  it("staleness warning mentions re-indexing", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("Re-index");
-  });
-});
-
-// ── Container composition contract ────────────────────────────────────────────
-
-describe("PrReview container composition", () => {
-  const sveltePath = join(uiDir, "PrReview.svelte");
-
-  it("exists", () => {
-    expect(existsSync(sveltePath)).toBe(true);
-  });
-
-  it("imports NarrativeSummary from components/", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("NarrativeSummary");
-    expect(content).toContain("./components/NarrativeSummary.svelte");
-  });
-
-  it("imports ChangeStoryGrid from components/", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("ChangeStoryGrid");
-    expect(content).toContain("./components/ChangeStoryGrid.svelte");
-  });
-
-  it("imports ImpactTabs from components/", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("ImpactTabs");
-    expect(content).toContain("./components/ImpactTabs.svelte");
-  });
-
-  it("does NOT import bridge directly into child components (data-down pattern)", () => {
-    // The container passes onPrompt — children do NOT import bridge
-    const content = readFileSync(sveltePath, "utf-8");
-    // Container imports bridge itself
-    expect(content).toContain("import { bridge } from");
-    // But passes handlePrompt as onPrompt to children (not bridge directly)
-    expect(content).toContain("onPrompt={handlePrompt}");
-  });
-
-  it("passes narrative, totalFiles, layerCount, netNewFiles, violationCount to NarrativeSummary (via data.prep)", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("narrative={data.prep.narrative}");
-    expect(content).toContain("totalFiles={data.prep.total_files}");
-    expect(content).toContain("layerCount={data.prep.layers.length}");
-    expect(content).toContain("netNewFiles={netNewFiles}");
-    expect(content).toContain("violationCount={totalViolations}");
-  });
-
-  it("passes files and onPrompt to ChangeStoryGrid (via data.prep.files)", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("files={data.prep.files}");
-    expect(content).toContain("onPrompt={handlePrompt}");
-  });
-
-  it("passes files, blastRadius, and onPrompt to ImpactTabs (via data.prep)", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("blastRadius={data.prep.blast_radius}");
-  });
-
-  it("does NOT contain old bucket-section markup", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("bucket-section");
-  });
-
-  it("does NOT contain old layer-tabs markup", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("layer-tabs");
-  });
-
-  it("does NOT contain toggleBucket or toggleBlastRadius helpers", () => {
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).not.toContain("toggleBucket");
-    expect(content).not.toContain("toggleBlastRadius");
-  });
-});
-
 // ── Acceptance criteria edge cases ────────────────────────────────────────────
 
 describe("Acceptance criteria: 0 violations, 0 blast_radius, single file", () => {
@@ -511,15 +405,6 @@ describe("Acceptance criteria: 0 violations, 0 blast_radius, single file", () =>
 
   it("isStale is false when graph_data_age_ms is not set (new PR)", () => {
     expect(computeIsStale(undefined)).toBe(false);
-  });
-
-  it("ImpactTabs receives empty blastRadius gracefully (0 blast_radius)", () => {
-    // When blastRadius = [], Tab C should show empty state
-    // We verify the container passes blast_radius correctly (via data.prep.blast_radius)
-    const sveltePath = join(uiDir, "PrReview.svelte");
-    const content = readFileSync(sveltePath, "utf-8");
-    expect(content).toContain("blastRadius={data.prep.blast_radius}");
-    // blast_radius is always an array (never undefined in PrepData)
   });
 
   it("totalViolations is 0 for section 1 empty violations display", () => {

@@ -144,7 +144,6 @@ src/
 | `post_wave_bulletin` | Post inter-agent message during parallel waves |
 | `get_wave_bulletin` | Read wave bulletin messages |
 | `inject_wave_event` | Inject user events into running wave execution |
-| `get_flow_analytics` | Flow execution analytics and bottleneck identification |
 
 ## Dependencies
 <!-- last-updated: 2026-03-22 -->

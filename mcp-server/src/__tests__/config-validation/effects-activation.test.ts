@@ -7,11 +7,11 @@
 import { describe, it, expect } from "vitest";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import { loadAndResolveFlow } from "../../orchestration/flow-parser.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
+const pluginDir = resolve(__dirname, "../../../.."); // mcp-server/src/__tests__/config-validation → project root
 
 // ---------------------------------------------------------------------------
 // review-fix-loop fragment: persist_review on review state
