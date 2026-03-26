@@ -505,7 +505,7 @@ describe("getPrReviewData — git ref sanitization", () => {
   });
 });
 
-// ── DriftStore review tests (migrated from PrStore) ──
+// ── DriftStore review tests ──
 
 describe("DriftStore — review methods", () => {
   let tmpDir: string;

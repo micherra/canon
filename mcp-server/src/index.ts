@@ -531,7 +531,7 @@ server.registerTool(
 server.registerTool(
   "store_pr_review",
   {
-    description: "Store a PR review result for drift tracking. Server generates pr_review_id and timestamp.",
+    description: "Store a PR review result for drift tracking. Server generates review_id and timestamp.",
     inputSchema: {
       pr_number: z.number().optional().describe("GitHub PR number"),
       branch: z.string().optional().describe("Branch name reviewed"),

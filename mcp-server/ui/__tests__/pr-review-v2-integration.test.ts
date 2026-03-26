@@ -1,7 +1,7 @@
 /**
  * pr-review-v2-integration.test.ts
  *
- * Integration tests for the PrReviewPrep v2 container.
+ * Integration tests for the PrReview v2 container.
  *
  * Since Svelte components cannot be rendered in Vitest without a DOM, we test:
  *   1. Derived computation logic (totalViolations, netNewFiles, isStale)

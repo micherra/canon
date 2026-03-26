@@ -4,7 +4,7 @@
  * Integration tests and coverage gap fills for the PR Review Prep redesign.
  *
  * Wave 1 (pr-review-data.ts) adds classifyFile(), generateNarrative(), and
- * computeBlastRadius() to getPrReviewData(). Wave 2 (PrReviewPrep.svelte)
+ * computeBlastRadius() to getPrReviewData(). Wave 2 (PrReview.svelte)
  * consumes those fields in the UI.
  *
  * This file covers:
@@ -712,7 +712,7 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
 //    verified structurally in the entry-point tests.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// The helpers are not exported from PrReviewPrep.svelte, so we reproduce the
+// The helpers are not exported from PrReview.svelte, so we reproduce the
 // exact logic here (copied verbatim from the component) and test it as a unit.
 // This is intentional: the Svelte entry test confirmed the helpers *exist*;
 // these tests confirm the helpers *behave correctly*.
@@ -760,21 +760,21 @@ function groupByDepth(
   return map;
 }
 
-describe("PrReviewPrep helper: statusIcon()", () => {
+describe("PrReview helper: statusIcon()", () => {
   it("returns '+' for added", () => expect(statusIcon("added")).toBe("+"));
   it("returns '−' for deleted", () => expect(statusIcon("deleted")).toBe("−"));
   it("returns '→' for renamed", () => expect(statusIcon("renamed")).toBe("→"));
   it("returns '~' for modified", () => expect(statusIcon("modified")).toBe("~"));
 });
 
-describe("PrReviewPrep helper: statusClass()", () => {
+describe("PrReview helper: statusClass()", () => {
   it("returns 'status-added' for added", () => expect(statusClass("added")).toBe("status-added"));
   it("returns 'status-deleted' for deleted", () => expect(statusClass("deleted")).toBe("status-deleted"));
   it("returns 'status-renamed' for renamed", () => expect(statusClass("renamed")).toBe("status-renamed"));
   it("returns 'status-modified' for modified", () => expect(statusClass("modified")).toBe("status-modified"));
 });
 
-describe("PrReviewPrep helper: shortPath()", () => {
+describe("PrReview helper: shortPath()", () => {
   it("returns path unchanged when 2 or fewer segments", () => {
     expect(shortPath("src/file.ts")).toBe("src/file.ts");
     expect(shortPath("file.ts")).toBe("file.ts");
@@ -790,7 +790,7 @@ describe("PrReviewPrep helper: shortPath()", () => {
   });
 });
 
-describe("PrReviewPrep helper: formatAge()", () => {
+describe("PrReview helper: formatAge()", () => {
   it("formats sub-hour durations as minutes", () => {
     // 5 minutes = 300000 ms
     expect(formatAge(300000)).toBe("5m ago");
@@ -818,7 +818,7 @@ describe("PrReviewPrep helper: formatAge()", () => {
   });
 });
 
-describe("PrReviewPrep helper: groupByDepth()", () => {
+describe("PrReview helper: groupByDepth()", () => {
   it("groups a single depth-1 entry correctly", () => {
     const result = groupByDepth([{ path: "src/a.ts", depth: 1 }]);
     expect(result.get(1)).toEqual(["src/a.ts"]);
@@ -866,7 +866,7 @@ function setActiveLayer(
   return activeLayer === layer ? null : layer;
 }
 
-describe("PrReviewPrep setActiveLayer() toggle logic (declared gap)", () => {
+describe("PrReview setActiveLayer() toggle logic (declared gap)", () => {
   it("sets active layer when none is active", () => {
     expect(setActiveLayer(null, "tools")).toBe("tools");
   });
@@ -969,7 +969,7 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiDir = pathJoin(__dirname, "../../ui");
 
-describe("PrReviewPrep.svelte — v2 container structural contract", () => {
+describe("PrReview.svelte — v2 container structural contract", () => {
   // Updated 2026-03-25: PrReviewPrep.svelte merged into PrReview.svelte (unified view)
   const sveltePath = pathJoin(uiDir, "PrReview.svelte");
 

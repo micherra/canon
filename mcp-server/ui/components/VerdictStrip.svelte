@@ -7,7 +7,7 @@
    *
    * Canon principles:
    *   - functions-do-one-thing: renders verdict banner only
-   *   - compose-from-small-to-large: used as an atom by PrImpact.svelte
+   *   - compose-from-small-to-large: used as an atom by PrReview.svelte
    */
 
   interface VerdictStripProps {
