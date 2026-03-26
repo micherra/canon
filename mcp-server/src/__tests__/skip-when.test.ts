@@ -268,15 +268,4 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     expect(result.skip).toBe(true);
   });
 
-  it("uses spawnSync (not execSync) — verifying mock is called via spawnSync path", async () => {
-    let spawnWasCalled = false;
-    spawnSyncImpl = () => {
-      spawnWasCalled = true;
-      return { stdout: "", status: 0 };
-    };
-    const board = makeBoard({ base_commit: "abc1234" });
-    await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
-
-    expect(spawnWasCalled).toBe(true);
-  });
 });

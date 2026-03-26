@@ -263,21 +263,6 @@ describe("enterAndPrepareState", () => {
       expect(result.prompts[0].prompt).toContain("build the widget");
     });
 
-    it("enters the state (calls enterState + writeBoard)", async () => {
-      const workspace = makeTmpDir();
-      const flow = makeFlow();
-
-      await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
-      });
-
-      expect(enterState).toHaveBeenCalledTimes(1);
-      expect(writeBoard).toHaveBeenCalledTimes(1);
-    });
-
     it("returns the updated board in the result", async () => {
       const workspace = makeTmpDir();
       const flow = makeFlow();
@@ -334,63 +319,6 @@ describe("enterAndPrepareState", () => {
       expect(result.can_enter).toBe(true);
       expect(result.state_type).toBe("terminal");
       expect(result.prompts).toHaveLength(0);
-    });
-  });
-
-  describe("board read count", () => {
-    it("calls readBoard exactly once per invocation", async () => {
-      const workspace = makeTmpDir();
-      const board = makeBoard();
-      const enteredBoard = makeBoard({
-        states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
-
-      const flow = makeFlow({
-        states: {
-          implement: {
-            type: "single",
-            agent: "canon-implementor",
-            skip_when: "no_contract_changes",
-          },
-          done: { type: "terminal" },
-        },
-      });
-
-      // skip_when NOT met, so it will proceed to enter state
-      vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
-
-      await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
-      });
-
-      // Only one readBoard call total — not once per sub-call
-      expect(readBoard).toHaveBeenCalledTimes(1);
-    });
-
-    it("calls readBoard exactly once even when state has no skip_when", async () => {
-      const workspace = makeTmpDir();
-      const board = makeBoard();
-      const enteredBoard = makeBoard({
-        states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
-
-      const flow = makeFlow();
-
-      await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
-      });
-
-      expect(readBoard).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -280,7 +280,7 @@ describe("getPrReviewData — layer inference", () => {
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
-    expect(result.files[0]?.layer).toBeTruthy(); // At minimum has some layer string
+    expect(result.files[0]?.layer).toBe("unknown");
   });
 });
 
