@@ -208,7 +208,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     rmSync(workspace, { recursive: true, force: true });
   });
 
-  it("discovered_gates stored by report_result are readable via readBoard and usable by runGates", async () => {
+  it("discovered_gates stored by report_result are readable via readBoard but NOT executed by normalizeGates", async () => {
     // Step 1: Agent calls report_result with discovered gates
     await reportResult({
       workspace,
@@ -221,26 +221,22 @@ describe("Integration: report_result discovered_gates → board stores → runGa
       ],
     });
 
-    // Step 2: Read the board back — discovered gates should be on the state entry
+    // Step 2: Read the board back — discovered gates should be stored on the state entry
     const board = await readBoard(workspace);
     const implState = board.states["impl"];
     expect(implState.discovered_gates).toHaveLength(2);
     expect(implState.discovered_gates![0]).toEqual({ command: "npx vitest run", source: "tester" });
     expect(implState.discovered_gates![1]).toEqual({ command: "npx tsc --noEmit", source: "tester" });
 
-    // Step 3: runGates with no explicit gates uses the discovered gates from board state
-    // We don't actually execute commands here — just verify normalizeGates behavior
-    // by checking the returned gate names match discovered format
+    // Step 3: normalizeGates returns "none" — discovered gates are stored but NOT executed
+    // Only YAML-defined gates (tiers 1 and 2) are executed.
     const flow = { name: "feature", description: "test", entry: "impl", states: {}, spawn_instructions: {} };
     const stateDef = { type: "single" as const }; // no explicit gates
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
     const normalized = normalizeGates(stateDef, flow as any, workspace, implState);
 
-    expect(normalized.source).toBe("discovered");
-    expect(normalized.commands).toHaveLength(2);
-    expect(normalized.commands[0].command).toBe("npx vitest run");
-    expect(normalized.commands[1].command).toBe("npx tsc --noEmit");
-    expect(normalized.commands[0].name).toBe("discovered:tester:npx vitest run");
+    expect(normalized.source).toBe("none");
+    expect(normalized.commands).toEqual([]);
   });
 
   it("multiple report_result calls accumulate discovered_gates (append semantics preserved across cycle)", async () => {
@@ -280,14 +276,14 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     expect(discovered.map(d => d.command)).toContain("npx vitest run");
     expect(discovered.map(d => d.command)).toContain("npx eslint . --ext .ts");
 
-    // Verify runGates would deduplicate and use both
+    // Verify normalizeGates returns "none" — discovered gates are stored but NOT executed
     const stateDef = { type: "single" as const };
     const flow = { name: "feature", description: "test", entry: "impl", states: {}, spawn_instructions: {} };
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
     const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states["impl"]);
 
-    expect(normalized.source).toBe("discovered");
-    expect(normalized.commands).toHaveLength(2); // deduplicated
+    expect(normalized.source).toBe("none");
+    expect(normalized.commands).toEqual([]);
   });
 });
 
@@ -768,15 +764,13 @@ describe("Integration: discovered_gates deduplicated when same command reported 
     expect(accumulated[0]).toEqual({ command: "npm test", source: "tester" });
     expect(accumulated[1]).toEqual({ command: "npm test", source: "reviewer" });
 
-    // normalizeGates deduplicates — only 1 unique command
+    // normalizeGates returns "none" — discovered gates stored as metadata, not executed
     const stateDef = { type: "single" as const };
     const flow = { name: "f", description: "f", entry: "impl", states: {}, spawn_instructions: {} };
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
     const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states["impl"]);
 
-    expect(normalized.source).toBe("discovered");
-    expect(normalized.commands).toHaveLength(1); // deduplicated
-    expect(normalized.commands[0].command).toBe("npm test");
-    expect(normalized.commands[0].name).toBe("discovered:tester:npm test"); // first source wins
+    expect(normalized.source).toBe("none");
+    expect(normalized.commands).toEqual([]);
   });
 });

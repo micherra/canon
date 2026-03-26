@@ -46,6 +46,41 @@ describe("resolvePostconditions", () => {
   it("returns empty when explicit is empty and discovered is empty", () => {
     expect(resolvePostconditions([], [])).toEqual([]);
   });
+
+  it("strips bash_check entries from discovered postconditions", () => {
+    const discovered: PostconditionAssertion[] = [
+      { type: "file_exists", target: "foo.ts" },
+      { type: "bash_check", command: "echo injected" },
+      { type: "pattern_match", target: "bar.ts", pattern: "hello" },
+      { type: "bash_check", command: "npm test" },
+    ];
+    const result = resolvePostconditions(undefined, discovered);
+    // bash_check entries must be stripped — only safe types remain
+    expect(result).toHaveLength(2);
+    expect(result.every(a => a.type !== "bash_check")).toBe(true);
+    expect(result[0]).toEqual({ type: "file_exists", target: "foo.ts" });
+    expect(result[1]).toEqual({ type: "pattern_match", target: "bar.ts", pattern: "hello" });
+  });
+
+  it("returns empty array when discovered contains only bash_check entries", () => {
+    const discovered: PostconditionAssertion[] = [
+      { type: "bash_check", command: "npm test" },
+      { type: "bash_check", command: "echo hello" },
+    ];
+    const result = resolvePostconditions(undefined, discovered);
+    expect(result).toEqual([]);
+  });
+
+  it("does NOT strip bash_check from explicit (YAML-committed) postconditions", () => {
+    const explicit: PostconditionAssertion[] = [
+      { type: "bash_check", command: "npm test" },
+      { type: "file_exists", target: "foo.ts" },
+    ];
+    const result = resolvePostconditions(explicit, undefined);
+    // Explicit YAML entries pass through unchanged — bash_check in YAML is allowed
+    expect(result).toHaveLength(2);
+    expect(result[0].type).toBe("bash_check");
+  });
 });
 
 describe("evaluatePostconditions — file_exists", () => {

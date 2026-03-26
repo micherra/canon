@@ -371,54 +371,49 @@ describe("normalizeGates — tier 2: legacy gate field", () => {
   });
 });
 
-describe("normalizeGates — tier 3: discovered gates from board state", () => {
-  it("uses discovered_gates from boardState when no explicit gates or legacy gate", () => {
+describe("normalizeGates — tier 3: discovered gates are stored as metadata but NOT executed", () => {
+  it("returns { commands: [], source: 'none' } when only discovered_gates exist (not executed)", () => {
     const flow = makeFlow();
     const stateDef = makeStateDef();
     const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
     const result = normalizeGates(stateDef, flow, "/project", boardState);
 
-    expect(result.source).toBe("discovered");
-    expect(result.commands).toHaveLength(1);
-    expect(result.commands[0].command).toBe("pytest");
-    expect(result.commands[0].name).toContain("tester");
+    // Discovered gates are stored on board for metadata but normalizeGates returns none
+    expect(result.source).toBe("none");
+    expect(result.commands).toEqual([]);
   });
 
-  it("formats discovered gate names as 'discovered:{source}:{command}'", () => {
-    const flow = makeFlow();
-    const stateDef = makeStateDef();
-    const boardState = makeBoardState([{ command: "npm run lint", source: "reviewer" }]);
-    const result = normalizeGates(stateDef, flow, "/project", boardState);
-
-    expect(result.commands[0].name).toBe("discovered:reviewer:npm run lint");
-  });
-
-  it("deduplicates discovered_gates by command string", () => {
+  it("returns 'none' even when discovered_gates has multiple commands", () => {
     const flow = makeFlow();
     const stateDef = makeStateDef();
     const boardState = makeBoardState([
       { command: "pytest", source: "tester" },
-      { command: "pytest", source: "reviewer" }, // duplicate command
       { command: "npm run lint", source: "reviewer" },
     ]);
     const result = normalizeGates(stateDef, flow, "/project", boardState);
 
-    expect(result.source).toBe("discovered");
-    expect(result.commands).toHaveLength(2);
-    expect(result.commands.map(c => c.command)).toEqual(["pytest", "npm run lint"]);
+    expect(result.source).toBe("none");
+    expect(result.commands).toEqual([]);
   });
 
-  it("uses first source when deduplicating discovered_gates with same command", () => {
+  it("explicit gates still win over discovered when both present (tier 1 check still works)", () => {
     const flow = makeFlow();
-    const stateDef = makeStateDef();
-    const boardState = makeBoardState([
-      { command: "pytest", source: "tester" },
-      { command: "pytest", source: "reviewer" }, // same command, different source
-    ]);
+    const stateDef = makeStateDef({ gates: ["npm test"] });
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
     const result = normalizeGates(stateDef, flow, "/project", boardState);
 
-    // First occurrence wins for deduplication
-    expect(result.commands[0].name).toBe("discovered:tester:pytest");
+    expect(result.source).toBe("gates");
+    expect(result.commands[0].command).toBe("npm test");
+  });
+
+  it("legacy gate still wins over discovered when both present (tier 2 check still works)", () => {
+    const flow = makeFlow({ "lint": "npm run lint" });
+    const stateDef = makeStateDef({ gate: "lint" });
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
+    const result = normalizeGates(stateDef, flow, "/project", boardState);
+
+    expect(result.source).toBe("gate");
+    expect(result.commands[0].command).toBe("npm run lint");
   });
 });
 
@@ -523,18 +518,18 @@ describe("runGates — fail-closed for unresolvable legacy named gate", () => {
   });
 });
 
-describe("runGates — with discovered gates from board state", () => {
-  it("executes discovered gates from board state when no explicit gates declared", () => {
-    spawnSyncImpl = () => ({ stdout: "test output", stderr: "", status: 0 });
+describe("runGates — discovered gates are NOT executed (stored as metadata only)", () => {
+  it("returns empty array when only discovered gates exist — they are not executed", () => {
+    spawnSyncImpl = () => {
+      throw new Error("spawnSync must NOT be called for discovered gates");
+    };
     const flow = makeFlow();
     const stateDef = makeStateDef();
     const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
     const results = runGates(stateDef, flow, "/project", boardState);
 
-    expect(results).toHaveLength(1);
-    expect(results[0].passed).toBe(true);
-    expect(results[0].command).toBe("pytest");
-    expect(results[0].gate).toContain("discovered");
+    // No execution — discovered gates are stored on board state but not run
+    expect(results).toEqual([]);
   });
 
   it("returns empty array when board state has no discovered_gates", () => {
@@ -546,22 +541,15 @@ describe("runGates — with discovered gates from board state", () => {
     expect(results).toEqual([]);
   });
 
-  it("deduplicates and runs discovered gates", () => {
-    let executedCommands: string[] = [];
-    spawnSyncImpl = (cmd) => {
-      executedCommands.push(cmd);
-      return { stdout: "ok", stderr: "", status: 0 };
-    };
+  it("still executes explicit gates even when discovered gates are also present", () => {
+    spawnSyncImpl = () => ({ stdout: "ok", stderr: "", status: 0 });
     const flow = makeFlow();
-    const stateDef = makeStateDef();
-    const boardState = makeBoardState([
-      { command: "pytest", source: "tester" },
-      { command: "pytest", source: "reviewer" }, // duplicate
-    ]);
+    const stateDef = makeStateDef({ gates: ["npm test"] });
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
     const results = runGates(stateDef, flow, "/project", boardState);
 
-    // Only one unique command executed
     expect(results).toHaveLength(1);
-    expect(executedCommands).toEqual(["pytest"]);
+    expect(results[0].command).toBe("npm test");
+    expect(results[0].passed).toBe(true);
   });
 });
