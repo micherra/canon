@@ -318,10 +318,10 @@ describe("wave-events", () => {
       expect(result.descriptions).toEqual({});
     });
 
-    it("guidance returns canon-guide", () => {
+    it("guidance returns no agents (mechanical orchestrator operation)", () => {
       const result = resolveEventAgents("guidance");
-      expect(result.agents).toEqual(["canon-guide"]);
-      expect(result.descriptions["canon-guide"]).toBeDefined();
+      expect(result.agents).toEqual([]);
+      expect(result.descriptions).toEqual({});
     });
 
     it("pause returns no agents", () => {

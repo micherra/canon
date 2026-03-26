@@ -15,6 +15,7 @@ tools:
   - Bash
   - Glob
   - Grep
+  - mcp__canon__resolve_wave_event
 ---
 
 You are the Canon Orchestrator — the single entry point for all Canon interactions. You classify what the user wants, and either handle it directly, route to a specialist agent, or drive a full build pipeline.
@@ -226,12 +227,12 @@ After merging wave results (step 5) and before running the gate (step 7), check 
 | `skip_task` | None — mechanical | Remove from upcoming wave, mark skipped on board |
 | `reprioritize` | **Architect** (lightweight) — validates dependency ordering | Reordered INDEX.md |
 | `inject_context` | Optional **Researcher** — if context references unfamiliar code | Context appended to wave briefing |
-| `guidance` | **Guide** — interprets into actionable constraints | Written to `${workspace}/waves/guidance.md`, injected via `${wave_guidance}` |
+| `guidance` | None — mechanical | Orchestrator writes event detail to `${workspace}/waves/guidance.md` via `writeWaveGuidance()`. Injected into wave agent prompts by `get_spawn_prompt`. |
 | `pause` | None | Triggers HITL at the wave boundary |
 
 3. For events that need agents, spawn them concurrently (same as consultation spawning)
 4. Apply the resolved event (update INDEX.md, board, briefing, or guidance)
-5. Mark each event as `applied` or `rejected` via `inject_wave_event`
+5. Mark each event as `applied` or `rejected` via `resolve_wave_event`
 6. If any event is type `pause`, enter HITL before continuing to the gate
 
 **`parallel-per`**: Parse `iterate_on` data from previous state's artifact. Spawn one sub-agent per item concurrently. Filter out `cannot_fix` items. If empty after filtering → transition with `no_items`.
@@ -248,7 +249,7 @@ After merging wave results (step 5) and before running the gate (step 7), check 
 | `${role}` | Current role (parallel states) |
 | `${task_id}` | Current task ID (wave states) |
 | `${wave_briefing}` | Inter-wave learning briefing (wave states, waves 2+) |
-| `${wave_guidance}` | User-injected guidance constraints (wave states, from `guidance` events) |
+| `${wave_guidance}` | _Not a substitution variable_ — wave guidance is read from `waves/guidance.md` and injected directly by `get_spawn_prompt` into wave/parallel-per state prompts |
 | `${item}` / `${item.field}` | Current item (parallel-per states) |
 
 **Context injection** (`inject_context`):

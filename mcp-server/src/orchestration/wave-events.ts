@@ -155,12 +155,9 @@ export function resolveEventAgents(eventType: WaveEventType): {
       // Researcher is optional; orchestrator decides
       return { agents: [], descriptions: {} };
     case "guidance":
-      return {
-        agents: ["canon-guide"],
-        descriptions: {
-          "canon-guide": "Interpret user guidance into actionable constraints for wave agents",
-        },
-      };
+      // Guidance is a mechanical orchestrator operation — write user text
+      // to waves/guidance.md via writeWaveGuidance(). No agent needed.
+      return { agents: [], descriptions: {} };
     case "pause":
       return { agents: [], descriptions: {} };
     default: {
