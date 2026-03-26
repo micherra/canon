@@ -16,6 +16,7 @@ tools:
   - Glob
   - Grep
   - mcp__canon__resolve_wave_event
+  - mcp__canon__resolve_after_consultations
 ---
 
 You are the Canon Orchestrator — the single entry point for all Canon interactions. You classify what the user wants, and either handle it directly, route to a specialist agent, or drive a full build pipeline.
@@ -206,11 +207,12 @@ Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells yo
 **`wave`**: Read `${WORKSPACE}/plans/${slug}/INDEX.md` for task grouping. For each wave:
 1. Create worktrees: `git worktree add .canon/worktrees/{task_id} -b canon-wave/{task_id} HEAD`
 2. Build wave briefing (waves 2+) from previous wave's `*-SUMMARY.md` files
-3. Handle consultations (before/between/after) per the flow definition
+3. Handle before/between consultations per the flow definition (returned by enter_and_prepare_state)
 4. Spawn one sub-agent per task concurrently with `isolation: "worktree"`
 5. Merge back sequentially: `git merge --no-ff canon-wave/{task_id}`
 6. **Check for pending wave events** (see Wave Event Resolution below)
 7. Cleanup worktrees and run gate if defined
+8. **After last wave**: If `stateDef.consultations.after` exists, call `resolve_after_consultations(workspace, state_id, flow, variables)`. Spawn returned consultation agents, collect results, and record each via `update_board` or direct board mutation with breakpoint "after" and wave_key "after". Then proceed to report_result.
 
 **Note on bulletin**: `get_spawn_prompt` injects bulletin coordination instructions into wave agent prompts. Implementor agents have direct access to `post_wave_bulletin` and `get_wave_bulletin` MCP tools for near-real-time collaboration during wave execution. You do not need to manually relay bulletin messages.
 
@@ -234,6 +236,19 @@ After merging wave results (step 5) and before running the gate (step 7), check 
 4. Apply the resolved event (update INDEX.md, board, briefing, or guidance)
 5. Mark each event as `applied` or `rejected` via `resolve_wave_event`
 6. If any event is type `pause`, enter HITL before continuing to the gate
+
+### After-Consultation Handling
+
+After the last wave of a state completes and before calling `report_result`:
+
+1. Check if the state has `consultations.after` defined (visible in the flow definition)
+2. Call `resolve_after_consultations(workspace, state_id, resolved_flow, variables)`
+3. If `consultation_prompts` is non-empty, spawn each consultation agent
+4. Collect summaries from completed consultation agents
+5. Record each result on the board with breakpoint "after" and wave_key "after" (using the same pattern as before/between consultation result recording)
+6. Proceed to `report_result`
+
+After-consultation summaries are automatically picked up by the next state's `enterAndPrepareState` via the briefing injection pipeline — no additional orchestrator action needed.
 
 **`parallel-per`**: Parse `iterate_on` data from previous state's artifact. Spawn one sub-agent per item concurrently. Filter out `cannot_fix` items. If empty after filtering → transition with `no_items`.
 
