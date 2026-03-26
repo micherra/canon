@@ -44,9 +44,23 @@ vi.mock("../orchestration/events.js", () => ({
   createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
+vi.mock("../orchestration/consultation-executor.js", () => ({
+  resolveConsultationPrompt: vi.fn(),
+}));
+
+vi.mock("../orchestration/wave-variables.js", () => ({
+  escapeDollarBrace: vi.fn((s: string) => s),
+  substituteVariables: vi.fn((s: string) => s),
+  buildTemplateInjection: vi.fn(() => ""),
+  parseTaskIdsForWave: vi.fn(() => []),
+  extractFilePaths: vi.fn(() => []),
+}));
+
 import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
 import { withBoardLock } from "../orchestration/workspace.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
+import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
@@ -362,6 +376,243 @@ describe("enterAndPrepareState", () => {
       expect(result.prompts).toHaveLength(2);
       expect(result.prompts[0].agent).toBe("canon-reviewer");
       expect(result.prompts[1].agent).toBe("canon-security");
+    });
+  });
+
+  describe("consultation_prompts", () => {
+    function makeFlowWithConsultations(breakpoint: "before" | "between" = "before"): ResolvedFlow {
+      return {
+        name: "test-flow",
+        description: "Test flow",
+        entry: "implement",
+        states: {
+          implement: {
+            type: "wave",
+            agent: "canon-implementor",
+            consultations: { [breakpoint]: ["risk-assessment"] },
+          },
+          done: { type: "terminal" },
+        },
+        spawn_instructions: {
+          implement: "Implement ${task}.",
+          "risk-assessment": "Assess risks for ${task}.",
+        },
+        consultations: {
+          "risk-assessment": {
+            fragment: "risk-assessment",
+            agent: "canon-security",
+            role: "security-reviewer",
+            timeout: "10m",
+            section: "Risk Assessment",
+          },
+        },
+      } as unknown as ResolvedFlow;
+    }
+
+    beforeEach(() => {
+      const board = makeBoard();
+      const enteredBoard = makeBoard({
+        states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
+      });
+      vi.mocked(readBoard).mockResolvedValue(board);
+      vi.mocked(enterState).mockReturnValue(enteredBoard);
+    });
+
+    it("returns consultation_prompts for before breakpoint when wave is 0", async () => {
+      const workspace = makeTmpDir();
+      const flow = makeFlowWithConsultations("before");
+
+      vi.mocked(resolveConsultationPrompt).mockReturnValue({
+        agent: "canon-security",
+        prompt: "Assess risks for test task.",
+        role: "security-reviewer",
+        timeout: "10m",
+        section: "Risk Assessment",
+      });
+
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 0,
+      });
+
+      expect(result.consultation_prompts).toBeDefined();
+      expect(result.consultation_prompts).toHaveLength(1);
+      expect(result.consultation_prompts![0]).toEqual({
+        name: "risk-assessment",
+        agent: "canon-security",
+        prompt: "Assess risks for test task.",
+        role: "security-reviewer",
+        timeout: "10m",
+        section: "Risk Assessment",
+      });
+    });
+
+    it("returns consultation_prompts for before breakpoint when wave is null/undefined", async () => {
+      const workspace = makeTmpDir();
+      const flow = makeFlowWithConsultations("before");
+
+      vi.mocked(resolveConsultationPrompt).mockReturnValue({
+        agent: "canon-security",
+        prompt: "Assess risks for test task.",
+        role: "security-reviewer",
+      });
+
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        // wave is undefined
+      });
+
+      expect(result.consultation_prompts).toBeDefined();
+      expect(result.consultation_prompts).toHaveLength(1);
+      expect(result.consultation_prompts![0].name).toBe("risk-assessment");
+    });
+
+    it("uses between breakpoint when wave > 0", async () => {
+      const workspace = makeTmpDir();
+      const flow = makeFlowWithConsultations("between");
+
+      vi.mocked(resolveConsultationPrompt).mockReturnValue({
+        agent: "canon-security",
+        prompt: "Assess risks between waves.",
+        role: "security-reviewer",
+      });
+
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 1,
+      });
+
+      expect(result.consultation_prompts).toBeDefined();
+      expect(result.consultation_prompts).toHaveLength(1);
+
+      // Verify resolveConsultationPrompt was called (between breakpoint names were resolved)
+      expect(resolveConsultationPrompt).toHaveBeenCalledWith(
+        "risk-assessment",
+        flow,
+        { task: "test task", CANON_PLUGIN_ROOT: "" },
+      );
+    });
+
+    it("returns no consultation_prompts when wave > 0 but only before consultations declared", async () => {
+      const workspace = makeTmpDir();
+      const flow = makeFlowWithConsultations("before"); // only has "before", not "between"
+
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 1, // wave > 0 → uses "between" breakpoint
+      });
+
+      // between is empty/absent, so no consultation_prompts
+      expect(result.consultation_prompts).toBeUndefined();
+      expect(resolveConsultationPrompt).not.toHaveBeenCalled();
+    });
+
+    it("returns no consultation_prompts when stateDef has no consultations", async () => {
+      const workspace = makeTmpDir();
+      const flow = makeFlow(); // no consultations declared
+
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 0,
+      });
+
+      expect(result.consultation_prompts).toBeUndefined();
+      expect(resolveConsultationPrompt).not.toHaveBeenCalled();
+    });
+
+    it("gracefully skips unknown consultation names (resolveConsultationPrompt returns null)", async () => {
+      const workspace = makeTmpDir();
+      const flow = makeFlowWithConsultations("before");
+
+      // Simulate unknown name — resolveConsultationPrompt returns null
+      vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
+
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 0,
+      });
+
+      // No crash — just empty result
+      expect(result.consultation_prompts).toBeUndefined();
+    });
+
+    it("escapes ${evil} in completed consultation summaries before passing as consultation_outputs", async () => {
+      const workspace = makeTmpDir();
+
+      // Board with a completed consultation summary containing injection attempt
+      const boardWithResults = makeBoard({
+        states: {
+          implement: {
+            status: "in_progress",
+            entries: 1,
+            wave_results: {
+              "wave-0": {
+                tasks: [],
+                status: "done",
+                consultations: {
+                  before: {
+                    "risk-assessment": {
+                      status: "done",
+                      summary: "Risk: ${evil} injection attempt",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          done: { status: "pending", entries: 0 },
+        },
+      });
+      const enteredBoard = makeBoard({
+        states: {
+          implement: {
+            status: "in_progress",
+            entries: 2,
+            wave_results: boardWithResults.states["implement"].wave_results,
+          },
+          done: { status: "pending", entries: 0 },
+        },
+      });
+      vi.mocked(readBoard).mockResolvedValue(boardWithResults);
+      vi.mocked(enterState).mockReturnValue(enteredBoard);
+
+      // escapeDollarBrace should escape the injection string
+      vi.mocked(escapeDollarBrace).mockImplementation((s: string) =>
+        s.replace(/\$\{/g, "\\${")
+      );
+
+      const flow = makeFlowWithConsultations("between");
+      // No new consultation for between — we're testing that outputs are escaped
+      vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
+
+      await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 1,
+      });
+
+      // escapeDollarBrace must have been called with the raw summary
+      expect(escapeDollarBrace).toHaveBeenCalledWith("Risk: ${evil} injection attempt");
     });
   });
 });

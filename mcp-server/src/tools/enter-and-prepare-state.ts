@@ -16,12 +16,23 @@ import { canEnterState } from "../orchestration/convergence.ts";
 import { withBoardLock } from "../orchestration/workspace.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { getSpawnPrompt } from "./get-spawn-prompt.ts";
+import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
+import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { createJsonlLogger } from "../orchestration/events.ts";
 import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
 import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
 import type { OverlayDefinition } from "../orchestration/overlays.ts";
+
+export interface ConsultationPromptEntry {
+  name: string;
+  agent: string;
+  prompt: string;
+  role: string;
+  timeout?: string;
+  section?: string;
+}
 
 export interface EnterAndPrepareStateInput {
   workspace: string;
@@ -54,6 +65,9 @@ export interface EnterAndPrepareStateResult {
   warnings?: string[];
   clusters?: FileCluster[];
   timeout_ms?: number;
+
+  // Consultation prompts to spawn (only when state has consultations at the current breakpoint)
+  consultation_prompts?: ConsultationPromptEntry[];
 
   // Updated board (only when state was entered)
   board?: Board;
@@ -150,6 +164,54 @@ export async function enterAndPrepareState(
     }
   });
 
+  // Step 4.5: Resolve consultation prompts for the current breakpoint.
+  const consultationPrompts: ConsultationPromptEntry[] = [];
+  const consultationOutputs: Record<string, { section?: string; summary: string }> = {};
+
+  if (stateDef?.consultations) {
+    // Determine breakpoint: "before" for first wave (0 or null), "between" for subsequent waves
+    const breakpoint: "before" | "between" = (input.wave == null || input.wave === 0) ? "before" : "between";
+    const names = stateDef.consultations[breakpoint] ?? [];
+
+    for (const name of names) {
+      const resolved = resolveConsultationPrompt(name, flow, input.variables);
+      if (resolved) {
+        consultationPrompts.push({
+          name,
+          agent: resolved.agent,
+          prompt: resolved.prompt,
+          role: resolved.role,
+          ...(resolved.timeout ? { timeout: resolved.timeout } : {}),
+          ...(resolved.section ? { section: resolved.section } : {}),
+        });
+      }
+    }
+
+    // Collect completed consultation summaries from prior waves for briefing injection.
+    // All summaries pass through escapeDollarBrace before entering the prompt pipeline
+    // (trust boundary: agent output → prompt assembly).
+    const stateEntry = enteredBoard.states[state_id];
+    if (stateEntry?.wave_results) {
+      for (const [_waveKey, waveResult] of Object.entries(stateEntry.wave_results)) {
+        const consultations = waveResult.consultations;
+        if (!consultations) continue;
+        for (const bp of ["before", "between"] as const) {
+          const bpMap = consultations[bp];
+          if (!bpMap) continue;
+          for (const [cName, cResult] of Object.entries(bpMap)) {
+            if (cResult.status === "done" && cResult.summary) {
+              const fragment = flow.consultations?.[cName];
+              consultationOutputs[cName] = {
+                section: fragment?.section,
+                summary: escapeDollarBrace(cResult.summary),
+              };
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Step 5: Resolve spawn prompts. Pass the entered board so getSpawnPrompt
   // reuses the already-read board instead of calling readBoard again.
   const spawnResult = await getSpawnPrompt({
@@ -164,6 +226,7 @@ export async function enterAndPrepareState(
     peer_count: input.peer_count,
     project_dir: input.project_dir,
     loaded_overlays: input.loaded_overlays,
+    consultation_outputs: Object.keys(consultationOutputs).length > 0 ? consultationOutputs : undefined,
     _board: enteredBoard,
   });
 
@@ -179,6 +242,7 @@ export async function enterAndPrepareState(
     ...(spawnResult.warnings ? { warnings: spawnResult.warnings } : {}),
     ...(spawnResult.clusters ? { clusters: spawnResult.clusters } : {}),
     ...(spawnResult.timeout_ms != null ? { timeout_ms: spawnResult.timeout_ms } : {}),
+    ...(consultationPrompts.length > 0 ? { consultation_prompts: consultationPrompts } : {}),
     board: enteredBoard,
   };
 }
