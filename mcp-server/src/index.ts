@@ -329,6 +329,7 @@ server.registerTool(
       tier: z.enum(["small", "medium", "large"]),
       original_input: z.string().optional(),
       skip_flags: z.array(z.string()).optional(),
+      preflight: z.boolean().optional().describe("Run pre-flight checks (git status, lock, stale sessions) before creating workspace"),
     },
   },
   async (input) => {
@@ -382,6 +383,7 @@ server.registerTool(
         status: z.string(),
         artifacts: z.array(z.string()).optional(),
       })).optional().describe("Results from parallel-per execution — triggers aggregation"),
+      progress_line: z.string().optional().describe("One-line progress entry to append to progress.md (e.g. '- [state_id] done: summary')"),
     },
   },
   async (input) => {

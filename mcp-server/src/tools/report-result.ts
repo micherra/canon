@@ -12,6 +12,8 @@ import {
   isStuck,
   aggregateParallelPerResults,
 } from "../orchestration/transitions.ts";
+import { appendFile } from "fs/promises";
+import { join } from "path";
 import {
   readBoard,
   writeBoard,
@@ -46,6 +48,8 @@ interface ReportResultInput {
   file_test_pairs?: Array<{ file: string; test: string }>;
   commit_sha?: string;
   artifact_count?: number;
+  // Optional progress line to append to progress.md (saves a separate Write call)
+  progress_line?: string;
   // Project directory for drift effect persistence
   project_dir?: string;
 }
@@ -289,6 +293,12 @@ async function reportResultLocked(
 
   // Write board
   await writeBoard(input.workspace, board);
+
+  // Append progress line (best-effort — cosmetic, never blocks the flow)
+  if (input.progress_line) {
+    const progressPath = join(input.workspace, "progress.md");
+    await appendFile(progressPath, input.progress_line + "\n", "utf-8").catch(() => {});
+  }
 
   // Execute drift effects (best-effort — never blocks the flow)
   if (stateDef?.effects?.length && input.artifacts?.length) {

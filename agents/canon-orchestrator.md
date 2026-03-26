@@ -143,11 +143,13 @@ Workspaces are scoped by **branch + task slug**, so multiple tasks can run indep
 
 ```
 ws = init_workspace({
-  flow_name, task, branch, base_commit, tier, original_input, skip_flags
+  flow_name, task, branch, base_commit, tier, original_input, skip_flags,
+  preflight: true
 })
 ```
 
-- **`ws.created == true`** (new): Proceed to pre-flight.
+- **`ws.preflight_issues`** (array): If non-empty, pre-flight failed. Present issues to user and wait. Do not proceed until resolved.
+- **`ws.created == true`** (new): Proceed to state machine.
 - **`ws.created == false`** (resume): `ws.resume_state` tells you where to continue. This happens when the same task is re-initiated on the same branch.
 - **`ws.briefs`** (optional): Array of briefs from prior chat discussions. If present, copy relevant briefs into `${WORKSPACE}/research/` as pre-research context. When the flow enters a research state, the researcher will find these and can build on them instead of starting from scratch. After copying, update the brief's status to `consumed` in the source file.
 
@@ -157,9 +159,13 @@ Workspace path structure: `.canon/workspaces/{branch}/{slug}/`
 
 ### Pre-flight Validation
 
-1. **Uncommitted changes**: `git status --porcelain`. If non-empty, warn and wait.
-2. **Build lock**: Check `${WORKSPACE}/.lock`. Stale (>2hr) → remove. Fresh → stop.
-3. Write `.lock` on passing. Delete on completion or abort.
+Pre-flight checks are handled server-side by `init_workspace` when `preflight: true` is set. The tool checks:
+
+1. **Uncommitted changes**: `git status --porcelain`. If non-empty, returns issue.
+2. **Build lock**: Active `.lock` on candidate workspace → returns issue.
+3. **Stale sessions**: Active sessions on same branch with no lock and older than 4 hours → returns warning.
+
+If preflight passes, the workspace `.lock` is acquired during creation. Delete on completion or abort.
 
 ## Phase 3: State Machine Execution
 
@@ -177,16 +183,13 @@ Loop until the current state is `terminal`:
 2. Spawn agents using result.prompts (see Spawning below)
 
 3. result = report_result(workspace, state_id, status_keyword, resolved_flow, {
-     artifacts, concern_text, metrics
+     artifacts, concern_text, metrics,
+     progress_line: "- [{state_id}] {status}: {one-sentence summary}"
    })
+   → The progress_line is appended to progress.md server-side (no separate Write needed)
    → If hitl_required → HITL
    → current_state = result.next_state
    → If terminal → break
-
-4. Append progress: After report_result, append a one-line summary to progress.md:
-   `- [{state_id}] {status}: {one-sentence summary of what happened}`
-   Write to: `${WORKSPACE}/progress.md`
-   This is a simple file append -- do NOT overwrite the file.
 ```
 
 **Note on legacy tools**: `check_convergence`, `update_board`, and `get_spawn_prompt` remain available and registered. Use them directly for non-enter operations: `update_board` for `skip_state`, `block`, `unblock`, `complete_flow`, `set_wave_progress`; `check_convergence` standalone when needed outside the main loop.

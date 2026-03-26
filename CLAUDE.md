@@ -66,7 +66,7 @@ Read `agents/canon-orchestrator.md` for the full protocol. The key loop:
 
 1. `resolved_flow = load_flow(flow_name)` → get flow definition **object**
 2. `init_workspace(...)` → create or resume workspace
-3. For each state: `enter_and_prepare_state(workspace, state_id, resolved_flow, ...)` → spawn specialist agent → `report_result(workspace, state_id, status, resolved_flow, ...)` → append one-line summary to `progress.md` → next state
+3. For each state: `enter_and_prepare_state(workspace, state_id, resolved_flow, ...)` → spawn specialist agent → `report_result(workspace, state_id, status, resolved_flow, ..., progress_line)` → next state
 4. On terminal state: `update_board(complete_flow)`
 
 **Critical**: The `flow` parameter in steps 3-4 is the resolved flow **object** from `load_flow` — never the flow name string.

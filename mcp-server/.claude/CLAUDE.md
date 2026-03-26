@@ -135,11 +135,11 @@ src/
 |------|---------|
 | `load_flow` | Load and resolve a flow definition |
 | `validate_flows` | Validate flow definitions |
-| `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation |
+| `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status, locks, and stale sessions before creating |
 | `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop |
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress) |
 | `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
-| `report_result` | Record agent result and evaluate transitions |
+| `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side |
 | `check_convergence` | Check iteration limits |
 | `list_overlays` | List available role overlays |
 | `post_wave_bulletin` | Post inter-agent message during parallel waves |
@@ -166,7 +166,7 @@ src/
 - `CANON_PROJECT_DIR` env var sets project root (defaults to `process.cwd()`)
 - `CANON_PLUGIN_DIR` env var sets plugin directory (defaults to parent of mcp-server)
 - Workspace subdirectories created by `initWorkspace`: `research/`, `decisions/`, `plans/`, `reviews/` — `notes/` is NOT created (removed 2026-03-24)
-- `progress.md` is seeded at workspace creation and appended by the orchestrator after each `report_result`; agents treat it as read-only
+- `progress.md` is seeded at workspace creation and appended server-side by `report_result` via its `progress_line` parameter; agents treat it as read-only
 
 ## Development
 <!-- last-updated: 2026-03-22 -->

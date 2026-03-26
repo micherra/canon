@@ -604,3 +604,70 @@ describe("reportResult — parallel_results aggregation", () => {
     expect(result.next_state).toBe("hitl");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Progress line append
+// ---------------------------------------------------------------------------
+
+describe("reportResult — progress_line", () => {
+  it("appends progress_line to progress.md when provided", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    // Seed progress.md like init_workspace does
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(workspace, "progress.md"), "## Progress: test\n\n");
+
+    await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      progress_line: "- [build] done: Built successfully",
+    });
+
+    const { readFileSync } = await import("node:fs");
+    const content = readFileSync(join(workspace, "progress.md"), "utf-8");
+    expect(content).toContain("- [build] done: Built successfully");
+    expect(content).toContain("## Progress: test");
+  });
+
+  it("does not touch progress.md when progress_line is omitted", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const { writeFileSync, readFileSync } = await import("node:fs");
+    writeFileSync(join(workspace, "progress.md"), "## Progress: test\n\n");
+
+    await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    const content = readFileSync(join(workspace, "progress.md"), "utf-8");
+    expect(content).toBe("## Progress: test\n\n");
+  });
+
+  it("handles missing progress.md gracefully (creates file)", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    // No progress.md seeded — appendFile will create it
+    await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      progress_line: "- [build] done: Built successfully",
+    });
+
+    const { readFileSync } = await import("node:fs");
+    const content = readFileSync(join(workspace, "progress.md"), "utf-8");
+    expect(content).toContain("- [build] done: Built successfully");
+  });
+});
