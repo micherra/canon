@@ -298,45 +298,6 @@ describe("reportResult — event emissions", () => {
 // ---------------------------------------------------------------------------
 
 describe("reportResult — listener error isolation", () => {
-  it("internal logger listeners do not throw on async write failure", async () => {
-    const workspace = makeTmpWorkspace();
-    const flow = makeMinimalFlow();
-    await setupWorkspace(workspace, flow);
-
-    // The internal listener wraps logger calls with .catch(() => {}) so
-    // Promise rejections from appendFile never propagate to the caller.
-    // We test that reportResult completes without throwing.
-    const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
-      flow,
-    });
-
-    // Result should be correct regardless of any log write outcome
-    expect(result.transition_condition).toBe("done");
-    expect(result.next_state).toBe("review");
-  });
-
-  it("does not throw when createJsonlLogger write fails (async error is swallowed)", async () => {
-    const workspace = makeTmpWorkspace();
-    const flow = makeMinimalFlow();
-    await setupWorkspace(workspace, flow);
-
-    // The internal handler does log("state_completed", event).catch(() => {})
-    // so Promise rejections from appendFile are swallowed.
-    // We test by using a readonly workspace path that would fail writes.
-    // Since the logger creates dirs via mkdirSync, we just verify no throw.
-    const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
-      flow,
-    });
-
-    expect(result.transition_condition).toBe("done");
-  });
-
   it("cleans up listeners after successful emit (no listener leak)", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();

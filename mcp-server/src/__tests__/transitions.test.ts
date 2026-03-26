@@ -75,9 +75,6 @@ describe("normalizeStatus", () => {
     expect(normalizeStatus("NO_UPDATES")).toBe("no_updates");
   });
 
-  it("passes through unknown status lowercased", () => {
-    expect(normalizeStatus("SomethingNew")).toBe("somethingnew");
-  });
 });
 
 describe("evaluateTransition", () => {

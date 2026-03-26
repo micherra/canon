@@ -94,27 +94,3 @@ describe("bridge.sendMessage()", () => {
   });
 });
 
-describe("bridge.sendMessage() — uninitialized guard", () => {
-  it("throws when bridge has not been initialized", async () => {
-    // We create a fresh bridge module in isolation for this test
-    // by clearing module cache and re-importing.
-    // Since vitest ESM mocking caches modules, we test the guard condition
-    // by checking the error message pattern explicitly.
-    //
-    // The guard is: if (!app) throw new Error("Bridge not initialized")
-    // We verify this is thrown by bridge.callTool() which uses the same guard —
-    // and document the same guard exists for sendMessage.
-    //
-    // To test the uninitialized path without module isolation, we rely on the
-    // fact that the guard is identical to callTool's guard (same pattern, same
-    // variable). This is documented rather than duplicated to avoid brittle
-    // module-reload gymnastics.
-    //
-    // The test below validates the guard by attempting to call sendMessage
-    // on a bridge that was never initialized in this describe block.
-    // We cannot easily reset module-level state in ESM vitest without
-    // full module isolation, so we document this as a known gap
-    // and rely on the implementation review.
-    expect(true).toBe(true); // placeholder — see coverage notes
-  });
-});

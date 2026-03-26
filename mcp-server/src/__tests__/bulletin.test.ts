@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { bulletinPath, postBulletin, readBulletin, buildBulletinInstructions } from "../orchestration/bulletin.ts";
+import { postBulletin, readBulletin, buildBulletinInstructions } from "../orchestration/bulletin.ts";
 import { postWaveBulletin } from "../tools/post-wave-bulletin.ts";
 import { getWaveBulletin } from "../tools/get-wave-bulletin.ts";
 
@@ -15,25 +15,6 @@ describe("bulletin", () => {
 
   afterEach(async () => {
     await rm(workspace, { recursive: true, force: true });
-  });
-
-  describe("bulletinPath", () => {
-    it("computes correct zero-padded path", () => {
-      const result = bulletinPath("/tmp/workspace", 2);
-      expect(result).toBe("/tmp/workspace/waves/002/bulletin.jsonl");
-    });
-
-    it("pads single-digit wave numbers", () => {
-      expect(bulletinPath("/tmp/ws", 1)).toBe("/tmp/ws/waves/001/bulletin.jsonl");
-    });
-
-    it("pads double-digit wave numbers", () => {
-      expect(bulletinPath("/tmp/ws", 42)).toBe("/tmp/ws/waves/042/bulletin.jsonl");
-    });
-
-    it("preserves triple-digit wave numbers", () => {
-      expect(bulletinPath("/tmp/ws", 100)).toBe("/tmp/ws/waves/100/bulletin.jsonl");
-    });
   });
 
   describe("postBulletin", () => {

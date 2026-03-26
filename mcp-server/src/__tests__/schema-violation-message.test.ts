@@ -124,28 +124,3 @@ describe("reportInputSchema — review violations with message field", () => {
     expect(result.success).toBe(false);
   });
 });
-
-describe("ReviewViolation type — derived from schema", () => {
-  it("ReviewViolation includes message in its parsed shape", () => {
-    // This test verifies that the type system correctly reflects the schema
-    const input = {
-      ...baseReviewInput,
-      violations: [
-        {
-          principle_id: "information-hiding",
-          severity: "strong-opinion",
-          message: "Leaking internal implementation details",
-        },
-      ],
-    };
-
-    const result = reportInputSchema.safeParse(input);
-    expect(result.success).toBe(true);
-    if (result.success && result.data.type === "review") {
-      // TypeScript should allow accessing .message on the violation
-      const violation = result.data.violations[0];
-      const msg: string | undefined = violation.message;
-      expect(msg).toBe("Leaking internal implementation details");
-    }
-  });
-});

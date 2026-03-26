@@ -127,9 +127,4 @@ describe("bridge.callTool()", () => {
     });
   });
 
-  it("throws when bridge is not initialized", async () => {
-    // Create a fresh bridge by re-importing — but since we can't easily do that,
-    // we just verify the current bridge works after init (covered above).
-    // The init guard is tested implicitly by the constructor flow.
-  });
 });
