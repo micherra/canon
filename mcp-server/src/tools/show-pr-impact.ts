@@ -299,11 +299,16 @@ export async function showPrImpact(
 ): Promise<PrImpactOutput> {
   // 1. Load latest PR review (optionally filtered by branch/pr_number)
   const driftStore = new DriftStore(projectDir);
+  const hasFilter = options?.branch !== undefined || options?.pr_number !== undefined;
   const reviews = await driftStore.getReviews({
     branch: options?.branch,
     prNumber: options?.pr_number,
   });
-  const latestReview = reviews.length > 0 ? reviews[reviews.length - 1] : null;
+  // When no explicit filter, only consider reviews with PR context
+  const prReviews = hasFilter
+    ? reviews
+    : reviews.filter((r) => r.pr_number !== undefined || r.branch !== undefined);
+  const latestReview = prReviews.length > 0 ? prReviews[prReviews.length - 1] : null;
 
   if (!latestReview) {
     return {
