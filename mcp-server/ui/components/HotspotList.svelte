@@ -11,6 +11,7 @@
    */
 
   import { basename } from "../lib/graph";
+  import Badge from "./Badge.svelte";
 
   interface HotspotItem {
     file: string;
@@ -67,18 +68,18 @@
         <!-- Stats: blast radius + violations -->
         <span class="stats">
           {#if hotspot.blast_radius_count > 0}
-            <span class="stat blast" title="Blast radius: {hotspot.blast_radius_count} affected entities">
-              {formatBlast(hotspot.blast_radius_count)}
-            </span>
+            <Badge
+              text={formatBlast(hotspot.blast_radius_count)}
+              bg="var(--bg-alt, #2a2a2a)"
+              color="var(--text-muted, #888)"
+            />
           {/if}
           {#if hotspot.violation_count > 0}
-            <span
-              class="stat violations"
-              style:color={dominantSeverityColor(hotspot.violations)}
-              title="{hotspot.violation_count} violation{hotspot.violation_count === 1 ? '' : 's'}"
-            >
-              {hotspot.violation_count}v
-            </span>
+            <Badge
+              text="{hotspot.violation_count}v"
+              bg="var(--bg-alt, #2a2a2a)"
+              color={dominantSeverityColor(hotspot.violations)}
+            />
           {/if}
         </span>
 
@@ -147,18 +148,6 @@
     display: flex;
     gap: 4px;
     flex-shrink: 0;
-  }
-
-  .stat {
-    font-size: 10px;
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: var(--bg-alt, #2a2a2a);
-    white-space: nowrap;
-  }
-
-  .blast {
-    color: var(--text-muted, #888);
   }
 
   .risk-score {

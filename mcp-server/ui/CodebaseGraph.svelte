@@ -3,6 +3,7 @@
   import { useDataLoader } from "./lib/useDataLoader.svelte";
   import EmptyState from "./components/EmptyState.svelte";
   import SubGraph from "./components/SubGraph.svelte";
+  import Badge from "./components/Badge.svelte";
   import type { GraphData, GraphNode, GraphEdge } from "./lib/types";
   import type { FilterOptions } from "./lib/sigmaGraph";
 
@@ -247,12 +248,22 @@
           </div>
 
           <div class="node-meta">
-            <span class="layer-badge" style="background: {layerColors[selectedNode.layer] ?? '#6b7394'}">{selectedNode.layer}</span>
+            <Badge
+              text={selectedNode.layer}
+              bg={layerColors[selectedNode.layer] ?? '#6b7394'}
+              color="#fff"
+            />
             {#if selectedNode.changed}
-              <span class="changed-badge">changed</span>
+              <Badge
+                text="changed"
+                bg="var(--accent-soft, rgba(108,140,255,0.12))"
+                color="var(--accent, #6c8cff)"
+              />
             {/if}
             {#if selectedNode.kind}
-              <span class="kind-badge">{selectedNode.kind}</span>
+              <Badge
+                text={selectedNode.kind}
+              />
             {/if}
           </div>
 
@@ -522,29 +533,6 @@
     flex-wrap: wrap;
     padding: 6px 12px 8px;
     border-bottom: 1px solid var(--border, rgba(255,255,255,0.04));
-  }
-
-  .layer-badge {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    color: #fff;
-  }
-
-  .changed-badge {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    background: var(--accent-soft, rgba(108,140,255,0.12));
-    color: var(--accent, #6c8cff);
-  }
-
-  .kind-badge {
-    font-size: 10px;
-    padding: 1px 6px;
-    border-radius: 3px;
-    background: var(--bg-card, rgba(255,255,255,0.06));
-    color: var(--text-muted, #636a80);
   }
 
   /* ── Stats row ──────────────────────────────────────────────────────────── */
