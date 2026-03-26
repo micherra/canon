@@ -28,7 +28,7 @@ export async function getCompliance(
 
   // Load principles (cached) and filter parsed JSONL entries to this principle only
   const [reviews, decisions, principles, weeklyTrend] = await Promise.all([
-    store.getReviews(input.principle_id),
+    store.getReviews({ principleId: input.principle_id }),
     store.getDecisions(input.principle_id),
     loadAllPrinciples(projectDir, pluginDir),
     store.getComplianceTrend(input.principle_id),

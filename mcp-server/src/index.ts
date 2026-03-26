@@ -91,10 +91,16 @@ registerToolWithUi(
   "ui://canon/pr-impact",
   "PR Impact Analysis",
   "Opens the PR Impact View showing blast radius, hotspots, violations, and dependency subgraph for the most recent Canon PR review.",
-  {},
+  {
+    branch: z.string().optional().describe("Filter to reviews for this branch"),
+    pr_number: z.number().optional().describe("Filter to reviews for this PR number"),
+  },
   "pr-impact.html",
-  async () => {
-    const result = await showPrImpact(projectDir);
+  async (input) => {
+    const result = await showPrImpact(projectDir, {
+      branch: input.branch,
+      pr_number: input.pr_number,
+    });
     return jsonResponse(result);
   },
 );

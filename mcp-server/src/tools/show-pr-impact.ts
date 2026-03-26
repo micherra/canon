@@ -22,12 +22,11 @@
 import { existsSync } from "fs";
 import { readFile } from "fs/promises";
 import { join, resolve, isAbsolute } from "path";
-import { PrStore } from "../drift/pr-store.ts";
 import { DriftStore } from "../drift/store.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
-import type { PrReviewEntry, ReviewViolation } from "../schema.ts";
+import type { ReviewEntry, ReviewViolation } from "../schema.ts";
 
 /** Resolve a project-relative path safely. Returns null on traversal attempts. */
 function safeResolvePath(projectDir: string, filePath: string): string | null {
@@ -77,7 +76,7 @@ export interface PrImpactOutput {
     pr_number?: number;
     files: string[];
     violations: ReviewViolation[];
-    score: PrReviewEntry["score"];
+    score: ReviewEntry["score"];
   };
   blastRadius?: {
     total_affected: number;
@@ -122,7 +121,7 @@ function severityWeight(severity: string): number {
 // ---------------------------------------------------------------------------
 
 function buildHotspots(
-  review: PrReviewEntry,
+  review: ReviewEntry,
   blastRadius: PrImpactOutput["blastRadius"] | undefined,
 ): PrImpactHotspot[] {
   // Index violations by file
@@ -289,12 +288,21 @@ async function buildSubgraph(
 /**
  * Assemble the PR impact payload for the most recent stored PR review.
  *
+ * When options.branch or options.pr_number are provided, filters to reviews
+ * matching those criteria. Falls back to all reviews (latest) when no filter given.
+ *
  * Returns structured empty states for missing data — never throws to the caller.
  */
-export async function showPrImpact(projectDir: string): Promise<PrImpactOutput> {
-  // 1. Load latest PR review
-  const prStore = new PrStore(projectDir);
-  const reviews = await prStore.getReviews();
+export async function showPrImpact(
+  projectDir: string,
+  options?: { branch?: string; pr_number?: number },
+): Promise<PrImpactOutput> {
+  // 1. Load latest PR review (optionally filtered by branch/pr_number)
+  const driftStore = new DriftStore(projectDir);
+  const reviews = await driftStore.getReviews({
+    branch: options?.branch,
+    prNumber: options?.pr_number,
+  });
   const latestReview = reviews.length > 0 ? reviews[reviews.length - 1] : null;
 
   if (!latestReview) {
@@ -350,7 +358,6 @@ export async function showPrImpact(projectDir: string): Promise<PrImpactOutput> 
   const subgraph = await buildSubgraph(projectDir, latestReview.files, blastRadius);
 
   // 6. Load relevant decisions (cross-referenced with violated principles)
-  const driftStore = new DriftStore(projectDir);
   const violatedPrinciples = new Set(latestReview.violations.map((v) => v.principle_id));
   const allDecisions = await driftStore.getDecisions();
   const relevantDecisions = allDecisions.filter((d) => violatedPrinciples.has(d.principle_id));

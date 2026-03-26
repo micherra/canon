@@ -1,7 +1,6 @@
 import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { execFile } from "child_process";
-import { PrStore } from "../drift/pr-store.ts";
 import { DriftStore } from "../drift/store.ts";
 import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
@@ -216,7 +215,7 @@ export async function getPrReviewData(
   input: PrReviewDataInput,
   projectDir: string
 ): Promise<PrReviewDataOutput> {
-  const store = new PrStore(projectDir);
+  const driftStore = new DriftStore(projectDir);
 
   // Determine whether this is a gh pr diff (name-only) or git diff (name-status)
   const isPrNumberMode = input.pr_number !== undefined;
@@ -240,7 +239,7 @@ export async function getPrReviewData(
   // Check for incremental review
   let lastReviewedSha: string | undefined;
   if (input.incremental && input.pr_number !== undefined) {
-    const lastReview = await store.getLastReviewForPr(input.pr_number);
+    const lastReview = await driftStore.getLastReviewForPr(input.pr_number);
     if (lastReview?.last_reviewed_sha) {
       lastReviewedSha = sanitizeGitRef(lastReview.last_reviewed_sha);
       diffCmd = { cmd: "git", args: ["diff", `${lastReviewedSha}..HEAD`, "--name-status"] };
@@ -310,7 +309,6 @@ export async function getPrReviewData(
 
   // Attach per-file violations from DriftStore general reviews
   try {
-    const driftStore = new DriftStore(projectDir);
     const reviews = await driftStore.getReviews();
     const fileViolationMap = buildFileViolationMap(reviews);
     for (const file of files) {

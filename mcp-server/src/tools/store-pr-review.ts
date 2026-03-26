@@ -1,4 +1,4 @@
-import { PrStore } from "../drift/pr-store.ts";
+import { DriftStore } from "../drift/store.ts";
 import { generateId } from "../utils/id.ts";
 import type { ReviewViolation } from "../schema.ts";
 
@@ -26,19 +26,19 @@ export interface StorePrReviewInput {
 
 export interface StorePrReviewOutput {
   recorded: boolean;
-  pr_review_id: string;
+  review_id: string;
 }
 
 export async function storePrReview(
   input: StorePrReviewInput,
   projectDir: string
 ): Promise<StorePrReviewOutput> {
-  const store = new PrStore(projectDir);
-  const pr_review_id = generateId("prr");
+  const store = new DriftStore(projectDir);
+  const review_id = generateId("rev");
   const timestamp = new Date().toISOString();
 
   await store.appendReview({
-    pr_review_id,
+    review_id,
     timestamp,
     ...(input.pr_number !== undefined ? { pr_number: input.pr_number } : {}),
     ...(input.branch !== undefined ? { branch: input.branch } : {}),
@@ -51,5 +51,5 @@ export async function storePrReview(
     ...(input.file_priorities !== undefined ? { file_priorities: input.file_priorities } : {}),
   });
 
-  return { recorded: true, pr_review_id };
+  return { recorded: true, review_id };
 }
