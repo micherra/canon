@@ -27,7 +27,12 @@ export function resolvePostconditions(
   discovered?: PostconditionAssertion[],
 ): PostconditionAssertion[] {
   if (explicit?.length) return explicit;
-  if (discovered?.length) return discovered;
+  if (discovered?.length) {
+    // Security: strip bash_check entries from agent-discovered postconditions.
+    // Only YAML-committed (explicit) postconditions may execute arbitrary commands.
+    const safe = discovered.filter(a => a.type !== "bash_check");
+    if (safe.length > 0) return safe;
+  }
   return [];
 }
 
@@ -78,13 +83,14 @@ function evaluateFileExists(
   name: string,
   cwd: string,
 ): PostconditionResult {
-  const fullPath = resolve(cwd, assertion.target);
+  const target = assertion.target ?? "";
+  const fullPath = resolve(cwd, target);
   const passed = existsSync(fullPath);
   return {
     passed,
     name,
     type: assertion.type,
-    output: passed ? `File exists: ${assertion.target}` : `File not found: ${assertion.target}`,
+    output: passed ? `File exists: ${target}` : `File not found: ${target}`,
   };
 }
 
@@ -103,9 +109,10 @@ function evaluateFileChanged(
     };
   }
 
+  const target = assertion.target ?? "";
   const result = spawnSync(
     "git",
-    ["diff", "--name-only", baseCommit, "HEAD", "--", assertion.target],
+    ["diff", "--name-only", baseCommit, "HEAD", "--", target],
     { cwd, encoding: "utf-8", timeout: 30_000 },
   );
 
@@ -126,8 +133,8 @@ function evaluateFileChanged(
     name,
     type: assertion.type,
     output: passed
-      ? `File changed: ${assertion.target}`
-      : `File not changed since ${baseCommit}: ${assertion.target}`,
+      ? `File changed: ${target}`
+      : `File not changed since ${baseCommit}: ${target}`,
   };
 }
 
@@ -137,7 +144,8 @@ function evaluatePatternMatch(
   cwd: string,
   invert: boolean,
 ): PostconditionResult {
-  const fullPath = resolve(cwd, assertion.target);
+  const target = assertion.target ?? "";
+  const fullPath = resolve(cwd, target);
 
   let content: string;
   try {
@@ -147,7 +155,7 @@ function evaluatePatternMatch(
       passed: false,
       name,
       type: assertion.type,
-      output: `Cannot read file: ${assertion.target} — ${err instanceof Error ? err.message : String(err)}`,
+      output: `Cannot read file: ${target} — ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 
@@ -173,8 +181,8 @@ function evaluatePatternMatch(
     name,
     type: assertion.type,
     output: passed
-      ? `Pattern ${invert ? "not found" : "found"} in ${assertion.target}`
-      : `Pattern ${invert ? "found (should be absent)" : "not found"} in ${assertion.target}: ${patternStr}`,
+      ? `Pattern ${invert ? "not found" : "found"} in ${target}`
+      : `Pattern ${invert ? "found (should be absent)" : "not found"} in ${target}: ${patternStr}`,
   };
 }
 

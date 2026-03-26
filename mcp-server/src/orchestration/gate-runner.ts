@@ -144,21 +144,11 @@ export function normalizeGates(
     };
   }
 
-  // Tier 3: Discovered gates from agent reports on board state
-  if (boardState?.discovered_gates?.length) {
-    // Deduplicate by command string
-    const seen = new Set<string>();
-    const deduped: Array<{ name: string; command: string }> = [];
-    for (const dg of boardState.discovered_gates) {
-      if (!seen.has(dg.command)) {
-        seen.add(dg.command);
-        deduped.push({ name: `discovered:${dg.source}:${dg.command}`, command: dg.command });
-      }
-    }
-    if (deduped.length > 0) {
-      return { commands: deduped, source: "discovered" };
-    }
-  }
+  // Tier 3: Discovered gates are stored on board state as metadata but NOT executed.
+  // Agent-discovered gates provide useful context (recorded by report_result) but only
+  // YAML-defined gates (tiers 1 and 2) are executed — this prevents agent-injected
+  // arbitrary commands from running via the gate runner.
+  // (boardState?.discovered_gates are intentionally ignored here)
 
   return { commands: [], source: "none" };
 }

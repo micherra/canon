@@ -119,7 +119,7 @@ export const DiscoveredGateSchema = z.object({
 /** Postcondition assertion declaration (for flow YAML or agent-discovered). */
 export const PostconditionAssertionSchema = z.object({
   type: z.enum(["file_exists", "file_changed", "pattern_match", "no_pattern", "bash_check"]),
-  target: z.string(),
+  target: z.string().optional(),
   pattern: z.string().optional(),
   command: z.string().optional(),
 });
