@@ -394,3 +394,28 @@ export type BlockedInfo = z.infer<typeof BlockedInfoSchema>;
 export type ConcernEntry = z.infer<typeof ConcernEntrySchema>;
 export type Board = z.infer<typeof BoardSchema>;
 export type Session = z.infer<typeof SessionSchema>;
+
+// ---------------------------------------------------------------------------
+// Wave event types (used by wave-events.ts, inject-wave-event.ts, etc.)
+// ---------------------------------------------------------------------------
+
+export type WaveEventType =
+  | "add_task"
+  | "skip_task"
+  | "reprioritize"
+  | "inject_context"
+  | "guidance"
+  | "pause";
+
+export type WaveEventResolution = Record<string, unknown>;
+
+export interface WaveEvent {
+  id: string;
+  type: WaveEventType;
+  payload: Record<string, unknown>;
+  timestamp: string;
+  status: "pending" | "applied" | "rejected";
+  applied_at?: string;
+  resolution?: WaveEventResolution;
+  rejection_reason?: string;
+}

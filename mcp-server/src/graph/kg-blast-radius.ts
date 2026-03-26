@@ -7,9 +7,9 @@
  */
 
 import type Database from 'better-sqlite3';
-import { KgQuery } from './kg-query.js';
-import { KgStore } from './kg-store.js';
-import type { BlastRadiusResult } from './kg-types.js';
+import { KgQuery } from './kg-query.ts';
+import { KgStore } from './kg-store.ts';
+import type { BlastRadiusResult } from './kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Exported Interfaces

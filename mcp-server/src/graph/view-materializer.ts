@@ -15,9 +15,9 @@ import Database from 'better-sqlite3';
 import { writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { KgQuery } from './kg-query.js';
-import { CANON_DIR, CANON_FILES } from '../constants.js';
-import type { GraphNode, GraphEdge, CodebaseGraphOutput } from '../tools/codebase-graph.js';
+import { KgQuery } from './kg-query.ts';
+import { CANON_DIR, CANON_FILES } from '../constants.ts';
+import type { GraphNode, GraphEdge, CodebaseGraphOutput } from '../tools/codebase-graph.ts';
 
 // ---------------------------------------------------------------------------
 // GraphData — the shape written to graph-data.json

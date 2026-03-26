@@ -3,7 +3,6 @@ import Sigma from "sigma";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import louvain from "graphology-communities-louvain";
 import {
-  getLayerColor,
   NODE_DEFAULT,
   NODE_CHANGED,
   NODE_VIOLATION,
@@ -17,7 +16,6 @@ import {
   EDGE_VERY_DIM,
   EDGE_ADJACENT_FOCUS,
 } from "./constants";
-import { escapeHtml } from "./escapeHtml";
 import type { GraphData, GraphNode } from "./types";
 
 // ── Filter options (mirrors GraphApi's FilterOptions) ────────────────────────
@@ -92,42 +90,6 @@ function safeKey(id: string): string {
   return id;
 }
 
-// ── Tooltip DOM helper ─────────────────────────────────────────────────────────
-
-function makeTooltip(container: HTMLElement): HTMLElement {
-  const el = document.createElement("div");
-  el.className = "graph-tooltip";
-  el.id = "sigma-graph-tooltip";
-  el.style.display = "none"; // position, pointer-events, z-index handled by .graph-tooltip CSS
-  container.style.position = "relative";
-  container.appendChild(el);
-  return el;
-}
-
-function showTooltip(
-  tooltip: HTMLElement,
-  container: HTMLElement,
-  x: number,
-  y: number,
-  html: string,
-): void {
-  tooltip.innerHTML = html;
-  tooltip.style.display = "block";
-  const rect = container.getBoundingClientRect();
-  const tw = tooltip.offsetWidth || 200;
-  const th = tooltip.offsetHeight || 60;
-  let left = x - rect.left + 14;
-  let top = y - rect.top - 10;
-  if (left + tw > rect.width) left = Math.max(0, rect.width - tw - 8);
-  if (top + th > rect.height) top = Math.max(0, top - th - 20);
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
-}
-
-function hideTooltip(tooltip: HTMLElement): void {
-  tooltip.style.display = "none";
-}
-
 // ── Main builder ───────────────────────────────────────────────────────────────
 
 export function buildSigmaGraph(
@@ -154,13 +116,12 @@ export function buildSigmaGraph(
 
   // Add nodes with random initial positions; ForceAtlas2 will move them
   for (const node of data.nodes) {
-    const color = getLayerColor(node.layer, opts.layerColors);
     graph.addNode(safeKey(node.id), {
       label: node.id.split("/").pop() || node.id,
       x: Math.random() * 1000,
       y: Math.random() * 1000,
       size: nodeSize(node),
-      color: node.changed ? NODE_CHANGED : (node.violation_count ?? 0) > 0 ? NODE_VIOLATION : color,
+      color: (node.violation_count ?? 0) > 0 ? NODE_VIOLATION : node.changed ? NODE_CHANGED : NODE_DEFAULT,
       layer: node.layer || "unknown",
       changed: node.changed || false,
       violation_count: node.violation_count || 0,
@@ -260,7 +221,7 @@ export function buildSigmaGraph(
   function nodeBaseColor(gn: GraphNode): string {
     if ((gn.violation_count ?? 0) > 0) return NODE_VIOLATION;
     if (gn.changed) return NODE_CHANGED;
-    return getLayerColor(gn.layer, opts.layerColors);
+    return NODE_DEFAULT;
   }
 
   // ── nodeReducer — computes visual props from rendering state ─────────────
@@ -448,37 +409,7 @@ export function buildSigmaGraph(
     }
   });
 
-  // ── 6. Tooltip ────────────────────────────────────────────────────────────
-
-  const tooltip = makeTooltip(container);
-
-  sigma.on("enterNode", ({ node, event }: { node: string; event: MouseEvent }) => {
-    const gn = nodeIndex.get(node);
-    if (!gn) return;
-    const color = getLayerColor(gn.layer, opts.layerColors);
-    let meta = `<span style="color:${color}">${escapeHtml(gn.layer)}</span>`;
-    if (gn.violation_count) {
-      meta += ` · <span style="color:var(--danger,#ef4444)">${gn.violation_count} violations</span>`;
-    }
-    if (gn.changed) {
-      meta += ' · <span style="color:var(--info,#6c8cff)">changed</span>';
-    }
-    if (gn.dead_code_count) {
-      meta += ` · <span style="color:#888">${gn.dead_code_count} dead</span>`;
-    }
-    showTooltip(
-      tooltip,
-      container,
-      event.clientX,
-      event.clientY,
-      `<strong>${escapeHtml(gn.id)}</strong><div class="tt-meta">${meta}</div>`,
-    );
-  });
-
-  sigma.on("leaveNode", () => hideTooltip(tooltip));
-  sigma.on("leaveStage", () => hideTooltip(tooltip));
-
-  // ── 7. Event handlers ────────────────────────────────────────────────────
+  // ── 6. Event handlers ────────────────────────────────────────────────────
 
   sigma.on("clickNode", ({ node }: { node: string }) => {
     if (isDragging) return; // don't fire click after drag
@@ -563,8 +494,6 @@ export function buildSigmaGraph(
   }
 
   function destroy(): void {
-    hideTooltip(tooltip);
-    tooltip.remove();
     sigma.kill();
     graph.clear();
   }

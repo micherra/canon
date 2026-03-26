@@ -35,6 +35,7 @@ export type EdgeType =
   | 'type-references'
   | 'contains'
   | 're-exports'
+  | 'composition'
   | 'fm:references'
   | 'doc:references'
   | 'applies-to'

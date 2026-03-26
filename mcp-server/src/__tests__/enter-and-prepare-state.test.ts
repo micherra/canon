@@ -48,7 +48,7 @@ import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
 import { withBoardLock } from "../orchestration/workspace.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,7 +62,7 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function makeBoard(overrides: Record<string, unknown> = {}) {
+function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
     flow: "test-flow",
     task: "test task",
@@ -80,7 +80,7 @@ function makeBoard(overrides: Record<string, unknown> = {}) {
     concerns: [],
     skipped: [],
     ...overrides,
-  };
+  } as Board;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
@@ -118,7 +118,7 @@ describe("enterAndPrepareState", () => {
           implement: { count: 3, max: 3, history: [], cannot_fix: [] },
         },
       });
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
@@ -147,7 +147,7 @@ describe("enterAndPrepareState", () => {
           implement: { count: 2, max: 2, history, cannot_fix: cannotFixItems },
         },
       });
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
 
       const result = await enterAndPrepareState({
         workspace,
@@ -166,7 +166,7 @@ describe("enterAndPrepareState", () => {
     it("returns skipped:true when skip_when condition is met, without entering state", async () => {
       const workspace = makeTmpDir();
       const board = makeBoard();
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
       vi.mocked(evaluateSkipWhen).mockResolvedValue({
         skip: true,
         reason: "No contract changes detected — all changes are internal",
@@ -206,9 +206,9 @@ describe("enterAndPrepareState", () => {
       const enteredBoard = makeBoard({
         states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
       });
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
       vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
-      vi.mocked(enterState).mockReturnValue(enteredBoard as ReturnType<typeof makeBoard>);
+      vi.mocked(enterState).mockReturnValue(enteredBoard);
 
       const flow = makeFlow({
         states: {
@@ -241,8 +241,8 @@ describe("enterAndPrepareState", () => {
       const enteredBoard = makeBoard({
         states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
       });
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
-      vi.mocked(enterState).mockReturnValue(enteredBoard as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
+      vi.mocked(enterState).mockReturnValue(enteredBoard);
     });
 
     it("returns can_enter:true and resolved prompts for a single-agent state", async () => {
@@ -319,8 +319,8 @@ describe("enterAndPrepareState", () => {
       const enteredBoard = makeBoard({
         states: { implement: { status: "pending", entries: 0 }, done: { status: "in_progress", entries: 1 } },
       });
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
-      vi.mocked(enterState).mockReturnValue(enteredBoard as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
+      vi.mocked(enterState).mockReturnValue(enteredBoard);
 
       const flow = makeFlow();
 
@@ -344,8 +344,8 @@ describe("enterAndPrepareState", () => {
       const enteredBoard = makeBoard({
         states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
       });
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
-      vi.mocked(enterState).mockReturnValue(enteredBoard as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
+      vi.mocked(enterState).mockReturnValue(enteredBoard);
 
       const flow = makeFlow({
         states: {
@@ -378,8 +378,8 @@ describe("enterAndPrepareState", () => {
       const enteredBoard = makeBoard({
         states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
       });
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
-      vi.mocked(enterState).mockReturnValue(enteredBoard as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
+      vi.mocked(enterState).mockReturnValue(enteredBoard);
 
       const flow = makeFlow();
 
@@ -409,8 +409,8 @@ describe("enterAndPrepareState", () => {
           done: { status: "pending", entries: 0 },
         },
       });
-      vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
-      vi.mocked(enterState).mockReturnValue(enteredBoard as ReturnType<typeof makeBoard>);
+      vi.mocked(readBoard).mockResolvedValue(board);
+      vi.mocked(enterState).mockReturnValue(enteredBoard);
 
       const flow: ResolvedFlow = {
         name: "test-flow",

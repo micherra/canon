@@ -29,16 +29,16 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 
-import { initDatabase } from '../graph/kg-schema.js';
-import { KgStore } from '../graph/kg-store.js';
-import { KgQuery } from '../graph/kg-query.js';
-import { materialize, materializeToFile } from '../graph/view-materializer.js';
-import { analyzeBlastRadius } from '../graph/kg-blast-radius.js';
-import { runPipeline } from '../graph/kg-pipeline.js';
-import { graphQuery } from '../tools/graph-query.js';
-import { getAdapter, getLanguage } from '../graph/kg-adapter-registry.js';
-import { CANON_DIR, CANON_FILES } from '../constants.js';
-import type { FileRow, EntityRow } from '../graph/kg-types.js';
+import { initDatabase } from '../graph/kg-schema.ts';
+import { KgStore } from '../graph/kg-store.ts';
+import { KgQuery } from '../graph/kg-query.ts';
+import { materialize, materializeToFile } from '../graph/view-materializer.ts';
+import { analyzeBlastRadius } from '../graph/kg-blast-radius.ts';
+import { runPipeline } from '../graph/kg-pipeline.ts';
+import { graphQuery } from '../tools/graph-query.ts';
+import { getAdapter, getLanguage } from '../graph/kg-adapter-registry.ts';
+import { CANON_DIR, CANON_FILES } from '../constants.ts';
+import type { FileRow, EntityRow } from '../graph/kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -232,7 +232,7 @@ describe('materialize — view materializer contract', () => {
     store.insertFileEdge({
       source_file_id: fileA.file_id!,
       target_file_id: fileD.file_id!,
-      edge_type: 'some-unknown-type',
+      edge_type: 'some-unknown-type' as any,
       confidence: 1.0,
       evidence: null,
       relation: null,
@@ -367,7 +367,7 @@ describe('Pipeline → Materializer end-to-end flow', () => {
 
   test('pipeline populates DB and materializer produces valid graph-data.json', async () => {
     writeProjectFile(projectDir, 'src/a.ts', 'export function hello() {}');
-    writeProjectFile(projectDir, 'src/b.ts', "import { hello } from './a.js';");
+    writeProjectFile(projectDir, 'src/b.ts', "import { hello } from './a.ts';");
 
     const dbPath = path.join(projectDir, 'test.db');
     await runPipeline(projectDir, { dbPath, incremental: false });
@@ -430,7 +430,7 @@ describe('Pipeline → Materializer end-to-end flow', () => {
     expect(edgeBefore).toBeUndefined();
 
     // Update b.ts to import from a.ts
-    writeProjectFile(projectDir, 'src/b.ts', "import { greet } from './a.js';");
+    writeProjectFile(projectDir, 'src/b.ts', "import { greet } from './a.ts';");
 
     // Re-run pipeline (non-incremental to force re-parse)
     await runPipeline(projectDir, { dbPath, incremental: false });
@@ -1157,7 +1157,7 @@ describe('Adapter edge cases — malformed input and empty files', () => {
 
   test('TypeScript adapter extracts import specifiers', () => {
     const adapter = getAdapter('.ts');
-    const result = adapter!.parse('src/consumer.ts', "import { foo, bar } from './utils.js';");
+    const result = adapter!.parse('src/consumer.ts', "import { foo, bar } from './utils.ts';");
     expect(result.importSpecifiers).toBeDefined();
     expect(result.importSpecifiers!.length).toBeGreaterThanOrEqual(1);
     const specifier = result.importSpecifiers!.find((s) => s.specifier.includes('utils'));

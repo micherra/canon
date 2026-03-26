@@ -10,9 +10,9 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { initDatabase } from '../graph/kg-schema.js';
-import { KgStore } from '../graph/kg-store.js';
-import { runPipeline, reindexFile } from '../graph/kg-pipeline.js';
+import { initDatabase } from '../graph/kg-schema.ts';
+import { KgStore } from '../graph/kg-store.ts';
+import { runPipeline, reindexFile } from '../graph/kg-pipeline.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -140,7 +140,7 @@ describe('runPipeline', () => {
 
   test('creates file_edge for TypeScript import between two files', async () => {
     writeFile(projectDir, 'src/a.ts', `export const A = 1;`);
-    writeFile(projectDir, 'src/b.ts', `import { A } from './a.js';`);
+    writeFile(projectDir, 'src/b.ts', `import { A } from './a.ts';`);
 
     const dbPath = path.join(projectDir, 'test.db');
     await runPipeline(projectDir, { dbPath, incremental: false });

@@ -14,7 +14,7 @@ import type {
   SearchResult,
   DeadCodeResult,
   FileRow,
-} from './kg-types.js';
+} from './kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean

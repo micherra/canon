@@ -6,12 +6,12 @@
  * them at startup and builds a fast O(1) lookup map.
  */
 
-import type { LanguageAdapter } from './kg-types.js';
-import { typescriptAdapter } from './kg-adapter-typescript.js';
-import { pythonAdapter } from './kg-adapter-python.js';
-import { bashAdapter } from './kg-adapter-bash.js';
-import { markdownAdapter } from './kg-adapter-markdown.js';
-import { yamlAdapter } from './kg-adapter-yaml.js';
+import type { LanguageAdapter } from './kg-types.ts';
+import { typescriptAdapter } from './kg-adapter-typescript.ts';
+import { pythonAdapter } from './kg-adapter-python.ts';
+import { bashAdapter } from './kg-adapter-bash.ts';
+import { markdownAdapter } from './kg-adapter-markdown.ts';
+import { yamlAdapter } from './kg-adapter-yaml.ts';
 
 const registry = new Map<string, LanguageAdapter>();
 

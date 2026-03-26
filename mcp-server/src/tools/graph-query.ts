@@ -1,9 +1,9 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { KgQuery } from '../graph/kg-query.js';
-import { initDatabase } from '../graph/kg-schema.js';
-import { CANON_DIR, CANON_FILES } from '../constants.js';
-import type { SearchResult } from '../graph/kg-types.js';
+import { KgQuery } from '../graph/kg-query.ts';
+import { initDatabase } from '../graph/kg-schema.ts';
+import { CANON_DIR, CANON_FILES } from '../constants.ts';
+import type { SearchResult } from '../graph/kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Input / Output types

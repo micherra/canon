@@ -61,7 +61,7 @@ import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveContextInjections } from "../orchestration/inject-context.ts";
 import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,7 +75,7 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function makeBoard(overrides: Record<string, unknown> = {}) {
+function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
     flow: "test-flow",
     task: "test task",
@@ -93,7 +93,7 @@ function makeBoard(overrides: Record<string, unknown> = {}) {
     concerns: [],
     skipped: [],
     ...overrides,
-  };
+  } as Board;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
@@ -145,7 +145,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       state_id: "implement",
       flow,
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
-      _board: board as ReturnType<typeof makeBoard>,
+      _board: board,
     });
 
     expect(readBoard).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
         implement: {
           type: "single",
           agent: "canon-implementor",
-          inject_context: [{ key: "some_context", from: "board", field: "task" }],
+          inject_context: [{ from: "board", as: "some_context" }],
         },
         done: { type: "terminal" },
       },
@@ -176,7 +176,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       state_id: "implement",
       flow,
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
-      _board: board as ReturnType<typeof makeBoard>,
+      _board: board,
     });
 
     expect(readBoard).not.toHaveBeenCalled();
@@ -203,7 +203,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       flow,
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       items: ["item1", "item2"],
-      _board: board as ReturnType<typeof makeBoard>,
+      _board: board,
     });
 
     expect(readBoard).not.toHaveBeenCalled();
@@ -225,7 +225,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
           type: "parallel-per",
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
-          inject_context: [{ key: "ctx", from: "board", field: "task" }],
+          inject_context: [{ from: "board", as: "ctx" }],
           large_diff_threshold: 5,
         },
         done: { type: "terminal" },
@@ -238,7 +238,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       flow,
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       items: ["item1"],
-      _board: board as ReturnType<typeof makeBoard>,
+      _board: board,
     });
 
     expect(readBoard).not.toHaveBeenCalled();
@@ -262,8 +262,8 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
       },
     });
 
-    vi.mocked(readBoard).mockResolvedValue(originalBoard as ReturnType<typeof makeBoard>);
-    vi.mocked(enterState).mockReturnValue(enteredBoard as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(originalBoard);
+    vi.mocked(enterState).mockReturnValue(enteredBoard);
 
     // Use skip_when=present but not met, so getSpawnPrompt would call readBoard
     // if _board were not passed — we verify it uses the entered board by checking
@@ -306,8 +306,8 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
       },
     });
 
-    vi.mocked(readBoard).mockResolvedValue(originalBoard as ReturnType<typeof makeBoard>);
-    vi.mocked(enterState).mockReturnValue(enteredBoard as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(originalBoard);
+    vi.mocked(enterState).mockReturnValue(enteredBoard);
 
     const result = await enterAndPrepareState({
       workspace,
@@ -396,7 +396,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
   it("skip_reason includes the condition name and reason from evaluateSkipWhen", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(board);
     vi.mocked(evaluateSkipWhen).mockResolvedValue({
       skip: true,
       reason: "No contract changes detected — all changes are internal",
@@ -432,7 +432,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
   it("skip_reason falls back to 'condition satisfied' when evaluateSkipWhen returns no reason", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(board);
     // No reason field returned
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: true });
 
@@ -460,7 +460,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
   it("can_enter is true when state is skipped (skip is not a convergence failure)", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(board);
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: true, reason: "condition met" });
 
     const flow = makeFlow({

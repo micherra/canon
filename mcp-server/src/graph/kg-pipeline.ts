@@ -14,14 +14,14 @@ import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { Database } from 'better-sqlite3';
-import { initDatabase } from './kg-schema.js';
-import { KgStore } from './kg-store.js';
-import { getAdapter, getLanguage } from './kg-adapter-registry.js';
-import { scanSourceFiles } from './scanner.js';
-import { resolveImport } from './import-parser.js';
-import { inferLayer } from '../matcher.js';
-import { CANON_DIR, CANON_FILES } from '../constants.js';
-import type { AdapterResult, EntityRow } from './kg-types.js';
+import { initDatabase } from './kg-schema.ts';
+import { KgStore } from './kg-store.ts';
+import { getAdapter, getLanguage } from './kg-adapter-registry.ts';
+import { scanSourceFiles } from './scanner.ts';
+import { resolveImport } from './import-parser.ts';
+import { inferLayer } from '../matcher.ts';
+import { CANON_DIR, CANON_FILES } from '../constants.ts';
+import type { AdapterResult, EntityRow } from './kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Public interfaces

@@ -23,7 +23,7 @@ vi.mock("../orchestration/board.js", () => ({
 
 import { readBoard } from "../orchestration/board.ts";
 import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,7 +37,7 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function makeBoard(overrides: Record<string, unknown> = {}) {
+function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
     flow: "test-flow",
     task: "test task",
@@ -52,7 +52,7 @@ function makeBoard(overrides: Record<string, unknown> = {}) {
     concerns: [],
     skipped: [],
     ...overrides,
-  };
+  } as Board;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
@@ -161,14 +161,14 @@ describe("getSpawnPrompt — readBoard consolidation", () => {
   it("calls readBoard exactly once when state has skip_when", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(board);
 
     const flow = makeFlow({
       states: {
         implement: {
           type: "single",
           agent: "canon-implementor",
-          skip_when: "board.current_state === 'implement'",
+          skip_when: "no_contract_changes",
         },
         done: { type: "terminal" },
       },
@@ -187,14 +187,14 @@ describe("getSpawnPrompt — readBoard consolidation", () => {
   it("calls readBoard exactly once when state has inject_context", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(board);
 
     const flow = makeFlow({
       states: {
         implement: {
           type: "single",
           agent: "canon-implementor",
-          inject_context: [{ key: "some_context", from: "board", field: "task" }],
+          inject_context: [{ from: "board", as: "some_context" }],
         },
         done: { type: "terminal" },
       },
@@ -213,7 +213,7 @@ describe("getSpawnPrompt — readBoard consolidation", () => {
   it("calls readBoard exactly once when state has large_diff_threshold", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(board);
 
     const flow = makeFlow({
       states: {
@@ -240,15 +240,15 @@ describe("getSpawnPrompt — readBoard consolidation", () => {
   it("calls readBoard exactly once when all three conditions are present", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(board);
 
     const flow = makeFlow({
       states: {
         implement: {
           type: "parallel-per",
           agent: "canon-implementor",
-          skip_when: "board.current_state === 'other'",
-          inject_context: [{ key: "ctx", from: "board", field: "task" }],
+          skip_when: "no_contract_changes",
+          inject_context: [{ from: "board", as: "ctx" }],
           large_diff_threshold: 10,
         },
         done: { type: "terminal" },
@@ -268,7 +268,7 @@ describe("getSpawnPrompt — readBoard consolidation", () => {
 
   it("does not call readBoard when no board-dependent features are used", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard() as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
 
     const flow = makeFlow(); // no skip_when, inject_context, or large_diff_threshold
 
@@ -290,7 +290,7 @@ describe("getSpawnPrompt — readBoard consolidation", () => {
 describe("getSpawnPrompt — progress truncation", () => {
   it("truncates progress to last 8 entries before injecting into prompt", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard() as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
 
     // Write a progress.md with 12 entries
     const header = "## Progress: My task";
@@ -324,7 +324,7 @@ describe("getSpawnPrompt — progress truncation", () => {
 
   it("passes through all entries unchanged when count is within cap", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard() as ReturnType<typeof makeBoard>);
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
 
     const header = "## Progress: My task";
     const entries = Array.from({ length: 5 }, (_, i) => `- [state-${i}] done: step ${i}`);

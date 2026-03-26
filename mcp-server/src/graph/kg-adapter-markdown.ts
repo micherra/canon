@@ -18,7 +18,7 @@ import type {
   EntityKind,
   IntraFileEdge,
   ImportSpecifier,
-} from './kg-types.js';
+} from './kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Entity kind classification

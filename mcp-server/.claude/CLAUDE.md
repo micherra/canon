@@ -49,7 +49,7 @@ src/
 - Unified tool — merges `show_pr_impact` and `get_pr_review_data` (removed 2026-03-25)
 - Accepts optional `options?: { branch?: string; pr_number?: number; diff_base?: string; incremental?: boolean }` — all four exposed as top-level MCP input fields
 - Always calls `getPrReviewData` internally for live diff analysis; optionally overlays stored review impact data when a Canon review exists in DriftStore
-- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), plus `review?`, `blastRadius?`, `hotspots`, `subgraph`, `decisions` (populated when stored review exists, empty when not)
+- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), `has_review: boolean` (UI layout signal; `true` when a stored Canon review exists in DriftStore, `false` otherwise), plus `review?`, `blastRadius?`, `hotspots`, `subgraph`, `decisions` (populated when stored review exists, empty when not)
 - `status` is always `"ok"` — no more `"no_review"` status; review field being absent signals no stored review
 - Resource URI: `ui://canon/pr-review` (was `ui://canon/pr-impact`); HTML entry: `pr-review.html`
 
@@ -91,11 +91,14 @@ src/
 - `ChangeStoryGrid.svelte` — props: `files` (ClusterInput[]), `onPrompt`; computes `clusterFiles()` via `$derived`; renders 2-col card grid
 - `ImpactTabs.svelte` — props: `files` (PrFileInfo[]), `blastRadius` (BlastRadiusEntry[]), `onPrompt`; three tabs: High Impact (`priority_score >= 15`), Violations (sorted rule > strong-opinion > convention), Critical Deps (files not in diff appearing in blast radius)
 
-**PrReviewPrep.svelte** (`ui/PrReviewPrep.svelte`):
-- v2 thin container (~150 lines); composes `NarrativeSummary`, `ChangeStoryGrid`, `ImpactTabs`
-- Owns: `totalViolations`, `netNewFiles`, `isStale` derived values; `handlePrompt` callback routing to `bridge.sendMessage()`
+**PrReview.svelte** (`ui/PrReview.svelte`) — added 2026-03-25; replaces deleted `PrReviewPrep.svelte` and `PrImpact.svelte`:
+- Unified progressive container; no props — all data from `bridge.callTool("show_pr_impact")`
+- Always renders: `NarrativeSummary`, `ChangeStoryGrid`, `ImpactTabs` (prep analysis from `data.prep.*`)
+- Conditionally renders when `has_review` is true: `HotspotList` (panel-left) | `SubGraph` (panel-center) | `PrDetailPanel` (panel-right), plus `VerdictStrip`
+- When no stored review: shows "Run Review" button that calls `bridge.sendMessage()`
 - Staleness warning banner shown when `graph_data_age_ms > 3_600_000`
-- v1 bucket-section, layer-tabs, and toggleBucket removed as of 2026-03-25
+- `PrReviewPrep.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
+- `PrImpact.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
 
 **Config utilities** (`src/utils/config.ts`):
 - `buildLayerInferrer(mappings)` — now supports glob patterns (`*`, `**`, `?`) in addition to plain directory name segments; globs are anchored to path start

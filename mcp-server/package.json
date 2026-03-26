@@ -5,10 +5,7 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "build": "tsc",
-    "build:ui": "cross-env INPUT=ui/mcp-app.html vite build",
-    "build:ui:pr-impact": "cross-env INPUT=ui/pr-impact.html vite build",
-    "build:all": "npm run build:ui && npm run build:ui:pr-impact && npm run build",
+    "build": "node scripts/build-ui.mjs && tsc",
     "start": "tsx src/index.ts",
     "test": "vitest run"
   },

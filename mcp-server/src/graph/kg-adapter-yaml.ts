@@ -8,7 +8,7 @@
  */
 
 import { parse as parseYaml } from 'yaml';
-import type { LanguageAdapter, AdapterResult } from './kg-types.js';
+import type { LanguageAdapter, AdapterResult } from './kg-types.ts';
 
 /** Classify entity kind and collect metadata from file path and parsed data */
 function classifyEntity(

@@ -8,7 +8,7 @@
 
 import Parser from 'tree-sitter';
 import PythonLang from 'tree-sitter-python';
-import type { LanguageAdapter, AdapterResult, IntraFileEdge, ImportSpecifier } from './kg-types.js';
+import type { LanguageAdapter, AdapterResult, IntraFileEdge, ImportSpecifier } from './kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Module-level parser (reused across calls for performance)

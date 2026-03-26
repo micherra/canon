@@ -7,7 +7,7 @@
 
 import Parser from 'tree-sitter';
 import BashLang from 'tree-sitter-bash';
-import type { LanguageAdapter, AdapterResult, IntraFileEdge } from './kg-types.js';
+import type { LanguageAdapter, AdapterResult, IntraFileEdge } from './kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

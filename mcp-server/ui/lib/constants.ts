@@ -12,8 +12,9 @@ export const SEVERITY_COLORS: Record<string, string> = {
   convention: "#3498db",
 };
 
-export const NODE_DEFAULT = "#6b7394";
+export const NODE_DEFAULT = "#c8cad4";
 export const NODE_CHANGED = "#6c8cff";
+export const NODE_VIOLATION = "#ff6b6b";
 
 // ── Edge colors ────────────────────────────────────────────────────────────────
 /** Default edge color — base visibility. */

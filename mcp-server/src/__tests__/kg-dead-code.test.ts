@@ -7,10 +7,10 @@
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { initDatabase } from '../graph/kg-schema.js';
-import { KgStore } from '../graph/kg-store.js';
-import { detectDeadCode } from '../graph/kg-dead-code.js';
-import type { FileRow, EntityRow } from '../graph/kg-types.js';
+import { initDatabase } from '../graph/kg-schema.ts';
+import { KgStore } from '../graph/kg-store.ts';
+import { detectDeadCode } from '../graph/kg-dead-code.ts';
+import type { FileRow, EntityRow } from '../graph/kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Test helpers
