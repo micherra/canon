@@ -9,13 +9,21 @@ cursor-extension/media/dashboard.js
 .claude/
 # Subdirectory scoped CLAUDE.md files (opt-mcp-02: scoped out of root agent context)
 !mcp-server/.claude/
+!mcp-server/.claude/CLAUDE.md
 !agents/.claude/
+!agents/.claude/CLAUDE.md
 !templates/.claude/
+!templates/.claude/CLAUDE.md
 !flows/.claude/
+!flows/.claude/CLAUDE.md
 !principles/.claude/
+!principles/.claude/CLAUDE.md
 !commands/.claude/
+!commands/.claude/CLAUDE.md
 !hooks/.claude/
+!hooks/.claude/CLAUDE.md
 !canon-cursor-cli/.claude/
+!canon-cursor-cli/.claude/CLAUDE.md
 
 # Canon local data (dogfooding — ignore entire .canon directory)
 .canon/

@@ -96,6 +96,3 @@ When writing or modifying code **outside** of a Canon build pipeline (e.g., a qu
 2. Follow each principle's guidance
 3. `rule` severity is non-negotiable; `strong-opinion` requires justification to skip; `convention` is noted but doesn't block
 
-## Dashboard Context
-
-When the Canon Dashboard extension is active, call `get_dashboard_selection` at the start of a conversation to pick up the user's current focus — selected graph node, active editor file, matched principles, and dependency context.

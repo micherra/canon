@@ -521,21 +521,6 @@ When the user asks for direct code edits outside a build pipeline (for example, 
    - which principles were loaded
    - whether any deviations were justified (and why)
 
-## Dashboard selection (filled in by later to-dos)
-
-If the flow wants dashboard-derived context (optional), do best-effort selection:
-
-1. Check whether the file exists:
-   - `.canon/dashboard-state.json`
-2. If it does NOT exist:
-   - Do not call `get_dashboard_selection`
-   - Treat dashboard context as empty and continue without blocking
-3. If it DOES exist:
-   - Call the MCP tool `get_dashboard_selection`
-   - If the response indicates `has_selection: false`, treat dashboard context as empty and continue
-
-Never transition to HITL solely because dashboard selection is unavailable.
-
 ## Developer references for the runner
 
 Use these files as the source of truth (read them as needed):
