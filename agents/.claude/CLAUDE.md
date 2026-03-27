@@ -25,9 +25,9 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 | `canon-security` | Security assessments on implemented code | opus |
 | `canon-scribe` | Updates CLAUDE.md, context.md, CONVENTIONS.md post-implementation | sonnet |
 | `canon-learner` | Analyzes patterns; suggests principle improvements | sonnet |
-| `canon-fixer` | Fixes principle violations identified by reviewers | sonnet |
+| `canon-fixer` | Fixes failing tests and principle violations identified by reviewers | sonnet |
 | `canon-shipper` | Handles final shipping decisions | sonnet |
-| `canon-writer` | Writes documentation and content | sonnet |
+| `canon-writer` | Creates and edits Canon principles and agent-rules | sonnet |
 | `canon-inspector` | Analyzes completed builds; produces cost/bottleneck/failure reports | sonnet |
 
 ## Conventions
