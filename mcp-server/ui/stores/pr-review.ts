@@ -43,10 +43,21 @@ export interface BlastRadiusFileEntry {
   dep_count: number;
 }
 
+export interface PrFileSummary {
+  path: string;
+  layer: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+}
+
 export interface PrepData {
-  files: PrFileInfo[];
+  /** Lightweight file list for clustering (path, status, layer only). */
+  files: PrFileSummary[];
+  /** Files with full detail — violations, high priority, or needs-attention. */
+  impact_files: PrFileInfo[];
   layers: Array<{ name: string; file_count: number }>;
   total_files: number;
+  total_violations: number;
+  net_new_files: number;
   incremental: boolean;
   last_reviewed_sha?: string;
   diff_command: string;
@@ -81,6 +92,13 @@ export interface PrImpactSubgraph {
   nodes: PrImpactSubgraphNode[];
   edges: PrImpactSubgraphEdge[];
   layers: Array<{ name: string; color: string; file_count: number }>;
+}
+
+export interface PrRecommendation {
+  file_path?: string;
+  title: string;
+  message: string;
+  source: "principle" | "holistic";
 }
 
 export interface UnifiedPrOutput {
@@ -123,4 +141,5 @@ export interface UnifiedPrOutput {
   empty_state?: string;
   subsystems: Subsystem[];
   blast_radius_by_file: BlastRadiusFileEntry[];
+  recommendations?: PrRecommendation[];
 }

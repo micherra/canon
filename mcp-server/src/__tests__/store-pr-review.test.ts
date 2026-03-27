@@ -155,6 +155,68 @@ describe("storePrReview", () => {
     ]);
   });
 
+  it("stores recommendations when provided", async () => {
+    const recommendations = [
+      {
+        file_path: "src/tools/foo.ts",
+        title: "thin-handlers",
+        message: "Business logic should move to a service layer.",
+        source: "principle" as const,
+      },
+      {
+        title: "Missing error handling",
+        message: "JSON.parse on line 42 is unguarded.",
+        source: "holistic" as const,
+      },
+    ];
+
+    const result = await storePrReview(
+      {
+        verdict: "WARNING",
+        files: ["src/tools/foo.ts"],
+        violations: [],
+        honored: [],
+        score: {
+          rules: { passed: 1, total: 1 },
+          opinions: { passed: 0, total: 1 },
+          conventions: { passed: 1, total: 1 },
+        },
+        recommendations,
+      },
+      tmpDir
+    );
+
+    expect(result.recorded).toBe(true);
+
+    const store = new DriftStore(tmpDir);
+    const reviews = await store.getReviews();
+    expect(reviews).toHaveLength(1);
+
+    const stored = reviews[0];
+    expect(stored.recommendations).toEqual(recommendations);
+  });
+
+  it("recommendations field absent when not provided", async () => {
+    await storePrReview(
+      {
+        verdict: "CLEAN",
+        files: [],
+        violations: [],
+        honored: [],
+        score: {
+          rules: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          conventions: { passed: 0, total: 0 },
+        },
+      },
+      tmpDir
+    );
+
+    const store = new DriftStore(tmpDir);
+    const reviews = await store.getReviews();
+    expect(reviews[0].recommendations).toBeUndefined();
+  });
+
   it("each call generates a unique pr_review_id", async () => {
     const minimalInput = {
       verdict: "CLEAN" as const,

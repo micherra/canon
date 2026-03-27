@@ -22,6 +22,12 @@ export interface StorePrReviewInput {
     conventions: { passed: number; total: number };
   };
   file_priorities?: Array<{ path: string; priority_score: number }>;
+  recommendations?: Array<{
+    file_path?: string;
+    title: string;
+    message: string;
+    source: "principle" | "holistic";
+  }>;
 }
 
 export interface StorePrReviewOutput {
@@ -49,6 +55,7 @@ export async function storePrReview(
     honored: input.honored,
     score: input.score,
     ...(input.file_priorities !== undefined ? { file_priorities: input.file_priorities } : {}),
+    ...(input.recommendations !== undefined ? { recommendations: input.recommendations } : {}),
   });
 
   return { recorded: true, review_id };

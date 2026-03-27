@@ -84,6 +84,36 @@ When graph context is available, also evaluate coupling quality, dependency dire
 
 This stage is **advisory** — suggestions, not violations. Only include Stage 2 suggestions that address a concrete risk (bug potential, maintenance burden, readability for next developer). Omit style preferences that don't affect correctness or comprehension. Follow the **Code Quality** section of the review-checklist template.
 
+### Recommendations array
+
+After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:
+
+- **Selection**: Pick the 5 most impactful items. Prioritize: (1) rule violations, (2) strong-opinion violations, (3) holistic observations with concrete risk (dead code, missing error handling, API design concerns, test gaps, performance issues, naming that obscures intent)
+- **source field**: Use `"principle"` for items derived from a principle violation; use `"holistic"` for broader code quality observations
+- **title**: Short label (≤ 60 characters). For principle items use the principle ID. For holistic items use a descriptive label (e.g., "Missing error handling", "Dead code", "Naming unclear")
+- **message**: Concrete explanation (1–3 sentences). State the risk and suggest a fix. No hedging.
+- **file_path**: Include when the observation is scoped to a specific file. Omit for cross-cutting concerns.
+
+Include the `recommendations` array in your `store_pr_review` call alongside `violations`, `honored`, and `score`.
+
+Example recommendations array:
+```json
+[
+  {
+    "file_path": "src/tools/handler.ts",
+    "title": "thin-handlers",
+    "message": "Business logic in the handler should move to a service layer. Makes it untestable and couples routing to domain logic.",
+    "source": "principle"
+  },
+  {
+    "file_path": "src/utils/parse.ts",
+    "title": "Missing error handling",
+    "message": "JSON.parse call on line 42 is unguarded. A malformed input will throw an unhandled exception. Wrap in try/catch and return a Result type.",
+    "source": "holistic"
+  }
+]
+```
+
 ## Stage 3: Compliance Cross-Check (Build Pipeline Only)
 
 When the orchestrator provides implementor summary paths (`${WORKSPACE}/plans/{slug}/*-SUMMARY.md`), cross-check implementor self-declared compliance against your Stage 1 findings. Skip for standalone reviews.

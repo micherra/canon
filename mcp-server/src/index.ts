@@ -57,7 +57,7 @@ const server = new McpServer({
 
 /** Standard JSON response wrapper for MCP tool results. */
 function jsonResponse(result: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+  return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
 }
 
 /** Helper to register a tool + resource pair for an MCP App UI. */
@@ -580,6 +580,14 @@ server.registerTool(
           priority_score: z.number(),
         })
       ).optional().describe("Graph-derived file review priorities"),
+      recommendations: z.array(
+        z.object({
+          file_path: z.string().optional().describe("File the recommendation applies to"),
+          title: z.string().describe("Short label for the recommendation (≤ 60 chars)"),
+          message: z.string().describe("Concrete explanation with suggested fix"),
+          source: z.enum(["principle", "holistic"]).describe("Whether derived from a principle violation or holistic observation"),
+        })
+      ).optional().describe("Top-5 prioritized recommendations mixing principle violations and holistic suggestions"),
     },
   },
   async (input) => {

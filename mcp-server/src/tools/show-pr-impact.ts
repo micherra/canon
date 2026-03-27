@@ -119,6 +119,17 @@ export interface PrImpactOutput {
 }
 
 /**
+ * A holistic recommendation — a code improvement suggestion that may come from
+ * principle compliance analysis or broader code quality observations.
+ */
+export interface PrRecommendation {
+  file_path?: string;
+  title: string;
+  message: string;
+  source: "principle" | "holistic";
+}
+
+/**
  * Unified output type for show_pr_impact.
  * prep is always present (live diff analysis).
  * review/blastRadius/hotspots/subgraph/decisions are impact layer fields (present when a stored review exists).
@@ -143,6 +154,8 @@ export interface UnifiedPrOutput {
   subsystems: Subsystem[];
   /** Per-file blast radius dep counts — derived from blastRadius.affected; top 15 by dep_count */
   blast_radius_by_file: BlastRadiusFileEntry[];
+  /** Holistic recommendations from the reviewer — mixed principle and code quality suggestions */
+  recommendations?: PrRecommendation[];
   empty_state?: string;
 }
 
@@ -566,5 +579,8 @@ export async function showPrImpact(
     })),
     subsystems,
     blast_radius_by_file,
+    ...(latestReview.recommendations !== undefined
+      ? { recommendations: latestReview.recommendations }
+      : {}),
   };
 }

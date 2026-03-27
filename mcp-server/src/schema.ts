@@ -69,6 +69,12 @@ export type ReviewEntry = Omit<ReviewInput, "type" | "verdict"> & {
   branch?: string;
   last_reviewed_sha?: string;
   file_priorities?: Array<{ path: string; priority_score: number }>;
+  recommendations?: Array<{
+    file_path?: string;
+    title: string;
+    message: string;
+    source: "principle" | "holistic";
+  }>;
 };
 
 export type ReviewViolation = ReviewEntry["violations"][number];

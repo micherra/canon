@@ -36,7 +36,9 @@
 
   const loader = useDataLoader(async () => {
     await bridge.init();
-    return bridge.callTool("show_pr_impact") as Promise<UnifiedPrOutput>;
+    const result = await bridge.waitForToolResult() as UnifiedPrOutput;
+    if (!result) throw new Error("No data received from tool");
+    return result;
   });
 
   let status = $derived(loader.status);
@@ -45,16 +47,9 @@
 
   // ── Derived: prep-level ────────────────────────────────────────────────────
 
-  let totalViolations = $derived(
-    (data?.prep?.files ?? []).reduce((sum, f) => sum + (f.violations?.length ?? 0), 0)
-  );
+  let totalViolations = $derived(data?.prep?.total_violations ?? 0);
 
-  let netNewFiles = $derived((() => {
-    const files = data?.prep?.files ?? [];
-    const added = files.filter(f => f.status === "added").length;
-    const deleted = files.filter(f => f.status === "deleted").length;
-    return added - deleted;
-  })());
+  let netNewFiles = $derived(data?.prep?.net_new_files ?? 0);
 
   let isStale = $derived((data?.prep?.graph_data_age_ms ?? 0) > 3_600_000);
 
@@ -96,8 +91,8 @@
     <EmptyState message="No changed files found." />
 
   {:else if data}
-    <!-- Verdict banner (review mode) or Run Review prompt (prep-only mode) -->
     {#if hasReview && data.review}
+      <!-- ── Review mode: VerdictBanner → StatsRow → 2-column grid dashboard ── -->
       <VerdictBanner
         verdict={data.review.verdict}
         fileCount={data.review.files.length}
@@ -105,67 +100,75 @@
         violationCount={data.review.violations.length}
         {ruleViolationCount}
       />
+
+      <StatsRow
+        filesChanged={data.review.files.length}
+        violationCount={data.review.violations.length}
+        ruleCount={ruleViolationCount}
+        {highestBlastRadius}
+      />
+
+      <div class="dashboard-grid">
+        <!-- Row 1 left: FixBeforeMerge -->
+        <div class="grid-card">
+          <FixBeforeMerge violations={data.review.violations} recommendations={data.recommendations} onPrompt={handlePrompt} />
+        </div>
+
+        <!-- Row 1 right: ViolationsByPrinciple + ComplianceScore stacked -->
+        <div class="grid-card grid-card--stack">
+          <ViolationsByPrinciple violations={data.review.violations} onPrompt={handlePrompt} />
+          <ComplianceScore score={data.review.score} {honoredPrinciples} />
+        </div>
+
+        <!-- Row 2 left: BlastRadiusChart -->
+        <div class="grid-card">
+          <BlastRadiusChart entries={data.blast_radius_by_file ?? []} onPrompt={handlePrompt} />
+        </div>
+
+        <!-- Row 2 right: LayerChart + SubsystemsPanel stacked -->
+        <div class="grid-card grid-card--stack">
+          <LayerChart layers={data.prep.layers} />
+          <SubsystemsPanel subsystems={data.subsystems ?? []} />
+        </div>
+      </div>
+
     {:else}
-      <!-- Run Review banner (prep-only mode) -->
+      <!-- ── Prep-only mode: run-review banner + prep components ──────────── -->
       <div class="run-review-bar">
         <span class="run-review-label">No stored review yet.</span>
         <button class="run-review-btn" onclick={handleRunReview}>
           Run Review
         </button>
       </div>
-    {/if}
 
-    <!-- Header bar -->
-    <div class="header-bar">
-      <span class="header-title">PR Review</span>
-      {#if data.prep.incremental && data.prep.last_reviewed_sha}
-        <span class="badge-incremental">Incremental from {data.prep.last_reviewed_sha.slice(0, 7)}</span>
+      <div class="header-bar">
+        <span class="header-title">PR Review</span>
+        {#if data.prep.incremental && data.prep.last_reviewed_sha}
+          <span class="badge-incremental">Incremental from {data.prep.last_reviewed_sha.slice(0, 7)}</span>
+        {/if}
+      </div>
+
+      <NarrativeSummary
+        narrative={data.prep.narrative}
+        totalFiles={data.prep.total_files}
+        layerCount={data.prep.layers.length}
+        netNewFiles={netNewFiles}
+        violationCount={totalViolations}
+      />
+
+      <ChangeStoryGrid files={data.prep.files} onPrompt={handlePrompt} />
+
+      {#if isStale}
+        <div class="staleness-warning">
+          Graph data is over 1 hour old. Re-index for accurate dependency information.
+        </div>
       {/if}
-    </div>
 
-    <!-- Section 1: Narrative Summary -->
-    <NarrativeSummary
-      narrative={data.prep.narrative}
-      totalFiles={data.prep.total_files}
-      layerCount={data.prep.layers.length}
-      netNewFiles={netNewFiles}
-      violationCount={totalViolations}
-    />
-
-    <!-- Section 2: Change Story Cards -->
-    <ChangeStoryGrid files={data.prep.files} onPrompt={handlePrompt} />
-
-    <!-- Staleness Warning -->
-    {#if isStale}
-      <div class="staleness-warning">
-        Graph data is over 1 hour old. Re-index for accurate dependency information.
-      </div>
-    {/if}
-
-    <!-- Section 3: Impact Tabs -->
-    <ImpactTabs
-      files={data.prep.files}
-      blastRadius={data.prep.blast_radius}
-      onPrompt={handlePrompt}
-    />
-
-    <!-- Dashboard panels (review mode only) -->
-    {#if hasReview && data.review}
-      <div class="dashboard-panels">
-        <StatsRow
-          filesChanged={data.review.files.length}
-          violationCount={data.review.violations.length}
-          ruleCount={ruleViolationCount}
-          {highestBlastRadius}
-        />
-
-        <FixBeforeMerge violations={data.review.violations} />
-        <ViolationsByPrinciple violations={data.review.violations} />
-        <ComplianceScore score={data.review.score} {honoredPrinciples} />
-        <BlastRadiusChart entries={data.blast_radius_by_file ?? []} />
-        <LayerChart layers={data.prep.layers} />
-        <SubsystemsPanel subsystems={data.subsystems ?? []} />
-      </div>
+      <ImpactTabs
+        files={data.prep.impact_files}
+        blastRadius={data.prep.blast_radius}
+        onPrompt={handlePrompt}
+      />
     {/if}
   {/if}
 </div>
@@ -251,14 +254,27 @@
     flex-shrink: 0;
   }
 
-  /* ── Dashboard panels ────────────────────────────────────────────────────── */
+  /* ── Dashboard grid (review mode) ───────────────────────────────────────── */
 
-  .dashboard-panels {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
     overflow-y: auto;
     flex: 1;
-    padding: 0 0 16px;
+    padding: 8px 12px 16px;
+  }
+
+  .grid-card {
+    background: var(--bg-card, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.07));
+    border-radius: 8px;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .grid-card--stack {
+    display: flex;
+    flex-direction: column;
   }
 </style>

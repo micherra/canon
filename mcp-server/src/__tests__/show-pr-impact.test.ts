@@ -65,8 +65,11 @@ const SAMPLE_SCORE = {
 // Minimal stub for PrReviewDataOutput returned by mocked getPrReviewData
 const SAMPLE_PREP = {
   files: [],
+  impact_files: [],
   layers: [],
   total_files: 0,
+  total_violations: 0,
+  net_new_files: 0,
   incremental: false,
   diff_command: "git diff main",
   narrative: "No changed files.",
@@ -488,6 +491,55 @@ describe("showPrImpact", () => {
       expect.objectContaining({ diff_base: "origin/develop", incremental: true }),
       tmpDir,
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // 9. Recommendations surfaced from stored review
+  // -------------------------------------------------------------------------
+
+  it("surfaces recommendations from stored review when present", async () => {
+    const recommendations = [
+      {
+        file_path: "src/tools/foo.ts",
+        title: "thin-handlers",
+        message: "Business logic should move to a service layer.",
+        source: "principle" as const,
+      },
+      {
+        title: "Missing error handling",
+        message: "JSON.parse is unguarded — wrap in try/catch.",
+        source: "holistic" as const,
+      },
+    ];
+
+    const reviewWithRecs = {
+      ...SAMPLE_REVIEW,
+      recommendations,
+    };
+
+    const store = new DriftStore(tmpDir);
+    await store.appendReview(reviewWithRecs);
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    const result = await showPrImpact(tmpDir);
+
+    expect(result.recommendations).toEqual(recommendations);
+  });
+
+  it("recommendations absent in output when stored review has no recommendations", async () => {
+    const store = new DriftStore(tmpDir);
+    await store.appendReview(SAMPLE_REVIEW); // no recommendations field
+    vi.mocked(existsSync).mockReturnValue(false);
+
+    const result = await showPrImpact(tmpDir);
+
+    expect(result.recommendations).toBeUndefined();
+  });
+
+  it("recommendations absent in output when no stored review", async () => {
+    const result = await showPrImpact(tmpDir);
+
+    expect(result.recommendations).toBeUndefined();
   });
 });
 
