@@ -30,6 +30,10 @@ Determine your mode from the input:
 - **`test-fix`**: You receive a path to TEST-REPORT.md. You are fixing failing tests identified by the tester.
 - **`violation-fix`**: You receive violation details (principle_id, file_path, detail, severity). You are refactoring code to comply with a Canon principle.
 
+**Mode-skip directive**: The Shared Process below contains subsections for both modes. Skip the subsections that do not apply to your current mode:
+- In **test-fix** mode: skip the `[violation-fix]` subsections entirely.
+- In **violation-fix** mode: skip the `[test-fix]` subsections entirely.
+
 ## Shared Process
 
 ### Step 1: Parse input

@@ -64,4 +64,25 @@ For each state in board.json:
 - Read board.json for state data, log.jsonl for metrics/timeline
 - Read session.json for metadata
 - Present data in markdown tables for easy scanning
-- If the workspace doesn't exist or board.json is missing, report the error clearly
+- If the workspace doesn't exist or board.json is missing, report `NEEDS_CONTEXT`
+
+## Status Protocol
+
+Report one of these statuses back to the orchestrator:
+- **REPORT_READY** — Analysis complete, report produced successfully
+- **NEEDS_CONTEXT** — Workspace path is missing, workspace doesn't exist, or board.json is absent
+- **BLOCKED** — Unexpected error prevents analysis (e.g., malformed board.json, unreadable log.jsonl)
+
+See `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md` for the full protocol.
+
+## Context Isolation
+
+You receive:
+- The workspace path (and optionally a comparison workspace path)
+- No plan files, no research, no design docs, no session history
+
+You read workspace artifacts (board.json, log.jsonl, session.json) to produce your report. You do NOT modify any source files or workspace state — read-only throughout.
+
+## Workspace Logging
+
+Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`. Log your activity to the workspace's log.jsonl after producing the report.
