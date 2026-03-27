@@ -141,6 +141,15 @@ export interface ParallelPerResult {
   artifacts?: string[];
 }
 
+/**
+ * Returns true if the RoleEntry has optional: true, false otherwise.
+ */
+export function isRoleOptional(
+  entry: string | { name: string; optional?: boolean },
+): boolean {
+  return typeof entry !== "string" && entry.optional === true;
+}
+
 const REVIEW_SEVERITY_ORDER: Record<string, number> = {
   blocking: 3,
   warning: 2,
@@ -175,30 +184,41 @@ export function aggregateReviewResults(
 /**
  * Aggregate results from a parallel-per execution into a single
  * condition and a list of items that could not be fixed.
+ *
+ * @param optionalRoles - Role names that are optional. Failures from optional
+ *   roles are excluded from blocking determination and cannot_fix items.
  */
 export function aggregateParallelPerResults(
   results: ParallelPerResult[],
+  optionalRoles?: Set<string>,
 ): { condition: string; cannotFixItems: string[] } {
-  const hasBlocked = results.some((r) => r.status === "blocked");
+  // Partition results into required and optional based on their item name.
+  const isOptional = (r: ParallelPerResult): boolean =>
+    optionalRoles != null && r.item != null && optionalRoles.has(r.item);
+
+  const requiredResults = results.filter((r) => !isOptional(r));
+
+  // Only required results can block the state.
+  const hasBlocked = requiredResults.some((r) => r.status === "blocked");
   if (hasBlocked) {
     return { condition: "blocked", cannotFixItems: [] };
   }
 
-  const doneResults = results.filter((r) => r.status === "done");
-  const cannotFixResults = results.filter((r) => r.status === "cannot_fix");
+  const doneResults = requiredResults.filter((r) => r.status === "done");
+  const cannotFixResults = requiredResults.filter((r) => r.status === "cannot_fix");
 
-  if (cannotFixResults.length === results.length) {
+  if (requiredResults.length > 0 && cannotFixResults.length === requiredResults.length) {
     return {
       condition: "cannot_fix",
       cannotFixItems: cannotFixResults.map((r) => r.item).filter((i): i is string => i !== undefined),
     };
   }
 
-  if (doneResults.length === results.length) {
+  if (requiredResults.length === 0 || doneResults.length === requiredResults.length) {
     return { condition: "done", cannotFixItems: [] };
   }
 
-  // Mixed: some done, some cannot_fix
+  // Mixed: some required done, some required cannot_fix
   return {
     condition: "done",
     cannotFixItems: cannotFixResults.map((r) => r.item).filter((i): i is string => i !== undefined),

@@ -12,6 +12,7 @@ import {
   isStuck,
   aggregateParallelPerResults,
   aggregateReviewResults,
+  isRoleOptional,
 } from "../orchestration/transitions.ts";
 import { appendFile } from "fs/promises";
 import { join } from "path";
@@ -129,9 +130,21 @@ async function reportResultLocked(
     const isReviewAggregation = input.parallel_results.every(
       r => ["clean", "warning", "blocking"].includes(r.status.toLowerCase())
     );
+
+    // Build the set of optional role names from the state's roles definition.
+    const optionalRoles = new Set<string>();
+    if (stateDef?.roles) {
+      for (const roleEntry of stateDef.roles) {
+        if (isRoleOptional(roleEntry)) {
+          const name = typeof roleEntry === "string" ? roleEntry : roleEntry.name;
+          optionalRoles.add(name);
+        }
+      }
+    }
+
     const aggregated = isReviewAggregation
       ? aggregateReviewResults(input.parallel_results)
-      : aggregateParallelPerResults(input.parallel_results);
+      : aggregateParallelPerResults(input.parallel_results, optionalRoles.size > 0 ? optionalRoles : undefined);
     condition = aggregated.condition; // Override condition with aggregated result
 
     // Store parallel_results on board state entry
