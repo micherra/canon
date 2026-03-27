@@ -11,7 +11,6 @@ Create a new Canon flow definition interactively.
 
 1. **Show existing flows** for reference:
    - Call `load_flow` for each existing flow to show names and descriptions
-   - Or call `validate_flows` with no args to list all flows
 
 2. **Interview the user:**
    - "What should this flow be called?" (kebab-case name)
@@ -34,12 +33,7 @@ Create a new Canon flow definition interactively.
    - Markdown body with `### state-id` spawn instruction stubs
    - Follow the format in `flows/SCHEMA.md`
 
-4. **Validate immediately:**
-   - Call `validate_flows` with the new flow name
-   - If errors, fix and re-validate
-   - Show warnings to the user
-
-5. **Save** to `flows/{name}.md`
+4. **Save** to `flows/{name}.md`
 
 ## Tips
 - Default transitions: `done: next-state`, `blocked: hitl`
