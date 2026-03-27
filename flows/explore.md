@@ -6,7 +6,7 @@ states:
   research:
     type: parallel
     agents: [canon-researcher]
-    roles: [codebase, dependencies]
+    roles: [codebase, {name: dependencies, optional: true}]
     template: research-finding
     transitions:
       done: synthesize
