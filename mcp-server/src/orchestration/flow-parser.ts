@@ -213,6 +213,7 @@ export function resolveFragments(
         section: definition.section,
         artifact: definition.artifact,
         timeout: definition.timeout,
+        min_waves: definition.min_waves,
       };
 
       const substituted = Object.keys(effectiveParams).length > 0

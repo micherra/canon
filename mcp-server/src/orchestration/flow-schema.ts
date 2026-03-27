@@ -233,6 +233,7 @@ export const FragmentDefinitionSchema = z.object({
   section: z.string().optional(),
   artifact: z.string().optional(),
   timeout: z.string().optional(),
+  min_waves: z.number().optional(),
 });
 
 // ---------------------------------------------------------------------------
