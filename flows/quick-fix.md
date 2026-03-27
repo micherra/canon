@@ -8,11 +8,7 @@ progress: ${WORKSPACE}/progress.md
 includes:
   - fragment: implement-verify
     with:
-      after_all_passing: context-sync
-
-  - fragment: context-sync
-    with:
-      next: review
+      after_all_passing: review
 
   - fragment: review-fix-loop
     with:

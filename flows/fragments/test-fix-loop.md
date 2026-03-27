@@ -24,17 +24,7 @@ states:
     role: test-fix
     template: implementation-log
     transitions:
-      done: context-sync-fix
-      blocked: hitl
-
-  context-sync-fix:
-    type: single
-    agent: canon-scribe
-    template: context-sync-report
-    skip_when: no_contract_changes
-    transitions:
-      updated: test
-      no_updates: test
+      done: test
       blocked: hitl
 ---
 
@@ -49,6 +39,3 @@ ${progress}
 Mode: test-fix. Test report: ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Determine source bugs vs test bugs for each failure. Save summary to ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
 
 ${progress}
-
-### context-sync-fix
-Sync docs after fix-impl. Diff source: fix commits since last context-sync. Summary: ${WORKSPACE}/plans/${slug}/FIX-SUMMARY.md. Save report to ${WORKSPACE}/plans/${slug}/CONTEXT-SYNC-FIX.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/context-sync-report.md.

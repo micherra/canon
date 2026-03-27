@@ -19,7 +19,7 @@ includes:
   - fragment: security-scan
     with:
       after_done: context-sync
-      on_critical: hitl
+      on_critical: fix-security
 
   - fragment: context-sync
     with:
@@ -59,6 +59,8 @@ states:
     type: wave
     agent: canon-implementor
     template: implementation-log
+    effects:
+      - type: persist_decisions
     transitions:
       done: verify
       blocked: hitl
