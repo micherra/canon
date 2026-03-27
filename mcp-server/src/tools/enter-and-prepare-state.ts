@@ -175,6 +175,18 @@ export async function enterAndPrepareState(
     const names = stateDef.consultations[breakpoint] ?? [];
 
     for (const name of names) {
+      // Check min_waves threshold before resolving -- skip consultation if
+      // wave_total is known and below the fragment's minimum.
+      // Fail-open: if wave_total is not yet set, do NOT skip.
+      const fragment = flow.consultations?.[name];
+      if (fragment?.min_waves != null) {
+        const waveTotal = enteredBoard.states[state_id]?.wave_total;
+        if (waveTotal != null && waveTotal < fragment.min_waves) {
+          // Skip this consultation -- wave count below threshold
+          continue;
+        }
+      }
+
       const resolved = resolveConsultationPrompt(name, flow, input.variables);
       if (resolved) {
         consultationPrompts.push({
@@ -213,13 +225,42 @@ export async function enterAndPrepareState(
     }
   }
 
+  // Step 4.6: Resolve review_scope for re-entered review states.
+  // When entries > 1 (re-entry after fix-violations), compute the file list
+  // changed since base_commit via git diff and inject as review_scope variable.
+  // On any failure (git not available, invalid commit ref), degrade to empty string.
+  let reviewScopeVars: Record<string, string> = {};
+  if (enteredBoard.states[state_id]?.entries > 1) {
+    const baseRef = enteredBoard.base_commit;
+    if (baseRef && /^[a-f0-9]{7,40}$/.test(baseRef)) {
+      try {
+        const { spawnSync } = await import("node:child_process");
+        const result = spawnSync("git", ["diff", "--name-only", `${baseRef}..HEAD`], {
+          encoding: "utf-8",
+          timeout: 5000,
+        });
+        if (result.status === 0 && result.stdout) {
+          const files = result.stdout.trim().split("\n").filter(Boolean);
+          reviewScopeVars.review_scope = files.length > 0
+            ? `Scoped re-review. Files changed since last review:\n${files.join("\n")}`
+            : "";
+        } else {
+          reviewScopeVars.review_scope = "";
+        }
+      } catch {
+        // Git diff failed -- degrade to full review
+        reviewScopeVars.review_scope = "";
+      }
+    }
+  }
+
   // Step 5: Resolve spawn prompts. Pass the entered board so getSpawnPrompt
   // reuses the already-read board instead of calling readBoard again.
   const spawnResult = await getSpawnPrompt({
     workspace,
     state_id,
     flow,
-    variables: input.variables,
+    variables: { ...input.variables, ...reviewScopeVars },
     items: input.items,
     role: input.role,
     overlays: input.overlays,

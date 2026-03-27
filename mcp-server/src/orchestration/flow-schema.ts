@@ -62,6 +62,7 @@ export const StuckWhenSchema = z.enum([
 export const SkipWhenSchema = z.enum([
   "no_contract_changes",
   "no_fix_requested",
+  "auto_approved",
 ]);
 
 export const ContextInjectionSchema = z.object({
@@ -247,6 +248,7 @@ export const ConsultationFragmentSchema = z.object({
   artifact: z.string().optional(),
   timeout: z.string().optional(),
   spawn_instruction: z.string().optional(),
+  min_waves: z.number().optional(),
 });
 
 export const ResolvedFlowSchema = FlowDefinitionSchema.extend({

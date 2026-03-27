@@ -6,6 +6,7 @@ agent: canon-architect
 role: pattern-check
 section: Pattern review
 timeout: 5m
+min_waves: 2
 ---
 
 ## Spawn Instructions
