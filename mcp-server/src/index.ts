@@ -2,6 +2,8 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
 import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { readFile } from "fs/promises";
@@ -61,14 +63,14 @@ function jsonResponse(result: unknown) {
 }
 
 /** Helper to register a tool + resource pair for an MCP App UI. */
-function registerToolWithUi(
+function registerToolWithUi<Schema extends ZodRawShapeCompat>(
   toolName: string,
   resourceUri: string,
   title: string,
   description: string,
-  inputSchema: any,
+  inputSchema: Schema,
   htmlFile: string,
-  handler: (input: any) => Promise<ReturnType<typeof jsonResponse>>,
+  handler: ToolCallback<Schema>,
 ) {
   registerAppTool(server, toolName, {
     title,
@@ -161,19 +163,18 @@ server.registerTool(
   }
 );
 
-registerToolWithUi(
+server.registerTool(
   "get_compliance",
-  "ui://canon/compliance",
-  "Compliance",
-  "Returns compliance stats for a specific Canon principle. Shows violation counts, compliance rate, trend, and weekly history.",
   {
-    principle_id: z.string().describe("ID of the principle to check compliance for"),
+    description: "Returns compliance stats for a specific Canon principle. Shows violation counts, compliance rate, trend, and weekly history.",
+    inputSchema: {
+      principle_id: z.string().describe("ID of the principle to check compliance for"),
+    },
   },
-  "compliance.html",
   async (input) => {
     const result = await getCompliance(input, projectDir, pluginDir);
     return jsonResponse(result);
-  },
+  }
 );
 
 // Tool: report (unified — decisions, patterns, and reviews)
@@ -243,21 +244,20 @@ server.registerTool(
   }
 );
 
-registerToolWithUi(
+server.registerTool(
   "get_drift_report",
-  "ui://canon/drift-report",
-  "Drift Report",
-  "Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, and PR review history.",
   {
-    last_n: z.number().optional().describe("Only analyze the last N reviews"),
-    principle_id: z.string().optional().describe("Filter to a specific principle"),
-    directory: z.string().optional().describe("Filter to files in a specific directory"),
+    description: "Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, and PR review history.",
+    inputSchema: {
+      last_n: z.number().optional().describe("Only analyze the last N reviews"),
+      principle_id: z.string().optional().describe("Filter to a specific principle"),
+      directory: z.string().optional().describe("Filter to files in a specific directory"),
+    },
   },
-  "drift-report.html",
   async (input) => {
     const result = await getDriftReport(input, projectDir, pluginDir);
     return jsonResponse(result);
-  },
+  }
 );
 
 server.registerTool(
@@ -596,32 +596,31 @@ server.registerTool(
   }
 );
 
-registerToolWithUi(
+server.registerTool(
   "graph_query",
-  "ui://canon/graph-query",
-  "Graph Query",
-  "Query the codebase knowledge graph for callers, callees, blast radius, dead code, search, and more. Requires the knowledge graph to be built first via codebase_graph.",
   {
-    query_type: z
-      .enum(['callers', 'callees', 'blast_radius', 'dead_code', 'search', 'ancestors'])
-      .describe('Type of query to perform'),
-    target: z
-      .string()
-      .optional()
-      .describe('Target entity name or file path (not needed for dead_code)'),
-    options: z
-      .object({
-        max_depth: z.number().int().min(1).max(10).optional().describe('Max depth for blast_radius (default 3)'),
-        limit: z.number().int().min(1).max(500).optional().describe('Max results for search (default 50)'),
-        include_tests: z.boolean().optional().describe('Include test files in dead_code results'),
-      })
-      .optional(),
+    description: "Query the codebase knowledge graph for callers, callees, blast radius, dead code, search, and more. Requires the knowledge graph to be built first via codebase_graph.",
+    inputSchema: {
+      query_type: z
+        .enum(['callers', 'callees', 'blast_radius', 'dead_code', 'search', 'ancestors'])
+        .describe('Type of query to perform'),
+      target: z
+        .string()
+        .optional()
+        .describe('Target entity name or file path (not needed for dead_code)'),
+      options: z
+        .object({
+          max_depth: z.number().int().min(1).max(10).optional().describe('Max depth for blast_radius (default 3)'),
+          limit: z.number().int().min(1).max(500).optional().describe('Max results for search (default 50)'),
+          include_tests: z.boolean().optional().describe('Include test files in dead_code results'),
+        })
+        .optional(),
+    },
   },
-  "graph-query.html",
   async (input) => {
     const result = graphQuery(input, projectDir);
     return jsonResponse(result);
-  },
+  }
 );
 
 // Start the server

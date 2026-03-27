@@ -147,7 +147,7 @@ export function buildSigmaGraph(
         hidden: false,
         confidence: edge.confidence ?? 1,
       } satisfies EdgeAttrs);
-    } catch {
+    } catch (_err) {
       // ignore rare duplicate-edge errors in multi: false mode
     }
   }
@@ -164,7 +164,7 @@ export function buildSigmaGraph(
         slowDown: 2,
       },
     });
-  } catch {
+  } catch (_err) {
     // If FA2 fails (e.g. disconnected graph), positions stay random — still renderable
   }
 
@@ -173,8 +173,8 @@ export function buildSigmaGraph(
   try {
     // Only run on undirected copy because Louvain expects undirected
     // or it handles directed graphs internally — assign directly
-    louvain.assign(graph as any, { nodeCommunityAttribute: "community" });
-  } catch {
+    louvain.assign(graph as Parameters<typeof louvain.assign>[0], { nodeCommunityAttribute: "community" });
+  } catch (_err) {
     // Community detection is optional — non-fatal
   }
 

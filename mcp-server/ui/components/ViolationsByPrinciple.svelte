@@ -28,12 +28,13 @@
 
   interface ViolationsByPrincipleProps {
     violations: Violation[];
+    onPrompt?: (text: string) => void;
   }
 
-  let { violations }: ViolationsByPrincipleProps = $props();
+  let { violations, onPrompt }: ViolationsByPrincipleProps = $props();
 
   /** Group violations by principle_id; keep worst severity per principle */
-  const groups = $derived(() => {
+  const groups = $derived.by(() => {
     const map = new Map<string, PrincipleGroup>();
 
     for (const v of violations) {
@@ -86,11 +87,11 @@
 <section class="violations-by-principle">
   <h2 class="section-title">Violations by Principle</h2>
 
-  {#if groups().length === 0}
+  {#if groups.length === 0}
     <p class="empty">No violations found.</p>
   {:else}
     <ul class="group-list">
-      {#each groups() as group (group.principleId)}
+      {#each groups as group (group.principleId)}
         {@const color = getSeverityColor(group.severity)}
         {@const isExpanded = expanded.has(group.principleId)}
 
@@ -114,7 +115,16 @@
           {#if isExpanded && group.files.length > 0}
             <ul class="file-list">
               {#each group.files as file (file)}
-                <li class="file-path">{file}</li>
+                <li class="file-path">
+                  {#if onPrompt}
+                    <button
+                      class="file-btn btn-reset"
+                      onclick={() => onPrompt(`Explain the ${group.principleId} violation in ${file} and how to fix it`)}
+                    >{file}</button>
+                  {:else}
+                    {file}
+                  {/if}
+                </li>
               {/each}
             </ul>
           {/if}
@@ -226,6 +236,22 @@
     padding: 5px 12px 5px 28px;
     border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.04));
     word-break: break-all;
+  }
+
+  .file-btn {
+    width: 100%;
+    text-align: left;
+    font-size: 11px;
+    font-family: var(--font-mono, monospace);
+    color: var(--text-muted, #888);
+    cursor: pointer;
+    padding: 0;
+    word-break: break-all;
+    transition: color 0.1s;
+  }
+
+  .file-btn:hover {
+    color: var(--accent, #6c8cff);
   }
 
   .file-path:last-child {

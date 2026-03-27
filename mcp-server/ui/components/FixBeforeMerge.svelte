@@ -43,7 +43,7 @@
 
   // Normalize: if recommendations provided and non-empty, use them.
   // Otherwise fall back to sorted violations.
-  const items = $derived((): Array<{ type: "recommendation"; rec: Recommendation } | { type: "violation"; v: Violation }> => {
+  const items = $derived.by((): Array<{ type: "recommendation"; rec: Recommendation } | { type: "violation"; v: Violation }> => {
     if (recommendations && recommendations.length > 0) {
       return recommendations.slice(0, 5).map((rec) => ({ type: "recommendation" as const, rec }));
     }
@@ -72,11 +72,36 @@
 <section class="fix-before-merge">
   <h2 class="section-title">Fix Before Merge</h2>
 
-  {#if items().length === 0}
+  {#if items.length === 0}
     <p class="empty">No violations — looking good.</p>
   {:else}
+    {#snippet itemContent(item: { type: "recommendation"; rec: Recommendation } | { type: "violation"; v: Violation }, color: string, index: number)}
+      <span class="item-number" style="color: {color}">{index + 1}</span>
+      <div class="item-body">
+        {#if item.type === "recommendation"}
+          {#if item.rec.file_path}
+            <span class="file-path">{item.rec.file_path}</span>
+          {/if}
+          <div class="badge-message-row">
+            <span class="principle-badge" style="color: {color};">{item.rec.title}</span>
+            <span class="message">{item.rec.message}</span>
+          </div>
+        {:else}
+          {#if item.v.file_path}
+            <span class="file-path">{item.v.file_path}</span>
+          {/if}
+          <div class="badge-message-row">
+            <span class="principle-badge" style="color: {color};">{item.v.principle_id}</span>
+            {#if item.v.message}
+              <span class="message">{item.v.message}</span>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/snippet}
+
     <ol class="violation-list">
-      {#each items() as item, i (i)}
+      {#each items as item, i (i)}
         {@const color = item.type === "recommendation"
           ? getRecommendationColor(item.rec.source)
           : getSeverityColor(item.v.severity)}
@@ -86,52 +111,10 @@
               class="violation-btn btn-reset"
               onclick={() => onPrompt(getPromptText(item))}
             >
-              <span class="item-number" style="color: {color}">{i + 1}</span>
-              <div class="item-body">
-                {#if item.type === "recommendation"}
-                  {#if item.rec.file_path}
-                    <span class="file-path">{item.rec.file_path}</span>
-                  {/if}
-                  <div class="badge-message-row">
-                    <span class="principle-badge" style="color: {color};">{item.rec.title}</span>
-                    <span class="message">{item.rec.message}</span>
-                  </div>
-                {:else}
-                  {#if item.v.file_path}
-                    <span class="file-path">{item.v.file_path}</span>
-                  {/if}
-                  <div class="badge-message-row">
-                    <span class="principle-badge" style="color: {color};">{item.v.principle_id}</span>
-                    {#if item.v.message}
-                      <span class="message">{item.v.message}</span>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
+              {@render itemContent(item, color, i)}
             </button>
           {:else}
-            <span class="item-number" style="color: {color}">{i + 1}</span>
-            <div class="item-body">
-              {#if item.type === "recommendation"}
-                {#if item.rec.file_path}
-                  <span class="file-path">{item.rec.file_path}</span>
-                {/if}
-                <div class="badge-message-row">
-                  <span class="principle-badge" style="color: {color};">{item.rec.title}</span>
-                  <span class="message">{item.rec.message}</span>
-                </div>
-              {:else}
-                {#if item.v.file_path}
-                  <span class="file-path">{item.v.file_path}</span>
-                {/if}
-                <div class="badge-message-row">
-                  <span class="principle-badge" style="color: {color};">{item.v.principle_id}</span>
-                  {#if item.v.message}
-                    <span class="message">{item.v.message}</span>
-                  {/if}
-                </div>
-              {/if}
-            </div>
+            {@render itemContent(item, color, i)}
           {/if}
         </li>
       {/each}

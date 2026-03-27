@@ -36,14 +36,25 @@ export interface BlastRadiusEntry {
   affected: Array<{ path: string; depth: number }>;
 }
 
+/** Lightweight file entry for clustering — path, status, layer only. */
+export interface PrFileSummary {
+  path: string;
+  layer: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+}
+
 export interface PrReviewDataOutput {
-  files: PrFileInfo[];
+  /** Lightweight file list for clustering (path, status, layer only). */
+  files: PrFileSummary[];
+  /** Files that need full detail — violations, high priority, or needs-attention bucket. */
+  impact_files: PrFileInfo[];
   layers: Array<{ name: string; file_count: number }>;
   total_files: number;
+  total_violations: number;
+  net_new_files: number;
   incremental: boolean;
   last_reviewed_sha?: string;
   diff_command: string;
-  prioritized_files?: FilePriorityScore[];
   graph_data_age_ms?: number;
   error?: string;
   narrative: string;
@@ -249,9 +260,10 @@ export async function getPrReviewData(
   // Human-readable command string for display
   const diffCommand = `${diffCmd.cmd} ${diffCmd.args.join(" ")}`;
 
-  // Enrich with graph-aware priority scores if graph data exists
-  let prioritizedFiles: FilePriorityScore[] | undefined;
+  // Load graph data once — used for both priority enrichment and blast radius
   let graphDataAgeMs: number | undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let loadedGraph: { nodes: any[]; edges: Array<{ source: string; target: string }> } | undefined;
   try {
     const graphPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
     const [raw, graphStat] = await Promise.all([
@@ -259,12 +271,18 @@ export async function getPrReviewData(
       stat(graphPath),
     ]);
     graphDataAgeMs = Date.now() - graphStat.mtimeMs;
-    const graph = JSON.parse(raw);
-    if (Array.isArray(graph.nodes) && Array.isArray(graph.edges)) {
-      prioritizedFiles = computeFilePriorities(graph.nodes, graph.edges);
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+      loadedGraph = parsed;
     }
   } catch {
-    // No graph data available — priority enrichment skipped
+    // No graph data available — priority enrichment and blast radius skipped
+  }
+
+  // Enrich with graph-aware priority scores if graph data exists
+  let prioritizedFiles: FilePriorityScore[] | undefined;
+  if (loadedGraph) {
+    prioritizedFiles = computeFilePriorities(loadedGraph.nodes, loadedGraph.edges);
   }
 
   // Build a map from path -> priority score for fast merge
@@ -326,25 +344,40 @@ export async function getPrReviewData(
 
   // Compute blast radius for top high-impact files using raw graph edges
   let blastRadius: BlastRadiusEntry[] = [];
-  try {
-    const graphPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
-    const raw = await readFile(graphPath, "utf-8");
-    const graph = JSON.parse(raw) as { nodes: unknown[]; edges: Array<{ source: string; target: string }> };
-    if (Array.isArray(graph.edges)) {
-      blastRadius = computeBlastRadius(files, graph.edges);
-    }
-  } catch {
-    // No graph data available — blast radius skipped
+  if (loadedGraph) {
+    blastRadius = computeBlastRadius(files, loadedGraph.edges);
   }
 
+  // Split files: lightweight summaries for clustering, full entries only for impactful files
+  const fileSummaries: PrFileSummary[] = files.map(f => ({
+    path: f.path,
+    layer: f.layer,
+    status: f.status,
+  }));
+
+  const impactFiles = files.filter(f =>
+    f.bucket === "needs-attention" ||
+    (f.priority_score ?? 0) >= 15 ||
+    (f.violations && f.violations.length > 0),
+  );
+
+  // Pre-compute aggregates so the UI doesn't need the full list
+  const totalViolations = files.reduce(
+    (sum, f) => sum + (f.violations?.length ?? 0), 0,
+  );
+  const added = files.filter(f => f.status === "added").length;
+  const deleted = files.filter(f => f.status === "deleted").length;
+
   return {
-    files,
+    files: fileSummaries,
+    impact_files: impactFiles,
     layers,
     total_files: files.length,
+    total_violations: totalViolations,
+    net_new_files: added - deleted,
     incremental: !!lastReviewedSha,
     last_reviewed_sha: lastReviewedSha,
     diff_command: diffCommand,
-    prioritized_files: prioritizedFiles,
     graph_data_age_ms: graphDataAgeMs,
     narrative,
     blast_radius: blastRadius,
@@ -445,37 +478,34 @@ function parseDiffOutput(
   const results: PrFileInfo[] = [];
 
   for (const line of lines) {
+    // Determine path and status from the line format
+    let path: string;
+    let status: PrFileInfo["status"];
+
     if (isNameOnly) {
-      // gh pr diff --name-only: plain path per line
-      const path = line;
-      const layer = inferLayer(path) || "unknown";
-      const priority = priorityMap.get(path);
-      // bucket/reason are placeholders — overwritten by classifyFile() in getPrReviewData
-      const file: PrFileInfo = { path, layer, status: "modified", bucket: "low-risk", reason: "" };
-      if (priority) {
-        file.priority_score = priority.priority_score;
-        file.priority_factors = priority.factors;
-      }
-      results.push(file);
+      // gh pr diff --name-only: plain path per line, status inferred as "modified"
+      path = line;
+      status = "modified";
     } else {
       // git diff --name-status: <STATUS>\t<path> or R<score>\t<old>\t<new>
       const parts = line.split("\t");
       const statusLetter = parts[0];
-      const status = mapStatus(statusLetter);
+      status = mapStatus(statusLetter);
       // For renames, use destination path (parts[2]); for others, use parts[1]
-      const path = status === "renamed" && parts[2] ? parts[2] : parts[1];
-      if (!path) continue;
-
-      const layer = inferLayer(path) || "unknown";
-      const priority = priorityMap.get(path);
-      // bucket/reason are placeholders — overwritten by classifyFile() in getPrReviewData
-      const file: PrFileInfo = { path, layer, status, bucket: "low-risk", reason: "" };
-      if (priority) {
-        file.priority_score = priority.priority_score;
-        file.priority_factors = priority.factors;
-      }
-      results.push(file);
+      const resolved = status === "renamed" && parts[2] ? parts[2] : parts[1];
+      if (!resolved) continue;
+      path = resolved;
     }
+
+    const layer = inferLayer(path) || "unknown";
+    const priority = priorityMap.get(path);
+    // bucket/reason are placeholders — overwritten by classifyFile() in getPrReviewData
+    const file: PrFileInfo = { path, layer, status, bucket: "low-risk", reason: "" };
+    if (priority) {
+      file.priority_score = priority.priority_score;
+      file.priority_factors = priority.factors;
+    }
+    results.push(file);
   }
 
   return results;

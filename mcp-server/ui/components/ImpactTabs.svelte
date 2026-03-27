@@ -99,7 +99,7 @@
 
   let changedFilePaths = $derived(new Set(files.map(f => f.path)));
 
-  let criticalDeps = $derived((): CriticalDep[] => {
+  let criticalDeps = $derived.by((): CriticalDep[] => {
     // Collect all affected paths from blast radius that are NOT in the diff
     const depMap = new Map<string, string[]>();
 
@@ -169,8 +169,8 @@
       onclick={() => (activeTab = "critical-deps")}
     >
       Critical deps
-      {#if criticalDeps().length > 0}
-        <span class="tab-count">{criticalDeps().length}</span>
+      {#if criticalDeps.length > 0}
+        <span class="tab-count">{criticalDeps.length}</span>
       {/if}
     </button>
   </div>
@@ -221,11 +221,11 @@
   <!-- ── Tab C: Critical Deps ───────────────────────────────────────────── -->
   {#if activeTab === "critical-deps"}
     <div class="tab-content">
-      {#if criticalDeps().length === 0}
+      {#if criticalDeps.length === 0}
         <div class="empty-state">No critical external dependencies</div>
       {:else}
         <div class="file-list">
-          {#each criticalDeps() as dep (dep.path)}
+          {#each criticalDeps as dep (dep.path)}
             <DepRow
               filePath={dep.path}
               relationship={depRelationship(dep)}
