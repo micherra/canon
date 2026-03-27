@@ -106,6 +106,60 @@ describe("evaluateSkipWhen — no_fix_requested", () => {
 });
 
 // ---------------------------------------------------------------------------
+// evaluateSkipWhen — auto_approved
+// ---------------------------------------------------------------------------
+
+describe("evaluateSkipWhen — auto_approved", () => {
+  it("skips when board.metadata.auto_approve is true", async () => {
+    const board = makeBoard({ metadata: { auto_approve: true } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("auto-approved");
+  });
+
+  it("does not skip when board.metadata.auto_approve is false", async () => {
+    const board = makeBoard({ metadata: { auto_approve: false } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("does not skip when board.metadata is undefined", async () => {
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("does not skip when board.metadata.auto_approve is absent", async () => {
+    const board = makeBoard({ metadata: { some_other_key: "value" } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SkipWhenSchema — schema validation
+// ---------------------------------------------------------------------------
+
+describe("SkipWhenSchema", () => {
+  it("accepts auto_approved as a valid value", async () => {
+    const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
+    expect(() => SkipWhenSchema.parse("auto_approved")).not.toThrow();
+    expect(SkipWhenSchema.parse("auto_approved")).toBe("auto_approved");
+  });
+
+  it("still accepts existing valid values", async () => {
+    const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
+    expect(() => SkipWhenSchema.parse("no_contract_changes")).not.toThrow();
+    expect(() => SkipWhenSchema.parse("no_fix_requested")).not.toThrow();
+  });
+
+  it("rejects unknown values", async () => {
+    const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
+    expect(() => SkipWhenSchema.parse("unknown_value")).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // evaluateSkipWhen — unknown condition
 // ---------------------------------------------------------------------------
 

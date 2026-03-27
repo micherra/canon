@@ -27,6 +27,8 @@ export async function evaluateSkipWhen(
       return evaluateNoContractChanges(board.base_commit);
     case "no_fix_requested":
       return evaluateNoFixRequested(board);
+    case "auto_approved":
+      return evaluateAutoApproved(board);
     default:
       console.error(
         `Warning: Unknown skip_when condition "${condition}" — not skipping`,
@@ -80,6 +82,16 @@ function evaluateNoFixRequested(board: Board): SkipResult {
     skip: true,
     reason: "No fix requested — user has not flagged issues for fixing",
   };
+}
+
+function evaluateAutoApproved(board: Board): SkipResult {
+  if (board.metadata?.auto_approve === true) {
+    return {
+      skip: true,
+      reason: "Task auto-approved — checkpoint skipped",
+    };
+  }
+  return { skip: false };
 }
 
 /** Simple glob matching for contract patterns. */

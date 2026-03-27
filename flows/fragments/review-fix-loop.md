@@ -39,6 +39,8 @@ states:
 ### review
 Review changes via `git diff ${base_commit}..HEAD` (scoped to file list if provided). After Stages 1-2, cross-check against ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.
 
+${review_scope}
+
 ${progress}
 
 ### fix-violations
