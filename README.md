@@ -230,14 +230,6 @@ The Canon Dashboard is an interactive dependency graph visualization served as a
 - **Violation context** — Violations enriched with fan-in, hub status, cycle membership, and impact scores
 - **Search and filter** — Find files by name; filter by layer, changed status, violations, or PR review scope
 
-**How to open it:**
-
-Call the `open_dashboard` MCP tool (or say "open the dashboard" in Claude). The dashboard reads `.canon/dashboard-state.json` — when you click a node, Canon picks up your focus context on the next message, making principle lookups and reviews context-aware without any extra prompting.
-
-**How it connects to Canon:**
-
-When you click a node in the dashboard, your selection is written to `.canon/dashboard-state.json`. Canon reads this at conversation start via `get_dashboard_selection` — giving it your current file focus, matched principles, and graph metrics automatically.
-
 ## Configuration
 
 All configuration lives in `.canon/config.json`. Every key is optional — Canon uses sensible defaults.

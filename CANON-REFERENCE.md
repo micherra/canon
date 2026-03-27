@@ -88,7 +88,6 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | Tool | Purpose |
 |------|---------|
 | `load_flow` | Load and resolve a flow definition (fragments, spawn instructions, state graph) |
-| `validate_flows` | Validate flow definitions (parse, fragment resolution, reachability) |
 | `init_workspace` | Create or resume a workspace (`board.json`, `session.json`, `progress.md`); seeds `progress.md` with task header on creation |
 | `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress |
 | `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, overlays, wave context); reads `progress.md` from disk and injects as `${progress}` when flow declares `progress:` field |

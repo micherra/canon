@@ -50,11 +50,6 @@ If a state transitions to `hitl` (blocked, merge conflict, unresolved questions,
 - present options including `retry`, `skip`, `rollback` (destructive), `abort`, and `manual-fix`
 - use `git revert` to roll back to `board.base_commit` for destructive rollback
 
-## Dashboard selection (best-effort)
-
-If `.canon/dashboard-state.json` exists, the runner may use `get_dashboard_selection` to seed context.
-If it does not exist, the runner continues without blocking on dashboard UI state.
-
 ## Installing into another repo (bundle)
 
 If you need to install via a prebuilt bundle, create it here with:
