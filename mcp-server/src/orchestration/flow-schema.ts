@@ -88,8 +88,6 @@ export const RoleEntrySchema = z.union([
 
 export const EffectTypeSchema = z.enum([
   "persist_review",
-  "persist_decisions",
-  "persist_patterns",
   "check_postconditions",
 ]);
 
@@ -166,7 +164,6 @@ export const StateDefinitionSchema = z.object({
   large_diff_threshold: z.number().optional(),
   cluster_by: z.enum(["directory", "layer"]).optional(),
   timeout: z.string().optional(),
-  overlays: z.array(z.string()).optional(),
   effects: z.array(EffectSchema).optional(),
 });
 
@@ -216,7 +213,6 @@ export const FragmentStateDefinitionSchema = z.object({
   large_diff_threshold: z.union([z.number(), z.string()]).optional(),
   cluster_by: z.enum(["directory", "layer"]).optional(),
   timeout: z.string().optional(),
-  overlays: z.array(z.string()).optional(),
   effects: z.array(EffectSchema).optional(),
 });
 

@@ -23,7 +23,6 @@ import { createJsonlLogger } from "../orchestration/events.ts";
 import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
 import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
-import type { OverlayDefinition } from "../orchestration/overlays.ts";
 
 export interface ConsultationPromptEntry {
   name: string;
@@ -41,12 +40,9 @@ export interface EnterAndPrepareStateInput {
   variables: Record<string, string>;
   items?: TaskItem[];
   role?: string;
-  overlays?: string[];
   wave?: number;
   peer_count?: number;
   project_dir?: string;
-  /** Pre-loaded overlays — avoids re-reading from disk if caller already has them. */
-  loaded_overlays?: OverlayDefinition[];
 }
 
 export interface EnterAndPrepareStateResult {
@@ -268,11 +264,9 @@ export async function enterAndPrepareState(
     variables: { ...input.variables, ...reviewScopeVars },
     items: input.items,
     role: input.role,
-    overlays: input.overlays,
     wave: input.wave,
     peer_count: input.peer_count,
     project_dir: input.project_dir,
-    loaded_overlays: input.loaded_overlays,
     consultation_outputs: Object.keys(consultationOutputs).length > 0 ? consultationOutputs : undefined,
     _board: enteredBoard,
   });

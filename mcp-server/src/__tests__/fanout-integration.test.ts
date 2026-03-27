@@ -442,10 +442,10 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Gap 3: Wave briefing / overlay injection for fanned-out single state
+// Gap 3: Wave guidance and bulletin injection for fanned-out single state
 // ---------------------------------------------------------------------------
 
-describe("getSpawnPrompt — overlay injection applies to all fanned-out prompts (gap fill)", () => {
+describe("getSpawnPrompt — wave guidance and bulletin injection for fanned-out single state", () => {
   it("wave guidance is injected into all fanned-out prompts when wave is set", async () => {
     // This verifies that the post-switch loop which injects wave guidance
     // applies to all cluster prompts generated in case "single".

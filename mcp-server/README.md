@@ -84,7 +84,6 @@ src/
 | `get_spawn_prompt` | Resolve spawn prompts for a flow state. Substitutes variables, applies templates, reads `progress.md` when the flow declares it, and fans out by state type (single/parallel/wave/parallel-per). |
 | `report_result` | Report an agent's result. Normalizes status, evaluates transitions, updates board state, executes drift effects (persist_decisions, persist_review, persist_patterns), and checks stuck detection. Returns next state and whether HITL is required. |
 | `check_convergence` | Check whether a state can be re-entered based on iteration limits. Returns iteration count, max, cannot-fix items, and history. |
-| `list_overlays` | List available role overlays. Overlays are expertise lenses injected into agent spawn prompts. Optionally filter by target agent. |
 | `post_wave_bulletin` | Post a message to the wave bulletin for near-real-time inter-agent communication during parallel wave execution. Implementor agents have direct access to this tool. |
 | `get_wave_bulletin` | Read messages from the wave bulletin. Returns messages posted by other agents in the same wave, optionally filtered by timestamp or type. Used by implementors for real-time coordination. |
 | `inject_wave_event` | Inject a user event into a running wave execution. Allows the user to steer, pause, or redirect agents mid-wave. |

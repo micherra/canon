@@ -18,15 +18,11 @@ Each command file contains instructions for the agent that executes it. Commands
 | `adopt` | Scan codebase for principle coverage; identify and optionally fix violations |
 | `check` | Check code for principle compliance before commit |
 | `clean` | Archive or remove workspace artifacts |
-| `create-flow` | Create a new Canon flow definition |
-| `create-overlay` | Create a new role overlay for agent prompt injection |
 | `doctor` | Diagnose Canon setup issues; validate configuration |
 | `edit-principle` | Create or modify a principle |
 | `learn` | Analyze drift data to suggest principle and convention improvements |
 | `pr-review` | Review pull request changes |
 | `test-principle` | Verify a principle works correctly |
-| `toggle-archive` | Archive/unarchive a workspace |
-| `workspaces` | Manage Canon build workspaces — list, inspect, clean, and diff |
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->

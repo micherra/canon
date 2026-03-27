@@ -100,12 +100,8 @@ Build modifiers can be expressed naturally: "skip research", "just plan don't im
 | `/canon:pr-review` | Review a PR or branch against principles with layer-parallel fan-out |
 | `/canon:edit-principle` | Edit an existing principle — change severity, scope, tags, or body |
 | `/canon:test-principle` | Verify a principle is detected during review by generating a violation |
-| `/canon:toggle-archive` | Archive or unarchive a principle — archived entries are skipped without being deleted |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, duplicate IDs, MCP server health (11 checks) |
 | `/canon:clean` | Clean up workspace artifacts — optionally archive decisions and notes to project history |
-| `/canon:create-flow` | Create a new workflow definition |
-| `/canon:create-overlay` | Create a new role overlay (expertise lens for agent prompts) |
-| `/canon:workspaces` | List and manage Canon workspaces |
 
 ## Workflows
 

@@ -175,7 +175,7 @@ Loop until the current state is `terminal`:
 
 ```
 1. result = enter_and_prepare_state(workspace, state_id, resolved_flow, variables, {
-     items, overlays, wave, peer_count
+     items, wave, peer_count
    })
    // resolved_flow is the OBJECT from load_flow — not the flow name string
    → If !can_enter → HITL (max iterations reached)

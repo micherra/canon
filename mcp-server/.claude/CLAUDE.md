@@ -32,7 +32,7 @@ src/
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, wave bulletin, variable resolution, gate execution, consultation preparation, wave briefing assembly
 
 ## Contracts
-<!-- last-updated: 2026-03-26 -->
+<!-- last-updated: 2026-03-26 (optional-roles parallel failure handling) -->
 
 **Drift Store** (`src/drift/store.ts`):
 - `ReviewEntry` — unified type for all reviews (principle and PR); optional PR fields: `pr_number?: number`, `branch?: string`, `last_reviewed_sha?: string`, `file_priorities?: Array<{ path: string; priority_score: number }>`
@@ -66,7 +66,8 @@ src/
 **PR Review Data** (`src/tools/pr-review-data.ts`) — pure function module; `get_pr_review_data` MCP tool removed 2026-03-25 (absorbed into `show_pr_impact`); `getPrReviewData` function called internally by `showPrImpact`:
 - `PrViolation` interface — `{ principle_id: string; severity: "rule"|"strong-opinion"|"convention"; message?: string }`
 - `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`, `violations?: PrViolation[]`
-- `PrReviewDataOutput` interface — fields: `files`, `layers`, `total_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `prioritized_files?`, `graph_data_age_ms?`, `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
+- `PrFileSummary` interface — `{ path: string; layer: string; status: "added"|"modified"|"deleted"|"renamed" }` — lightweight entry for clustering
+- `PrReviewDataOutput` interface — fields: `files: PrFileSummary[]` (lightweight), `impact_files: PrFileInfo[]` (needs-attention OR priority_score >= 15 OR has violations), `layers`, `total_files`, `total_violations`, `net_new_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `graph_data_age_ms?`, `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
 - `BlastRadiusEntry` interface — `{ file: string; affected: Array<{ path: string; depth: number }> }`
 - `classifyFile(file: Omit<PrFileInfo, "bucket"|"reason">)` — pure function; returns `{ bucket, reason }`; thresholds: needs-attention = `violation_count > 0` OR (`in_degree >= 5` AND `is_changed`); worth-a-look = `priority_score >= 5`; low-risk = else
 - `generateNarrative(files, layers)` — pure function; returns human-readable summary string
@@ -111,10 +112,7 @@ src/
 |------|-------------|---------|
 | `show_pr_impact` | `ui://canon/pr-review` | PR Review — change analysis (always), blast radius, hotspots, violations, subgraph (when stored review exists) |
 | `codebase_graph` | `ui://canon/codebase-graph` | Interactive dependency graph with compliance overlay |
-| `get_drift_report` | `ui://canon/drift-report` | Drift analysis: violations, trends, hotspots, PR reviews |
-| `get_compliance` | `ui://canon/compliance` | Per-principle compliance stats, trend chart |
 | `get_file_context` | `ui://canon/file-context` | File dependencies, entities, blast radius, metrics |
-| `graph_query` | `ui://canon/graph-query` | Call trees, blast radius, dead code, search |
 
 **Text-only principle/review tools:**
 
@@ -125,9 +123,20 @@ src/
 | `review_code` | Surface principles for code review + code content |
 | `report` | Log decisions/patterns/reviews (drift tracking) |
 | `store_summaries` | Persist file summaries to disk |
+| `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews |
+| `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
+| `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
 | `get_decisions` | Grouped intentional deviations |
 | `get_patterns` | Observed codebase patterns (grouped) |
 | `store_pr_review` | Store a PR review result for drift tracking |
+
+**`resolve_after_consultations` tool** (`src/tools/resolve-after-consultations.ts`) — added 2026-03-26:
+- Input: `ResolveAfterConsultationsInput` — `{ workspace: string; state_id: string; flow: ResolvedFlow; variables: Record<string, string> }`
+- Output: `ResolveAfterConsultationsResult` — `{ consultation_prompts: ConsultationPromptEntry[]; warnings: string[] }`
+- Pure resolution function — no board reads, no state entry, no convergence check; runs at the post-wave lifecycle breakpoint
+- Reads `flow.states[state_id].consultations.after`; unresolvable names produce warnings (not errors) and are skipped
+- Call after the last wave completes and before `report_result`; orchestrator spawns the returned consultation agents, records results with breakpoint `"after"`, then proceeds to `report_result`
+- After-consultation summaries are automatically picked up by the next state's `enterAndPrepareState` via the briefing injection pipeline
 
 **`resolve_wave_event` tool** (`src/tools/resolve-wave-event.ts`) — added 2026-03-26:
 - Input: `ResolveWaveEventInput` — `{ workspace: string; event_id: string; action: "apply"|"reject"; resolution?: Record<string, unknown>; reason?: string }`
@@ -176,6 +185,11 @@ src/
 - `gate_results` and `postcondition_results` stored both in `metrics` and top-level `BoardStateEntry` for quick access
 - `revision_count` auto-computed from `board.iterations[state_id].count` — not caller-supplied
 - Backward compat: callers providing no new fields get exactly the old behavior (no `metrics` entry written)
+- Optional role handling (added 2026-03-26): when aggregating parallel results, roles marked `optional: true` in `stateDef.roles` are excluded from blocking and cannot_fix determination; only required roles determine the aggregated condition
+
+**Parallel transitions** (`src/orchestration/transitions.ts`) — updated 2026-03-26:
+- `isRoleOptional(entry: string | { name: string; optional?: boolean }): boolean` — exported helper; returns `true` if entry has `optional: true`
+- `aggregateParallelPerResults(results, optionalRoles?: Set<string>)` — second parameter added; results whose `item` name is in `optionalRoles` are excluded from blocking/cannot_fix/done determination; all-required-done or zero required roles resolves to `"done"`
 
 **Orchestration harness tools:**
 
@@ -183,16 +197,16 @@ src/
 |------|---------|
 | `load_flow` | Load and resolve a flow definition |
 | `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status, locks, and stale sessions before creating |
-| `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop |
+| `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop; briefing injection scans all three breakpoints: `before`, `between`, and `after` |
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress); at `complete_flow` aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
 | `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
 | `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
 | `check_convergence` | Check iteration limits |
-| `list_overlays` | List available role overlays |
 | `post_wave_bulletin` | Post inter-agent message during parallel waves |
 | `get_wave_bulletin` | Read wave bulletin messages |
 | `inject_wave_event` | Inject user events into running wave execution |
 | `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
+| `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
 
 ## Dependencies
 <!-- last-updated: 2026-03-26 -->

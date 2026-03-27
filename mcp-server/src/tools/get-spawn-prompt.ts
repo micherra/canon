@@ -1,6 +1,5 @@
 import { readFile } from "fs/promises";
 import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.ts";
-import { loadAllOverlays, filterOverlaysForAgent, buildOverlayInjection, type OverlayDefinition } from "../orchestration/overlays.ts";
 import { buildBulletinInstructions } from "../orchestration/bulletin.ts";
 import { readWaveGuidance, assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import type { ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.ts";
@@ -19,11 +18,9 @@ interface SpawnPromptInput {
   variables: Record<string, string>;
   items?: TaskItem[];
   role?: string;
-  overlays?: string[];
   project_dir?: string;
   wave?: number;
   peer_count?: number;
-  loaded_overlays?: OverlayDefinition[];
   /**
    * Completed consultation outputs to inject into the wave briefing.
    * When provided alongside `wave`, assembleWaveBriefing is called and the
@@ -329,25 +326,6 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     for (let i = 0; i < prompts.length; i++) {
       prompts[i].prompt = substituteVariables(prompts[i].prompt, { role: input.role });
       prompts[i].role = input.role;
-    }
-  }
-
-  // Inject role overlays if requested
-  if (input.project_dir && (input.overlays?.length || state.overlays?.length)) {
-    const allOverlays = input.loaded_overlays ?? await loadAllOverlays(input.project_dir);
-    const requestedNames = new Set([
-      ...(input.overlays ?? []),
-      ...(state.overlays ?? []),
-    ]);
-
-    const requested = allOverlays.filter(o => requestedNames.has(o.name));
-
-    for (const entry of prompts) {
-      const applicable = filterOverlaysForAgent(requested, entry.agent);
-      const injection = buildOverlayInjection(applicable);
-      if (injection) {
-        entry.prompt += injection;
-      }
     }
   }
 

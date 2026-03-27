@@ -90,10 +90,9 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `load_flow` | Load and resolve a flow definition (fragments, spawn instructions, state graph) |
 | `init_workspace` | Create or resume a workspace (`board.json`, `session.json`, `progress.md`); seeds `progress.md` with task header on creation |
 | `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress |
-| `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, overlays, wave context); reads `progress.md` from disk and injects as `${progress}` when flow declares `progress:` field |
+| `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, wave context); reads `progress.md` from disk and injects as `${progress}` when flow declares `progress:` field |
 | `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state` |
 | `check_convergence` | Check iteration limits before re-entering a looping state |
-| `list_overlays` | List available role overlays (expertise lenses injected into prompts) |
 | `post_wave_bulletin` | Post inter-agent message during parallel wave execution |
 | `get_wave_bulletin` | Read wave bulletin messages from other agents in the same wave |
 | `inject_wave_event` | Inject user events into running wave execution |

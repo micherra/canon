@@ -17,15 +17,12 @@ import { getFileContext } from "./tools/get-file-context.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
 
 import { getDriftReport } from "./tools/get-drift-report.ts";
-import { getDecisions } from "./tools/get-decisions.ts";
-import { getPatterns } from "./tools/get-patterns.ts";
 import { loadFlow } from "./tools/load-flow.ts";
 import { initWorkspaceFlow } from "./tools/init-workspace.ts";
 import { getSpawnPrompt } from "./tools/get-spawn-prompt.ts";
 import { reportResult } from "./tools/report-result.ts";
 import { checkConvergence } from "./tools/check-convergence.ts";
 import { updateBoard } from "./tools/update-board.ts";
-import { listOverlays } from "./tools/list-overlays.ts";
 import { postWaveBulletin } from "./tools/post-wave-bulletin.ts";
 import { getWaveBulletin } from "./tools/get-wave-bulletin.ts";
 import { injectWaveEvent } from "./tools/inject-wave-event.ts";
@@ -265,35 +262,6 @@ server.registerTool(
 );
 
 server.registerTool(
-  "get_decisions",
-  {
-    description: "Returns intentional deviation decisions grouped by principle, with category counts. Use for understanding why principles are overridden.",
-    inputSchema: {
-      principle_id: z.string().optional().describe("Filter to decisions for a specific principle"),
-      limit: z.number().optional().describe("Max number of principle groups to return"),
-    },
-  },
-  async (input) => {
-    const result = await getDecisions(input, projectDir);
-    return jsonResponse(result);
-  }
-);
-
-server.registerTool(
-  "get_patterns",
-  {
-    description: "Returns observed codebase patterns logged by agents, grouped and deduplicated. Use to find pre-validated patterns before scanning.",
-    inputSchema: {
-      limit: z.number().optional().describe("Max number of pattern groups to return"),
-    },
-  },
-  async (input) => {
-    const result = await getPatterns(input, projectDir);
-    return jsonResponse(result);
-  }
-);
-
-server.registerTool(
   "load_flow",
   {
     description: "Load and resolve a Canon flow definition. Returns the resolved flow with fragment resolution, spawn instructions, and a state adjacency graph.",
@@ -339,7 +307,6 @@ server.registerTool(
       variables: z.record(z.string(), z.string()),
       items: z.array(z.any()).optional(),
       role: z.string().optional(),
-      overlays: z.array(z.string()).optional().describe("Role overlay names to inject"),
       wave: z.number().optional().describe("Current wave number (enables bulletin instructions)"),
       peer_count: z.number().optional().describe("Number of peer agents in the wave"),
     },
@@ -415,20 +382,6 @@ server.registerTool(
   },
   async (input) => {
     const result = await updateBoard(input);
-    return jsonResponse(result);
-  }
-);
-
-server.registerTool(
-  "list_overlays",
-  {
-    description: "List available role overlays. Overlays are expertise lenses injected into agent spawn prompts. Optionally filter by target agent.",
-    inputSchema: {
-      agent: z.string().optional().describe("Filter overlays applicable to a specific agent"),
-    },
-  },
-  async (input) => {
-    const result = await listOverlays(input, projectDir);
     return jsonResponse(result);
   }
 );
@@ -525,7 +478,6 @@ server.registerTool(
       variables: z.record(z.string(), z.string()),
       items: z.array(z.any()).optional(),
       role: z.string().optional(),
-      overlays: z.array(z.string()).optional().describe("Role overlay names to inject"),
       wave: z.number().optional().describe("Current wave number (enables bulletin instructions)"),
       peer_count: z.number().optional().describe("Number of peer agents in the wave"),
     },

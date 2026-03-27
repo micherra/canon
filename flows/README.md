@@ -315,6 +315,6 @@ For the complete field reference — including all state fields, transition cond
 
 ## Creating Flows
 
-Use the `/canon:create-flow` command to scaffold a new flow interactively, or create a `.md` file in `flows/` manually following the format above.
+To create a new flow, create a `.md` file in `flows/` manually following the format above.
 
 To validate an existing flow (fragment resolution, state reachability, schema correctness), use the `check` flow or review `SCHEMA.md` for the expected format.

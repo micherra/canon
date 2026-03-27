@@ -9,7 +9,6 @@
  * - Cluster item shape matches { cluster_key, files, file_count }
  * - Template paths are applied to every cluster prompt
  * - Role substitution still works on fanned-out single prompts
- * - Overlay injection applies to all fanned-out prompts
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -260,39 +259,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
     }
   });
 
-  it("overlay injection applies to all fanned-out prompts", async () => {
-    const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
-
-    const flow = makeSingleReviewFlow();
-
-    // Supply a pre-loaded overlay that matches the reviewer agent
-    const loadedOverlays = [
-      {
-        name: "security",
-        description: "Security review overlay",
-        applies_to: ["canon-reviewer"],
-        priority: 100,
-        body: "## Security Overlay\nLook for vulnerabilities.",
-      },
-    ];
-
-    const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: {},
-      project_dir: workspace,
-      overlays: ["security"],
-      loaded_overlays: loadedOverlays,
-    });
-
-    expect(result.prompts).toHaveLength(sampleClusters.length);
-    for (const entry of result.prompts) {
-      expect(entry.prompt).toContain("Security Overlay");
-    }
-  });
 });
 
 // ---------------------------------------------------------------------------
