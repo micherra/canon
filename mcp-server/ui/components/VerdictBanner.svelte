@@ -26,7 +26,7 @@
 
   const accentColor = $derived(VERDICT_COLORS[verdict] ?? "#888888");
 
-  const headline = $derived(() => {
+  const headline = $derived.by(() => {
     const filePart =
       fileCount === 0
         ? "No files changed"
@@ -55,7 +55,7 @@
   style:--accent={accentColor}
 >
   <span class="verdict-badge">{verdict}</span>
-  <span class="headline">{headline()}</span>
+  <span class="headline">{headline}</span>
 </div>
 
 <style>

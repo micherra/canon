@@ -177,7 +177,12 @@ export async function enterAndPrepareState(
     for (const name of names) {
       // Check min_waves threshold before resolving -- skip consultation if
       // wave_total is known and below the fragment's minimum.
-      // Fail-open: if wave_total is not yet set, do NOT skip.
+      // Fail-open: if wave_total is not yet set, do NOT skip. Running an extra
+      // consultation is low-risk and harmless; skipping it prematurely would
+      // miss needed input that the consultation is designed to gather. The
+      // exception to fail-closed applies here because the downside of acting
+      // (running an unneeded consultation) is far lower than the downside of
+      // not acting (silently omitting a required consultation prompt).
       const fragment = flow.consultations?.[name];
       if (fragment?.min_waves != null) {
         const waveTotal = enteredBoard.states[state_id]?.wave_total;

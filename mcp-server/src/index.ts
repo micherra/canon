@@ -40,6 +40,7 @@ import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
 
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
+import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
 
 // Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
 // Falls back to cwd which is typically set by Claude Code to the user's project root.
@@ -56,6 +57,9 @@ const server = new McpServer({
   name: "canon",
   version: "0.1.0",
 });
+
+// Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
+installFuzzyValidation(server);
 
 /** Standard JSON response wrapper for MCP tool results. */
 function jsonResponse(result: unknown) {
