@@ -134,6 +134,29 @@ describe("evaluateSkipWhen — auto_approved", () => {
     const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
     expect(result.skip).toBe(false);
   });
+
+  // -------------------------------------------------------------------------
+  // Truthy non-boolean values — strict === true check (declared known gap)
+  // -------------------------------------------------------------------------
+
+  it("does not skip when board.metadata.auto_approve is the string 'true' (strict equality)", async () => {
+    // Implementation uses === true so non-boolean truthy values should NOT skip
+    const board = makeBoard({ metadata: { auto_approve: "true" } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("does not skip when board.metadata.auto_approve is 1 (numeric truthy)", async () => {
+    const board = makeBoard({ metadata: { auto_approve: 1 } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("does not skip when board.metadata.auto_approve is an empty object (truthy)", async () => {
+    const board = makeBoard({ metadata: { auto_approve: {} } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
