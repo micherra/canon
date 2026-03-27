@@ -8,7 +8,7 @@ progress: ${WORKSPACE}/progress.md
 includes:
   - fragment: context-sync
     with:
-      next: test
+      next: verify
 
   - fragment: user-checkpoint
     with:
@@ -20,9 +20,10 @@ includes:
   - fragment: early-scan
   - fragment: impl-handoff
 
-  - fragment: test-fix-loop
+  - fragment: verify-fix-loop
     with:
       after_all_passing: security
+      role: test-writer
 
   - fragment: security-scan
     with:

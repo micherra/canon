@@ -6,6 +6,7 @@ params:
   after_all_passing: ~
   role: verify
   max_iterations: 2
+  write_tests: false
 
 states:
   verify:
@@ -33,7 +34,7 @@ states:
 ## Spawn Instructions
 
 ### verify
-Run the full test suite to verify implementation correctness. Check ${WORKSPACE}/plans/${slug}/*-SUMMARY.md for what changed. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Report all_passing or implementation_issue.
+Run the full test suite to verify implementation correctness. Check ${WORKSPACE}/plans/${slug}/*-SUMMARY.md for what changed. If your role includes test-writing, also write integration tests and fill coverage gaps starting with Coverage Notes from summaries. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/test-report.md. Report all_passing or implementation_issue.
 
 ${progress}
 

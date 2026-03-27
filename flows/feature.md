@@ -13,11 +13,12 @@ includes:
 
   - fragment: context-sync
     with:
-      next: test
+      next: verify
 
-  - fragment: test-fix-loop
+  - fragment: verify-fix-loop
     with:
       after_all_passing: review
+      role: test-writer
 
   - fragment: review-fix-loop
     with:

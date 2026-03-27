@@ -674,7 +674,7 @@ Fragments can contain internal loops — cycles between their own states. The ho
 - **Internal loop**: Hardwired transitions between fragment states (e.g., `fix-violations → review`).
 - **Convergence**: `max_iterations` and `stuck_when` live inside the fragment, keeping loop control self-contained.
 
-Example: `test-fix-loop` contains `test → fix-impl → context-sync-fix → test`. The host flow provides `after_all_passing` as the exit. The loop runs internally until tests pass or `max_iterations` is reached.
+Example: `verify-fix-loop` contains `verify → fix-impl → verify`. The host flow provides `after_all_passing` as the exit. The loop runs internally until tests pass or `max_iterations` is reached.
 
 ### Resolution Algorithm
 
@@ -703,8 +703,7 @@ The orchestrator resolves fragments during flow template loading (Phase 1, Step 
 | Fragment | States | Params | Description |
 |----------|--------|--------|-------------|
 | `implement-verify` | implement, verify | `after_all_passing` (required) | Direct-mode implement then verify — fast path for small changes |
-| `verify-fix-loop` | verify, fix-impl | `after_all_passing` (required), `role` (default: verify), `max_iterations` (default: 2) | Verify tests, fix impl bugs, loop until passing |
-| `test-fix-loop` | test, fix-impl, context-sync-fix | `after_all_passing` (required), `max_iterations` (default: 2) | Test, fix bugs, sync docs, loop until passing |
+| `verify-fix-loop` | verify, fix-impl | `after_all_passing` (required), `role` (default: verify), `max_iterations` (default: 2), `write_tests` (default: false) | Verify tests (or write+run when `role: test-writer`), fix impl bugs, loop until passing |
 | `security-scan` | security, fix-security | `after_done` (required), `on_critical` (default: hitl), `fix_max_iterations` (default: 2) | Security scan with optional fix loop for critical findings |
 | `user-checkpoint` | checkpoint | `after_approved`, `on_revise` (required) | Present summary for user approval; stores revision notes on revise |
 | `review-fix-loop` | review, fix-violations | `after_clean`, `after_warning` (required), `max_iterations` (default: 3) | Review code, fix violations, loop until clean |

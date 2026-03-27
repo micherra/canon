@@ -33,8 +33,7 @@ Fragments are reusable state groups stored in `fragments/`. A flow includes them
 | Fragment | Purpose |
 |----------|---------|
 | `implement-verify` | Direct-mode implement then lightweight test verify — fast path for small changes with no plan file |
-| `verify-fix-loop` | Run the test suite, fix implementation bugs, loop until all tests pass |
-| `test-fix-loop` | Run tests (including writing new tests), fix implementation bugs, sync docs after fix |
+| `verify-fix-loop` | Run tests (and optionally write new ones when `role: test-writer`), fix implementation bugs, loop until all tests pass |
 | `review-fix-loop` | Review code against principles, fix violations via parallel-per fixer, loop until clean. Persists review results to `reviews.jsonl` via drift effects. |
 | `context-sync` | Sync documentation after implementation or fix changes (skipped if no contract changes) |
 | `security-scan` | Security scan with optional fix loop for critical findings |
