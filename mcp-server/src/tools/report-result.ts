@@ -11,6 +11,7 @@ import {
   buildHistoryEntry,
   isStuck,
   aggregateParallelPerResults,
+  aggregateReviewResults,
 } from "../orchestration/transitions.ts";
 import { appendFile } from "fs/promises";
 import { join } from "path";
@@ -125,7 +126,12 @@ async function reportResultLocked(
 
   // Aggregate parallel-per results if present
   if (input.parallel_results && input.parallel_results.length > 0) {
-    const aggregated = aggregateParallelPerResults(input.parallel_results);
+    const isReviewAggregation = input.parallel_results.every(
+      r => ["clean", "warning", "blocking"].includes(r.status.toLowerCase())
+    );
+    const aggregated = isReviewAggregation
+      ? aggregateReviewResults(input.parallel_results)
+      : aggregateParallelPerResults(input.parallel_results);
     condition = aggregated.condition; // Override condition with aggregated result
 
     // Store parallel_results on board state entry

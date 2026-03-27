@@ -65,6 +65,7 @@ export interface EnterAndPrepareStateResult {
   warnings?: string[];
   clusters?: FileCluster[];
   timeout_ms?: number;
+  fanned_out?: boolean;
 
   // Consultation prompts to spawn (only when state has consultations at the current breakpoint)
   consultation_prompts?: ConsultationPromptEntry[];
@@ -242,6 +243,7 @@ export async function enterAndPrepareState(
     ...(spawnResult.warnings ? { warnings: spawnResult.warnings } : {}),
     ...(spawnResult.clusters ? { clusters: spawnResult.clusters } : {}),
     ...(spawnResult.timeout_ms != null ? { timeout_ms: spawnResult.timeout_ms } : {}),
+    ...(spawnResult.fanned_out ? { fanned_out: true } : {}),
     ...(consultationPrompts.length > 0 ? { consultation_prompts: consultationPrompts } : {}),
     board: enteredBoard,
   };

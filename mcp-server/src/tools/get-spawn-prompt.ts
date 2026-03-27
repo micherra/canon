@@ -54,6 +54,7 @@ interface SpawnPromptResult {
   warnings?: string[];
   clusters?: FileCluster[];
   timeout_ms?: number;
+  fanned_out?: boolean;
 }
 
 /**
@@ -251,7 +252,20 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
   switch (state.type) {
     case "single": {
       const agent = state.agent ?? "unknown";
-      prompts.push({ agent, prompt: basePrompt, template_paths: paths });
+      if (clusters && clusters.length > 0) {
+        // Fan out: one prompt per cluster, scoped to cluster files
+        for (const cluster of clusters) {
+          const clusterItem: TaskItem = {
+            cluster_key: cluster.key,
+            files: cluster.files.join(", "),
+            file_count: cluster.files.length,
+          };
+          const prompt = substituteItem(basePrompt, clusterItem);
+          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
+        }
+      } else {
+        prompts.push({ agent, prompt: basePrompt, template_paths: paths });
+      }
       break;
     }
 
@@ -370,12 +384,14 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     }
   }
 
+  const fanned_out = state.type === "single" && clusters != null && clusters.length > 0;
   return {
     prompts,
     state_type: state.type,
     ...(warnings.length > 0 ? { warnings } : {}),
     ...(clusters ? { clusters } : {}),
     ...(timeout_ms != null ? { timeout_ms } : {}),
+    ...(fanned_out ? { fanned_out: true } : {}),
   };
 }
 

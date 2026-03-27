@@ -141,6 +141,37 @@ export interface ParallelPerResult {
   artifacts?: string[];
 }
 
+const REVIEW_SEVERITY_ORDER: Record<string, number> = {
+  blocking: 3,
+  warning: 2,
+  clean: 1,
+};
+
+/**
+ * Aggregate review verdict results using severity ordering: BLOCKING > WARNING > CLEAN.
+ * The most severe verdict across all cluster results becomes the aggregated condition.
+ * Always returns an empty cannotFixItems list (not applicable for review verdicts).
+ */
+export function aggregateReviewResults(
+  results: ParallelPerResult[],
+): { condition: string; cannotFixItems: string[] } {
+  if (results.length === 0) return { condition: "clean", cannotFixItems: [] };
+
+  let maxSeverity = 0;
+  let maxCondition = "clean";
+
+  for (const r of results) {
+    const normalized = r.status.toLowerCase();
+    const severity = REVIEW_SEVERITY_ORDER[normalized] ?? 0;
+    if (severity > maxSeverity) {
+      maxSeverity = severity;
+      maxCondition = normalized;
+    }
+  }
+
+  return { condition: maxCondition, cannotFixItems: [] };
+}
+
 /**
  * Aggregate results from a parallel-per execution into a single
  * condition and a list of items that could not be fixed.
