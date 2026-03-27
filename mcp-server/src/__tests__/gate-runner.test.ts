@@ -259,29 +259,16 @@ describe("normalizeGates — no gates declared", () => {
     expect(result.source).toBe("none");
   });
 
-  it("returns 'none' when boardState is undefined", () => {
+  it.each([
+    ["boardState is undefined", undefined],
+    ["boardState has no discovered_gates field", makeBoardState(undefined)],
+    ["boardState has empty discovered_gates array", makeBoardState([])],
+  ])("returns 'none' when %s", (_label, boardState) => {
     const flow = makeFlow();
     const stateDef = makeStateDef();
-    const result = normalizeGates(stateDef, flow, "/project", undefined);
-
-    expect(result.source).toBe("none");
-  });
-
-  it("returns 'none' when boardState has empty discovered_gates array", () => {
-    const flow = makeFlow();
-    const stateDef = makeStateDef();
-    const boardState = makeBoardState([]);
     const result = normalizeGates(stateDef, flow, "/project", boardState);
 
-    expect(result.source).toBe("none");
-  });
-
-  it("returns 'none' when boardState has no discovered_gates field", () => {
-    const flow = makeFlow();
-    const stateDef = makeStateDef();
-    const boardState = makeBoardState(undefined);
-    const result = normalizeGates(stateDef, flow, "/project", boardState);
-
+    expect(result.commands).toEqual([]);
     expect(result.source).toBe("none");
   });
 });

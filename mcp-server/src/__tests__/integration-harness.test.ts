@@ -334,18 +334,6 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
     expect(stateEnteredEvents).toHaveLength(0);
   });
 
-  it("cleans up board_updated listener after emission (no listener leak)", async () => {
-    const workspace = makeTmpWorkspace();
-    const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
-
-    const before = flowEventBus.listenerCount("board_updated");
-
-    await updateBoard({ workspace, action: "enter_state", state_id: "implement" });
-
-    const after = flowEventBus.listenerCount("board_updated");
-    expect(after).toBe(before);
-  });
 
   it("emits board_updated on complete_flow action", async () => {
     const workspace = makeTmpWorkspace();

@@ -98,7 +98,7 @@ describe("reportInputSchema — review violations with message field", () => {
     }
   });
 
-  it("accepts empty violations array (backward compat)", () => {
+  it("accepts empty violations array (backward compat) and produces valid parsed structure", () => {
     const input = {
       ...baseReviewInput,
       violations: [],
@@ -106,6 +106,12 @@ describe("reportInputSchema — review violations with message field", () => {
 
     const result = reportInputSchema.safeParse(input);
     expect(result.success).toBe(true);
+    if (result.success && result.data.type === "review") {
+      expect(result.data.violations).toEqual([]);
+      expect(result.data.files).toEqual(["src/index.ts", "src/utils/config.ts"]);
+      expect(result.data.verdict).toBe("CLEAN");
+      expect(result.data.score.rules.passed).toBe(3);
+    }
   });
 
   it("rejects non-string message field", () => {

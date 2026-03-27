@@ -200,13 +200,23 @@ describe("codebaseGraph", () => {
   });
 
   it("falls back to default layers when layers are missing from config", async () => {
-    // Previously this would throw — now it should produce output using default layer mappings
+    // When config has no layers key, codebaseGraph must not throw and must use
+    // the DEFAULT_LAYER_MAPPINGS (api, ui, domain, data, infra, shared).
     await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ source_dirs: ["src"] }));
+    // Add a file in src/api — default mappings assign "api" layer to "api" directories.
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
+
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
-    // Should succeed and produce a graph (possibly with default layer inference)
-    expect(result).toBeDefined();
-    expect(Array.isArray(result.nodes)).toBe(true);
-    expect(Array.isArray(result.edges)).toBe(true);
+
+    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes[0].id).toBe("src/api/handler.ts");
+    // Default layer inference assigns "api" to files under api/
+    expect(result.nodes[0].layer).toBe("api");
+    expect(result.edges).toHaveLength(0);
+    // layers summary reflects the default inference
+    expect(result.layers).toHaveLength(1);
+    expect(result.layers[0].name).toBe("api");
+    expect(result.layers[0].file_count).toBe(1);
   });
 
   it("merges inferred composition edges from llm-style references", async () => {

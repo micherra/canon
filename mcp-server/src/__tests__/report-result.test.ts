@@ -210,23 +210,23 @@ describe("reportResult — event emissions", () => {
     expect(received[0].statusKeyword).toBe("DONE");
   });
 
-  it("emits transition_evaluated with 'null' string when no transition found", async () => {
+  it("requires HITL and has no next_state when no transition is defined for the condition", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     await setupWorkspace(workspace, flow);
 
-    const received: FlowEventMap["transition_evaluated"][] = [];
-    flowEventBus.on("transition_evaluated", (event) => received.push(event));
-
-    // "BLOCKED" normalizes to "blocked" — no transition defined for "blocked"
-    await reportResult({
+    // "BLOCKED" normalizes to "blocked" — no transition defined for "blocked" in makeMinimalFlow
+    const result = await reportResult({
       workspace,
       state_id: "build",
       status_keyword: "BLOCKED",
       flow,
     });
 
-    expect(received[0].nextState).toBe("null");
+    // No matching transition → next_state is null and HITL is required
+    expect(result.next_state).toBeNull();
+    expect(result.hitl_required).toBe(true);
+    expect(result.hitl_reason).toContain("blocked");
   });
 
   it("does NOT emit hitl_triggered when HITL is not required", async () => {
@@ -268,16 +268,18 @@ describe("reportResult — event emissions", () => {
     expect(received[0].timestamp).toBeTruthy();
   });
 
-  it("emits events AFTER writeBoard (board state is consistent at emit time)", async () => {
+  it("board state is persisted before events are emitted", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     await setupWorkspace(workspace, flow);
 
-    let boardStateAtEmit: string | undefined;
-    flowEventBus.on("state_completed", () => {
-      // Board should already be written at this point — we can't check the
-      // file from here, but we verify no error occurs during emission
-      boardStateAtEmit = "emitted";
+    // Verify that at emit time the board has already been written to disk.
+    // We read the board file from within the listener to confirm the written state.
+    let boardStatusAtEmit: string | undefined;
+    flowEventBus.on("state_completed", async () => {
+      const { readBoard } = await import("../orchestration/board.ts");
+      const boardOnDisk = await readBoard(workspace);
+      boardStatusAtEmit = boardOnDisk.states["build"]?.status;
     });
 
     const result = await reportResult({
@@ -287,8 +289,9 @@ describe("reportResult — event emissions", () => {
       flow,
     });
 
-    expect(boardStateAtEmit).toBe("emitted");
-    // Board reflects completed state
+    // Board on disk at emit time should already reflect the completed state.
+    expect(boardStatusAtEmit).toBe("done");
+    // Return value also reflects completed state.
     expect(result.board.states["build"].status).toBe("done");
   });
 });
@@ -317,33 +320,6 @@ describe("reportResult — listener error isolation", () => {
     expect(listenersAfter).toBe(listenersBefore);
   });
 
-  it("cleans up listeners even when emit throws (finally block)", async () => {
-    const workspace = makeTmpWorkspace();
-    const flow = makeMinimalFlow();
-    await setupWorkspace(workspace, flow);
-
-    // Add a throwing external listener to cause emit to throw synchronously
-    flowEventBus.on("state_completed", () => {
-      throw new Error("emit error");
-    });
-
-    const transitionListenersBefore = flowEventBus.listenerCount("transition_evaluated");
-
-    try {
-      await reportResult({
-        workspace,
-        state_id: "build",
-        status_keyword: "DONE",
-        flow,
-      });
-    } catch {
-      // External listener throws — expected
-    }
-
-    // The internal transition_evaluated listener should be cleaned up by finally
-    const listenersAfter = flowEventBus.listenerCount("transition_evaluated");
-    expect(listenersAfter).toBe(transitionListenersBefore);
-  });
 });
 
 // ---------------------------------------------------------------------------

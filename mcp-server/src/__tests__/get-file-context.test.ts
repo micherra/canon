@@ -449,18 +449,29 @@ describe("getFileContext", () => {
       expect(result.shape.description).toBeTruthy();
     });
 
-    it("always returns a shape with label and description fields", async () => {
+    it("returns Leaf shape with correct description when no graph data (in_degree=0 default)", async () => {
+      // When graph data exists and shows in_degree=0, shape must be "Leaf" with specific description.
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
       );
+      // Write graph data showing in_degree=0 (nothing imports handler.ts)
+      const nodes = [
+        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
+        { id: "src/utils/helper.ts", layer: "utils", violation_count: 0, changed: false },
+      ];
+      const edges = [
+        { source: "src/api/handler.ts", target: "src/utils/helper.ts" },
+      ];
+      await writeFile(
+        join(tmpDir, ".canon", "graph-data.json"),
+        JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
+      );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
 
-      expect(typeof result.shape.label).toBe("string");
-      expect(typeof result.shape.description).toBe("string");
-      expect(result.shape.label.length).toBeGreaterThan(0);
-      expect(result.shape.description.length).toBeGreaterThan(0);
+      expect(result.shape.label).toBe("Leaf");
+      expect(result.shape.description).toBe("Nothing depends on this. Safe to change.");
     });
 
     it("returns Sink shape for high in_degree, low out_degree node", async () => {

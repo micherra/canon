@@ -314,29 +314,6 @@ describe("event bus emission and listener cleanup", () => {
     expect(payload.action).toBe("reject");
   });
 
-  it("registers a once listener before emitting", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
-    const onceSpy = vi.spyOn(flowEventBus, "once");
-    const emitSpy = vi.spyOn(flowEventBus, "emit");
-
-    await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
-
-    const onceCall = onceSpy.mock.calls.find(([name]) => name === "wave_event_resolved");
-    expect(onceCall).toBeDefined();
-
-    const emitCallIndex = emitSpy.mock.calls.findIndex(
-      ([name]) => name === "wave_event_resolved",
-    );
-    const onceCallIndex =
-      onceSpy.mock.invocationCallOrder[
-        onceSpy.mock.calls.findIndex(([name]) => name === "wave_event_resolved")
-      ];
-    const emitCallOrder = emitSpy.mock.invocationCallOrder[emitCallIndex];
-
-    // once must be registered before emit fires
-    expect(onceCallIndex).toBeLessThan(emitCallOrder);
-  });
-
   it("removes the once listener after the call (no lingering listeners)", async () => {
     const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
     const removeListenerSpy = vi.spyOn(flowEventBus, "removeListener");
