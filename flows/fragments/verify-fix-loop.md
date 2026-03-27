@@ -6,7 +6,6 @@ params:
   after_all_passing: ~
   role: verify
   max_iterations: 2
-  write_tests: false
 
 states:
   verify:
