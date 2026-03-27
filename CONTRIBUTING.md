@@ -36,7 +36,7 @@ canon/
 ├── agents/                Specialist agent definitions (13 agents + orchestrator)
 ├── hooks/                 Pre/post tool-use interceptor scripts
 ├── commands/              CLI command definitions
-├── skills/                Skill definitions for Claude Code / Cursor integration
+├── skills/                Skill definitions for Claude Code integration
 └── .canon/                Runtime data (workspaces, drift JSONL, config)
 ```
 

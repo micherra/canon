@@ -43,25 +43,6 @@ We also recommend enabling tool search to reduce context usage from MCP tools:
 }
 ```
 
-## Cursor-only Setup
-
-Canon's full build and review pipeline can run in Cursor without installing the Claude Code plugin.
-
-1. In your project repo, run:
-```bash
-npx -y canon-cursor
-```
-This installs Cursor configuration and the Cursor-side runner into the repo (including `.cursor/mcp.json` and `AGENTS.md`).
-
-2. Restart Cursor.
-
-3. Trigger Canon in chat, for example:
-- `Review my changes`
-- `Security scan for vulnerabilities`
-- `Add an auth-protected dashboard with Zod validation`
-
-On first use, Cursor will start Canon's MCP server and auto-run `npm install` inside `mcp-server/` if dependencies are missing.
-
 ## Quick Start
 
 ```bash

@@ -1,0 +1,29 @@
+{
+  "source_dirs": [
+    "mcp-server/src",
+    "mcp-server/ui",
+    "agents",
+    "commands",
+    "flows",
+    "hooks",
+    "templates"
+  ],
+  "principle_dirs": [".canon/principles"],
+  "layers": {
+    "mcp-server": ["mcp-server/src/**"],
+    "dashboard-ui": ["mcp-server/ui/**"],
+    "agents": ["agents/**"],
+    "commands": ["commands/**"],
+    "flows": ["flows/**"],
+    "templates": ["templates/**"],
+    "principles": ["principles/**"]
+  },
+  "review": {
+    "max_principles_per_review": 10,
+    "include_honored_in_output": true
+  },
+  "hook": {
+    "pre_commit_severity": "rule",
+    "warn_on_opinions": true
+  }
+}
