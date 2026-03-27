@@ -200,7 +200,7 @@ Loop until the current state is `terminal`:
 
 Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells you how:
 
-**`single`**: Spawn one sub-agent. If the state has `large_diff_threshold`, check diff size first — fan out by directory if exceeded.
+**`single`**: Spawn one sub-agent. When the spawn result has `fanned_out: true` (automatic when `large_diff_threshold` is exceeded), spawn all prompts concurrently — same as `parallel`. Collect all results and pass as `parallel_results` to `report_result`. The tool auto-detects review-type statuses (clean/warning/blocking) and aggregates by severity: the most severe verdict across all clusters becomes the final verdict.
 
 **`parallel`**: Spawn all prompts concurrently. Collect all results before transitioning.
 
