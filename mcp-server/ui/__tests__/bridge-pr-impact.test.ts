@@ -65,8 +65,11 @@ describe("bridge.callTool()", () => {
       status: "ok",
       prep: {
         files: [],
+        impact_files: [],
         layers: [],
         total_files: 0,
+        total_violations: 0,
+        net_new_files: 0,
         incremental: false,
         diff_command: "git diff main",
         narrative: "No changes found.",
@@ -74,7 +77,6 @@ describe("bridge.callTool()", () => {
       },
       hotspots: [],
       subgraph: { nodes: [], edges: [], layers: [] },
-      decisions: [],
       has_review: false,
     };
     mockCallServerTool.mockResolvedValue(makeToolResult(payload));
@@ -93,9 +95,12 @@ describe("bridge.callTool()", () => {
     const payload = {
       status: "ok",
       prep: {
-        files: [{ path: "src/a.ts", layer: "tools", status: "modified", bucket: "low-risk", reason: "No issues" }],
+        files: [{ path: "src/a.ts", layer: "tools", status: "modified" }],
+        impact_files: [],
         layers: [{ name: "tools", file_count: 1 }],
         total_files: 1,
+        total_violations: 0,
+        net_new_files: 0,
         incremental: false,
         diff_command: "git diff main",
         narrative: "1 file changed.",
@@ -103,7 +108,6 @@ describe("bridge.callTool()", () => {
       },
       hotspots: [],
       subgraph: { nodes: [], edges: [], layers: [] },
-      decisions: [],
       has_review: false,
       empty_state: "No stored review — run the Canon reviewer first",
     };

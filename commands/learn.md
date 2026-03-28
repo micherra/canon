@@ -1,34 +1,30 @@
 ---
 description: Analyze codebase and drift data to suggest principle and convention improvements
-argument-hint: [--patterns] [--drift] [--conventions] [--decisions] [--graduation] [--staleness] [--apply]
+argument-hint: [--drift] [--conventions] [--graduation] [--staleness] [--apply]
 allowed-tools: [Bash, Read, Write, Edit, Glob, Grep, Agent]
 model: sonnet
 ---
 
-Analyze accumulated review data, decision logs, task conventions, and codebase patterns to suggest improvements to Canon principles and conventions. This is Canon's learning loop — it turns enforcement data into actionable refinements.
+Analyze accumulated review data and task conventions to suggest improvements to Canon principles and conventions. This is Canon's learning loop — it turns enforcement data into actionable refinements.
 
 ## Instructions
 
 ### Step 1: Parse arguments
 
 Extract flags from ${ARGUMENTS}:
-- `--patterns`: Only run codebase pattern inference
 - `--drift`: Only run drift-driven severity analysis (includes promotions AND demotions)
 - `--conventions`: Only run task convention promotion analysis
-- `--decisions`: Only run decision cluster analysis
 - `--graduation`: Only run convention-to-principle graduation analysis
 - `--staleness`: Only run convention staleness detection
 - `--apply`: After generating the report, walk through each suggestion interactively
-- No dimension flags (default): Run all six dimensions
+- No dimension flags (default): Run all four dimensions
 
-Multiple flags can be combined: `--drift --decisions --apply`
+Multiple flags can be combined: `--drift --apply`
 
 ### Step 2: Check for data
 
 Check what data sources are available. Use Glob and Read to count lines in:
 - `.canon/reviews.jsonl` — review count
-- `.canon/decisions.jsonl` — decision count
-- `.canon/patterns.jsonl` — agent-reported patterns
 - `.canon/learning.jsonl` — previous learning runs
 - `.canon/plans/*/CONVENTIONS.md` — task convention files
 - `.canon/CONVENTIONS.md` — project conventions
@@ -36,7 +32,7 @@ Check what data sources are available. Use Glob and Read to count lines in:
 
 Also glob for source files: `**/*.{ts,tsx,js,jsx,py,go,rs}` (excluding `node_modules/`, `.git/`, `.canon/`, `dist/`, `build/`).
 
-**Early exit**: If `reviews.jsonl` has fewer than 10 lines AND the user didn't pass `--patterns`, `--graduation`, or `--staleness` (which only need the codebase), tell the user:
+**Early exit**: If `reviews.jsonl` has fewer than 10 lines AND the user didn't pass `--graduation` or `--staleness` (which only need the codebase), tell the user:
 
 "Not enough data yet — Canon needs at least 10 code reviews to generate meaningful learning suggestions. You have {N} so far. Run code reviews on a few more files, then come back."
 
@@ -46,24 +42,21 @@ Stop here. Do not spawn the learner.
 
 | Dimension | Minimum data needed |
 |-----------|-------------------|
-| patterns | >= 5 source files |
 | drift | >= 10 reviews (15 for rule demotions) |
 | conventions | >= 3 task convention files |
-| decisions | >= 3 decisions for any single principle |
 | graduation | >= 1 convention in CONVENTIONS.md + >= 5 source files |
 | staleness | >= 1 convention in CONVENTIONS.md + >= 5 source files |
 
-If the user only asked for `--patterns`, `--graduation`, or `--staleness`, the codebase itself is sufficient — proceed even without drift data.
+If the user only asked for `--graduation` or `--staleness`, the codebase itself is sufficient — proceed even without drift data.
 
 ### Step 3: Spawn the canon-learner agent
 
 Launch the canon-learner agent. Provide it with:
-- Which dimensions to analyze (based on flags or all six)
+- Which dimensions to analyze (based on flags or all four)
 - Data availability summary (all counts from Step 2)
 - Path to project principles directory (`.canon/principles/` or `${CLAUDE_PLUGIN_ROOT}/principles/`)
 - Path to project conventions (`.canon/CONVENTIONS.md`)
 - Path to learning history (`.canon/learning.jsonl`)
-- Path to agent-reported patterns (`.canon/patterns.jsonl`)
 - Project root directory
 
 The agent will:
@@ -90,7 +83,7 @@ If `--apply` was NOT passed, show action hints after the report:
 - Log a decision: Use the `report` MCP tool (type=decision)
 
 **To re-run specific dimensions:**
-`/canon:learn --drift` | `--patterns` | `--conventions` | `--decisions` | `--graduation` | `--staleness`
+`/canon:learn --drift` | `--conventions` | `--graduation` | `--staleness`
 ```
 
 ### Step 5: Interactive apply (only if --apply)

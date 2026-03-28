@@ -1,6 +1,6 @@
 # Canon MCP Server
 
-TypeScript MCP server providing 27 tools for principle enforcement and build orchestration. This is the runtime core of Canon — it powers principle matching, drift tracking, codebase graph analysis, and the flow state machine that drives multi-agent builds.
+TypeScript MCP server providing 24 tools for principle enforcement and build orchestration. This is the runtime core of Canon — it powers principle matching, drift tracking, codebase graph analysis, and the flow state machine that drives multi-agent builds.
 
 This document is for contributors and power users. The main project README links here for internals.
 
@@ -10,7 +10,7 @@ ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for sch
 
 ```
 src/
-├── index.ts              # Entry point — registers all 27 MCP tools
+├── index.ts              # Entry point — registers all MCP tools
 ├── parser.ts             # Frontmatter parsing for principle markdown files
 ├── matcher.ts            # Principle matching by layer, file pattern, and tags
 ├── schema.ts             # Zod schemas for the report tool input
@@ -27,7 +27,7 @@ src/
 
 **`tools/`** — One file per MCP tool. Each tool file exports a single function that takes validated input and returns a plain object. `index.ts` registers them all with `server.registerTool()` and wraps results in a standard JSON response envelope.
 
-**`drift/`** — JSONL-backed persistence for the three observation types: decisions (intentional deviations), patterns (observed code conventions), and PR reviews. `jsonl-store.ts` handles append and rotation at 500 entries. `analyzer.ts` and `reporter.ts` compute drift statistics and trend analysis from the raw JSONL data.
+**`drift/`** — JSONL-backed persistence for reviews. `jsonl-store.ts` handles append and rotation at 500 entries. `analyzer.ts` and `reporter.ts` compute drift statistics and trend analysis from the raw JSONL data.
 
 **`graph/`** — Dependency graph scanner for JS/TS/Python source files. `scanner.ts` walks the directory tree. `import-parser.ts` and `export-parser.ts` extract dependency edges. `degree.ts` computes in-degree and out-degree for each node. `priority.ts` scores files by graph centrality (used to prioritize review effort). `insights.ts` detects cycles, hub files, and orphaned modules.
 
@@ -40,7 +40,7 @@ src/
 - `transitions.ts` — Evaluates transition conditions and selects the next state based on agent status keywords
 - `convergence.ts` — Tracks iteration counts to enforce loop limits and detect stuck agents
 - `wave-briefing.ts` — Assembles per-agent context packages for parallel wave execution
-- `effects.ts` — Executes declarative drift effects after state completion: parses agent artifacts (REVIEW.md, *-SUMMARY.md) and persists to JSONL drift stores. Activated via `effects:` declarations in flow/fragment YAML (e.g., `persist_review` on review states, `persist_decisions` on implementation states)
+- `effects.ts` — Executes declarative drift effects after state completion: parses agent artifacts (REVIEW.md) and persists to JSONL drift stores. Activated via `effects:` declarations in flow/fragment YAML (e.g., `persist_review` on review states)
 
 **`utils/`** — Shared helpers: `atomic-write.ts` (write-then-rename to prevent corruption), `config.ts` (loads `.canon/config.json` and builds layer inferrers), `paths.ts` (workspace and CANON_DIR resolution), `id.ts` (ID generation for drift records).
 
@@ -50,7 +50,7 @@ src/
 
 ## Tools
 
-### Principle and review tools (13)
+### Principle and review tools (10)
 
 | Tool | Description |
 |------|-------------|
@@ -58,11 +58,8 @@ src/
 | `list_principles` | Browse the full Canon principle index. Returns metadata only (no full body) for efficient browsing. |
 | `review_code` | Returns Canon principles relevant to a file for review. The calling agent evaluates compliance — this tool provides the matched principles and code. |
 | `get_compliance` | Returns compliance stats for a specific Canon principle. Shows violation counts, compliance rate, and trend. |
-| `report` | Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop. |
+| `report` | Log a Canon observation: a code review result. Feeds into drift tracking and the learning loop. |
 | `get_drift_report` | Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, and recommendations. |
-| `get_decisions` | Returns intentional deviation decisions grouped by principle, with category counts. |
-| `get_patterns` | Returns observed codebase patterns logged by agents, grouped and deduplicated. |
-| `get_pr_review_data` | Get PR review data — file list, layer grouping, diff command, and graph-aware review priority for a pull request or branch review. |
 | `codebase_graph` | Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to `.canon/graph-data.json`. Returns a compact summary. |
 | `get_file_context` | Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data. |
 | `store_summaries` | Store file summaries to `.canon/summaries.json`. Merges with existing summaries so you can generate them incrementally. |
@@ -82,7 +79,7 @@ src/
 | `init_workspace` | Initialize a Canon workspace for flow execution. Creates workspace directory, `session.json`, `board.json`, and `progress.md`. Resumes from existing board if present. |
 | `update_board` | Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress. |
 | `get_spawn_prompt` | Resolve spawn prompts for a flow state. Substitutes variables, applies templates, reads `progress.md` when the flow declares it, and fans out by state type (single/parallel/wave/parallel-per). |
-| `report_result` | Report an agent's result. Normalizes status, evaluates transitions, updates board state, executes drift effects (persist_decisions, persist_review, persist_patterns), and checks stuck detection. Returns next state and whether HITL is required. |
+| `report_result` | Report an agent's result. Normalizes status, evaluates transitions, updates board state, executes drift effects (persist_review), and checks stuck detection. Returns next state and whether HITL is required. |
 | `check_convergence` | Check whether a state can be re-entered based on iteration limits. Returns iteration count, max, cannot-fix items, and history. |
 | `post_wave_bulletin` | Post a message to the wave bulletin for near-real-time inter-agent communication during parallel wave execution. Implementor agents have direct access to this tool. |
 | `get_wave_bulletin` | Read messages from the wave bulletin. Returns messages posted by other agents in the same wave, optionally filtered by timestamp or type. Used by implementors for real-time coordination. |
@@ -94,10 +91,7 @@ All runtime data lives under `.canon/` in the project root:
 
 | File | Written by | Purpose |
 |------|-----------|---------|
-| `decisions.jsonl` | `report` tool, flow effects | Intentional deviation records |
-| `patterns.jsonl` | `report` tool, flow effects | Observed codebase patterns |
 | `reviews.jsonl` | `report` tool, flow effects | Code review results (violations, scores, verdicts) |
-| `pr-reviews.jsonl` | `store_pr_review` tool | PR-scoped review results |
 | `graph-data.json` | `codebase_graph` tool | Full dependency graph snapshot |
 | `summaries.json` | `store_summaries` tool | File-level summaries |
 | `workspaces/{slug}/board.json` | `init_workspace`, `update_board` | Flow state machine record |

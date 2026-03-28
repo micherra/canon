@@ -41,7 +41,7 @@ CANON_DIR="${MAIN_ROOT:-.}/.canon"
 WARNINGS=()
 
 # Check .jsonl file sizes
-for JSONL_FILE in "${CANON_DIR}/reviews.jsonl" "${CANON_DIR}/decisions.jsonl" "${CANON_DIR}/patterns.jsonl"; do
+for JSONL_FILE in "${CANON_DIR}/reviews.jsonl"; do
   if [[ -f "$JSONL_FILE" ]]; then
     LINE_COUNT=$(wc -l < "$JSONL_FILE" | tr -d ' ')
     if [[ $LINE_COUNT -gt 500 ]]; then

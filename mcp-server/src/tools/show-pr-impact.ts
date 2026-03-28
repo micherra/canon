@@ -6,8 +6,7 @@
  *   2. Latest PR review from DriftStore (optional — impact overlay)
  *   3. Blast radius analysis via analyzeBlastRadius (when KG is available)
  *   4. Subgraph extraction from graph-data.json (filtered to blast radius affected files)
- *   5. Drift decisions cross-referenced with violated principles
- *   6. Risk-ranked hotspot list (blast radius size × severity weight)
+ *   5. Risk-ranked hotspot list (blast radius size × severity weight)
  *
  * Graceful degradation:
  *   - No stored review → prep data always present; review/hotspots/subgraph empty
@@ -109,12 +108,6 @@ export interface PrImpactOutput {
   };
   hotspots: PrImpactHotspot[];
   subgraph: PrImpactSubgraph;
-  decisions: Array<{
-    principle_id: string;
-    file_path: string;
-    justification: string;
-    category?: string;
-  }>;
   empty_state?: string;
 }
 
@@ -132,7 +125,7 @@ export interface PrRecommendation {
 /**
  * Unified output type for show_pr_impact.
  * prep is always present (live diff analysis).
- * review/blastRadius/hotspots/subgraph/decisions are impact layer fields (present when a stored review exists).
+ * review/blastRadius/hotspots/subgraph are impact layer fields (present when a stored review exists).
  */
 export interface UnifiedPrOutput {
   status: "ok" | "no_diff_error";
@@ -148,8 +141,6 @@ export interface UnifiedPrOutput {
   hotspots: PrImpactHotspot[];
   /** Subgraph filtered to changed + affected files — empty when no stored review */
   subgraph: PrImpactSubgraph;
-  /** Decisions cross-referenced with violated principles — empty when no stored review */
-  decisions: PrImpactOutput["decisions"];
   /** Detected subsystems — directories with 3+ added (label: "new") or 3+ deleted (label: "removed") files */
   subsystems: Subsystem[];
   /** Per-file blast radius dep counts — derived from blastRadius.affected; top 15 by dep_count */
@@ -492,7 +483,6 @@ export async function showPrImpact(
       has_review: false,
       hotspots: [],
       subgraph: { nodes: [], edges: [], layers: [] },
-      decisions: [],
       subsystems: [],
       blast_radius_by_file: [],
     };
@@ -566,7 +556,6 @@ export async function showPrImpact(
     blastRadius,
     hotspots,
     subgraph,
-    decisions: [],
     subsystems,
     blast_radius_by_file,
     ...(latestReview.recommendations !== undefined

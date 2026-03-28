@@ -110,7 +110,7 @@ Check if `CLAUDE.md` exists and contains a Canon section.
 
 #### Check 9: Data file integrity
 
-For each `.jsonl` file (`.canon/reviews.jsonl`, `.canon/decisions.jsonl`, `.canon/patterns.jsonl`, `.canon/learning.jsonl`):
+For each `.jsonl` file (`.canon/reviews.jsonl`, `.canon/learning.jsonl`):
 - If it exists, try parsing each line as JSON
 - Flag lines that fail to parse
 

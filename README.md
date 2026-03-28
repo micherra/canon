@@ -179,20 +179,16 @@ Canon learns from your builds. As workflows run, drift data is persisted automat
 
 ```
 reviews.jsonl      — review results (violations, honored, scores, verdict)
-decisions.jsonl    — intentional deviations with justifications
-patterns.jsonl     — agent-observed codebase patterns
 ```
 
-Review results are captured each time a review state completes. Decisions and patterns are extracted from implementation summaries at ship time. No manual logging needed — the data accumulates as you build.
+Review results are captured each time a review state completes. No manual logging needed — the data accumulates as you build.
 
-Run `/canon:learn` to analyze this data across six dimensions:
+Run `/canon:learn` to analyze this data across four dimensions:
 
-1. **Pattern inference** — Find repeated codebase patterns not yet captured as conventions
-2. **Drift-driven severity** — Suggest promotions and demotions based on compliance data
-3. **Task convention promotion** — Promote recurring task conventions to project level
-4. **Decision clustering** — Find patterns in why principles get overridden
-5. **Convention graduation** — Identify mature conventions ready to become principles
-6. **Staleness detection** — Flag conventions the codebase no longer follows
+1. **Drift-driven severity** — Suggest promotions and demotions based on compliance data
+2. **Task convention promotion** — Promote recurring task conventions to project level
+3. **Convention graduation** — Identify mature conventions ready to become principles
+4. **Staleness detection** — Flag conventions the codebase no longer follows
 
 Use `--apply` to walk through suggestions interactively. Dismissed suggestions are permanently suppressed — Canon won't re-suggest them.
 
@@ -240,7 +236,7 @@ All configuration lives in `.canon/config.json`. Every key is optional — Canon
 
 Run `/canon:doctor` to check for configuration issues.
 
-**Automation hooks:** Canon includes 9 hooks that run automatically: secrets checking on pre-commit, a review guard before push, large file warnings, data file compaction checks, a nudge to run `/canon:learn` after reviews accumulate, principle injection before edits, agent cost tracking, a destructive git guard, and a workspace lock guard. All are configurable.
+**Automation hooks:** Canon includes 8 hooks that run automatically: secrets checking on pre-commit, a review guard before push, large file warnings, data file compaction checks, a nudge to run `/canon:learn` after reviews accumulate, principle injection before edits, a destructive git guard, and a workspace lock guard. All are configurable.
 
 ## Data & Privacy
 
@@ -252,8 +248,6 @@ All Canon data lives in `.canon/` in your project root:
 | `CONVENTIONS.md` | Project conventions | `/canon:init`, `/canon:learn --apply`, or edit directly |
 | `config.json` | Project configuration | `/canon:init` |
 | `reviews.jsonl` | Review results (violations, scores, verdicts) | Flow effects (review states) |
-| `decisions.jsonl` | Intentional deviations with justifications | Flow effects (ship state) |
-| `patterns.jsonl` | Observed codebase patterns | Flow effects (ship state) |
 | `LEARNING-REPORT.md` | Latest learning report | `/canon:learn` |
 | `workspaces/{branch}/` | Branch-scoped agent workspace (research, decisions, plans, logs) | Build pipeline |
 | `history/{branch}/` | Archived workspace artifacts | `/canon:clean --archive` |

@@ -49,7 +49,7 @@ src/
 - Unified tool — merges `show_pr_impact` and `get_pr_review_data` (removed 2026-03-25)
 - Accepts optional `options?: { branch?: string; pr_number?: number; diff_base?: string; incremental?: boolean }` — all four exposed as top-level MCP input fields
 - Always calls `getPrReviewData` internally for live diff analysis; optionally overlays stored review impact data when a Canon review exists in DriftStore
-- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), `has_review: boolean` (UI layout signal; `true` when a stored Canon review exists in DriftStore, `false` otherwise), plus `review?`, `blastRadius?`, `hotspots`, `subgraph`, `decisions` (populated when stored review exists, empty when not)
+- Returns `UnifiedPrOutput` — `prep: PrReviewDataOutput` (always present), `has_review: boolean` (UI layout signal; `true` when a stored Canon review exists in DriftStore, `false` otherwise), plus `review?`, `blastRadius?`, `hotspots`, `subgraph` (populated when stored review exists)
 - `status` is always `"ok"` — no more `"no_review"` status; review field being absent signals no stored review
 - Resource URI: `ui://canon/pr-review` (was `ui://canon/pr-impact`); HTML entry: `pr-review.html`
 
@@ -121,13 +121,11 @@ src/
 | `get_principles` | Find applicable principles for context (file, layer, task) |
 | `list_principles` | Browse principle index (metadata only) |
 | `review_code` | Surface principles for code review + code content |
-| `report` | Log decisions/patterns/reviews (drift tracking) |
+| `report` | Log reviews (drift tracking) |
 | `store_summaries` | Persist file summaries to disk |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
-| `get_decisions` | Grouped intentional deviations |
-| `get_patterns` | Observed codebase patterns (grouped) |
 | `store_pr_review` | Store a PR review result for drift tracking |
 
 **`resolve_after_consultations` tool** (`src/tools/resolve-after-consultations.ts`) — added 2026-03-26:
@@ -222,7 +220,7 @@ src/
 ## Invariants
 <!-- last-updated: 2026-03-26 -->
 
-- All data persists to `.canon/` directory (decisions.jsonl, patterns.jsonl, reviews.jsonl, graph-data.json, summaries.json)
+- All data persists to `.canon/` directory (reviews.jsonl, graph-data.json, summaries.json)
 - JSONL files auto-rotate when exceeding size limits
 - Atomic file writes prevent corruption on concurrent access
 - `CANON_PROJECT_DIR` env var sets project root (defaults to `process.cwd()`)

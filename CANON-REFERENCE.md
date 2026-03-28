@@ -50,8 +50,6 @@ Flows are state machines in `flows/`. Format: YAML frontmatter (states, transiti
 **State types**: `single` (one agent), `parallel` (concurrent agents), `wave` (parallel agents in git worktrees with gates between waves), `parallel-per` (fan-out over items from prior state), `terminal`.
 
 **State `effects:` field** — Optional list of drift extraction operations that run automatically after a state completes. Declared on the state definition in fragment or flow YAML, sibling to `transitions:`. Effect types:
-- `persist_decisions` — extracts JUSTIFIED_DEVIATION entries from agent summaries into drift store (active on `implement` and `ship` states)
-- `persist_patterns` — extracts observed patterns from agent summaries into drift store (active on `ship` state)
 - `persist_review` — stores a reviewer artifact file into drift store; requires `artifact:` field naming the file (active on `review` state, artifact: `REVIEW.md`)
 
 ## MCP Tools (Harness)
@@ -67,7 +65,6 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `get_drift_report` | Full drift analysis (violations, trends, hotspots, PR reviews) |
 | `get_compliance` | Per-principle compliance stats, weekly trend chart |
 | `get_file_context` | File dependencies, entities, blast radius, metrics |
-| `get_pr_review_data` | PR file list by layer, priority scores, diff metadata |
 | `graph_query` | Call trees, blast radius, dead code, search |
 
 **Principle & review tools:**
@@ -77,10 +74,8 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `get_principles` | Find applicable principles for a file/layer/task |
 | `list_principles` | Browse principle index (metadata only) |
 | `review_code` | Surface principles matched to a specific file for review |
-| `report` | Log a decision, pattern, or review result (drift tracking) |
+| `report` | Log a review result (drift tracking) |
 | `store_summaries` | Persist file summaries to `.canon/summaries.json` |
-| `get_decisions` | Grouped intentional deviation decisions |
-| `get_patterns` | Observed codebase patterns (grouped, deduplicated) |
 | `store_pr_review` | Store a PR review result for drift tracking |
 
 **Orchestration harness tools:**

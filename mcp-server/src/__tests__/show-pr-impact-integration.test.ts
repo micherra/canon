@@ -573,10 +573,10 @@ describe("showPrImpact — multiple reviews", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Decisions field — always empty (decisions removed from show_pr_impact)
+// Decisions field — removed from show_pr_impact output
 // ---------------------------------------------------------------------------
 
-describe("showPrImpact — decisions field is always empty", () => {
+describe("showPrImpact — decisions field is absent from output", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -594,7 +594,7 @@ describe("showPrImpact — decisions field is always empty", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns empty decisions array when a stored review has violations", async () => {
+  it("does not include decisions field when a stored review has violations", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/a.ts", "src/b.ts"],
@@ -605,13 +605,13 @@ describe("showPrImpact — decisions field is always empty", () => {
 
     const result = await showPrImpact(tmpDir);
 
-    expect(result.decisions).toEqual([]);
+    expect(result).not.toHaveProperty("decisions");
   });
 
-  it("returns empty decisions array when no stored review exists", async () => {
+  it("does not include decisions field when no stored review exists", async () => {
     const result = await showPrImpact(tmpDir);
 
-    expect(result.decisions).toEqual([]);
+    expect(result).not.toHaveProperty("decisions");
   });
 });
 
@@ -647,9 +647,8 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
     // Impact fields present as empty defaults
     expect(result).toHaveProperty("hotspots");
     expect(result).toHaveProperty("subgraph");
-    expect(result).toHaveProperty("decisions");
+    expect(result).not.toHaveProperty("decisions");
     expect(Array.isArray(result.hotspots)).toBe(true);
-    expect(Array.isArray(result.decisions)).toBe(true);
     expect(result.subgraph).toMatchObject({
       nodes: expect.any(Array),
       edges: expect.any(Array),

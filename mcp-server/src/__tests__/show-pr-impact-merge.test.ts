@@ -63,8 +63,11 @@ import { DriftStore } from "../drift/store.ts";
 
 const SAMPLE_PREP = {
   files: [],
+  impact_files: [],
   layers: [],
   total_files: 0,
+  total_violations: 0,
+  net_new_files: 0,
   incremental: false,
   diff_command: "git diff main..HEAD --name-status",
   narrative: "No changed files.",
@@ -508,8 +511,6 @@ describe("showPrImpact — cross-subsystem: prep + review coexist", () => {
           path: "src/a.ts",
           layer: "tools",
           status: "modified",
-          bucket: "needs-attention",
-          reason: "Has violations",
         },
       ],
       total_files: 1,
@@ -548,7 +549,7 @@ describe("showPrImpact — cross-subsystem: prep + review coexist", () => {
 
     // Both layers coexist — no fields missing from the spec
     expect(result).toHaveProperty("subgraph");
-    expect(result).toHaveProperty("decisions");
+    expect(result).not.toHaveProperty("decisions");
     expect(result).toHaveProperty("blastRadius"); // undefined because KG absent
     expect(result.blastRadius).toBeUndefined();
   });
@@ -595,7 +596,7 @@ describe("UI store type contract — field names match server UnifiedPrOutput", 
     expect(result).toHaveProperty("prep");            // PrepData — always present
     expect(result).toHaveProperty("hotspots");        // PrImpactHotspot[]
     expect(result).toHaveProperty("subgraph");        // PrImpactSubgraph
-    expect(result).toHaveProperty("decisions");       // decisions array
+    expect(result).not.toHaveProperty("decisions");  // decisions removed from output
     // review and blastRadius are optional
     expect(result.review).toBeDefined();
 

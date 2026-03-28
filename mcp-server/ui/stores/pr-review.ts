@@ -131,12 +131,6 @@ export interface UnifiedPrOutput {
   };
   hotspots: PrImpactHotspot[];
   subgraph: PrImpactSubgraph;
-  decisions: Array<{
-    principle_id: string;
-    file_path: string;
-    justification: string;
-    category?: string;
-  }>;
   has_review: boolean;
   empty_state?: string;
   subsystems: Subsystem[];

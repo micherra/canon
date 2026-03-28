@@ -38,4 +38,4 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 - Agent output must follow templates from `templates/` (see `agent-template-required` rule)
 - Agents log activity per `workspace-logging.md` protocol
 - `canon-implementor` has direct access to `mcp__canon__post_wave_bulletin` and `mcp__canon__get_wave_bulletin` for near-real-time collaboration during wave execution
-- `canon-implementor` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary — the `persist_decisions` effect auto-extracts them; no manual `report` tool call is needed
+- `canon-implementor` documents JUSTIFIED_DEVIATIONs in the Canon Compliance section of the summary for auditing purposes

@@ -104,8 +104,6 @@ states:
     effects:
       - type: persist_review
         artifact: REVIEW.md
-      - type: persist_decisions
-      - type: persist_patterns
 ```
 
 All effects are best-effort — parse failures are logged but never block the flow. Implementation: `mcp-server/src/orchestration/effects.ts`.

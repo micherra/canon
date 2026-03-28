@@ -170,7 +170,6 @@ describe("showPrImpact", () => {
     // impact fields are empty/absent
     expect(result.hotspots).toEqual([]);
     expect(result.subgraph).toEqual({ nodes: [], edges: [], layers: [] });
-    expect(result.decisions).toEqual([]);
     expect(result.review).toBeUndefined();
     expect(result.blastRadius).toBeUndefined();
   });
@@ -308,7 +307,7 @@ describe("showPrImpact", () => {
   // 5. Decisions field — always empty
   // -------------------------------------------------------------------------
 
-  it("returns empty decisions array even when a stored review has violations", async () => {
+  it("does not include decisions field in output", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW);
 
@@ -316,7 +315,7 @@ describe("showPrImpact", () => {
 
     const result = await showPrImpact(tmpDir);
 
-    expect(result.decisions).toEqual([]);
+    expect(result).not.toHaveProperty("decisions");
   });
 
   // -------------------------------------------------------------------------
