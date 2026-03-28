@@ -962,7 +962,7 @@ describe("filteredFiles derived state logic (declared gap)", () => {
 // 9. Svelte component structural contract: truncate used from lib/constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { existsSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import { join as pathJoin, dirname } from "path";
 import { fileURLToPath } from "url";
 

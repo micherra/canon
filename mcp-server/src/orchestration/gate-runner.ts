@@ -119,7 +119,7 @@ export function normalizeGates(
   stateDef: StateDefinition,
   flow: ResolvedFlow,
   cwd: string,
-  boardState?: BoardStateEntry,
+  _boardState?: BoardStateEntry,
 ): { commands: Array<{ name: string; command: string }>; source: "gates" | "gate" | "discovered" | "none" } {
   // Tier 1: Explicit gates array — direct shell commands
   if (stateDef.gates?.length) {

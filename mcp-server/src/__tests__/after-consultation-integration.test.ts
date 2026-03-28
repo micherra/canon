@@ -21,7 +21,7 @@
  *     with breakpoint "after" → enterAndPrepareState on next state injects into briefing
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,7 +65,7 @@ vi.mock("../orchestration/wave-briefing.js", async (importOriginal) => {
   };
 });
 
-import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
+import { readBoard, enterState } from "../orchestration/board.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
@@ -500,8 +500,6 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
     });
 
     expect(result.prompts).toHaveLength(1);
-    const prompt = result.prompts[0].prompt;
-
     // Summary collected from "after" breakpoint even without a section
     // assembleWaveBriefing skips the ### heading when section is absent
     // but the Wave Briefing header itself should still appear if any outputs

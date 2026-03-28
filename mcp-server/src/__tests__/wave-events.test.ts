@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
+import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import {
@@ -149,7 +149,7 @@ describe("wave-events", () => {
         type: "add_task",
         payload: { description: "Task" },
       });
-      const evt2 = await postWaveEvent(workspace, {
+      await postWaveEvent(workspace, {
         type: "inject_context",
         payload: { context: "Context data" },
       });

@@ -15,7 +15,7 @@ See `SCHEMA.md` for the complete frontmatter reference.
 | `refactor` | Medium | Behavior-preserving restructuring with continuous test verification |
 | `feature` | Medium (4-10 files) | New feature pipeline |
 | `migrate` | Medium | Staged migration with rollback planning and verification |
-| `deep-build` | Large (10+ files) | Research, design, wave implementation, testing, security, review |
+| `epic` | Large (10+ files) | Research, design, wave implementation, testing, security, review |
 | `explore` | Research | Investigate a codebase question — no implementation |
 | `test-gap` | Testing | Analyze coverage gaps, write tests, verify, review |
 | `review-only` | Review | Review an existing PR or branch without implementing |

@@ -81,7 +81,7 @@ vi.mock("node:child_process", () => ({
   spawnSync: vi.fn(),
 }));
 
-import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
+import { readBoard, enterState } from "../orchestration/board.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";

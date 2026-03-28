@@ -8,11 +8,11 @@
  * 4. getSpawnPrompt leaves ${progress} as literal when flow has no progress field
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 
 // ---------------------------------------------------------------------------
 // Hoist mock for loadAndResolveFlow used by initWorkspaceFlow

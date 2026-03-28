@@ -6,7 +6,6 @@ import {
   createMetricsAccumulator,
   createJsonlLogger,
 } from "../orchestration/events.ts";
-import type { FlowEventMap } from "../orchestration/events.ts";
 
 describe("createMetricsAccumulator", () => {
   it("tracks spawns on agent_spawned events", () => {

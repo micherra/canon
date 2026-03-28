@@ -488,7 +488,6 @@ describe('Knowledge Graph Store', () => {
 
     let funcA: EntityRow;
     let funcB: EntityRow;
-    let funcC: EntityRow;
     let funcD: EntityRow;
     let fileA: FileRow;
 
@@ -496,7 +495,7 @@ describe('Knowledge Graph Store', () => {
       db = initDatabase(':memory:');
       store = new KgStore(db);
       query = new KgQuery(db);
-      ({ fileA, funcA, funcB, funcC, funcD } = populateTestGraph(store));
+      ({ fileA, funcA, funcB, funcD } = populateTestGraph(store));
       void fileA; void funcD; // silence unused
     });
 

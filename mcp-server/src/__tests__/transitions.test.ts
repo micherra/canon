@@ -7,7 +7,7 @@ import {
   isStuck,
   aggregateParallelPerResults,
 } from "../orchestration/transitions.ts";
-import type { StateDefinition, StuckWhen } from "../orchestration/flow-schema.ts";
+import type { StateDefinition } from "../orchestration/flow-schema.ts";
 
 describe("normalizeStatus", () => {
   it.each([

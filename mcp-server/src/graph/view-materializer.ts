@@ -116,7 +116,7 @@ function atomicWriteFileSync(filePath: string, data: string): void {
  * - `layers`, `principles`, and `insights` default to empty structures;
  *   the existing `codebaseGraph` tool populates those on a full scan.
  */
-export function materialize(db: Database.Database, projectDir: string): GraphData {
+export function materialize(db: Database.Database, _projectDir: string): GraphData {
   const query = new KgQuery(db);
 
   // ------------------------------------------------------------------

@@ -2,23 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { DriftStore } from "../drift/store.ts";
 
 // ── helpers ──
-
-function mockExecFile(stdout: string): void {
-  vi.mock("child_process", () => ({
-    execFile: (
-      _cmd: string,
-      _args: string[],
-      _opts: unknown,
-      cb: (err: Error | null, stdout: string, stderr: string) => void,
-    ) => {
-      cb(null, stdout, "");
-    },
-  }));
-}
 
 // ── diff command construction tests ──
 

@@ -22,7 +22,6 @@ import {
   completeState,
   setBlocked,
 } from "../orchestration/board.ts";
-import { canEnterState } from "../orchestration/convergence.ts";
 import { withBoardLock } from "../orchestration/workspace.ts";
 import type { Board, ResolvedFlow, CannotFixItem, GateResult, PostconditionResult, DiscoveredGate, PostconditionAssertion, ViolationSeverities, TestResults } from "../orchestration/flow-schema.ts";
 import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts";

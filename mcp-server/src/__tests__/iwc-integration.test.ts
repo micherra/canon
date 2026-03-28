@@ -15,22 +15,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
-
 // ---------------------------------------------------------------------------
 // Hoist spawnSync mock — gate-runner uses child_process
 // ---------------------------------------------------------------------------
 
 type SpawnSyncArgs = { shell?: boolean; cwd?: string; encoding?: string; timeout?: number };
 let spawnSyncImpl: ((cmd: string, opts: SpawnSyncArgs) => { stdout: string; stderr: string; status: number | null; error?: Error }) | null = null;
-let lastSpawnSyncArgs: { cmd: string; opts: SpawnSyncArgs } | null = null;
-
 vi.mock("node:child_process", () => ({
   spawnSync: (cmd: string, opts: SpawnSyncArgs) => {
-    lastSpawnSyncArgs = { cmd, opts };
     if (spawnSyncImpl) return spawnSyncImpl(cmd, opts);
     return { stdout: "", stderr: "", status: 0 };
   },
@@ -114,25 +106,12 @@ function makeBoard(): Board {
   return initBoard(makeFlow(), "IWC integration task", "abc123");
 }
 
-let tmpDirs: string[] = [];
-
-function makeTmpWorkspace(): string {
-  const dir = mkdtempSync(join(tmpdir(), "iwc-integration-"));
-  tmpDirs.push(dir);
-  return dir;
-}
-
 beforeEach(() => {
   spawnSyncImpl = null;
   readFileSyncImpl = null;
-  lastSpawnSyncArgs = null;
 });
 
 afterEach(() => {
-  for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
-  }
-  tmpDirs = [];
 });
 
 // ---------------------------------------------------------------------------

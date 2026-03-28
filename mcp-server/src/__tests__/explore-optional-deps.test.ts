@@ -10,7 +10,7 @@
 import { describe, it, expect } from "vitest";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { parseFlowContent, loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import { isRoleOptional } from "../orchestration/transitions.ts";
 import type { RoleEntry } from "../orchestration/flow-schema.ts";
 

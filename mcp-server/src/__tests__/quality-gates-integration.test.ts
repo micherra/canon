@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { writeFile, readFile } from "node:fs/promises";
@@ -52,7 +52,6 @@ import { reportResult } from "../tools/report-result.ts";
 import { readBoard, writeBoard } from "../orchestration/board.ts";
 import { updateBoard } from "../tools/update-board.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
-import { runGates } from "../orchestration/gate-runner.ts";
 import { computeAnalytics, appendFlowRun } from "../drift/analytics.ts";
 import { CANON_DIR } from "../constants.ts";
 

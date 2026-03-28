@@ -155,7 +155,7 @@ let baseUrl: string;
 
 test.beforeAll(async () => {
   const html = readFileSync(distHtmlPath, "utf-8");
-  httpServer = createServer((req, res) => {
+  httpServer = createServer((_req, res) => {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(html);
   });

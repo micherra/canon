@@ -430,7 +430,7 @@ describe("runGates — empty when no gates declared", () => {
 describe("runGates — multi-gate execution from explicit gates array", () => {
   it("runs all gates and returns array of results", () => {
     let callCount = 0;
-    spawnSyncImpl = (cmd) => {
+    spawnSyncImpl = (_cmd) => {
       callCount++;
       return { stdout: `output-${callCount}`, stderr: "", status: 0 };
     };

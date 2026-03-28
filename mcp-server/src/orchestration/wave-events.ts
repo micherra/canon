@@ -161,7 +161,7 @@ export function resolveEventAgents(eventType: WaveEventType): {
     case "pause":
       return { agents: [], descriptions: {} };
     default: {
-      const _exhaustive: never = eventType;
+      void eventType;
       return { agents: [], descriptions: {} };
     }
   }

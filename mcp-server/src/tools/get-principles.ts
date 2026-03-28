@@ -1,4 +1,3 @@
-import { type Principle } from "../parser.ts";
 import { loadConfigNumber } from "../utils/config.ts";
 import { matchPrinciples, loadAllPrinciples } from "../matcher.ts";
 import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.ts";

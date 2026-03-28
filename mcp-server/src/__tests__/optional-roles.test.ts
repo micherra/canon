@@ -41,7 +41,7 @@ vi.mock("../orchestration/effects.js", () => ({
 
 import { withBoardLock } from "../orchestration/workspace.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { readBoard, writeBoard, initBoard } from "../orchestration/board.ts";
+import { writeBoard, initBoard } from "../orchestration/board.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------

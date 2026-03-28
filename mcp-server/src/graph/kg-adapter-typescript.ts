@@ -9,7 +9,7 @@
 
 import { extname } from "path";
 import type { LanguageAdapter, AdapterResult, IntraFileEdge, ImportSpecifier } from "./kg-types.ts";
-import type { EntityRow, EntityKind } from "./kg-types.ts";
+import type { EntityRow } from "./kg-types.ts";
 
 import Parser from "tree-sitter";
 import TypeScriptLang from "tree-sitter-typescript";

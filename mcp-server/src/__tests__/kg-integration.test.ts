@@ -262,7 +262,7 @@ describe('materialize — view materializer contract', () => {
       { path: 'src/main.ts', expectedKind: 'source' },
     ];
 
-    for (const { path: filePath, expectedKind } of paths) {
+    for (const { path: filePath } of paths) {
       const file = store.upsertFile(
         makeFileRow({ path: filePath, content_hash: `hash-${filePath}` }),
       );

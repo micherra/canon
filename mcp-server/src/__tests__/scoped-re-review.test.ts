@@ -9,7 +9,7 @@
  * 5. review_scope variable appears in the final spawn prompt
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,7 +61,7 @@ vi.mock("node:child_process", () => ({
   spawnSync: vi.fn(),
 }));
 
-import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
+import { readBoard, enterState } from "../orchestration/board.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { spawnSync } from "node:child_process";

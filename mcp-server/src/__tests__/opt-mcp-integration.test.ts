@@ -16,7 +16,7 @@
  * 5. getSpawnPrompt degrades gracefully when progress.md is absent.
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -56,7 +56,7 @@ vi.mock("../orchestration/events.js", () => ({
   createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
-import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
+import { readBoard, enterState } from "../orchestration/board.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveContextInjections } from "../orchestration/inject-context.ts";
 import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";

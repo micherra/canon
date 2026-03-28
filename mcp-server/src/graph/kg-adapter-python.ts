@@ -276,7 +276,7 @@ function parse(filePath: string, content: string): AdapterResult {
 function visitInsideClass(
   node: Parser.SyntaxNode,
   filePath: string,
-  fileQN: string,
+  _fileQN: string,
   classStack: string[],
   entities: AdapterResult['entities'],
   intraFileEdges: IntraFileEdge[],

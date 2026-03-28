@@ -1,4 +1,4 @@
-import { readBoard, writeBoard, enterState, completeState, setBlocked } from "../orchestration/board.ts";
+import { readBoard, writeBoard, enterState, setBlocked } from "../orchestration/board.ts";
 import { withBoardLock, writeSession } from "../orchestration/workspace.ts";
 import { SessionSchema, type Board } from "../orchestration/flow-schema.ts";
 import { readFile } from "fs/promises";

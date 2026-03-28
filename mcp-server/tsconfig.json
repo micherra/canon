@@ -3,17 +3,21 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+
     "outDir": "dist",
     "rootDir": "src",
+
     "strict": true,
+
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+
     "declaration": true,
-    "allowImportingTsExtensions": true,
-    "emitDeclarationOnly": true
+    "emitDeclarationOnly": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["src/**/*"],
-  "exclude": ["ui", "node_modules", "dist"]
+  "exclude": ["node_modules", "dist"]
 }

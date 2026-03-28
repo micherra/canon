@@ -8,13 +8,13 @@
  * inject-wave-event.test.ts, which test each tool in isolation.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile, readFile } from "fs/promises";
+import { mkdtemp, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { injectWaveEvent } from "../tools/inject-wave-event.ts";
 import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
 import { getWaveBulletin } from "../tools/get-wave-bulletin.ts";
-import { readPendingEvents, readAllEvents, eventsPath } from "../orchestration/wave-events.ts";
+import { readPendingEvents, readAllEvents } from "../orchestration/wave-events.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

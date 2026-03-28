@@ -27,27 +27,6 @@ const pluginDir = resolve(__dirname, "../../..");
 // Test fixtures
 // ---------------------------------------------------------------------------
 
-const MINIMAL_PLUGIN_FLOW = `---
-name: feature
-description: Plugin-level feature flow
-
-states:
-  build:
-    type: single
-    agent: canon-implementor
-    transitions:
-      done: done
-
-  done:
-    type: terminal
----
-
-## Spawn Instructions
-
-### build
-Build the feature.
-`;
-
 const PROJECT_FLOW_CONTENT = `---
 name: my-project-flow
 description: A project-specific flow
@@ -89,23 +68,6 @@ states:
 
 ### build
 Build the feature with project-specific instructions.
-`;
-
-const PLUGIN_FRAGMENT_CONTENT = `---
-fragment: my-plugin-frag
-entry: frag-work
-states:
-  frag-work:
-    type: single
-    agent: plugin-agent
-    transitions:
-      done: done
----
-
-## Spawn Instructions
-
-### frag-work
-Do plugin-level work.
 `;
 
 const PROJECT_FRAGMENT_CONTENT = `---

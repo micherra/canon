@@ -13,7 +13,7 @@
  * but this module does not enforce it.
  */
 
-import type { ConsultationFragment, ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
+import type { ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
 import { substituteVariables } from "./variables.ts";
 
 export interface ConsultationInput {
@@ -42,7 +42,7 @@ export interface ConsultationOutput {
 export async function executeConsultations(
   input: ConsultationInput,
 ): Promise<ConsultationOutput> {
-  const { consultationNames, flow, variables } = input;
+  const { consultationNames, flow } = input;
   const results: Record<string, ConsultationResult> = {};
   const warnings: string[] = [];
 

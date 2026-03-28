@@ -19,7 +19,7 @@ const CONTRACT_PATTERNS = [
 
 export async function evaluateSkipWhen(
   condition: string,
-  workspace: string,
+  _workspace: string,
   board: Board,
 ): Promise<SkipResult> {
   switch (condition) {

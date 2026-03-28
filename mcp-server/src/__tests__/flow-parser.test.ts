@@ -11,7 +11,6 @@ import type {
   FlowDefinition,
   FragmentDefinition,
   ResolvedFlow,
-  StateDefinition,
 } from "../orchestration/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);

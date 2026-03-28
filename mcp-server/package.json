@@ -5,7 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "build": "node scripts/build-ui.mjs && tsc",
+    "build": "tsc",
+    "lint": "tsc -p tsconfig.lint.json",
     "start": "tsx src/index.ts",
     "test": "vitest run",
     "test:e2e": "playwright test"

@@ -138,7 +138,7 @@ function extractFrontmatterEdges(
   filePath: string,
   frontmatterText: string,
   maps: MdNameMaps,
-  fileSet: Set<string>,
+  _fileSet: Set<string>,
 ): GraphEdge[] {
   const edges: GraphEdge[] = [];
   const seen = new Set<string>();

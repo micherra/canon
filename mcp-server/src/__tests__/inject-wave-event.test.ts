@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, writeFile, mkdir, access } from "fs/promises";
+import { mkdtemp, rm, writeFile, access } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { injectWaveEvent } from "../tools/inject-wave-event.ts";

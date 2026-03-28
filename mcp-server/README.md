@@ -50,7 +50,7 @@ src/
 
 ## Tools
 
-### Principle and review tools (10)
+### Principle and review tools (11)
 
 | Tool | Description |
 |------|-------------|
@@ -63,7 +63,8 @@ src/
 | `codebase_graph` | Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to `.canon/graph-data.json`. Returns a compact summary. |
 | `get_file_context` | Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data. |
 | `store_summaries` | Store file summaries to `.canon/summaries.json`. Merges with existing summaries so you can generate them incrementally. |
-| `store_pr_review` | Store a PR review result for drift tracking. Server generates `pr_review_id` and timestamp. |
+| `store_pr_review` | Store a PR review result for drift tracking. Server generates `review_id` and timestamp. |
+| `show_pr_impact` | Open the PR Review MCP App view with change story, impact analysis, and review results. |
 
 ### Graph query tools (1)
 
@@ -71,7 +72,7 @@ src/
 |------|-------------|
 | `graph_query` | Query the dependency graph — call trees, blast radius, dead code detection, and entity search. |
 
-### Orchestration harness tools (13)
+### Orchestration harness tools (12)
 
 | Tool | Description |
 |------|-------------|
@@ -84,6 +85,9 @@ src/
 | `post_wave_bulletin` | Post a message to the wave bulletin for near-real-time inter-agent communication during parallel wave execution. Implementor agents have direct access to this tool. |
 | `get_wave_bulletin` | Read messages from the wave bulletin. Returns messages posted by other agents in the same wave, optionally filtered by timestamp or type. Used by implementors for real-time coordination. |
 | `inject_wave_event` | Inject a user event into a running wave execution. Allows the user to steer, pause, or redirect agents mid-wave. |
+| `resolve_wave_event` | Resolve a pending injected wave event (`apply`/`reject`) and return orchestrator routing hints. |
+| `enter_and_prepare_state` | Combined helper that checks convergence, evaluates skip conditions, enters state, and resolves spawn prompts in one call. |
+| `resolve_after_consultations` | Resolve and return `after` consultation prompts for a state after final wave completion. |
 
 ## Data persistence
 

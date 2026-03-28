@@ -57,7 +57,6 @@ vi.mock("../orchestration/wave-variables.js", () => ({
 }));
 
 import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
-import { withBoardLock } from "../orchestration/workspace.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";

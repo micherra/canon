@@ -11,7 +11,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 
 // ---------------------------------------------------------------------------
 // Hoist mock for readBoard before module import
@@ -32,7 +32,7 @@ vi.mock("../orchestration/wave-briefing.js", () => ({
 }));
 
 import { readBoard } from "../orchestration/board.ts";
-import { assembleWaveBriefing, readWaveGuidance } from "../orchestration/wave-briefing.ts";
+import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
@@ -362,8 +362,6 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     vi.mocked(assembleWaveBriefing).mockReturnValue("");
 
     const flow = makeWaveFlow();
-    const basePromptText = "Build task-a.";
-
     const result = await getSpawnPrompt({
       workspace,
       state_id: "build",

@@ -11,7 +11,7 @@ import {
   writeSession,
   withBoardLock,
 } from "../orchestration/workspace.ts";
-import { initBoard, readBoard, writeBoard } from "../orchestration/board.ts";
+import { initBoard, writeBoard } from "../orchestration/board.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
 import { BoardSchema, SessionSchema } from "../orchestration/flow-schema.ts";

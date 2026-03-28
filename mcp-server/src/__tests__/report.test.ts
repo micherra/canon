@@ -86,7 +86,7 @@ describe("report()", () => {
   });
 
   it("derives WARNING verdict for strong-opinion violation", async () => {
-    const result = await report(
+    await report(
       {
         type: "review",
         files: ["src/a.ts"],

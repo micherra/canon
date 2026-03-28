@@ -63,7 +63,7 @@ From this point on, Canon loads relevant principles automatically whenever you b
 
 ## Principles
 
-Principles are the core of Canon. They're markdown files that tell agents what rules, preferences, and conventions to apply. Canon ships with 52 built-in principles covering security, architecture, testing, and more. After init, you'll find your project's principles under `.canon/principles/`.
+Principles are the core of Canon. They're markdown files that tell agents what rules, preferences, and conventions to apply. Canon ships with 53 built-in principles covering security, architecture, testing, and more. After init, you'll find your project's principles under `.canon/principles/`.
 
 A principle looks like this:
 

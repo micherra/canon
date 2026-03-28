@@ -62,7 +62,7 @@ vi.mock("../orchestration/wave-briefing.js", async (importOriginal) => {
   };
 });
 
-import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
+import { readBoard, enterState } from "../orchestration/board.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
