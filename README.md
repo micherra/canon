@@ -160,6 +160,22 @@ Or just include security concerns in a build request — Canon automatically add
 
 Canon spins up parallel research agents, synthesizes their findings, and gives you a structured analysis. No code changes.
 
+### Visual dashboards (MCP App)
+
+When you're using Claude Desktop or another MCP-compatible client, Canon opens interactive dashboards right in the conversation:
+
+**PR Review** — After a review, Canon opens a dashboard with a verdict banner, compliance score, fix-before-merge checklist, violations grouped by principle, blast radius chart, and layer distribution. Before the review runs, you see a prep view with your change story and impact assessment. Click any violation to ask Claude to explain it.
+
+**Codebase Graph** — An interactive dependency graph of your project. Nodes are colored by architectural layer and highlighted when they have violations or are part of a diff. Filter by layer, violations, or changed files. Click a node to see its dependencies.
+
+> "Show me the codebase graph"
+
+**File Context** — Deep-dive on a single file: its layer, dependencies, exports, blast radius, and any principle violations. Click entities to explore further.
+
+> "Show me the context for src/routes/orders.ts"
+
+These dashboards are powered by Canon's MCP server and render automatically when the corresponding tools run. In terminal-only environments, you get the same data as structured text.
+
 ### Compliance check
 
 ```bash
