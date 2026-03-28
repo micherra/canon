@@ -30,3 +30,4 @@ mcp-server/.claude/settings.local.json
 
 # Canon local data (dogfooding — ignore entire .canon directory)
 .canon/
+.env
