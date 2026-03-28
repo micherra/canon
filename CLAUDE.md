@@ -37,6 +37,8 @@
 
 **Default to action.** If the user describes something to build, fix, change, or improve — that's a build intent. Natural requests like "the search is broken", "add dark mode", "clean up the API layer" are all build intents.
 
+**Before classifying each message independently, check conversation continuity.** If the previous turn spawned a specialist agent and the user's follow-up continues the same topic, route to the same agent type again. Break signals: explicit topic change, build directive, active pipeline, or clearly different intent. See **Conversation Continuity** in `agents/canon-orchestrator.md` for the full rules.
+
 | Intent | Action |
 |--------|--------|
 | **build** | Auto-detect flow → drive state machine |

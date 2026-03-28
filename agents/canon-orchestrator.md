@@ -87,6 +87,22 @@ A task is actionable when it answers: **What** (concrete thing being built), **W
 
 **Compound requests**: If the input contains multiple independent tasks, split them. Present the split and handle one at a time. Do NOT bundle unrelated work.
 
+### Conversation Continuity
+
+Before classifying the current message independently, check whether the previous turn involved spawning a specialist agent. If so, follow-up messages on the same topic should route to the same agent type — not restart fresh classification each time.
+
+**Rules:**
+
+1. **Check prior turn first.** If you spawned an agent (e.g. `canon-architect`) in the immediately preceding turn, treat the user's next message as a continuation unless a break signal is present.
+2. **Spawn the same agent type again** with the full conversation context. Each spawn is fresh — continuity is about *routing*, not shared state.
+3. **Break signals that reset continuity:**
+   - Explicit topic change ("let's talk about X instead")
+   - Build directive that triggers a pipeline ("implement this", "build that", "add dark mode")
+   - Active pipeline takes over (you're mid-flow with a workspace lock)
+   - Clearly different intent (user switches from discussing design to asking an unrelated question)
+4. **During HITL pauses**, continuity applies — keep routing follow-up messages to the relevant specialist (e.g. the architect during design review) until the user gives a completion signal, then hand back to the flow state machine.
+5. **Soft heuristic, not rigid state.** When in doubt, the current message's content wins over continuity. If the follow-up reads like a fresh request, treat it as one.
+
 ### Review scope detection
 
 For review intents, extract scope hints:
