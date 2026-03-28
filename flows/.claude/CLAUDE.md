@@ -24,7 +24,7 @@ Flows use YAML frontmatter (defining states, transitions, loops, constraints) fo
 | `test-gap.md` | Testing | Analyze coverage gaps, write tests, verify, review |
 | `review-only.md` | Review | Review existing PR without implementing |
 | `security-audit.md` | Security | Dedicated security audit |
-| `adopt.md` | Adoption | Scan for violations + auto-fix |
+| `adopt.md` | Adoption | Scan for violations + auto-fix (invoked by `init` as final step, not a standalone user command) |
 
 **Fragments** (`fragments/`) — Reusable state groups included in flows:
 - `context-sync.md`, `review-fix-loop.md`, `implement-verify.md`, `verify-fix-loop.md`, `security-scan.md`, `user-checkpoint.md`, `plan-review.md`, `pattern-check.md`, `early-scan.md`, `impl-handoff.md`, `targeted-research.md`, `test-fix-loop.md`, `ship-done.md`

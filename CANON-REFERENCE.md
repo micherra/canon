@@ -14,7 +14,7 @@ canon/
 │   └── src/
 │       ├── orchestration/  # Flow runtime: board, bulletin, convergence, events, gate-runner, etc.
 │       ├── tools/          # MCP tool implementations (one file per tool)
-│       ├── drift/          # JSONL-backed drift tracking (decisions, patterns, reviews)
+│       ├── drift/          # JSONL-backed drift tracking (reviews)
 │       └── graph/          # Dependency graph scanner and priority scoring
 ├── principles/           # Canonical engineering principles (markdown)
 ├── skills/canon/         # Canon skill definition (entry point for Claude Code)
@@ -42,7 +42,7 @@ Flows are state machines in `flows/`. Format: YAML frontmatter (states, transiti
 | `test-gap` | Testing | Analyze coverage gaps, write tests, verify, review |
 | `review-only` | Review | Review an existing PR or branch without implementing |
 | `security-audit` | Security | Dedicated security audit |
-| `adopt` | Adoption | Scan for principle violations and auto-fix |
+| `adopt` | Adoption | Scan for principle violations and auto-fix (invoked by `init` as final step) |
 
 **Flow Fragments** (`flows/fragments/`) — Reusable state groups included into flows via `includes:`:
 `context-sync`, `test-fix-loop`, `review-fix-loop`, `implement-verify`, `verify-fix-loop`, `security-scan`, `user-checkpoint`, `plan-review`, `pattern-check`, `early-scan`, `impl-handoff`, `ship-done`
@@ -98,4 +98,4 @@ This project uses Canon for engineering principles. Before writing or modifying 
 
 ## Hooks
 
-`hooks/hooks.json` registers pre/post tool-use interceptors that run automatically. Key hooks: `destructive-guard.sh` (blocks dangerous git ops), `workspace-lock-guard.sh` (prevents concurrent builds), `pre-commit-check.sh` (secrets + compliance), `principle-inject.sh` (injects principle summaries into prompts), `agent-cost-tracker.sh` (tracks API costs). See `hooks/.claude/CLAUDE.md` for the full registry.
+`hooks/hooks.json` registers pre/post tool-use interceptors that run automatically. Key hooks: `destructive-guard.sh` (blocks dangerous git ops), `workspace-lock-guard.sh` (prevents concurrent builds), `pre-commit-check.sh` (secrets + compliance), `principle-inject.sh` (injects principle summaries into prompts). See `hooks/.claude/CLAUDE.md` for the full registry.

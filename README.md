@@ -58,6 +58,8 @@ Canon scans your source files to detect conventions, then creates a `.canon/` di
 - **CONVENTIONS.md** — project conventions pre-populated for your setup
 - **config.json** — configuration with sensible defaults
 
+After setup, Canon automatically runs an adoption scan to find any existing principle violations in your codebase and report them. Pass `--no-scan` to skip the scan if you'd rather review it later.
+
 From this point on, Canon loads relevant principles automatically whenever you build, review, or check code.
 
 ---
@@ -180,13 +182,12 @@ Analyzes your accumulated review data to suggest principle improvements: severit
 
 | Command | What it does |
 |---------|-------------|
-| `/canon:init` | Set up Canon in your project |
+| `/canon:init` | Set up Canon in your project (includes adoption scan; pass `--no-scan` to skip) |
 | `/canon:check` | Lightweight pre-commit principle compliance check |
 | `/canon:pr-review` | Review a PR or branch against principles |
 | `/canon:edit-principle` | Edit a principle — severity, scope, tags, or body |
 | `/canon:test-principle` | Verify a principle fires by generating a violation |
 | `/canon:learn` | Analyze review data and suggest improvements |
-| `/canon:adopt` | Scan an existing repo for violations and optionally auto-fix |
 | `/canon:doctor` | Diagnose setup issues — broken frontmatter, MCP server health |
 | `/canon:clean` | Clean up workspace artifacts; optionally archive to project history |
 
@@ -196,7 +197,7 @@ Analyzes your accumulated review data to suggest principle improvements: severit
 
 **Principles** are the rules Canon enforces. They live in `.canon/principles/` and are matched to code by layer and file pattern. You can write project-specific principles that override built-ins.
 
-**Flows** are the workflows Canon picks from automatically — hotfix, quick-fix, refactor, feature, migrate, epic, explore, test-gap, review-only, security-audit, and adopt. You don't need to know which one is running; Canon selects based on scope and urgency.
+**Flows** are the workflows Canon picks from automatically — hotfix, quick-fix, refactor, feature, migrate, epic, explore, test-gap, review-only, security-audit, and adopt (run automatically at the end of `init`). You don't need to know which one is running; Canon selects based on scope and urgency.
 
 **Agents** are specialists Canon dispatches — Researcher, Architect, Implementor, Tester, Reviewer, Security, and others. Each runs in its own context with relevant principles loaded. You see their output but never manage them directly.
 

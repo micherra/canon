@@ -14,8 +14,7 @@ Each command file contains instructions for the agent that executes it. Commands
 
 | Command | Purpose |
 |---------|---------|
-| `init` | Initialize Canon principles in a project |
-| `adopt` | Scan codebase for principle coverage; identify and optionally fix violations |
+| `init` | Initialize Canon principles in a project (includes adoption scan unless `--no-scan`) |
 | `check` | Check code for principle compliance before commit |
 | `clean` | Archive or remove workspace artifacts |
 | `doctor` | Diagnose Canon setup issues; validate configuration |
@@ -29,4 +28,4 @@ Each command file contains instructions for the agent that executes it. Commands
 
 - Commands are the user interface to Canon — agents and flows are internal
 - Each command file is self-contained with its own instructions
-- Commands may spawn flows (e.g., `adopt` triggers the adopt flow) or run directly
+- Commands may spawn flows (e.g., `init` invokes the adopt flow as its final step) or run directly
