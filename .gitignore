@@ -10,6 +10,7 @@ cursor-extension/media/dashboard.js
 # Subdirectory scoped CLAUDE.md files (opt-mcp-02: scoped out of root agent context)
 !mcp-server/.claude/
 !mcp-server/.claude/CLAUDE.md
+mcp-server/.claude/settings.local.json
 !agents/.claude/
 !agents/.claude/CLAUDE.md
 !templates/.claude/
