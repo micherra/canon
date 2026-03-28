@@ -40,15 +40,15 @@ vi.mock("fs", async (importOriginal) => {
   };
 });
 
-vi.mock("../graph/kg-schema.js", () => ({
+vi.mock("../graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(),
 }));
 
-vi.mock("../graph/kg-blast-radius.js", () => ({
+vi.mock("../graph/kg-blast-radius.ts", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
-vi.mock("../tools/pr-review-data.js", () => ({
+vi.mock("../tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 

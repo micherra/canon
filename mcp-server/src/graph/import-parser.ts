@@ -114,8 +114,9 @@ function tryResolve(candidate: string, allFiles: Set<string>): string | null {
     if (allFiles.has(indexPath)) return indexPath;
   }
 
-  // TS ESM convention: import specifiers use `.js` even though source files
-  // are `.ts`. Strip the JS extension and retry with TS equivalents.
+  // TS execution (vitest/tsx): import specifiers use `.ts` even though source files
+  // are `.ts`. Or standard Node.js ESM convention: import specifiers use `.js`
+  // even though source files are `.ts`. Try both.
   for (const [jsExt, tsExts] of Object.entries(ESM_JS_TO_TS)) {
     if (posix.endsWith(jsExt)) {
       const base = posix.slice(0, -jsExt.length);

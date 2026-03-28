@@ -30,21 +30,21 @@ import { join } from "node:path";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.js", () => ({
+vi.mock("../orchestration/board.ts", () => ({
   readBoard: vi.fn(),
   writeBoard: vi.fn(),
   enterState: vi.fn(),
 }));
 
-vi.mock("../orchestration/workspace.js", () => ({
+vi.mock("../orchestration/workspace.ts", () => ({
   withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
 }));
 
-vi.mock("../orchestration/skip-when.js", () => ({
+vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../orchestration/event-bus-instance.js", () => ({
+vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -52,13 +52,13 @@ vi.mock("../orchestration/event-bus-instance.js", () => ({
   },
 }));
 
-vi.mock("../orchestration/events.js", () => ({
+vi.mock("../orchestration/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
 // Leave assembleWaveBriefing real — we test actual briefing output.
-vi.mock("../orchestration/wave-briefing.js", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../orchestration/wave-briefing.js")>();
+vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../orchestration/wave-briefing.ts")>();
   return {
     ...real,
     readWaveGuidance: vi.fn().mockResolvedValue(""),

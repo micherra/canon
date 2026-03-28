@@ -20,17 +20,17 @@ import { join } from "node:path";
 // Hoist mocks before module import
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.js", () => ({
+vi.mock("../orchestration/board.ts", () => ({
   readBoard: vi.fn(),
   writeBoard: vi.fn(),
 }));
 
-vi.mock("../orchestration/wave-briefing.js", () => ({
+vi.mock("../orchestration/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
 }));
 
-vi.mock("../orchestration/diff-cluster.js", () => ({
+vi.mock("../orchestration/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 

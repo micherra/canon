@@ -11,5 +11,5 @@
 - **Testing**: Vitest with co-located `__tests__/` directories
 - **Error handling**: Custom error utilities in `utils/errors.ts`
 - **Data persistence**: JSONL files in `.canon/` with atomic writes
-- **Imports**: Explicit `.js` extensions for ES module imports
+- **Imports**: Explicit `.ts` extensions for TypeScript ES module imports (matching Vitest/tsx execution)
 - **Frontend**: Svelte (mcp-server/ui), served as MCP App via ext-apps SDK; Sigma.js + Graphology for graph rendering (WebGL, ForceAtlas2 layout, Louvain community detection); D3 removed

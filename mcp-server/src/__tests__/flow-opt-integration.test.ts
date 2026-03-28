@@ -29,21 +29,21 @@ const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ â†
 // Mocks for enterAndPrepareState tests
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.js", () => ({
+vi.mock("../orchestration/board.ts", () => ({
   readBoard: vi.fn(),
   writeBoard: vi.fn(),
   enterState: vi.fn(),
 }));
 
-vi.mock("../orchestration/workspace.js", () => ({
+vi.mock("../orchestration/workspace.ts", () => ({
   withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
 }));
 
-vi.mock("../orchestration/skip-when.js", () => ({
+vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../orchestration/event-bus-instance.js", () => ({
+vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -51,19 +51,19 @@ vi.mock("../orchestration/event-bus-instance.js", () => ({
   },
 }));
 
-vi.mock("../orchestration/events.js", () => ({
+vi.mock("../orchestration/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
-vi.mock("../orchestration/wave-briefing.js", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../orchestration/wave-briefing.js")>();
+vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../orchestration/wave-briefing.ts")>();
   return {
     ...real,
     readWaveGuidance: vi.fn().mockResolvedValue(""),
   };
 });
 
-vi.mock("../orchestration/consultation-executor.js", () => ({
+vi.mock("../orchestration/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn((name: string, flow: unknown) => {
     // Return a minimal resolved consultation for testing
     const flowTyped = flow as { consultations?: Record<string, { agent: string; role: string }> };

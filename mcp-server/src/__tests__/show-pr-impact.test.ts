@@ -31,16 +31,16 @@ vi.mock("fs", async (importOriginal) => {
 });
 
 // Mock initDatabase and analyzeBlastRadius so tests don't need a real SQLite DB
-vi.mock("../graph/kg-schema.js", () => ({
+vi.mock("../graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(),
 }));
 
-vi.mock("../graph/kg-blast-radius.js", () => ({
+vi.mock("../graph/kg-blast-radius.ts", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
 // Mock getPrReviewData so tests don't need git/diff infrastructure
-vi.mock("../tools/pr-review-data.js", () => ({
+vi.mock("../tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 

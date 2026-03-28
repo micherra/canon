@@ -18,7 +18,7 @@ import { readFile, writeFile } from "node:fs/promises";
 // Hoist mock for loadAndResolveFlow used by initWorkspaceFlow
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/flow-parser.js", () => ({
+vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn(),
 }));
 

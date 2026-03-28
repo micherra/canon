@@ -17,7 +17,7 @@ import { writeFile } from "node:fs/promises";
 // Hoist mock for readBoard before module import
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.js", () => ({
+vi.mock("../orchestration/board.ts", () => ({
   readBoard: vi.fn(),
   writeBoard: vi.fn(),
 }));
@@ -26,7 +26,7 @@ vi.mock("../orchestration/board.js", () => ({
 // Hoist mock for wave-briefing before module import
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/wave-briefing.js", () => ({
+vi.mock("../orchestration/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn(),
 }));

@@ -22,3 +22,11 @@
     "NEW INSTRUCTION": "WHEN performing a 'deep' audit THEN list all inspected files and specific lines changed"
 }
 
+[2026-03-28 08:53] - Updated by Junie
+{
+    "TYPE": "correction",
+    "CATEGORY": "convention consistency",
+    "EXPECTATION": "They want a single, consistent import-extension rule that matches actual project usage (.ts in TS-only runs) or code changed to match the documented .js rule, with no contradictions.",
+    "NEW INSTRUCTION": "WHEN proposing import-extension conventions or editing imports THEN scan repo/tests for current style and toolchain, then enforce one consistent rule"
+}
+

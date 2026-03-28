@@ -23,11 +23,11 @@ import { join } from "node:path";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/workspace.js", () => ({
+vi.mock("../orchestration/workspace.ts", () => ({
   withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
 }));
 
-vi.mock("../orchestration/event-bus-instance.js", () => ({
+vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -35,11 +35,11 @@ vi.mock("../orchestration/event-bus-instance.js", () => ({
   },
 }));
 
-vi.mock("../orchestration/events.js", () => ({
+vi.mock("../orchestration/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
-vi.mock("../orchestration/effects.js", () => ({
+vi.mock("../orchestration/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
