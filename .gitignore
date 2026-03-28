@@ -8,6 +8,7 @@ cursor-extension/media/dashboard.js
 .idea/
 .air/
 .claude/
+.junie/
 # Subdirectory scoped CLAUDE.md files (opt-mcp-02: scoped out of root agent context)
 !mcp-server/.claude/
 !mcp-server/.claude/CLAUDE.md
