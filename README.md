@@ -162,15 +162,15 @@ Canon spins up parallel research agents, synthesizes their findings, and gives y
 
 ### Visual dashboards (MCP App)
 
-When you're using Claude Desktop or another MCP-compatible client, Canon opens interactive dashboards right in the conversation:
+When you're using Claude Desktop or another MCP-compatible client, Canon opens interactive dashboards right in the conversation.
 
-**PR Review** — After a review, Canon opens a dashboard with a verdict banner, compliance score, fix-before-merge checklist, violations grouped by principle, blast radius chart, and layer distribution. Before the review runs, you see a prep view with your change story and impact assessment. Click any violation to ask Claude to explain it.
+**PR Review** — Run a review first (`/canon:pr-review` or "review my changes"), then Canon opens a dashboard with a verdict banner, compliance score, fix-before-merge checklist, violations grouped by principle, blast radius chart, and layer distribution. You can also open it before a review to see a prep view with your change story and impact assessment. Click any violation to ask Claude to explain it.
 
-**Codebase Graph** — An interactive dependency graph of your project. Nodes are colored by architectural layer and highlighted when they have violations or are part of a diff. Filter by layer, violations, or changed files. Click a node to see its dependencies.
+**Codebase Graph** — An interactive dependency graph of your project. Fully standalone — just ask for it and Canon builds the graph from your source files. Nodes are colored by architectural layer and highlighted when they have violations or are part of a diff. Filter by layer, violations, or changed files. Click a node to see its dependencies.
 
 > "Show me the codebase graph"
 
-**File Context** — Deep-dive on a single file: its layer, dependencies, exports, blast radius, and any principle violations. Click entities to explore further.
+**File Context** — Deep-dive on a single file: its layer, dependencies, exports, blast radius, and any principle violations. Works on its own for basic info, but shows richer data (entity-level blast radius, graph metrics) if you've run the codebase graph first. Click entities to explore further.
 
 > "Show me the context for src/routes/orders.ts"
 
