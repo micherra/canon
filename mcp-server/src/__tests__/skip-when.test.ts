@@ -179,6 +179,12 @@ describe("SkipWhenSchema", () => {
     expect(() => SkipWhenSchema.parse("no_fix_requested")).not.toThrow();
   });
 
+  it("accepts no_open_questions as a valid value", async () => {
+    const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
+    expect(() => SkipWhenSchema.parse("no_open_questions")).not.toThrow();
+    expect(SkipWhenSchema.parse("no_open_questions")).toBe("no_open_questions");
+  });
+
   it("rejects unknown values", async () => {
     const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
     expect(() => SkipWhenSchema.parse("unknown_value")).toThrow();
@@ -205,6 +211,45 @@ describe("evaluateSkipWhen — unknown condition", () => {
     );
 
     errorSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluateSkipWhen — no_open_questions
+// ---------------------------------------------------------------------------
+
+describe("evaluateSkipWhen — no_open_questions", () => {
+  it("skips when board has no metadata (has_open_questions not set)", async () => {
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("No open questions");
+  });
+
+  it("skips when metadata is present but has_open_questions is not set", async () => {
+    const board = makeBoard({ metadata: { some_other_key: "value" } });
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+  });
+
+  it("skips when has_open_questions is false", async () => {
+    const board = makeBoard({ metadata: { has_open_questions: false } });
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("targeted research skipped");
+  });
+
+  it("does not skip when has_open_questions is true", async () => {
+    const board = makeBoard({ metadata: { has_open_questions: true } });
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("skips when has_open_questions is the string 'true' (strict === true check)", async () => {
+    // Implementation uses === true so non-boolean truthy should skip (treated as falsy for our purposes)
+    const board = makeBoard({ metadata: { has_open_questions: "true" } });
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
   });
 });
 

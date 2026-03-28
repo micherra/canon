@@ -10,6 +10,7 @@ import type {
   FileTestHistoryEntry,
   StatusHistoryEntry,
   ProgressHistoryEntry,
+  GateProgressHistoryEntry,
 } from "./flow-schema.ts";
 import { STATUS_ALIASES } from "./flow-schema.ts";
 
@@ -63,6 +64,8 @@ export function buildHistoryEntry(
     status?: string;
     commitSha?: string;
     artifactCount?: number;
+    gateOutputHash?: string;
+    gatePassed?: boolean;
   },
 ): HistoryEntry {
   switch (stuckWhen) {
@@ -83,6 +86,11 @@ export function buildHistoryEntry(
       return {
         commit_sha: data.commitSha ?? "",
         artifact_count: data.artifactCount ?? 0,
+      };
+    case "no_gate_progress":
+      return {
+        gate_output_hash: data.gateOutputHash ?? "",
+        passed: data.gatePassed ?? false,
       };
   }
 }
@@ -122,6 +130,11 @@ export function isStuck(history: HistoryEntry[], stuckWhen: StuckWhen): boolean 
       const p = prev as ProgressHistoryEntry;
       const c = curr as ProgressHistoryEntry;
       return p.commit_sha === c.commit_sha && p.artifact_count === c.artifact_count;
+    }
+    case "no_gate_progress": {
+      const p = prev as GateProgressHistoryEntry;
+      const c = curr as GateProgressHistoryEntry;
+      return p.gate_output_hash === c.gate_output_hash && !c.passed;
     }
   }
 }

@@ -28,6 +28,7 @@ export const STATUS_KEYWORDS = [
   "critical",
   "updated",
   "no_updates",
+  "epic_complete",
 ] as const;
 
 /** Maps agent-reported statuses to transition conditions. */
@@ -38,6 +39,7 @@ export const STATUS_ALIASES: Record<string, string> = {
   done_with_concerns: "done",
   needs_context: "hitl",
   has_questions: "has_questions",
+  epic_complete: "epic_complete",
 };
 
 // ---------------------------------------------------------------------------
@@ -57,12 +59,14 @@ export const StuckWhenSchema = z.enum([
   "same_file_test",
   "same_status",
   "no_progress",
+  "no_gate_progress",  // NEW: detect stuck when gate output and pass state don't change
 ]);
 
 export const SkipWhenSchema = z.enum([
   "no_contract_changes",
   "no_fix_requested",
   "auto_approved",
+  "no_open_questions",  // NEW: skip targeted-research when no open questions from pattern-check
 ]);
 
 export const ContextInjectionSchema = z.object({
@@ -230,6 +234,7 @@ export const FragmentDefinitionSchema = z.object({
   artifact: z.string().optional(),
   timeout: z.string().optional(),
   min_waves: z.number().optional(),
+  skip_when: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -246,6 +251,7 @@ export const ConsultationFragmentSchema = z.object({
   timeout: z.string().optional(),
   spawn_instruction: z.string().optional(),
   min_waves: z.number().optional(),
+  skip_when: z.string().optional(),
 });
 
 export const ResolvedFlowSchema = FlowDefinitionSchema.extend({
@@ -359,11 +365,17 @@ export const ProgressHistoryEntrySchema = z.object({
   artifact_count: z.number(),
 });
 
+export const GateProgressHistoryEntrySchema = z.object({
+  gate_output_hash: z.string(),
+  passed: z.boolean(),
+});
+
 export const HistoryEntrySchema = z.union([
   ViolationHistoryEntrySchema,
   FileTestHistoryEntrySchema,
   StatusHistoryEntrySchema,
   ProgressHistoryEntrySchema,
+  GateProgressHistoryEntrySchema,
 ]);
 
 export const IterationEntrySchema = z.object({
@@ -457,6 +469,7 @@ export type ViolationHistoryEntry = z.infer<typeof ViolationHistoryEntrySchema>;
 export type FileTestHistoryEntry = z.infer<typeof FileTestHistoryEntrySchema>;
 export type StatusHistoryEntry = z.infer<typeof StatusHistoryEntrySchema>;
 export type ProgressHistoryEntry = z.infer<typeof ProgressHistoryEntrySchema>;
+export type GateProgressHistoryEntry = z.infer<typeof GateProgressHistoryEntrySchema>;
 export type HistoryEntry = z.infer<typeof HistoryEntrySchema>;
 export type IterationEntry = z.infer<typeof IterationEntrySchema>;
 export type BlockedInfo = z.infer<typeof BlockedInfoSchema>;

@@ -29,6 +29,8 @@ export async function evaluateSkipWhen(
       return evaluateNoFixRequested(board);
     case "auto_approved":
       return evaluateAutoApproved(board);
+    case "no_open_questions":
+      return evaluateNoOpenQuestions(board);
     default:
       console.error(
         `Warning: Unknown skip_when condition "${condition}" — not skipping`,
@@ -46,7 +48,7 @@ function evaluateNoContractChanges(baseCommit: string): SkipResult {
   }
 
   try {
-    const result = spawnSync("git", ["diff", "--name-only", `${baseCommit}..HEAD`], {
+    const result = spawnSync("git", ["diff", "--diff-filter=d", "--name-only", `${baseCommit}..HEAD`], {
       encoding: "utf-8",
     });
 
@@ -92,6 +94,16 @@ function evaluateAutoApproved(board: Board): SkipResult {
     };
   }
   return { skip: false };
+}
+
+function evaluateNoOpenQuestions(board: Board): SkipResult {
+  if (board.metadata?.has_open_questions === true) {
+    return { skip: false };
+  }
+  return {
+    skip: true,
+    reason: "No open questions from pattern-check — targeted research skipped",
+  };
 }
 
 /** Simple glob matching for contract patterns. */
