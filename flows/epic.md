@@ -1,29 +1,29 @@
 ---
-name: deep-build
-description: Full pipeline — research, design, wave implementation, test, security, review with convergence
+name: epic
+description: Adaptive epic pipeline — research, design, collaborative wave implementation with replan, test, security, review
 tier: large
 entry: research
 progress: ${WORKSPACE}/progress.md
 
 includes:
-  - fragment: context-sync
-    with:
-      next: verify
-
   - fragment: user-checkpoint
     with:
       after_approved: implement
       on_revise: design
 
+  - fragment: context-sync
+    with:
+      next: test
+
   - fragment: plan-review
   - fragment: pattern-check
   - fragment: early-scan
   - fragment: impl-handoff
+  - fragment: targeted-research
 
-  - fragment: verify-fix-loop
+  - fragment: test-fix-loop
     with:
       after_all_passing: security
-      role: test-writer
 
   - fragment: security-scan
     with:
@@ -66,14 +66,16 @@ states:
     type: wave
     agent: canon-implementor
     template: implementation-log
-    effects:
-      - type: check_postconditions
+    gate: test-suite
+    max_iterations: 10
+    stuck_when: no_gate_progress
     consultations:
       before: [plan-review]
-      between: [pattern-check, early-scan]
+      between: [pattern-check, early-scan, targeted-research]
       after: [impl-handoff]
     transitions:
       done: context-sync
+      epic_complete: ship
       blocked: hitl
 ---
 
@@ -84,6 +86,8 @@ Research ${role} patterns relevant to: ${task}. Save to ${WORKSPACE}/research/${
 
 ### design
 Design the technical approach for: ${task}. Read research from ${WORKSPACE}/research/ (especially risk.md). Save design to ${WORKSPACE}/plans/${slug}/DESIGN.md. Save task plans to ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md and index to INDEX.md. Record decisions to ${WORKSPACE}/decisions/. Templates: design-decision, session-context at ${CLAUDE_PLUGIN_ROOT}/templates/. Initialize ${WORKSPACE}/context.md.
+
+Use the North Star template section in the design document. Include machine-readable done criteria in the DESIGN.md frontmatter.
 
 ### implement
 Execute task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.

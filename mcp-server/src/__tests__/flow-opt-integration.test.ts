@@ -139,8 +139,8 @@ describe("affected flows load without errors after all optimizations", () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it("deep-build.md loads cleanly", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "deep-build");
+  it("epic.md loads cleanly", async () => {
+    const result = await loadAndResolveFlow(pluginDir, "epic");
     expect(result.errors).toHaveLength(0);
   });
 
@@ -174,8 +174,8 @@ describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved"
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
 
-  it("deep-build.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "deep-build");
+  it("epic.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
+    const result = await loadAndResolveFlow(pluginDir, "epic");
     expect(result.errors).toHaveLength(0);
 
     const checkpointState = result.flow.states["checkpoint"];
@@ -201,9 +201,9 @@ describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved"
 //    to be updated when the bug is fixed.
 // ===========================================================================
 
-describe("disk-load: deep-build flow consultation fragments from disk", () => {
-  it("deep-build flow consultations map contains pattern-check after disk load", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "deep-build");
+describe("disk-load: epic flow consultation fragments from disk", () => {
+  it("epic flow consultations map contains pattern-check after disk load", async () => {
+    const result = await loadAndResolveFlow(pluginDir, "epic");
     expect(result.errors).toHaveLength(0);
 
     const consultations = result.flow.consultations;
@@ -214,8 +214,8 @@ describe("disk-load: deep-build flow consultation fragments from disk", () => {
     expect(consultations!["pattern-check"].role).toBe("pattern-check");
   });
 
-  it("deep-build flow consultations map contains early-scan after disk load", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "deep-build");
+  it("epic flow consultations map contains early-scan after disk load", async () => {
+    const result = await loadAndResolveFlow(pluginDir, "epic");
     expect(result.errors).toHaveLength(0);
 
     const consultations = result.flow.consultations;
@@ -224,8 +224,8 @@ describe("disk-load: deep-build flow consultation fragments from disk", () => {
     expect(consultations!["early-scan"].role).toBe("early-scan");
   });
 
-  it("deep-build implement state references pattern-check and early-scan in between breakpoint", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "deep-build");
+  it("epic implement state references pattern-check and early-scan in between breakpoint", async () => {
+    const result = await loadAndResolveFlow(pluginDir, "epic");
     expect(result.errors).toHaveLength(0);
 
     const implementState = result.flow.states["implement"];

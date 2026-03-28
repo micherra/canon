@@ -18,8 +18,8 @@ const pluginDir = resolve(__dirname, "../../../.."); // mcp-server/src/__tests__
 // ---------------------------------------------------------------------------
 
 describe("review-fix-loop fragment effects", () => {
-  it("deep-build: review state has persist_review effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "deep-build");
+  it("epic: review state has persist_review effect", async () => {
+    const { flow, errors } = await loadAndResolveFlow(pluginDir, "epic");
     expect(errors).toEqual([]);
     const review = flow.states["review"];
     expect(review).toBeDefined();
@@ -60,8 +60,8 @@ describe("review-fix-loop fragment effects", () => {
 // ---------------------------------------------------------------------------
 
 describe("ship-done fragment effects", () => {
-  it("deep-build: ship state does not have persist_decisions or persist_patterns effects", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "deep-build");
+  it("epic: ship state does not have persist_decisions or persist_patterns effects", async () => {
+    const { flow, errors } = await loadAndResolveFlow(pluginDir, "epic");
     expect(errors).toEqual([]);
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
@@ -126,12 +126,12 @@ describe("implement-verify fragment effects (single-type implement)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Wave implement states in deep-build and feature: no persist_decisions
+// Wave implement states in epic and feature: no persist_decisions
 // ---------------------------------------------------------------------------
 
 describe("wave implement state effects", () => {
-  it("deep-build: implement state (wave) does not have persist_decisions effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "deep-build");
+  it("epic: implement state (wave) does not have persist_decisions effect", async () => {
+    const { flow, errors } = await loadAndResolveFlow(pluginDir, "epic");
     expect(errors).toEqual([]);
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();

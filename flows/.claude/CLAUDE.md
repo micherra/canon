@@ -19,7 +19,7 @@ Flows use YAML frontmatter (defining states, transitions, loops, constraints) fo
 | `refactor.md` | Medium | Behavior-preserving restructuring with continuous test verification |
 | `feature.md` | Medium (4-10 files) | Feature-specific pipeline |
 | `migrate.md` | Medium | Staged migration with rollback planning and verification |
-| `deep-build.md` | Large (10+ files) | Research, design, wave implementation, testing, security, review with convergence |
+| `epic.md` | Large (10+ files) | Adaptive epic pipeline — research, design, wave implementation with replan, test, security, review |
 | `explore.md` | Research | Research and report on a codebase question — no implementation |
 | `test-gap.md` | Testing | Analyze coverage gaps, write tests, verify, review |
 | `review-only.md` | Review | Review existing PR without implementing |
@@ -27,7 +27,7 @@ Flows use YAML frontmatter (defining states, transitions, loops, constraints) fo
 | `adopt.md` | Adoption | Scan for violations + auto-fix |
 
 **Fragments** (`fragments/`) — Reusable state groups included in flows:
-- `context-sync.md`, `review-fix-loop.md`, `implement-verify.md`, `verify-fix-loop.md`, `security-scan.md`, `user-checkpoint.md`, `plan-review.md`, `pattern-check.md`, `early-scan.md`, `impl-handoff.md`, `ship-done.md`
+- `context-sync.md`, `review-fix-loop.md`, `implement-verify.md`, `verify-fix-loop.md`, `security-scan.md`, `user-checkpoint.md`, `plan-review.md`, `pattern-check.md`, `early-scan.md`, `impl-handoff.md`, `targeted-research.md`, `test-fix-loop.md`, `ship-done.md`
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->

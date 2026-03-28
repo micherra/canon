@@ -26,17 +26,12 @@ import type { Board } from "../orchestration/flow-schema.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// pluginDir must point to a directory that has flows/fragments/ with all standard fragments,
-// including test-fix-loop.md and targeted-research.md which are not in the project root subset.
+// pluginDir must point to a directory that has flows/ with all standard flows and fragments,
+// including epic.md, test-fix-loop.md, and targeted-research.md.
 // Use CANON_PLUGIN_DIR env var if set (e.g. in CI), otherwise fall back to the project root.
-// The project root fragment subset is sufficient for most tests; tests that need the full
-// fragment library (epic.md end-to-end) require CANON_PLUGIN_DIR to be set correctly.
 const pluginCacheDir = process.env.CANON_PLUGIN_DIR
   ? resolve(process.env.CANON_PLUGIN_DIR)
   : resolve(__dirname, "../../..");
-
-// projectDir has .canon/flows/epic.md and .canon/flows/fragments/targeted-research.md
-const canonProjectDir = resolve(__dirname, "../../..");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -244,26 +239,25 @@ describe("FragmentDefinitionSchema — skip_when field", () => {
 });
 
 // ---------------------------------------------------------------------------
-// epic.md loading end-to-end — two-tier resolver with real .canon/flows/epic.md
+// epic.md loading end-to-end — plugin-level flow in flows/epic.md
 // ---------------------------------------------------------------------------
 
 describe("epic.md end-to-end loading through two-tier resolver", () => {
-  it("loads epic.md from project .canon/flows/ when canonProjectDir is provided", async () => {
-    // The project's .canon/flows/epic.md exists — it should take precedence over any plugin epic.md
-    // pluginCacheDir provides the fragment library (test-fix-loop.md, etc.)
-    const { flow, errors } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+  it("loads epic.md from plugin flows/ directory", async () => {
+    // epic.md is a source-controlled flow in flows/epic.md (plugin dir)
+    const { flow, errors } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.name).toBe("epic");
     expect(errors).toEqual([]);
   });
 
   it("epic flow has the correct entry state: research", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
     expect(flow.entry).toBe("research");
   });
 
   it("epic flow has all three inline states: research, design, implement", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["research"]).toBeDefined();
     expect(flow.states["design"]).toBeDefined();
@@ -271,38 +265,38 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   });
 
   it("epic implement state has stuck_when: no_gate_progress", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["implement"].stuck_when).toBe("no_gate_progress");
   });
 
   it("epic implement state has max_iterations: 10", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["implement"].max_iterations).toBe(10);
   });
 
   it("epic implement state does NOT have max_waves (architecture constraint)", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     // max_waves must not be present — architecture decision epic-06
     expect((flow.states["implement"] as Record<string, unknown>)["max_waves"]).toBeUndefined();
   });
 
   it("epic implement state has epic_complete transition to ship", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["implement"].transitions?.["epic_complete"]).toBe("ship");
   });
 
   it("epic flow has tier: large", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.tier).toBe("large");
   });
 
   it("epic flow has consultations resolved from fragment includes", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     // targeted-research is in the between consultations of implement
     expect(flow.consultations).toBeDefined();
@@ -310,7 +304,7 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   });
 
   it("targeted-research consultation in epic flow has skip_when: no_open_questions", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     const consultation = flow.consultations?.["targeted-research"];
     expect(consultation).toBeDefined();
@@ -318,31 +312,31 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   });
 
   it("epic flow ship state is present (from ship-done fragment)", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["ship"]).toBeDefined();
   });
 
   it("epic flow research state has type: parallel", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["research"].type).toBe("parallel");
   });
 
   it("epic flow design state has done transition to checkpoint", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic", canonProjectDir);
+    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["design"].transitions?.["done"]).toBe("checkpoint");
   });
 });
 
 // ---------------------------------------------------------------------------
-// loadFlow() with projectDir — load-flow.ts → flow-parser.ts cross-task integration
+// loadFlow() — load-flow.ts → flow-parser.ts cross-task integration
 // ---------------------------------------------------------------------------
 
-describe("loadFlow() with projectDir parameter (cross-task integration)", () => {
-  it("loadFlow with projectDir loads epic.md and returns state_graph", async () => {
-    const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir, canonProjectDir);
+describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
+  it("loadFlow loads epic.md and returns state_graph", async () => {
+    const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
 
     expect(result.flow.name).toBe("epic");
     expect(result.errors).toEqual([]);
@@ -351,7 +345,7 @@ describe("loadFlow() with projectDir parameter (cross-task integration)", () => 
   });
 
   it("loadFlow state_graph for epic includes research → design edge", async () => {
-    const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir, canonProjectDir);
+    const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
 
     // research state transitions done → design
     const researchEdges = result.state_graph["research"];
@@ -360,7 +354,7 @@ describe("loadFlow() with projectDir parameter (cross-task integration)", () => 
   });
 
   it("loadFlow state_graph for epic includes implement → ship edge (epic_complete)", async () => {
-    const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir, canonProjectDir);
+    const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
 
     const implementEdges = result.state_graph["implement"];
     expect(implementEdges).toBeDefined();
