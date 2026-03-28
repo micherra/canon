@@ -1,7 +1,6 @@
 import { DriftStore } from "../drift/store.ts";
 import { generateId } from "../utils/id.ts";
 import type { ReportInput, ReviewEntry } from "../schema.ts";
-export { reportInputSchema, type ReportInput } from "../schema.ts";
 
 export interface ReportOutput {
   recorded: boolean;
@@ -18,6 +17,10 @@ export async function report(
   switch (input.type) {
     case "review":
       return recordReview(input, store);
+    default: {
+      const _exhaustive: never = input.type;
+      throw new Error(`Unknown report type: ${_exhaustive}`);
+    }
   }
 }
 

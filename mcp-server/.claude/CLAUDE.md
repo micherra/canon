@@ -18,7 +18,7 @@ src/
 ├── schema.ts             # Zod schemas for report input
 ├── constants.ts          # Shared constants (layers, extensions, CANON_DIR)
 ├── tools/                # Tool implementations (one file per tool)
-├── drift/                # Drift tracking — decisions, reviews, patterns (JSONL persistence)
+├── drift/                # Drift tracking — reviews (JSONL persistence)
 ├── graph/                # Dependency graph — scanner, import/export parsing, priority scoring
 ├── orchestration/        # Flow execution — board, bulletin, variables, gates, consultations
 ├── utils/                # Config loading, path handling, atomic writes, ID generation
@@ -26,7 +26,7 @@ src/
 ```
 
 **Key subsystems:**
-- **Drift tracking** (`drift/`) — JSONL-backed store for decisions, patterns, reviews with auto-rotation
+- **Drift tracking** (`drift/`) — JSONL-backed store for reviews with auto-rotation
 - **Dependency graph** (`graph/`) — Scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs
 - **Principle matching** (`matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, wave bulletin, variable resolution, gate execution, consultation preparation, wave briefing assembly
@@ -93,10 +93,10 @@ src/
 - `ImpactTabs.svelte` — props: `files` (PrFileInfo[]), `blastRadius` (BlastRadiusEntry[]), `onPrompt`; three tabs: High Impact (`priority_score >= 15`), Violations (sorted rule > strong-opinion > convention), Critical Deps (files not in diff appearing in blast radius)
 
 **PrReview.svelte** (`ui/PrReview.svelte`) — added 2026-03-25; replaces deleted `PrReviewPrep.svelte` and `PrImpact.svelte`:
-- Unified progressive container; no props — all data from `bridge.callTool("show_pr_impact")`
-- Always renders: `NarrativeSummary`, `ChangeStoryGrid`, `ImpactTabs` (prep analysis from `data.prep.*`)
-- Conditionally renders when `has_review` is true: `HotspotList` (panel-left) | `SubGraph` (panel-center) | `PrDetailPanel` (panel-right), plus `VerdictStrip`
-- When no stored review: shows "Run Review" button that calls `bridge.sendMessage()`
+- Unified progressive container; no props — all data from `bridge.waitForToolResult()` (via `useDataLoader`)
+- Prep-only mode (`has_review === false`): run-review banner + header bar + `NarrativeSummary`, `ChangeStoryGrid`, staleness warning (when stale), `ImpactTabs`
+- Review mode (`has_review === true`): `VerdictBanner`, `StatsRow`, then a 2-column grid dashboard — Row 1: `FixBeforeMerge` (left), `ViolationsByPrinciple` + `ComplianceScore` stacked (right); Row 2: `BlastRadiusChart` (left), `LayerChart` + `SubsystemsPanel` stacked (right)
+- When no stored review: shows "Run Review" button that calls `bridge.sendMessage("Run a Canon review on this PR")`
 - Staleness warning banner shown when `graph_data_age_ms > 3_600_000`
 - `PrReviewPrep.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
 - `PrImpact.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)

@@ -57,22 +57,4 @@ export function truncate(text: string, maxLen: number): string {
   return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
 }
 
-/** Built-in structural rule descriptions. */
-export const BUILTIN_RULE_DESCRIPTIONS: Record<string, string> = {
-  "imports-across-layers": "A file imports directly from a layer it should not depend on, violating the project's layered architecture boundaries.",
-};
-
-/**
- * Get a human-readable tooltip for a violation rule ID.
- * Checks built-in rules first, then the principles map from the MCP server.
- */
-export function getRuleDescription(
-  ruleId: string,
-  principles?: Record<string, { title: string; summary: string }>,
-): string {
-  if (BUILTIN_RULE_DESCRIPTIONS[ruleId]) return BUILTIN_RULE_DESCRIPTIONS[ruleId];
-  const p = principles?.[ruleId];
-  if (p) return `${p.title}\n\n${p.summary}`;
-  return ruleId;
-}
 
