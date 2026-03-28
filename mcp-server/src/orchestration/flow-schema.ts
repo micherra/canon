@@ -234,7 +234,7 @@ export const FragmentDefinitionSchema = z.object({
   artifact: z.string().optional(),
   timeout: z.string().optional(),
   min_waves: z.number().optional(),
-  skip_when: z.string().optional(),
+  skip_when: SkipWhenSchema.optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -251,7 +251,7 @@ export const ConsultationFragmentSchema = z.object({
   timeout: z.string().optional(),
   spawn_instruction: z.string().optional(),
   min_waves: z.number().optional(),
-  skip_when: z.string().optional(),
+  skip_when: SkipWhenSchema.optional(),
 });
 
 export const ResolvedFlowSchema = FlowDefinitionSchema.extend({

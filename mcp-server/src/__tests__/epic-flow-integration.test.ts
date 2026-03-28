@@ -26,12 +26,14 @@ import type { Board } from "../orchestration/flow-schema.ts";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// pluginDir must point to a directory that has flows/fragments/ with all standard fragments.
-// The plugin cache has all fragments (test-fix-loop.md, targeted-research.md, etc.).
-// The project root (canon/) only has a subset in flows/fragments/.
-// See: CLAUDE.md memory — plugin cache at /Users/michelle/.claude/plugins/cache/canon-marketplace/canon/0.1.0/
-// Note: pluginDir is for the standard fragment library; tests that don't load epic.md can use the project root.
-const pluginCacheDir = "/Users/michelle/.claude/plugins/cache/canon-marketplace/canon/0.1.0";
+// pluginDir must point to a directory that has flows/fragments/ with all standard fragments,
+// including test-fix-loop.md and targeted-research.md which are not in the project root subset.
+// Use CANON_PLUGIN_DIR env var if set (e.g. in CI), otherwise fall back to the project root.
+// The project root fragment subset is sufficient for most tests; tests that need the full
+// fragment library (epic.md end-to-end) require CANON_PLUGIN_DIR to be set correctly.
+const pluginCacheDir = process.env.CANON_PLUGIN_DIR
+  ? resolve(process.env.CANON_PLUGIN_DIR)
+  : resolve(__dirname, "../../..");
 
 // projectDir has .canon/flows/epic.md and .canon/flows/fragments/targeted-research.md
 const canonProjectDir = resolve(__dirname, "../../..");
@@ -198,8 +200,8 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
     expect(result.skip_when).toBeUndefined();
   });
 
-  it("accepts a consultation fragment with an arbitrary skip_when string value", async () => {
-    // ConsultationFragmentSchema uses z.string().optional() — any string value is valid
+  it("accepts a consultation fragment with another valid SkipWhenSchema value (no_fix_requested)", async () => {
+    // ConsultationFragmentSchema uses SkipWhenSchema.optional() — only known enum values are valid
     const { ConsultationFragmentSchema } = await import("../orchestration/flow-schema.ts");
     const result = ConsultationFragmentSchema.parse({
       fragment: "some-fragment",
