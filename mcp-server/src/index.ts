@@ -270,7 +270,7 @@ server.registerTool(
     },
   },
   async (input) => {
-    const result = await loadFlow(input, pluginDir);
+    const result = await loadFlow(input, pluginDir, projectDir);
     return jsonResponse(result);
   }
 );
