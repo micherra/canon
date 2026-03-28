@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { analyzeDrift } from "../drift/analyzer.ts";
-import type { ReviewEntry, DecisionEntry } from "../schema.ts";
+import type { ReviewEntry } from "../schema.ts";
 
 function makeReview(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {
@@ -19,22 +19,10 @@ function makeReview(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   };
 }
 
-function makeDecision(overrides: Partial<DecisionEntry> = {}): DecisionEntry {
-  return {
-    decision_id: "dec_1",
-    principle_id: "p1",
-    file_path: "src/a.ts",
-    justification: "Justified",
-    timestamp: "2026-03-15T00:00:00Z",
-    ...overrides,
-  };
-}
-
 describe("analyzeDrift", () => {
   it("returns empty report for no data", () => {
-    const report = analyzeDrift([], [], ["p1", "p2"]);
+    const report = analyzeDrift([], ["p1", "p2"]);
     expect(report.total_reviews).toBe(0);
-    expect(report.total_decisions).toBe(0);
     expect(report.most_violated).toEqual([]);
     expect(report.never_triggered).toEqual(["p1", "p2"]);
     expect(report.trend).toBe("insufficient_data");
@@ -51,7 +39,7 @@ describe("analyzeDrift", () => {
         honored: ["p1", "p2"],
       }),
     ];
-    const report = analyzeDrift(reviews, [], ["p1", "p2"]);
+    const report = analyzeDrift(reviews, ["p1", "p2"]);
 
     const p1Stats = report.most_violated.find((s) => s.principle_id === "p1");
     expect(p1Stats).toBeDefined();
@@ -61,18 +49,16 @@ describe("analyzeDrift", () => {
     expect(p1Stats!.compliance_rate).toBe(33);
   });
 
-  it("adjusts unintentional violations for decisions", () => {
+  it("counts unintentional violations from reviews", () => {
     const reviews = [
       makeReview({
         violations: [{ principle_id: "p1", severity: "rule" }],
       }),
     ];
-    const decisions = [makeDecision({ principle_id: "p1" })];
 
-    const report = analyzeDrift(reviews, decisions, ["p1"]);
+    const report = analyzeDrift(reviews, ["p1"]);
     const p1Stats = report.most_violated.find((s) => s.principle_id === "p1");
-    expect(p1Stats!.unintentional_violations).toBe(0);
-    expect(p1Stats!.intentional_deviations).toBe(1);
+    expect(p1Stats!.unintentional_violations).toBe(1);
     expect(p1Stats!.total_violations).toBe(1);
   });
 
@@ -80,7 +66,7 @@ describe("analyzeDrift", () => {
     const reviews = [
       makeReview({ honored: ["p1"] }),
     ];
-    const report = analyzeDrift(reviews, [], ["p1", "p2", "p3"]);
+    const report = analyzeDrift(reviews, ["p1", "p2", "p3"]);
     expect(report.never_triggered).toEqual(["p2", "p3"]);
   });
 
@@ -101,7 +87,7 @@ describe("analyzeDrift", () => {
         },
       }),
     ];
-    const report = analyzeDrift(reviews, [], []);
+    const report = analyzeDrift(reviews, []);
     expect(report.avg_score.rules).toBe(50);
     expect(report.avg_score.opinions).toBe(100);
     expect(report.avg_score.conventions).toBe(50);
@@ -126,7 +112,7 @@ describe("analyzeDrift", () => {
         makeReview({ review_id: `rev_${i}`, violations: [] })
       );
     }
-    const report = analyzeDrift(reviews, [], ["p1", "p2"]);
+    const report = analyzeDrift(reviews, ["p1", "p2"]);
     expect(report.trend).toBe("improving");
   });
 
@@ -148,7 +134,7 @@ describe("analyzeDrift", () => {
         })
       );
     }
-    const report = analyzeDrift(reviews, [], ["p1", "p2"]);
+    const report = analyzeDrift(reviews, ["p1", "p2"]);
     expect(report.trend).toBe("declining");
   });
 
@@ -162,13 +148,13 @@ describe("analyzeDrift", () => {
         })
       );
     }
-    const report = analyzeDrift(reviews, [], ["p1"]);
+    const report = analyzeDrift(reviews, ["p1"]);
     expect(report.trend).toBe("stable");
   });
 
   it("returns insufficient_data trend for < 6 reviews", () => {
     const reviews = [makeReview(), makeReview(), makeReview()];
-    const report = analyzeDrift(reviews, [], []);
+    const report = analyzeDrift(reviews, []);
     expect(report.trend).toBe("insufficient_data");
   });
 
@@ -180,7 +166,7 @@ describe("analyzeDrift", () => {
       }),
       makeReview({ honored: ["p2"] }),
     ];
-    const report = analyzeDrift(reviews, [], ["p1", "p2"], {
+    const report = analyzeDrift(reviews, ["p1", "p2"], {
       principleId: "p1",
     });
     // Only the first review mentions p1
@@ -192,7 +178,7 @@ describe("analyzeDrift", () => {
       makeReview({ review_id: "old" }),
       makeReview({ review_id: "new" }),
     ];
-    const report = analyzeDrift(reviews, [], [], { lastN: 1 });
+    const report = analyzeDrift(reviews, [], { lastN: 1 });
     expect(report.total_reviews).toBe(1);
   });
 
@@ -210,7 +196,7 @@ describe("analyzeDrift", () => {
         ],
       }),
     ];
-    const report = analyzeDrift(reviews, [], ["p1", "p2"]);
+    const report = analyzeDrift(reviews, ["p1", "p2"]);
     expect(report.violation_directories.length).toBeGreaterThan(0);
     expect(report.violation_directories[0].directory).toBe("src/routes");
   });

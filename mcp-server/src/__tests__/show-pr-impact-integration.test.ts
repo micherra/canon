@@ -67,8 +67,11 @@ const SAMPLE_SCORE = {
 
 const SAMPLE_PREP = {
   files: [],
+  impact_files: [],
   layers: [],
   total_files: 0,
+  total_violations: 0,
+  net_new_files: 0,
   incremental: false,
   diff_command: "git diff main",
   narrative: "No changed files.",
@@ -570,10 +573,10 @@ describe("showPrImpact — multiple reviews", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Decision cross-reference — edge cases
+// Decisions field — always empty (decisions removed from show_pr_impact)
 // ---------------------------------------------------------------------------
 
-describe("showPrImpact — decision cross-reference gaps", () => {
+describe("showPrImpact — decisions field is always empty", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -591,7 +594,7 @@ describe("showPrImpact — decision cross-reference gaps", () => {
     vi.restoreAllMocks();
   });
 
-  it("includes multiple decisions for the same violated principle", async () => {
+  it("returns empty decisions array when a stored review has violations", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({
       files: ["src/a.ts", "src/b.ts"],
@@ -600,66 +603,14 @@ describe("showPrImpact — decision cross-reference gaps", () => {
       ],
     }));
 
-    const driftStore = new DriftStore(tmpDir);
-    await driftStore.appendDecision({
-      decision_id: "dec_001",
-      timestamp: new Date().toISOString(),
-      principle_id: "functions-do-one-thing",
-      file_path: "src/a.ts",
-      justification: "First deviation for src/a.ts",
-    });
-    await driftStore.appendDecision({
-      decision_id: "dec_002",
-      timestamp: new Date().toISOString(),
-      principle_id: "functions-do-one-thing",
-      file_path: "src/b.ts",
-      justification: "Second deviation for src/b.ts",
-    });
-
-    const result = await showPrImpact(tmpDir);
-
-    // Both decisions match the violated principle — both should be included
-    expect(result.decisions).toHaveLength(2);
-    const justifications = result.decisions.map((d) => d.justification);
-    expect(justifications).toContain("First deviation for src/a.ts");
-    expect(justifications).toContain("Second deviation for src/b.ts");
-  });
-
-  it("returns empty decisions array when no decisions exist at all", async () => {
-    const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({
-      files: ["src/a.ts"],
-      violations: [
-        { principle_id: "functions-do-one-thing", severity: "rule", file_path: "src/a.ts" },
-      ],
-    }));
-
-    // No DriftStore decisions written
-
     const result = await showPrImpact(tmpDir);
 
     expect(result.decisions).toEqual([]);
   });
 
-  it("returns empty decisions when review has no violations (no violated principles to match)", async () => {
-    const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({
-      files: ["src/clean.ts"],
-      violations: [],
-    }));
-
-    const driftStore = new DriftStore(tmpDir);
-    await driftStore.appendDecision({
-      decision_id: "dec_001",
-      timestamp: new Date().toISOString(),
-      principle_id: "some-principle",
-      file_path: "src/other.ts",
-      justification: "Some deviation",
-    });
-
+  it("returns empty decisions array when no stored review exists", async () => {
     const result = await showPrImpact(tmpDir);
 
-    // No principles were violated, so no decisions should match
     expect(result.decisions).toEqual([]);
   });
 });

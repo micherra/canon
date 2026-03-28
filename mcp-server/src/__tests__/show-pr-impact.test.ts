@@ -305,40 +305,18 @@ describe("showPrImpact", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 5. Decision cross-reference
+  // 5. Decisions field — always empty
   // -------------------------------------------------------------------------
 
-  it("includes only decisions relevant to violated principles", async () => {
+  it("returns empty decisions array even when a stored review has violations", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW);
-
-    // Write some decisions — only functions-do-one-thing and deep-modules are violated
-    const driftStore = new DriftStore(tmpDir);
-    await driftStore.appendDecision({
-      decision_id: "dec_001",
-      timestamp: new Date().toISOString(),
-      principle_id: "functions-do-one-thing",
-      file_path: "src/tools/foo.ts",
-      justification: "Legacy constraint — too complex to split now",
-      category: "legacy-constraint",
-    });
-    await driftStore.appendDecision({
-      decision_id: "dec_002",
-      timestamp: new Date().toISOString(),
-      principle_id: "unrelated-principle",
-      file_path: "src/other.ts",
-      justification: "Intentional deviation",
-    });
 
     vi.mocked(existsSync).mockReturnValue(false);
 
     const result = await showPrImpact(tmpDir);
 
-    // Only the decision for functions-do-one-thing is relevant
-    expect(result.decisions).toHaveLength(1);
-    expect(result.decisions[0].principle_id).toBe("functions-do-one-thing");
-    expect(result.decisions[0].justification).toBe("Legacy constraint — too complex to split now");
-    expect(result.decisions[0].category).toBe("legacy-constraint");
+    expect(result.decisions).toEqual([]);
   });
 
   // -------------------------------------------------------------------------

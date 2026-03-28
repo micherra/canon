@@ -540,12 +540,7 @@ export async function showPrImpact(
   // 6. Build subgraph from graph-data.json (filtered to changed + affected files)
   const subgraph = await buildSubgraph(projectDir, latestReview.files, blastRadius);
 
-  // 7. Load relevant decisions (cross-referenced with violated principles)
-  const violatedPrinciples = new Set(latestReview.violations.map((v) => v.principle_id));
-  const allDecisions = await driftStore.getDecisions();
-  const relevantDecisions = allDecisions.filter((d) => violatedPrinciples.has(d.principle_id));
-
-  // 8. Detect subsystems — cross-reference review files with prep file statuses
+  // 7. Detect subsystems — cross-reference review files with prep file statuses
   const statusMap = new Map<string, string>();
   for (const prepFile of prepResult.files) {
     statusMap.set(prepFile.path, prepFile.status);
@@ -571,12 +566,7 @@ export async function showPrImpact(
     blastRadius,
     hotspots,
     subgraph,
-    decisions: relevantDecisions.map((d) => ({
-      principle_id: d.principle_id,
-      file_path: d.file_path,
-      justification: d.justification,
-      category: d.category,
-    })),
+    decisions: [],
     subsystems,
     blast_radius_by_file,
     ...(latestReview.recommendations !== undefined

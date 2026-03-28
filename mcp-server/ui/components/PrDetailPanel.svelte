@@ -3,7 +3,6 @@
   import Badge from "./Badge.svelte";
   import PrViolationList from "./PrViolationList.svelte";
   import PrBlastRadiusSection from "./PrBlastRadiusSection.svelte";
-  import PrDecisionsList from "./PrDecisionsList.svelte";
 
   // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -20,20 +19,12 @@
     depth: number;
   }
 
-  interface Decision {
-    principle_id: string;
-    file_path: string;
-    justification: string;
-    category?: string;
-  }
-
   // ── Props ─────────────────────────────────────────────────────────────────
 
   interface PrDetailPanelProps {
     file: string;
     violations: Violation[];
     blastRadiusAffected: BlastRadiusEntry[];
-    decisions: Decision[];
     onFileClick: (fileId: string) => void;
   }
 
@@ -41,23 +32,15 @@
     file,
     violations,
     blastRadiusAffected,
-    decisions,
     onFileClick,
   }: PrDetailPanelProps = $props();
 
   // ── Derived state ─────────────────────────────────────────────────────────
 
-  /** Decisions filtered to principle IDs that this file has violations for */
-  let relevantDecisions = $derived.by(() => {
-    const violatedPrinciples = new Set(violations.map((v) => v.principle_id));
-    return decisions.filter((d) => violatedPrinciples.has(d.principle_id));
-  });
-
   /** True when the file has nothing to show */
   let isEmpty = $derived(
     violations.length === 0 &&
-      blastRadiusAffected.length === 0 &&
-      decisions.length === 0,
+      blastRadiusAffected.length === 0,
   );
 
   /** Human-readable filename */
@@ -106,11 +89,6 @@
       </section>
     {/if}
 
-    <!-- ── Decisions section ──────────────────────────────────────────── -->
-    <section class="panel-section">
-      <h4 class="section-header">Prior Decisions ({relevantDecisions.length})</h4>
-      <PrDecisionsList decisions={relevantDecisions} />
-    </section>
   {/if}
 </div>
 

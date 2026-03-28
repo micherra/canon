@@ -5,7 +5,6 @@ import { tmpdir } from "os";
 import {
   executeEffects,
   parseReviewArtifact,
-  parseDecisionsFromSummary,
 } from "../orchestration/effects.ts";
 import type { StateDefinition, Board } from "../orchestration/flow-schema.ts";
 
@@ -43,47 +42,6 @@ principles-checked: 5
 
 #### Suggestions
 - **Readability**: Consider extracting the order validation into a separate function
-`;
-
-const SAMPLE_SUMMARY = `---
-task-id: "task-01"
-status: "DONE"
-agent: canon-implementor
-timestamp: "2026-03-23T10:00:00Z"
-commit: "abc123"
----
-
-## Implementation: task-01
-
-### What Changed
-Added order validation service.
-
-### Files
-| File | Action | Purpose |
-|------|--------|---------|
-| \`src/api/orders.ts\` | modified | Added validation |
-| \`src/services/order-validator.ts\` | created | Validation logic |
-
-### Tests Written
-| Test File | Count | Coverage |
-|-----------|-------|----------|
-| \`src/services/order-validator.test.ts\` | 5 | happy path, error cases |
-
-### Coverage Notes
-#### Tested Paths
-- validateOrder: happy path, missing fields, invalid types
-
-#### Known Gaps
-- validateOrder: concurrent validation not tested
-
-### Canon Compliance
-- **thin-handlers** (strong-opinion): ✓ COMPLIANT — extracted logic to service layer
-- **validate-at-boundaries** (rule): ⚠ JUSTIFIED_DEVIATION — validation deferred to middleware layer for performance
-- **naming-reveals-intent** (convention): ✓ COMPLIANT — descriptive names used
-
-### Verification
-- [x] New tests: 5 passing
-- [x] Full test suite: passing
 `;
 
 describe("parseReviewArtifact", () => {
@@ -158,30 +116,6 @@ verdict: "CLEAN"
   });
 });
 
-describe("parseDecisionsFromSummary", () => {
-  it("extracts JUSTIFIED_DEVIATION entries", () => {
-    const decisions = parseDecisionsFromSummary(SAMPLE_SUMMARY, "test-SUMMARY.md");
-    expect(decisions).toHaveLength(1);
-    expect(decisions[0].principle_id).toBe("validate-at-boundaries");
-    expect(decisions[0].justification).toBe(
-      "validation deferred to middleware layer for performance",
-    );
-    expect(decisions[0].file_path).toBe("test-SUMMARY.md");
-    expect(decisions[0].decision_id).toMatch(/^dec_/);
-  });
-
-  it("returns empty for no deviations", () => {
-    const noDeviations = `### Canon Compliance
-- **thin-handlers** (strong-opinion): ✓ COMPLIANT — all good
-`;
-    expect(parseDecisionsFromSummary(noDeviations, "test.md")).toHaveLength(0);
-  });
-
-  it("returns empty when no compliance section", () => {
-    expect(parseDecisionsFromSummary("no compliance here", "test.md")).toHaveLength(0);
-  });
-});
-
 describe("executeEffects", () => {
   let tmpDir: string;
   let workspace: string;
@@ -228,52 +162,6 @@ describe("executeEffects", () => {
     expect(entries[0].honored).toEqual(["naming-reveals-intent", "errors-are-values"]);
   });
 
-  it("persist_decisions writes to decisions.jsonl", async () => {
-    await writeFile(
-      join(workspace, "plans", "test-task", "task-01-SUMMARY.md"),
-      SAMPLE_SUMMARY,
-    );
-
-    const stateDef: StateDefinition = {
-      type: "single",
-      effects: [{ type: "persist_decisions" }],
-    };
-
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
-
-    expect(results).toHaveLength(1);
-    expect(results[0].type).toBe("persist_decisions");
-    expect(results[0].recorded).toBe(1);
-
-    const jsonl = await readFile(join(tmpDir, ".canon", "decisions.jsonl"), "utf-8");
-    const entries = jsonl.trim().split("\n").map((l) => JSON.parse(l));
-    expect(entries).toHaveLength(1);
-    expect(entries[0].principle_id).toBe("validate-at-boundaries");
-  });
-
-  it("persist_patterns writes to patterns.jsonl", async () => {
-    await writeFile(
-      join(workspace, "plans", "test-task", "task-01-SUMMARY.md"),
-      SAMPLE_SUMMARY,
-    );
-
-    const stateDef: StateDefinition = {
-      type: "single",
-      effects: [{ type: "persist_patterns" }],
-    };
-
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
-
-    expect(results).toHaveLength(1);
-    expect(results[0].type).toBe("persist_patterns");
-    expect(results[0].recorded).toBe(1);
-
-    const jsonl = await readFile(join(tmpDir, ".canon", "patterns.jsonl"), "utf-8");
-    const entries = jsonl.trim().split("\n").map((l) => JSON.parse(l));
-    expect(entries).toHaveLength(1);
-    expect(entries[0].file_paths).toContain("src/api/orders.ts");
-  });
-
   it("returns empty results when no effects defined", async () => {
     const stateDef: StateDefinition = { type: "single" };
     const results = await executeEffects(stateDef, workspace, [], tmpDir);
@@ -290,34 +178,6 @@ describe("executeEffects", () => {
     expect(results).toHaveLength(1);
     expect(results[0].recorded).toBe(0);
     expect(results[0].errors.length).toBeGreaterThan(0);
-  });
-
-  it("runs multiple effects in sequence", async () => {
-    const reviewPath = join(workspace, "plans", "test-task", "REVIEW.md");
-    await writeFile(reviewPath, SAMPLE_REVIEW);
-    await writeFile(
-      join(workspace, "plans", "test-task", "task-01-SUMMARY.md"),
-      SAMPLE_SUMMARY,
-    );
-
-    const stateDef: StateDefinition = {
-      type: "single",
-      effects: [
-        { type: "persist_review", artifact: "REVIEW.md" },
-        { type: "persist_decisions" },
-        { type: "persist_patterns" },
-      ],
-    };
-
-    const results = await executeEffects(
-      stateDef,
-      workspace,
-      ["plans/test-task/REVIEW.md"],
-      tmpDir,
-    );
-
-    expect(results).toHaveLength(3);
-    expect(results.every((r) => r.recorded > 0)).toBe(true);
   });
 });
 

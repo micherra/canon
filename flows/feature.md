@@ -41,7 +41,6 @@ states:
     agent: canon-implementor
     template: implementation-log
     effects:
-      - type: persist_decisions
       - type: check_postconditions
     transitions:
       done: context-sync

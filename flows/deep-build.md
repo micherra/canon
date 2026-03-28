@@ -67,7 +67,6 @@ states:
     agent: canon-implementor
     template: implementation-log
     effects:
-      - type: persist_decisions
       - type: check_postconditions
     consultations:
       before: [plan-review]

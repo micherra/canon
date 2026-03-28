@@ -56,101 +56,97 @@ describe("review-fix-loop fragment effects", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ship-done fragment: persist_decisions + persist_patterns on ship state
+// ship-done fragment: no persist_decisions or persist_patterns (removed)
 // ---------------------------------------------------------------------------
 
 describe("ship-done fragment effects", () => {
-  it("deep-build: ship state has persist_decisions and persist_patterns effects", async () => {
+  it("deep-build: ship state does not have persist_decisions or persist_patterns effects", async () => {
     const { flow, errors } = await loadAndResolveFlow(pluginDir, "deep-build");
     expect(errors).toEqual([]);
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
-    expect(ship.effects).toBeDefined();
-    const types = ship.effects!.map((e) => e.type);
-    expect(types).toContain("persist_decisions");
-    expect(types).toContain("persist_patterns");
+    const types = ship.effects?.map((e) => e.type) ?? [];
+    expect(types).not.toContain("persist_decisions");
+    expect(types).not.toContain("persist_patterns");
   });
 
-  it("feature: ship state has persist_decisions and persist_patterns effects", async () => {
+  it("feature: ship state does not have persist_decisions or persist_patterns effects", async () => {
     const { flow, errors } = await loadAndResolveFlow(pluginDir, "feature");
     expect(errors).toEqual([]);
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
-    expect(ship.effects).toBeDefined();
-    const types = ship.effects!.map((e) => e.type);
-    expect(types).toContain("persist_decisions");
-    expect(types).toContain("persist_patterns");
+    const types = ship.effects?.map((e) => e.type) ?? [];
+    expect(types).not.toContain("persist_decisions");
+    expect(types).not.toContain("persist_patterns");
   });
 
-  it("quick-fix: ship state has persist_decisions and persist_patterns effects", async () => {
+  it("quick-fix: ship state does not have persist_decisions or persist_patterns effects", async () => {
     const { flow, errors } = await loadAndResolveFlow(pluginDir, "quick-fix");
     expect(errors).toEqual([]);
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
-    expect(ship.effects).toBeDefined();
-    const types = ship.effects!.map((e) => e.type);
-    expect(types).toContain("persist_decisions");
-    expect(types).toContain("persist_patterns");
+    const types = ship.effects?.map((e) => e.type) ?? [];
+    expect(types).not.toContain("persist_decisions");
+    expect(types).not.toContain("persist_patterns");
   });
 
-  it("hotfix: ship state has persist_decisions and persist_patterns effects", async () => {
+  it("hotfix: ship state does not have persist_decisions or persist_patterns effects", async () => {
     const { flow, errors } = await loadAndResolveFlow(pluginDir, "hotfix");
     expect(errors).toEqual([]);
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
-    expect(ship.effects).toBeDefined();
-    const types = ship.effects!.map((e) => e.type);
-    expect(types).toContain("persist_decisions");
-    expect(types).toContain("persist_patterns");
+    const types = ship.effects?.map((e) => e.type) ?? [];
+    expect(types).not.toContain("persist_decisions");
+    expect(types).not.toContain("persist_patterns");
   });
 });
 
 // ---------------------------------------------------------------------------
-// implement-verify fragment: persist_decisions on implement state
+// implement-verify fragment: no persist_decisions (removed)
 // ---------------------------------------------------------------------------
 
 describe("implement-verify fragment effects (single-type implement)", () => {
-  it("quick-fix: implement state has persist_decisions effect", async () => {
+  it("quick-fix: implement state does not have persist_decisions effect", async () => {
     const { flow, errors } = await loadAndResolveFlow(pluginDir, "quick-fix");
     expect(errors).toEqual([]);
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();
-    expect(implement.effects).toBeDefined();
-    expect(implement.effects).toContainEqual({ type: "persist_decisions" });
+    const types = implement.effects?.map((e) => e.type) ?? [];
+    expect(types).not.toContain("persist_decisions");
   });
 
-  it("hotfix: implement state has persist_decisions effect", async () => {
+  it("hotfix: implement state does not have persist_decisions effect", async () => {
     const { flow, errors } = await loadAndResolveFlow(pluginDir, "hotfix");
     expect(errors).toEqual([]);
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();
-    expect(implement.effects).toBeDefined();
-    expect(implement.effects).toContainEqual({ type: "persist_decisions" });
+    const types = implement.effects?.map((e) => e.type) ?? [];
+    expect(types).not.toContain("persist_decisions");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Wave implement states in deep-build and feature: persist_decisions
+// Wave implement states in deep-build and feature: no persist_decisions
 // ---------------------------------------------------------------------------
 
 describe("wave implement state effects", () => {
-  it("deep-build: implement state (wave) has persist_decisions effect", async () => {
+  it("deep-build: implement state (wave) does not have persist_decisions effect", async () => {
     const { flow, errors } = await loadAndResolveFlow(pluginDir, "deep-build");
     expect(errors).toEqual([]);
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();
     expect(implement.type).toBe("wave");
-    expect(implement.effects).toBeDefined();
-    expect(implement.effects).toContainEqual({ type: "persist_decisions" });
+    const types = implement.effects?.map((e) => e.type) ?? [];
+    expect(types).not.toContain("persist_decisions");
   });
 
-  it("feature: implement state (wave) has persist_decisions effect", async () => {
+  it("feature: implement state (wave) does not have persist_decisions effect", async () => {
     const { flow, errors } = await loadAndResolveFlow(pluginDir, "feature");
     expect(errors).toEqual([]);
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();
     expect(implement.type).toBe("wave");
-    expect(implement.effects).toBeDefined();
-    expect(implement.effects).toContainEqual({ type: "persist_decisions" });
+    const types = implement.effects?.map((e) => e.type) ?? [];
+    expect(types).not.toContain("persist_decisions");
   });
 });

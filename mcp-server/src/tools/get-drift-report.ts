@@ -23,15 +23,14 @@ export async function getDriftReport(
 ): Promise<DriftReportOutput> {
   const store = new DriftStore(projectDir);
 
-  const [reviews, decisions, principles] = await Promise.all([
+  const [reviews, principles] = await Promise.all([
     store.getReviews(),
-    store.getDecisions(),
     loadAllPrinciples(projectDir, pluginDir),
   ]);
 
   const allIds = principles.map((p) => p.id);
 
-  const report = analyzeDrift(reviews, decisions, allIds, {
+  const report = analyzeDrift(reviews, allIds, {
     lastN: input.last_n,
     principleId: input.principle_id,
     directory: input.directory,

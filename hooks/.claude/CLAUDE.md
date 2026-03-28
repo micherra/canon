@@ -22,7 +22,6 @@ Pre/post tool-use interceptors that enforce policy and prevent mistakes without 
 | `principle-inject.sh` | PreToolUse | Inject principle summaries into prompts |
 | `learn-nudge.sh` | PostToolUse | Suggest principle creation/updates |
 | `compaction-check.sh` | PostToolUse | Detect workspace file growth |
-| `agent-cost-tracker.sh` | PostToolUse | Track API costs per agent |
 
 ## Conventions
 <!-- last-updated: 2026-03-22 -->

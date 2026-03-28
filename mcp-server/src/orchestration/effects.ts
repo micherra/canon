@@ -1,6 +1,6 @@
 /**
  * Drift effect executor — runs declarative effects after state completion.
- * Effects parse agent artifacts and persist drift data (reviews, decisions, patterns).
+ * Effects parse agent artifacts and persist drift data (reviews).
  * All effects are best-effort: parse failures are logged but never block the flow.
  */
 
@@ -9,7 +9,7 @@ import { join, basename } from "path";
 import { DriftStore } from "../drift/store.ts";
 import { generateId } from "../utils/id.ts";
 import type { StateDefinition, Effect } from "./flow-schema.ts";
-import type { DecisionEntry, PatternEntry, ReviewEntry } from "../schema.ts";
+import type { ReviewEntry } from "../schema.ts";
 import { readBoard } from "./board.ts";
 import { resolvePostconditions, evaluatePostconditions } from "./contract-checker.ts";
 
@@ -66,10 +66,6 @@ async function executeOneEffect(
   switch (effect.type) {
     case "persist_review":
       return persistReview(effect, store, workspace, artifacts);
-    case "persist_decisions":
-      return persistDecisions(store, workspace);
-    case "persist_patterns":
-      return persistPatterns(store, workspace);
     case "check_postconditions":
       return checkPostconditions(stateDef, workspace, projectDir, stateName);
   }
@@ -264,168 +260,8 @@ export function parseReviewArtifact(content: string): ParsedReview | null {
 }
 
 // ---------------------------------------------------------------------------
-// persist_decisions — parse *-SUMMARY.md Canon Compliance → decisions.jsonl
-// ---------------------------------------------------------------------------
-
-async function persistDecisions(
-  store: DriftStore,
-  workspace: string,
-): Promise<EffectResult> {
-  const errors: string[] = [];
-  let recorded = 0;
-  const summaries = await findSummaryFiles(workspace);
-
-  for (const filePath of summaries) {
-    try {
-      const content = await readFile(filePath, "utf-8");
-      const decisions = parseDecisionsFromSummary(content, filePath);
-      for (const d of decisions) {
-        await store.appendDecision(d);
-        recorded++;
-      }
-    } catch (err) {
-      errors.push(`${basename(filePath)}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  return { type: "persist_decisions", recorded, errors };
-}
-
-/**
- * Parse Canon Compliance section from an implementation summary.
- * Looks for JUSTIFIED_DEVIATION entries.
- */
-export function parseDecisionsFromSummary(content: string, filePath: string): DecisionEntry[] {
-  const decisions: DecisionEntry[] = [];
-  const complianceMatch = content.match(
-    /### Canon Compliance\s*\n(?:<!--.*?-->\s*\n)?((?:- .*\n)*)/,
-  );
-  if (!complianceMatch) return decisions;
-
-  const lines = complianceMatch[1].trim().split("\n");
-  for (const line of lines) {
-    // Match: - **principle-id** (severity): ⚠ JUSTIFIED_DEVIATION — detail
-    const m = line.match(
-      /- \*\*([^*]+)\*\*\s*\([^)]*\):\s*⚠?\s*JUSTIFIED_DEVIATION\s*—?\s*(.*)/i,
-    );
-    if (m) {
-      decisions.push({
-        decision_id: generateId("dec"),
-        timestamp: new Date().toISOString(),
-        principle_id: m[1].trim(),
-        file_path: filePath,
-        justification: m[2].trim() || "Justified deviation (no detail provided)",
-      });
-    }
-  }
-
-  return decisions;
-}
-
-// ---------------------------------------------------------------------------
-// persist_patterns — parse *-SUMMARY.md for observed patterns → patterns.jsonl
-// ---------------------------------------------------------------------------
-
-async function persistPatterns(
-  store: DriftStore,
-  workspace: string,
-): Promise<EffectResult> {
-  const errors: string[] = [];
-  let recorded = 0;
-  const summaries = await findSummaryFiles(workspace);
-
-  // Collect files from all summaries for pattern context
-  const allFiles: string[] = [];
-  const patternTexts: string[] = [];
-
-  for (const filePath of summaries) {
-    try {
-      const content = await readFile(filePath, "utf-8");
-
-      // Collect file paths from the Files table
-      const filesTableMatch = content.match(
-        /### Files\s*\n\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/,
-      );
-      if (filesTableMatch) {
-        const rows = filesTableMatch[1].trim().split("\n");
-        for (const row of rows) {
-          const cells = row.split("|").map((c) => c.trim()).filter(Boolean);
-          if (cells.length >= 1) {
-            const fp = cells[0].replace(/`/g, "");
-            if (fp && !allFiles.includes(fp)) allFiles.push(fp);
-          }
-        }
-      }
-
-      // Check for Canon Compliance patterns — COMPLIANT entries that follow conventions
-      const complianceMatch = content.match(
-        /### Canon Compliance\s*\n(?:<!--.*?-->\s*\n)?((?:- .*\n)*)/,
-      );
-      if (complianceMatch) {
-        const lines = complianceMatch[1].trim().split("\n");
-        for (const line of lines) {
-          const m = line.match(
-            /- \*\*([^*]+)\*\*\s*\([^)]*\):\s*[✓✔]?\s*COMPLIANT\s*—?\s*(.*)/i,
-          );
-          if (m && m[2].trim()) {
-            patternTexts.push(`${m[1].trim()}: ${m[2].trim()}`);
-          }
-        }
-      }
-    } catch (err) {
-      errors.push(`${basename(filePath)}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  // Only persist if we found meaningful patterns
-  if (patternTexts.length > 0 && allFiles.length > 0) {
-    const entry: PatternEntry = {
-      pattern_id: generateId("pat"),
-      timestamp: new Date().toISOString(),
-      pattern: patternTexts.join("; "),
-      file_paths: allFiles,
-      context: "Extracted from implementation summaries at ship time",
-    };
-    await store.appendPattern(entry);
-    recorded = 1;
-  }
-
-  return { type: "persist_patterns", recorded, errors };
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Find *-SUMMARY.md files in workspace plans directory.
- * Scans one level of subdirectories (plans/{slug}/*-SUMMARY.md).
- */
-async function findSummaryFiles(workspace: string): Promise<string[]> {
-  const plansDir = join(workspace, "plans");
-  const results: string[] = [];
-  let subdirs: string[];
-  try {
-    subdirs = await readdir(plansDir);
-  } catch {
-    return results;
-  }
-  for (const sub of subdirs) {
-    const subPath = join(plansDir, sub);
-    let files: string[];
-    try {
-      files = await readdir(subPath);
-    } catch {
-      continue;
-    }
-    for (const f of files) {
-      if (f.endsWith("-SUMMARY.md")) {
-        results.push(join(subPath, f));
-      }
-    }
-  }
-  return results;
-}
 
 /** Resolve an artifact name to a file path and read its content. */
 async function resolveAndRead(

@@ -27,25 +27,15 @@ describe("reportInputSchema", () => {
     }
   });
 
-  it("rejects input with missing required fields", () => {
-    expect(() =>
-      reportInputSchema.parse({ type: "decision", principle_id: "p1" })
-    ).toThrow();
-  });
-
   it("rejects input with invalid type discriminant", () => {
     expect(() =>
       reportInputSchema.parse({ type: "unknown", foo: "bar" })
     ).toThrow();
   });
 
-  it("rejects pattern with empty file_paths array", () => {
+  it("rejects input with missing required fields for review", () => {
     expect(() =>
-      reportInputSchema.parse({
-        type: "pattern",
-        pattern: "something",
-        file_paths: [],
-      })
+      reportInputSchema.parse({ type: "review" })
     ).toThrow();
   });
 });
@@ -70,45 +60,6 @@ describe("report()", () => {
       .filter((l) => l.trim() !== "")
       .map((l) => JSON.parse(l) as T);
   }
-
-  it("records a decision and writes to decisions.jsonl", async () => {
-    const result = await report(
-      {
-        type: "decision",
-        principle_id: "p1",
-        file_path: "src/foo.ts",
-        justification: "Legacy constraint",
-      },
-      tmpDir
-    );
-
-    expect(result.recorded).toBe(true);
-    expect(result.id).toMatch(/^dec_\d{8}_[0-9a-f]{16}$/);
-
-    const entries = await readJsonl(join(tmpDir, ".canon", "decisions.jsonl"));
-    expect(entries).toHaveLength(1);
-    expect((entries[0] as any).principle_id).toBe("p1");
-    expect((entries[0] as any).decision_id).toBe(result.id);
-  });
-
-  it("records a pattern and writes to patterns.jsonl", async () => {
-    const result = await report(
-      {
-        type: "pattern",
-        pattern: "Early returns on error",
-        file_paths: ["src/a.ts", "src/b.ts"],
-      },
-      tmpDir
-    );
-
-    expect(result.recorded).toBe(true);
-    expect(result.id).toMatch(/^pat_\d{8}_[0-9a-f]{16}$/);
-
-    const entries = await readJsonl(join(tmpDir, ".canon", "patterns.jsonl"));
-    expect(entries).toHaveLength(1);
-    expect((entries[0] as any).pattern).toBe("Early returns on error");
-    expect((entries[0] as any).context).toBe(""); // default when omitted
-  });
 
   it("records a review with derived BLOCKING verdict (rule violation)", async () => {
     const result = await report(

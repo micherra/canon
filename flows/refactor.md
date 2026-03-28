@@ -41,8 +41,6 @@ states:
     type: wave
     agent: canon-implementor
     template: implementation-log
-    effects:
-      - type: persist_decisions
     transitions:
       done: verify
       blocked: hitl

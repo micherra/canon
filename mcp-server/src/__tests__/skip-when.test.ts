@@ -6,9 +6,11 @@ import { evaluateSkipWhen, matchGlob } from "../orchestration/skip-when.ts";
 // spawnSyncImpl is a mutable reference we swap per test.
 type SpawnSyncResult = { stdout: string; status: number; error?: Error };
 let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
+let lastSpawnArgs: unknown[] = [];
 
 vi.mock("node:child_process", () => ({
   spawnSync: (...args: unknown[]) => {
+    lastSpawnArgs = args;
     if (spawnSyncImpl) return spawnSyncImpl();
     // Default: simulate git failure (safe default — do not skip)
     return { stdout: "", status: 1, error: new Error("spawnSync not configured in test") };
@@ -39,6 +41,7 @@ function makeBoard(overrides?: Partial<Board>): Board {
 
 beforeEach(() => {
   spawnSyncImpl = null;
+  lastSpawnArgs = [];
 });
 
 // ---------------------------------------------------------------------------
@@ -152,8 +155,8 @@ describe("evaluateSkipWhen — auto_approved", () => {
     expect(result.skip).toBe(false);
   });
 
-  it("does not skip when board.metadata.auto_approve is an empty object (truthy)", async () => {
-    const board = makeBoard({ metadata: { auto_approve: {} } });
+  it("does not skip when board.metadata.auto_approve is a non-boolean truthy value (string)", async () => {
+    const board = makeBoard({ metadata: { auto_approve: "yes" } });
     const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
     expect(result.skip).toBe(false);
   });
@@ -241,6 +244,24 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
     expect(result.skip).toBe(false);
+  });
+
+  it("returns skip: true when contract files are only deleted (not added/modified)", async () => {
+    // --diff-filter=d excludes deleted files, so git returns only the non-contract file
+    spawnSyncImpl = () => ({ stdout: "src/utils/helper.ts\n", status: 0 });
+    const board = makeBoard({ base_commit: "abc1234" });
+    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("No contract changes detected");
+  });
+
+  it("passes --diff-filter=d to exclude deleted files from contract check", async () => {
+    spawnSyncImpl = () => ({ stdout: "", status: 0 });
+    const board = makeBoard({ base_commit: "abc1234" });
+    await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+
+    expect(lastSpawnArgs[1]).toContain("--diff-filter=d");
   });
 
   it("returns skip: true when diff output is empty (no changes at all)", async () => {
