@@ -19,6 +19,8 @@ files:
   - path/to/file.ts
 principles:
   - principle-id-1
+domains:
+  - frontend
 ---
 
 ## Task: {brief description}

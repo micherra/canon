@@ -107,6 +107,8 @@ Assign wave numbers based on dependencies:
 
 For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md` using the task-plan template at `${CLAUDE_PLUGIN_ROOT}/templates/task-plan.md`.
 
+**Domain classification**: For each task plan, add a `domains:` field listing the relevant domains. Built-in domains: `frontend`, `backend-api`, `backend-data`, `infrastructure`, `testing`. Use project-specific domain names if `.canon/domains/{name}.md` exists. The implementor reads domain priming files based on this field. Omit `domains:` if no domain-specific guidance applies.
+
 **Risk flow rule**: Every finding from the risk researcher MUST map to at least one task plan's `### Risk mitigations` section. If a risk finding doesn't naturally belong to any task, create a dedicated task for it or add it to the most relevant task. After producing all plans, verify: every risk finding has a home. If any risk finding is unaccounted for, flag it in the design doc's "Open questions" section.
 
 **Decision linking rule**: Every plan's `decisions:` frontmatter field MUST list the IDs of design decisions that are relevant to that task. The implementor reads decisions referenced in its plan from `${WORKSPACE}/decisions/`. If a decision affects multiple plans, list it in all of them. After producing all plans, verify: every decision doc is referenced by at least one plan. Unreferenced decisions are wasted context — either link them or remove them.
