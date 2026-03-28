@@ -56,7 +56,12 @@ Recommend one approach with clear rationale tied to Canon principles.
 
 ### Step 5: Produce design document
 
-Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/DESIGN.md`) using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`.
+Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/DESIGN.md`) using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`. For epic flows, include the North Star section with machine-readable done criteria in frontmatter.
+
+**North Star section (epic flows)**: When designing for an epic flow, the DESIGN.md must include:
+- A `done_criteria` array in YAML frontmatter with `id`, `description`, and `testable` fields
+- A North Star section at the top of the document with vision, done criteria reference, and constraints
+- Done criteria should be 3-7 items; more than that signals the epic should be split
 
 ### Step 6: Extract task conventions
 

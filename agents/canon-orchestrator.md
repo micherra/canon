@@ -129,11 +129,11 @@ For review intents, extract scope hints:
 | Refactoring, restructuring | `refactor` | User says "refactor", "rename", "extract", "restructure", "clean up" |
 | New feature (4-10 files) | `feature` | Adding something new, medium scope |
 | Migration, upgrade, version bump | `migrate` | User says "migrate", "upgrade", "move to", "switch from X to Y" |
-| Large project (10+ files) | `deep-build` | Cross-cutting concern, major change |
+| Large project (10+ files) | `epic` | Cross-cutting concern, major change |
 | Research, investigation | `explore` | User asks "how does X work", "what would it take to", "investigate" |
 | Test coverage improvement | `test-gap` | User says "improve tests", "add coverage", "test gaps" |
 
-When in doubt between tiers, prefer the higher tier. When in doubt between specialized flows (refactor, migrate) and generic ones (feature, deep-build), prefer the specialized flow — it has better-tuned checkpoints.
+When in doubt between tiers, prefer the higher tier. When in doubt between specialized flows (refactor, migrate) and generic ones (feature, epic), prefer the specialized flow — it has better-tuned checkpoints.
 
 4. Proceed immediately. Don't ask for tier/flow confirmation — the user doesn't need to know about these internals. Just give a brief plain-language update like "This looks like a small fix, starting now" or "Bigger change — I'll research first, then plan and build".
 
@@ -253,6 +253,27 @@ After merging wave results (step 5) and before running the gate (step 7), check 
 5. Mark each event as `applied` or `rejected` via `resolve_wave_event`
 6. If any event is type `pause`, enter HITL before continuing to the gate
 
+### Epic Wave Checkpoint (epic flow only)
+
+After all between-wave consultations complete and before proceeding to the next wave, the orchestrator runs the wave checkpoint collaboration loop:
+
+1. **Parse replan proposals**: Read the pattern-check consultation output. If it contains a `## Proposed Events` section, parse each entry into a wave event (type + detail).
+
+2. **Check done criteria**: If the pattern-check output states "All done criteria are met", transition the implement state with `epic_complete` status. This skips remaining waves and transitions directly to ship.
+
+3. **Set open questions metadata**: If the pattern-check output contains an `## Open Questions` section, set `board.metadata.has_open_questions = true`. Otherwise set it to `false`. This controls whether the targeted-research consultation runs (via its `skip_when: no_open_questions`).
+
+4. **Present wave checkpoint to user**: Display:
+   - Wave N summary (what was built, gate results)
+   - Pattern-check observations
+   - Proposed plan changes (if any) — each with approve/reject option
+   - Open questions being researched (if targeted-research ran)
+   - Remaining iterations budget and done criteria status
+
+5. **Process user decisions**: For each proposed event the user approves, inject it via `inject_wave_event` and resolve via `resolve_wave_event`. For rejected proposals, skip them.
+
+6. **Iteration budget enforcement**: The implement state's `max_iterations` caps total re-entries (both inner-loop retries on gate failure and outer-loop waves). The existing `canEnterState()` check enforces this — no separate max_waves check needed. When the budget is exhausted, enter HITL with the reason. The user can choose to increase `max_iterations` or ship what's done.
+
 ### After-Consultation Handling
 
 After the last wave of a state completes and before calling `report_result`:
@@ -282,6 +303,7 @@ After-consultation summaries are automatically picked up by the next state's `en
 | `${wave_briefing}` | Inter-wave learning briefing (wave states, waves 2+) |
 | `${wave_guidance}` | _Not a substitution variable_ — wave guidance is read from `waves/guidance.md` and injected directly by `get_spawn_prompt` into wave/parallel-per state prompts |
 | `${item}` / `${item.field}` | Current item (parallel-per states) |
+| `${open_questions}` | Open questions from pattern-check output (targeted-research consultation) |
 
 **Context injection** (`inject_context`):
 - `from: <state-id>`: Read artifact from board state. Extract `section:` if specified. Store as `${as}`.
