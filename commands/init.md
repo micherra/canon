@@ -34,9 +34,10 @@ Create `.canon/config.json` with sensible defaults:
 
 ```json
 {
-  "source_dirs": ["src"],
   "principle_dirs": [".canon/principles"],
-  "layer_patterns": {},
+  "layers": {
+    "src": ["src/**"]
+  },
   "review": {
     "max_principles_per_review": 10,
     "include_honored_in_output": true

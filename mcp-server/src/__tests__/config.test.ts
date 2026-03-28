@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { loadConfigNumber, buildLayerInferrer } from "../utils/config.ts";
+import { loadConfigNumber, buildLayerInferrer, deriveSourceDirsFromLayers } from "../utils/config.ts";
 
 let tmpDir: string;
 
@@ -100,6 +100,92 @@ describe("buildLayerInferrer", () => {
       expect(infer("agents/canon-implementor.md")).toBe("agents");
       expect(infer("unmatched/file.ts")).toBe("unknown");
     });
+  });
+});
+
+describe("deriveSourceDirsFromLayers", () => {
+  it("returns directories from rooted glob patterns", async () => {
+    await writeConfig({
+      layers: {
+        "mcp-server": ["mcp-server/src/**"],
+        agents: ["agents/**"],
+      },
+    });
+    const result = await deriveSourceDirsFromLayers(tmpDir);
+    expect(result).toContain("mcp-server/src");
+    expect(result).toContain("agents");
+  });
+
+  it("skips plain segment patterns with no slash before wildcard", async () => {
+    await writeConfig({
+      layers: {
+        api: ["api", "routes"],
+      },
+    });
+    const result = await deriveSourceDirsFromLayers(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it("deduplicates overlapping patterns from different layers", async () => {
+    await writeConfig({
+      layers: {
+        first: ["src/api/**"],
+        second: ["src/api/**"],
+      },
+    });
+    const result = await deriveSourceDirsFromLayers(tmpDir);
+    expect(result).not.toBeNull();
+    const srcApiCount = result!.filter((d) => d === "src/api").length;
+    expect(srcApiCount).toBe(1);
+  });
+
+  it("returns null when no layers configured in config", async () => {
+    await writeConfig({ review: { max_principles_per_review: 5 } });
+    const result = await deriveSourceDirsFromLayers(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when config file is missing", async () => {
+    const result = await deriveSourceDirsFromLayers(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when layers contain only plain segment patterns", async () => {
+    await writeConfig({
+      layers: {
+        api: ["api", "routes", "controllers"],
+        ui: ["components", "pages"],
+      },
+    });
+    const result = await deriveSourceDirsFromLayers(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  it("handles mixed rooted globs and plain segments, returns only rooted", async () => {
+    await writeConfig({
+      layers: {
+        "mcp-server": ["mcp-server/src/**"],
+        api: ["api", "routes"],
+      },
+    });
+    const result = await deriveSourceDirsFromLayers(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result).toContain("mcp-server/src");
+    expect(result).not.toContain("api");
+    expect(result).not.toContain("routes");
+  });
+
+  it("strips trailing slash after removing wildcard suffix", async () => {
+    await writeConfig({
+      layers: {
+        flows: ["flows/*"],
+      },
+    });
+    const result = await deriveSourceDirsFromLayers(tmpDir);
+    expect(result).not.toBeNull();
+    expect(result).toContain("flows");
+    // Should not have trailing slash
+    expect(result!.every((d) => !d.endsWith("/"))).toBe(true);
   });
 });
 

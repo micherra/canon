@@ -8,7 +8,7 @@ import { extractImports, resolveImport } from "../graph/import-parser.ts";
 import { extractExports } from "../graph/export-parser.ts";
 import { scanSourceFiles } from "../graph/scanner.ts";
 import { DriftStore } from "../drift/store.ts";
-import { loadSourceDirs, loadLayerMappings, buildLayerInferrer } from "../utils/config.ts";
+import { deriveSourceDirsFromLayers, loadLayerMappings, buildLayerInferrer } from "../utils/config.ts";
 import { isNotFound } from "../utils/errors.ts";
 import { loadCachedGraph, getNodeMetrics, computeImpactScore, type GraphMetrics } from "../graph/query.ts";
 import { toPosix, loadPathAliases } from "../utils/paths.ts";
@@ -183,7 +183,7 @@ export async function getFileContext(
   const aliases = await loadPathAliases(projectDir);
 
   // Scan all project files to resolve this file's imports
-  const sourceDirs = await loadSourceDirs(projectDir);
+  const sourceDirs = await deriveSourceDirsFromLayers(projectDir);
   let allFiles: string[] = [];
 
   if (sourceDirs && sourceDirs.length > 0) {

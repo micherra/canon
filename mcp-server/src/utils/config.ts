@@ -3,7 +3,7 @@ import { join } from "path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 // Simple per-event-loop-tick cache — avoids reading config.json 3x when
-// loadLayerMappings, loadSourceDirs, and loadConfigNumber are called in sequence.
+// loadLayerMappings, deriveSourceDirsFromLayers, and loadConfigNumber are called in sequence.
 let configCache: { projectDir: string; result: Record<string, any> | null; tick: number } | null = null;
 let currentTick = 0;
 const bumpTick = () => { queueMicrotask(() => { currentTick++; }); };
@@ -132,13 +132,31 @@ export function buildLayerInferrer(mappings: LayerMappings): (filePath: string) 
   };
 }
 
-/** Read source_dirs from .canon/config.json if it exists. */
-export async function loadSourceDirs(projectDir: string): Promise<string[] | null> {
+/**
+ * Derive scan directories from layer glob patterns in .canon/config.json.
+ * For each pattern that contains a '/' before any '*', strips from the first '*'
+ * character and trims trailing '/' to yield the scan directory.
+ * Plain segment patterns (no '/' before '*') are skipped.
+ * Returns null if no rooted patterns are found or if no layers are configured.
+ */
+export async function deriveSourceDirsFromLayers(projectDir: string): Promise<string[] | null> {
   const config = await loadCanonConfig(projectDir);
-  if (config && Array.isArray(config.source_dirs) && config.source_dirs.length > 0) {
-    return config.source_dirs;
+  if (!config?.layers || typeof config.layers !== "object" || Array.isArray(config.layers)) {
+    return null;
   }
-  return null;
+  const dirs = new Set<string>();
+  for (const patterns of Object.values(config.layers as Record<string, string[]>)) {
+    if (!Array.isArray(patterns)) continue;
+    for (const pattern of patterns) {
+      const starIdx = pattern.indexOf("*");
+      if (starIdx === -1) continue; // no wildcard — plain segment, skip
+      const slashBeforeStar = pattern.lastIndexOf("/", starIdx - 1);
+      if (slashBeforeStar === -1) continue; // no '/' before '*' — not a rooted path, skip
+      const dir = pattern.slice(0, starIdx).replace(/\/$/, "");
+      if (dir) dirs.add(dir);
+    }
+  }
+  return dirs.size > 0 ? Array.from(dirs) : null;
 }
 
 /**

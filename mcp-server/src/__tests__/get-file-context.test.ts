@@ -14,10 +14,17 @@ describe("getFileContext", () => {
     await mkdir(join(tmpDir, "src", "services"), { recursive: true });
     await mkdir(join(tmpDir, "src", "utils"), { recursive: true });
 
-    // Write config with source_dirs
+    // Write config with layers using rooted globs so files under src/ are scanned.
+    // Use the canonical layer names (api, domain, shared) so layer inference tests pass.
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ source_dirs: ["src"] }),
+      JSON.stringify({
+        layers: {
+          api: ["src/api/**"],
+          domain: ["src/services/**"],
+          shared: ["src/utils/**"],
+        },
+      }),
     );
   });
 
@@ -281,10 +288,10 @@ describe("getFileContext", () => {
     });
 
     it("groups imports by their inferred layer", async () => {
-      // Override config with layer mappings (keep source_dirs)
+      // Override config with layer mappings using rooted globs so src/ is scanned
       await writeFile(
         join(tmpDir, ".canon", "config.json"),
-        JSON.stringify({ source_dirs: ["src"], layers: { utils: ["src/utils"], domain: ["src/domain"] } }),
+        JSON.stringify({ layers: { utils: ["src/utils/**"], domain: ["src/domain/**"] } }),
       );
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
@@ -307,7 +314,7 @@ describe("getFileContext", () => {
     it("keeps the flat imports array alongside imports_by_layer", async () => {
       await writeFile(
         join(tmpDir, ".canon", "config.json"),
-        JSON.stringify({ source_dirs: ["src"], layers: { utils: ["src/utils"] } }),
+        JSON.stringify({ layers: { utils: ["src/utils/**"] } }),
       );
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
@@ -342,7 +349,6 @@ describe("getFileContext", () => {
       await writeFile(
         join(tmpDir, ".canon", "config.json"),
         JSON.stringify({
-          source_dirs: ["src"],
           layers: {
             services: ["src/services/**"],
             api: ["src/api/**"],
@@ -389,7 +395,7 @@ describe("getFileContext", () => {
     it("groups imported_by files by their inferred layer", async () => {
       await writeFile(
         join(tmpDir, ".canon", "config.json"),
-        JSON.stringify({ source_dirs: ["src"], layers: { api: ["src/api"], services: ["src/services"], utils: ["src/utils"] } }),
+        JSON.stringify({ layers: { api: ["src/api/**"], services: ["src/services/**"], utils: ["src/utils/**"] } }),
       );
       await writeFile(
         join(tmpDir, "src", "utils", "helper.ts"),
@@ -417,7 +423,7 @@ describe("getFileContext", () => {
     it("keeps the flat imported_by array alongside imported_by_layer", async () => {
       await writeFile(
         join(tmpDir, ".canon", "config.json"),
-        JSON.stringify({ source_dirs: ["src"], layers: { api: ["src/api"], utils: ["src/utils"] } }),
+        JSON.stringify({ layers: { api: ["src/api/**"], utils: ["src/utils/**"] } }),
       );
       await writeFile(
         join(tmpDir, "src", "utils", "helper.ts"),

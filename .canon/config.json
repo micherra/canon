@@ -1,13 +1,4 @@
 {
-  "source_dirs": [
-    "mcp-server/src",
-    "mcp-server/ui",
-    "agents",
-    "commands",
-    "flows",
-    "hooks",
-    "templates"
-  ],
   "principle_dirs": [".canon/principles"],
   "layers": {
     "mcp-server": ["mcp-server/src/**"],

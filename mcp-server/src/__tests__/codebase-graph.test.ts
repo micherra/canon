@@ -109,12 +109,11 @@ describe("codebaseGraph", () => {
     await rm(emptyDir, { recursive: true, force: true });
   });
 
-  it("reads source_dirs from .canon/config.json", async () => {
+  it("derives scan dirs from layers in .canon/config.json", async () => {
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
-        source_dirs: ["src"],
-        layers: { api: ["api"], domain: ["services"], shared: ["utils"] },
+        layers: { src: ["src/**"] },
       })
     );
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
@@ -124,20 +123,19 @@ describe("codebaseGraph", () => {
     expect(result.nodes[0].id).toBe("src/api/handler.ts");
   });
 
-  it("uses root_dir as fallback when no source_dirs configured", async () => {
+  it("uses root_dir as fallback when no layers with rooted globs configured", async () => {
     await writeFile(join(tmpDir, "src", "api", "a.ts"), `export const a = 1;`);
 
     const result = await codebaseGraph({ root_dir: tmpDir }, tmpDir, "/nonexistent");
     expect(result.nodes.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("source_dirs from config takes precedence over root_dir", async () => {
-    // Config says scan "src" only
+  it("layers-derived dirs take precedence over root_dir", async () => {
+    // Config layers say scan "src" only via glob
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
-        source_dirs: ["src"],
-        layers: { api: ["api"], domain: ["services"], shared: ["utils"] },
+        layers: { src: ["src/**"] },
       })
     );
     // File inside src
@@ -146,7 +144,7 @@ describe("codebaseGraph", () => {
     await mkdir(join(tmpDir, "scripts"), { recursive: true });
     await writeFile(join(tmpDir, "scripts", "seed.ts"), `export const s = 1;`);
 
-    // Even though root_dir is passed, config source_dirs should win
+    // Even though root_dir is passed, layers-derived dirs should win
     const result = await codebaseGraph({ root_dir: tmpDir }, tmpDir, "/nonexistent");
     expect(result.nodes.every((n) => n.id.startsWith("src/"))).toBe(true);
     expect(result.nodes.find((n) => n.id.includes("scripts"))).toBeUndefined();
@@ -202,7 +200,7 @@ describe("codebaseGraph", () => {
   it("falls back to default layers when layers are missing from config", async () => {
     // When config has no layers key, codebaseGraph must not throw and must use
     // the DEFAULT_LAYER_MAPPINGS (api, ui, domain, data, infra, shared).
-    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ source_dirs: ["src"] }));
+    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({}));
     // Add a file in src/api — default mappings assign "api" layer to "api" directories.
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
@@ -224,8 +222,7 @@ describe("codebaseGraph", () => {
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
-        source_dirs: ["src"],
-        layers: { llm: ["templates"] },
+        layers: { llm: ["src/templates/**"] },
         graph: {
           composition: {
             enabled: true,
@@ -261,8 +258,7 @@ describe("codebaseGraph", () => {
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
-        source_dirs: ["src"],
-        layers: { llm: ["templates"] },
+        layers: { llm: ["src/templates/**"] },
         graph: {
           composition: {
             enabled: false,

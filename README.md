@@ -211,15 +211,14 @@ All configuration is in `.canon/config.json`. Every key is optional.
 
 ```json
 {
-  "source_dirs": ["src", "lib"],
   "max_file_lines": 500,
   "layers": {
-    "api": ["api", "routes", "controllers"],
-    "ui": ["app", "components", "pages", "views"],
-    "domain": ["services", "domain", "models"],
-    "data": ["db", "data", "repositories", "prisma"],
-    "infra": ["infra", "deploy", "terraform", "docker"],
-    "shared": ["utils", "lib", "shared", "types"]
+    "api": ["api/**", "routes/**", "controllers/**"],
+    "ui": ["app/**", "components/**", "pages/**", "views/**"],
+    "domain": ["services/**", "domain/**", "models/**"],
+    "data": ["db/**", "data/**", "repositories/**"],
+    "infra": ["infra/**", "deploy/**"],
+    "shared": ["utils/**", "lib/**", "shared/**", "types/**"]
   },
   "review": {
     "max_principles_per_review": 10,
@@ -228,7 +227,7 @@ All configuration is in `.canon/config.json`. Every key is optional.
 }
 ```
 
-Override `layers` to match your project's directory structure. Run `/canon:doctor` to check for configuration issues.
+Canon scans directories derived from the glob prefixes in `layers` — no separate `source_dirs` needed. Override `layers` to match your project's directory structure. Run `/canon:doctor` to check for configuration issues.
 
 ---
 

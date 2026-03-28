@@ -8,7 +8,7 @@ import { loadAllPrinciples } from "../matcher.ts";
 import { DriftStore } from "../drift/store.ts";
 import { generateInsights, type CodebaseInsights } from "../graph/insights.ts";
 import {
-  loadSourceDirs,
+  deriveSourceDirsFromLayers,
   loadLayerMappings,
   loadLayerMappingsStrict,
   buildLayerInferrer,
@@ -117,7 +117,7 @@ async function scanProjectFiles(
   projectDir: string,
 ): Promise<string[]> {
   const explicitSourceDirs = input.source_dirs;
-  const configSourceDirs = await loadSourceDirs(projectDir);
+  const configSourceDirs = await deriveSourceDirsFromLayers(projectDir);
   const sourceDirs = explicitSourceDirs || configSourceDirs;
   let baseFiles: string[] = [];
 
@@ -485,7 +485,7 @@ export async function codebaseGraph(
 
   // Resolve source_dirs for pipeline scoping
   const explicitSourceDirs = input.source_dirs;
-  const configSourceDirs = await loadSourceDirs(projectDir);
+  const configSourceDirs = await deriveSourceDirsFromLayers(projectDir);
   const pipelineSourceDirs = explicitSourceDirs || configSourceDirs || undefined;
 
   try {
