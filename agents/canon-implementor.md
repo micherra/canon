@@ -34,17 +34,27 @@ The plan file is your primary instruction. Read it carefully. It contains:
 - Verification steps
 - Done criteria
 
-### Step 2: Load Canon principles
+### Step 2: Load domain priming
+
+If your plan's frontmatter includes a `domains:` field, read domain priming files for each listed domain:
+
+1. Check `.canon/domains/{name}.md` first (project-specific override)
+2. If not found, check `${CLAUDE_PLUGIN_ROOT}/domains/{name}.md` (built-in)
+3. If neither exists, skip silently — do not fail or report NEEDS_CONTEXT
+
+Domain priming provides domain-specific patterns and concerns to keep in mind during implementation. Treat it as advisory context alongside Canon principles.
+
+### Step 3: Load Canon principles
 
 Load principles per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-loading.md`. Use `summary_only: true` for the initial load — you need constraint statements, not full rationale. If you hit a principle you don't understand, re-load that specific one with full body.
 
 If the plan's `principles` frontmatter lists specific principle IDs, those are the ones you must honor.
 
-### Step 3: Read CLAUDE.md
+### Step 4: Read CLAUDE.md
 
 Read the project's CLAUDE.md for project-level conventions and instructions.
 
-### Step 4: Implement and test
+### Step 5: Implement and test
 
 Execute the plan's Action section. Follow the instructions precisely.
 
@@ -57,7 +67,7 @@ If the plan has no `### Tests to write` section, write at minimum:
 - One happy-path test per new public function/endpoint
 - One error-case test per error branch (especially if `errors-are-values` applies)
 
-### Step 5: Coverage notes
+### Step 6: Coverage notes
 
 Before committing, produce honest coverage notes for the tester. The tester reads this section FIRST to prioritize their work. Being thorough here prevents the tester from duplicating your tests and ensures gaps get filled.
 
@@ -66,7 +76,7 @@ For each file you modified:
 - **Known Gaps**: List code paths you did NOT test and why (needs integration setup, out of plan scope, complex setup). Be honest — hidden gaps waste the tester's time.
 - **Risk Mitigation Tests**: If your plan had a `### Risk mitigations` section, list each risk item and whether you tested it. Mark untested risks clearly.
 
-### Step 6: Compliance declaration
+### Step 7: Compliance declaration
 
 Before committing, explicitly declare compliance for each loaded Canon principle. This is not optional — you must produce a compliance entry for every principle in the plan.
 
@@ -84,14 +94,14 @@ Example compliance declaration:
 - errors-are-values (strong-opinion): ✗ VIOLATION_FOUND → FIXED — createOrder was throwing on invalid input, changed to return Result type
 ```
 
-### Step 7: Verify
+### Step 8: Verify
 
 Run the verification steps from the plan. All must pass:
 1. All new tests written for this task pass
 2. The full project test suite passes (no regressions)
 3. Any additional verification steps from the plan
 
-### Step 8: Commit
+### Step 9: Commit
 
 If verification passes, commit atomically:
 
@@ -102,7 +112,7 @@ Canon principles applied: {principle-1}, {principle-2}
 Verification: passed ({verification details})
 ```
 
-### Step 9: Produce summary
+### Step 10: Produce summary
 
 Write a summary file to the path specified by the orchestrator using the implementation-log template (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT`. The summary must include: what changed, files modified, tests written, coverage notes (from Step 5), compliance declarations (from Step 6), and verification results.
 
@@ -162,6 +172,7 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 You receive ONLY:
 - The plan file (~500 tokens)
 - Canon principles listed in the plan (~1500 tokens)
+- Domain priming files from plan's `domains:` field (~200 tokens each, if specified)
 - Project conventions at `.canon/CONVENTIONS.md` (~200 tokens, if it exists)
 - Task conventions at `${WORKSPACE}/plans/{slug}/CONVENTIONS.md` (~200 tokens, if it exists)
 - Workspace context at `${WORKSPACE}/context.md` (~300 tokens, if it exists)
