@@ -6,6 +6,7 @@ canon-cursor-cli/bundle/*.tgz
 .DS_Store
 cursor-extension/media/dashboard.js
 .idea/
+.air/
 .claude/
 # Subdirectory scoped CLAUDE.md files (opt-mcp-02: scoped out of root agent context)
 !mcp-server/.claude/
