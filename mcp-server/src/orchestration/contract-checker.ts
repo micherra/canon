@@ -151,12 +151,7 @@ function evaluatePatternMatch(
   try {
     content = readFileSync(fullPath, "utf-8");
   } catch (err) {
-    return {
-      passed: false,
-      name,
-      type: assertion.type,
-      output: `Cannot read file: ${target} — ${err instanceof Error ? err.message : String(err)}`,
-    };
+    return failResult(name, assertion.type, `Cannot read file: ${target}`, err);
   }
 
   const patternStr = assertion.pattern ?? "";
@@ -164,18 +159,11 @@ function evaluatePatternMatch(
   try {
     regex = new RegExp(patternStr);
   } catch (err) {
-    return {
-      passed: false,
-      name,
-      type: assertion.type,
-      output: `Invalid regex: ${patternStr} — ${err instanceof Error ? err.message : String(err)}`,
-    };
+    return failResult(name, assertion.type, `Invalid regex: ${patternStr}`, err);
   }
 
   const matched = regex.test(content);
   const passed = invert ? !matched : matched;
-  const typeName = invert ? "no_pattern" : "pattern_match";
-
   return {
     passed,
     name,
@@ -224,5 +212,21 @@ function evaluateBashCheck(
     name,
     type: assertion.type,
     output,
+  };
+}
+
+/** Helper to create a failure result with consistent error message formatting. */
+function failResult(
+  name: string,
+  type: string,
+  message: string,
+  err: unknown,
+): PostconditionResult {
+  const errMsg = err instanceof Error ? err.message : String(err);
+  return {
+    passed: false,
+    name,
+    type,
+    output: `${message} — ${errMsg}`,
   };
 }

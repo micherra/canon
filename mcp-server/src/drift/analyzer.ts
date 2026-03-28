@@ -155,16 +155,12 @@ export function analyzeDrift(
     const firstHalf = filteredReviews.slice(0, mid);
     const secondHalf = filteredReviews.slice(mid);
 
-    const firstViolations = firstHalf.reduce((sum, r) => sum + r.violations.length, 0) / firstHalf.length;
-    const secondViolations = secondHalf.reduce((sum, r) => sum + r.violations.length, 0) / secondHalf.length;
+    const firstAvg = firstHalf.reduce((sum, r) => sum + r.violations.length, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((sum, r) => sum + r.violations.length, 0) / secondHalf.length;
 
-    if (secondViolations < firstViolations * 0.8) {
-      trend = "improving";
-    } else if (secondViolations > firstViolations * 1.2) {
-      trend = "declining";
-    } else {
-      trend = "stable";
-    }
+    if (secondAvg < firstAvg * 0.8) trend = "improving";
+    else if (secondAvg > firstAvg * 1.2) trend = "declining";
+    else trend = "stable";
   }
 
   return {

@@ -15,72 +15,38 @@ export function extractExports(content: string, filePath: string): string[] {
   return extractor ? extractor(content) : [];
 }
 
+const JS_EXPORT_RES = [
+  { re: /export\s+(?:async\s+)?function\s+(\w+)/g, type: "func" },
+  { re: /export\s+class\s+(\w+)/g, type: "class" },
+  { re: /export\s+(?:interface|type)\s+(\w+)/g, type: "type" },
+  { re: /export\s+(?:const|let|var)\s+(\w+)/g, type: "var" },
+  { re: /export\s+enum\s+(\w+)/g, type: "enum" },
+  { re: /export\s+default\s+(?:async\s+)?function\s+(\w+)/g, type: "defaultFunc" },
+  { re: /export\s+default\s+class\s+(\w+)/g, type: "defaultClass" },
+];
+
 function extractJsExports(content: string): string[] {
-  const exports: string[] = [];
-  const seen = new Set<string>();
+  const exports = new Set<string>();
 
-  function add(name: string) {
-    const trimmed = name.trim();
-    if (trimmed && !seen.has(trimmed)) {
-      seen.add(trimmed);
-      exports.push(trimmed);
+  for (const { re } of JS_EXPORT_RES) {
+    let match;
+    while ((match = re.exec(content)) !== null) {
+      if (match[1]) exports.add(match[1].trim());
     }
-  }
-
-  // export function name / export async function name
-  const funcRe = /export\s+(?:async\s+)?function\s+(\w+)/g;
-  let match;
-  while ((match = funcRe.exec(content)) !== null) {
-    add(match[1]);
-  }
-
-  // export class Name
-  const classRe = /export\s+class\s+(\w+)/g;
-  while ((match = classRe.exec(content)) !== null) {
-    add(match[1]);
-  }
-
-  // export interface Name / export type Name
-  const typeRe = /export\s+(?:interface|type)\s+(\w+)/g;
-  while ((match = typeRe.exec(content)) !== null) {
-    add(match[1]);
-  }
-
-  // export const/let/var name
-  const varRe = /export\s+(?:const|let|var)\s+(\w+)/g;
-  while ((match = varRe.exec(content)) !== null) {
-    add(match[1]);
-  }
-
-  // export enum Name
-  const enumRe = /export\s+enum\s+(\w+)/g;
-  while ((match = enumRe.exec(content)) !== null) {
-    add(match[1]);
-  }
-
-  // export default function name / export default class Name
-  const defaultFuncRe = /export\s+default\s+(?:async\s+)?function\s+(\w+)/g;
-  while ((match = defaultFuncRe.exec(content)) !== null) {
-    add(match[1]);
-  }
-  const defaultClassRe = /export\s+default\s+class\s+(\w+)/g;
-  while ((match = defaultClassRe.exec(content)) !== null) {
-    add(match[1]);
   }
 
   // Named exports: export { a, b, c }
   const namedRe = /export\s*\{([^}]+)\}/g;
+  let match;
   while ((match = namedRe.exec(content)) !== null) {
-    const names = match[1].split(",");
-    for (const name of names) {
-      // Handle "name as alias" — take the alias
+    for (const name of match[1].split(",")) {
       const parts = name.trim().split(/\s+as\s+/);
-      const exported = parts.length > 1 ? parts[1].trim() : parts[0].trim();
-      if (exported) add(exported);
+      const exported = (parts.length > 1 ? parts[1] : parts[0]).trim();
+      if (exported) exports.add(exported);
     }
   }
 
-  return exports;
+  return Array.from(exports);
 }
 
 function extractPyExports(content: string): string[] {

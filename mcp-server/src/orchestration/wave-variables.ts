@@ -42,7 +42,7 @@ export async function resolveWaveVariables(
   workspace: string,
   wave: number,
   slug: string,
-  totalWaves: number,
+  _totalWaves: number,
   projectDir?: string,
 ): Promise<Record<string, string>> {
   const plansDir = path.join(workspace, "plans", slug);
@@ -81,16 +81,16 @@ async function readWavePlans(plansDir: string, wave: number): Promise<string> {
     return "";
   }
 
-  const contents: string[] = [];
-  for (const taskId of taskIds) {
-    const planPath = path.join(plansDir, `${taskId}-PLAN.md`);
-    const content = await safeReadFile(planPath, `wave_plans: plan file for ${taskId}`);
-    if (content !== null) {
-      contents.push(content);
-    }
-  }
+  const contents = await Promise.all(
+    taskIds.map((taskId) =>
+      safeReadFile(
+        path.join(plansDir, `${taskId}-PLAN.md`),
+        `wave_plans: plan file for ${taskId}`,
+      ),
+    ),
+  );
 
-  return escapeDollarBrace(contents.join("\n\n"));
+  return escapeDollarBrace(contents.filter((c): c is string => c !== null).join("\n\n"));
 }
 
 /**
@@ -107,16 +107,16 @@ async function readWaveSummaries(plansDir: string, wave: number): Promise<string
     return "";
   }
 
-  const contents: string[] = [];
-  for (const taskId of taskIds) {
-    const summaryPath = path.join(plansDir, `${taskId}-SUMMARY.md`);
-    const content = await safeReadFile(summaryPath, `wave_summaries: summary for ${taskId}`);
-    if (content !== null) {
-      contents.push(content);
-    }
-  }
+  const contents = await Promise.all(
+    taskIds.map((taskId) =>
+      safeReadFile(
+        path.join(plansDir, `${taskId}-SUMMARY.md`),
+        `wave_summaries: summary for ${taskId}`,
+      ),
+    ),
+  );
 
-  return escapeDollarBrace(contents.join("\n\n"));
+  return escapeDollarBrace(contents.filter((c): c is string => c !== null).join("\n\n"));
 }
 
 /**
@@ -136,9 +136,16 @@ async function readWaveFiles(plansDir: string, wave: number): Promise<string> {
 
   const allPaths = new Set<string>();
 
-  for (const taskId of taskIds) {
-    const summaryPath = path.join(plansDir, `${taskId}-SUMMARY.md`);
-    const content = await safeReadFile(summaryPath, `wave_files: summary for ${taskId}`);
+  const contents = await Promise.all(
+    taskIds.map((taskId) =>
+      safeReadFile(
+        path.join(plansDir, `${taskId}-SUMMARY.md`),
+        `wave_files: summary for ${taskId}`,
+      ),
+    ),
+  );
+
+  for (const content of contents) {
     if (content !== null) {
       extractFilePaths(content).forEach((p) => allPaths.add(p));
     }

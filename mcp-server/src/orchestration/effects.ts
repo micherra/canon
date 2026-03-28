@@ -293,15 +293,12 @@ async function resolveAndRead(
 
   // Search in plans subdirectories
   const plansDir = join(workspace, "plans");
-  try {
-    const subdirs = await readdir(plansDir);
-    for (const sub of subdirs) {
-      const candidate = join(plansDir, sub, artifactName);
-      try {
-        return await readFile(candidate, "utf-8");
-      } catch { /* continue */ }
-    }
-  } catch { /* plans dir doesn't exist */ }
+  const subdirs = await readdir(plansDir).catch(() => []);
+  for (const sub of subdirs) {
+    const candidate = join(plansDir, sub, artifactName);
+    const content = await readFile(candidate, "utf-8").catch(() => null);
+    if (content) return content;
+  }
 
   return null;
 }

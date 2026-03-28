@@ -166,49 +166,26 @@ export interface UnifiedPrOutput {
  * @returns list of detected subsystems sorted by file_count descending
  */
 export function detectSubsystems(files: string[], statusMap: Map<string, string>): Subsystem[] {
-  // Group files by the first two directory segments
-  const addedByDir = new Map<string, number>();
-  const deletedByDir = new Map<string, number>();
+  const counts = new Map<string, { new: number; removed: number }>();
 
   for (const file of files) {
     const segments = file.split("/");
-    // Derive the directory key: use first two segments if they exist and are not the file itself
-    let dir: string;
-    if (segments.length === 1) {
-      // Root-level file — no directory segment; group under the file's name prefix or "."
-      dir = ".";
-    } else if (segments.length === 2) {
-      // Only one directory level (e.g., "src/foo.ts" → "src")
-      dir = segments[0];
-    } else {
-      // Two or more directory levels: take first two (e.g., "src/tools/foo.ts" → "src/tools")
-      dir = `${segments[0]}/${segments[1]}`;
-    }
+    const dir = segments.length <= 1 ? "." : segments.slice(0, 2).join("/");
 
+    const stats = counts.get(dir) ?? { new: 0, removed: 0 };
     const status = statusMap.get(file);
-    if (status === "added") {
-      addedByDir.set(dir, (addedByDir.get(dir) ?? 0) + 1);
-    } else if (status === "deleted") {
-      deletedByDir.set(dir, (deletedByDir.get(dir) ?? 0) + 1);
-    }
+    if (status === "added") stats.new++;
+    if (status === "deleted") stats.removed++;
+    counts.set(dir, stats);
   }
 
   const result: Subsystem[] = [];
-
-  for (const [directory, file_count] of addedByDir.entries()) {
-    if (file_count >= 3) {
-      result.push({ directory, label: "new", file_count });
-    }
+  for (const [directory, stats] of counts.entries()) {
+    if (stats.new >= 3) result.push({ directory, label: "new", file_count: stats.new });
+    if (stats.removed >= 3) result.push({ directory, label: "removed", file_count: stats.removed });
   }
 
-  for (const [directory, file_count] of deletedByDir.entries()) {
-    if (file_count >= 3) {
-      result.push({ directory, label: "removed", file_count });
-    }
-  }
-
-  result.sort((a, b) => b.file_count - a.file_count);
-  return result;
+  return result.sort((a, b) => b.file_count - a.file_count);
 }
 
 // ---------------------------------------------------------------------------

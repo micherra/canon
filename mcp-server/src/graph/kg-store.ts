@@ -194,18 +194,18 @@ export class KgStore {
   insertEntity(entity: Omit<EntityRow, 'entity_id'>): EntityRow {
     const params = {
       ...entity,
-      // SQLite stores booleans as 0/1
       is_exported: entity.is_exported ? 1 : 0,
       is_default_export: entity.is_default_export ? 1 : 0,
     };
+
     const row = this.stmtInsertEntity.get(params) as Record<string, unknown> | undefined;
     if (row !== undefined) {
       return toEntityRow(row);
     }
-    // INSERT OR IGNORE fired a conflict — RETURNING * emits no rows. Fall back to
-    // fetching the existing row by qualified_name so callers always get a valid EntityRow.
+
+    // INSERT OR IGNORE conflict: return existing row
     const existing = this.getEntityByQualifiedName(entity.file_id, entity.qualified_name);
-    if (existing === undefined) {
+    if (!existing) {
       throw new Error(
         `insertEntity: conflict on (file_id=${entity.file_id}, qualified_name=${entity.qualified_name}) but existing row not found`,
       );

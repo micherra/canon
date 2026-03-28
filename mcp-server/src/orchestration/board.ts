@@ -63,28 +63,22 @@ export async function readBoard(workspace: string): Promise<Board> {
   const primaryPath = join(workspace, BOARD_FILE);
   const backupPath = join(workspace, BOARD_BACKUP);
 
-  // Try primary
-  try {
-    const data = await readFile(primaryPath, "utf-8");
-    return BoardSchema.parse(JSON.parse(data));
-  } catch (err: any) {
-    // Fall through to backup only for missing/corrupt files
-    if (err.code !== "ENOENT" && !(err instanceof SyntaxError) && !(err instanceof z.ZodError)) {
-      throw err;
+  async function tryRead(filePath: string): Promise<Board | null> {
+    try {
+      const data = await readFile(filePath, "utf-8");
+      return BoardSchema.parse(JSON.parse(data));
+    } catch (err: any) {
+      const isCorruptOrMissing =
+        err.code === "ENOENT" || err instanceof SyntaxError || err instanceof z.ZodError;
+      if (!isCorruptOrMissing) throw err;
+      return null;
     }
   }
 
-  try {
-    const data = await readFile(backupPath, "utf-8");
-    return BoardSchema.parse(JSON.parse(data));
-  } catch (err: any) {
-    if (err.code !== "ENOENT" && !(err instanceof SyntaxError) && !(err instanceof z.ZodError)) {
-      throw err;
-    }
-    throw new Error(
-      `Failed to read board from ${primaryPath} or ${backupPath}`,
-    );
-  }
+  const board = (await tryRead(primaryPath)) ?? (await tryRead(backupPath));
+  if (board) return board;
+
+  throw new Error(`Failed to read board from ${primaryPath} or ${backupPath}`);
 }
 
 /**

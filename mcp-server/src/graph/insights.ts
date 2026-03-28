@@ -235,14 +235,12 @@ function enrichWithKgInsights(
     const byKindRows = db
       .prepare(`SELECT kind, COUNT(*) AS n FROM entities GROUP BY kind`)
       .all() as Array<{ kind: string; n: number }>;
-    const by_kind: Record<string, number> = {};
-    for (const row of byKindRows) by_kind[row.kind] = row.n;
+    const by_kind = Object.fromEntries(byKindRows.map((r) => [r.kind, r.n]));
 
     const byEdgeTypeRows = db
       .prepare(`SELECT edge_type, COUNT(*) AS n FROM edges GROUP BY edge_type`)
       .all() as Array<{ edge_type: string; n: number }>;
-    const by_edge_type: Record<string, number> = {};
-    for (const row of byEdgeTypeRows) by_edge_type[row.edge_type] = row.n;
+    const by_edge_type = Object.fromEntries(byEdgeTypeRows.map((r) => [r.edge_type, r.n]));
 
     const stats = store.getStats();
     const entity_overview: CodebaseInsights["entity_overview"] = {

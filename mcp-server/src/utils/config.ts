@@ -211,12 +211,8 @@ export async function loadConfigNumber(
 ): Promise<number> {
   const config = await loadCanonConfig(projectDir);
   if (!config) return defaultValue;
-  const parts = key.split(".");
-  let current: any = config;
-  for (const part of parts) {
-    current = current?.[part];
-  }
-  const value = Number(current);
-  if (!Number.isFinite(value) || value < 1) return defaultValue;
-  return Math.floor(value);
+
+  const value = Number(key.split(".").reduce((acc, part) => acc?.[part], config));
+
+  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : defaultValue;
 }

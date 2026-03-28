@@ -165,7 +165,7 @@ function substituteSpawnInstructions(
  * spawn instructions.
  */
 export function resolveFragments(
-  flow: FlowDefinition,
+  _flow: FlowDefinition,
   fragments: Array<{
     definition: FragmentDefinition;
     spawnInstructions: Record<string, string>;
@@ -210,17 +210,12 @@ export function resolveFragments(
     }
 
     // Build effective params: defaults merged with include.with
-    const effectiveParams: Record<string, string | number> = {};
-    if (definition.params) {
-      for (const [k, v] of Object.entries(definition.params)) {
-        if (v !== null) {
-          effectiveParams[k] = v;
-        }
-      }
-    }
-    for (const [k, v] of Object.entries(withParams)) {
-      effectiveParams[k] = v;
-    }
+    const effectiveParams = {
+      ...Object.fromEntries(
+        Object.entries(definition.params ?? {}).filter(([, v]) => v !== null),
+      ),
+      ...(include.with ?? {}),
+    } as Record<string, string | number>;
 
     // Handle consultation-type fragments
     if (definition.type === "consultation") {
@@ -233,11 +228,12 @@ export function resolveFragments(
         artifact: definition.artifact,
         timeout: definition.timeout,
         min_waves: definition.min_waves,
-        // Propagate skip_when from fragment definition (added by epic-01 to ConsultationFragmentSchema)
+        // Propagate skip_when from fragment definition
         ...(definition.skip_when !== undefined ? { skip_when: definition.skip_when } : {}),
       };
 
-      const substituted = Object.keys(effectiveParams).length > 0
+      const hasParams = Object.keys(effectiveParams).length > 0;
+      const substituted = hasParams
         ? substituteParams(consultation, effectiveParams)
         : consultation;
 
@@ -245,7 +241,7 @@ export function resolveFragments(
       consultations[consultName] = substituted;
 
       // Merge spawn instructions for consultation
-      const fragSpawn = Object.keys(effectiveParams).length > 0
+      const fragSpawn = hasParams
         ? substituteSpawnInstructions(spawnInstructions, effectiveParams)
         : { ...spawnInstructions };
 
@@ -259,7 +255,8 @@ export function resolveFragments(
 
     // Regular fragment: merge states
     if (definition.states) {
-      let states = Object.keys(effectiveParams).length > 0
+      const hasParams = Object.keys(effectiveParams).length > 0;
+      let states = hasParams
         ? substituteParams(definition.states, effectiveParams)
         : { ...definition.states };
 
@@ -293,7 +290,8 @@ export function resolveFragments(
     }
 
     // Merge spawn instructions
-    const fragSpawn = Object.keys(effectiveParams).length > 0
+    const hasParams = Object.keys(effectiveParams).length > 0;
+    const fragSpawn = hasParams
       ? substituteSpawnInstructions(spawnInstructions, effectiveParams)
       : { ...spawnInstructions };
 

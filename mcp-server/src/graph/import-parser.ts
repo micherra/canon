@@ -20,33 +20,21 @@ export function extractImports(
   return extractor ? extractor(content) : [];
 }
 
-/** Extract JS/TS import paths. */
+const JS_IMPORT_RES = [
+  /import\s+(?:[\w{},*\s]+\s+from\s+)?['"]([^'"]+)['"]/g, // ES module
+  /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g,                // Dynamic
+  /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,               // CommonJS
+  /export\s+(?:[\w{},*\s]+\s+from\s+)['"]([^'"]+)['"]/g, // Re-export
+];
+
 function extractJsImports(content: string): string[] {
   const imports: string[] = [];
 
-  // ES module imports: import ... from '...'
-  const esImportRe = /import\s+(?:[\w{},*\s]+\s+from\s+)?['"]([^'"]+)['"]/g;
-  let match;
-  while ((match = esImportRe.exec(content)) !== null) {
-    imports.push(match[1]);
-  }
-
-  // Dynamic imports: import('...')
-  const dynamicRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-  while ((match = dynamicRe.exec(content)) !== null) {
-    imports.push(match[1]);
-  }
-
-  // CommonJS requires: require('...')
-  const requireRe = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-  while ((match = requireRe.exec(content)) !== null) {
-    imports.push(match[1]);
-  }
-
-  // Re-exports: export ... from '...'
-  const reExportRe = /export\s+(?:[\w{},*\s]+\s+from\s+)['"]([^'"]+)['"]/g;
-  while ((match = reExportRe.exec(content)) !== null) {
-    imports.push(match[1]);
+  for (const re of JS_IMPORT_RES) {
+    let match;
+    while ((match = re.exec(content)) !== null) {
+      imports.push(match[1]);
+    }
   }
 
   return imports;

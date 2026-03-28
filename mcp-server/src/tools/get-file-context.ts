@@ -92,8 +92,8 @@ function deriveShape(metrics: FileGraphMetrics | undefined): { label: string; de
 
   const { in_degree, out_degree, in_cycle } = metrics;
 
-  let label: string;
-  let description: string;
+  let label = "Internal";
+  let description = "Moderate connectivity, typical file.";
 
   if (in_degree > 8 && out_degree < 4) {
     label = "Sink";
@@ -107,16 +107,21 @@ function deriveShape(metrics: FileGraphMetrics | undefined): { label: string; de
   } else if (in_degree === 0) {
     label = "Leaf";
     description = "Nothing depends on this. Safe to change.";
-  } else {
-    label = "Internal";
-    description = "Moderate connectivity, typical file.";
   }
 
-  if (in_cycle) {
-    label = `Cycle member — ${label}`;
-  }
+  return {
+    label: in_cycle ? `Cycle member — ${label}` : label,
+    description,
+  };
+}
 
-  return { label, description };
+function deriveRole(metrics: FileGraphMetrics | undefined): string {
+  if (!metrics) return "internal";
+  if (metrics.is_hub) return "hub";
+  if (metrics.in_cycle) return "cycle member";
+  if (metrics.in_degree === 0) return "entry point";
+  if (metrics.out_degree === 0) return "leaf";
+  return "internal";
 }
 
 export async function getFileContext(
@@ -388,18 +393,7 @@ export async function getFileContext(
   const layer_stack: string[] = Object.keys(layerMappings).sort();
 
   // Derive role from graph metrics
-  let role = "internal";
-  if (graph_metrics) {
-    if (graph_metrics.is_hub) {
-      role = "hub";
-    } else if (graph_metrics.in_cycle) {
-      role = "cycle member";
-    } else if (graph_metrics.in_degree === 0) {
-      role = "entry point";
-    } else if (graph_metrics.out_degree === 0) {
-      role = "leaf";
-    }
-  }
+  const role = deriveRole(graph_metrics);
 
   // Derive shape characterization from graph metrics
   const shape = deriveShape(graph_metrics);

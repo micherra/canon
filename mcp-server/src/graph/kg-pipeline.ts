@@ -81,7 +81,7 @@ function normaliseSpecifier(spec: string): string {
 
 function parseAndStoreFile(
   store: KgStore,
-  projectDir: string,
+  _projectDir: string,
   relPath: string,
   content: string,
   hash: string,
@@ -122,29 +122,22 @@ function parseAndStoreFile(
 
   // Attempt adapter parse
   const adapter = getAdapter(ext);
-  let adapterResult: AdapterResult | null = null;
+  if (!adapter) return { fileId, adapterResult: null };
 
-  if (adapter) {
-    try {
-      adapterResult = adapter.parse(relPath, content);
+  try {
+    const adapterResult = adapter.parse(relPath, content);
 
-      for (const entityDef of adapterResult.entities) {
-        try {
-          store.insertEntity({
-            file_id: fileId,
-            ...entityDef,
-          } as Omit<EntityRow, 'entity_id'>);
-        } catch {
-          // Ignore duplicate entity errors (qualified_name uniqueness)
-        }
-      }
-    } catch (err) {
-      console.warn(`[kg-pipeline] adapter error for ${relPath}: ${(err as Error).message}`);
-      adapterResult = null;
+    for (const entityDef of adapterResult.entities) {
+      store.insertEntity({
+        file_id: fileId,
+        ...entityDef,
+      } as Omit<EntityRow, 'entity_id'>);
     }
+    return { fileId, adapterResult };
+  } catch (err) {
+    console.warn(`[kg-pipeline] adapter error for ${relPath}: ${(err as Error).message}`);
+    return { fileId, adapterResult: null };
   }
-
-  return { fileId, adapterResult };
 }
 
 // ---------------------------------------------------------------------------
@@ -153,7 +146,7 @@ function parseAndStoreFile(
 
 function resolveImports(
   store: KgStore,
-  projectDir: string,
+  _projectDir: string,
   allRelPaths: Set<string>,
   fileImports: Map<string, { relPath: string; specifiers: Array<{ specifier: string; names: string[] }> }>,
 ): void {
@@ -170,18 +163,14 @@ function resolveImports(
       if (!targetFileRow?.file_id) continue;
 
       // File-level edge
-      try {
-        store.insertFileEdge({
-          source_file_id: sourceFileRow.file_id as number,
-          target_file_id: targetFileRow.file_id as number,
-          edge_type: 'imports',
-          confidence: 1.0,
-          evidence: specifier,
-          relation: null,
-        });
-      } catch {
-        // Ignore duplicate edge
-      }
+      store.insertFileEdge({
+        source_file_id: sourceFileRow.file_id as number,
+        target_file_id: targetFileRow.file_id as number,
+        edge_type: 'imports',
+        confidence: 1.0,
+        evidence: specifier,
+        relation: null,
+      });
 
       // Named import → entity-level edges
       for (const name of names) {
@@ -199,17 +188,13 @@ function resolveImports(
 
         for (const target of targetCandidates) {
           if (!target.entity_id) continue;
-          try {
-            store.insertEdge({
-              source_entity_id: sourceFileEntity.entity_id as number,
-              target_entity_id: target.entity_id as number,
-              edge_type: 'type-references',
-              confidence: 0.9,
-              metadata: JSON.stringify({ import_name: name }),
-            });
-          } catch {
-            // Ignore duplicates
-          }
+          store.insertEdge({
+            source_entity_id: sourceFileEntity.entity_id as number,
+            target_entity_id: target.entity_id as number,
+            edge_type: 'type-references',
+            confidence: 0.9,
+            metadata: JSON.stringify({ import_name: name }),
+          });
         }
       }
     }
@@ -237,7 +222,7 @@ function resolveCanonLinks(
 
       const entities = store.getEntitiesByFile(fileRow.file_id as number);
       for (const entity of entities) {
-        if (!entity.metadata) continue;
+        if (!entity.metadata || !entity.entity_id) continue;
 
         let meta: Record<string, unknown>;
         try {
@@ -246,65 +231,56 @@ function resolveCanonLinks(
           continue;
         }
 
+        const sourceEntityId = entity.entity_id as number;
+
         // applies-to: principle → files matching layers/patterns
         const appliesTo = meta['applies_to'] as string[] | undefined;
-        if (appliesTo && Array.isArray(appliesTo) && entity.entity_id) {
+        if (Array.isArray(appliesTo)) {
           for (const target of appliesTo) {
             const targetFileRow = store.getFile(target);
             if (!targetFileRow?.file_id) continue;
             const targetEntities = store.getEntitiesByFile(targetFileRow.file_id as number);
             const targetFileEntity = targetEntities.find((e) => e.kind === 'file');
-            if (!targetFileEntity?.entity_id) continue;
-            try {
+            if (targetFileEntity?.entity_id) {
               store.insertEdge({
-                source_entity_id: entity.entity_id as number,
+                source_entity_id: sourceEntityId,
                 target_entity_id: targetFileEntity.entity_id as number,
                 edge_type: 'applies-to',
                 confidence: 0.8,
                 metadata: null,
               });
-            } catch {
-              // Ignore duplicates
             }
           }
         }
 
         // spawns: flow-state → agent
         const spawnsTarget = meta['spawns'] as string | undefined;
-        if (spawnsTarget && entity.entity_id) {
-          const exported = store.findExportedByName(spawnsTarget);
-          for (const target of exported) {
-            if (!target.entity_id) continue;
-            try {
+        if (spawnsTarget) {
+          for (const target of store.findExportedByName(spawnsTarget)) {
+            if (target.entity_id) {
               store.insertEdge({
-                source_entity_id: entity.entity_id as number,
+                source_entity_id: sourceEntityId,
                 target_entity_id: target.entity_id as number,
                 edge_type: 'spawns',
                 confidence: 0.7,
                 metadata: null,
               });
-            } catch {
-              // Ignore duplicates
             }
           }
         }
 
         // includes: flow → fragment
         const includesTarget = meta['includes'] as string | undefined;
-        if (includesTarget && entity.entity_id) {
-          const exported = store.findExportedByName(includesTarget);
-          for (const target of exported) {
-            if (!target.entity_id) continue;
-            try {
+        if (includesTarget) {
+          for (const target of store.findExportedByName(includesTarget)) {
+            if (target.entity_id) {
               store.insertEdge({
-                source_entity_id: entity.entity_id as number,
+                source_entity_id: sourceEntityId,
                 target_entity_id: target.entity_id as number,
                 edge_type: 'includes',
                 confidence: 0.7,
                 metadata: null,
               });
-            } catch {
-              // Ignore duplicates
             }
           }
         }
