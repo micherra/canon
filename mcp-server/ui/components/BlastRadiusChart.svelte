@@ -18,9 +18,10 @@
 
   interface BlastRadiusChartProps {
     entries: BlastRadiusEntry[];
+    onPrompt?: (text: string) => void;
   }
 
-  let { entries }: BlastRadiusChartProps = $props();
+  let { entries, onPrompt }: BlastRadiusChartProps = $props();
 
   const maxDepCount = $derived(
     entries.length > 0 ? Math.max(...entries.map((e) => e.dep_count)) : 0,
@@ -42,23 +43,40 @@
 </script>
 
 <div class="blast-radius-chart">
-  <div class="section-title">Highest Blast Radius</div>
+  <div class="section-title">Highest Blast Radius (Watch These)</div>
 
   {#if entries.length === 0}
     <div class="empty">No blast radius data</div>
   {:else}
     <div class="chart-rows">
       {#each entries as entry (entry.file)}
-        <div class="chart-row" title={entry.file}>
-          <span class="file-name">{truncate(basename(entry.file), 25)}</span>
-          <div class="bar-track">
-            <div
-              class="bar-fill"
-              style:width={barWidth(entry.dep_count)}
-            ></div>
+        {#if onPrompt}
+          <button
+            class="chart-row chart-row--clickable btn-reset"
+            title={entry.file}
+            onclick={() => onPrompt(`What breaks if ${entry.file} regresses? Show me the dependents`)}
+          >
+            <span class="file-name">{truncate(basename(entry.file), 25)}</span>
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                style:width={barWidth(entry.dep_count)}
+              ></div>
+            </div>
+            <span class="dep-count">{entry.dep_count}</span>
+          </button>
+        {:else}
+          <div class="chart-row" title={entry.file}>
+            <span class="file-name">{truncate(basename(entry.file), 25)}</span>
+            <div class="bar-track">
+              <div
+                class="bar-fill"
+                style:width={barWidth(entry.dep_count)}
+              ></div>
+            </div>
+            <span class="dep-count">{entry.dep_count}</span>
           </div>
-          <span class="dep-count">{entry.dep_count}</span>
-        </div>
+        {/if}
       {/each}
     </div>
   {/if}
@@ -99,6 +117,17 @@
     align-items: center;
     gap: 8px;
     font-size: 11px;
+  }
+
+  .chart-row--clickable {
+    cursor: pointer;
+    border-radius: 4px;
+    text-align: left;
+    transition: background 0.1s;
+  }
+
+  .chart-row--clickable:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.08));
   }
 
   .file-name {

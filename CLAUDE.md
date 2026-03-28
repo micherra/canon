@@ -89,7 +89,6 @@ Read `agents/canon-orchestrator.md` for the full protocol. The key loop:
 | Guide | `canon:canon-guide` | Questions, status |
 | Writer | `canon:canon-writer` | Principle authoring |
 | Learner | `canon:canon-learner` | Pattern analysis |
-| Inspector | `canon:canon-inspector` | Build analysis, cost/bottleneck reports |
 
 ## Rate Limit Handling
 

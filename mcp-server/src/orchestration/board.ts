@@ -3,7 +3,7 @@
  * All state-mutating functions return new Board objects (immutable pattern).
  */
 
-import { readFile, copyFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import { join } from "path";
 import { z } from "zod";
 import type { Board, ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
@@ -97,9 +97,12 @@ export async function writeBoard(
   const primaryPath = join(workspace, BOARD_FILE);
   const backupPath = join(workspace, BOARD_BACKUP);
 
-  // Copy current board.json to .bak (ignore if it doesn't exist yet)
+  // Atomically copy current board.json to .bak (read + atomic write instead of
+  // copyFile, which truncates the destination before writing — creating a window
+  // where concurrent readBoard calls can find a corrupt/empty backup).
   try {
-    await copyFile(primaryPath, backupPath);
+    const existing = await readFile(primaryPath, "utf-8");
+    await atomicWriteFile(backupPath, existing);
   } catch (err: any) {
     if (err.code !== "ENOENT") throw err;
   }

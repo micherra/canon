@@ -7,7 +7,7 @@
  *   1. Parsing edge cases (R0 similarity, pure-whitespace lines, single-tab lines)
  *   2. Incremental mode when no prior review exists (null from store)
  *   3. Non-integer pr_number validation
- *   4. graph_data_age_ms and prioritized_files passthrough
+ *   4. graph_data_age_ms and priority data passthrough
  *   5. data.error + total_files=0 co-occurrence (error path with some returned data)
  *   6. sanitizeGitRef on last_reviewed_sha that cannot pass the pattern (triggers error)
  *   7. Cross-subsystem integration: priority scoring round-trips through a real graph
@@ -202,9 +202,9 @@ describe("getPrReviewData — pr_number validation", () => {
   });
 });
 
-// ── 4. graph_data_age_ms and prioritized_files passthrough ──
+// ── 4. graph_data_age_ms and priority data passthrough ──
 
-describe("getPrReviewData — graph_data_age_ms and prioritized_files passthrough", () => {
+describe("getPrReviewData — graph_data_age_ms and priority data passthrough", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -247,7 +247,7 @@ describe("getPrReviewData — graph_data_age_ms and prioritized_files passthroug
     expect(result.graph_data_age_ms).toBeUndefined();
   });
 
-  it("prioritized_files contains all graph nodes when graph data is present", async () => {
+  it("merges priority data into file entries when graph data is present", async () => {
     const graphData = {
       nodes: [
         { id: "src/a.ts", layer: "tools", violation_count: 0, changed: true },
@@ -267,13 +267,14 @@ describe("getPrReviewData — graph_data_age_ms and prioritized_files passthroug
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    expect(result.prioritized_files).toBeDefined();
-    expect(Array.isArray(result.prioritized_files)).toBe(true);
-    // Both changed nodes should appear in prioritized_files
-    expect(result.prioritized_files!.length).toBeGreaterThanOrEqual(1);
+    // File with violation_count > 0 should be in impact_files with priority data
+    const fileB = result.impact_files.find((f: any) => f.path === "src/b.ts");
+    expect(fileB).toBeDefined();
+    expect(fileB!.priority_score).toBeTypeOf("number");
+    expect(fileB!.priority_factors).toBeDefined();
   });
 
-  it("prioritized_files is undefined when graph file is missing", async () => {
+  it("files have no priority data when graph file is missing", async () => {
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/a.ts"),
     }));
@@ -281,11 +282,10 @@ describe("getPrReviewData — graph_data_age_ms and prioritized_files passthroug
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    expect(result.prioritized_files).toBeUndefined();
+    expect(result.impact_files).toHaveLength(0);
   });
 
-  it("prioritized_files is undefined when graph JSON is malformed (graceful degrade)", async () => {
-    // Write invalid JSON to the graph file
+  it("no impact files when graph JSON is malformed (graceful degrade)", async () => {
     await writeFile(join(tmpDir, ".canon", "graph-data.json"), "{ broken json }");
 
     vi.doMock("child_process", () => ({
@@ -295,11 +295,9 @@ describe("getPrReviewData — graph_data_age_ms and prioritized_files passthroug
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    // Should gracefully degrade — no crash, prioritized_files stays undefined.
+    // Should gracefully degrade — no crash, no impact files without graph data.
     // Note: graph_data_age_ms IS set because stat() succeeds before JSON.parse() throws.
-    // This is intentional — the age reflects when the file was last written, even if
-    // parsing fails. The caller can use graph_data_age_ms to know the file is stale/corrupt.
-    expect(result.prioritized_files).toBeUndefined();
+    expect(result.impact_files).toHaveLength(0);
     // age is set (stat succeeds even when JSON is invalid)
     expect(result.graph_data_age_ms).toBeTypeOf("number");
   });
@@ -490,22 +488,20 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
     expect(graphLayer?.file_count).toBe(1);
     expect(testsLayer?.file_count).toBe(1);
 
-    // Priority scores merged
-    const toolsFile = result.files.find((f) => f.path === "src/tools/pr-review-data.ts");
-    expect(toolsFile?.priority_score).toBeTypeOf("number");
-    expect(toolsFile?.priority_factors).toBeDefined();
-    // tools file has violation_count: 2 → should have higher priority than the test file
-    const testFile = result.files.find((f) => f.path === "src/__tests__/pr.test.ts");
-    expect((toolsFile?.priority_score ?? 0)).toBeGreaterThan((testFile?.priority_score ?? 0));
+    // Priority scores merged into impact_files (tools file has violation_count: 2)
+    const toolsImpact = result.impact_files.find((f) => f.path === "src/tools/pr-review-data.ts");
+    expect(toolsImpact).toBeDefined();
+    expect(toolsImpact?.priority_score).toBeTypeOf("number");
+    expect(toolsImpact?.priority_factors).toBeDefined();
 
-    // Status values preserved through the pipeline
+    // Status and layer preserved in lightweight files list
+    const toolsFile = result.files.find((f) => f.path === "src/tools/pr-review-data.ts");
     expect(toolsFile?.status).toBe("modified");
+    expect(toolsFile?.layer).toBe("tools");
     const graphFile = result.files.find((f) => f.path === "src/graph/scanner.ts");
     expect(graphFile?.status).toBe("added");
-
-    // Layer assignment correct
-    expect(toolsFile?.layer).toBe("tools");
     expect(graphFile?.layer).toBe("graph");
+    const testFile = result.files.find((f) => f.path === "src/__tests__/pr.test.ts");
     expect(testFile?.layer).toBe("tests");
   });
 

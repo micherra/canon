@@ -344,14 +344,14 @@ describe("getPrReviewData — priority score merging", () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    // The changed file should have a priority score merged in
-    const prFile = result.files.find((f) => f.path === "src/tools/pr-review-data.ts");
+    // The file with violations should appear in impact_files with priority data merged
+    const prFile = result.impact_files.find((f) => f.path === "src/tools/pr-review-data.ts");
     expect(prFile).toBeDefined();
     expect(prFile?.priority_score).toBeTypeOf("number");
     expect(prFile?.priority_factors).toBeDefined();
   });
 
-  it("files without a priority score entry have undefined priority_score", async () => {
+  it("files without a priority score entry are excluded from impact_files", async () => {
     const output = "M\tsrc/some/unlisted-file.ts\n";
     vi.doMock("child_process", () => ({
       execFile: (
@@ -364,8 +364,8 @@ describe("getPrReviewData — priority score merging", () => {
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
-    const file = result.files[0];
-    expect(file?.priority_score).toBeUndefined();
+    expect(result.files).toHaveLength(1);
+    expect(result.impact_files).toHaveLength(0);
   });
 });
 

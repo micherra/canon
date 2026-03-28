@@ -30,19 +30,19 @@
   <!-- Card 1: Files Changed -->
   <div class="stat-card">
     <span class="stat-value">{filesChanged}</span>
-    <span class="stat-label">Files Changed</span>
+    <span class="stat-label">files changed</span>
   </div>
 
   <!-- Card 2: Violations (red when > 0) -->
   <div class="stat-card">
     <span class="stat-value" class:stat-value--danger={violationCount > 0}>{violationCount}</span>
-    <span class="stat-label">Violations</span>
+    <span class="stat-label">violations</span>
   </div>
 
   <!-- Card 3: Rule-level violations -->
   <div class="stat-card">
     <span class="stat-value" class:stat-value--danger={ruleCount > 0}>{ruleCount}</span>
-    <span class="stat-label">Rules</span>
+    <span class="stat-label">rule-level</span>
   </div>
 
   <!-- Card 4: Highest Blast Radius -->
@@ -51,10 +51,10 @@
       <span class="stat-value stat-value--file" title={highestBlastRadius.file}>
         {blastBasename}
       </span>
-      <span class="stat-label">{highestBlastRadius.dep_count} dependents</span>
+      <span class="stat-label">highest blast radius<br>({highestBlastRadius.dep_count} deps)</span>
     {:else}
       <span class="stat-value stat-value--muted">None</span>
-      <span class="stat-label">Highest Blast Radius</span>
+      <span class="stat-label">highest blast radius</span>
     {/if}
   </div>
 </div>

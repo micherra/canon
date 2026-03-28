@@ -76,7 +76,16 @@ export async function enterAndPrepareState(
   const { workspace, state_id, flow } = input;
 
   // Step 1: Read board once for all subsequent operations.
-  const board = await readBoard(workspace);
+  // Retry once after a short delay — under concurrent MCP server activity the
+  // board file can briefly be absent between workspace creation and the first
+  // writeBoard inside init_workspace's lock.
+  let board: Board;
+  try {
+    board = await readBoard(workspace);
+  } catch (firstErr) {
+    await new Promise((r) => setTimeout(r, 500));
+    board = await readBoard(workspace);
+  }
 
   // Step 2: Check convergence — bail early if max iterations reached.
   const { allowed, reason } = canEnterState(board, state_id);

@@ -252,7 +252,7 @@ describe("getPrReviewData — violations integration", () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    const changedFile = result.files.find((f) => f.path === "src/tools/some-tool.ts");
+    const changedFile = result.impact_files.find((f) => f.path === "src/tools/some-tool.ts");
     expect(changedFile).toBeDefined();
     expect(changedFile!.violations).toHaveLength(1);
     expect(changedFile!.violations![0].principle_id).toBe("functions-do-one-thing");
@@ -260,7 +260,7 @@ describe("getPrReviewData — violations integration", () => {
     expect(changedFile!.violations![0].message).toBe("Does too many things");
   });
 
-  it("files with no violations get empty violations array", async () => {
+  it("files with no violations are excluded from impact_files", async () => {
     // No reviews.jsonl at all
     const diffOutput = "M\tsrc/some-clean-file.ts\n";
     vi.doMock("child_process", () => ({
@@ -275,8 +275,8 @@ describe("getPrReviewData — violations integration", () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    const file = result.files.find((f) => f.path === "src/some-clean-file.ts");
-    expect(file).toBeDefined();
-    expect(file!.violations).toEqual([]);
+    // Low-risk file with no violations should be in files (summary) but not impact_files
+    expect(result.files.find((f) => f.path === "src/some-clean-file.ts")).toBeDefined();
+    expect(result.impact_files.find((f) => f.path === "src/some-clean-file.ts")).toBeUndefined();
   });
 });

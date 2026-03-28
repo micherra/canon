@@ -2,8 +2,6 @@
 
 Canon is a Claude Code plugin that brings engineering principles and an agent-driven build pipeline to your project. You describe what you want — Canon figures out the right approach, coordinates specialist agents to research, design, implement, test, review, and ship, and enforces your principles throughout. From your side, you just talk to Claude.
 
-> **Note:** Canon is a work in progress. The core pipeline, principles system, and MCP tools are functional, but rough edges remain. Expect breaking changes as the plugin format and MCP protocol evolve. Feedback and contributions welcome — open an issue or PR.
-
 ---
 
 ## Installation
@@ -29,7 +27,6 @@ git clone https://github.com/micherra/canon.git
 ### Requirements
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
-- Node.js 24+
 
 We recommend enabling tool search to reduce context usage:
 
@@ -166,7 +163,7 @@ When you're using Claude Desktop or another MCP-compatible client, Canon opens i
 
 **PR Review** — Run a review first (`/canon:pr-review` or "review my changes"), then Canon opens a dashboard with a verdict banner, compliance score, fix-before-merge checklist, violations grouped by principle, blast radius chart, and layer distribution. You can also open it before a review to see a prep view with your change story and impact assessment. Click any violation to ask Claude to explain it.
 
-**Codebase Graph** — An interactive dependency graph of your project. Fully standalone — just ask for it and Canon builds the graph from your source files. Nodes are colored by architectural layer and highlighted when they have violations or are part of a diff. Filter by layer, violations, or changed files. Click a node to see its dependencies.
+**Codebase Graph** — An interactive dependency graph of your project. Fully standalone — just ask for it and Canon builds the graph from your source files. It parses both code relationships (imports, exports, function calls, inheritance across JS/TS/Python) and markdown relationships (frontmatter references, links between docs, backtick identifiers) into a unified graph. Nodes are colored by architectural layer and highlighted when they have violations or are part of a diff. Filter by layer, violations, or changed files. Click a node to see its dependencies.
 
 > "Show me the codebase graph"
 

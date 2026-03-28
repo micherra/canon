@@ -95,12 +95,12 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    for (const file of result.files) {
+    for (const file of result.impact_files) {
       expect(["needs-attention", "worth-a-look", "low-risk"]).toContain(file.bucket);
     }
   });
 
-  it("every returned file has a non-empty reason string", async () => {
+  it("every impact_file has a non-empty reason string", async () => {
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/tools/a.ts\nA\tsrc/graph/b.ts"),
     }));
@@ -108,13 +108,13 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    for (const file of result.files) {
+    for (const file of result.impact_files) {
       expect(typeof file.reason).toBe("string");
       expect(file.reason.length).toBeGreaterThan(0);
     }
   });
 
-  it("file with violation_count > 0 in graph data gets needs-attention bucket", async () => {
+  it("file with violation_count > 0 in graph data gets needs-attention bucket in impact_files", async () => {
     // This is the key cross-task contract: classifyFile() is wired inside getPrReviewData()
     // and uses priority_factors populated from graph data.
     const graphData = {
@@ -135,14 +135,14 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    const badFile = result.files.find((f) => f.path === "src/tools/bad.ts");
+    const badFile = result.impact_files.find((f) => f.path === "src/tools/bad.ts");
     expect(badFile).toBeDefined();
     expect(badFile?.bucket).toBe("needs-attention");
     expect(badFile?.reason).toMatch(/violation/i);
     expect(badFile?.reason).toContain("3");
   });
 
-  it("file without graph data gets low-risk bucket and reason (no graph → no factors)", async () => {
+  it("file without graph data is excluded from impact_files (no graph → low-risk)", async () => {
     // No graph-data.json: priority_factors will be undefined → classifyFile → low-risk
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/orphan/file.ts"),
@@ -151,9 +151,9 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    const file = result.files[0];
-    expect(file?.bucket).toBe("low-risk");
-    expect(file?.reason).toMatch(/low.risk|minimal|depend/i);
+    // Low-risk files are in the lightweight files list but not impact_files
+    expect(result.files).toHaveLength(1);
+    expect(result.impact_files).toHaveLength(0);
   });
 });
 
