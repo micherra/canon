@@ -4,18 +4,20 @@ Reference material for `canon-learner`. Contains dimension specs, report templat
 
 ---
 
-## Dimension 1: Drift-Driven Severity Adjustments
+## Dimension: principle-health
 
-**Goal**: Use review history to suggest severity promotions, demotions, or revisions.
+**Goal**: Use review history to suggest severity promotions, demotions, scope revisions, and removal of dead principles.
 
-### Data sources
+### Data source
 
-Call the `get_drift_report` MCP tool to get baseline stats: per-principle compliance rates, violation counts, trend, never-triggered list, and hotspot directories.
+Call the `get_drift_report` MCP tool to get baseline stats: per-principle compliance rates, violation counts, trend, never-triggered list, violation file_paths, and hotspot directories.
 
 For verdict-impact weighting, weight violations by their review verdict:
 - Violations in BLOCKING reviews count 2x for severity analysis (they stopped builds)
 - Violations in WARNING reviews count 1x (normal weight)
 - A principle violated 3 times in BLOCKING reviews has the same signal as one violated 6 times in WARNING reviews
+
+**Minimum threshold**: 10 reviews required for any suggestion. Below threshold → note "Skipped: principle-health — requires 10 reviews, have {current}."
 
 ### Promotion rules
 
@@ -43,6 +45,7 @@ Demotions are as important as promotions — a principle at the wrong severity c
 | Low compliance, any severity | < 50% compliance across >= 10 reviews | Revise: too strict, unclear, or wrong scope |
 | Frequent justified overrides | >= 5 intentional deviations with similar justifications | Add exception or narrow scope |
 | Never triggered | 0 appearances across >= 10 reviews | Flag as potentially dead — too narrow or irrelevant |
+| Violations concentrated in one directory | >= 70% of violation file_paths in same directory/layer | Suggest narrowing scope — principle may be too broad for its actual applicability |
 
 ### Demotion safety
 
@@ -55,35 +58,69 @@ Demotions are as important as promotions — a principle at the wrong severity c
 ```
 **{principle-id}** (current: {severity} → suggested: {new severity})
 {compliance_rate}% compliance across {N} reviews, {M} intentional deviations
-Suggest: {promote to X | demote to Y — reason | revise — reason | add exception for Z | flag as dead}
+Suggest: {promote to X | demote to Y — reason | revise — reason | add exception for Z | flag as dead | narrow scope to {pattern}}
 {CAUTION note if demoting a rule}
 ```
 
 ---
 
-## Dimension 2: Task Convention Promotion
+## Dimension: codebase-patterns
 
-**Goal**: Find patterns in task-level conventions that should be promoted to project-level.
+**Goal**: Detect consistent coding patterns in the live codebase that should be formalized as conventions or principles.
 
 ### Data source
 
-- `.canon/plans/*/CONVENTIONS.md` — task conventions created by the architect agent during builds
+Scan the codebase directly using **Grep** and **Glob** tools only. Do NOT use any MCP pattern tool. Scan these categories:
 
-### Analysis
+- Error handling (try/catch, Result types, error propagation patterns)
+- Validation (schema libraries, guard clauses, input checks)
+- Naming (file naming conventions, variable conventions, export patterns)
+- Imports (barrel files, path aliases, import ordering)
+- Testing (test file location, mock patterns, assertion style)
+- API (HTTP handler structure, middleware patterns, response shapes)
+- Types (type vs interface, generics, utility type usage)
 
-1. Read all task convention files
-2. Extract each convention line (bullets starting with `- **`)
-3. Group semantically similar conventions (same category and similar pattern — use your judgment)
-4. Count how many distinct builds each pattern appeared in
+For each category, identify the dominant pattern and count how many files use it vs. competing patterns.
 
-### Suggestion rules
+**Minimum threshold**: Pattern must appear in >= 5 files with >= 70% consistency across relevant files.
 
-- Pattern must appear in **>= 3 distinct builds** to suggest promotion
-- Cross-check against `.canon/CONVENTIONS.md` — skip if already a project convention
-- Cross-check against principle index — skip if already covered by a principle
+### Cross-checks before suggesting
+
+- Check against `.canon/CONVENTIONS.md` — skip if already a project convention
+- Check against principle index — skip if already covered by a principle
+- Only suggest patterns that are stable (not in recently modified files only)
 
 ### Output per suggestion
 
+```
+**{Pattern category}** ({N} files, {consistency}% consistent)
+Pattern: "{description of the dominant pattern}"
+Evidence: {file-1}, {file-2}, {file-3} (and {N-3} more)
+Suggest: Add to CONVENTIONS.md — "{convention text}"
+```
+
+---
+
+## Dimension: convention-lifecycle
+
+**Goal**: Track the full lifecycle of conventions — from task-level patterns to project conventions to formal principles, and flag stale conventions.
+
+This dimension merges three analyses:
+
+### Sub-analysis A: Task convention promotion
+
+**Data source**: `.canon/plans/*/CONVENTIONS.md` — task conventions created by the architect agent during builds.
+
+1. Read all task convention files
+2. Extract each convention line (bullets starting with `- **`)
+3. Group semantically similar conventions (same category and similar pattern)
+4. Count how many distinct builds each pattern appeared in
+
+**Suggestion rule**: Pattern must appear in >= 3 distinct builds to suggest promotion. Cross-check against `.canon/CONVENTIONS.md` and principle index before suggesting.
+
+**Minimum threshold**: 3 builds. Below → note "Skipped: convention promotion — requires 3 builds, have {current}."
+
+**Output per suggestion**:
 ```
 **{Pattern category}** (appeared in {N} builds)
 Pattern: "{the convention text}"
@@ -91,32 +128,23 @@ Builds: {slug-1}, {slug-2}, {slug-3}
 Suggest: Add to CONVENTIONS.md — "{convention text}"
 ```
 
----
+### Sub-analysis B: Convention graduation
 
-## Dimension 3: Convention Graduation
-
-**Goal**: Identify mature conventions ready to become formal principles.
-
-A convention in `.canon/CONVENTIONS.md` that has been stable, universally followed, and survived multiple builds is ready to graduate to a full principle with rationale, examples, and severity.
-
-### Analysis
+**Goal**: Identify conventions in `.canon/CONVENTIONS.md` ready to become formal principles.
 
 1. Read `.canon/CONVENTIONS.md` — extract each convention
 2. For each convention, check:
-   - **Age**: Is it present in the git history for a meaningful period? Check `git log --diff-filter=A -p .canon/CONVENTIONS.md` to find when it was added. Conventions added in the last build are too new.
-   - **Codebase adherence**: Does the codebase actually follow this convention? Use Grep/Glob to verify the pattern holds across relevant files (same thresholds as Dimension 1: 70%+ consistency, 5+ files).
-   - **Build survival**: Has this convention been carried through as a task convention in multiple builds? Check `.canon/plans/*/CONVENTIONS.md` for overlap.
-   - **No violations**: Has this convention ever been contradicted in review data? Check if related principles were violated.
+   - **Age**: Check `git log --diff-filter=A -p .canon/CONVENTIONS.md` to find when it was added. Conventions added in the last build are too new.
+   - **Codebase adherence**: Use Grep/Glob to verify the pattern holds. Threshold: >= 80% consistency across relevant files.
+   - **Build survival**: Has this convention appeared as a task convention in multiple builds? Check `.canon/plans/*/CONVENTIONS.md` for overlap.
+   - **No violations**: Has this convention ever been contradicted in review data?
 
-### Graduation criteria
+**Graduation criteria** (all must be true):
+- Convention has existed for >= 5 builds or been in `CONVENTIONS.md` for a meaningful period
+- Codebase adherence >= 80% across relevant files
+- Convention has never been contradicted in review or decision data
 
-All of these must be true:
-- Convention has existed for **>= 5 builds** or been in `CONVENTIONS.md` for a meaningful period
-- Codebase adherence is **>= 80%** across relevant files
-- Convention has **never been contradicted** in review or decision data
-
-### Output per suggestion
-
+**Output per suggestion**:
 ```
 **{Convention text}** (ready for graduation)
 Age: Present since {date or build count}
@@ -125,13 +153,9 @@ Suggest: Ask Canon to create a new principle — starts an interactive interview
 Proposed severity: {convention or strong-opinion based on whether it affects correctness}
 ```
 
----
-
-## Dimension 4: Convention Staleness Detection
+### Sub-analysis C: Convention staleness detection
 
 **Goal**: Identify conventions in `CONVENTIONS.md` that the codebase no longer follows.
-
-### Analysis
 
 1. Read `.canon/CONVENTIONS.md` — extract each convention
 2. For each convention, determine what codebase pattern it describes
@@ -140,20 +164,48 @@ Proposed severity: {convention or strong-opinion based on whether it affects cor
    - Search for contradicting patterns (e.g., if convention says "Use Zod", search for competing validation libraries)
 4. Calculate current adherence
 
-### Staleness criteria
-
-A convention is stale if:
-- Adherence has dropped **below 50%** across relevant files
-- A competing pattern has emerged with **higher adoption** than the convention's pattern
+**Staleness criteria** (any one sufficient):
+- Adherence has dropped below 50% across relevant files
+- A competing pattern has emerged with higher adoption than the convention's pattern
 - The convention references a tool/library/pattern that no longer exists in the codebase
 
-### Output per suggestion
-
+**Output per suggestion**:
 ```
 **{Convention text}** (stale)
 Current adherence: {N}% across {M} files
 Competing pattern: {what the codebase actually does now, if applicable}
 Suggest: {update convention to match current practice | remove convention | investigate divergence}
+```
+
+---
+
+## Dimension: process-health
+
+**Goal**: Detect flow execution problems — churn, duration outliers, skipped states, and declining pass rates — that suggest principles or flow definitions need revision.
+
+### Data source
+
+Read `.canon/flow-runs.jsonl` directly (no MCP tool needed). Each entry represents one completed flow run with state-level data.
+
+**Minimum threshold**: 5 flow runs required for any suggestion. Below → note "Skipped: process-health — requires 5 flow runs, have {current}."
+
+### Signals to analyze
+
+| Signal | Threshold | Suggestion |
+|--------|-----------|------------|
+| High iteration count on a state | Average iterations >= 3 across >= 5 runs | Review→fix churn — suggest examining the principle or implementor prompt for that state |
+| Declining pass rates | Gate/postcondition pass rate trending down across recent 5 runs | Principles may be becoming harder to satisfy — review recently changed principles |
+| Duration outlier by tier | A small-tier flow taking as long as a large-tier flow across >= 3 runs | Flow definition may have unnecessary states for this tier |
+| Frequently skipped states | Same state skipped in >= 60% of runs | Flow definition may need trimming — this state adds little value |
+| Rising violation count | Total violations per run trending up across recent 5 runs | Principles may need revision or scope narrowing |
+
+### Output per suggestion
+
+```
+**{state-name or flow-name}** ({signal type})
+Evidence: {specific numbers — average iterations, pass rate trend, duration comparison}
+Runs analyzed: {N}
+Suggest: {specific action — examine principle X | trim state Y from flow | review implementor prompt for state Z}
 ```
 
 ---
@@ -164,24 +216,35 @@ Combine all suggestions into `.canon/LEARNING-REPORT.md`:
 
 ```markdown
 ## Canon Learning Report
-Generated: {YYYY-MM-DD} | Reviews analyzed: {N} | Source files scanned: {N}
+Generated: {YYYY-MM-DD} | Reviews analyzed: {N} | Source files scanned: {N} | Flow runs analyzed: {N}
 
-### Suggested Severity Changes (from drift data)
+### Principle Health (from review history)
 
 #### Promotions
-{Dimension 1 suggestions, or "No promotions suggested." if none}
+{principle-health promotion suggestions, or "No promotions suggested." if none}
 
 #### Demotions
-{Demotion suggestions from Dimension 1, or "No demotions suggested." if none}
+{principle-health demotion suggestions, or "No demotions suggested." if none}
 
-### Suggested Convention Promotions (from task conventions)
-{Dimension 2 suggestions, or "No recurring task conventions found (need 3+ builds)." if none}
+#### Scope / Revision
+{principle-health scope and revision suggestions, or "No scope revisions suggested." if none}
 
-### Convention Graduation Candidates
-{Dimension 3 suggestions, or "No conventions ready for graduation." if none}
+### Codebase Patterns (from live scan)
+{codebase-patterns suggestions, or "No new patterns found meeting threshold (5+ files, 70%+ consistency)." if none}
 
-### Stale Conventions
-{Dimension 4 suggestions, or "All conventions are current." if none}
+### Convention Lifecycle
+
+#### Task Convention Promotions
+{convention-lifecycle sub-A suggestions, or "No recurring task conventions found (need 3+ builds)." if none}
+
+#### Convention Graduation Candidates
+{convention-lifecycle sub-B suggestions, or "No conventions ready for graduation." if none}
+
+#### Stale Conventions
+{convention-lifecycle sub-C suggestions, or "All conventions are current." if none}
+
+### Process Health (from flow-runs.jsonl)
+{process-health suggestions, or "No process health issues detected." if none}
 
 ### Recurring Suggestions
 {Suggestions that appeared in 3+ previous learning runs but were never acted on — flag these prominently}
@@ -204,18 +267,19 @@ After writing the report, append a structured entry to `.canon/learning.jsonl`:
 {
   "run_id": "learn_{YYYYMMDD}_{random_hex}",
   "timestamp": "{ISO-8601}",
-  "dimensions": ["drift", "conventions", "graduation", "staleness"],
+  "dimensions": ["principle-health", "codebase-patterns", "convention-lifecycle", "process-health"],
   "data_summary": {
     "reviews_analyzed": 0,
     "source_files_scanned": 0,
-    "task_conventions_read": 0
+    "task_conventions_read": 0,
+    "flow_runs_analyzed": 0
   },
   "suggestions": [
     {
       "id": "sug_{deterministic_hash}",
-      "dimension": "drift",
-      "type": "promote|demote|promote-convention|graduate|stale",
-      "target": "principle-id or convention text",
+      "dimension": "principle-health",
+      "type": "promote|demote|revise|narrow-scope|flag-dead|promote-convention|graduate|stale|churn|pass-rate|duration|skipped-state|violation-trend",
+      "target": "principle-id or convention text or state name",
       "summary": "One-line description of what's suggested",
       "confidence": "high|medium",
       "action": "suggested"
@@ -235,10 +299,10 @@ id = "sug_" + first8chars(lowercase(dimension + ":" + type + ":" + target))
 ```
 
 For example:
-- Drift promotion of `validate-at-trust-boundaries` → `sug_drift:promote:validate-at-trust-boundaries` → take first 8 hex chars of a hash
-- New convention about Zod validation → `sug_patterns:new-convention:zod-validation-at-api-boundaries` → take first 8
+- Principle health promotion of `validate-at-trust-boundaries` → `sug_principle-health:promote:validate-at-trust-boundaries` → take first 8 hex chars of a hash
+- New codebase pattern about Zod validation → `sug_codebase-patterns:promote-convention:zod-validation-at-api-boundaries` → take first 8
 
-In bash (portable): `echo -n "drift:promote:validate-at-trust-boundaries" | md5sum | head -c 8`
+In bash (portable): `echo -n "principle-health:promote:validate-at-trust-boundaries" | md5sum | head -c 8`
 (On macOS use `md5 -q` instead of `md5sum` if `md5sum` is unavailable.)
 
 The key property: **the same suggestion always gets the same ID**, regardless of when or how many times the learner runs.
