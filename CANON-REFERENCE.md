@@ -12,7 +12,7 @@ canon/
 ├── hooks/                # Pre/post tool-use interceptor scripts + hooks.json registry
 ├── mcp-server/           # TypeScript MCP server (Canon harness tools)
 │   └── src/
-│       ├── orchestration/  # Flow runtime: board, bulletin, convergence, events, gate-runner, etc.
+│       ├── orchestration/  # Flow runtime: board, messaging, convergence, events, gate-runner, etc.
 │       ├── tools/          # MCP tool implementations (one file per tool)
 │       ├── drift/          # JSONL-backed drift tracking (reviews)
 │       └── graph/          # Dependency graph scanner and priority scoring
@@ -37,7 +37,7 @@ Flows are state machines in `flows/`. Format: YAML frontmatter (states, transiti
 | `refactor` | Medium | Behavior-preserving restructuring with continuous test verification |
 | `feature` | Medium | New feature pipeline (4-10 files) |
 | `migrate` | Medium | Staged migration with rollback planning and verification |
-| `deep-build` | Large | Research → design → wave implementation → test → security → review (10+ files) |
+| `epic` | Large | Research → design → wave implementation → test → security → review (10+ files) |
 | `explore` | Research | Investigate a codebase question — no implementation |
 | `test-gap` | Testing | Analyze coverage gaps, write tests, verify, review |
 | `review-only` | Review | Review an existing PR or branch without implementing |
@@ -88,8 +88,8 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, wave context); reads `progress.md` from disk and injects as `${progress}` when flow declares `progress:` field |
 | `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state` |
 | `check_convergence` | Check iteration limits before re-entering a looping state |
-| `post_wave_bulletin` | Post inter-agent message during parallel wave execution |
-| `get_wave_bulletin` | Read wave bulletin messages from other agents in the same wave |
+| `post_message` | Post a message to a workspace channel (unified messaging) |
+| `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
 | `inject_wave_event` | Inject user events into running wave execution |
 
 ## Canon Engineering Principles

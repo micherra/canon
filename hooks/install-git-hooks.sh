@@ -75,6 +75,7 @@ install_hook() {
 ${canon_marker}
 "${src_script}" "\$@"
 APPEND
+  chmod +x "$dest"
   echo "Appended: Canon ${hook_name} call added to existing .git/hooks/${hook_name}"
 }
 

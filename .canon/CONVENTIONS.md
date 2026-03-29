@@ -3,7 +3,7 @@
 > Project-specific patterns and decisions. Auto-detected by init and refined as the project evolves.
 > Implementor agents read this file alongside Canon principles.
 
-- **Language**: TypeScript (ES modules) with Node.js 24+
+- **Language**: TypeScript (ES modules) with Node.js 25.x (pinned to 25.8.0 in .tool-versions)
 - **Naming**: camelCase for functions and variables, PascalCase for types and interfaces
 - **File naming**: kebab-case for files and directories
 - **Module structure**: One tool per file in `tools/`, one subsystem per directory (`drift/`, `graph/`, `utils/`)

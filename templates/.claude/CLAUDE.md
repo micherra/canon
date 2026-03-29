@@ -36,3 +36,4 @@ Each template is a markdown file with placeholder sections that agents fill in.
 - Templates ensure downstream agents can reliably parse upstream output
 - Never modify template structure without updating all consuming agents
 - Templates use markdown with clear section headers and placeholder text
+- Some templates now include optional evidence sections (`External Evidence`, `Evidence URLs`, `Verified Facts`, `Assumptions`) that downstream readers should preserve and tolerate when absent

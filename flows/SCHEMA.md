@@ -32,6 +32,7 @@ Prompt text for the agent in this state...
 | `progress` | string | no | Path to append-only learnings file for cross-iteration context |
 | `review_threshold` | string | no | Minimum review verdict that triggers fix-violations: `blocking` (default) or `warning`. When set to `warning`, both BLOCKING and WARNING verdicts route to fix-violations instead of only BLOCKING. |
 | `includes` | list | no | Fragment includes — reusable state groups expanded at load time (see Flow Fragments) |
+| `debate` | object | no | Debate protocol configuration — multi-round structured conversations between competing teams (see Debate Protocol) |
 
 ### States
 
@@ -55,6 +56,7 @@ Each key under `states:` is a state ID. State IDs must be lowercase, alphanumeri
 | `skip_when` | string | no | Pre-check condition — if met, skip the state with `no_items` result (see below) |
 | `large_diff_threshold` | int | no | For `single` review states: if the diff exceeds this many lines, the orchestrator fans out parallel reviewers by file cluster instead of running a single reviewer (see Large Diff Review) |
 | `cluster_by` | string | no | For review states with `large_diff_threshold`: clustering strategy — `directory` (default) or `layer` (see Large Diff Review) |
+| `compete` | object or `"auto"` | no | Competitive expansion — spawn N agents with different lenses, then synthesize (see Competitive States) |
 
 ### State Types
 
@@ -155,6 +157,8 @@ For `parallel-per` states, `iterate_on` names a data source the orchestrator ext
 | `security_findings` | SECURITY.md `### Findings` section | `{ severity, file_path, detail, category }` |
 
 The orchestrator parses the violations table from the reviewer's REVIEW.md. Each unique `{principle_id, file_path}` pair becomes one item. If the table has multiple violations for the same principle in the same file, they are grouped into one item.
+
+For `security_findings`, the core item shape comes from the finding heading, file, detail, and category. Optional evidence fields in `SECURITY.md` such as `Evidence URLs`, `Verified Facts`, and `Assumptions` are supporting context and do not change the iterate-on contract unless a flow explicitly defines a richer custom parser.
 
 Custom `iterate_on` values can reference any artifact from the prior state. The orchestrator reads the artifact as a markdown table or JSON array and fans out.
 
@@ -406,7 +410,7 @@ The orchestrator maps tiers to flows via `tier` field or a separate config:
 |------|-------------|
 | `small` | `quick-fix` |
 | `medium` | `feature` |
-| `large` | `deep-build` |
+| `large` | `epic` |
 
 Override with `--flow <name>` to use any flow regardless of tier.
 
@@ -424,7 +428,7 @@ The orchestrator persists its execution state to `${WORKSPACE}/board.json`. This
 
 ```json
 {
-  "flow": "deep-build",
+  "flow": "epic",
   "task": "Add order creation endpoint",
   "entry": "research",
   "current_state": "implement",
@@ -719,6 +723,78 @@ The orchestrator resolves fragments during flow template loading (Phase 1, Step 
 | `early-scan` | canon-security | section: Early warnings | Quick security scan of wave changes before next wave |
 | `impl-handoff` | canon-architect | artifact: IMPL-OVERVIEW.md | Produces implementation overview for downstream agents |
 
+### Competitive States
+
+Any state can be made competitive by adding a `compete` field. When present, the orchestrator expands the single spawn prompt into N competing versions, collects all outputs, then spawns a synthesizer to merge the best ideas.
+
+```yaml
+design:
+  type: single
+  agent: canon-architect
+  compete:
+    count: 3
+    strategy: synthesize
+    lenses: [performance, simplicity, extensibility]
+  transitions:
+    done: implement
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `count` | int | yes | Number of competing agents to spawn (2-5) |
+| `strategy` | enum | yes | `synthesize` (combine best ideas) or `select` (pick winner) |
+| `lenses` | list | no | Optimization constraints — one per competitor. If fewer lenses than count, remaining competitors get general framing. |
+
+When `compete: "auto"`, the orchestrator decides whether to compete based on the researcher's ambiguity signal.
+
+**Orchestrator protocol for competitive states:**
+1. `enter_and_prepare_state` returns `compete` config in the result
+2. Expand the base prompt into N competitor prompts (each gets a team label and optional lens)
+3. Spawn all N competitors concurrently
+4. Collect all outputs
+5. Build a synthesizer prompt with the original brief + all competitor outputs
+6. Spawn one synthesizer agent (same agent type)
+7. Use the synthesized output as the state's result
+
+Board fields for competitive states:
+- `states.{id}.compete_results`: Array of competitor outputs
+- `states.{id}.synthesized`: The synthesized final output
+
+### Debate Protocol
+
+Flows can define a `debate` configuration at the top level for multi-round structured conversations between competing teams. Debates are used during pre-flight to explore approaches before committing to implementation.
+
+```yaml
+debate:
+  teams: 3
+  composition: [canon-researcher, canon-architect]
+  min_rounds: 2
+  max_rounds: 5
+  convergence_check_after: 3
+  hitl_checkpoint: true
+  continue_to_build: true
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `teams` | int | 3 | Number of competing teams |
+| `composition` | list | required | Agent types composing each team |
+| `min_rounds` | int | 2 | Minimum rounds before convergence check |
+| `max_rounds` | int | 5 | Hard cap on total rounds |
+| `convergence_check_after` | int | 3 | Start convergence checks after this round |
+| `hitl_checkpoint` | bool | true | Pause for user review before proceeding |
+| `continue_to_build` | bool | true | Winning teams continue into implementation |
+
+**Round structure:**
+- Round 1 (position): Each team states their approach
+- Round 2 (challenge): Each team critiques the others
+- Round 3 (response): Teams defend/revise based on challenges
+- Round 4+ (narrow): Focus only on remaining disagreements
+
+**Convergence detection**: After `convergence_check_after` rounds, the orchestrator checks if the debate has stabilized via heuristic signals (agreement language, short messages, explicit consensus). If converged, the debate ends early.
+
+**Communication**: Teams communicate via the unified messaging system. Each round's messages are written to `messages/debate-round-{N}/` channels. The full transcript is preserved for HITL review.
+
 ## Example
 
-See `flows/deep-build.md` for a complete example with fragment includes.
+See `flows/epic.md` for a complete example with fragment includes.

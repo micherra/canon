@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { reportResult } from "../tools/report-result.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { writeBoard, initBoard } from "../orchestration/board.ts";
+import { writeMessage } from "../orchestration/messages.ts";
 import type { FlowEventMap } from "../orchestration/events.ts";
 import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
 
@@ -138,6 +139,73 @@ describe("reportResult — basic functionality", () => {
       "summary.md",
       "diff.patch",
     ]);
+  });
+});
+
+describe("reportResult — debate flow", () => {
+  it("loops back to the entry state while debate rounds remain", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow({
+      debate: {
+        teams: 2,
+        composition: ["canon-researcher", "canon-architect"],
+        min_rounds: 2,
+        max_rounds: 4,
+        convergence_check_after: 3,
+        hitl_checkpoint: true,
+        continue_to_build: true,
+      },
+    });
+    await setupWorkspace(workspace, flow);
+
+    await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "Use events.");
+    await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Use CRUD.");
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    expect(result.transition_condition).toBe("done");
+    expect(result.next_state).toBe("build");
+    expect(result.hitl_required).toBe(false);
+    expect(result.board.metadata?.debate_completed).toBe(false);
+  });
+
+  it("stops at HITL with summary once debate converges", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow({
+      debate: {
+        teams: 2,
+        composition: ["canon-researcher", "canon-architect"],
+        min_rounds: 2,
+        max_rounds: 4,
+        convergence_check_after: 2,
+        hitl_checkpoint: true,
+        continue_to_build: true,
+      },
+    });
+    await setupWorkspace(workspace, flow);
+
+    await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "We agree on event sourcing.");
+    await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Consensus reached, aligned.");
+    await writeMessage(workspace, "debate-round-2", "round-2-team-a-canon-researcher", "Agreed.");
+    await writeMessage(workspace, "debate-round-2", "round-2-team-b-canon-architect", "Same conclusion.");
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    expect(result.next_state).toBeNull();
+    expect(result.hitl_required).toBe(true);
+    expect(result.hitl_reason).toContain("Debate completed");
+    expect(result.board.metadata?.debate_completed).toBe(true);
+    expect(result.board.metadata?.debate_summary).toContain("Debate Round 1");
   });
 });
 
@@ -606,5 +674,83 @@ describe("reportResult — progress_line", () => {
     const { readFileSync } = await import("node:fs");
     const content = readFileSync(join(workspace, "progress.md"), "utf-8");
     expect(content).toContain("- [build] done: Built successfully");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compete_results persistence
+// ---------------------------------------------------------------------------
+
+describe("reportResult — compete_results persistence", () => {
+  it("persists compete_results to board state entry", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const competeResults = [
+      { lens: "simplicity", status: "done", artifacts: ["design-a.md"] },
+      { lens: "performance", status: "done", artifacts: ["design-b.md"] },
+      { lens: "extensibility", status: "done", artifacts: ["design-c.md"] },
+    ];
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      compete_results: competeResults,
+    });
+
+    expect(result.board.states["build"].compete_results).toEqual(competeResults);
+  });
+
+  it("persists synthesized flag to board state entry", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      compete_results: [{ status: "done" }],
+      synthesized: true,
+    });
+
+    expect(result.board.states["build"].synthesized).toBe(true);
+  });
+
+  it("persists synthesized flag without compete_results", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      synthesized: true,
+    });
+
+    expect(result.board.states["build"].synthesized).toBe(true);
+    expect(result.board.states["build"].compete_results).toBeUndefined();
+  });
+
+  it("does not set compete_results when not provided", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    expect(result.board.states["build"].compete_results).toBeUndefined();
+    expect(result.board.states["build"].synthesized).toBeUndefined();
   });
 });

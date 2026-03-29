@@ -348,3 +348,66 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
     expect(result.fanned_out).toBeUndefined();
   });
 });
+
+describe("getSpawnPrompt — compete expansion", () => {
+  it("expands a single state into multiple prompts when compete is configured", async () => {
+    const workspace = makeTmpDir();
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    vi.mocked(clusterDiff).mockReturnValue(undefined);
+
+    const flow = makeSingleReviewFlow({
+      states: {
+        review: {
+          type: "single",
+          agent: "canon-reviewer",
+          compete: {
+            count: 3,
+            strategy: "synthesize",
+            lenses: ["speed", "safety", "simplicity"],
+          },
+        },
+        done: { type: "terminal" },
+      },
+    });
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "review",
+      flow,
+      variables: { task: "review the PR" },
+    });
+
+    expect(result.prompts).toHaveLength(3);
+    expect(result.fanned_out).toBe(true);
+    expect(result.prompts[0].prompt).toContain("speed");
+    expect(result.prompts[1].prompt).toContain("safety");
+    expect(result.prompts[2].prompt).toContain("simplicity");
+  });
+
+  it("uses default auto compete expansion", async () => {
+    const workspace = makeTmpDir();
+    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    vi.mocked(clusterDiff).mockReturnValue(undefined);
+
+    const flow = makeSingleReviewFlow({
+      states: {
+        review: {
+          type: "single",
+          agent: "canon-reviewer",
+          compete: "auto",
+        },
+        done: { type: "terminal" },
+      },
+    });
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "review",
+      flow,
+      variables: { task: "review the PR" },
+    });
+
+    expect(result.prompts).toHaveLength(3);
+    expect(result.fanned_out).toBe(true);
+  });
+});

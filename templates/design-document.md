@@ -44,6 +44,13 @@ done_criteria:
 ### Decisions made
 - {decision and rationale, tied to principle}
 
+### External Evidence
+<!-- Only include when external research materially affected the design. -->
+- **URLs**: {source links consulted}
+- **Facts**: {verified external constraints or capabilities}
+- **Assumptions**: {architect inferences that still need validation}
+- **Open Questions**: {unresolved external dependencies or decisions}
+
 ### Open questions for user
 - {questions that need human input}
 ```
@@ -56,3 +63,4 @@ done_criteria:
 - The `testable` field should be specific enough that an agent can evaluate it
 - Everything below North Star can evolve between waves via architect replan
 - Keep done criteria to 3-7 items — more than that signals the epic should be split
+- Include the `External Evidence` section only when outside research materially shaped the design

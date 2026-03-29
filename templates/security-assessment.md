@@ -37,6 +37,9 @@ Findings: {N} ({X} critical, {X} high, {X} medium, {X} low)
 **Pattern:** {Category — e.g., SQL injection, XSS, open redirect}
 **Detail:** {What the vulnerability is and how it could be exploited.}
 **Recommendation:** {How to fix it.}
+**Evidence URLs:** {advisories, docs, or references consulted}
+**Verified Facts:** {externally supported claims relevant to this finding}
+**Assumptions:** {anything not fully verified from the available evidence}
 
 ### Passed Checks
 - {Check that passed — e.g., "No hardcoded secrets found"}
@@ -51,3 +54,4 @@ Findings: {N} ({X} critical, {X} high, {X} medium, {X} low)
 4. **Pattern field is required**: Use a recognized category (SQL injection, XSS, command injection, path traversal, prototype pollution, missing auth, hardcoded secret, weak token, missing CSRF, permissive CORS, sensitive data exposure, missing rate limit, debug mode, exposed port, dependency vulnerability).
 5. **File field must include line number** when identifiable.
 6. **Passed Checks section is required** even when findings exist — it shows what was verified clean.
+7. **Evidence fields are required** when external research materially informed the finding. Omit them only if the finding is fully supported by local code evidence.

@@ -28,6 +28,7 @@ import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { createJsonlLogger } from "../orchestration/events.ts";
 import { executeEffects } from "../orchestration/effects.ts";
+import { inspectDebateProgress } from "../orchestration/debate.ts";
 
 interface ReportResultInput {
   workspace: string;
@@ -59,6 +60,9 @@ interface ReportResultInput {
   // Discovery fields — agents report what gate commands and postconditions they discovered
   discovered_gates?: DiscoveredGate[];
   discovered_postconditions?: PostconditionAssertion[];
+  // Compete results — persisted to board state for synthesizer access
+  compete_results?: Array<{ lens?: string; status: string; artifacts?: string[] }>;
+  synthesized?: boolean;
   // Optional progress line to append to progress.md (saves a separate Write call)
   progress_line?: string;
   // Project directory for drift effect persistence
@@ -306,6 +310,33 @@ async function reportResultLocked(
     };
   }
 
+  // Persist compete results to board state entry
+  if (input.compete_results?.length && board.states[input.state_id]) {
+    board = {
+      ...board,
+      states: {
+        ...board.states,
+        [input.state_id]: {
+          ...board.states[input.state_id],
+          compete_results: input.compete_results,
+          ...(input.synthesized != null ? { synthesized: input.synthesized } : {}),
+        },
+      },
+    };
+  } else if (input.synthesized != null && board.states[input.state_id]) {
+    // synthesized can be set without compete_results (e.g., marking synthesis complete)
+    board = {
+      ...board,
+      states: {
+        ...board.states,
+        [input.state_id]: {
+          ...board.states[input.state_id],
+          synthesized: input.synthesized,
+        },
+      },
+    };
+  }
+
   // Stuck detection
   let stuck = false;
   let stuck_reason: string | undefined;
@@ -382,6 +413,29 @@ async function reportResultLocked(
   let hitl_required = false;
   let hitl_reason: string | undefined;
 
+  if (input.state_id === input.flow.entry && input.flow.debate) {
+    const debate = await inspectDebateProgress(input.workspace, input.flow.debate);
+    board = {
+      ...board,
+      metadata: {
+        ...(board.metadata ?? {}),
+        debate_last_round: debate.last_completed_round,
+        debate_completed: debate.completed,
+        ...(debate.summary ? { debate_summary: debate.summary } : {}),
+      },
+    };
+
+    if (!debate.completed) {
+      nextState = input.state_id;
+    } else if (input.flow.debate.hitl_checkpoint) {
+      nextState = null;
+      hitl_required = true;
+      hitl_reason = `Debate completed after round ${debate.last_completed_round}${
+        debate.convergence?.reason ? `: ${debate.convergence.reason}` : ""
+      }`;
+    }
+  }
+
   // Check if status keyword is recognized
   const loweredKeyword = input.status_keyword.toLowerCase();
   const isRecognized =
@@ -394,13 +448,17 @@ async function reportResultLocked(
   } else if (nextState === "hitl") {
     hitl_required = true;
     hitl_reason = `Transition from '${input.state_id}' on '${condition}' leads to hitl`;
-  } else if (nextState === null && stateDef?.type !== "terminal") {
+  } else if (!hitl_required && nextState === null && stateDef?.type !== "terminal") {
     hitl_required = true;
     if (!isRecognized) {
       hitl_reason = `Unrecognized status keyword '${input.status_keyword}' from state '${input.state_id}' (normalized to '${condition}')`;
     } else {
       hitl_reason = `No matching transition from '${input.state_id}' for condition '${condition}'`;
     }
+    board = setBlocked(board, input.state_id, hitl_reason);
+  }
+
+  if (hitl_required && hitl_reason && board.blocked == null && stateDef?.type !== "terminal") {
     board = setBlocked(board, input.state_id, hitl_reason);
   }
 

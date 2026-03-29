@@ -23,12 +23,12 @@ import { getSpawnPrompt } from "./tools/get-spawn-prompt.ts";
 import { reportResult } from "./tools/report-result.ts";
 import { checkConvergence } from "./tools/check-convergence.ts";
 import { updateBoard } from "./tools/update-board.ts";
-import { postWaveBulletin } from "./tools/post-wave-bulletin.ts";
-import { getWaveBulletin } from "./tools/get-wave-bulletin.ts";
 import { injectWaveEvent } from "./tools/inject-wave-event.ts";
 import { resolveWaveEvent } from "./tools/resolve-wave-event.ts";
 import { enterAndPrepareState } from "./tools/enter-and-prepare-state.ts";
 import { resolveAfterConsultations } from "./tools/resolve-after-consultations.ts";
+import { postMessage } from "./tools/post-message.ts";
+import { getMessages } from "./tools/get-messages.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
 import { graphQuery } from "./tools/graph-query.ts";
 import { showPrImpact } from "./tools/show-pr-impact.ts";
@@ -307,7 +307,7 @@ server.registerTool(
       variables: z.record(z.string(), z.string()),
       items: z.array(z.any()).optional(),
       role: z.string().optional(),
-      wave: z.number().optional().describe("Current wave number (enables bulletin instructions)"),
+      wave: z.number().optional().describe("Current wave number (enables message instructions)"),
       peer_count: z.number().optional().describe("Number of peer agents in the wave"),
     },
   },
@@ -340,6 +340,46 @@ server.registerTool(
         status: z.string(),
         artifacts: z.array(z.string()).optional(),
       })).optional().describe("Results from parallel-per execution — triggers aggregation"),
+      gate_results: z.array(z.object({
+        passed: z.boolean(),
+        gate: z.string(),
+        command: z.string().optional(),
+        output: z.string().optional(),
+        exitCode: z.number().optional(),
+      })).optional().describe("Quality gate results reported by the agent"),
+      postcondition_results: z.array(z.object({
+        passed: z.boolean(),
+        name: z.string(),
+        type: z.string(),
+        output: z.string().optional(),
+      })).optional().describe("Postcondition check results reported by the agent"),
+      violation_count: z.number().optional().describe("Total number of principle violations found"),
+      violation_severities: z.object({
+        blocking: z.number(),
+        warning: z.number(),
+      }).optional().describe("Violation counts broken down by severity"),
+      test_results: z.object({
+        passed: z.number(),
+        failed: z.number(),
+        skipped: z.number(),
+      }).optional().describe("Test suite results"),
+      files_changed: z.number().optional().describe("Number of files changed in this state's work"),
+      discovered_gates: z.array(z.object({
+        command: z.string(),
+        source: z.string(),
+      })).optional().describe("Gate commands discovered by the agent for future runs"),
+      discovered_postconditions: z.array(z.object({
+        type: z.string(),
+        target: z.string(),
+        pattern: z.string().optional(),
+        command: z.string().optional(),
+      })).optional().describe("Postcondition assertions discovered by the agent for future runs"),
+      compete_results: z.array(z.object({
+        lens: z.string().optional(),
+        status: z.string(),
+        artifacts: z.array(z.string()).optional(),
+      })).optional().describe("Results from competitive execution — persisted to board state"),
+      synthesized: z.boolean().optional().describe("Whether the compete results have been synthesized into a single output"),
       progress_line: z.string().optional().describe("One-line progress entry to append to progress.md (e.g. '- [state_id] done: summary')"),
     },
   },
@@ -387,48 +427,6 @@ server.registerTool(
 );
 
 server.registerTool(
-  "post_wave_bulletin",
-  {
-    description: "Post a message to the wave bulletin for inter-agent communication during parallel execution. Agents use this to share created utilities, patterns, and gotchas.",
-    inputSchema: {
-      workspace: z.string(),
-      wave: z.number(),
-      from: z.string().describe("Task ID or agent name of the poster"),
-      type: z.enum(["created_utility", "established_pattern", "discovered_gotcha", "needs_input", "fyi"]),
-      summary: z.string().describe("One-line human-readable description"),
-      detail: z.object({
-        path: z.string().optional(),
-        exports: z.array(z.string()).optional(),
-        pattern: z.string().optional(),
-        issue: z.string().optional(),
-      }).optional(),
-    },
-  },
-  async (input) => {
-    const result = await postWaveBulletin(input);
-    return jsonResponse(result);
-  }
-);
-
-server.registerTool(
-  "get_wave_bulletin",
-  {
-    description: "Read messages from the wave bulletin. Returns messages posted by other agents in the same wave, optionally filtered by timestamp or type.",
-    inputSchema: {
-      workspace: z.string(),
-      wave: z.number(),
-      since: z.string().optional().describe("ISO timestamp — only return messages after this time"),
-      type: z.string().optional().describe("Filter by message type"),
-      include_events: z.boolean().optional().describe("Also return pending wave events"),
-    },
-  },
-  async (input) => {
-    const result = await getWaveBulletin(input);
-    return jsonResponse(result);
-  }
-);
-
-server.registerTool(
   "inject_wave_event",
   {
     description: "Inject a user event into a running wave execution. Events are applied at wave boundaries (between waves). Use to add tasks, skip tasks, inject context, provide guidance, or pause execution.",
@@ -452,7 +450,7 @@ server.registerTool(
 server.registerTool(
   "resolve_wave_event",
   {
-    description: "Resolve a pending wave event by applying or rejecting it. Returns agent routing from resolveEventAgents so the orchestrator knows which agents to spawn. Use after processing events from get_wave_bulletin.",
+    description: "Resolve a pending wave event by applying or rejecting it. Returns agent routing from resolveEventAgents so the orchestrator knows which agents to spawn. Use after processing events from get_messages.",
     inputSchema: {
       workspace: z.string(),
       event_id: z.string().describe("ID of the pending event to resolve"),
@@ -478,7 +476,7 @@ server.registerTool(
       variables: z.record(z.string(), z.string()),
       items: z.array(z.any()).optional(),
       role: z.string().optional(),
-      wave: z.number().optional().describe("Current wave number (enables bulletin instructions)"),
+      wave: z.number().optional().describe("Current wave number (enables message instructions)"),
       peer_count: z.number().optional().describe("Number of peer agents in the wave"),
     },
   },
@@ -501,6 +499,40 @@ server.registerTool(
   },
   async (input) => {
     const result = await resolveAfterConsultations(input);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "post_message",
+  {
+    description: "Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time.",
+    inputSchema: {
+      workspace: z.string(),
+      channel: z.string().describe("Channel name (e.g. 'wave-000', 'debate-preflight', 'consultation')"),
+      from: z.string().describe("Sender identity (e.g. task ID, agent name)"),
+      content: z.string().describe("Markdown message content"),
+    },
+  },
+  async (input) => {
+    const result = await postMessage(input);
+    return jsonResponse(result);
+  }
+);
+
+server.registerTool(
+  "get_messages",
+  {
+    description: "Read messages from a workspace channel. Returns messages ordered by sequence number. Optionally includes pending wave events.",
+    inputSchema: {
+      workspace: z.string(),
+      channel: z.string().describe("Channel name to read from"),
+      since: z.string().optional().describe("ISO timestamp — only return messages after this time"),
+      include_events: z.boolean().optional().describe("Also return pending wave events"),
+    },
+  },
+  async (input) => {
+    const result = await getMessages(input);
     return jsonResponse(result);
   }
 );

@@ -1,8 +1,10 @@
 import { readFile } from "fs/promises";
 import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.ts";
-import { buildBulletinInstructions } from "../orchestration/bulletin.ts";
+import { buildMessageInstructions } from "../orchestration/messages.ts";
+import { buildDebatePrompt, debateTeamLabel, inspectDebateProgress } from "../orchestration/debate.ts";
 import { readWaveGuidance, assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
-import type { ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.ts";
+import type { ResolvedFlow, StateDefinition, CompeteConfig } from "../orchestration/flow-schema.ts";
+import { expandCompetitorPrompts, type CompeteConfig as ExpandedCompeteConfig } from "../orchestration/compete.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { readBoard } from "../orchestration/board.ts";
 import { resolveContextInjections } from "../orchestration/inject-context.ts";
@@ -71,6 +73,14 @@ function templatePaths(
   if (!template) return [];
   const names = Array.isArray(template) ? template : [template];
   return names.map((name) => `${pluginDir}/templates/${name}.md`);
+}
+
+function resolveCompeteConfig(config: CompeteConfig | undefined): ExpandedCompeteConfig | undefined {
+  if (!config) return undefined;
+  if (config === "auto") {
+    return { count: 3, strategy: "synthesize" };
+  }
+  return config;
 }
 
 /**
@@ -245,6 +255,58 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
 
   const paths = pluginDir ? templatePaths(state.template, pluginDir) : [];
   const prompts: SpawnPromptEntry[] = [];
+  const competeConfig = state.type === "single" ? resolveCompeteConfig(state.compete) : undefined;
+  const debateConfig = state_id === flow.entry ? flow.debate : undefined;
+
+  if (state.type !== "single" && state.compete) {
+    warnings.push(`State "${state_id}" declares compete but only single states support prompt expansion`);
+  }
+
+  if (debateConfig) {
+    const debate = await inspectDebateProgress(input.workspace, debateConfig);
+
+    if (!debate.completed) {
+      const teamLabels = Array.from({ length: debateConfig.teams }, (_, i) => debateTeamLabel(i));
+      for (const teamLabel of teamLabels) {
+        const otherTeamLabels = teamLabels.filter((label) => label !== teamLabel);
+        for (const agent of debateConfig.composition) {
+          prompts.push({
+            agent,
+            role: teamLabel,
+            item: { team: teamLabel, round: debate.next_round, channel: debate.next_channel },
+            template_paths: paths,
+            prompt: buildDebatePrompt(
+              basePrompt,
+              input.workspace,
+              debate.next_round,
+              debateConfig.max_rounds,
+              teamLabel,
+              otherTeamLabels,
+              agent,
+              debate.transcript,
+            ),
+          });
+        }
+      }
+
+      return {
+        prompts,
+        state_type: state.type,
+        ...(warnings.length > 0 ? { warnings } : {}),
+        timeout_ms,
+        fanned_out: true,
+      };
+    }
+
+    if (debate.summary) {
+      basePrompt += `\n\n${debate.summary}`;
+    }
+    warnings.push(
+      `Debate completed after round ${debate.last_completed_round}${
+        debate.convergence?.reason ? `: ${debate.convergence.reason}` : ""
+      }`,
+    );
+  }
 
   switch (state.type) {
     case "single": {
@@ -259,6 +321,18 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
           };
           const prompt = substituteItem(basePrompt, clusterItem);
           prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
+        }
+      } else if (competeConfig) {
+        const expanded = expandCompetitorPrompts(
+          { agent, prompt: basePrompt, template_paths: paths },
+          competeConfig,
+        );
+        for (const entry of expanded) {
+          prompts.push({
+            agent: entry.agent,
+            prompt: entry.prompt,
+            template_paths: entry.template_paths,
+          });
         }
       } else {
         prompts.push({ agent, prompt: basePrompt, template_paths: paths });
@@ -329,12 +403,13 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     }
   }
 
-  // Inject bulletin coordination instructions for wave/parallel-per states
+  // Inject messaging coordination instructions for wave/parallel-per states
   if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null) {
     const peerCount = input.peer_count ?? prompts.length - 1;
-    const bulletinInstr = buildBulletinInstructions(input.wave, peerCount, input.workspace);
+    const channel = `wave-${String(input.wave).padStart(3, "0")}`;
+    const messageInstr = buildMessageInstructions(channel, peerCount, input.workspace);
     for (const entry of prompts) {
-      entry.prompt += `\n\n${bulletinInstr}`;
+      entry.prompt += `\n\n${messageInstr}`;
     }
   }
 
@@ -362,7 +437,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     }
   }
 
-  const fanned_out = state.type === "single" && clusters != null && clusters.length > 0;
+  const fanned_out = state.type === "single" && prompts.length > 1;
   return {
     prompts,
     state_type: state.type,

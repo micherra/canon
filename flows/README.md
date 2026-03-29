@@ -157,7 +157,7 @@ fix-violations:
     blocked: hitl
 ```
 
-`iterate_on` names a built-in or custom data source parsed from the prior state's artifact. Built-in sources: `violation_groups` (parsed from REVIEW.md violations table) and `security_findings` (parsed from SECURITY.md findings section). Each item is available as `${item}` or `${item.field}` in spawn instructions.
+`iterate_on` names a built-in or custom data source parsed from the prior state's artifact. Built-in sources: `violation_groups` (parsed from REVIEW.md violations table) and `security_findings` (parsed from SECURITY.md findings section). Each item is available as `${item}` or `${item.field}` in spawn instructions. Additional optional evidence fields inside a finding, such as `Evidence URLs`, `Verified Facts`, and `Assumptions`, are supporting context and do not change the iterate-on item shape.
 
 If the parsed list is empty, the state transitions immediately to `done` with result `no_items` — no agents are spawned.
 
@@ -209,7 +209,7 @@ The `user-checkpoint` fragment pauses the flow and presents a summary of complet
 - **approved** — User is satisfied, proceed to the next state
 - **revise** — User wants changes; feedback is saved to `REVISION-NOTES.md` and routed back for rework
 
-This is used at design review gates in flows like `deep-build` and `feature`.
+This is used at design review gates in flows like `epic` and `feature`.
 
 ### Consultations
 

@@ -64,7 +64,7 @@ describe("createMetricsAccumulator", () => {
     const { handler, getMetrics } = createMetricsAccumulator();
 
     handler("flow_started", {
-      flowName: "deep-build",
+      flowName: "epic",
       task: "build feature",
       tier: "t2",
       workspace: "/tmp/ws",
@@ -90,7 +90,7 @@ describe("createJsonlLogger", () => {
     const logger = createJsonlLogger(workspace);
 
     await logger("flow_started", {
-      flowName: "deep-build",
+      flowName: "epic",
       task: "implement feature",
       tier: "t2",
       workspace,
@@ -111,7 +111,7 @@ describe("createJsonlLogger", () => {
     const first = JSON.parse(lines[0]);
     expect(first.type).toBe("flow_started");
     expect(first.timestamp).toBe("2026-03-22T00:00:00Z");
-    expect(first.flowName).toBe("deep-build");
+    expect(first.flowName).toBe("epic");
 
     const second = JSON.parse(lines[1]);
     expect(second.type).toBe("agent_spawned");

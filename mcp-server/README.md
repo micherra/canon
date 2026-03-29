@@ -18,7 +18,7 @@ src/
 ├── tools/                # One file per MCP tool implementation
 ├── drift/                # JSONL-backed stores: decisions, patterns, reviews
 ├── graph/                # Dependency graph: scanner, import/export parsing, priority scoring
-├── orchestration/        # Flow state machine runtime: board, bulletin, variables, gates, effects
+├── orchestration/        # Flow state machine runtime: board, messaging, variables, gates, effects
 ├── utils/                # Config loading, path handling, atomic writes, ID generation
 └── __tests__/            # Vitest unit tests
 ```
@@ -33,7 +33,7 @@ src/
 
 **`orchestration/`** — Flow state machine runtime used by the orchestrator agent.
 - `board.ts` — Reads and writes `board.json` (the persistent state machine record for a workspace)
-- `bulletin.ts` — Appends to and reads `bulletin.jsonl` for inter-agent messaging during parallel wave execution
+- `messages.ts` — Unified inter-agent messaging via workspace channels
 - `variables.ts` — Resolves `{{variable}}` substitutions in spawn prompts, pulling values from board state, session, and wave context
 - `gate-runner.ts` — Evaluates between-wave gate conditions before advancing to the next wave
 - `flow-parser.ts` — Parses flow YAML frontmatter and markdown spawn instructions, resolves fragment includes
@@ -82,8 +82,8 @@ src/
 | `get_spawn_prompt` | Resolve spawn prompts for a flow state. Substitutes variables, applies templates, reads `progress.md` when the flow declares it, and fans out by state type (single/parallel/wave/parallel-per). |
 | `report_result` | Report an agent's result. Normalizes status, evaluates transitions, updates board state, executes drift effects (persist_review), and checks stuck detection. Returns next state and whether HITL is required. |
 | `check_convergence` | Check whether a state can be re-entered based on iteration limits. Returns iteration count, max, cannot-fix items, and history. |
-| `post_wave_bulletin` | Post a message to the wave bulletin for near-real-time inter-agent communication during parallel wave execution. Implementor agents have direct access to this tool. |
-| `get_wave_bulletin` | Read messages from the wave bulletin. Returns messages posted by other agents in the same wave, optionally filtered by timestamp or type. Used by implementors for real-time coordination. |
+| `post_message` | Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time. |
+| `get_messages` | Read messages from a workspace channel. Returns messages ordered by sequence number. Optionally includes pending wave events. |
 | `inject_wave_event` | Inject a user event into a running wave execution. Allows the user to steer, pause, or redirect agents mid-wave. |
 | `resolve_wave_event` | Resolve a pending injected wave event (`apply`/`reject`) and return orchestrator routing hints. |
 | `enter_and_prepare_state` | Combined helper that checks convergence, evaluates skip conditions, enters state, and resolves spawn prompts in one call. |
@@ -101,7 +101,7 @@ All runtime data lives under `.canon/` in the project root:
 | `workspaces/{slug}/board.json` | `init_workspace`, `update_board` | Flow state machine record |
 | `workspaces/{slug}/session.json` | `init_workspace` | Session metadata (flow, branch, tier) |
 | `workspaces/{slug}/progress.md` | `init_workspace`, orchestrator | Append-only cross-state learnings; injected into spawn prompts via `${progress}` |
-| `workspaces/{slug}/waves/{N}/bulletin.jsonl` | `post_wave_bulletin` | Near-real-time inter-agent messages during parallel wave execution |
+| `workspaces/{slug}/messages/{channel}/*.md` | `post_message` | Inter-agent messages during parallel wave execution |
 
 JSONL files auto-rotate when they exceed 500 entries. Atomic writes (write-then-rename) prevent corruption on concurrent access.
 

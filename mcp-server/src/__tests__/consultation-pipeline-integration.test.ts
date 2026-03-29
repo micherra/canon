@@ -408,7 +408,7 @@ describe("getSpawnPrompt — wave=null with consultation_outputs does not inject
       },
     });
 
-    // No wave → bulletin/guidance/briefing injection blocks all fire on `input.wave != null`
+    // No wave → messaging/guidance/briefing injection blocks all fire on `input.wave != null`
     // The prompt should not contain any briefing content
     expect(result.prompts[0].prompt).not.toContain("Wave Briefing");
     expect(result.prompts[0].prompt).not.toContain("All clear.");

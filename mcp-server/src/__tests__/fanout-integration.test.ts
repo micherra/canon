@@ -13,7 +13,7 @@
  *   enterAndPrepareState must surface fanned_out:true in its result.
  *
  * Gap 3 — Wave briefing injection for fanned-out single states:
- *   The bulletin/wave-briefing injection loop runs over the prompts array after
+ *   The messaging/wave-briefing injection loop runs over the prompts array after
  *   the switch, so it applies to all prompts including fanned-out ones.
  *   Verify that wave guidance and overlay injection apply to all cluster prompts.
  */
@@ -442,10 +442,10 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Gap 3: Wave guidance and bulletin injection for fanned-out single state
+// Gap 3: Wave guidance and messaging injection for fanned-out single state
 // ---------------------------------------------------------------------------
 
-describe("getSpawnPrompt — wave guidance and bulletin injection for fanned-out single state", () => {
+describe("getSpawnPrompt — wave guidance and messaging injection for fanned-out single state", () => {
   it("wave guidance is injected into all fanned-out prompts when wave is set", async () => {
     // This verifies that the post-switch loop which injects wave guidance
     // applies to all cluster prompts generated in case "single".
@@ -476,9 +476,9 @@ describe("getSpawnPrompt — wave guidance and bulletin injection for fanned-out
     }
   });
 
-  it("bulletin injection does NOT apply to fanned-out single state prompts", async () => {
-    // Bulletin injection is gated on state.type === "wave" || "parallel-per"
-    // Verify that fanned-out "single" state prompts do NOT get bulletin injected
+  it("messaging injection does NOT apply to fanned-out single state prompts", async () => {
+    // Messaging injection is gated on state.type === "wave" || "parallel-per"
+    // Verify that fanned-out "single" state prompts do NOT get messaging injected
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
@@ -494,11 +494,11 @@ describe("getSpawnPrompt — wave guidance and bulletin injection for fanned-out
       peer_count: 1,
     });
 
-    // Bulletin coordination instructions are for wave/parallel-per, not single
+    // Messaging coordination instructions are for wave/parallel-per, not single
     expect(result.prompts).toHaveLength(sampleClusters.length);
     for (const entry of result.prompts) {
-      // Bulletin instructions mention "post_wave_bulletin" or "get_wave_bulletin"
-      expect(entry.prompt).not.toContain("post_wave_bulletin");
+      // Messaging instructions mention "post_message" or "get_messages"
+      expect(entry.prompt).not.toContain("post_message");
     }
   });
 });

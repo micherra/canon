@@ -2,7 +2,7 @@
  * Integration tests — wave event lifecycle
  *
  * These tests exercise the full cross-tool flow:
- *   inject_wave_event → get_wave_bulletin(include_events) → resolve_wave_event
+ *   inject_wave_event → get_messages(include_events) → resolve_wave_event
  *
  * They are distinct from the unit tests in resolve-wave-event.test.ts and
  * inject-wave-event.test.ts, which test each tool in isolation.
@@ -13,7 +13,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { injectWaveEvent } from "../tools/inject-wave-event.ts";
 import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
-import { getWaveBulletin } from "../tools/get-wave-bulletin.ts";
+import { getMessages } from "../tools/get-messages.ts";
 import { readPendingEvents, readAllEvents } from "../orchestration/wave-events.ts";
 
 // ---------------------------------------------------------------------------
@@ -148,53 +148,53 @@ describe("end-to-end lifecycle: inject → resolve → pending drops to zero", (
 });
 
 // ---------------------------------------------------------------------------
-// 2. Cross-tool: inject → get_wave_bulletin(include_events) → resolve → bulletin shows 0
+// 2. cross-tool: inject → get_messages(include_events) → resolve
 // ---------------------------------------------------------------------------
 
-describe("cross-tool: inject + get_wave_bulletin(include_events) + resolve", () => {
-  it("get_wave_bulletin reflects pending events from inject, then zero after resolve", async () => {
+describe("cross-tool: inject + get_messages(include_events) + resolve", () => {
+  it("get_messages reflects pending events from inject, then zero after resolve", async () => {
     // Inject two events
     const e1 = await injectWaveEvent({ workspace, type: "add_task", payload: { description: "Task B" } });
     const e2 = await injectWaveEvent({ workspace, type: "pause", payload: {} });
 
-    // Bulletin with include_events should list both pending events
-    const bulletinBefore = await getWaveBulletin({ workspace, wave: 1, include_events: true });
-    expect(bulletinBefore.events).toBeDefined();
-    expect(bulletinBefore.events_count).toBe(2);
-    const eventIds = bulletinBefore.events!.map((e) => e.id);
+    // Messages with include_events should list both pending events
+    const resultBefore = await getMessages({ workspace, channel: "wave-001", include_events: true });
+    expect(resultBefore.events).toBeDefined();
+    expect(resultBefore.events_count).toBe(2);
+    const eventIds = resultBefore.events!.map((e) => e.id);
     expect(eventIds).toContain(e1.event.id);
     expect(eventIds).toContain(e2.event.id);
-    expect(bulletinBefore.events!.every((e) => e.status === "pending")).toBe(true);
+    expect(resultBefore.events!.every((e) => e.status === "pending")).toBe(true);
 
     // Resolve both events
     await resolveWaveEvent({ workspace, event_id: e1.event.id, action: "apply" });
     await resolveWaveEvent({ workspace, event_id: e2.event.id, action: "reject", reason: "Pausing deferred" });
 
-    // Bulletin should now report no pending events
-    const bulletinAfter = await getWaveBulletin({ workspace, wave: 1, include_events: true });
-    expect(bulletinAfter.events_count).toBe(0);
-    expect(bulletinAfter.events).toEqual([]);
+    // Messages should now report no pending events
+    const resultAfter = await getMessages({ workspace, channel: "wave-001", include_events: true });
+    expect(resultAfter.events_count).toBe(0);
+    expect(resultAfter.events).toEqual([]);
   });
 
-  it("get_wave_bulletin without include_events never includes event fields", async () => {
+  it("get_messages without include_events never includes event fields", async () => {
     await injectWaveEvent({ workspace, type: "guidance", payload: { context: "Some guidance" } });
 
-    const bulletin = await getWaveBulletin({ workspace, wave: 1 });
-    expect(bulletin.events).toBeUndefined();
-    expect(bulletin.events_count).toBeUndefined();
+    const result = await getMessages({ workspace, channel: "wave-001" });
+    expect(result.events).toBeUndefined();
+    expect(result.events_count).toBeUndefined();
   });
 
-  it("get_wave_bulletin events field only returns pending events, not resolved ones", async () => {
+  it("get_messages events field only returns pending events, not resolved ones", async () => {
     const e1 = await injectWaveEvent({ workspace, type: "add_task", payload: { description: "Keep pending" } });
     const e2 = await injectWaveEvent({ workspace, type: "skip_task", payload: { task_id: "t1" } });
 
     // Resolve only e2
     await resolveWaveEvent({ workspace, event_id: e2.event.id, action: "apply" });
 
-    const bulletin = await getWaveBulletin({ workspace, wave: 1, include_events: true });
-    expect(bulletin.events_count).toBe(1);
-    expect(bulletin.events![0].id).toBe(e1.event.id);
-    expect(bulletin.events![0].status).toBe("pending");
+    const result = await getMessages({ workspace, channel: "wave-001", include_events: true });
+    expect(result.events_count).toBe(1);
+    expect(result.events![0].id).toBe(e1.event.id);
+    expect(result.events![0].status).toBe("pending");
   });
 });
 

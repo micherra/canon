@@ -40,6 +40,7 @@ states:
   implement:
     type: wave
     agent: canon-implementor
+    gate: test-suite
     template: implementation-log
     transitions:
       done: verify

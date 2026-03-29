@@ -20,7 +20,7 @@ src/
 ├── tools/                # Tool implementations (one file per tool)
 ├── drift/                # Drift tracking — reviews (JSONL persistence)
 ├── graph/                # Dependency graph — scanner, import/export parsing, priority scoring
-├── orchestration/        # Flow execution — board, bulletin, variables, gates, consultations
+├── orchestration/        # Flow execution — board, messaging, variables, gates, consultations, compete, debate
 ├── utils/                # Config loading, path handling, atomic writes, ID generation
 └── __tests__/            # Vitest unit tests
 ```
@@ -29,7 +29,7 @@ src/
 - **Drift tracking** (`drift/`) — JSONL-backed store for reviews with auto-rotation
 - **Dependency graph** (`graph/`) — Scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs
 - **Principle matching** (`matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity
-- **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, wave bulletin, variable resolution, gate execution, consultation preparation, wave briefing assembly
+- **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
 <!-- last-updated: 2026-03-26 (optional-roles parallel failure handling) -->
@@ -200,8 +200,8 @@ src/
 | `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
 | `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
 | `check_convergence` | Check iteration limits |
-| `post_wave_bulletin` | Post inter-agent message during parallel waves |
-| `get_wave_bulletin` | Read wave bulletin messages |
+| `post_message` | Post a message to a workspace channel (unified messaging) |
+| `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
 | `inject_wave_event` | Inject user events into running wave execution |
 | `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
 | `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |

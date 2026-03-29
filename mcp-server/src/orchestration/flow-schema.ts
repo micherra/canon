@@ -101,6 +101,34 @@ export const EffectSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Compete & Debate config schemas
+// ---------------------------------------------------------------------------
+
+/** Configuration for competitive state execution — N parallel agents + synthesis. */
+export const CompeteConfigObjectSchema = z.object({
+  count: z.number().min(2).max(5),
+  strategy: z.enum(["synthesize", "select"]).default("synthesize"),
+  lenses: z.array(z.string()).optional(),
+});
+
+/** Compete field: explicit config, "auto" (orchestrator decides), or absent. */
+export const CompeteConfigSchema = z.union([
+  z.literal("auto"),
+  CompeteConfigObjectSchema,
+]);
+
+/** Configuration for pre-flight debate protocol. */
+export const DebateConfigSchema = z.object({
+  teams: z.number().min(2).max(5).default(3),
+  composition: z.array(z.string()),
+  min_rounds: z.number().default(2),
+  max_rounds: z.number().default(5),
+  convergence_check_after: z.number().default(3),
+  hitl_checkpoint: z.boolean().default(true),
+  continue_to_build: z.boolean().default(true),
+});
+
+// ---------------------------------------------------------------------------
 // Quality gate result schemas
 // ---------------------------------------------------------------------------
 
@@ -169,6 +197,7 @@ export const StateDefinitionSchema = z.object({
   cluster_by: z.enum(["directory", "layer"]).optional(),
   timeout: z.string().optional(),
   effects: z.array(EffectSchema).optional(),
+  compete: CompeteConfigSchema.optional(),
 });
 
 export const FragmentIncludeSchema = z.object({
@@ -190,6 +219,7 @@ export const FlowDefinitionSchema = z.object({
   gates: z.record(z.string(), z.string()).optional(),
   includes: z.array(FragmentIncludeSchema).optional(),
   states: z.record(z.string(), StateDefinitionSchema).optional(),
+  debate: DebateConfigSchema.optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -218,6 +248,7 @@ export const FragmentStateDefinitionSchema = z.object({
   cluster_by: z.enum(["directory", "layer"]).optional(),
   timeout: z.string().optional(),
   effects: z.array(EffectSchema).optional(),
+  compete: CompeteConfigSchema.optional(),
 });
 
 export const FragmentDefinitionSchema = z.object({
@@ -225,7 +256,7 @@ export const FragmentDefinitionSchema = z.object({
   description: z.string().optional(),
   type: z.literal("consultation").optional(),
   entry: z.string().optional(),
-  params: z.record(z.string(), z.union([z.string(), z.number(), z.null()])).optional(),
+  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
   states: z.record(z.string(), FragmentStateDefinitionSchema).optional(),
   // Consultation-specific fields
   agent: z.string().optional(),
@@ -339,6 +370,12 @@ export const BoardStateEntrySchema = z.object({
     status: z.string(),
     artifacts: z.array(z.string()).optional(),
   })).optional(),
+  compete_results: z.array(z.object({
+    lens: z.string().optional(),
+    status: z.string(),
+    artifacts: z.array(z.string()).optional(),
+  })).optional(),
+  synthesized: z.boolean().optional(),
 });
 
 export const CannotFixItemSchema = z.object({
@@ -476,6 +513,9 @@ export type BlockedInfo = z.infer<typeof BlockedInfoSchema>;
 export type ConcernEntry = z.infer<typeof ConcernEntrySchema>;
 export type Board = z.infer<typeof BoardSchema>;
 export type Session = z.infer<typeof SessionSchema>;
+export type CompeteConfigObject = z.infer<typeof CompeteConfigObjectSchema>;
+export type CompeteConfig = z.infer<typeof CompeteConfigSchema>;
+export type DebateConfig = z.infer<typeof DebateConfigSchema>;
 
 // ---------------------------------------------------------------------------
 // Wave event types (used by wave-events.ts, inject-wave-event.ts, etc.)

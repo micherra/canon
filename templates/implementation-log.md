@@ -49,6 +49,10 @@ commit: "{hash}"
 - {risk item}: tested via {test name} — {PASS/FAIL}
 - {risk item}: NOT tested — {reason, e.g., requires integration setup}
 
+#### External Evidence
+<!-- Only include if web research materially informed implementation choices. -->
+- `{URL}` — {what implementation decision, API usage, or constraint this source informed}
+
 ### Canon Compliance
 <!-- One line per principle from the plan. -->
 - **{principle-id}** ({severity}): {✓ COMPLIANT|⚠ JUSTIFIED_DEVIATION|✗ VIOLATION_FOUND → FIXED} — {detail}
@@ -73,3 +77,4 @@ commit: "{hash}"
 - Status must be one of the four defined values — no custom statuses
 - Canon compliance section is mandatory — every principle in the plan must appear
 - Concerns and Blockers sections only appear when relevant
+- Include `External Evidence` only when web research materially informed implementation choices

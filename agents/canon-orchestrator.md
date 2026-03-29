@@ -230,13 +230,17 @@ Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells yo
 7. Cleanup worktrees and run gate if defined
 8. **After last wave**: If `stateDef.consultations.after` exists, call `resolve_after_consultations(workspace, state_id, flow, variables)`. Spawn returned consultation agents, collect results, and record each via `update_board` or direct board mutation with breakpoint "after" and wave_key "after". Then proceed to report_result.
 
-**Note on bulletin**: `get_spawn_prompt` injects bulletin coordination instructions into wave agent prompts. Implementor agents have direct access to `post_wave_bulletin` and `get_wave_bulletin` MCP tools for near-real-time collaboration during wave execution. You do not need to manually relay bulletin messages.
+**Note on messaging**: `get_spawn_prompt` injects messaging coordination instructions into wave agent prompts. Implementor agents have direct access to `post_message` and `get_messages` MCP tools for collaboration during wave execution. You do not need to manually relay messages.
+
+**Competitive states**: When `enter_and_prepare_state` returns a `compete` config on the result, expand the single prompt into N competing prompts using the compete module. Spawn all competitors concurrently, collect outputs, then spawn a synthesizer. Store competitor outputs and synthesized result on the board.
+
+**Debate protocol**: When the flow defines a `debate` config, drive multi-round structured debates before or during implementation. Use the debate module for round framing, convergence detection, and summary building. Present the debate summary at HITL checkpoints for user review.
 
 ### Wave Event Resolution
 
 After merging wave results (step 5) and before running the gate (step 7), check for user-injected events:
 
-1. Call `get_wave_bulletin` with `include_events: true` to read pending events
+1. Call `get_messages` with `include_events: true` to read pending events
 2. For each pending event, resolve it by spawning the needed agents:
 
 | Event type | Resolution agents | What they produce |
