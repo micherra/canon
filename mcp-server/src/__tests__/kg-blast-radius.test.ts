@@ -1,15 +1,57 @@
 /**
- * Tests for the unified blast radius types and classifyBlastSeverity() pure function.
+ * Tests for the unified blast radius types, classifyBlastSeverity() pure function,
+ * and computeUnifiedBlastRadius() orchestration function.
  *
  * These tests cover severity classification rules, description string generation,
- * and the treatment of test files vs. production files.
+ * the treatment of test files vs. production files, and the integration between
+ * file-level and entity-level blast radius queries.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import Database from 'better-sqlite3';
+import { initDatabase } from '../graph/kg-schema.ts';
+import { KgStore } from '../graph/kg-store.ts';
 import {
   classifyBlastSeverity,
+  computeUnifiedBlastRadius,
   type BlastRadiusFile,
 } from '../graph/kg-blast-radius.ts';
+import type { FileRow, EntityRow } from '../graph/kg-types.ts';
+
+// ---------------------------------------------------------------------------
+// Shared DB helpers
+// ---------------------------------------------------------------------------
+
+function makeFileRow(overrides: Partial<Omit<FileRow, 'file_id'>> = {}): Omit<FileRow, 'file_id'> {
+  return {
+    path: 'src/A.ts',
+    mtime_ms: 1700000000000,
+    content_hash: 'abc123',
+    language: 'typescript',
+    layer: 'domain',
+    last_indexed_at: Date.now(),
+    ...overrides,
+  };
+}
+
+function makeEntityRow(
+  fileId: number,
+  overrides: Partial<Omit<EntityRow, 'entity_id' | 'file_id'>> = {},
+): Omit<EntityRow, 'entity_id'> {
+  return {
+    file_id: fileId,
+    name: 'myFunc',
+    qualified_name: 'src/A.ts::myFunc',
+    kind: 'function',
+    line_start: 1,
+    line_end: 10,
+    is_exported: false,
+    is_default_export: false,
+    signature: null,
+    metadata: null,
+    ...overrides,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -282,5 +324,357 @@ describe('classifyBlastSeverity', () => {
       const result = classifyBlastSeverity(affected, 'domain');
       expect(result.amplification_risk).toBe(false);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeUnifiedBlastRadius — integration tests
+// ---------------------------------------------------------------------------
+
+describe('computeUnifiedBlastRadius', () => {
+  let db: Database.Database;
+  let store: KgStore;
+
+  beforeEach(() => {
+    db = initDatabase(':memory:');
+    store = new KgStore(db);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  it('returns contained report when file is not in the KG', () => {
+    const result = computeUnifiedBlastRadius(db, 'src/nonexistent.ts');
+    expect(result.seed_file).toBe('src/nonexistent.ts');
+    expect(result.summary.severity).toBe('contained');
+    expect(result.affected).toHaveLength(0);
+    expect(result.by_depth).toEqual({});
+  });
+
+  it('returns contained report when file has no dependents', () => {
+    // Seed file exists but no file_edges point to it and no entities call it
+    store.upsertFile(makeFileRow({ path: 'src/seed.ts', layer: 'domain' }));
+
+    const result = computeUnifiedBlastRadius(db, 'src/seed.ts');
+    expect(result.summary.severity).toBe('contained');
+    expect(result.affected).toHaveLength(0);
+    expect(result.seed_layer).toBe('domain');
+  });
+
+  it('returns file-level blast radius for a non-code file (file_edges only)', () => {
+    // Seed: a config file with no entities. Two files import it via file_edges.
+    const seedFile = store.upsertFile(
+      makeFileRow({ path: 'config/tsconfig.json', layer: 'config', language: 'json' }),
+    );
+    const fileA = store.upsertFile(
+      makeFileRow({ path: 'src/a.ts', layer: 'api', language: 'typescript' }),
+    );
+    const fileB = store.upsertFile(
+      makeFileRow({ path: 'src/b.ts', layer: 'domain', language: 'typescript' }),
+    );
+
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: seedFile.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: seedFile.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const result = computeUnifiedBlastRadius(db, 'config/tsconfig.json');
+
+    expect(result.affected).toHaveLength(2);
+    const affectedPaths = result.affected.map((f) => f.path).sort();
+    expect(affectedPaths).toEqual(['src/a.ts', 'src/b.ts']);
+    // Both are at depth 1
+    expect(result.affected.every((f) => f.depth === 1)).toBe(true);
+    // by_depth should have depth 1 with 2 files
+    expect(result.by_depth[1]).toHaveLength(2);
+  });
+
+  it('returns entity-level blast radius for a code file with exported entities', () => {
+    // Seed file has an exported function. Another file's entity calls it.
+    const seedFile = store.upsertFile(
+      makeFileRow({ path: 'src/seed.ts', layer: 'domain' }),
+    );
+    const callerFile = store.upsertFile(
+      makeFileRow({ path: 'src/caller.ts', layer: 'api' }),
+    );
+
+    const exportedFn = store.insertEntity(
+      makeEntityRow(seedFile.file_id!, {
+        name: 'exportedFn',
+        qualified_name: 'src/seed.ts::exportedFn',
+        is_exported: true,
+      }),
+    );
+    const callerFn = store.insertEntity(
+      makeEntityRow(callerFile.file_id!, {
+        name: 'callerFn',
+        qualified_name: 'src/caller.ts::callerFn',
+      }),
+    );
+
+    // callerFn calls exportedFn
+    store.insertEdge({
+      source_entity_id: callerFn.entity_id!,
+      target_entity_id: exportedFn.entity_id!,
+      edge_type: 'calls',
+      confidence: 1.0,
+      metadata: null,
+    });
+
+    const result = computeUnifiedBlastRadius(db, 'src/seed.ts');
+
+    expect(result.affected).toHaveLength(1);
+    expect(result.affected[0].path).toBe('src/caller.ts');
+    expect(result.affected[0].depth).toBe(1);
+    expect(result.affected[0].affected_entities).toContain('callerFn');
+  });
+
+  it('merges file-level and entity-level results — entity adds affected_entities to existing file entry', () => {
+    // Both file_edges and entity edges point from callerFile to seedFile.
+    // The result should have a single entry for callerFile with affected_entities populated.
+    const seedFile = store.upsertFile(
+      makeFileRow({ path: 'src/seed.ts', layer: 'domain' }),
+    );
+    const callerFile = store.upsertFile(
+      makeFileRow({ path: 'src/caller.ts', layer: 'api' }),
+    );
+
+    // File edge: callerFile imports seedFile
+    store.insertFileEdge({
+      source_file_id: callerFile.file_id!,
+      target_file_id: seedFile.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    // Entity edge: callerFn calls exportedFn in seed
+    const exportedFn = store.insertEntity(
+      makeEntityRow(seedFile.file_id!, {
+        name: 'exportedFn',
+        qualified_name: 'src/seed.ts::exportedFn',
+        is_exported: true,
+      }),
+    );
+    const callerFn = store.insertEntity(
+      makeEntityRow(callerFile.file_id!, {
+        name: 'callerFn',
+        qualified_name: 'src/caller.ts::callerFn',
+      }),
+    );
+    store.insertEdge({
+      source_entity_id: callerFn.entity_id!,
+      target_entity_id: exportedFn.entity_id!,
+      edge_type: 'calls',
+      confidence: 1.0,
+      metadata: null,
+    });
+
+    const result = computeUnifiedBlastRadius(db, 'src/seed.ts');
+
+    // Should be a single file entry (not duplicated)
+    expect(result.affected).toHaveLength(1);
+    expect(result.affected[0].path).toBe('src/caller.ts');
+    // Entity detail should be merged in
+    expect(result.affected[0].affected_entities).toContain('callerFn');
+  });
+
+  it('entity-level results add new file entries not found via file_edges', () => {
+    // No file_edges exist, but entity-level edges reveal a caller in a different file
+    const seedFile = store.upsertFile(
+      makeFileRow({ path: 'src/seed.ts', layer: 'domain' }),
+    );
+    const callerFile = store.upsertFile(
+      makeFileRow({ path: 'src/indirect.ts', layer: 'api' }),
+    );
+
+    const exportedFn = store.insertEntity(
+      makeEntityRow(seedFile.file_id!, {
+        name: 'myExport',
+        qualified_name: 'src/seed.ts::myExport',
+        is_exported: true,
+      }),
+    );
+    const callerFn = store.insertEntity(
+      makeEntityRow(callerFile.file_id!, {
+        name: 'indirectUser',
+        qualified_name: 'src/indirect.ts::indirectUser',
+      }),
+    );
+    store.insertEdge({
+      source_entity_id: callerFn.entity_id!,
+      target_entity_id: exportedFn.entity_id!,
+      edge_type: 'calls',
+      confidence: 1.0,
+      metadata: null,
+    });
+
+    const result = computeUnifiedBlastRadius(db, 'src/seed.ts');
+
+    expect(result.affected).toHaveLength(1);
+    expect(result.affected[0].path).toBe('src/indirect.ts');
+    expect(result.affected[0].relationship).toBe('entity-dependency');
+    expect(result.affected[0].affected_entities).toContain('indirectUser');
+  });
+
+  it('respects maxDepth option', () => {
+    // A imports B, B imports seed. maxDepth=1 → only B should appear.
+    const seedFile = store.upsertFile(
+      makeFileRow({ path: 'src/seed.ts', layer: 'domain' }),
+    );
+    const fileB = store.upsertFile(
+      makeFileRow({ path: 'src/b.ts', layer: 'domain' }),
+    );
+    const fileA = store.upsertFile(
+      makeFileRow({ path: 'src/a.ts', layer: 'api' }),
+    );
+
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: seedFile.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const result = computeUnifiedBlastRadius(db, 'src/seed.ts', { maxDepth: 1 });
+
+    const affectedPaths = result.affected.map((f) => f.path);
+    expect(affectedPaths).toContain('src/b.ts'); // depth 1
+    expect(affectedPaths).not.toContain('src/a.ts'); // depth 2, excluded
+  });
+
+  it('handles circular file references without infinite recursion', () => {
+    // Circular: A imports B, B imports A. Seed = A. Should terminate.
+    const fileA = store.upsertFile(
+      makeFileRow({ path: 'src/a.ts', layer: 'domain' }),
+    );
+    const fileB = store.upsertFile(
+      makeFileRow({ path: 'src/b.ts', layer: 'domain' }),
+    );
+
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: fileA.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    // Should not hang or throw; DISTINCT in the CTE handles cycles
+    expect(() => computeUnifiedBlastRadius(db, 'src/a.ts')).not.toThrow();
+    const result = computeUnifiedBlastRadius(db, 'src/a.ts');
+    // fileB references fileA, so fileB should appear in blast radius
+    const affectedPaths = result.affected.map((f) => f.path);
+    expect(affectedPaths).toContain('src/b.ts');
+  });
+
+  it('marks test files as is_test=true via isTestFile()', () => {
+    const seedFile = store.upsertFile(
+      makeFileRow({ path: 'src/utils.ts', layer: 'domain' }),
+    );
+    const testFile = store.upsertFile(
+      makeFileRow({ path: 'src/__tests__/utils.test.ts', layer: 'domain' }),
+    );
+
+    store.insertFileEdge({
+      source_file_id: testFile.file_id!,
+      target_file_id: seedFile.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const result = computeUnifiedBlastRadius(db, 'src/utils.ts');
+
+    expect(result.affected).toHaveLength(1);
+    expect(result.affected[0].is_test).toBe(true);
+    // All affected are test files → severity is contained
+    expect(result.summary.severity).toBe('contained');
+  });
+
+  it('populates in_degree from file_edges for each affected file', () => {
+    // Set up callerFile as a hub: 3 other files also import it (in_degree = 3 for callerFile)
+    const seedFile = store.upsertFile(
+      makeFileRow({ path: 'src/seed.ts', layer: 'domain' }),
+    );
+    const callerFile = store.upsertFile(
+      makeFileRow({ path: 'src/hub.ts', layer: 'domain' }),
+    );
+    const otherA = store.upsertFile(
+      makeFileRow({ path: 'src/other-a.ts', layer: 'api' }),
+    );
+    const otherB = store.upsertFile(
+      makeFileRow({ path: 'src/other-b.ts', layer: 'api' }),
+    );
+    const otherC = store.upsertFile(
+      makeFileRow({ path: 'src/other-c.ts', layer: 'api' }),
+    );
+
+    // callerFile imports seed (so hub is in blast radius of seed)
+    store.insertFileEdge({
+      source_file_id: callerFile.file_id!,
+      target_file_id: seedFile.file_id!,
+      edge_type: 'imports',
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    // 3 other files import callerFile (raises callerFile's in_degree to 3)
+    for (const other of [otherA, otherB, otherC]) {
+      store.insertFileEdge({
+        source_file_id: other.file_id!,
+        target_file_id: callerFile.file_id!,
+        edge_type: 'imports',
+        confidence: 1.0,
+        evidence: null,
+        relation: null,
+      });
+    }
+
+    const result = computeUnifiedBlastRadius(db, 'src/seed.ts', { maxDepth: 1 });
+
+    expect(result.affected).toHaveLength(1);
+    expect(result.affected[0].path).toBe('src/hub.ts');
+    expect(result.affected[0].in_degree).toBe(3);
+  });
+
+  it('returns correct seed_layer in the report', () => {
+    store.upsertFile(makeFileRow({ path: 'src/tool.ts', layer: 'api' }));
+    const result = computeUnifiedBlastRadius(db, 'src/tool.ts');
+    expect(result.seed_layer).toBe('api');
   });
 });

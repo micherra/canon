@@ -176,6 +176,152 @@ export function classifyBlastSeverity(
 }
 
 // ---------------------------------------------------------------------------
+// computeUnifiedBlastRadius — orchestration function (new unified API)
+// ---------------------------------------------------------------------------
+
+export interface UnifiedBlastRadiusOptions {
+  /** Maximum traversal depth for both file-level and entity-level queries. Default: 2 */
+  maxDepth?: number;
+  /** Currently unused — test files are always included in `affected` but excluded from severity. Default: false */
+  includeTests?: boolean;
+}
+
+/**
+ * Compute the unified blast radius for a given file path.
+ *
+ * Combines file-level reverse dependencies (from `file_edges`) with
+ * entity-level reverse dependencies (from `edges` for exported entities)
+ * into a single `UnifiedBlastRadiusReport`.
+ *
+ * Algorithm:
+ * 1. Look up `filePath` in the files table. If not found, return a `contained` report.
+ * 2. Get file-level reverse dependencies via `getFileBlastRadius()`.
+ * 3. Get the file's exported entities and their reverse dependencies via `getBlastRadius()`.
+ * 4. Merge both result sets: file-level results form the base; entity-level results
+ *    add `affected_entities` detail to existing entries, or create new entries for
+ *    files not reachable via `file_edges`.
+ * 5. Look up `in_degree` for each affected file from `file_edges`.
+ * 6. Classify severity via `classifyBlastSeverity()`.
+ * 7. Group results by depth.
+ */
+export function computeUnifiedBlastRadius(
+  db: Database.Database,
+  filePath: string,
+  options?: UnifiedBlastRadiusOptions,
+): UnifiedBlastRadiusReport {
+  const maxDepth = options?.maxDepth ?? 2;
+
+  const store = new KgStore(db);
+  const query = new KgQuery(db);
+
+  // Step 1: Resolve the seed file
+  const seedFile = store.getFile(filePath);
+  if (!seedFile || seedFile.file_id == null) {
+    return buildContainedReport(filePath, '');
+  }
+
+  const seedFileId = seedFile.file_id;
+  const seedLayer = seedFile.layer ?? '';
+
+  // Step 2: File-level blast radius
+  const fileResults = query.getFileBlastRadius(seedFileId, maxDepth);
+
+  // Build a map from file_id → BlastRadiusFile for merging
+  // We'll populate `in_degree` and `layer` after building the full file set.
+  const fileMap = new Map<number, BlastRadiusFile>();
+
+  for (const fr of fileResults) {
+    fileMap.set(fr.file_id, {
+      path: fr.path,
+      depth: fr.depth,
+      relationship: 'file-import',
+      layer: fr.layer ?? '',
+      is_test: isTestFile(fr.path),
+      in_degree: 0, // populated below
+      affected_entities: [],
+    });
+  }
+
+  // Step 3: Entity-level blast radius (exported entities only)
+  const exportedEntities = store.getEntitiesByFile(seedFileId).filter((e) => e.is_exported);
+  const exportedEntityIds = exportedEntities
+    .map((e) => e.entity_id)
+    .filter((id): id is number => id != null);
+
+  if (exportedEntityIds.length > 0) {
+    const entityResults = query.getBlastRadius(exportedEntityIds, maxDepth);
+
+    // Step 6 (merged): for each entity result, find or create the BlastRadiusFile entry
+    for (const er of entityResults) {
+      // Skip depth 0 (seed entities themselves — they're in the seed file, not affected files)
+      if (er.depth === 0) continue;
+
+      const existingEntry = fileMap.get(er.file_id);
+      if (existingEntry) {
+        // Add entity detail to existing file entry
+        if (!existingEntry.affected_entities) existingEntry.affected_entities = [];
+        existingEntry.affected_entities.push(er.name);
+        // Use the shallower of the two depths (entity path may be shorter)
+        if (er.depth < existingEntry.depth) {
+          existingEntry.depth = er.depth;
+        }
+      } else {
+        // New file reachable via entity edges but not file_edges
+        const fileRow = store.getFileById(er.file_id);
+        if (fileRow) {
+          fileMap.set(er.file_id, {
+            path: fileRow.path,
+            depth: er.depth,
+            relationship: 'entity-dependency',
+            layer: fileRow.layer ?? '',
+            is_test: isTestFile(fileRow.path),
+            in_degree: 0, // populated below
+            affected_entities: [er.name],
+          });
+        }
+      }
+    }
+  }
+
+  // Step 7: Populate in_degree for each affected file from file_edges
+  for (const [affectedFileId, entry] of fileMap) {
+    entry.in_degree = store.getFileEdgesTo(affectedFileId).length;
+  }
+
+  // Build the flat affected list
+  const affected = Array.from(fileMap.values());
+
+  // Step 8: Classify severity
+  const summary = classifyBlastSeverity(affected, seedLayer);
+
+  // Step 9: Group by depth
+  const by_depth: Record<number, BlastRadiusFile[]> = {};
+  for (const file of affected) {
+    if (!by_depth[file.depth]) by_depth[file.depth] = [];
+    by_depth[file.depth].push(file);
+  }
+
+  return {
+    seed_file: filePath,
+    seed_layer: seedLayer,
+    summary,
+    by_depth,
+    affected,
+  };
+}
+
+/** Build a contained (empty) UnifiedBlastRadiusReport for files not in the KG or with no dependents. */
+function buildContainedReport(filePath: string, seedLayer: string): UnifiedBlastRadiusReport {
+  return {
+    seed_file: filePath,
+    seed_layer: seedLayer,
+    summary: classifyBlastSeverity([], seedLayer),
+    by_depth: {},
+    affected: [],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
