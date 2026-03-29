@@ -481,34 +481,35 @@ describe('analyzeBlastRadius', () => {
 
   test('resolves entity by name and returns blast radius results', () => {
     populateTestGraph(store);
-    // funcA calls funcB which calls funcC — blast radius from funcA covers all 3
-    const report = analyzeBlastRadius(db, ['funcA']);
+    // funcA calls funcB which calls funcC — reverse blast radius from funcC covers all 3
+    const report = analyzeBlastRadius(db, ['funcC']);
     expect(report.total_affected).toBeGreaterThanOrEqual(1);
-    expect(report.seed_entities).toContain('funcA');
+    expect(report.seed_entities).toContain('funcC');
   });
 
-  test('blast radius at depth 1 only reaches direct callees', () => {
+  test('blast radius at depth 1 only reaches direct callers', () => {
     populateTestGraph(store);
-    // funcA → funcB → funcC; maxDepth=1 should not reach funcC
-    const report = analyzeBlastRadius(db, ['funcA'], { maxDepth: 1 });
+    // funcA → funcB → funcC; seed = funcC, maxDepth=1 should reach funcB but not funcA
+    const report = analyzeBlastRadius(db, ['funcC'], { maxDepth: 1 });
     const names = report.affected.map((e) => e.entity_name);
-    expect(names).toContain('funcA'); // seed (depth 0)
-    expect(names).toContain('funcB'); // depth 1
-    expect(names).not.toContain('funcC'); // depth 2 — excluded by maxDepth=1
+    expect(names).toContain('funcC'); // seed (depth 0)
+    expect(names).toContain('funcB'); // depth 1 (direct caller)
+    expect(names).not.toContain('funcA'); // depth 2 — excluded by maxDepth=1
   });
 
-  test('blast radius at depth 2 reaches transitive callees', () => {
+  test('blast radius at depth 2 reaches transitive callers', () => {
     populateTestGraph(store);
-    const report = analyzeBlastRadius(db, ['funcA'], { maxDepth: 2 });
+    // seed = funcC; funcB calls funcC (depth 1), funcA calls funcB (depth 2)
+    const report = analyzeBlastRadius(db, ['funcC'], { maxDepth: 2 });
     const names = report.affected.map((e) => e.entity_name);
-    expect(names).toContain('funcA');
-    expect(names).toContain('funcB');
     expect(names).toContain('funcC');
+    expect(names).toContain('funcB');
+    expect(names).toContain('funcA');
   });
 
   test('depth 0 entries are labeled seed, depth > 0 labeled dependency', () => {
     populateTestGraph(store);
-    const report = analyzeBlastRadius(db, ['funcA'], { maxDepth: 2 });
+    const report = analyzeBlastRadius(db, ['funcC'], { maxDepth: 2 });
     const seedEntries = report.affected.filter((e) => e.depth === 0);
     const depEntries = report.affected.filter((e) => e.depth > 0);
     expect(seedEntries.every((e) => e.edge_type === 'seed')).toBe(true);
@@ -517,8 +518,8 @@ describe('analyzeBlastRadius', () => {
 
   test('by_depth summary counts are correct', () => {
     populateTestGraph(store);
-    const report = analyzeBlastRadius(db, ['funcA'], { maxDepth: 2 });
-    // depth 0: funcA, depth 1: funcB, depth 2: funcC
+    // seed = funcC; depth 0: funcC, depth 1: funcB, depth 2: funcA
+    const report = analyzeBlastRadius(db, ['funcC'], { maxDepth: 2 });
     expect(report.by_depth[0]).toBeGreaterThanOrEqual(1);
     expect(report.by_depth[1]).toBeGreaterThanOrEqual(1);
     expect(report.by_depth[2]).toBeGreaterThanOrEqual(1);
@@ -526,8 +527,9 @@ describe('analyzeBlastRadius', () => {
 
   test('affected_files count reflects unique files hit', () => {
     populateTestGraph(store);
-    const report = analyzeBlastRadius(db, ['funcA'], { maxDepth: 3 });
-    // funcA in A.ts, funcB in B.ts, funcC in C.ts
+    // seed = funcC; funcB in B.ts (depth 1), funcA in A.ts (depth 2)
+    const report = analyzeBlastRadius(db, ['funcC'], { maxDepth: 3 });
+    // funcC in C.ts, funcB in B.ts, funcA in A.ts
     expect(report.affected_files).toBeGreaterThanOrEqual(2);
   });
 
@@ -561,17 +563,17 @@ describe('analyzeBlastRadius', () => {
       }),
     );
 
-    // Create an edge from funcA to testHelper so it appears in blast radius
-    const { funcA } = populateTestGraph(store);
+    // testHelper calls funcC — so funcC's blast radius (reverse) includes testHelper
+    const { funcC } = populateTestGraph(store);
     store.insertEdge({
-      source_entity_id: funcA.entity_id!,
-      target_entity_id: testEntity.entity_id!,
+      source_entity_id: testEntity.entity_id!,
+      target_entity_id: funcC.entity_id!,
       edge_type: 'calls',
       confidence: 0.8,
       metadata: null,
     });
 
-    const report = analyzeBlastRadius(db, ['funcA'], { maxDepth: 2, includeTests: false });
+    const report = analyzeBlastRadius(db, ['funcC'], { maxDepth: 2, includeTests: false });
     const names = report.affected.map((e) => e.entity_name);
     expect(names).not.toContain('testHelper');
   });
@@ -588,16 +590,17 @@ describe('analyzeBlastRadius', () => {
       }),
     );
 
-    const { funcA } = populateTestGraph(store);
+    // testHelper calls funcC — so funcC's blast radius (reverse) includes testHelper
+    const { funcC } = populateTestGraph(store);
     store.insertEdge({
-      source_entity_id: funcA.entity_id!,
-      target_entity_id: testEntity.entity_id!,
+      source_entity_id: testEntity.entity_id!,
+      target_entity_id: funcC.entity_id!,
       edge_type: 'calls',
       confidence: 0.8,
       metadata: null,
     });
 
-    const report = analyzeBlastRadius(db, ['funcA'], { maxDepth: 2, includeTests: true });
+    const report = analyzeBlastRadius(db, ['funcC'], { maxDepth: 2, includeTests: true });
     const names = report.affected.map((e) => e.entity_name);
     expect(names).toContain('testHelper');
   });
@@ -621,7 +624,8 @@ describe('analyzeBlastRadius — deeper graph CTE correctness', () => {
   });
 
   test('CTE traverses 4-level deep chain correctly', () => {
-    // Build: root → a → b → c → d (4 hops)
+    // Build: root → a → b → c → d (4 hops, forward/outgoing direction)
+    // With reverse traversal, seed = d reaches c (1), b (2), a (3), root (4)
     const fileRoot = store.upsertFile(makeFileRow({ path: 'root.ts', content_hash: 'h0' }));
     const fileA = store.upsertFile(makeFileRow({ path: 'A.ts', content_hash: 'h1' }));
     const fileB = store.upsertFile(makeFileRow({ path: 'B.ts', content_hash: 'h2' }));
@@ -639,49 +643,52 @@ describe('analyzeBlastRadius — deeper graph CTE correctness', () => {
     store.insertEdge({ source_entity_id: b.entity_id!, target_entity_id: c.entity_id!, edge_type: 'calls', confidence: 1, metadata: null });
     store.insertEdge({ source_entity_id: c.entity_id!, target_entity_id: d.entity_id!, edge_type: 'calls', confidence: 1, metadata: null });
 
-    // maxDepth=4 — should reach all 5 entities
-    const report4 = analyzeBlastRadius(db, ['root'], { maxDepth: 4 });
+    // seed = d; maxDepth=4 — should reach all 5 entities (d at depth 0, c at 1, b at 2, a at 3, root at 4)
+    const report4 = analyzeBlastRadius(db, ['d'], { maxDepth: 4 });
     const names4 = report4.affected.map((e) => e.entity_name);
-    expect(names4).toContain('root');
-    expect(names4).toContain('a');
-    expect(names4).toContain('b');
-    expect(names4).toContain('c');
     expect(names4).toContain('d');
+    expect(names4).toContain('c');
+    expect(names4).toContain('b');
+    expect(names4).toContain('a');
+    expect(names4).toContain('root');
 
-    // maxDepth=2 — should only reach root, a, b
-    const report2 = analyzeBlastRadius(db, ['root'], { maxDepth: 2 });
+    // seed = d; maxDepth=2 — should only reach d, c, b (not a or root)
+    const report2 = analyzeBlastRadius(db, ['d'], { maxDepth: 2 });
     const names2 = report2.affected.map((e) => e.entity_name);
-    expect(names2).toContain('root');
-    expect(names2).toContain('a');
+    expect(names2).toContain('d');
+    expect(names2).toContain('c');
     expect(names2).toContain('b');
-    expect(names2).not.toContain('c');
-    expect(names2).not.toContain('d');
+    expect(names2).not.toContain('a');
+    expect(names2).not.toContain('root');
   });
 
   test('CTE handles diamond dependency pattern without duplicates', () => {
     // Diamond: root → a, root → b, a → c, b → c
+    // With reverse traversal, seed = c → a (depth 1), b (depth 1), root (depth 2)
     const fileRoot = store.upsertFile(makeFileRow({ path: 'root.ts', content_hash: 'h0' }));
     const fileA = store.upsertFile(makeFileRow({ path: 'A.ts', content_hash: 'h1' }));
     const fileB = store.upsertFile(makeFileRow({ path: 'B.ts', content_hash: 'h2' }));
     const fileC = store.upsertFile(makeFileRow({ path: 'C.ts', content_hash: 'h3' }));
 
-    const root = store.insertEntity(makeEntityRow(fileRoot.file_id!, { name: 'root', qualified_name: 'root.ts::root' }));
+    store.insertEntity(makeEntityRow(fileRoot.file_id!, { name: 'root', qualified_name: 'root.ts::root' }));
     const a = store.insertEntity(makeEntityRow(fileA.file_id!, { name: 'a', qualified_name: 'A.ts::a' }));
     const b = store.insertEntity(makeEntityRow(fileB.file_id!, { name: 'b', qualified_name: 'B.ts::b' }));
     const c = store.insertEntity(makeEntityRow(fileC.file_id!, { name: 'c', qualified_name: 'C.ts::c' }));
+    const root = store.insertEntity(makeEntityRow(fileRoot.file_id!, { name: 'root2', qualified_name: 'root.ts::root2' }));
 
     store.insertEdge({ source_entity_id: root.entity_id!, target_entity_id: a.entity_id!, edge_type: 'calls', confidence: 1, metadata: null });
     store.insertEdge({ source_entity_id: root.entity_id!, target_entity_id: b.entity_id!, edge_type: 'calls', confidence: 1, metadata: null });
     store.insertEdge({ source_entity_id: a.entity_id!, target_entity_id: c.entity_id!, edge_type: 'calls', confidence: 1, metadata: null });
     store.insertEdge({ source_entity_id: b.entity_id!, target_entity_id: c.entity_id!, edge_type: 'calls', confidence: 1, metadata: null });
 
-    const report = analyzeBlastRadius(db, ['root'], { maxDepth: 3 });
+    // seed = c; a and b both call c, root calls both a and b
+    const report = analyzeBlastRadius(db, ['c'], { maxDepth: 3 });
     const names = report.affected.map((e) => e.entity_name);
 
-    // c should appear exactly once despite two paths to it (DISTINCT in CTE)
+    // c should appear exactly once (it's the seed at depth 0)
     const cOccurrences = names.filter((n) => n === 'c').length;
     expect(cOccurrences).toBe(1);
-    // All 4 entities should be present
+    // All 4 entities should be present: c (seed), a, b, root2
     expect(new Set(names).size).toBe(4);
   });
 
@@ -772,7 +779,8 @@ describe('graphQuery tool dispatch', () => {
 
   test('blast_radius query returns reachable entities', () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'blast_radius', target: 'funcA', options: { max_depth: 3 } }, projectDir);
+    // seed = funcC (funcB calls funcC, funcA calls funcB); reverse blast radius includes funcB and funcA
+    const result = graphQuery({ query_type: 'blast_radius', target: 'funcC', options: { max_depth: 3 } }, projectDir);
     expect(result.count).toBeGreaterThanOrEqual(2);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
     expect(names).toContain('funcB');

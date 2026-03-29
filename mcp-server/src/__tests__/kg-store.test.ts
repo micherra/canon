@@ -174,6 +174,7 @@ describe('Knowledge Graph Store', () => {
       expect(names).toContain('edges');
       expect(names).toContain('file_edges');
       expect(names).toContain('meta');
+      expect(names).toContain('summaries');
     });
 
     test('initDatabase is idempotent (can call twice)', () => {
@@ -184,13 +185,13 @@ describe('Knowledge Graph Store', () => {
       }).not.toThrow();
     });
 
-    test('schema_version is set to 1', () => {
+    test('schema_version is set to 2', () => {
       const row = db
         .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
         .get() as { value: string } | undefined;
       expect(row).toBeDefined();
       expect(row!.value).toBe(SCHEMA_VERSION);
-      expect(row!.value).toBe('1');
+      expect(row!.value).toBe('2');
     });
 
     test('WAL mode pragma is applied (in-memory uses memory mode)', () => {
@@ -205,6 +206,129 @@ describe('Knowledge Graph Store', () => {
     test('foreign keys are enabled', () => {
       const result = db.pragma('foreign_keys') as Array<{ foreign_keys: number }>;
       expect(result[0]?.foreign_keys).toBe(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Summaries table
+  // ---------------------------------------------------------------------------
+
+  describe('Summaries table', () => {
+    let db: Database.Database;
+
+    beforeEach(() => {
+      db = initDatabase(':memory:');
+    });
+
+    afterEach(() => {
+      db.close();
+    });
+
+    test('summaries table exists after initDatabase', () => {
+      const row = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='summaries'`)
+        .get() as { name: string } | undefined;
+      expect(row).toBeDefined();
+      expect(row!.name).toBe('summaries');
+    });
+
+    test('summaries table has correct columns', () => {
+      const cols = db
+        .prepare(`PRAGMA table_info(summaries)`)
+        .all() as Array<{ name: string }>;
+      const colNames = cols.map((c) => c.name);
+      expect(colNames).toContain('summary_id');
+      expect(colNames).toContain('file_id');
+      expect(colNames).toContain('entity_id');
+      expect(colNames).toContain('scope');
+      expect(colNames).toContain('summary');
+      expect(colNames).toContain('model');
+      expect(colNames).toContain('content_hash');
+      expect(colNames).toContain('updated_at');
+    });
+
+    test('SCHEMA_VERSION is "2" after initDatabase', () => {
+      const row = db
+        .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
+        .get() as { value: string } | undefined;
+      expect(row?.value).toBe('2');
+    });
+
+    test('inserting a summary row with valid file_id succeeds', () => {
+      // Insert a file first
+      db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at)
+               VALUES ('src/A.ts', 0, 'hash1', 'typescript', 'domain', '2024-01-01')`);
+      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/A.ts'`).get() as { file_id: number };
+
+      const insert = db.prepare(
+        `INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
+         VALUES (?, NULL, 'file', 'A summary.', 'gpt-4', NULL, '2024-01-01T00:00:00Z')`,
+      );
+      expect(() => insert.run(file.file_id)).not.toThrow();
+
+      const row = db
+        .prepare(`SELECT * FROM summaries WHERE file_id = ?`)
+        .get(file.file_id) as { summary: string; scope: string } | undefined;
+      expect(row).toBeDefined();
+      expect(row!.summary).toBe('A summary.');
+      expect(row!.scope).toBe('file');
+    });
+
+    test('inserting a summary row with invalid file_id fails (FK constraint)', () => {
+      const insert = db.prepare(
+        `INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
+         VALUES (99999, NULL, 'file', 'Bad row.', NULL, NULL, '2024-01-01T00:00:00Z')`,
+      );
+      expect(() => insert.run()).toThrow();
+    });
+
+    test('ON DELETE CASCADE removes summaries when parent file is deleted', () => {
+      // Insert file and summary
+      db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at)
+               VALUES ('src/B.ts', 0, 'hash2', 'typescript', 'domain', '2024-01-01')`);
+      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/B.ts'`).get() as { file_id: number };
+
+      db.prepare(
+        `INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
+         VALUES (?, NULL, 'file', 'Will cascade.', NULL, NULL, '2024-01-01T00:00:00Z')`,
+      ).run(file.file_id);
+
+      // Verify it exists
+      expect(
+        db.prepare(`SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ?`).get(file.file_id),
+      ).toMatchObject({ cnt: 1 });
+
+      // Delete the file — cascade should remove summary
+      db.prepare(`DELETE FROM files WHERE file_id = ?`).run(file.file_id);
+
+      expect(
+        db.prepare(`SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ?`).get(file.file_id),
+      ).toMatchObject({ cnt: 0 });
+    });
+
+    test('UNIQUE(file_id, entity_id, scope) rejects duplicate inserts', () => {
+      // Note: SQLite treats NULLs as distinct in UNIQUE constraints, so we use
+      // a non-NULL entity_id to properly test the uniqueness enforcement.
+      db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at)
+               VALUES ('src/C.ts', 0, 'hash3', 'typescript', 'domain', '2024-01-01')`);
+      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/C.ts'`).get() as { file_id: number };
+
+      // Insert an entity so we have a valid entity_id
+      db.prepare(
+        `INSERT INTO entities (file_id, name, qualified_name, kind, line_start, line_end,
+           is_exported, is_default_export, signature, metadata)
+         VALUES (?, 'myEnt', 'src/C.ts::myEnt', 'function', 1, 5, 0, 0, NULL, NULL)`,
+      ).run(file.file_id);
+      const entity = db.prepare(`SELECT entity_id FROM entities WHERE qualified_name = 'src/C.ts::myEnt'`).get() as { entity_id: number };
+
+      const insertStmt = db.prepare(
+        `INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
+         VALUES (?, ?, 'entity', 'First.', NULL, NULL, '2024-01-01T00:00:00Z')`,
+      );
+      insertStmt.run(file.file_id, entity.entity_id);
+
+      // Second insert with same (file_id, entity_id, scope) should fail
+      expect(() => insertStmt.run(file.file_id, entity.entity_id)).toThrow();
     });
   });
 
@@ -488,6 +612,7 @@ describe('Knowledge Graph Store', () => {
 
     let funcA: EntityRow;
     let funcB: EntityRow;
+    let funcC: EntityRow;
     let funcD: EntityRow;
     let fileA: FileRow;
 
@@ -495,7 +620,7 @@ describe('Knowledge Graph Store', () => {
       db = initDatabase(':memory:');
       store = new KgStore(db);
       query = new KgQuery(db);
-      ({ fileA, funcA, funcB, funcD } = populateTestGraph(store));
+      ({ fileA, funcA, funcB, funcC, funcD } = populateTestGraph(store));
       void fileA; void funcD; // silence unused
     });
 
@@ -524,22 +649,24 @@ describe('Knowledge Graph Store', () => {
     // ---- Blast Radius ----
 
     describe('Blast Radius', () => {
-      test('blast radius from funcC includes funcB and funcA (reverse not applicable — using outgoing)', () => {
-        // getBlastRadius follows outgoing edges, so from funcA it reaches funcB then funcC
-        const results = query.getBlastRadius([funcA.entity_id!], 5);
+      test('blast radius from funcC includes funcB and funcA (reverse traversal — callers)', () => {
+        // getBlastRadius follows reverse edges (who depends on the seed).
+        // Graph: funcA calls funcB calls funcC.
+        // Seed = funcC → blast radius includes funcB (direct caller) and funcA (transitive caller).
+        const results = query.getBlastRadius([funcC.entity_id!], 5);
         const names = results.map((r) => r.name);
-        expect(names).toContain('funcA');
-        expect(names).toContain('funcB');
-        expect(names).toContain('funcC');
+        expect(names).toContain('funcC'); // seed (depth 0)
+        expect(names).toContain('funcB'); // direct caller (depth 1)
+        expect(names).toContain('funcA'); // transitive caller (depth 2)
       });
 
       test('blast radius respects maxDepth', () => {
-        // From funcA with maxDepth=1 should only reach funcB (depth 1), not funcC (depth 2)
-        const results = query.getBlastRadius([funcA.entity_id!], 1);
+        // Seed = funcC with maxDepth=1 should only reach funcB (depth 1), not funcA (depth 2)
+        const results = query.getBlastRadius([funcC.entity_id!], 1);
         const names = results.map((r) => r.name);
-        expect(names).toContain('funcA');
-        expect(names).toContain('funcB');
-        expect(names).not.toContain('funcC');
+        expect(names).toContain('funcC'); // seed (depth 0)
+        expect(names).toContain('funcB'); // direct caller (depth 1)
+        expect(names).not.toContain('funcA'); // depth 2 — excluded by maxDepth=1
       });
 
       test('blast radius returns empty for empty seed', () => {

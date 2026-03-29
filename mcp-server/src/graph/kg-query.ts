@@ -11,6 +11,7 @@ import type {
   EntityRow,
   CallerResult,
   BlastRadiusResult,
+  FileBlastRadiusResult,
   SearchResult,
   DeadCodeResult,
   FileRow,
@@ -219,8 +220,10 @@ export class KgQuery {
   // --------------------------------------------------------------------------
 
   /**
-   * Return all entities reachable from the given seed entity IDs within
-   * `maxDepth` hops following outgoing edges (any edge type).
+   * Return all entities that depend on the given seed entity IDs within
+   * `maxDepth` hops following reverse edges (callers/dependents), excluding
+   * `contains` edges which represent structural containment rather than
+   * functional dependency.
    *
    * Uses a recursive CTE; the seed set is expanded via a VALUES clause so a
    * single prepared statement is not possible — the statement is built and
@@ -237,10 +240,11 @@ export class KgQuery {
       WITH RECURSIVE blast(entity_id, depth) AS (
         ${seedRows}
         UNION ALL
-        SELECT e.target_entity_id, blast.depth + 1
+        SELECT e.source_entity_id, blast.depth + 1
         FROM blast
-        JOIN edges e ON e.source_entity_id = blast.entity_id
+        JOIN edges e ON e.target_entity_id = blast.entity_id
         WHERE blast.depth < ?
+          AND e.edge_type IN ('calls', 'type-references', 'extends', 'implements', 're-exports')
       )
       SELECT DISTINCT b.entity_id, b.depth,
              ent.file_id, ent.name, ent.qualified_name, ent.kind
@@ -252,6 +256,41 @@ export class KgQuery {
     const stmt = this.db.prepare(sql);
     const params = [...entityIds, maxDepth];
     return stmt.all(params) as BlastRadiusResult[];
+  }
+
+  // --------------------------------------------------------------------------
+  // File Blast Radius (Recursive CTE on file_edges)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Return all files that depend on the given seed file ID within `maxDepth`
+   * hops following reverse file edges (files that import/reference the seed).
+   *
+   * Uses a recursive CTE on `file_edges`; the seed file is excluded from
+   * results (depth > 0). When a file is reachable via multiple routes, the
+   * shortest path depth is returned.
+   */
+  getFileBlastRadius(fileId: number, maxDepth: number = 2): FileBlastRadiusResult[] {
+    const sql = `
+      WITH RECURSIVE blast(file_id, depth) AS (
+        SELECT ?, 0
+        UNION ALL
+        SELECT fe.source_file_id, blast.depth + 1
+        FROM blast
+        JOIN file_edges fe ON fe.target_file_id = blast.file_id
+        WHERE blast.depth < ?
+      )
+      SELECT DISTINCT b.file_id, MIN(b.depth) as depth,
+             f.path, f.layer, f.language
+      FROM blast b
+      JOIN files f ON f.file_id = b.file_id
+      WHERE b.depth > 0
+      GROUP BY b.file_id
+      ORDER BY b.depth, f.path
+    `;
+
+    const stmt = this.db.prepare(sql);
+    return stmt.all(fileId, maxDepth) as FileBlastRadiusResult[];
   }
 
   // --------------------------------------------------------------------------

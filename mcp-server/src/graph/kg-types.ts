@@ -185,3 +185,24 @@ export interface DeadCodeResult {
   /** True when the entity has no incoming edges */
   is_unreferenced: boolean;
 }
+
+/** Result row for file-level blast-radius recursive CTE queries */
+export interface FileBlastRadiusResult {
+  file_id: number;
+  path: string;
+  layer: string;
+  language: string;
+  depth: number;
+}
+
+/** Matches the `summaries` table. `summary_id` is undefined before DB insert. */
+export interface SummaryRow {
+  summary_id?: number;
+  file_id: number;
+  entity_id: number | null;
+  scope: 'file' | 'entity';
+  summary: string;
+  model: string | null;
+  content_hash: string | null;
+  updated_at: string;
+}
