@@ -1,0 +1,2 @@
+# Mark WASM grammar files as binary to prevent line-ending changes
+mcp-server/grammars/*.wasm binary
