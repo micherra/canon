@@ -266,7 +266,10 @@ function enrichWithKgInsights(
     };
 
     // ------------------------------------------------------------------ //
-    // 3. Blast-radius hotspots — entities with the most incoming edges    //
+    // 3. Blast-radius hotspots — entities with the most callers           //
+    //    (counts incoming entity edges: calls, type-references, extends,  //
+    //    implements). This measures "how many things depend on this        //
+    //    entity" — i.e. reverse direction, not forward blast radius.      //
     // ------------------------------------------------------------------ //
 
     const hotspotRows = db

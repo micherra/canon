@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir } from "fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { DriftStore } from "../drift/store.ts";
@@ -587,5 +587,77 @@ describe("DriftStore — review methods", () => {
     const store = new DriftStore(tmpDir);
     const last = await store.getLastReviewForPr(999);
     expect(last).toBeNull();
+  });
+});
+
+// ── Blast radius — KG fallback tests ──
+
+describe("getPrReviewData — blast radius fallback", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-pr-review-br-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns empty blast_radius when neither KG nor graph-data.json exist", async () => {
+    // Files returned have no priority_factors.in_degree, so no candidates
+    vi.doMock("child_process", () => ({
+      execFile: (
+        _cmd: string,
+        _args: string[],
+        _opts: unknown,
+        cb: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => cb(null, "M\tsrc/api/handler.ts", ""),
+    }));
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const result = await fn({}, tmpDir);
+    expect(result.blast_radius).toEqual([]);
+  });
+
+  it("falls back to graph-data.json blast radius when KG database does not exist", async () => {
+    // Set up graph-data.json with edges so blast radius can be computed
+    const nodes = [
+      { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: true },
+      { id: "src/services/svc1.ts", layer: "services", violation_count: 0, changed: false },
+      { id: "src/services/svc2.ts", layer: "services", violation_count: 0, changed: false },
+      { id: "src/services/svc3.ts", layer: "services", violation_count: 0, changed: false },
+    ];
+    const edges = [
+      // 3 files import handler.ts (in_degree=3, meets threshold)
+      { source: "src/services/svc1.ts", target: "src/api/handler.ts" },
+      { source: "src/services/svc2.ts", target: "src/api/handler.ts" },
+      { source: "src/services/svc3.ts", target: "src/api/handler.ts" },
+    ];
+    await writeFile(
+      join(tmpDir, ".canon", "graph-data.json"),
+      JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
+    );
+
+    // No KG database at .canon/knowledge-graph.db
+    vi.doMock("child_process", () => ({
+      execFile: (
+        _cmd: string,
+        _args: string[],
+        _opts: unknown,
+        cb: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => cb(null, "M\tsrc/api/handler.ts", ""),
+    }));
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const result = await fn({}, tmpDir);
+
+    // handler.ts has in_degree=3 and is_changed=true, should be a candidate
+    const entry = result.blast_radius.find((e) => e.file === "src/api/handler.ts");
+    expect(entry).toBeDefined();
+    expect(entry!.affected.length).toBeGreaterThan(0);
+    // All affected files should be the importers
+    const affectedPaths = entry!.affected.map((a) => a.path);
+    expect(affectedPaths).toContain("src/services/svc1.ts");
   });
 });

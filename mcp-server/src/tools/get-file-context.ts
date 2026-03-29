@@ -15,7 +15,7 @@ import { toPosix, loadPathAliases } from "../utils/paths.ts";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { KgQuery } from "../graph/kg-query.ts";
+import { computeUnifiedBlastRadius, type UnifiedBlastRadiusReport } from "../graph/kg-blast-radius.ts";
 import type { EntityKind } from "../graph/kg-types.ts";
 import { loadSummariesFile } from "./store-summaries.ts";
 
@@ -35,15 +35,6 @@ export interface FileEntitySummary {
   is_exported: boolean;
   line_start: number;
   line_end: number;
-}
-
-/** One reachable entity in the blast radius of this file's exports. */
-export interface FileBlastRadiusEntry {
-  name: string;
-  qualified_name: string;
-  kind: EntityKind;
-  depth: number;
-  file_path: string;
 }
 
 /** Violation detail from the most recent review that includes this file. */
@@ -80,7 +71,7 @@ export interface FileContextOutput {
   project_max_impact: number;
   graph_metrics?: FileGraphMetrics;
   entities?: FileEntitySummary[];
-  blast_radius?: FileBlastRadiusEntry[];
+  blast_radius?: UnifiedBlastRadiusReport;
 }
 
 
@@ -312,14 +303,13 @@ export async function getFileContext(
 
   // Load entity data from the knowledge graph DB if it exists
   let entities: FileEntitySummary[] | undefined;
-  let blast_radius: FileBlastRadiusEntry[] | undefined;
+  let blast_radius: UnifiedBlastRadiusReport | undefined;
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   if (existsSync(dbPath)) {
     let db: ReturnType<typeof initDatabase> | undefined;
     try {
       db = initDatabase(dbPath);
       const store = new KgStore(db);
-      const query = new KgQuery(db);
 
       const fileRow = store.getFile(filePath);
       if (fileRow?.file_id !== undefined) {
@@ -332,28 +322,9 @@ export async function getFileContext(
           line_start: e.line_start,
           line_end: e.line_end,
         }));
-
-        // Blast radius from exported entities only
-        const exportedIds = entityRows
-          .filter((e) => e.is_exported && e.entity_id !== undefined)
-          .map((e) => e.entity_id as number);
-
-        if (exportedIds.length > 0) {
-          const blastRows = query.getBlastRadius(exportedIds);
-          blast_radius = blastRows.map((r) => {
-            const fileRow = store.getFileById(r.file_id);
-            return {
-              name: r.name,
-              qualified_name: r.qualified_name,
-              kind: r.kind,
-              depth: r.depth,
-              file_path: fileRow?.path ?? "",
-            };
-          });
-        } else {
-          blast_radius = [];
-        }
       }
+
+      blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2 });
     } catch {
       // KG unavailable — skip entity data gracefully
     } finally {

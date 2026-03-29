@@ -1,11 +1,14 @@
 import { readFile, stat } from "fs/promises";
 import { join } from "path";
+import { existsSync } from "fs";
 import { execFile } from "child_process";
 import { DriftStore } from "../drift/store.ts";
 import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
 import type { ReviewEntry } from "../schema.ts";
+import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 
 export interface PrReviewDataInput {
   pr_number?: number;
@@ -342,9 +345,23 @@ export async function getPrReviewData(
   // Generate plain-English narrative
   const narrative = generateNarrative(files, layers);
 
-  // Compute blast radius for top high-impact files using raw graph edges
+  // Compute blast radius — prefer KG-backed unified blast radius, fall back to graph-data.json
   let blastRadius: BlastRadiusEntry[] = [];
-  if (loadedGraph) {
+  const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  if (existsSync(kgDbPath)) {
+    let db: ReturnType<typeof initDatabase> | undefined;
+    try {
+      db = initDatabase(kgDbPath);
+      blastRadius = computeBlastRadiusFromKg(files, db);
+    } catch {
+      // KG unavailable — fall back to graph-data.json approach
+      if (loadedGraph) {
+        blastRadius = computeBlastRadius(files, loadedGraph.edges);
+      }
+    } finally {
+      db?.close();
+    }
+  } else if (loadedGraph) {
     blastRadius = computeBlastRadius(files, loadedGraph.edges);
   }
 
@@ -386,10 +403,45 @@ export async function getPrReviewData(
 }
 
 /**
+ * Compute blast radius for top high-impact changed files using the KG database.
+ * Uses `computeUnifiedBlastRadius()` and converts to the `BlastRadiusEntry` format
+ * for backward compatibility with the PR output shape.
+ * Takes top 2-3 files by in_degree (minimum threshold: 3).
+ */
+function computeBlastRadiusFromKg(
+  files: PrFileInfo[],
+  db: ReturnType<typeof initDatabase>,
+): BlastRadiusEntry[] {
+  const IN_DEGREE_THRESHOLD = 3;
+  const MAX_SEEDS = 3;
+  const MAX_AFFECTED_PER_SEED = 10;
+
+  const candidates = files
+    .filter(
+      (f) =>
+        f.priority_factors?.is_changed &&
+        (f.priority_factors?.in_degree ?? 0) >= IN_DEGREE_THRESHOLD,
+    )
+    .sort((a, b) => (b.priority_factors?.in_degree ?? 0) - (a.priority_factors?.in_degree ?? 0))
+    .slice(0, MAX_SEEDS);
+
+  if (candidates.length === 0) return [];
+
+  return candidates.map((seed) => {
+    const report = computeUnifiedBlastRadius(db, seed.path, { maxDepth: 1 });
+    const affected = report.affected
+      .slice(0, MAX_AFFECTED_PER_SEED)
+      .map((f) => ({ path: f.path, depth: f.depth }));
+    return { file: seed.path, affected };
+  });
+}
+
+/**
  * Compute blast radius for the top high-impact changed files.
  * Uses raw edges (source->target) to find direct importers (depth 1).
  * Takes top 2-3 files by in_degree (minimum threshold: 3).
  * Caps at 10 affected files per seed.
+ * @deprecated Prefer computeBlastRadiusFromKg() when KG database is available.
  */
 function computeBlastRadius(
   files: PrFileInfo[],

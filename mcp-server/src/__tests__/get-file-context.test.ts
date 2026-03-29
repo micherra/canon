@@ -3,6 +3,9 @@ import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { getFileContext } from "../tools/get-file-context.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { KgStore } from "../graph/kg-store.ts";
+import type { FileRow } from "../graph/kg-types.ts";
 
 describe("getFileContext", () => {
   let tmpDir: string;
@@ -597,6 +600,56 @@ describe("getFileContext", () => {
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
 
       expect(result.project_max_impact).toBe(0);
+    });
+  });
+
+  describe("blast_radius field — UnifiedBlastRadiusReport shape", () => {
+    it("returns UnifiedBlastRadiusReport shape when KG database is available", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      // Create a KG database with the seed file registered
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+
+      const fileRow: Omit<FileRow, "file_id"> = {
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      };
+      store.upsertFile(fileRow);
+      db.close();
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      // blast_radius should be present and have UnifiedBlastRadiusReport shape
+      expect(result.blast_radius).toBeDefined();
+      const br = result.blast_radius!;
+      expect(br.seed_file).toBe("src/api/handler.ts");
+      expect(br.summary).toBeDefined();
+      expect(typeof br.summary.severity).toBe("string");
+      expect(Array.isArray(br.affected)).toBe(true);
+      expect(typeof br.by_depth).toBe("object");
+      // With no dependents, severity should be 'contained'
+      expect(br.summary.severity).toBe("contained");
+    });
+
+    it("blast_radius is undefined when KG database does not exist", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      // No KG database created
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.blast_radius).toBeUndefined();
     });
   });
 });
