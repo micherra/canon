@@ -17,12 +17,32 @@
     impact_score: number;
   }
 
-  interface FileBlastRadiusEntry {
-    name: string;
-    qualified_name: string;
-    kind: string;
+  interface BlastRadiusFile {
+    path: string;
     depth: number;
-    file_path?: string;
+    relationship: string;
+    layer: string;
+    is_test: boolean;
+    in_degree: number;
+    affected_entities?: string[];
+  }
+
+  interface BlastRadiusSummary {
+    severity: 'contained' | 'low' | 'moderate' | 'high' | 'critical';
+    total_files: number;
+    total_production_files: number;
+    cross_layer_count: number;
+    max_depth_reached: number;
+    amplification_risk: boolean;
+    description: string;
+  }
+
+  interface UnifiedBlastRadiusReport {
+    seed_file: string;
+    seed_layer: string;
+    summary: BlastRadiusSummary;
+    by_depth: Record<string, BlastRadiusFile[]>;  // JSON keys are strings
+    affected: BlastRadiusFile[];
   }
 
   interface FileViolationDetail {
@@ -56,7 +76,7 @@
       line_start: number;
       line_end: number;
     }>;
-    blast_radius?: FileBlastRadiusEntry[];
+    blast_radius?: UnifiedBlastRadiusReport | BlastRadiusFile[];
   }
 
   // ── Data loading (push-mode — waits for tool to push result) ─────────────
@@ -129,26 +149,27 @@
     });
   });
 
+  /** True when blast_radius is the old array format (pre-br-03). */
+  let blastRadiusIsLegacy = $derived.by(() => {
+    return Array.isArray(data?.blast_radius);
+  });
+
+  /** The unified report, or null when data is absent or legacy format. */
+  let blastRadiusReport = $derived.by((): UnifiedBlastRadiusReport | null => {
+    if (!data?.blast_radius || blastRadiusIsLegacy) return null;
+    return data.blast_radius as UnifiedBlastRadiusReport;
+  });
+
   let blastRadiusByDepth = $derived.by(() => {
-    if (!data?.blast_radius) return new Map<number, FileBlastRadiusEntry[]>();
-    const map = new Map<number, FileBlastRadiusEntry[]>();
-    for (const entry of data.blast_radius) {
-      const arr = map.get(entry.depth) ?? [];
-      arr.push(entry);
-      map.set(entry.depth, arr);
+    if (!blastRadiusReport) return new Map<number, BlastRadiusFile[]>();
+    const map = new Map<number, BlastRadiusFile[]>();
+    for (const [key, files] of Object.entries(blastRadiusReport.by_depth)) {
+      map.set(Number(key), files);
     }
     return map;
   });
 
-  let blastRadiusSummary = $derived.by(() => {
-    if (!data?.blast_radius) return null;
-    const br = data.blast_radius;
-    if (br.length === 0) return "Nothing depends on this file's exports. Changes are fully contained.";
-    const depth1 = br.filter(e => e.depth === 1).length;
-    const depth2plus = br.filter(e => e.depth >= 2).length;
-    if (depth1 <= 3 && depth2plus === 0) return `Low blast radius — ${depth1} direct ${pluralize(depth1, "dependent")}. Well-contained.`;
-    return `Moderate blast radius — changes affect ${depth1} ${pluralize(depth1, "file")} directly and propagate further.`;
-  });
+  let blastRadiusSummary = $derived(blastRadiusReport?.summary ?? null);
 
   // ── Canvas graph ──────────────────────────────────────────────────────────
 
@@ -379,7 +400,7 @@
       </div>
       <div class="metric-card">
         <span class="metric-value">{data.imported_by.length}</span>
-        <span class="metric-label">Imported by</span>
+        <span class="metric-label">Referenced by</span>
         <span class="metric-sub" title={data.imported_by.join(", ")}>{importedByLabel || "none"}</span>
       </div>
       <div class="metric-card">
@@ -465,25 +486,38 @@
         <div class="panel">
           <div class="panel-header">BLAST RADIUS</div>
           {#if data.blast_radius != null}
-            {#if data.blast_radius.length === 0}
-              <p class="panel-empty">{blastRadiusSummary}</p>
-            {:else}
-              {#each [...blastRadiusByDepth.entries()].sort((a, b) => a[0] - b[0]) as [depth, entries] (depth)}
-                <div class="depth-group">
-                  <span class="depth-label">Depth {depth}</span>
-                  <div class="depth-chips">
-                    {#each entries as entry (entry.qualified_name)}
-                      <span
-                        class="depth-chip"
-                        title={entry.file_path ?? entry.qualified_name}
-                        style="border-left-color: {depthChipBorderColor(depth)}"
-                      >{shortName(entry.file_path ?? entry.name)}</span>
-                    {/each}
-                  </div>
+            {#if blastRadiusIsLegacy}
+              <p class="panel-empty">Blast radius data outdated — run codebase_graph to update.</p>
+            {:else if blastRadiusReport}
+              <div class="blast-header">
+                <span class="severity-badge severity-{blastRadiusReport.summary.severity}">{blastRadiusReport.summary.severity}</span>
+                {#if blastRadiusReport.summary.cross_layer_count > 0}
+                  <span class="cross-layer-note">{blastRadiusReport.summary.cross_layer_count} cross-layer</span>
+                {/if}
+              </div>
+              {#if blastRadiusReport.summary.amplification_risk}
+                <div class="amplification-warning">
+                  &#9888; Hub file in blast radius — changes may cascade further
                 </div>
-              {/each}
-              {#if blastRadiusSummary}
-                <p class="blast-summary">{blastRadiusSummary}</p>
+              {/if}
+              {#if blastRadiusByDepth.size === 0}
+                <p class="blast-summary">{blastRadiusReport.summary.description}</p>
+              {:else}
+                {#each [...blastRadiusByDepth.entries()].sort((a, b) => a[0] - b[0]) as [depth, files] (depth)}
+                  <div class="depth-group">
+                    <span class="depth-label">Depth {depth}</span>
+                    <div class="depth-chips">
+                      {#each files as file (file.path)}
+                        <span
+                          class="depth-chip"
+                          title={file.path}
+                          style="border-left-color: {depthChipBorderColor(depth)}"
+                        >{shortName(file.path)}<span class="relationship-tag">{file.relationship}</span></span>
+                      {/each}
+                    </div>
+                  </div>
+                {/each}
+                <p class="blast-summary">{blastRadiusReport.summary.description}</p>
               {/if}
             {/if}
           {:else}
@@ -898,6 +932,74 @@
     color: var(--text, #b4b8c8);
     white-space: nowrap;
     cursor: default;
+  }
+
+  .blast-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 4px;
+    flex-wrap: wrap;
+  }
+
+  .severity-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+
+  .severity-contained,
+  .severity-low {
+    background: rgba(52, 211, 153, 0.12);
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.3);
+  }
+
+  .severity-moderate {
+    background: rgba(251, 191, 36, 0.12);
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.3);
+  }
+
+  .severity-high {
+    background: rgba(251, 146, 60, 0.12);
+    color: #fb923c;
+    border-color: rgba(251, 146, 60, 0.3);
+  }
+
+  .severity-critical {
+    background: rgba(255, 107, 107, 0.12);
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, 0.3);
+  }
+
+  .cross-layer-note {
+    font-size: 10px;
+    color: var(--text-muted, #636a80);
+  }
+
+  .amplification-warning {
+    margin: 4px 12px;
+    padding: 6px 10px;
+    border-left: 3px solid #fbbf24;
+    background: rgba(251, 191, 36, 0.07);
+    border-radius: 3px;
+    font-size: 11px;
+    color: #fbbf24;
+    line-height: 1.4;
+  }
+
+  .relationship-tag {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 9px;
+    color: var(--text-muted, #636a80);
+    font-family: monospace;
   }
 
   .blast-summary {
