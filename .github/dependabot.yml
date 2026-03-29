@@ -8,11 +8,9 @@ updates:
       prefix: "chore(deps):"
     open-pull-requests-limit: 10
     groups:
-      dev-dependencies:
-        dependency-type: development
-        update-types:
-          - minor
-          - patch
+      all-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: github-actions
     directory: /
@@ -20,3 +18,7 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci:"
+    groups:
+      all-actions:
+        patterns:
+          - "*"
