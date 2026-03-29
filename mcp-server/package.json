@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "^1.0.0",
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "better-sqlite3": "^12.8.0",
     "gray-matter": "^4.0.3",
     "remark-frontmatter": "^5.0.0",
