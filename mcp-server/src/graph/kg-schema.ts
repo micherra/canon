@@ -11,7 +11,7 @@ import Database from 'better-sqlite3';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '1';
+export const SCHEMA_VERSION = '2';
 
 // ---------------------------------------------------------------------------
 // DDL statements
@@ -115,6 +115,22 @@ const DDL_STATEMENTS = [
     INSERT INTO entity_fts(rowid, name, qualified_name, signature)
     VALUES (new.entity_id, new.name, new.qualified_name, new.signature);
   END`,
+
+  // Summaries table — stores AI-generated summaries for files and entities
+  `CREATE TABLE IF NOT EXISTS summaries (
+    summary_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id      INTEGER NOT NULL REFERENCES files(file_id) ON DELETE CASCADE,
+    entity_id    INTEGER REFERENCES entities(entity_id) ON DELETE CASCADE,
+    scope        TEXT NOT NULL DEFAULT 'file',
+    summary      TEXT NOT NULL,
+    model        TEXT,
+    content_hash TEXT,
+    updated_at   TEXT NOT NULL,
+    UNIQUE(file_id, entity_id, scope)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_summaries_file  ON summaries(file_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_summaries_scope ON summaries(scope)`,
 ];
 
 // ---------------------------------------------------------------------------
