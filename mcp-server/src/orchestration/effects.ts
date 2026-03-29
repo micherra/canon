@@ -99,7 +99,7 @@ async function checkPostconditions(
   // Explicit YAML postconditions take priority; discovered are the fallback.
   const resolved = resolvePostconditions(stateDef?.postconditions, discoveredPostconditions);
   const results = evaluatePostconditions(resolved, projectDir, baseCommit);
-  const errors = results.filter((r) => !r.passed).map((r) => r.output);
+  const errors = results.filter((r) => !r.passed).map((r) => r.output ?? "");
 
   return {
     type: "check_postconditions",

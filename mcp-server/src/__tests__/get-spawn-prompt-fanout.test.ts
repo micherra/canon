@@ -353,7 +353,7 @@ describe("getSpawnPrompt — compete expansion", () => {
   it("expands a single state into multiple prompts when compete is configured", async () => {
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(undefined);
+    vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeSingleReviewFlow({
       states: {
@@ -387,7 +387,7 @@ describe("getSpawnPrompt — compete expansion", () => {
   it("uses default auto compete expansion", async () => {
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(undefined);
+    vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeSingleReviewFlow({
       states: {

@@ -293,7 +293,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
       "implement",
       "wave_1",
       gateResult.gate,
-      gateResult.output,
+      gateResult.output ?? "",
     );
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
@@ -314,7 +314,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
       "implement",
       "wave_1",
       gateResult.gate,
-      gateResult.output,
+      gateResult.output ?? "",
     );
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
@@ -331,7 +331,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
 
     const board = makeBoard();
     const updatedBoard = recordGateResult(
-      board, "implement", "wave_1", gateResult.gate, gateResult.output,
+      board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "",
     );
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];

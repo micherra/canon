@@ -90,7 +90,7 @@ describe("getSpawnPrompt — debate expansion", () => {
   it("expands the entry state into team debate prompts", async () => {
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(undefined);
+    vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -108,7 +108,7 @@ describe("getSpawnPrompt — debate expansion", () => {
   it("includes prior debate transcript in later rounds", async () => {
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(undefined);
+    vi.mocked(clusterDiff).mockReturnValue(null);
 
     await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "Use event sourcing.");
     await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Prefer CRUD plus audit.");

@@ -369,8 +369,8 @@ server.registerTool(
         source: z.string(),
       })).optional().describe("Gate commands discovered by the agent for future runs"),
       discovered_postconditions: z.array(z.object({
-        type: z.string(),
-        target: z.string(),
+        type: z.enum(["file_exists", "file_changed", "pattern_match", "no_pattern", "bash_check"]),
+        target: z.string().optional(),
         pattern: z.string().optional(),
         command: z.string().optional(),
       })).optional().describe("Postcondition assertions discovered by the agent for future runs"),

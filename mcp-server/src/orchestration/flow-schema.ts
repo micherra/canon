@@ -136,9 +136,9 @@ export const DebateConfigSchema = z.object({
 export const GateResultSchema = z.object({
   passed: z.boolean(),
   gate: z.string(),
-  command: z.string(),
-  output: z.string(),
-  exitCode: z.number(),
+  command: z.string().optional(),
+  output: z.string().optional(),
+  exitCode: z.number().optional(),
 });
 
 /** Discovered gate command reported by agents (e.g. tester, reviewer). */
@@ -160,7 +160,7 @@ export const PostconditionResultSchema = z.object({
   passed: z.boolean(),
   name: z.string(),
   type: z.string(),
-  output: z.string(),
+  output: z.string().optional(),
 });
 
 /** Violation severity counts. */

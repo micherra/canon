@@ -210,7 +210,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
   it("resolveCompeteConfig('auto') expands to 3 competitors with synthesize strategy", async () => {
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(undefined);
+    vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -230,7 +230,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
   it("compete path preserves agent type from state", async () => {
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(undefined);
+    vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -247,7 +247,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
   it("compete path with explicit count and lenses fans out correctly", async () => {
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(undefined);
+    vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeCompeteFlow({ count: 2, strategy: "select", lenses: ["simplicity", "performance"] });
     const result = await getSpawnPrompt({
@@ -265,7 +265,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
   it("compete with non-single state type produces a warning", async () => {
     const workspace = makeTmpDir();
     vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    vi.mocked(clusterDiff).mockReturnValue(undefined);
+    vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow: ResolvedFlow = {
       name: "wave-flow",
