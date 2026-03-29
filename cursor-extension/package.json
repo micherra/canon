@@ -61,7 +61,7 @@
     "esbuild": "0.25.0",
     "esbuild-svelte": "^0.9.4",
     "semantic-release": "^24.0.0",
-    "semantic-release-vsce": "^5.7.0",
+    "semantic-release-vsce": "^6.1.1",
     "svelte": "^5.54.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.0"
