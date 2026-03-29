@@ -117,39 +117,39 @@ describe("kg-wasm-parser — parsing trivial source strings", () => {
     const parser = getParser("typescript");
     const tree = parser.parse("const x: number = 42;");
     expect(tree).toBeDefined();
-    expect(tree.rootNode).toBeDefined();
-    expect(tree.rootNode.type).toBe("program");
+    expect(tree!.rootNode).toBeDefined();
+    expect(tree!.rootNode.type).toBe("program");
   });
 
   it("tsx parser can parse a trivial TSX source string", () => {
     const parser = getParser("tsx");
     const tree = parser.parse("const x = <div>hello</div>;");
     expect(tree).toBeDefined();
-    expect(tree.rootNode).toBeDefined();
-    expect(tree.rootNode.type).toBe("program");
+    expect(tree!.rootNode).toBeDefined();
+    expect(tree!.rootNode.type).toBe("program");
   });
 
   it("python parser can parse a trivial Python source string", () => {
     const parser = getParser("python");
     const tree = parser.parse("x = 42");
     expect(tree).toBeDefined();
-    expect(tree.rootNode).toBeDefined();
-    expect(tree.rootNode.type).toBe("module");
+    expect(tree!.rootNode).toBeDefined();
+    expect(tree!.rootNode.type).toBe("module");
   });
 
   it("bash parser can parse a trivial Bash source string", () => {
     const parser = getParser("bash");
     const tree = parser.parse("echo hello");
     expect(tree).toBeDefined();
-    expect(tree.rootNode).toBeDefined();
-    expect(tree.rootNode.type).toBe("program");
+    expect(tree!.rootNode).toBeDefined();
+    expect(tree!.rootNode.type).toBe("program");
   });
 
   it("java parser can parse a trivial Java source string", () => {
     const parser = getParser("java");
     const tree = parser.parse("class Hello { }");
     expect(tree).toBeDefined();
-    expect(tree.rootNode).toBeDefined();
-    expect(tree.rootNode.type).toBe("program");
+    expect(tree!.rootNode).toBeDefined();
+    expect(tree!.rootNode.type).toBe("program");
   });
 });

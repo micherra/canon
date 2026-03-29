@@ -16,7 +16,7 @@
  * All DB-bound tests use in-memory SQLite (:memory:).
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import {
   mkdtempSync,
   writeFileSync,
@@ -37,6 +37,7 @@ import { analyzeBlastRadius } from '../graph/kg-blast-radius.ts';
 import { runPipeline } from '../graph/kg-pipeline.ts';
 import { graphQuery } from '../tools/graph-query.ts';
 import { getAdapter, getLanguage } from '../graph/kg-adapter-registry.ts';
+import { initParsers } from '../graph/kg-wasm-parser.ts';
 import { CANON_DIR, CANON_FILES } from '../constants.ts';
 import type { FileRow, EntityRow } from '../graph/kg-types.ts';
 
@@ -854,6 +855,10 @@ describe('graphQuery tool dispatch', () => {
 // ===========================================================================
 
 describe('Adapter Registry', () => {
+  beforeAll(async () => {
+    await initParsers();
+  });
+
   test('getAdapter returns a LanguageAdapter for all expected extensions', () => {
     const tsExt = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
     for (const ext of tsExt) {
@@ -1124,6 +1129,10 @@ describe('KgQuery — coverage gaps (getAncestors, getAdjacencyList)', () => {
 // ===========================================================================
 
 describe('Adapter edge cases — malformed input and empty files', () => {
+  beforeAll(async () => {
+    await initParsers();
+  });
+
   test('TypeScript adapter handles empty file without throwing', () => {
     const adapter = getAdapter('.ts');
     expect(adapter).toBeDefined();

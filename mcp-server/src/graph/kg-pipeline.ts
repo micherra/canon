@@ -17,6 +17,7 @@ import type { Database } from 'better-sqlite3';
 import { initDatabase } from './kg-schema.ts';
 import { KgStore } from './kg-store.ts';
 import { getAdapter, getLanguage } from './kg-adapter-registry.ts';
+import { initParsers } from './kg-wasm-parser.ts';
 import { scanSourceFiles } from './scanner.ts';
 import { resolveImport } from './import-parser.ts';
 import { inferLayer } from '../matcher.ts';
@@ -299,6 +300,7 @@ export async function runPipeline(
   projectDir: string,
   options?: PipelineOptions,
 ): Promise<PipelineResult> {
+  await initParsers(); // One-time WASM initialization — idempotent
   const startMs = Date.now();
   const incremental = options?.incremental ?? true;
   const dbPath =
@@ -494,6 +496,7 @@ export async function reindexFile(
   projectDir: string,
   filePath: string,
 ): Promise<ReindexResult> {
+  await initParsers(); // Idempotent — no-op if already initialized
   const store = new KgStore(db);
   const absPath = path.isAbsolute(filePath)
     ? filePath
