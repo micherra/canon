@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+import type { ResolvedFlow, BoardStateEntry } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -32,7 +32,7 @@ vi.mock("node:fs", () => ({
 // Import after mocks are registered
 // ---------------------------------------------------------------------------
 
-import { resolveGateCommand, runGate } from "../orchestration/gate-runner.js";
+import { resolveGateCommand, runGate, normalizeGates, runGates } from "../orchestration/gate-runner.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,6 +46,21 @@ function makeFlow(gates?: Record<string, string>): ResolvedFlow {
     states: {},
     spawn_instructions: {},
     ...(gates ? { gates } : {}),
+  };
+}
+
+function makeStateDef(overrides: Partial<{ gate: string; gates: string[] }> = {}): Parameters<typeof normalizeGates>[0] {
+  return {
+    type: "single",
+    ...overrides,
+  };
+}
+
+function makeBoardState(discovered_gates?: Array<{ command: string; source: string }>): BoardStateEntry {
+  return {
+    status: "in_progress",
+    entries: 0,
+    ...(discovered_gates !== undefined ? { discovered_gates } : {}),
   };
 }
 
@@ -117,7 +132,7 @@ describe("resolveGateCommand — test-suite auto-detection from package.json", (
 });
 
 // ---------------------------------------------------------------------------
-// runGate
+// runGate — fail-closed behavior
 // ---------------------------------------------------------------------------
 
 describe("runGate — gate exits 0 (passed)", () => {
@@ -146,15 +161,22 @@ describe("runGate — gate exits non-zero (failed)", () => {
   });
 });
 
-describe("runGate — gate not configured", () => {
-  it("returns passed: true with skip message when gate command is not configured", () => {
+describe("runGate — gate not configured (fail-closed)", () => {
+  it("returns passed: false when gate command is not configured", () => {
     const flow = makeFlow(); // no gates
     const result = runGate("nonexistent-gate", flow, "/project");
 
-    expect(result.passed).toBe(true);
+    expect(result.passed).toBe(false);
     expect(result.command).toBe("");
-    expect(result.output).toBe("Gate not configured — skipped");
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(1);
+  });
+
+  it("includes fail-closed message in output when gate is not configured", () => {
+    const flow = makeFlow();
+    const result = runGate("nonexistent-gate", flow, "/project");
+
+    expect(result.output).toContain("fail-closed");
+    expect(result.output).toContain("nonexistent-gate");
   });
 
   it("does NOT call spawnSync when gate is not configured", () => {
@@ -176,10 +198,9 @@ describe("runGate — command injection protection", () => {
     // Even though spawnSyncImpl would throw if called, runGate must not call it
     const result = runGate("rm -rf /", flow, "/project");
 
-    // Gate was not configured (null) — skipped gracefully
-    expect(result.passed).toBe(true);
+    // Gate was not configured (null) — fail-closed
+    expect(result.passed).toBe(false);
     expect(result.command).toBe("");
-    expect(result.output).toBe("Gate not configured — skipped");
   });
 
   it("only executes the resolved command from flow.gates, not the gateName", () => {
@@ -221,5 +242,301 @@ describe("runGate — spawnSync timeout configuration", () => {
     runGate("check", flow, "/my/project");
 
     expect(lastSpawnSyncArgs!.opts.cwd).toBe("/my/project");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeGates — 3-tier resolution
+// ---------------------------------------------------------------------------
+
+describe("normalizeGates — no gates declared", () => {
+  it("returns { commands: [], source: 'none' } when no gate, gates, or discovered_gates", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef();
+    const result = normalizeGates(stateDef, flow, "/project");
+
+    expect(result.commands).toEqual([]);
+    expect(result.source).toBe("none");
+  });
+
+  it.each([
+    ["boardState is undefined", undefined],
+    ["boardState has no discovered_gates field", makeBoardState(undefined)],
+    ["boardState has empty discovered_gates array", makeBoardState([])],
+  ])("returns 'none' when %s", (_label, boardState) => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef();
+    const result = normalizeGates(stateDef, flow, "/project", boardState);
+
+    expect(result.commands).toEqual([]);
+    expect(result.source).toBe("none");
+  });
+});
+
+describe("normalizeGates — tier 1: explicit gates array", () => {
+  it("returns gates array entries as direct commands", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["npm test", "npx tsc --noEmit"] });
+    const result = normalizeGates(stateDef, flow, "/project");
+
+    expect(result.source).toBe("gates");
+    expect(result.commands).toHaveLength(2);
+    expect(result.commands[0]).toEqual({ name: "npm test", command: "npm test" });
+    expect(result.commands[1]).toEqual({ name: "npx tsc --noEmit", command: "npx tsc --noEmit" });
+  });
+
+  it("returns single gates array entry as direct command", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["echo hello"] });
+    const result = normalizeGates(stateDef, flow, "/project");
+
+    expect(result.source).toBe("gates");
+    expect(result.commands).toEqual([{ name: "echo hello", command: "echo hello" }]);
+  });
+
+  it("prefers explicit gates array over discovered_gates (tier 1 wins)", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["npm test"] });
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
+    const result = normalizeGates(stateDef, flow, "/project", boardState);
+
+    expect(result.source).toBe("gates");
+    expect(result.commands).toHaveLength(1);
+    expect(result.commands[0].command).toBe("npm test");
+  });
+
+  it("prefers explicit gates array over legacy gate field (tier 1 wins even if gate is also set)", () => {
+    const flow = makeFlow({ "lint": "npm run lint" });
+    // Both gates array and gate field present — gates array wins (tier 1)
+    const stateDef = { type: "single" as const, gates: ["npm test"], gate: "lint" };
+    const result = normalizeGates(stateDef, flow, "/project");
+
+    expect(result.source).toBe("gates");
+    expect(result.commands[0].command).toBe("npm test");
+  });
+});
+
+describe("normalizeGates — tier 2: legacy gate field", () => {
+  it("wraps resolvable legacy gate name as resolved command", () => {
+    const flow = makeFlow({ "lint": "npm run lint" });
+    const stateDef = makeStateDef({ gate: "lint" });
+    const result = normalizeGates(stateDef, flow, "/project");
+
+    expect(result.source).toBe("gate");
+    expect(result.commands).toHaveLength(1);
+    expect(result.commands[0]).toEqual({ name: "lint", command: "npm run lint" });
+  });
+
+  it("returns empty command string for unresolvable legacy gate (fails closed downstream)", () => {
+    const flow = makeFlow(); // no gates map
+    const stateDef = makeStateDef({ gate: "unknown-gate" });
+    const result = normalizeGates(stateDef, flow, "/project");
+
+    expect(result.source).toBe("gate");
+    expect(result.commands).toHaveLength(1);
+    expect(result.commands[0]).toEqual({ name: "unknown-gate", command: "" });
+  });
+
+  it("prefers legacy gate over discovered_gates (tier 2 wins)", () => {
+    const flow = makeFlow({ "lint": "npm run lint" });
+    const stateDef = makeStateDef({ gate: "lint" });
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
+    const result = normalizeGates(stateDef, flow, "/project", boardState);
+
+    expect(result.source).toBe("gate");
+    expect(result.commands[0].command).toBe("npm run lint");
+  });
+
+  it("resolves test-suite legacy gate via built-in auto-detection", () => {
+    readFileSyncImpl = () => JSON.stringify({ scripts: { test: "vitest run" } });
+    const flow = makeFlow(); // no explicit gates map — uses built-in
+    const stateDef = makeStateDef({ gate: "test-suite" });
+    const result = normalizeGates(stateDef, flow, "/project");
+
+    expect(result.source).toBe("gate");
+    expect(result.commands[0].command).toBe("npm test");
+  });
+});
+
+describe("normalizeGates — tier 3: discovered gates are stored as metadata but NOT executed", () => {
+  it("returns { commands: [], source: 'none' } when only discovered_gates exist (not executed)", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef();
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
+    const result = normalizeGates(stateDef, flow, "/project", boardState);
+
+    // Discovered gates are stored on board for metadata but normalizeGates returns none
+    expect(result.source).toBe("none");
+    expect(result.commands).toEqual([]);
+  });
+
+  it("returns 'none' even when discovered_gates has multiple commands", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef();
+    const boardState = makeBoardState([
+      { command: "pytest", source: "tester" },
+      { command: "npm run lint", source: "reviewer" },
+    ]);
+    const result = normalizeGates(stateDef, flow, "/project", boardState);
+
+    expect(result.source).toBe("none");
+    expect(result.commands).toEqual([]);
+  });
+
+  it("explicit gates still win over discovered when both present (tier 1 check still works)", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["npm test"] });
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
+    const result = normalizeGates(stateDef, flow, "/project", boardState);
+
+    expect(result.source).toBe("gates");
+    expect(result.commands[0].command).toBe("npm test");
+  });
+
+  it("legacy gate still wins over discovered when both present (tier 2 check still works)", () => {
+    const flow = makeFlow({ "lint": "npm run lint" });
+    const stateDef = makeStateDef({ gate: "lint" });
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
+    const result = normalizeGates(stateDef, flow, "/project", boardState);
+
+    expect(result.source).toBe("gate");
+    expect(result.commands[0].command).toBe("npm run lint");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runGates — multi-gate execution
+// ---------------------------------------------------------------------------
+
+describe("runGates — empty when no gates declared", () => {
+  it("returns empty array when stateDef has no gate, gates, or discovered_gates", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef();
+    const result = runGates(stateDef, flow, "/project");
+
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when boardState has empty discovered_gates", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef();
+    const boardState = makeBoardState([]);
+    const result = runGates(stateDef, flow, "/project", boardState);
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe("runGates — multi-gate execution from explicit gates array", () => {
+  it("runs all gates and returns array of results", () => {
+    let callCount = 0;
+    spawnSyncImpl = (_cmd) => {
+      callCount++;
+      return { stdout: `output-${callCount}`, stderr: "", status: 0 };
+    };
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["echo hello", "echo world"] });
+    const results = runGates(stateDef, flow, "/project");
+
+    expect(results).toHaveLength(2);
+    expect(results[0].passed).toBe(true);
+    expect(results[1].passed).toBe(true);
+    expect(callCount).toBe(2);
+  });
+
+  it("executes direct shell commands from gates array — echo exits 0", () => {
+    spawnSyncImpl = () => ({ stdout: "hello", stderr: "", status: 0 });
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["echo hello"] });
+    const results = runGates(stateDef, flow, "/project");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].passed).toBe(true);
+    expect(results[0].command).toBe("echo hello");
+    expect(results[0].exitCode).toBe(0);
+  });
+
+  it("executes direct shell commands from gates array — false exits 1", () => {
+    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: 1 });
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["false"] });
+    const results = runGates(stateDef, flow, "/project");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].passed).toBe(false);
+    expect(results[0].exitCode).toBe(1);
+  });
+
+  it("handles mixed pass/fail: one gate passes, one fails", () => {
+    let callCount = 0;
+    spawnSyncImpl = () => {
+      callCount++;
+      return { stdout: "", stderr: "", status: callCount === 1 ? 0 : 1 };
+    };
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["echo ok", "false"] });
+    const results = runGates(stateDef, flow, "/project");
+
+    expect(results).toHaveLength(2);
+    expect(results[0].passed).toBe(true);
+    expect(results[1].passed).toBe(false);
+  });
+});
+
+describe("runGates — fail-closed for unresolvable legacy named gate", () => {
+  it("fails closed when legacy gate field references an unresolvable gate name", () => {
+    const flow = makeFlow(); // no gates map
+    const stateDef = makeStateDef({ gate: "nonexistent-gate" });
+    const results = runGates(stateDef, flow, "/project");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].passed).toBe(false);
+    expect(results[0].command).toBe("");
+    expect(results[0].output).toContain("fail-closed");
+  });
+
+  it("does NOT call spawnSync for unresolvable legacy gate", () => {
+    spawnSyncImpl = () => {
+      throw new Error("spawnSync must not be called for unresolvable gate");
+    };
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gate: "nonexistent-gate" });
+    expect(() => runGates(stateDef, flow, "/project")).not.toThrow();
+  });
+});
+
+describe("runGates — discovered gates are NOT executed (stored as metadata only)", () => {
+  it("returns empty array when only discovered gates exist — they are not executed", () => {
+    spawnSyncImpl = () => {
+      throw new Error("spawnSync must NOT be called for discovered gates");
+    };
+    const flow = makeFlow();
+    const stateDef = makeStateDef();
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
+    const results = runGates(stateDef, flow, "/project", boardState);
+
+    // No execution — discovered gates are stored on board state but not run
+    expect(results).toEqual([]);
+  });
+
+  it("returns empty array when board state has no discovered_gates", () => {
+    const flow = makeFlow();
+    const stateDef = makeStateDef();
+    const boardState = makeBoardState(undefined);
+    const results = runGates(stateDef, flow, "/project", boardState);
+
+    expect(results).toEqual([]);
+  });
+
+  it("still executes explicit gates even when discovered gates are also present", () => {
+    spawnSyncImpl = () => ({ stdout: "ok", stderr: "", status: 0 });
+    const flow = makeFlow();
+    const stateDef = makeStateDef({ gates: ["npm test"] });
+    const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
+    const results = runGates(stateDef, flow, "/project", boardState);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].command).toBe("npm test");
+    expect(results[0].passed).toBe(true);
   });
 });

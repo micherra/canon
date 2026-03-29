@@ -3,8 +3,8 @@ import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rmSync } from "node:fs";
-import { resolveContextInjections, extractSection } from "../orchestration/inject-context.js";
-import type { Board, ContextInjection } from "../orchestration/flow-schema.js";
+import { resolveContextInjections, extractSection } from "../orchestration/inject-context.ts";
+import type { Board, ContextInjection } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

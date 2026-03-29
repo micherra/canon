@@ -11,6 +11,7 @@ states:
     type: single
     agent: canon-guide
     role: checkpoint
+    skip_when: auto_approved
     max_iterations: 3
     stuck_when: same_status
     transitions:

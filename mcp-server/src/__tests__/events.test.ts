@@ -3,68 +3,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  FlowEventBus,
   createMetricsAccumulator,
   createJsonlLogger,
-} from "../orchestration/events.js";
-import type { FlowEventMap } from "../orchestration/events.js";
-
-describe("FlowEventBus", () => {
-  let bus: FlowEventBus;
-
-  beforeEach(() => {
-    bus = new FlowEventBus();
-  });
-
-  it("emits and receives state_entered events", () => {
-    const received: FlowEventMap["state_entered"][] = [];
-    bus.on("state_entered", (event) => received.push(event));
-
-    const event: FlowEventMap["state_entered"] = {
-      stateId: "review",
-      stateType: "agent",
-      timestamp: "2026-03-22T00:00:00Z",
-      iterationCount: 1,
-    };
-    bus.emit("state_entered", event);
-
-    expect(received).toHaveLength(1);
-    expect(received[0]).toEqual(event);
-  });
-
-  it("emits and receives agent_spawned events", () => {
-    const received: FlowEventMap["agent_spawned"][] = [];
-    bus.on("agent_spawned", (event) => received.push(event));
-
-    bus.emit("agent_spawned", {
-      stateId: "build",
-      agent: "canon-implementor",
-      role: "builder",
-      model: "opus",
-      timestamp: "2026-03-22T00:00:01Z",
-    });
-
-    expect(received).toHaveLength(1);
-    expect(received[0].agent).toBe("canon-implementor");
-  });
-
-  it("does not cross-deliver between event types", () => {
-    const stateEvents: unknown[] = [];
-    const spawnEvents: unknown[] = [];
-    bus.on("state_entered", (e) => stateEvents.push(e));
-    bus.on("agent_spawned", (e) => spawnEvents.push(e));
-
-    bus.emit("state_entered", {
-      stateId: "s1",
-      stateType: "agent",
-      timestamp: "2026-03-22T00:00:00Z",
-      iterationCount: 0,
-    });
-
-    expect(stateEvents).toHaveLength(1);
-    expect(spawnEvents).toHaveLength(0);
-  });
-});
+} from "../orchestration/events.ts";
 
 describe("createMetricsAccumulator", () => {
   it("tracks spawns on agent_spawned events", () => {
@@ -123,7 +64,7 @@ describe("createMetricsAccumulator", () => {
     const { handler, getMetrics } = createMetricsAccumulator();
 
     handler("flow_started", {
-      flowName: "deep-build",
+      flowName: "epic",
       task: "build feature",
       tier: "t2",
       workspace: "/tmp/ws",
@@ -149,7 +90,7 @@ describe("createJsonlLogger", () => {
     const logger = createJsonlLogger(workspace);
 
     await logger("flow_started", {
-      flowName: "deep-build",
+      flowName: "epic",
       task: "implement feature",
       tier: "t2",
       workspace,
@@ -170,7 +111,7 @@ describe("createJsonlLogger", () => {
     const first = JSON.parse(lines[0]);
     expect(first.type).toBe("flow_started");
     expect(first.timestamp).toBe("2026-03-22T00:00:00Z");
-    expect(first.flowName).toBe("deep-build");
+    expect(first.flowName).toBe("epic");
 
     const second = JSON.parse(lines[1]);
     expect(second.type).toBe("agent_spawned");

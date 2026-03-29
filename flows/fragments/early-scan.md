@@ -6,6 +6,7 @@ agent: canon-security
 role: early-scan
 section: Early warnings
 timeout: 5m
+min_waves: 2
 ---
 
 ## Spawn Instructions

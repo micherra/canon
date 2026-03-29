@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { inferLayer, matchPrinciples } from "../matcher.js";
-import type { Principle } from "../parser.js";
+import { inferLayer, matchPrinciples } from "../matcher.ts";
+import type { Principle } from "../parser.ts";
 
 function makePrinciple(overrides: Partial<Principle> = {}): Principle {
   return {

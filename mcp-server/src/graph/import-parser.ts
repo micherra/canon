@@ -1,6 +1,6 @@
 import { dirname, join, normalize } from "path";
-import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../constants.js";
-import { toPosix } from "../utils/paths.js";
+import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../constants.ts";
+import { toPosix } from "../utils/paths.ts";
 
 /** Registry of import extractors by file extension. Add new languages here. */
 const importExtractors = new Map<string, (content: string) => string[]>();
@@ -20,33 +20,21 @@ export function extractImports(
   return extractor ? extractor(content) : [];
 }
 
-/** Extract JS/TS import paths. */
+const JS_IMPORT_RES = [
+  /import\s+(?:[\w{},*\s]+\s+from\s+)?['"]([^'"]+)['"]/g, // ES module
+  /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g,                // Dynamic
+  /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,               // CommonJS
+  /export\s+(?:[\w{},*\s]+\s+from\s+)['"]([^'"]+)['"]/g, // Re-export
+];
+
 function extractJsImports(content: string): string[] {
   const imports: string[] = [];
 
-  // ES module imports: import ... from '...'
-  const esImportRe = /import\s+(?:[\w{},*\s]+\s+from\s+)?['"]([^'"]+)['"]/g;
-  let match;
-  while ((match = esImportRe.exec(content)) !== null) {
-    imports.push(match[1]);
-  }
-
-  // Dynamic imports: import('...')
-  const dynamicRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-  while ((match = dynamicRe.exec(content)) !== null) {
-    imports.push(match[1]);
-  }
-
-  // CommonJS requires: require('...')
-  const requireRe = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-  while ((match = requireRe.exec(content)) !== null) {
-    imports.push(match[1]);
-  }
-
-  // Re-exports: export ... from '...'
-  const reExportRe = /export\s+(?:[\w{},*\s]+\s+from\s+)['"]([^'"]+)['"]/g;
-  while ((match = reExportRe.exec(content)) !== null) {
-    imports.push(match[1]);
+  for (const re of JS_IMPORT_RES) {
+    let match;
+    while ((match = re.exec(content)) !== null) {
+      imports.push(match[1]);
+    }
   }
 
   return imports;
@@ -103,6 +91,17 @@ export function parseTsconfigPaths(
   return aliases;
 }
 
+/**
+ * Mapping from JS-family extensions used in TS ESM import specifiers to the
+ * TypeScript source extensions that should be tried instead.
+ * e.g. `./store.js` → try `./store.ts` then `./store.tsx`
+ */
+const ESM_JS_TO_TS: Record<string, string[]> = {
+  ".js":  [".ts", ".tsx"],
+  ".jsx": [".tsx", ".ts"],
+  ".mjs": [".mts", ".ts"],
+};
+
 /** Try to find a file in the set with extension and index resolution */
 function tryResolve(candidate: string, allFiles: Set<string>): string | null {
   const posix = toPosix(candidate);
@@ -114,6 +113,24 @@ function tryResolve(candidate: string, allFiles: Set<string>): string | null {
     const indexPath = toPosix(join(candidate, "index" + ext));
     if (allFiles.has(indexPath)) return indexPath;
   }
+
+  // TS execution (vitest/tsx): import specifiers use `.ts` even though source files
+  // are `.ts`. Or standard Node.js ESM convention: import specifiers use `.js`
+  // even though source files are `.ts`. Try both.
+  for (const [jsExt, tsExts] of Object.entries(ESM_JS_TO_TS)) {
+    if (posix.endsWith(jsExt)) {
+      const base = posix.slice(0, -jsExt.length);
+      for (const tsExt of tsExts) {
+        if (allFiles.has(base + tsExt)) return base + tsExt;
+      }
+      // Also try index resolution after stripping the JS extension
+      for (const tsExt of tsExts) {
+        const indexPath = toPosix(join(base, "index" + tsExt));
+        if (allFiles.has(indexPath)) return indexPath;
+      }
+    }
+  }
+
   return null;
 }
 

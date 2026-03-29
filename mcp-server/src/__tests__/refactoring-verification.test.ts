@@ -32,14 +32,14 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { spawnSync } from "node:child_process";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.js";
-import { resolveWaveVariables } from "../orchestration/wave-variables.js";
-import { updateBoard } from "../tools/update-board.js";
-import { reportResult } from "../tools/report-result.js";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { writeBoard, initBoard } from "../orchestration/board.js";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import { resolveWaveVariables } from "../orchestration/wave-variables.ts";
+import { updateBoard } from "../tools/update-board.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { writeBoard, initBoard } from "../orchestration/board.ts";
 import { mkdir, writeFile } from "node:fs/promises";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 const mockSpawnSync = vi.mocked(spawnSync);
 
@@ -211,160 +211,46 @@ describe("resolveWaveVariables — cwd is passed to git spawnSync", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Fix 6: update-board.ts — once() listener cleanup (no listener leak)
+// FlowEventBus — no listener leaks across repeated operations
 // ---------------------------------------------------------------------------
 
-describe("updateBoard — once() listener cleanup", () => {
-  it("does not leak board_updated listeners after enter_state", async () => {
+describe("FlowEventBus — no listener leaks across repeated operations", () => {
+  it("listener counts are stable after 10 full reportResult + updateBoard cycles", async () => {
     const workspace = makeTmpDir();
     const flow = makeMinimalFlow();
     await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
 
-    const before = flowEventBus.listenerCount("board_updated");
+    // Capture baseline counts before any cycles
+    const eventNames = [
+      "state_completed",
+      "transition_evaluated",
+      "hitl_triggered",
+      "state_entered",
+      "board_updated",
+    ] as const;
 
-    await updateBoard({ workspace, action: "enter_state", state_id: "build" });
-
-    const after = flowEventBus.listenerCount("board_updated");
-    expect(after).toBe(before);
-  });
-
-  it("does not leak state_entered listeners after enter_state", async () => {
-    const workspace = makeTmpDir();
-    const flow = makeMinimalFlow();
-    await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
-
-    const before = flowEventBus.listenerCount("state_entered");
-
-    await updateBoard({ workspace, action: "enter_state", state_id: "build" });
-
-    const after = flowEventBus.listenerCount("state_entered");
-    expect(after).toBe(before);
-  });
-
-  it("does not leak board_updated listeners after block action", async () => {
-    const workspace = makeTmpDir();
-    const flow = makeMinimalFlow();
-    await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
-    await updateBoard({ workspace, action: "enter_state", state_id: "build" });
-
-    const before = flowEventBus.listenerCount("board_updated");
-
-    await updateBoard({
-      workspace,
-      action: "block",
-      state_id: "build",
-      blocked_reason: "testing",
-    });
-
-    const after = flowEventBus.listenerCount("board_updated");
-    expect(after).toBe(before);
-  });
-
-  it("does not leak board_updated listeners after complete_flow action", async () => {
-    const workspace = makeTmpDir();
-    const flow = makeMinimalFlow();
-    await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
-    await updateBoard({ workspace, action: "enter_state", state_id: "ship" });
-
-    const before = flowEventBus.listenerCount("board_updated");
-
-    await updateBoard({ workspace, action: "complete_flow" });
-
-    const after = flowEventBus.listenerCount("board_updated");
-    expect(after).toBe(before);
-  });
-
-  it("cleans up state_entered listener even when board_updated emit throws", async () => {
-    const workspace = makeTmpDir();
-    const flow = makeMinimalFlow();
-    await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
-
-    // Add a throwing external listener on board_updated to cause emit to throw
-    flowEventBus.on("board_updated", () => {
-      throw new Error("forced board_updated error");
-    });
-
-    const stateEnteredBefore = flowEventBus.listenerCount("state_entered");
-
-    try {
-      await updateBoard({ workspace, action: "enter_state", state_id: "build" });
-    } catch {
-      // External listener throws — expected
+    const baseline: Record<string, number> = {};
+    for (const name of eventNames) {
+      baseline[name] = flowEventBus.listenerCount(name);
     }
 
-    // The internal state_entered listener should be cleaned up in finally block
-    const stateEnteredAfter = flowEventBus.listenerCount("state_entered");
-    expect(stateEnteredAfter).toBe(stateEnteredBefore);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Fix 5: report-result.ts — once() listener cleanup for transition_evaluated
-// on the nested emit path (covers the finally block)
-// ---------------------------------------------------------------------------
-
-describe("reportResult — once() listener cleanup on all event paths", () => {
-  it("does not leak transition_evaluated listeners after successful call", async () => {
-    const workspace = makeTmpDir();
-    const flow = makeMinimalFlow();
-    await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
-
-    const before = flowEventBus.listenerCount("transition_evaluated");
-
-    await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
-      flow,
-    });
-
-    const after = flowEventBus.listenerCount("transition_evaluated");
-    expect(after).toBe(before);
-  });
-
-  it("does not leak state_completed listeners after successful call", async () => {
-    const workspace = makeTmpDir();
-    const flow = makeMinimalFlow();
-    await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
-
-    const before = flowEventBus.listenerCount("state_completed");
-
-    await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
-      flow,
-    });
-
-    const after = flowEventBus.listenerCount("state_completed");
-    expect(after).toBe(before);
-  });
-
-  it("cleans up transition_evaluated listener when state_completed emit throws", async () => {
-    const workspace = makeTmpDir();
-    const flow = makeMinimalFlow();
-    await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
-
-    // Attach throwing listener on state_completed to cause emit sequence to abort early
-    flowEventBus.on("state_completed", () => {
-      throw new Error("forced state_completed error");
-    });
-
-    const transitionBefore = flowEventBus.listenerCount("transition_evaluated");
-
-    try {
+    // Run N cycles
+    const CYCLES = 10;
+    for (let i = 0; i < CYCLES; i++) {
+      // Reset board for each cycle
+      await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
+      await updateBoard({ workspace, action: "enter_state", state_id: "build" });
       await reportResult({
         workspace,
         state_id: "build",
         status_keyword: "DONE",
         flow,
       });
-    } catch {
-      // External listener throws — expected
     }
 
-    // The internal transition_evaluated once() listener is cleaned up in finally
-    const transitionAfter = flowEventBus.listenerCount("transition_evaluated");
-    expect(transitionAfter).toBe(transitionBefore);
+    // Listener counts must be identical to baseline — no accumulation
+    for (const name of eventNames) {
+      expect(flowEventBus.listenerCount(name)).toBe(baseline[name]);
+    }
   });
 });

@@ -40,8 +40,8 @@ states:
   implement:
     type: wave
     agent: canon-implementor
-    template: implementation-log
     gate: test-suite
+    template: implementation-log
     transitions:
       done: verify
       blocked: hitl

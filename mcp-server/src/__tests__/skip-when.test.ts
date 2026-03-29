@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { Board } from "../orchestration/flow-schema.js";
-import { evaluateSkipWhen, matchGlob } from "../orchestration/skip-when.js";
+import type { Board } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen, matchGlob } from "../orchestration/skip-when.ts";
 
 // Hoist the mock factory so it runs before module import.
 // spawnSyncImpl is a mutable reference we swap per test.
 type SpawnSyncResult = { stdout: string; status: number; error?: Error };
 let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
+let lastSpawnArgs: unknown[] = [];
 
 vi.mock("node:child_process", () => ({
   spawnSync: (...args: unknown[]) => {
+    lastSpawnArgs = args;
     if (spawnSyncImpl) return spawnSyncImpl();
     // Default: simulate git failure (safe default — do not skip)
     return { stdout: "", status: 1, error: new Error("spawnSync not configured in test") };
@@ -39,6 +41,7 @@ function makeBoard(overrides?: Partial<Board>): Board {
 
 beforeEach(() => {
   spawnSyncImpl = null;
+  lastSpawnArgs = [];
 });
 
 // ---------------------------------------------------------------------------
@@ -80,10 +83,111 @@ describe("matchGlob", () => {
 // ---------------------------------------------------------------------------
 
 describe("evaluateSkipWhen — no_fix_requested", () => {
-  it("always returns skip: false (no fix_requested field on board yet)", async () => {
+  it("skips when board has no metadata", async () => {
     const board = makeBoard();
     const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
-    expect(result).toEqual({ skip: false });
+    expect(result.skip).toBe(true);
+  });
+
+  it("skips when fix_requested is not set in metadata", async () => {
+    const board = makeBoard({ metadata: { some_other_key: "value" } });
+    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+  });
+
+  it("does not skip when fix_requested is true", async () => {
+    const board = makeBoard({ metadata: { fix_requested: true } });
+    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("skips when fix_requested is false", async () => {
+    const board = makeBoard({ metadata: { fix_requested: false } });
+    const result = await evaluateSkipWhen("no_fix_requested", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluateSkipWhen — auto_approved
+// ---------------------------------------------------------------------------
+
+describe("evaluateSkipWhen — auto_approved", () => {
+  it("skips when board.metadata.auto_approve is true", async () => {
+    const board = makeBoard({ metadata: { auto_approve: true } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("auto-approved");
+  });
+
+  it("does not skip when board.metadata.auto_approve is false", async () => {
+    const board = makeBoard({ metadata: { auto_approve: false } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("does not skip when board.metadata is undefined", async () => {
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("does not skip when board.metadata.auto_approve is absent", async () => {
+    const board = makeBoard({ metadata: { some_other_key: "value" } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // Truthy non-boolean values — strict === true check (declared known gap)
+  // -------------------------------------------------------------------------
+
+  it("does not skip when board.metadata.auto_approve is the string 'true' (strict equality)", async () => {
+    // Implementation uses === true so non-boolean truthy values should NOT skip
+    const board = makeBoard({ metadata: { auto_approve: "true" } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("does not skip when board.metadata.auto_approve is 1 (numeric truthy)", async () => {
+    const board = makeBoard({ metadata: { auto_approve: 1 } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("does not skip when board.metadata.auto_approve is a non-boolean truthy value (string)", async () => {
+    const board = makeBoard({ metadata: { auto_approve: "yes" } });
+    const result = await evaluateSkipWhen("auto_approved", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SkipWhenSchema — schema validation
+// ---------------------------------------------------------------------------
+
+describe("SkipWhenSchema", () => {
+  it("accepts auto_approved as a valid value", async () => {
+    const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
+    expect(() => SkipWhenSchema.parse("auto_approved")).not.toThrow();
+    expect(SkipWhenSchema.parse("auto_approved")).toBe("auto_approved");
+  });
+
+  it("still accepts existing valid values", async () => {
+    const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
+    expect(() => SkipWhenSchema.parse("no_contract_changes")).not.toThrow();
+    expect(() => SkipWhenSchema.parse("no_fix_requested")).not.toThrow();
+  });
+
+  it("accepts no_open_questions as a valid value", async () => {
+    const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
+    expect(() => SkipWhenSchema.parse("no_open_questions")).not.toThrow();
+    expect(SkipWhenSchema.parse("no_open_questions")).toBe("no_open_questions");
+  });
+
+  it("rejects unknown values", async () => {
+    const { SkipWhenSchema } = await import("../orchestration/flow-schema.ts");
+    expect(() => SkipWhenSchema.parse("unknown_value")).toThrow();
   });
 });
 
@@ -107,6 +211,45 @@ describe("evaluateSkipWhen — unknown condition", () => {
     );
 
     errorSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluateSkipWhen — no_open_questions
+// ---------------------------------------------------------------------------
+
+describe("evaluateSkipWhen — no_open_questions", () => {
+  it("skips when board has no metadata (has_open_questions not set)", async () => {
+    const board = makeBoard();
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("No open questions");
+  });
+
+  it("skips when metadata is present but has_open_questions is not set", async () => {
+    const board = makeBoard({ metadata: { some_other_key: "value" } });
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+  });
+
+  it("skips when has_open_questions is false", async () => {
+    const board = makeBoard({ metadata: { has_open_questions: false } });
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("targeted research skipped");
+  });
+
+  it("does not skip when has_open_questions is true", async () => {
+    const board = makeBoard({ metadata: { has_open_questions: true } });
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(false);
+  });
+
+  it("skips when has_open_questions is the string 'true' (strict === true check)", async () => {
+    // Implementation uses === true so non-boolean truthy should skip (treated as falsy for our purposes)
+    const board = makeBoard({ metadata: { has_open_questions: "true" } });
+    const result = await evaluateSkipWhen("no_open_questions", "/tmp/ws", board);
+    expect(result.skip).toBe(true);
   });
 });
 
@@ -146,6 +289,24 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
     expect(result.skip).toBe(false);
+  });
+
+  it("returns skip: true when contract files are only deleted (not added/modified)", async () => {
+    // --diff-filter=d excludes deleted files, so git returns only the non-contract file
+    spawnSyncImpl = () => ({ stdout: "src/utils/helper.ts\n", status: 0 });
+    const board = makeBoard({ base_commit: "abc1234" });
+    const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+
+    expect(result.skip).toBe(true);
+    expect(result.reason).toContain("No contract changes detected");
+  });
+
+  it("passes --diff-filter=d to exclude deleted files from contract check", async () => {
+    spawnSyncImpl = () => ({ stdout: "", status: 0 });
+    const board = makeBoard({ base_commit: "abc1234" });
+    await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
+
+    expect(lastSpawnArgs[1]).toContain("--diff-filter=d");
   });
 
   it("returns skip: true when diff output is empty (no changes at all)", async () => {
@@ -250,15 +411,4 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     expect(result.skip).toBe(true);
   });
 
-  it("uses spawnSync (not execSync) — verifying mock is called via spawnSync path", async () => {
-    let spawnWasCalled = false;
-    spawnSyncImpl = () => {
-      spawnWasCalled = true;
-      return { stdout: "", status: 0 };
-    };
-    const board = makeBoard({ base_commit: "abc1234" });
-    await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
-
-    expect(spawnWasCalled).toBe(true);
-  });
 });

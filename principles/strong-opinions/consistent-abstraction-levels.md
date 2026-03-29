@@ -9,6 +9,8 @@ tags:
   - functions
   - ousterhout
   - clean-code
+  - separation-of-concerns
+  - testability
 ---
 
 Each function should operate at a single, consistent level of abstraction. Don't mix high-level orchestration calls with low-level operations in the same function body. If adjacent lines of code are at different abstraction levels — one line calls `processOrder()` and the next does `str.split(",").map(Number).filter(n => n > 0)` — the function is mixing levels.
@@ -76,6 +78,8 @@ async function processNewUser(rawInput: string) {
 
 Each line is at the same level — named operations that describe *what* happens. The *how* lives in each function's implementation.
 
+A common violation is fat HTTP handlers. Route controllers and API entry points should do three things: validate input, call a service, and return a response. Business logic belongs in service modules, not handler files. If your handler inlines database calls, transformation logic, and conditional business rules, it's mixing orchestration with implementation.
+
 ## Exceptions
 
-Small utility functions that do one concrete thing (parse a date, format a number) naturally work at a single low level — that's fine. The principle targets orchestration functions that mix levels, not leaf functions that implement one detail.
+Small utility functions that do one concrete thing (parse a date, format a number) naturally work at a single low level — that's fine. The principle targets orchestration functions that mix levels, not leaf functions that implement one detail. Trivial endpoints with no business logic (health checks, simple lookups under ~15 lines) don't need the indirection.

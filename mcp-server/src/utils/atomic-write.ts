@@ -16,8 +16,9 @@ export async function atomicWriteFile(filePath: string, data: string): Promise<v
     try {
       await rename(tmpPath, filePath);
     } catch (renameErr: any) {
-      // On Windows, rename() can fail with EPERM/EEXIST/EACCES when dest exists — remove dest and retry
-      if (renameErr.code === "EPERM" || renameErr.code === "EEXIST" || renameErr.code === "EACCES") {
+      // On Windows, rename() can fail if dest exists — remove dest and retry
+      const isWindowsLocked = ["EPERM", "EEXIST", "EACCES"].includes(renameErr.code);
+      if (isWindowsLocked) {
         try { await unlink(filePath); } catch (e: any) {
           if (e.code !== "ENOENT") throw e;
         }

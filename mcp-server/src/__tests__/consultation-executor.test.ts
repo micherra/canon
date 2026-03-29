@@ -3,8 +3,8 @@ import {
   executeConsultations,
   resolveConsultationPrompt,
   type ConsultationInput,
-} from "../orchestration/consultation-executor.js";
-import type { ResolvedFlow } from "../orchestration/flow-schema.js";
+} from "../orchestration/consultation-executor.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -197,5 +197,44 @@ describe("resolveConsultationPrompt", () => {
 
     expect(result).not.toBeNull();
     expect(result!.prompt).toBe("Run security audit for ${task}.");
+  });
+
+  it("returns timeout when fragment declares it", () => {
+    const flow = makeFlow();
+    // "security-check" fixture has timeout: "5m"
+    const result = resolveConsultationPrompt("security-check", flow, {});
+
+    expect(result).not.toBeNull();
+    expect(result!.timeout).toBe("5m");
+  });
+
+  it("returns section when fragment declares it", () => {
+    const flow = makeFlow({
+      consultations: {
+        "section-check": {
+          fragment: "section-check",
+          agent: "canon:canon-security",
+          role: "security",
+          section: "## Security Review",
+        },
+      },
+      spawn_instructions: {
+        "section-check": "Run section check.",
+      },
+    });
+    const result = resolveConsultationPrompt("section-check", flow, {});
+
+    expect(result).not.toBeNull();
+    expect(result!.section).toBe("## Security Review");
+  });
+
+  it("omits timeout and section when fragment does not declare them", () => {
+    const flow = makeFlow();
+    // "perf-check" fixture has no timeout or section
+    const result = resolveConsultationPrompt("perf-check", flow, {});
+
+    expect(result).not.toBeNull();
+    expect("timeout" in result!).toBe(false);
+    expect("section" in result!).toBe(false);
   });
 });

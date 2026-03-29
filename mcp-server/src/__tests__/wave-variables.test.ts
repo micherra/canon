@@ -15,7 +15,7 @@ import {
   resolveWaveVariables,
   parseTaskIdsForWave,
   extractFilePaths,
-} from "../orchestration/wave-variables.js";
+} from "../orchestration/wave-variables.ts";
 import { spawnSync } from "node:child_process";
 
 const mockSpawnSync = vi.mocked(spawnSync);

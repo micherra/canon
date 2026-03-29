@@ -15,22 +15,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
-
 // ---------------------------------------------------------------------------
 // Hoist spawnSync mock — gate-runner uses child_process
 // ---------------------------------------------------------------------------
 
 type SpawnSyncArgs = { shell?: boolean; cwd?: string; encoding?: string; timeout?: number };
 let spawnSyncImpl: ((cmd: string, opts: SpawnSyncArgs) => { stdout: string; stderr: string; status: number | null; error?: Error }) | null = null;
-let lastSpawnSyncArgs: { cmd: string; opts: SpawnSyncArgs } | null = null;
-
 vi.mock("node:child_process", () => ({
   spawnSync: (cmd: string, opts: SpawnSyncArgs) => {
-    lastSpawnSyncArgs = { cmd, opts };
     if (spawnSyncImpl) return spawnSyncImpl(cmd, opts);
     return { stdout: "", stderr: "", status: 0 };
   },
@@ -49,20 +41,20 @@ vi.mock("node:fs", () => ({
 // Imports after mocks
 // ---------------------------------------------------------------------------
 
-import { resolveGateCommand, runGate } from "../orchestration/gate-runner.js";
+import { resolveGateCommand, runGate } from "../orchestration/gate-runner.ts";
 import {
   initBoard,
   recordConsultationResult,
   recordGateResult,
-} from "../orchestration/board.js";
+} from "../orchestration/board.ts";
 import {
   executeConsultations,
   resolveConsultationPrompt,
   type ConsultationInput,
-} from "../orchestration/consultation-executor.js";
-import { assembleWaveBriefing } from "../orchestration/wave-briefing.js";
-import { escapeDollarBrace } from "../orchestration/wave-variables.js";
-import type { ResolvedFlow, Board, ConsultationResult } from "../orchestration/flow-schema.js";
+} from "../orchestration/consultation-executor.ts";
+import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
+import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
+import type { ResolvedFlow, Board, ConsultationResult } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -114,25 +106,12 @@ function makeBoard(): Board {
   return initBoard(makeFlow(), "IWC integration task", "abc123");
 }
 
-let tmpDirs: string[] = [];
-
-function makeTmpWorkspace(): string {
-  const dir = mkdtempSync(join(tmpdir(), "iwc-integration-"));
-  tmpDirs.push(dir);
-  return dir;
-}
-
 beforeEach(() => {
   spawnSyncImpl = null;
   readFileSyncImpl = null;
-  lastSpawnSyncArgs = null;
 });
 
 afterEach(() => {
-  for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
-  }
-  tmpDirs = [];
 });
 
 // ---------------------------------------------------------------------------
@@ -314,7 +293,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
       "implement",
       "wave_1",
       gateResult.gate,
-      gateResult.output,
+      gateResult.output ?? "",
     );
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
@@ -335,7 +314,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
       "implement",
       "wave_1",
       gateResult.gate,
-      gateResult.output,
+      gateResult.output ?? "",
     );
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
@@ -343,20 +322,20 @@ describe("integration: runGate result → recordGateResult on board", () => {
     expect(waveResult?.gate_output).toBe("3 tests failed");
   });
 
-  it("skipped gate result (not configured) stores skip message on board", () => {
+  it("unconfigured gate result (fail-closed) stores fail-closed message on board", () => {
     const flow = makeFlow(); // no gates
     const gateResult = runGate("nonexistent-gate", flow, "/project");
 
-    expect(gateResult.passed).toBe(true); // skipped = graceful pass
-    expect(gateResult.output).toBe("Gate not configured — skipped");
+    expect(gateResult.passed).toBe(false); // fail-closed — unconfigured gate fails
+    expect(gateResult.output).toContain("fail-closed");
 
     const board = makeBoard();
     const updatedBoard = recordGateResult(
-      board, "implement", "wave_1", gateResult.gate, gateResult.output,
+      board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "",
     );
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
-    expect(waveResult?.gate_output).toBe("Gate not configured — skipped");
+    expect(waveResult?.gate_output).toContain("fail-closed");
   });
 });
 

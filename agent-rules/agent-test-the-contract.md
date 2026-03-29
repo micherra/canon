@@ -1,7 +1,7 @@
 ---
 id: agent-test-the-contract
 title: Test the Contract, Not the Implementation
-severity: convention
+severity: rule
 scope:
   layers: []
 tags:

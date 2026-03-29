@@ -10,8 +10,8 @@ import {
   acquireLock,
   releaseLock,
   writeSession,
-} from "../orchestration/workspace.js";
-import type { Session } from "../orchestration/flow-schema.js";
+} from "../orchestration/workspace.ts";
+import type { Session } from "../orchestration/flow-schema.ts";
 
 let tmpDir: string;
 
@@ -112,12 +112,19 @@ describe("checkSlugCollision", () => {
 describe("initWorkspace", () => {
   it("creates all subdirectories", async () => {
     const ws = await initWorkspace(tmpDir, "my-branch");
-    const expected = ["research", "decisions", "plans", "reviews", "notes"];
+    const expected = ["research", "decisions", "plans", "reviews"];
     for (const dir of expected) {
       await expect(
         access(path.join(ws, dir)).then(() => true),
       ).resolves.toBe(true);
     }
+  });
+
+  it("does not create a notes/ directory", async () => {
+    const ws = await initWorkspace(tmpDir, "my-branch-no-notes");
+    await expect(
+      access(path.join(ws, "notes")).then(() => true),
+    ).rejects.toThrow();
   });
 
   it("returns the workspace path", async () => {

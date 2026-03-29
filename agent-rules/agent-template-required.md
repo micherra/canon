@@ -16,7 +16,7 @@ When the orchestrator provides a template path, the agent **must** use it. Templ
 
 ## Why
 
-Templates exist so downstream agents can reliably parse upstream output. When an implementor skips the implementation-log template, the tester can't find the `### Tests Written` section. When a researcher skips the research-finding template, the architect gets unparseable findings. Consistency across the team is more valuable than any individual agent's formatting preference.
+Templates exist so downstream agents can reliably parse upstream output. When an implementor skips the implementation-log template, the tester can't find the `### Tests Written` section. When a researcher skips the research-finding template, the architect gets unparseable findings. Optional evidence blocks such as `External Evidence` and security finding evidence fields are also part of the contract when they appear. Consistency across the team is more valuable than any individual agent's formatting preference.
 
 ## Which Templates
 
@@ -36,4 +36,3 @@ The orchestrator is responsible for passing these paths. Agents are responsible 
 ## Exceptions
 
 **canon-fixer (violation-fix mode)**: The fixer in violation-fix mode produces a structured status report (FIXED/PARTIAL_FIX/CANNOT_FIX with commit hash, change description, and behavior preservation confirmation) rather than a full artifact document. Its output is consumed only by the orchestrator for transition decisions, not parsed by downstream agents. The fixer in violation-fix mode is exempt from template requirements — no template is defined for it in the flow states, and it should NOT report NEEDS_CONTEXT for a missing template.
-

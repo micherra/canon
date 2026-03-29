@@ -1,7 +1,7 @@
 ---
 description: Initialize Canon principles in your project
-argument-hint: [--starter|--empty]
-allowed-tools: [Bash, Read, Write, Glob, Edit]
+argument-hint: [--starter|--empty|--no-scan]
+allowed-tools: [Bash, Read, Write, Glob, Edit, Agent]
 model: haiku
 ---
 
@@ -34,9 +34,10 @@ Create `.canon/config.json` with sensible defaults:
 
 ```json
 {
-  "source_dirs": ["src"],
   "principle_dirs": [".canon/principles"],
-  "layer_patterns": {},
+  "layers": {
+    "src": ["src/**"]
+  },
   "review": {
     "max_principles_per_review": 10,
     "include_honored_in_output": true
@@ -113,4 +114,16 @@ If no conventions could be detected (empty project or unrecognizable stack), fal
 
 ### Step 6: Report what was done
 
-Tell the user what was created (principles, conventions, workspaces, CLAUDE.md) and suggest next steps: ask Canon to list principles to browse them, edit `.canon/CONVENTIONS.md` to add conventions, and add `.canon/` to git tracking.
+Tell the user what was created (principles, conventions, workspaces, CLAUDE.md). If the adoption scan in Step 7 was run, summarize scan results here (number of violations found by tier, and whether any were highlighted for attention). Suggest next steps: ask Canon to list principles to browse them, edit `.canon/CONVENTIONS.md` to add conventions, and add `.canon/` to git tracking.
+
+### Step 7: Run adoption scan
+
+Check whether `--no-scan` was passed in `${ARGUMENTS}`. If it was, skip this step entirely.
+
+Otherwise, invoke the orchestrator with:
+- `flow: adopt`
+- `task: "Adoption scan of the project"`
+
+The flow will scan the codebase for principle violations and produce a tiered adoption report. Read the adoption report from the workspace and display a summary to the user: how many violations were found per tier, and which files have the most issues.
+
+If the project appears to be empty or very small (fewer than 5 source files), skip the scan and note that it can be run later by re-running `/canon:init` without `--no-scan`.

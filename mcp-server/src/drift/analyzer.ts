@@ -1,11 +1,10 @@
 import { dirname } from "path";
-import type { DecisionEntry, ReviewEntry } from "../schema.js";
+import type { ReviewEntry } from "../schema.ts";
 
 export interface PrincipleStats {
   principle_id: string;
   total_violations: number;
   unintentional_violations: number;
-  intentional_deviations: number;
   times_honored: number;
   compliance_rate: number; // 0-100
 }
@@ -18,7 +17,6 @@ export interface DirectoryStats {
 
 export interface DriftReport {
   total_reviews: number;
-  total_decisions: number;
   avg_score: {
     rules: number;
     opinions: number;
@@ -26,20 +24,16 @@ export interface DriftReport {
   };
   most_violated: PrincipleStats[];
   violation_directories: DirectoryStats[];
-  intentional_ratio: number; // 0-100: what % of deviations were intentional
-  recent_decisions: DecisionEntry[];
   never_triggered: string[]; // principle IDs that never appeared in reviews
   trend: "improving" | "stable" | "declining" | "insufficient_data";
 }
 
 export function analyzeDrift(
   reviews: ReviewEntry[],
-  decisions: DecisionEntry[],
   allPrincipleIds: string[],
   options?: { lastN?: number; principleId?: string; directory?: string }
 ): DriftReport {
   let filteredReviews = reviews;
-  let filteredDecisions = decisions;
 
   // Apply lastN filter
   if (options?.lastN) {
@@ -53,18 +47,12 @@ export function analyzeDrift(
         r.violations.some((v) => v.principle_id === options.principleId) ||
         r.honored.includes(options.principleId!)
     );
-    filteredDecisions = filteredDecisions.filter(
-      (d) => d.principle_id === options.principleId
-    );
   }
 
   // Apply directory filter
   if (options?.directory) {
     filteredReviews = filteredReviews.filter((r) =>
       r.files.some((f) => f.startsWith(options.directory!))
-    );
-    filteredDecisions = filteredDecisions.filter((d) =>
-      d.file_path.startsWith(options.directory!)
     );
   }
 
@@ -74,7 +62,6 @@ export function analyzeDrift(
     principle_id: id,
     total_violations: 0,
     unintentional_violations: 0,
-    intentional_deviations: 0,
     times_honored: 0,
     compliance_rate: 0,
   });
@@ -92,17 +79,6 @@ export function analyzeDrift(
       stats.times_honored++;
       principleMap.set(h, stats);
     }
-  }
-
-  // Count intentional deviations from decisions and adjust unintentional count
-  for (const d of filteredDecisions) {
-    const stats = principleMap.get(d.principle_id) || initStats(d.principle_id);
-    stats.intentional_deviations++;
-    // Each intentional deviation accounts for one violation that was previously counted as unintentional
-    if (stats.unintentional_violations > 0) {
-      stats.unintentional_violations--;
-    }
-    principleMap.set(d.principle_id, stats);
   }
 
   // Compute compliance rates
@@ -168,13 +144,6 @@ export function analyzeDrift(
     avgScore.conventions = cTotal > 0 ? Math.round((cPassed / cTotal) * 100) : 100;
   }
 
-  // Intentional ratio
-  const totalDeviations = mostViolated.reduce((sum, s) => sum + s.total_violations, 0) +
-    filteredDecisions.length;
-  const intentionalRatio = totalDeviations > 0
-    ? Math.round((filteredDecisions.length / totalDeviations) * 100)
-    : 100;
-
   // Never-triggered principles
   const triggeredIds = new Set(principleMap.keys());
   const neverTriggered = allPrincipleIds.filter((id) => !triggeredIds.has(id));
@@ -186,29 +155,19 @@ export function analyzeDrift(
     const firstHalf = filteredReviews.slice(0, mid);
     const secondHalf = filteredReviews.slice(mid);
 
-    const firstViolations = firstHalf.reduce((sum, r) => sum + r.violations.length, 0) / firstHalf.length;
-    const secondViolations = secondHalf.reduce((sum, r) => sum + r.violations.length, 0) / secondHalf.length;
+    const firstAvg = firstHalf.reduce((sum, r) => sum + r.violations.length, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((sum, r) => sum + r.violations.length, 0) / secondHalf.length;
 
-    if (secondViolations < firstViolations * 0.8) {
-      trend = "improving";
-    } else if (secondViolations > firstViolations * 1.2) {
-      trend = "declining";
-    } else {
-      trend = "stable";
-    }
+    if (secondAvg < firstAvg * 0.8) trend = "improving";
+    else if (secondAvg > firstAvg * 1.2) trend = "declining";
+    else trend = "stable";
   }
-
-  // Recent decisions (last 5)
-  const recentDecisions = filteredDecisions.slice(-5);
 
   return {
     total_reviews: filteredReviews.length,
-    total_decisions: filteredDecisions.length,
     avg_score: avgScore,
     most_violated: mostViolated.slice(0, 10),
     violation_directories: violationDirectories,
-    intentional_ratio: intentionalRatio,
-    recent_decisions: recentDecisions,
     never_triggered: neverTriggered,
     trend,
   };

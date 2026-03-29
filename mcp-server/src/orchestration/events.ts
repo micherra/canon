@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { appendFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { HistoryEntry, ConcernEntry } from "./flow-schema.js";
+import type { HistoryEntry, ConcernEntry, GateResult, PostconditionResult, ViolationSeverities, TestResults } from "./flow-schema.ts";
 
 export type FlowEventType =
   | "state_entered"
@@ -12,7 +12,9 @@ export type FlowEventType =
   | "hitl_triggered"
   | "flow_started"
   | "flow_completed"
-  | "board_updated";
+  | "board_updated"
+  | "wave_event_injected"
+  | "wave_event_resolved";
 
 export interface FlowEventMap {
   state_entered: {
@@ -27,6 +29,14 @@ export interface FlowEventMap {
     duration_ms: number;
     artifacts: string[];
     timestamp: string;
+    gate_results?: GateResult[];
+    postcondition_results?: PostconditionResult[];
+    violation_count?: number;
+    violation_severities?: ViolationSeverities;
+    test_results?: TestResults;
+    files_changed?: number;
+    discovered_gates_count?: number;
+    discovered_postconditions_count?: number;
   };
   agent_spawned: {
     stateId: string;
@@ -68,6 +78,19 @@ export interface FlowEventMap {
   board_updated: {
     action: string;
     stateId?: string;
+    timestamp: string;
+  };
+  wave_event_injected: {
+    eventId: string;
+    eventType: string;
+    workspace: string;
+    timestamp: string;
+  };
+  wave_event_resolved: {
+    eventId: string;
+    eventType: string;
+    action: "apply" | "reject";
+    workspace: string;
     timestamp: string;
   };
 }

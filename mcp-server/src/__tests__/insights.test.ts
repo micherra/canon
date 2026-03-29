@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { generateInsights } from "../graph/insights.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { generateInsights } from "../graph/insights.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { KgStore } from "../graph/kg-store.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 describe("generateInsights", () => {
   it("returns zeroed insights for empty graph", () => {
@@ -64,6 +71,24 @@ describe("generateInsights", () => {
     const edges = [{ source: "connected.ts", target: "other.ts" }];
     const result = generateInsights(nodes, edges);
     expect(result.orphan_files).toEqual(["orphan.ts"]);
+  });
+
+  it("does not mark colocated test files as orphans when source exists", () => {
+    const nodes = [
+      { id: "src/services/order.ts", layer: "domain" },
+      { id: "src/services/order.test.ts", layer: "domain" },
+    ];
+    const result = generateInsights(nodes, []);
+    expect(result.orphan_files).toEqual([]);
+  });
+
+  it("does not mark __tests__ files as orphans when source exists", () => {
+    const nodes = [
+      { id: "src/services/order.ts", layer: "domain" },
+      { id: "src/services/__tests__/order.ts", layer: "domain" },
+    ];
+    const result = generateInsights(nodes, []);
+    expect(result.orphan_files).toEqual([]);
   });
 
   it("detects circular dependencies", () => {
@@ -167,5 +192,263 @@ describe("generateInsights", () => {
     // With custom rules allowing it
     const customResult = generateInsights(nodes, edges, { api: ["infra"] });
     expect(customResult.layer_violations).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// KG enrichment tests — use a real on-disk SQLite DB via a temp directory
+// ---------------------------------------------------------------------------
+
+describe("generateInsights — KG enrichment", () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "insights-kg-test-"));
+    // Create the .canon directory inside tmpDir so the function can find the DB
+    const canonDir = join(tmpDir, CANON_DIR);
+    mkdirSync(canonDir, { recursive: true });
+    dbPath = join(canonDir, CANON_FILES.KNOWLEDGE_DB);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("omits KG fields when DB does not exist", () => {
+    // No DB created — enrichment should be skipped
+    const result = generateInsights([], [], undefined, tmpDir);
+    expect(result.entity_overview).toBeUndefined();
+    expect(result.dead_code_summary).toBeUndefined();
+    expect(result.blast_radius_hotspots).toBeUndefined();
+  });
+
+  it("does not break base insights when DB does not exist", () => {
+    const nodes = [
+      { id: "a.ts", layer: "api" },
+      { id: "b.ts", layer: "domain" },
+    ];
+    const edges = [{ source: "a.ts", target: "b.ts" }];
+    const result = generateInsights(nodes, edges, undefined, tmpDir);
+    // Base fields unaffected
+    expect(result.overview.total_files).toBe(2);
+    expect(result.overview.total_edges).toBe(1);
+    expect(result.layer_violations).toHaveLength(0);
+  });
+
+  it("enriches with entity_overview when DB exists and has entities", () => {
+    // Seed the DB
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+    const fileRow = store.upsertFile({
+      path: "src/service.ts",
+      mtime_ms: Date.now(),
+      content_hash: "abc",
+      language: "typescript",
+      layer: "domain",
+      last_indexed_at: Date.now(),
+    });
+    store.insertEntity({
+      file_id: fileRow.file_id!,
+      name: "doWork",
+      qualified_name: "src/service.ts::doWork",
+      kind: "function",
+      line_start: 1,
+      line_end: 10,
+      is_exported: true,
+      is_default_export: false,
+      signature: null,
+      metadata: null,
+    });
+    store.insertEntity({
+      file_id: fileRow.file_id!,
+      name: "MyClass",
+      qualified_name: "src/service.ts::MyClass",
+      kind: "class",
+      line_start: 12,
+      line_end: 30,
+      is_exported: true,
+      is_default_export: false,
+      signature: null,
+      metadata: null,
+    });
+    db.close();
+
+    const result = generateInsights([], [], undefined, tmpDir);
+
+    expect(result.entity_overview).toBeDefined();
+    expect(result.entity_overview!.total_entities).toBe(2);
+    expect(result.entity_overview!.by_kind["function"]).toBe(1);
+    expect(result.entity_overview!.by_kind["class"]).toBe(1);
+    expect(result.entity_overview!.total_edges).toBe(0);
+  });
+
+  it("enriches with dead_code_summary when DB has unexported unreferenced entities", () => {
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+    const fileRow = store.upsertFile({
+      path: "src/utils.ts",
+      mtime_ms: Date.now(),
+      content_hash: "def",
+      language: "typescript",
+      layer: "shared",
+      last_indexed_at: Date.now(),
+    });
+    // Unexported + no incoming edges = dead code
+    store.insertEntity({
+      file_id: fileRow.file_id!,
+      name: "deadHelper",
+      qualified_name: "src/utils.ts::deadHelper",
+      kind: "function",
+      line_start: 5,
+      line_end: 15,
+      is_exported: false,
+      is_default_export: false,
+      signature: null,
+      metadata: null,
+    });
+    db.close();
+
+    const result = generateInsights([], [], undefined, tmpDir);
+
+    expect(result.dead_code_summary).toBeDefined();
+    expect(result.dead_code_summary!.total_dead).toBe(1);
+    expect(result.dead_code_summary!.by_kind["function"]).toBe(1);
+    expect(result.dead_code_summary!.top_files).toHaveLength(1);
+    expect(result.dead_code_summary!.top_files[0].path).toBe("src/utils.ts");
+    expect(result.dead_code_summary!.top_files[0].count).toBe(1);
+  });
+
+  it("returns empty dead_code_summary when no dead code exists", () => {
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+    const fileRow = store.upsertFile({
+      path: "src/index.ts",
+      mtime_ms: Date.now(),
+      content_hash: "ghi",
+      language: "typescript",
+      layer: "api",
+      last_indexed_at: Date.now(),
+    });
+    // Exported entity — not dead
+    store.insertEntity({
+      file_id: fileRow.file_id!,
+      name: "main",
+      qualified_name: "src/index.ts::main",
+      kind: "function",
+      line_start: 1,
+      line_end: 5,
+      is_exported: true,
+      is_default_export: false,
+      signature: null,
+      metadata: null,
+    });
+    db.close();
+
+    const result = generateInsights([], [], undefined, tmpDir);
+
+    expect(result.dead_code_summary).toBeDefined();
+    expect(result.dead_code_summary!.total_dead).toBe(0);
+    expect(result.dead_code_summary!.top_files).toHaveLength(0);
+  });
+
+  it("enriches with blast_radius_hotspots sorted by incoming edges", () => {
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+    const fileA = store.upsertFile({
+      path: "src/hub.ts",
+      mtime_ms: Date.now(),
+      content_hash: "jkl",
+      language: "typescript",
+      layer: "shared",
+      last_indexed_at: Date.now(),
+    });
+    const fileB = store.upsertFile({
+      path: "src/callers.ts",
+      mtime_ms: Date.now(),
+      content_hash: "mno",
+      language: "typescript",
+      layer: "domain",
+      last_indexed_at: Date.now(),
+    });
+    const hubEntity = store.insertEntity({
+      file_id: fileA.file_id!,
+      name: "hubFunc",
+      qualified_name: "src/hub.ts::hubFunc",
+      kind: "function",
+      line_start: 1,
+      line_end: 10,
+      is_exported: true,
+      is_default_export: false,
+      signature: null,
+      metadata: null,
+    });
+    const callerA = store.insertEntity({
+      file_id: fileB.file_id!,
+      name: "callerA",
+      qualified_name: "src/callers.ts::callerA",
+      kind: "function",
+      line_start: 1,
+      line_end: 5,
+      is_exported: false,
+      is_default_export: false,
+      signature: null,
+      metadata: null,
+    });
+    const callerB = store.insertEntity({
+      file_id: fileB.file_id!,
+      name: "callerB",
+      qualified_name: "src/callers.ts::callerB",
+      kind: "function",
+      line_start: 6,
+      line_end: 10,
+      is_exported: false,
+      is_default_export: false,
+      signature: null,
+      metadata: null,
+    });
+    // Both callers call hubFunc
+    store.insertEdge({
+      source_entity_id: callerA.entity_id!,
+      target_entity_id: hubEntity.entity_id!,
+      edge_type: "calls",
+      confidence: 1.0,
+      metadata: null,
+    });
+    store.insertEdge({
+      source_entity_id: callerB.entity_id!,
+      target_entity_id: hubEntity.entity_id!,
+      edge_type: "calls",
+      confidence: 1.0,
+      metadata: null,
+    });
+    db.close();
+
+    const result = generateInsights([], [], undefined, tmpDir);
+
+    expect(result.blast_radius_hotspots).toBeDefined();
+    expect(result.blast_radius_hotspots!.length).toBeGreaterThanOrEqual(1);
+    const hotspot = result.blast_radius_hotspots![0];
+    expect(hotspot.entity_name).toBe("hubFunc");
+    expect(hotspot.affected_count).toBe(2);
+  });
+
+  it("preserves base insights when KG enrichment is present", () => {
+    // Seed a minimal DB
+    const db = initDatabase(dbPath);
+    db.close();
+
+    const nodes = [
+      { id: "a.ts", layer: "api" },
+      { id: "b.ts", layer: "domain" },
+    ];
+    const edges = [{ source: "a.ts", target: "b.ts" }];
+    const result = generateInsights(nodes, edges, undefined, tmpDir);
+
+    // Base fields must still be correct
+    expect(result.overview.total_files).toBe(2);
+    expect(result.overview.total_edges).toBe(1);
+    expect(result.orphan_files).toEqual([]);
+    expect(result.circular_dependencies).toEqual([]);
   });
 });

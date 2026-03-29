@@ -6,77 +6,31 @@ import {
   buildHistoryEntry,
   isStuck,
   aggregateParallelPerResults,
-} from "../orchestration/transitions.js";
-import type { StateDefinition, StuckWhen } from "../orchestration/flow-schema.js";
+} from "../orchestration/transitions.ts";
+import type { StateDefinition } from "../orchestration/flow-schema.ts";
 
 describe("normalizeStatus", () => {
-  it("maps DONE to done (case insensitive)", () => {
-    expect(normalizeStatus("DONE")).toBe("done");
-  });
-
-  it("maps FIXED to done", () => {
-    expect(normalizeStatus("FIXED")).toBe("done");
-    expect(normalizeStatus("fixed")).toBe("done");
-  });
-
-  it("maps PARTIAL_FIX to done", () => {
-    expect(normalizeStatus("PARTIAL_FIX")).toBe("done");
-  });
-
-  it("maps FINDINGS to done", () => {
-    expect(normalizeStatus("FINDINGS")).toBe("done");
-  });
-
-  it("maps DONE_WITH_CONCERNS to done", () => {
-    expect(normalizeStatus("DONE_WITH_CONCERNS")).toBe("done");
-  });
-
-  it("maps NEEDS_CONTEXT to hitl", () => {
-    expect(normalizeStatus("NEEDS_CONTEXT")).toBe("hitl");
-  });
-
-  it("maps HAS_QUESTIONS to has_questions", () => {
-    expect(normalizeStatus("HAS_QUESTIONS")).toBe("has_questions");
-  });
-
-  it("passes through CLEAN as clean (lowercased)", () => {
-    expect(normalizeStatus("CLEAN")).toBe("clean");
-  });
-
-  it("passes through WARNING as warning", () => {
-    expect(normalizeStatus("WARNING")).toBe("warning");
-  });
-
-  it("passes through BLOCKING as blocking", () => {
-    expect(normalizeStatus("BLOCKING")).toBe("blocking");
-  });
-
-  it("passes through ALL_PASSING as all_passing", () => {
-    expect(normalizeStatus("ALL_PASSING")).toBe("all_passing");
-  });
-
-  it("passes through IMPLEMENTATION_ISSUE as implementation_issue", () => {
-    expect(normalizeStatus("IMPLEMENTATION_ISSUE")).toBe("implementation_issue");
-  });
-
-  it("passes through CANNOT_FIX as cannot_fix", () => {
-    expect(normalizeStatus("CANNOT_FIX")).toBe("cannot_fix");
-  });
-
-  it("passes through CRITICAL as critical", () => {
-    expect(normalizeStatus("CRITICAL")).toBe("critical");
-  });
-
-  it("passes through UPDATED as updated", () => {
-    expect(normalizeStatus("UPDATED")).toBe("updated");
-  });
-
-  it("passes through NO_UPDATES as no_updates", () => {
-    expect(normalizeStatus("NO_UPDATES")).toBe("no_updates");
-  });
-
-  it("passes through unknown status lowercased", () => {
-    expect(normalizeStatus("SomethingNew")).toBe("somethingnew");
+  it.each([
+    ["DONE",                  "done"],
+    ["FIXED",                 "done"],
+    ["fixed",                 "done"],
+    ["PARTIAL_FIX",           "done"],
+    ["FINDINGS",              "done"],
+    ["DONE_WITH_CONCERNS",    "done"],
+    ["NEEDS_CONTEXT",         "hitl"],
+    ["HAS_QUESTIONS",         "has_questions"],
+    ["CLEAN",                 "clean"],
+    ["WARNING",               "warning"],
+    ["BLOCKING",              "blocking"],
+    ["ALL_PASSING",           "all_passing"],
+    ["IMPLEMENTATION_ISSUE",  "implementation_issue"],
+    ["CANNOT_FIX",            "cannot_fix"],
+    ["CRITICAL",              "critical"],
+    ["UPDATED",               "updated"],
+    ["NO_UPDATES",            "no_updates"],
+    ["SomethingNew",          "somethingnew"],  // default: toLowerCase
+  ])('normalizeStatus("%s") === "%s"', (input, expected) => {
+    expect(normalizeStatus(input)).toBe(expected);
   });
 });
 

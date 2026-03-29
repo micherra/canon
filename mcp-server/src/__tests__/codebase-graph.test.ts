@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { codebaseGraph, LAYER_COLORS } from "../tools/codebase-graph.js";
+import { codebaseGraph } from "../tools/codebase-graph.ts";
 
 describe("codebaseGraph", () => {
   let tmpDir: string;
@@ -13,6 +13,16 @@ describe("codebaseGraph", () => {
     await mkdir(join(tmpDir, "src", "api"), { recursive: true });
     await mkdir(join(tmpDir, "src", "services"), { recursive: true });
     await mkdir(join(tmpDir, "src", "utils"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({
+        layers: {
+          api: ["api"],
+          domain: ["services"],
+          shared: ["utils"],
+        },
+      }),
+    );
   });
 
   afterEach(async () => {
@@ -65,7 +75,7 @@ describe("codebaseGraph", () => {
     const apiLayer = result.layers.find((l) => l.name === "api");
     if (apiLayer) {
       expect(apiLayer.file_count).toBe(2);
-      expect(apiLayer.color).toBe(LAYER_COLORS.api);
+      expect(apiLayer.color).toMatch(/^hsl\(/);
     }
   });
 
@@ -85,6 +95,12 @@ describe("codebaseGraph", () => {
   it("returns empty graph when no source_dirs configured", async () => {
     const emptyDir = await mkdtemp(join(tmpdir(), "canon-empty-"));
     await mkdir(join(emptyDir, ".canon"), { recursive: true });
+    await writeFile(
+      join(emptyDir, ".canon", "config.json"),
+      JSON.stringify({
+        layers: { backend: ["src"] },
+      }),
+    );
 
     const result = await codebaseGraph({}, emptyDir, "/nonexistent");
     expect(result.nodes).toHaveLength(0);
@@ -93,10 +109,12 @@ describe("codebaseGraph", () => {
     await rm(emptyDir, { recursive: true, force: true });
   });
 
-  it("reads source_dirs from .canon/config.json", async () => {
+  it("derives scan dirs from layers in .canon/config.json", async () => {
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ source_dirs: ["src"] })
+      JSON.stringify({
+        layers: { src: ["src/**"] },
+      })
     );
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
 
@@ -105,18 +123,20 @@ describe("codebaseGraph", () => {
     expect(result.nodes[0].id).toBe("src/api/handler.ts");
   });
 
-  it("uses root_dir as fallback when no source_dirs configured", async () => {
+  it("uses root_dir as fallback when no layers with rooted globs configured", async () => {
     await writeFile(join(tmpDir, "src", "api", "a.ts"), `export const a = 1;`);
 
     const result = await codebaseGraph({ root_dir: tmpDir }, tmpDir, "/nonexistent");
     expect(result.nodes.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("source_dirs from config takes precedence over root_dir", async () => {
-    // Config says scan "src" only
+  it("layers-derived dirs take precedence over root_dir", async () => {
+    // Config layers say scan "src" only via glob
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ source_dirs: ["src"] })
+      JSON.stringify({
+        layers: { src: ["src/**"] },
+      })
     );
     // File inside src
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
@@ -124,7 +144,7 @@ describe("codebaseGraph", () => {
     await mkdir(join(tmpDir, "scripts"), { recursive: true });
     await writeFile(join(tmpDir, "scripts", "seed.ts"), `export const s = 1;`);
 
-    // Even though root_dir is passed, config source_dirs should win
+    // Even though root_dir is passed, layers-derived dirs should win
     const result = await codebaseGraph({ root_dir: tmpDir }, tmpDir, "/nonexistent");
     expect(result.nodes.every((n) => n.id.startsWith("src/"))).toBe(true);
     expect(result.nodes.find((n) => n.id.includes("scripts"))).toBeUndefined();
@@ -159,6 +179,15 @@ describe("codebaseGraph", () => {
 
   it("classifies app/ directory files as ui layer", async () => {
     await mkdir(join(tmpDir, "src", "app"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({
+        layers: {
+          ui: ["app"],
+          shared: ["utils"],
+        },
+      }),
+    );
     await writeFile(join(tmpDir, "src", "app", "page.tsx"), `export default function Page() { return <div/>; }`);
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
@@ -166,6 +195,90 @@ describe("codebaseGraph", () => {
     const appNode = result.nodes.find((n) => n.id === "src/app/page.tsx");
     expect(appNode).toBeDefined();
     expect(appNode!.layer).toBe("ui");
+  });
+
+  it("falls back to default layers when layers are missing from config", async () => {
+    // When config has no layers key, codebaseGraph must not throw and must use
+    // the DEFAULT_LAYER_MAPPINGS (api, ui, domain, data, infra, shared).
+    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({}));
+    // Add a file in src/api — default mappings assign "api" layer to "api" directories.
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
+
+    const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
+
+    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes[0].id).toBe("src/api/handler.ts");
+    // Default layer inference assigns "api" to files under api/
+    expect(result.nodes[0].layer).toBe("api");
+    expect(result.edges).toHaveLength(0);
+    // layers summary reflects the default inference
+    expect(result.layers).toHaveLength(1);
+    expect(result.layers[0].name).toBe("api");
+    expect(result.layers[0].file_count).toBe(1);
+  });
+
+  it("merges inferred composition edges from llm-style references", async () => {
+    await mkdir(join(tmpDir, "src", "templates"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({
+        layers: { llm: ["src/templates/**"] },
+        graph: {
+          composition: {
+            enabled: true,
+            file_patterns: [".md"],
+            min_confidence: 0.7,
+          },
+        },
+      })
+    );
+    await writeFile(
+      join(tmpDir, "src", "templates", "planner.md"),
+      "uses: ./summarizer.md\n"
+    );
+    await writeFile(
+      join(tmpDir, "src", "templates", "summarizer.md"),
+      "name: summarizer\n"
+    );
+
+    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+    const compositionEdge = result.edges.find(
+      (e) =>
+        e.source === "src/templates/planner.md" &&
+        e.target === "src/templates/summarizer.md" &&
+        e.type === "composition"
+    );
+    expect(compositionEdge).toBeDefined();
+    expect(compositionEdge?.origin).toBe("inferred-llm");
+    expect(compositionEdge?.confidence).toBeGreaterThanOrEqual(0.7);
+  });
+
+  it("respects composition config when disabled", async () => {
+    await mkdir(join(tmpDir, "src", "templates"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({
+        layers: { llm: ["src/templates/**"] },
+        graph: {
+          composition: {
+            enabled: false,
+            file_patterns: [".md"],
+          },
+        },
+      })
+    );
+    await writeFile(
+      join(tmpDir, "src", "templates", "planner.md"),
+      "uses: ./summarizer.md\n"
+    );
+    await writeFile(
+      join(tmpDir, "src", "templates", "summarizer.md"),
+      "name: summarizer\n"
+    );
+
+    const result = await codebaseGraph({}, tmpDir, "/nonexistent");
+    const compositionEdge = result.edges.find((e) => e.type === "composition");
+    expect(compositionEdge).toBeUndefined();
   });
 });
 

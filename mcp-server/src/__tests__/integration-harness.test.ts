@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,16 +29,16 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { reportResult } from "../tools/report-result.js";
-import { updateBoard } from "../tools/update-board.js";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.js";
-import { checkConvergence } from "../tools/check-convergence.js";
-import { filterCannotFix } from "../orchestration/convergence.js";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { writeBoard, initBoard, readBoard } from "../orchestration/board.js";
-import { BoardSchema } from "../orchestration/flow-schema.js";
-import type { FlowEventMap } from "../orchestration/events.js";
-import type { ResolvedFlow, Board } from "../orchestration/flow-schema.js";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { checkConvergence } from "../tools/check-convergence.ts";
+import { filterCannotFix } from "../orchestration/convergence.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { writeBoard, initBoard, readBoard } from "../orchestration/board.ts";
+import { BoardSchema } from "../orchestration/flow-schema.ts";
+import type { FlowEventMap } from "../orchestration/events.ts";
+import type { ResolvedFlow, Board } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -334,18 +334,6 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
     expect(stateEnteredEvents).toHaveLength(0);
   });
 
-  it("cleans up board_updated listener after emission (no listener leak)", async () => {
-    const workspace = makeTmpWorkspace();
-    const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
-
-    const before = flowEventBus.listenerCount("board_updated");
-
-    await updateBoard({ workspace, action: "enter_state", state_id: "implement" });
-
-    const after = flowEventBus.listenerCount("board_updated");
-    expect(after).toBe(before);
-  });
 
   it("emits board_updated on complete_flow action", async () => {
     const workspace = makeTmpWorkspace();
@@ -705,7 +693,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     // but if it were present it would not produce a deferred warning either.
   });
 
-  it("emits warning when state has 'timeout' field", async () => {
+  it("returns timeout_ms when state has valid 'timeout' field", async () => {
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
@@ -733,10 +721,13 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       variables: {},
     });
 
-    expect(result.warnings?.some((w) => w.includes("timeout"))).toBe(true);
+    expect(result.timeout_ms).toBe(1800000); // 30 minutes
+    // No deferred warning for timeout — it's now implemented
+    const deferredWarnings = result.warnings?.filter((w) => w.includes("not yet implemented")) ?? [];
+    expect(deferredWarnings.some((w) => w.includes("timeout"))).toBe(false);
   });
 
-  it("emits warnings for multiple deferred fields simultaneously", async () => {
+  it("no deferred-field warnings when timeout, large_diff_threshold, and gate are all set", async () => {
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
@@ -766,13 +757,11 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       variables: {},
     });
 
-    expect(result.warnings).toBeDefined();
+    // All three fields are now implemented — no deferred warnings
     const fieldWarnings = result.warnings?.filter((w) => w.includes("not yet implemented")) ?? [];
-    // gate is now implemented — only timeout and large_diff_threshold remain deferred
-    expect(fieldWarnings.length).toBe(2);
-    expect(fieldWarnings.some((w) => w.includes("timeout"))).toBe(true);
-    expect(fieldWarnings.some((w) => w.includes("large_diff_threshold"))).toBe(true);
-    expect(fieldWarnings.some((w) => w.includes("gate"))).toBe(false);
+    expect(fieldWarnings.length).toBe(0);
+    // timeout_ms should be set
+    expect(result.timeout_ms).toBe(900000); // 15 minutes
   });
 });
 
@@ -886,7 +875,7 @@ describe("backward compatibility: board.json without new fields", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Integration: store_pr_review → PrStore round-trip with pr_number filtering
+// Integration: store_pr_review → DriftStore round-trip with pr_number filtering
 // (harness-01 gap: store + retrieve with filter)
 // ---------------------------------------------------------------------------
 
@@ -896,7 +885,7 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
     await mkdir(join(workspace, ".canon"), { recursive: true });
 
     const { storePrReview } = await import("../tools/store-pr-review.js");
-    const { PrStore } = await import("../drift/pr-store.js");
+    const { DriftStore } = await import("../drift/store.js");
 
     // Store two reviews for PR #1 and one for PR #2
     await storePrReview(
@@ -933,9 +922,9 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
       workspace
     );
 
-    const store = new PrStore(workspace);
-    const pr1Reviews = await store.getReviews(1);
-    const pr2Reviews = await store.getReviews(2);
+    const store = new DriftStore(workspace);
+    const pr1Reviews = await store.getReviews({ prNumber: 1 });
+    const pr2Reviews = await store.getReviews({ prNumber: 2 });
     const allReviews = await store.getReviews();
 
     expect(pr1Reviews).toHaveLength(2);
@@ -944,7 +933,7 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
     expect(allReviews).toHaveLength(3);
 
     // All have unique IDs
-    const ids = allReviews.map((r) => r.pr_review_id);
+    const ids = allReviews.map((r) => r.review_id);
     expect(new Set(ids).size).toBe(3);
   });
 });

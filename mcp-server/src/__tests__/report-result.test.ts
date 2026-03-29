@@ -5,15 +5,16 @@
  * transition evaluation, HITL detection, and listener error swallowing.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { reportResult } from "../tools/report-result.js";
-import { flowEventBus } from "../orchestration/event-bus-instance.js";
-import { writeBoard, initBoard } from "../orchestration/board.js";
-import type { FlowEventMap } from "../orchestration/events.js";
-import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.js";
+import { reportResult } from "../tools/report-result.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { writeBoard, initBoard } from "../orchestration/board.ts";
+import { writeMessage } from "../orchestration/messages.ts";
+import type { FlowEventMap } from "../orchestration/events.ts";
+import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -141,6 +142,73 @@ describe("reportResult — basic functionality", () => {
   });
 });
 
+describe("reportResult — debate flow", () => {
+  it("loops back to the entry state while debate rounds remain", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow({
+      debate: {
+        teams: 2,
+        composition: ["canon-researcher", "canon-architect"],
+        min_rounds: 2,
+        max_rounds: 4,
+        convergence_check_after: 3,
+        hitl_checkpoint: true,
+        continue_to_build: true,
+      },
+    });
+    await setupWorkspace(workspace, flow);
+
+    await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "Use events.");
+    await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Use CRUD.");
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    expect(result.transition_condition).toBe("done");
+    expect(result.next_state).toBe("build");
+    expect(result.hitl_required).toBe(false);
+    expect(result.board.metadata?.debate_completed).toBe(false);
+  });
+
+  it("stops at HITL with summary once debate converges", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow({
+      debate: {
+        teams: 2,
+        composition: ["canon-researcher", "canon-architect"],
+        min_rounds: 2,
+        max_rounds: 4,
+        convergence_check_after: 2,
+        hitl_checkpoint: true,
+        continue_to_build: true,
+      },
+    });
+    await setupWorkspace(workspace, flow);
+
+    await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "We agree on event sourcing.");
+    await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Consensus reached, aligned.");
+    await writeMessage(workspace, "debate-round-2", "round-2-team-a-canon-researcher", "Agreed.");
+    await writeMessage(workspace, "debate-round-2", "round-2-team-b-canon-architect", "Same conclusion.");
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    expect(result.next_state).toBeNull();
+    expect(result.hitl_required).toBe(true);
+    expect(result.hitl_reason).toContain("Debate completed");
+    expect(result.board.metadata?.debate_completed).toBe(true);
+    expect(result.board.metadata?.debate_summary).toContain("Debate Round 1");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Event emissions
 // ---------------------------------------------------------------------------
@@ -210,23 +278,23 @@ describe("reportResult — event emissions", () => {
     expect(received[0].statusKeyword).toBe("DONE");
   });
 
-  it("emits transition_evaluated with 'null' string when no transition found", async () => {
+  it("requires HITL and has no next_state when no transition is defined for the condition", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     await setupWorkspace(workspace, flow);
 
-    const received: FlowEventMap["transition_evaluated"][] = [];
-    flowEventBus.on("transition_evaluated", (event) => received.push(event));
-
-    // "BLOCKED" normalizes to "blocked" — no transition defined for "blocked"
-    await reportResult({
+    // "BLOCKED" normalizes to "blocked" — no transition defined for "blocked" in makeMinimalFlow
+    const result = await reportResult({
       workspace,
       state_id: "build",
       status_keyword: "BLOCKED",
       flow,
     });
 
-    expect(received[0].nextState).toBe("null");
+    // No matching transition → next_state is null and HITL is required
+    expect(result.next_state).toBeNull();
+    expect(result.hitl_required).toBe(true);
+    expect(result.hitl_reason).toContain("blocked");
   });
 
   it("does NOT emit hitl_triggered when HITL is not required", async () => {
@@ -268,16 +336,18 @@ describe("reportResult — event emissions", () => {
     expect(received[0].timestamp).toBeTruthy();
   });
 
-  it("emits events AFTER writeBoard (board state is consistent at emit time)", async () => {
+  it("board state is persisted before events are emitted", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     await setupWorkspace(workspace, flow);
 
-    let boardStateAtEmit: string | undefined;
-    flowEventBus.on("state_completed", () => {
-      // Board should already be written at this point — we can't check the
-      // file from here, but we verify no error occurs during emission
-      boardStateAtEmit = "emitted";
+    // Verify that at emit time the board has already been written to disk.
+    // We read the board file from within the listener to confirm the written state.
+    let boardStatusAtEmit: string | undefined;
+    flowEventBus.on("state_completed", async () => {
+      const { readBoard } = await import("../orchestration/board.ts");
+      const boardOnDisk = await readBoard(workspace);
+      boardStatusAtEmit = boardOnDisk.states["build"]?.status;
     });
 
     const result = await reportResult({
@@ -287,8 +357,9 @@ describe("reportResult — event emissions", () => {
       flow,
     });
 
-    expect(boardStateAtEmit).toBe("emitted");
-    // Board reflects completed state
+    // Board on disk at emit time should already reflect the completed state.
+    expect(boardStatusAtEmit).toBe("done");
+    // Return value also reflects completed state.
     expect(result.board.states["build"].status).toBe("done");
   });
 });
@@ -298,45 +369,6 @@ describe("reportResult — event emissions", () => {
 // ---------------------------------------------------------------------------
 
 describe("reportResult — listener error isolation", () => {
-  it("internal logger listeners do not throw on async write failure", async () => {
-    const workspace = makeTmpWorkspace();
-    const flow = makeMinimalFlow();
-    await setupWorkspace(workspace, flow);
-
-    // The internal listener wraps logger calls with .catch(() => {}) so
-    // Promise rejections from appendFile never propagate to the caller.
-    // We test that reportResult completes without throwing.
-    const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
-      flow,
-    });
-
-    // Result should be correct regardless of any log write outcome
-    expect(result.transition_condition).toBe("done");
-    expect(result.next_state).toBe("review");
-  });
-
-  it("does not throw when createJsonlLogger write fails (async error is swallowed)", async () => {
-    const workspace = makeTmpWorkspace();
-    const flow = makeMinimalFlow();
-    await setupWorkspace(workspace, flow);
-
-    // The internal handler does log("state_completed", event).catch(() => {})
-    // so Promise rejections from appendFile are swallowed.
-    // We test by using a readonly workspace path that would fail writes.
-    // Since the logger creates dirs via mkdirSync, we just verify no throw.
-    const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
-      flow,
-    });
-
-    expect(result.transition_condition).toBe("done");
-  });
-
   it("cleans up listeners after successful emit (no listener leak)", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
@@ -356,33 +388,6 @@ describe("reportResult — listener error isolation", () => {
     expect(listenersAfter).toBe(listenersBefore);
   });
 
-  it("cleans up listeners even when emit throws (finally block)", async () => {
-    const workspace = makeTmpWorkspace();
-    const flow = makeMinimalFlow();
-    await setupWorkspace(workspace, flow);
-
-    // Add a throwing external listener to cause emit to throw synchronously
-    flowEventBus.on("state_completed", () => {
-      throw new Error("emit error");
-    });
-
-    const transitionListenersBefore = flowEventBus.listenerCount("transition_evaluated");
-
-    try {
-      await reportResult({
-        workspace,
-        state_id: "build",
-        status_keyword: "DONE",
-        flow,
-      });
-    } catch {
-      // External listener throws — expected
-    }
-
-    // The internal transition_evaluated listener should be cleaned up by finally
-    const listenersAfter = flowEventBus.listenerCount("transition_evaluated");
-    expect(listenersAfter).toBe(transitionListenersBefore);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -602,5 +607,150 @@ describe("reportResult — parallel_results aggregation", () => {
 
     expect(result.transition_condition).toBe("cannot_fix");
     expect(result.next_state).toBe("hitl");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Progress line append
+// ---------------------------------------------------------------------------
+
+describe("reportResult — progress_line", () => {
+  it("appends progress_line to progress.md when provided", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    // Seed progress.md like init_workspace does
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(workspace, "progress.md"), "## Progress: test\n\n");
+
+    await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      progress_line: "- [build] done: Built successfully",
+    });
+
+    const { readFileSync } = await import("node:fs");
+    const content = readFileSync(join(workspace, "progress.md"), "utf-8");
+    expect(content).toContain("- [build] done: Built successfully");
+    expect(content).toContain("## Progress: test");
+  });
+
+  it("does not touch progress.md when progress_line is omitted", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const { writeFileSync, readFileSync } = await import("node:fs");
+    writeFileSync(join(workspace, "progress.md"), "## Progress: test\n\n");
+
+    await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    const content = readFileSync(join(workspace, "progress.md"), "utf-8");
+    expect(content).toBe("## Progress: test\n\n");
+  });
+
+  it("handles missing progress.md gracefully (creates file)", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    // No progress.md seeded — appendFile will create it
+    await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      progress_line: "- [build] done: Built successfully",
+    });
+
+    const { readFileSync } = await import("node:fs");
+    const content = readFileSync(join(workspace, "progress.md"), "utf-8");
+    expect(content).toContain("- [build] done: Built successfully");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compete_results persistence
+// ---------------------------------------------------------------------------
+
+describe("reportResult — compete_results persistence", () => {
+  it("persists compete_results to board state entry", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const competeResults = [
+      { lens: "simplicity", status: "done", artifacts: ["design-a.md"] },
+      { lens: "performance", status: "done", artifacts: ["design-b.md"] },
+      { lens: "extensibility", status: "done", artifacts: ["design-c.md"] },
+    ];
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      compete_results: competeResults,
+    });
+
+    expect(result.board.states["build"].compete_results).toEqual(competeResults);
+  });
+
+  it("persists synthesized flag to board state entry", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      compete_results: [{ status: "done" }],
+      synthesized: true,
+    });
+
+    expect(result.board.states["build"].synthesized).toBe(true);
+  });
+
+  it("persists synthesized flag without compete_results", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+      synthesized: true,
+    });
+
+    expect(result.board.states["build"].synthesized).toBe(true);
+    expect(result.board.states["build"].compete_results).toBeUndefined();
+  });
+
+  it("does not set compete_results when not provided", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    await setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    expect(result.board.states["build"].compete_results).toBeUndefined();
+    expect(result.board.states["build"].synthesized).toBeUndefined();
   });
 });

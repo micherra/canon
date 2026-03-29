@@ -6,13 +6,12 @@ import {
   resolveFragments,
   validateFlow,
   loadAndResolveFlow,
-} from "../orchestration/flow-parser.js";
+} from "../orchestration/flow-parser.ts";
 import type {
   FlowDefinition,
   FragmentDefinition,
   ResolvedFlow,
-  StateDefinition,
-} from "../orchestration/flow-schema.js";
+} from "../orchestration/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

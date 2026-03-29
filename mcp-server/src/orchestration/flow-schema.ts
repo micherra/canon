@@ -28,6 +28,7 @@ export const STATUS_KEYWORDS = [
   "critical",
   "updated",
   "no_updates",
+  "epic_complete",
 ] as const;
 
 /** Maps agent-reported statuses to transition conditions. */
@@ -38,6 +39,7 @@ export const STATUS_ALIASES: Record<string, string> = {
   done_with_concerns: "done",
   needs_context: "hitl",
   has_questions: "has_questions",
+  epic_complete: "epic_complete",
 };
 
 // ---------------------------------------------------------------------------
@@ -57,11 +59,14 @@ export const StuckWhenSchema = z.enum([
   "same_file_test",
   "same_status",
   "no_progress",
+  "no_gate_progress",  // NEW: detect stuck when gate output and pass state don't change
 ]);
 
 export const SkipWhenSchema = z.enum([
   "no_contract_changes",
   "no_fix_requested",
+  "auto_approved",
+  "no_open_questions",  // NEW: skip targeted-research when no open questions from pattern-check
 ]);
 
 export const ContextInjectionSchema = z.object({
@@ -85,6 +90,92 @@ export const RoleEntrySchema = z.union([
   }),
 ]);
 
+export const EffectTypeSchema = z.enum([
+  "persist_review",
+  "check_postconditions",
+]);
+
+export const EffectSchema = z.object({
+  type: EffectTypeSchema,
+  artifact: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Compete & Debate config schemas
+// ---------------------------------------------------------------------------
+
+/** Configuration for competitive state execution — N parallel agents + synthesis. */
+export const CompeteConfigObjectSchema = z.object({
+  count: z.number().min(2).max(5),
+  strategy: z.enum(["synthesize", "select"]).default("synthesize"),
+  lenses: z.array(z.string()).optional(),
+});
+
+/** Compete field: explicit config, "auto" (orchestrator decides), or absent. */
+export const CompeteConfigSchema = z.union([
+  z.literal("auto"),
+  CompeteConfigObjectSchema,
+]);
+
+/** Configuration for pre-flight debate protocol. */
+export const DebateConfigSchema = z.object({
+  teams: z.number().min(2).max(5).default(3),
+  composition: z.array(z.string()),
+  min_rounds: z.number().default(2),
+  max_rounds: z.number().default(5),
+  convergence_check_after: z.number().default(3),
+  hitl_checkpoint: z.boolean().default(true),
+  continue_to_build: z.boolean().default(true),
+});
+
+// ---------------------------------------------------------------------------
+// Quality gate result schemas
+// ---------------------------------------------------------------------------
+
+/** Gate result stored on board state (source of truth imported from here, not local interfaces). */
+export const GateResultSchema = z.object({
+  passed: z.boolean(),
+  gate: z.string(),
+  command: z.string().optional(),
+  output: z.string().optional(),
+  exitCode: z.number().optional(),
+});
+
+/** Discovered gate command reported by agents (e.g. tester, reviewer). */
+export const DiscoveredGateSchema = z.object({
+  command: z.string(),
+  source: z.string(), // agent that discovered it, e.g. "tester", "reviewer"
+});
+
+/** Postcondition assertion declaration (for flow YAML or agent-discovered). */
+export const PostconditionAssertionSchema = z.object({
+  type: z.enum(["file_exists", "file_changed", "pattern_match", "no_pattern", "bash_check"]),
+  target: z.string().optional(),
+  pattern: z.string().optional(),
+  command: z.string().optional(),
+});
+
+/** Postcondition evaluation result. */
+export const PostconditionResultSchema = z.object({
+  passed: z.boolean(),
+  name: z.string(),
+  type: z.string(),
+  output: z.string().optional(),
+});
+
+/** Violation severity counts. */
+export const ViolationSeveritiesSchema = z.object({
+  blocking: z.number(),
+  warning: z.number(),
+});
+
+/** Test result counts. */
+export const TestResultsSchema = z.object({
+  passed: z.number(),
+  failed: z.number(),
+  skipped: z.number(),
+});
+
 export const StateDefinitionSchema = z.object({
   type: StateTypeSchema,
   agent: z.string().optional(),
@@ -96,6 +187,8 @@ export const StateDefinitionSchema = z.object({
   max_iterations: z.coerce.number().optional(),
   stuck_when: StuckWhenSchema.optional(),
   gate: z.string().optional(),
+  gates: z.array(z.string()).optional(),
+  postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   iterate_on: z.string().optional(),
   inject_context: z.array(ContextInjectionSchema).optional(),
@@ -103,7 +196,8 @@ export const StateDefinitionSchema = z.object({
   large_diff_threshold: z.number().optional(),
   cluster_by: z.enum(["directory", "layer"]).optional(),
   timeout: z.string().optional(),
-  overlays: z.array(z.string()).optional(),
+  effects: z.array(EffectSchema).optional(),
+  compete: CompeteConfigSchema.optional(),
 });
 
 export const FragmentIncludeSchema = z.object({
@@ -125,6 +219,7 @@ export const FlowDefinitionSchema = z.object({
   gates: z.record(z.string(), z.string()).optional(),
   includes: z.array(FragmentIncludeSchema).optional(),
   states: z.record(z.string(), StateDefinitionSchema).optional(),
+  debate: DebateConfigSchema.optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -143,6 +238,8 @@ export const FragmentStateDefinitionSchema = z.object({
   max_iterations: z.union([z.coerce.number(), z.string()]).optional(),
   stuck_when: z.union([StuckWhenSchema, z.string()]).optional(),
   gate: z.string().optional(),
+  gates: z.array(z.string()).optional(),
+  postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   iterate_on: z.string().optional(),
   inject_context: z.array(ContextInjectionSchema).optional(),
@@ -150,7 +247,8 @@ export const FragmentStateDefinitionSchema = z.object({
   large_diff_threshold: z.union([z.number(), z.string()]).optional(),
   cluster_by: z.enum(["directory", "layer"]).optional(),
   timeout: z.string().optional(),
-  overlays: z.array(z.string()).optional(),
+  effects: z.array(EffectSchema).optional(),
+  compete: CompeteConfigSchema.optional(),
 });
 
 export const FragmentDefinitionSchema = z.object({
@@ -158,7 +256,7 @@ export const FragmentDefinitionSchema = z.object({
   description: z.string().optional(),
   type: z.literal("consultation").optional(),
   entry: z.string().optional(),
-  params: z.record(z.string(), z.union([z.string(), z.number(), z.null()])).optional(),
+  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
   states: z.record(z.string(), FragmentStateDefinitionSchema).optional(),
   // Consultation-specific fields
   agent: z.string().optional(),
@@ -166,6 +264,8 @@ export const FragmentDefinitionSchema = z.object({
   section: z.string().optional(),
   artifact: z.string().optional(),
   timeout: z.string().optional(),
+  min_waves: z.number().optional(),
+  skip_when: SkipWhenSchema.optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -181,6 +281,8 @@ export const ConsultationFragmentSchema = z.object({
   artifact: z.string().optional(),
   timeout: z.string().optional(),
   spawn_instruction: z.string().optional(),
+  min_waves: z.number().optional(),
+  skip_when: SkipWhenSchema.optional(),
 });
 
 export const ResolvedFlowSchema = FlowDefinitionSchema.extend({
@@ -229,9 +331,16 @@ export const WaveResultSchema = z.object({
 });
 
 export const StateMetricsSchema = z.object({
-  duration_ms: z.number(),
-  spawns: z.number(),
-  model: z.string(),
+  duration_ms: z.number().optional(),
+  spawns: z.number().optional(),
+  model: z.string().optional(),
+  gate_results: z.array(GateResultSchema).optional(),
+  postcondition_results: z.array(PostconditionResultSchema).optional(),
+  violation_count: z.number().optional(),
+  violation_severities: ViolationSeveritiesSchema.optional(),
+  test_results: TestResultsSchema.optional(),
+  files_changed: z.number().optional(),
+  revision_count: z.number().optional(),
 });
 
 export const ArtifactHistoryEntrySchema = z.object({
@@ -252,11 +361,21 @@ export const BoardStateEntrySchema = z.object({
   wave_total: z.number().optional(),
   wave_results: z.record(z.string(), WaveResultSchema).optional(),
   metrics: StateMetricsSchema.optional(),
+  gate_results: z.array(GateResultSchema).optional(),
+  postcondition_results: z.array(PostconditionResultSchema).optional(),
+  discovered_gates: z.array(DiscoveredGateSchema).optional(),
+  discovered_postconditions: z.array(PostconditionAssertionSchema).optional(),
   parallel_results: z.array(z.object({
     item: z.string(),
     status: z.string(),
     artifacts: z.array(z.string()).optional(),
   })).optional(),
+  compete_results: z.array(z.object({
+    lens: z.string().optional(),
+    status: z.string(),
+    artifacts: z.array(z.string()).optional(),
+  })).optional(),
+  synthesized: z.boolean().optional(),
 });
 
 export const CannotFixItemSchema = z.object({
@@ -283,11 +402,17 @@ export const ProgressHistoryEntrySchema = z.object({
   artifact_count: z.number(),
 });
 
+export const GateProgressHistoryEntrySchema = z.object({
+  gate_output_hash: z.string(),
+  passed: z.boolean(),
+});
+
 export const HistoryEntrySchema = z.union([
   ViolationHistoryEntrySchema,
   FileTestHistoryEntrySchema,
   StatusHistoryEntrySchema,
   ProgressHistoryEntrySchema,
+  GateProgressHistoryEntrySchema,
 ]);
 
 export const IterationEntrySchema = z.object({
@@ -325,6 +450,7 @@ export const BoardSchema = z.object({
   blocked: BlockedInfoSchema,
   concerns: z.array(ConcernEntrySchema),
   skipped: z.array(z.string()),
+  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -350,6 +476,14 @@ export const SessionSchema = z.object({
 // Inferred TypeScript types
 // ---------------------------------------------------------------------------
 
+export type EffectType = z.infer<typeof EffectTypeSchema>;
+export type Effect = z.infer<typeof EffectSchema>;
+export type GateResult = z.infer<typeof GateResultSchema>;
+export type DiscoveredGate = z.infer<typeof DiscoveredGateSchema>;
+export type PostconditionAssertion = z.infer<typeof PostconditionAssertionSchema>;
+export type PostconditionResult = z.infer<typeof PostconditionResultSchema>;
+export type ViolationSeverities = z.infer<typeof ViolationSeveritiesSchema>;
+export type TestResults = z.infer<typeof TestResultsSchema>;
 export type StateType = z.infer<typeof StateTypeSchema>;
 export type StuckWhen = z.infer<typeof StuckWhenSchema>;
 export type SkipWhen = z.infer<typeof SkipWhenSchema>;
@@ -372,9 +506,38 @@ export type ViolationHistoryEntry = z.infer<typeof ViolationHistoryEntrySchema>;
 export type FileTestHistoryEntry = z.infer<typeof FileTestHistoryEntrySchema>;
 export type StatusHistoryEntry = z.infer<typeof StatusHistoryEntrySchema>;
 export type ProgressHistoryEntry = z.infer<typeof ProgressHistoryEntrySchema>;
+export type GateProgressHistoryEntry = z.infer<typeof GateProgressHistoryEntrySchema>;
 export type HistoryEntry = z.infer<typeof HistoryEntrySchema>;
 export type IterationEntry = z.infer<typeof IterationEntrySchema>;
 export type BlockedInfo = z.infer<typeof BlockedInfoSchema>;
 export type ConcernEntry = z.infer<typeof ConcernEntrySchema>;
 export type Board = z.infer<typeof BoardSchema>;
 export type Session = z.infer<typeof SessionSchema>;
+export type CompeteConfigObject = z.infer<typeof CompeteConfigObjectSchema>;
+export type CompeteConfig = z.infer<typeof CompeteConfigSchema>;
+export type DebateConfig = z.infer<typeof DebateConfigSchema>;
+
+// ---------------------------------------------------------------------------
+// Wave event types (used by wave-events.ts, inject-wave-event.ts, etc.)
+// ---------------------------------------------------------------------------
+
+export type WaveEventType =
+  | "add_task"
+  | "skip_task"
+  | "reprioritize"
+  | "inject_context"
+  | "guidance"
+  | "pause";
+
+export type WaveEventResolution = Record<string, unknown>;
+
+export interface WaveEvent {
+  id: string;
+  type: WaveEventType;
+  payload: Record<string, unknown>;
+  timestamp: string;
+  status: "pending" | "applied" | "rejected";
+  applied_at?: string;
+  resolution?: WaveEventResolution;
+  rejection_reason?: string;
+}

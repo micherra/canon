@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ResolvedFlow, Board } from "../orchestration/flow-schema.js";
+import type { ResolvedFlow, Board } from "../orchestration/flow-schema.ts";
 import {
   initBoard,
   readBoard,
@@ -12,7 +12,7 @@ import {
   setBlocked,
   recordConsultationResult,
   recordGateResult,
-} from "../orchestration/board.js";
+} from "../orchestration/board.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

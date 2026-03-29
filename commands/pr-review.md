@@ -23,7 +23,7 @@ Build a `review_scope` object for the orchestrator:
 
 - If PR number: `{ type: "pr", target: "{number}" }`
 - If branch: `{ type: "branch", target: "{branch}" }`
-- If `--incremental`: Check `.canon/pr-reviews.jsonl` for the last reviewed SHA for this PR. Set `{ type: "pr", target: "{number}", since_sha: "{sha}" }`
+- If `--incremental`: Query `DriftStore.getLastReviewForPr(number)` (reads from `.canon/reviews.jsonl`) for the last reviewed SHA for this PR. Set `{ type: "pr", target: "{number}", since_sha: "{sha}" }`
 
 If `--layer` is specified, add `layer: "{name}"` to the scope.
 
@@ -51,7 +51,7 @@ If `--post-comments` was specified:
 
 ### Step 5: Log and present
 
-Log the review to `.canon/pr-reviews/{number}/REVIEW.md` and update `.canon/pr-reviews.jsonl` with the current HEAD SHA (for `--incremental` support).
+Log the review to `.canon/pr-reviews/{number}/REVIEW.md` and update `.canon/reviews.jsonl` (via `DriftStore.appendReview`) with the current HEAD SHA (for `--incremental` support).
 
 Display the review to the user:
 - Verdict prominently displayed

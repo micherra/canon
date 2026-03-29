@@ -1,10 +1,14 @@
-import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.js";
-import { loadAllOverlays, filterOverlaysForAgent, buildOverlayInjection, type OverlayDefinition } from "../orchestration/overlays.js";
-import { buildBulletinInstructions } from "../orchestration/bulletin.js";
-import type { ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.js";
-import { evaluateSkipWhen } from "../orchestration/skip-when.js";
-import { readBoard } from "../orchestration/board.js";
-import { resolveContextInjections } from "../orchestration/inject-context.js";
+import { readFile } from "fs/promises";
+import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.ts";
+import { buildMessageInstructions } from "../orchestration/messages.ts";
+import { buildDebatePrompt, debateTeamLabel, inspectDebateProgress } from "../orchestration/debate.ts";
+import { readWaveGuidance, assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
+import type { ResolvedFlow, StateDefinition, CompeteConfig } from "../orchestration/flow-schema.ts";
+import { expandCompetitorPrompts, type CompeteConfig as ExpandedCompeteConfig } from "../orchestration/compete.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { readBoard } from "../orchestration/board.ts";
+import { resolveContextInjections } from "../orchestration/inject-context.ts";
+import { clusterDiff, type FileCluster } from "../orchestration/diff-cluster.ts";
 
 /** A task item passed to wave/parallel-per states — either a name or a structured plan. */
 export type TaskItem = string | Record<string, string | number | boolean | string[]>;
@@ -16,14 +20,25 @@ interface SpawnPromptInput {
   variables: Record<string, string>;
   items?: TaskItem[];
   role?: string;
-  overlays?: string[];
   project_dir?: string;
   wave?: number;
   peer_count?: number;
-  loaded_overlays?: OverlayDefinition[];
+  /**
+   * Completed consultation outputs to inject into the wave briefing.
+   * When provided alongside `wave`, assembleWaveBriefing is called and the
+   * result is appended to each wave/parallel-per prompt entry.
+   * Must be pre-escaped by the caller (e.g. via escapeDollarBrace).
+   */
+  consultation_outputs?: Record<string, { section?: string; summary: string }>;
+  /**
+   * Pre-read board — if provided, skips the internal readBoard call.
+   * Use this when the caller has already read the board (e.g., enterAndPrepareState)
+   * to avoid a redundant round-trip.
+   */
+  _board?: import("../orchestration/flow-schema.ts").Board;
 }
 
-interface SpawnPromptEntry {
+export interface SpawnPromptEntry {
   agent: string;
   prompt: string;
   role?: string;
@@ -36,6 +51,9 @@ interface SpawnPromptResult {
   state_type: string;
   skip_reason?: string;
   warnings?: string[];
+  clusters?: FileCluster[];
+  timeout_ms?: number;
+  fanned_out?: boolean;
 }
 
 /**
@@ -55,6 +73,14 @@ function templatePaths(
   if (!template) return [];
   const names = Array.isArray(template) ? template : [template];
   return names.map((name) => `${pluginDir}/templates/${name}.md`);
+}
+
+function resolveCompeteConfig(config: CompeteConfig | undefined): ExpandedCompeteConfig | undefined {
+  if (!config) return undefined;
+  if (config === "auto") {
+    return { count: 3, strategy: "synthesize" };
+  }
+  return config;
 }
 
 /**
@@ -78,6 +104,41 @@ function substituteItem(prompt: string, item: TaskItem): string {
   return result;
 }
 
+/**
+ * Truncate progress.md content to at most maxEntries entry lines.
+ * Header lines (lines before the first "- [" entry) are always preserved.
+ * If entry count is within the cap, content is returned unchanged.
+ */
+export function truncateProgress(content: string, maxEntries: number): string {
+  const lines = content.split("\n");
+
+  // Find the index of the first entry line (starts with "- [")
+  const firstEntryIndex = lines.findIndex((l) => l.startsWith("- ["));
+  if (firstEntryIndex === -1) {
+    // No entries found — return content unchanged
+    return content;
+  }
+
+  const headerLines = lines.slice(0, firstEntryIndex);
+  const entryAndTrailing = lines.slice(firstEntryIndex);
+
+  // Separate actual entry lines from any trailing non-entry lines
+  // Entry lines are those matching /^- \[/; trailing blank lines may follow
+  const entryLines = entryAndTrailing.filter((l) => l.startsWith("- ["));
+  const trailingLines = entryAndTrailing.filter((l) => !l.startsWith("- ["));
+
+  if (entryLines.length <= maxEntries) {
+    return content;
+  }
+
+  if (maxEntries <= 0) {
+    return [...headerLines, ...trailingLines].join("\n");
+  }
+
+  const keptEntries = entryLines.slice(-maxEntries);
+  return [...headerLines, ...keptEntries, ...trailingLines].join("\n");
+}
+
 export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnPromptResult> {
   const { state_id, flow, variables, items } = input;
 
@@ -90,10 +151,18 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     return { prompts: [], state_type: "terminal" };
   }
 
+  // Read board once if any board-dependent feature is active.
+  // If a pre-read board is provided (e.g., from enterAndPrepareState), use it directly
+  // to avoid a redundant readBoard call.
+  const needsBoard =
+    !!state.skip_when ||
+    (state.inject_context != null && state.inject_context.length > 0) ||
+    state.large_diff_threshold != null;
+  const board = input._board ?? (needsBoard ? await readBoard(input.workspace) : undefined);
+
   // Evaluate skip_when condition before spawning
   if (state.skip_when) {
-    const board = await readBoard(input.workspace);
-    const skipResult = await evaluateSkipWhen(state.skip_when, input.workspace, board);
+    const skipResult = await evaluateSkipWhen(state.skip_when, input.workspace, board!);
     if (skipResult.skip) {
       return {
         prompts: [],
@@ -113,8 +182,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
   const warnings: string[] = [];
 
   if (state.inject_context && state.inject_context.length > 0) {
-    const board = await readBoard(input.workspace);
-    const injectionResult = await resolveContextInjections(state.inject_context, board, input.workspace);
+    const injectionResult = await resolveContextInjections(state.inject_context, board!, input.workspace);
 
     // Add injection warnings
     warnings.push(...injectionResult.warnings);
@@ -133,6 +201,22 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     mergedVariables = { ...mergedVariables, ...injectionResult.variables };
   }
 
+  // Resolve progress.md if the flow declares a progress path
+  if (input.flow.progress) {
+    const progressPath = input.flow.progress.replace(
+      /\$\{WORKSPACE\}/g,
+      input.workspace
+    );
+    try {
+      const rawProgress = await readFile(progressPath, "utf-8");
+      const progressContent = truncateProgress(rawProgress, 8);
+      mergedVariables = { ...mergedVariables, progress: progressContent };
+    } catch {
+      // progress.md may not exist yet -- degrade gracefully
+      mergedVariables = { ...mergedVariables, progress: "" };
+    }
+  }
+
   // Substitute flow-level variables (using merged variables that include injected context)
   let basePrompt = substituteVariables(rawInstruction, mergedVariables);
 
@@ -149,23 +233,110 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     }
   }
 
-  // Warn about unimplemented fields that are present but not yet evaluated at runtime
-  // large_diff_threshold, cluster_by, and timeout remain unimplemented at runtime.
-  // gate and consultations are now implemented — they are no longer deferred.
-  const deferredFields = ["large_diff_threshold", "cluster_by", "timeout"] as const;
-  for (const field of deferredFields) {
-    if (state[field] !== undefined) {
-      warnings.push(`StateDefinition field "${field}" is present but not yet implemented at runtime`);
+  // Parse timeout override
+  let timeout_ms: number | undefined;
+  if (state.timeout) {
+    timeout_ms = parseTimeout(state.timeout);
+    if (timeout_ms === undefined) {
+      warnings.push(`Invalid timeout format "${state.timeout}" — expected e.g. "10m", "1h", "90s"`);
+    }
+  }
+
+  // Evaluate large_diff_threshold — cluster files when diff exceeds threshold
+  let clusters: FileCluster[] | undefined;
+  if (state.large_diff_threshold != null) {
+    const baseCommit = board?.base_commit ?? "";
+    const strategy = state.cluster_by ?? "directory";
+    const result = clusterDiff(baseCommit, state.large_diff_threshold, strategy);
+    if (result) {
+      clusters = result;
     }
   }
 
   const paths = pluginDir ? templatePaths(state.template, pluginDir) : [];
   const prompts: SpawnPromptEntry[] = [];
+  const competeConfig = state.type === "single" ? resolveCompeteConfig(state.compete) : undefined;
+  const debateConfig = state_id === flow.entry ? flow.debate : undefined;
+
+  if (state.type !== "single" && state.compete) {
+    warnings.push(`State "${state_id}" declares compete but only single states support prompt expansion`);
+  }
+
+  if (debateConfig) {
+    const debate = await inspectDebateProgress(input.workspace, debateConfig);
+
+    if (!debate.completed) {
+      const teamLabels = Array.from({ length: debateConfig.teams }, (_, i) => debateTeamLabel(i));
+      for (const teamLabel of teamLabels) {
+        const otherTeamLabels = teamLabels.filter((label) => label !== teamLabel);
+        for (const agent of debateConfig.composition) {
+          prompts.push({
+            agent,
+            role: teamLabel,
+            item: { team: teamLabel, round: debate.next_round, channel: debate.next_channel },
+            template_paths: paths,
+            prompt: buildDebatePrompt(
+              basePrompt,
+              input.workspace,
+              debate.next_round,
+              debateConfig.max_rounds,
+              teamLabel,
+              otherTeamLabels,
+              agent,
+              debate.transcript,
+            ),
+          });
+        }
+      }
+
+      return {
+        prompts,
+        state_type: state.type,
+        ...(warnings.length > 0 ? { warnings } : {}),
+        timeout_ms,
+        fanned_out: true,
+      };
+    }
+
+    if (debate.summary) {
+      basePrompt += `\n\n${debate.summary}`;
+    }
+    warnings.push(
+      `Debate completed after round ${debate.last_completed_round}${
+        debate.convergence?.reason ? `: ${debate.convergence.reason}` : ""
+      }`,
+    );
+  }
 
   switch (state.type) {
     case "single": {
       const agent = state.agent ?? "unknown";
-      prompts.push({ agent, prompt: basePrompt, template_paths: paths });
+      if (clusters && clusters.length > 0) {
+        // Fan out: one prompt per cluster, scoped to cluster files
+        for (const cluster of clusters) {
+          const clusterItem: TaskItem = {
+            cluster_key: cluster.key,
+            files: cluster.files.join(", "),
+            file_count: cluster.files.length,
+          };
+          const prompt = substituteItem(basePrompt, clusterItem);
+          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
+        }
+      } else if (competeConfig) {
+        const expanded = expandCompetitorPrompts(
+          { agent, prompt: basePrompt, template_paths: paths },
+          competeConfig,
+        );
+        for (const entry of expanded) {
+          prompts.push({
+            agent: entry.agent,
+            prompt: entry.prompt,
+            template_paths: entry.template_paths,
+          });
+        }
+      } else {
+        prompts.push({ agent, prompt: basePrompt, template_paths: paths });
+      }
       break;
     }
 
@@ -202,10 +373,23 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
 
     case "parallel-per": {
       const agent = state.agent ?? "unknown";
-      const perItems = items ?? [];
-      for (const item of perItems) {
-        const prompt = substituteItem(basePrompt, item);
-        prompts.push({ agent, prompt, item, template_paths: paths });
+      // When clusters are available, use cluster items instead of the original items
+      if (clusters) {
+        for (const cluster of clusters) {
+          const clusterItem: TaskItem = {
+            cluster_key: cluster.key,
+            files: cluster.files.join(", "),
+            file_count: cluster.files.length,
+          };
+          const prompt = substituteItem(basePrompt, clusterItem);
+          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
+        }
+      } else {
+        const perItems = items ?? [];
+        for (const item of perItems) {
+          const prompt = substituteItem(basePrompt, item);
+          prompts.push({ agent, prompt, item, template_paths: paths });
+        }
       }
       break;
     }
@@ -219,37 +403,68 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     }
   }
 
-  // Inject role overlays if requested
-  if (input.project_dir && (input.overlays?.length || state.overlays?.length)) {
-    const allOverlays = input.loaded_overlays ?? await loadAllOverlays(input.project_dir);
-    const requestedNames = new Set([
-      ...(input.overlays ?? []),
-      ...(state.overlays ?? []),
-    ]);
-
-    const requested = allOverlays.filter(o => requestedNames.has(o.name));
-
+  // Inject messaging coordination instructions for wave/parallel-per states
+  if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null) {
+    const peerCount = input.peer_count ?? prompts.length - 1;
+    const channel = `wave-${String(input.wave).padStart(3, "0")}`;
+    const messageInstr = buildMessageInstructions(channel, peerCount, input.workspace);
     for (const entry of prompts) {
-      const applicable = filterOverlaysForAgent(requested, entry.agent);
-      const injection = buildOverlayInjection(applicable);
-      if (injection) {
-        entry.prompt += injection;
+      entry.prompt += `\n\n${messageInstr}`;
+    }
+  }
+
+  // Inject wave guidance for wave states
+  if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null) {
+    const guidance = await readWaveGuidance(input.workspace);
+    if (guidance) {
+      for (const entry of prompts) {
+        entry.prompt += `\n\n## Wave Guidance (from user)\n\n${guidance}`;
       }
     }
   }
 
-  // Inject bulletin coordination instructions for wave/parallel-per states
-  if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null) {
-    const peerCount = input.peer_count ?? prompts.length - 1;
-    const bulletinInstr = buildBulletinInstructions(input.wave, peerCount, input.workspace);
-    for (const entry of prompts) {
-      entry.prompt += `\n\n${bulletinInstr}`;
+  // Inject wave briefing for wave/parallel-per states
+  if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null && input.consultation_outputs) {
+    const briefing = assembleWaveBriefing({
+      wave: input.wave,
+      summaries: [],  // Summaries from prior agents — caller provides via separate mechanism
+      consultationOutputs: input.consultation_outputs,
+    });
+    if (briefing) {
+      for (const entry of prompts) {
+        entry.prompt += `\n\n${briefing}`;
+      }
     }
   }
 
+  const fanned_out = state.type === "single" && prompts.length > 1;
   return {
     prompts,
     state_type: state.type,
     ...(warnings.length > 0 ? { warnings } : {}),
+    ...(clusters ? { clusters } : {}),
+    ...(timeout_ms != null ? { timeout_ms } : {}),
+    ...(fanned_out ? { fanned_out: true } : {}),
   };
+}
+
+/**
+ * Parse a human-readable timeout string into milliseconds.
+ * Supports: "30s", "10m", "1h", "1h30m".
+ */
+export function parseTimeout(timeout: string): number | undefined {
+  let totalMs = 0;
+  let matched = false;
+  const remaining = timeout.replace(/(\d+)\s*(h|m|s)/gi, (_, num, unit) => {
+    matched = true;
+    const n = parseInt(num, 10);
+    switch (unit.toLowerCase()) {
+      case "h": totalMs += n * 3600000; break;
+      case "m": totalMs += n * 60000; break;
+      case "s": totalMs += n * 1000; break;
+    }
+    return "";
+  });
+  if (!matched || remaining.trim()) return undefined;
+  return totalMs;
 }

@@ -1,4 +1,4 @@
-import { type DriftReport } from "./analyzer.js";
+import { type DriftReport } from "./analyzer.ts";
 
 export function formatDriftReport(report: DriftReport): string {
   const lines: string[] = [];
@@ -7,10 +7,9 @@ export function formatDriftReport(report: DriftReport): string {
   lines.push("");
 
   // Overview
-  lines.push(`### Overview (${report.total_reviews} reviews, ${report.total_decisions} decisions)`);
+  lines.push(`### Overview (${report.total_reviews} reviews)`);
   lines.push(`Avg score: Rules ${report.avg_score.rules}% | Opinions ${report.avg_score.opinions}% | Conventions ${report.avg_score.conventions}%`);
   lines.push(`Trend: ${formatTrend(report.trend)}`);
-  lines.push(`Intentional deviation ratio: ${report.intentional_ratio}%`);
   lines.push("");
 
   // Most violated
@@ -29,17 +28,6 @@ export function formatDriftReport(report: DriftReport): string {
     lines.push("### Hotspot directories");
     for (const dir of report.violation_directories) {
       lines.push(`${dir.directory} — ${dir.total_violations} violations across ${dir.review_count} reviews`);
-    }
-    lines.push("");
-  }
-
-  // Recent decisions
-  if (report.recent_decisions.length > 0) {
-    lines.push("### Intentional deviation log (last 5)");
-    for (const d of report.recent_decisions) {
-      const date = d.timestamp.split("T")[0];
-      lines.push(`- [${date}] ${d.principle_id} in ${d.file_path}`);
-      lines.push(`  "${d.justification}"`);
     }
     lines.push("");
   }
@@ -110,13 +98,6 @@ function generateRecommendations(report: DriftReport): string[] {
   if (report.never_triggered.length > 3) {
     recs.push(
       `${report.never_triggered.length} principles have never been triggered. Review them for relevance — they may be too narrowly scoped.`
-    );
-  }
-
-  // Low intentional ratio
-  if (report.intentional_ratio < 30 && report.most_violated.length > 0) {
-    recs.push(
-      `Only ${report.intentional_ratio}% of deviations are intentional. Encourage using the \`report\` tool (type=decision) to log justified deviations.`
     );
   }
 

@@ -8,6 +8,9 @@ tags:
   - functions
   - readability
   - clean-code
+  - ui
+  - components
+  - modularity
 ---
 
 A function should do exactly one thing. If you can extract a meaningful sub-function from it — one whose name is not just a restatement of the parent function's name — the original function does too much. Functions should be short: typically under 30 lines of logic, excluding declarations and blank lines.
@@ -79,8 +82,8 @@ async function processOrder(input: OrderInput): Promise<OrderResult> {
 
 Each extracted function has a clear, singular purpose and can be tested independently.
 
+This applies at every level — functions, UI components, modules. A React component that fetches data, manages tooltip state, and handles navigation does too many things. Split rendering, data-fetching, and behavioral concerns into separate components or hooks so each piece can be understood, tested, and reused independently.
+
 ## Exceptions
 
-Pure data transformation pipelines (map/filter/reduce chains) can be longer without being "multi-purpose" — they're doing one thing (transforming data) through multiple steps. Also, configuration/setup functions that initialize many related settings are doing one thing (configuration) even though they touch many values.
-
-**Related:** `component-single-responsibility` applies the same single-purpose constraint at the UI component level.
+Pure data transformation pipelines (map/filter/reduce chains) can be longer without being "multi-purpose" — they're doing one thing (transforming data) through multiple steps. Configuration/setup functions that initialize many related settings are doing one thing (configuration) even though they touch many values. Leaf UI components that combine a small amount of local state with rendering (a `<Toggle>` managing its own open/closed state) are fine — the state is intrinsic to the component's single purpose.

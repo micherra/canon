@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assembleWaveBriefing, WaveBriefingInput } from "../orchestration/wave-briefing.js";
+import { assembleWaveBriefing, WaveBriefingInput } from "../orchestration/wave-briefing.ts";
 
 describe("assembleWaveBriefing", () => {
   it("assembles briefing with all sections populated", () => {

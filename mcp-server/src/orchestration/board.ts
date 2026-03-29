@@ -3,12 +3,12 @@
  * All state-mutating functions return new Board objects (immutable pattern).
  */
 
-import { readFile, copyFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import { join } from "path";
 import { z } from "zod";
-import type { Board, ConsultationResult, ResolvedFlow } from "./flow-schema.js";
-import { BoardSchema } from "./flow-schema.js";
-import { atomicWriteFile } from "../utils/atomic-write.js";
+import type { Board, ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
+import { BoardSchema } from "./flow-schema.ts";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
 
 const BOARD_FILE = "board.json";
 const BOARD_BACKUP = "board.json.bak";
@@ -63,28 +63,22 @@ export async function readBoard(workspace: string): Promise<Board> {
   const primaryPath = join(workspace, BOARD_FILE);
   const backupPath = join(workspace, BOARD_BACKUP);
 
-  // Try primary
-  try {
-    const data = await readFile(primaryPath, "utf-8");
-    return BoardSchema.parse(JSON.parse(data));
-  } catch (err: any) {
-    // Fall through to backup only for missing/corrupt files
-    if (err.code !== "ENOENT" && !(err instanceof SyntaxError) && !(err instanceof z.ZodError)) {
-      throw err;
+  async function tryRead(filePath: string): Promise<Board | null> {
+    try {
+      const data = await readFile(filePath, "utf-8");
+      return BoardSchema.parse(JSON.parse(data));
+    } catch (err: any) {
+      const isCorruptOrMissing =
+        err.code === "ENOENT" || err instanceof SyntaxError || err instanceof z.ZodError;
+      if (!isCorruptOrMissing) throw err;
+      return null;
     }
   }
 
-  try {
-    const data = await readFile(backupPath, "utf-8");
-    return BoardSchema.parse(JSON.parse(data));
-  } catch (err: any) {
-    if (err.code !== "ENOENT" && !(err instanceof SyntaxError) && !(err instanceof z.ZodError)) {
-      throw err;
-    }
-    throw new Error(
-      `Failed to read board from ${primaryPath} or ${backupPath}`,
-    );
-  }
+  const board = (await tryRead(primaryPath)) ?? (await tryRead(backupPath));
+  if (board) return board;
+
+  throw new Error(`Failed to read board from ${primaryPath} or ${backupPath}`);
 }
 
 /**
@@ -97,9 +91,12 @@ export async function writeBoard(
   const primaryPath = join(workspace, BOARD_FILE);
   const backupPath = join(workspace, BOARD_BACKUP);
 
-  // Copy current board.json to .bak (ignore if it doesn't exist yet)
+  // Atomically copy current board.json to .bak (read + atomic write instead of
+  // copyFile, which truncates the destination before writing — creating a window
+  // where concurrent readBoard calls can find a corrupt/empty backup).
   try {
-    await copyFile(primaryPath, backupPath);
+    const existing = await readFile(primaryPath, "utf-8");
+    await atomicWriteFile(backupPath, existing);
   } catch (err: any) {
     if (err.code !== "ENOENT") throw err;
   }

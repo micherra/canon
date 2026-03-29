@@ -1,7 +1,6 @@
-import { DriftStore } from "../drift/store.js";
-import { generateId } from "../utils/id.js";
-import type { ReportInput, DecisionEntry, PatternEntry, ReviewEntry } from "../schema.js";
-export { reportInputSchema, type ReportInput } from "../schema.js";
+import { DriftStore } from "../drift/store.ts";
+import { generateId } from "../utils/id.ts";
+import type { ReportInput, ReviewEntry } from "../schema.ts";
 
 export interface ReportOutput {
   recorded: boolean;
@@ -16,64 +15,13 @@ export async function report(
   const store = new DriftStore(projectDir);
 
   switch (input.type) {
-    case "decision":
-      return recordDecision(input, store);
-    case "pattern":
-      return recordPattern(input, store);
     case "review":
       return recordReview(input, store);
     default: {
-      const _exhaustive: never = input;
-      throw new Error(`Unknown report type`);
+      const _exhaustive: never = input.type;
+      throw new Error(`Unknown report type: ${_exhaustive}`);
     }
   }
-}
-
-async function recordDecision(
-  decision: Extract<ReportInput, { type: "decision" }>,
-  store: DriftStore
-): Promise<ReportOutput> {
-  const id = generateId("dec");
-
-  const entry: DecisionEntry = {
-    decision_id: id,
-    timestamp: new Date().toISOString(),
-    principle_id: decision.principle_id,
-    file_path: decision.file_path,
-    justification: decision.justification,
-    ...(decision.category ? { category: decision.category } : {}),
-  };
-
-  await store.appendDecision(entry);
-
-  return {
-    recorded: true,
-    id,
-    note: "Deviation logged. This will be surfaced in drift reports.",
-  };
-}
-
-async function recordPattern(
-  pattern: Extract<ReportInput, { type: "pattern" }>,
-  store: DriftStore
-): Promise<ReportOutput> {
-  const id = generateId("pat");
-
-  const entry: PatternEntry = {
-    pattern_id: id,
-    timestamp: new Date().toISOString(),
-    pattern: pattern.pattern,
-    file_paths: pattern.file_paths,
-    context: pattern.context ?? "",
-  };
-
-  await store.appendPattern(entry);
-
-  return {
-    recorded: true,
-    id,
-    note: "Pattern observation logged. The learner will validate this in the next /canon:learn run.",
-  };
 }
 
 async function recordReview(
@@ -108,4 +56,3 @@ function deriveVerdict(violations: { severity: string }[]): "BLOCKING" | "WARNIN
   if (violations.some((v) => v.severity === "strong-opinion")) return "WARNING";
   return "CLEAN";
 }
-

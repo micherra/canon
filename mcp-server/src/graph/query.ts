@@ -5,10 +5,10 @@
 
 import { readFile, stat } from "fs/promises";
 import { join } from "path";
-import { isNotFound } from "../utils/errors.js";
-import { LAYER_CENTRALITY, CANON_DIR, CANON_FILES } from "../constants.js";
-import type { CodebaseInsights } from "./insights.js";
-import { buildDegreeMaps } from "./degree.js";
+import { isNotFound } from "../utils/errors.ts";
+import { LAYER_CENTRALITY, CANON_DIR, CANON_FILES } from "../constants.ts";
+import type { CodebaseInsights } from "./insights.ts";
+import { buildDegreeMaps } from "./degree.ts";
 
 // --- Types ---
 

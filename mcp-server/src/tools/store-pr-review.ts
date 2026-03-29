@@ -1,6 +1,6 @@
-import { PrStore } from "../drift/pr-store.js";
-import { generateId } from "../utils/id.js";
-import type { ReviewViolation } from "../schema.js";
+import { DriftStore } from "../drift/store.ts";
+import { generateId } from "../utils/id.ts";
+import type { ReviewViolation } from "../schema.ts";
 
 export interface StorePrReviewInput {
   pr_number?: number;
@@ -13,6 +13,7 @@ export interface StorePrReviewInput {
     severity: string;
     file_path?: string;
     impact_score?: number;
+    message?: string;
   }>;
   honored: string[];
   score: {
@@ -21,23 +22,29 @@ export interface StorePrReviewInput {
     conventions: { passed: number; total: number };
   };
   file_priorities?: Array<{ path: string; priority_score: number }>;
+  recommendations?: Array<{
+    file_path?: string;
+    title: string;
+    message: string;
+    source: "principle" | "holistic";
+  }>;
 }
 
 export interface StorePrReviewOutput {
   recorded: boolean;
-  pr_review_id: string;
+  review_id: string;
 }
 
 export async function storePrReview(
   input: StorePrReviewInput,
   projectDir: string
 ): Promise<StorePrReviewOutput> {
-  const store = new PrStore(projectDir);
-  const pr_review_id = generateId("prr");
+  const store = new DriftStore(projectDir);
+  const review_id = generateId("rev");
   const timestamp = new Date().toISOString();
 
   await store.appendReview({
-    pr_review_id,
+    review_id,
     timestamp,
     ...(input.pr_number !== undefined ? { pr_number: input.pr_number } : {}),
     ...(input.branch !== undefined ? { branch: input.branch } : {}),
@@ -48,7 +55,8 @@ export async function storePrReview(
     honored: input.honored,
     score: input.score,
     ...(input.file_priorities !== undefined ? { file_priorities: input.file_priorities } : {}),
+    ...(input.recommendations !== undefined ? { recommendations: input.recommendations } : {}),
   });
 
-  return { recorded: true, pr_review_id };
+  return { recorded: true, review_id };
 }

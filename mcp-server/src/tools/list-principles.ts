@@ -1,4 +1,4 @@
-import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
+import { matchPrinciples, loadAllPrinciples } from "../matcher.ts";
 
 export interface ListPrinciplesInput {
   filter_severity?: "rule" | "strong-opinion" | "convention";

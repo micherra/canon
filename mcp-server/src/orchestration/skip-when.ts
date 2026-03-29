@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import type { Board } from "./flow-schema.js";
+import type { Board } from "./flow-schema.ts";
 
 interface SkipResult {
   skip: boolean;
@@ -19,7 +19,7 @@ const CONTRACT_PATTERNS = [
 
 export async function evaluateSkipWhen(
   condition: string,
-  workspace: string,
+  _workspace: string,
   board: Board,
 ): Promise<SkipResult> {
   switch (condition) {
@@ -27,6 +27,10 @@ export async function evaluateSkipWhen(
       return evaluateNoContractChanges(board.base_commit);
     case "no_fix_requested":
       return evaluateNoFixRequested(board);
+    case "auto_approved":
+      return evaluateAutoApproved(board);
+    case "no_open_questions":
+      return evaluateNoOpenQuestions(board);
     default:
       console.error(
         `Warning: Unknown skip_when condition "${condition}" — not skipping`,
@@ -44,7 +48,7 @@ function evaluateNoContractChanges(baseCommit: string): SkipResult {
   }
 
   try {
-    const result = spawnSync("git", ["diff", "--name-only", `${baseCommit}..HEAD`], {
+    const result = spawnSync("git", ["diff", "--diff-filter=d", "--name-only", `${baseCommit}..HEAD`], {
       encoding: "utf-8",
     });
 
@@ -73,9 +77,33 @@ function evaluateNoContractChanges(baseCommit: string): SkipResult {
 }
 
 function evaluateNoFixRequested(board: Board): SkipResult {
-  // Board does not currently have a fix_requested metadata field.
-  // This condition is not met unless explicitly set — always returns false for now.
+  if (board.metadata?.fix_requested === true) {
+    return { skip: false };
+  }
+  return {
+    skip: true,
+    reason: "No fix requested — user has not flagged issues for fixing",
+  };
+}
+
+function evaluateAutoApproved(board: Board): SkipResult {
+  if (board.metadata?.auto_approve === true) {
+    return {
+      skip: true,
+      reason: "Task auto-approved — checkpoint skipped",
+    };
+  }
   return { skip: false };
+}
+
+function evaluateNoOpenQuestions(board: Board): SkipResult {
+  if (board.metadata?.has_open_questions === true) {
+    return { skip: false };
+  }
+  return {
+    skip: true,
+    reason: "No open questions from pattern-check — targeted research skipped",
+  };
 }
 
 /** Simple glob matching for contract patterns. */

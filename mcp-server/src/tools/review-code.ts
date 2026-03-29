@@ -1,6 +1,6 @@
-import { matchPrinciples, loadAllPrinciples } from "../matcher.js";
-import { loadConfigNumber } from "../utils/config.js";
-import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.js";
+import { matchPrinciples, loadAllPrinciples } from "../matcher.ts";
+import { loadConfigNumber } from "../utils/config.ts";
+import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.ts";
 
 export interface ReviewCodeInput {
   code: string;

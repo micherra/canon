@@ -1,35 +1,35 @@
-import { DriftStore } from "../drift/store.js";
-import { analyzeDrift } from "../drift/analyzer.js";
-import { loadAllPrinciples } from "../matcher.js";
+import { DriftStore, type WeeklyTrendPoint } from "../drift/store.ts";
+import { analyzeDrift } from "../drift/analyzer.ts";
+import { loadAllPrinciples } from "../matcher.ts";
 
-export interface GetComplianceInput {
+export interface ComplianceInput {
   principle_id: string;
 }
 
-export interface GetComplianceOutput {
+export interface ComplianceOutput {
   principle_id: string;
   found: boolean;
   compliance_rate: number;
   total_violations: number;
   unintentional_violations: number;
-  intentional_deviations: number;
   times_honored: number;
   total_reviews: number;
   trend: "improving" | "stable" | "declining" | "insufficient_data";
+  weekly_trend: WeeklyTrendPoint[];
 }
 
 export async function getCompliance(
-  input: GetComplianceInput,
+  input: ComplianceInput,
   projectDir: string,
   pluginDir: string
-): Promise<GetComplianceOutput> {
+): Promise<ComplianceOutput> {
   const store = new DriftStore(projectDir);
 
   // Load principles (cached) and filter parsed JSONL entries to this principle only
-  const [reviews, decisions, principles] = await Promise.all([
-    store.getReviews(input.principle_id),
-    store.getDecisions(input.principle_id),
+  const [reviews, principles, weeklyTrend] = await Promise.all([
+    store.getReviews({ principleId: input.principle_id }),
     loadAllPrinciples(projectDir, pluginDir),
+    store.getComplianceTrend(input.principle_id),
   ]);
 
   const allIds = principles.map((p) => p.id);
@@ -42,14 +42,14 @@ export async function getCompliance(
       compliance_rate: 0,
       total_violations: 0,
       unintentional_violations: 0,
-      intentional_deviations: 0,
       times_honored: 0,
       total_reviews: 0,
       trend: "insufficient_data",
+      weekly_trend: [],
     };
   }
 
-  const report = analyzeDrift(reviews, decisions, allIds, {
+  const report = analyzeDrift(reviews, allIds, {
     principleId: input.principle_id,
   });
 
@@ -70,10 +70,10 @@ export async function getCompliance(
       compliance_rate: 100,
       total_violations: 0,
       unintentional_violations: 0,
-      intentional_deviations: decisions.length,
       times_honored: honored,
       total_reviews: report.total_reviews,
       trend: report.trend,
+      weekly_trend: weeklyTrend,
     };
   }
 
@@ -83,9 +83,9 @@ export async function getCompliance(
     compliance_rate: stats.compliance_rate,
     total_violations: stats.total_violations,
     unintentional_violations: stats.unintentional_violations,
-    intentional_deviations: stats.intentional_deviations,
     times_honored: stats.times_honored,
     total_reviews: report.total_reviews,
     trend: report.trend,
+    weekly_trend: weeklyTrend,
   };
 }

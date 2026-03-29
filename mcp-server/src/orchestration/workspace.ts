@@ -5,8 +5,8 @@
 
 import { access, mkdir, open, readFile, rename, unlink } from "fs/promises";
 import path from "path";
-import type { Session } from "./flow-schema.js";
-import { atomicWriteFile } from "../utils/atomic-write.js";
+import type { Session } from "./flow-schema.ts";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
@@ -94,7 +94,7 @@ export async function initWorkspace(
   sanitized: string,
 ): Promise<string> {
   const workspace = path.join(projectDir, ".canon", "workspaces", sanitized);
-  const subdirs = ["research", "decisions", "plans", "reviews", "notes"];
+  const subdirs = ["research", "decisions", "plans", "reviews"];
   await Promise.all(
     subdirs.map((dir) => mkdir(path.join(workspace, dir), { recursive: true })),
   );
@@ -131,24 +131,16 @@ export async function acquireLock(
   try {
     const raw = await readFile(lockPath, "utf-8");
     const lock = JSON.parse(raw) as { pid: number; started: string };
-    const started = new Date(lock.started).getTime();
-    const age = Date.now() - started;
+    const age = Date.now() - new Date(lock.started).getTime();
 
-    // If process is dead, remove stale lock regardless of age
-    if (!isProcessAlive(lock.pid)) {
-      try { await unlink(lockPath); } catch (err: any) {
-        if (err.code !== "ENOENT") throw err;
-      }
-    } else if (age < TWO_HOURS_MS) {
+    // If process is dead or lock is stale (>2h), remove it
+    if (!isProcessAlive(lock.pid) || age >= TWO_HOURS_MS) {
+      await safeUnlink(lockPath);
+    } else {
       return {
         acquired: false,
         reason: `Another build is active (pid ${lock.pid}, started ${lock.started})`,
       };
-    } else {
-      // Stale lock from a live process (hung?) — remove it
-      try { await unlink(lockPath); } catch (err: any) {
-        if (err.code !== "ENOENT") throw err;
-      }
     }
   } catch (err: any) {
     if (err.code !== "ENOENT") throw err;
@@ -203,29 +195,35 @@ export async function releaseLock(workspace: string): Promise<void> {
   // Read and verify ownership from the moved file
   try {
     const raw = await readFile(tempPath, "utf-8");
-    const lock = JSON.parse(raw) as { pid: number };
-    if (lock.pid !== process.pid) {
-      // Not our lock — restore it
-      try { await rename(tempPath, lockPath); } catch (e: any) {
-        // If restore fails because someone else created a new lock, just
-        // clean up our temp file
-        if (e.code === "ENOENT") return;
-        try { await unlink(tempPath); } catch { /* best effort */ }
-      }
+    const { pid } = JSON.parse(raw) as { pid: number };
+    if (pid === process.pid) {
+      // Our lock — delete the temp file
+      await unlink(tempPath);
       return;
     }
-    // Our lock — delete the temp file
-    await unlink(tempPath);
+    // Not our lock — restore it
+    try {
+      await rename(tempPath, lockPath);
+    } catch (e: any) {
+      // If restore fails because someone else created a new lock, just clean up
+      if (e.code !== "ENOENT") await safeUnlink(tempPath);
+    }
   } catch (err: any) {
     // If JSON parse fails the lock is corrupt — safe to remove
-    if (err instanceof SyntaxError) {
-      try { await unlink(tempPath); } catch (e: any) {
-        if (e.code !== "ENOENT") throw e;
-      }
-      return;
+    if (err instanceof SyntaxError || err.code === "ENOENT") {
+      await safeUnlink(tempPath);
+    } else {
+      throw err;
     }
-    if (err.code === "ENOENT") return;
-    throw err;
+  }
+}
+
+/** Helper for idempotent file removal. */
+async function safeUnlink(filePath: string): Promise<void> {
+  try {
+    await unlink(filePath);
+  } catch (err: any) {
+    if (err.code !== "ENOENT") throw err;
   }
 }
 

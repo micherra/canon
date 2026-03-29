@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   substituteVariables,
   buildTemplateInjection,
-} from "../orchestration/variables.js";
+} from "../orchestration/variables.ts";
 
 describe("substituteVariables", () => {
   it("replaces a simple variable", () => {

@@ -13,11 +13,12 @@ includes:
 
   - fragment: context-sync
     with:
-      next: test
+      next: verify
 
-  - fragment: test-fix-loop
+  - fragment: verify-fix-loop
     with:
       after_all_passing: review
+      role: test-writer
 
   - fragment: review-fix-loop
     with:
@@ -39,7 +40,8 @@ states:
     type: wave
     agent: canon-implementor
     template: implementation-log
-    gate: test-suite
+    effects:
+      - type: check_postconditions
     transitions:
       done: context-sync
       blocked: hitl

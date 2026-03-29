@@ -13,8 +13,8 @@
  * but this module does not enforce it.
  */
 
-import type { ConsultationFragment, ConsultationResult, ResolvedFlow } from "./flow-schema.js";
-import { substituteVariables } from "./variables.js";
+import type { ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
+import { substituteVariables } from "./variables.ts";
 
 export interface ConsultationInput {
   consultationNames: string[];
@@ -42,7 +42,7 @@ export interface ConsultationOutput {
 export async function executeConsultations(
   input: ConsultationInput,
 ): Promise<ConsultationOutput> {
-  const { consultationNames, flow, variables } = input;
+  const { consultationNames, flow } = input;
   const results: Record<string, ConsultationResult> = {};
   const warnings: string[] = [];
 
@@ -80,7 +80,7 @@ export function resolveConsultationPrompt(
   name: string,
   flow: ResolvedFlow,
   variables: Record<string, string>,
-): { agent: string; prompt: string; role: string } | null {
+): { agent: string; prompt: string; role: string; timeout?: string; section?: string } | null {
   const fragment = flow.consultations?.[name];
   if (!fragment) {
     return null;
@@ -95,5 +95,7 @@ export function resolveConsultationPrompt(
     agent: fragment.agent,
     prompt: substituteVariables(spawnInstruction, variables),
     role: fragment.role,
+    ...(fragment.timeout ? { timeout: fragment.timeout } : {}),
+    ...(fragment.section ? { section: fragment.section } : {}),
   };
 }

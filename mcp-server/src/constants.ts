@@ -19,6 +19,8 @@ export const PY_EXTENSIONS = new Set(["py"]);
 export const SCANNABLE_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
   ".py", ".go", ".rs",
+  ".md", ".yaml", ".yml", ".json",
+  ".sh",
 ]);
 
 /** Extensions to try when resolving imports (e.g., `./foo` → `./foo.ts`). */
@@ -31,6 +33,7 @@ export const CANON_FILES = {
   REVERSE_DEPS: "reverse-deps.json",
   SUMMARIES: "summaries.json",
   CONFIG: "config.json",
+  KNOWLEDGE_DB: "knowledge-graph.db",
 } as const;
 
 /** Maximum lines of file content returned by get_file_context. */

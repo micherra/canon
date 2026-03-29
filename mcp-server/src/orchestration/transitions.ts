@@ -10,8 +10,9 @@ import type {
   FileTestHistoryEntry,
   StatusHistoryEntry,
   ProgressHistoryEntry,
-} from "./flow-schema.js";
-import { STATUS_ALIASES } from "./flow-schema.js";
+  GateProgressHistoryEntry,
+} from "./flow-schema.ts";
+import { STATUS_ALIASES } from "./flow-schema.ts";
 
 /**
  * Lowercase the input and apply alias mapping to produce a normalized
@@ -63,6 +64,8 @@ export function buildHistoryEntry(
     status?: string;
     commitSha?: string;
     artifactCount?: number;
+    gateOutputHash?: string;
+    gatePassed?: boolean;
   },
 ): HistoryEntry {
   switch (stuckWhen) {
@@ -83,6 +86,11 @@ export function buildHistoryEntry(
       return {
         commit_sha: data.commitSha ?? "",
         artifact_count: data.artifactCount ?? 0,
+      };
+    case "no_gate_progress":
+      return {
+        gate_output_hash: data.gateOutputHash ?? "",
+        passed: data.gatePassed ?? false,
       };
   }
 }
@@ -123,6 +131,11 @@ export function isStuck(history: HistoryEntry[], stuckWhen: StuckWhen): boolean 
       const c = curr as ProgressHistoryEntry;
       return p.commit_sha === c.commit_sha && p.artifact_count === c.artifact_count;
     }
+    case "no_gate_progress": {
+      const p = prev as GateProgressHistoryEntry;
+      const c = curr as GateProgressHistoryEntry;
+      return p.gate_output_hash === c.gate_output_hash && !c.passed;
+    }
   }
 }
 
@@ -142,32 +155,83 @@ export interface ParallelPerResult {
 }
 
 /**
+ * Returns true if the RoleEntry has optional: true, false otherwise.
+ */
+export function isRoleOptional(
+  entry: string | { name: string; optional?: boolean },
+): boolean {
+  return typeof entry !== "string" && entry.optional === true;
+}
+
+const REVIEW_SEVERITY_ORDER: Record<string, number> = {
+  blocking: 3,
+  warning: 2,
+  clean: 1,
+};
+
+/**
+ * Aggregate review verdict results using severity ordering: BLOCKING > WARNING > CLEAN.
+ * The most severe verdict across all cluster results becomes the aggregated condition.
+ * Always returns an empty cannotFixItems list (not applicable for review verdicts).
+ */
+export function aggregateReviewResults(
+  results: ParallelPerResult[],
+): { condition: string; cannotFixItems: string[] } {
+  if (results.length === 0) return { condition: "clean", cannotFixItems: [] };
+
+  let maxSeverity = 0;
+  let maxCondition = "clean";
+
+  for (const r of results) {
+    const normalized = r.status.toLowerCase();
+    const severity = REVIEW_SEVERITY_ORDER[normalized] ?? 0;
+    if (severity > maxSeverity) {
+      maxSeverity = severity;
+      maxCondition = normalized;
+    }
+  }
+
+  return { condition: maxCondition, cannotFixItems: [] };
+}
+
+/**
  * Aggregate results from a parallel-per execution into a single
  * condition and a list of items that could not be fixed.
+ *
+ * @param optionalRoles - Role names that are optional. Failures from optional
+ *   roles are excluded from blocking determination and cannot_fix items.
  */
 export function aggregateParallelPerResults(
   results: ParallelPerResult[],
+  optionalRoles?: Set<string>,
 ): { condition: string; cannotFixItems: string[] } {
-  const hasBlocked = results.some((r) => r.status === "blocked");
+  // Partition results into required and optional based on their item name.
+  const isOptional = (r: ParallelPerResult): boolean =>
+    optionalRoles != null && r.item != null && optionalRoles.has(r.item);
+
+  const requiredResults = results.filter((r) => !isOptional(r));
+
+  // Only required results can block the state.
+  const hasBlocked = requiredResults.some((r) => r.status === "blocked");
   if (hasBlocked) {
     return { condition: "blocked", cannotFixItems: [] };
   }
 
-  const doneResults = results.filter((r) => r.status === "done");
-  const cannotFixResults = results.filter((r) => r.status === "cannot_fix");
+  const doneResults = requiredResults.filter((r) => r.status === "done");
+  const cannotFixResults = requiredResults.filter((r) => r.status === "cannot_fix");
 
-  if (cannotFixResults.length === results.length) {
+  if (requiredResults.length > 0 && cannotFixResults.length === requiredResults.length) {
     return {
       condition: "cannot_fix",
       cannotFixItems: cannotFixResults.map((r) => r.item).filter((i): i is string => i !== undefined),
     };
   }
 
-  if (doneResults.length === results.length) {
+  if (requiredResults.length === 0 || doneResults.length === requiredResults.length) {
     return { condition: "done", cannotFixItems: [] };
   }
 
-  // Mixed: some done, some cannot_fix
+  // Mixed: some required done, some required cannot_fix
   return {
     condition: "done",
     cannotFixItems: cannotFixResults.map((r) => r.item).filter((i): i is string => i !== undefined),

@@ -9,19 +9,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        package: [mcp-server, cursor-extension]
+    defaults:
+      run:
+        working-directory: mcp-server
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 25.8.0
           cache: npm
-          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+          cache-dependency-path: mcp-server/package-lock.json
       - run: npm ci
-        working-directory: ${{ matrix.package }}
       - run: npm run build
-        working-directory: ${{ matrix.package }}
       - run: npm test --if-present
-        working-directory: ${{ matrix.package }}

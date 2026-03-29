@@ -1,6 +1,6 @@
 import { readdir, realpath } from "fs/promises";
 import { join, relative } from "path";
-import { SCANNABLE_EXTENSIONS } from "../constants.js";
+import { SCANNABLE_EXTENSIONS } from "../constants.ts";
 
 const DEFAULT_EXCLUDE_DIRS = new Set([
   "node_modules", ".git", ".canon", "dist", "build",

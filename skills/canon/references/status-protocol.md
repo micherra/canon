@@ -31,7 +31,9 @@ Report exactly ONE of these in ALL CAPS as the last substantive line of your out
 | **CRITICAL** | security | At least one critical finding — blocks the pipeline | `critical` |
 | **UPDATED** | scribe | At least one document was modified | `updated` |
 | **NO_UPDATES** | scribe | All changes were internal/test-only, no doc updates needed | `no_updates` |
-| **HAS_QUESTIONS** | architect | Unresolved questions requiring user input before design can proceed | `has_questions` |
+| **HAS_QUESTIONS** | architect, guide (checkpoint) | Unresolved questions requiring user input before design can proceed | `has_questions` |
+| **APPROVED** | guide (checkpoint) | User approved the plan, proceed to implementation | `approved` |
+| **REVISE** | guide (checkpoint) | User requested changes, save feedback and re-analyze | `revise` |
 
 ## Decision Guide
 

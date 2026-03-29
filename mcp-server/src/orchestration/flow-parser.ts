@@ -5,7 +5,7 @@
  * resolves fragment includes, and produces a fully validated ResolvedFlow.
  */
 
-import { readFile } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { parse as parseYaml } from "yaml";
 import {
   FlowDefinitionSchema,
@@ -17,7 +17,7 @@ import {
   type StateDefinition,
   type ConsultationFragment,
   type ResolvedFlow,
-} from "./flow-schema.js";
+} from "./flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // parseFlowContent
@@ -73,19 +73,38 @@ export function parseFlowContent(content: string): {
 // ---------------------------------------------------------------------------
 
 /**
- * Load a fragment file from `${pluginDir}/flows/fragments/${name}.md`,
- * parse it, validate against FragmentDefinitionSchema, and return the
+ * Resolve a fragment file path using two-tier lookup:
+ * 1. Check `${projectDir}/.canon/flows/fragments/${name}.md` first (if projectDir provided)
+ * 2. Fall back to `${pluginDir}/flows/fragments/${name}.md`
+ */
+async function resolveFragmentFile(
+  pluginDir: string,
+  name: string,
+  projectDir?: string,
+): Promise<string> {
+  if (projectDir) {
+    const projectPath = `${projectDir}/.canon/flows/fragments/${name}.md`;
+    try {
+      return await readFile(projectPath, "utf-8");
+    } catch { /* not in project dir, fall through */ }
+  }
+  return await readFile(`${pluginDir}/flows/fragments/${name}.md`, "utf-8");
+}
+
+/**
+ * Load a fragment file, using two-tier lookup (project dir first, then plugin dir).
+ * Parse it, validate against FragmentDefinitionSchema, and return the
  * definition plus spawn instructions.
  */
 export async function loadFragment(
   pluginDir: string,
   name: string,
+  projectDir?: string,
 ): Promise<{
   definition: FragmentDefinition;
   spawnInstructions: Record<string, string>;
 }> {
-  const filePath = `${pluginDir}/flows/fragments/${name}.md`;
-  const raw = await readFile(filePath, "utf-8");
+  const raw = await resolveFragmentFile(pluginDir, name, projectDir);
   const { frontmatter, spawnInstructions } = parseFlowContent(raw);
   const definition = FragmentDefinitionSchema.parse(frontmatter);
   return { definition, spawnInstructions };
@@ -146,7 +165,7 @@ function substituteSpawnInstructions(
  * spawn instructions.
  */
 export function resolveFragments(
-  flow: FlowDefinition,
+  _flow: FlowDefinition,
   fragments: Array<{
     definition: FragmentDefinition;
     spawnInstructions: Record<string, string>;
@@ -191,17 +210,12 @@ export function resolveFragments(
     }
 
     // Build effective params: defaults merged with include.with
-    const effectiveParams: Record<string, string | number> = {};
-    if (definition.params) {
-      for (const [k, v] of Object.entries(definition.params)) {
-        if (v !== null) {
-          effectiveParams[k] = v;
-        }
-      }
-    }
-    for (const [k, v] of Object.entries(withParams)) {
-      effectiveParams[k] = v;
-    }
+    const effectiveParams = {
+      ...Object.fromEntries(
+        Object.entries(definition.params ?? {}).filter(([, v]) => v !== null),
+      ),
+      ...(include.with ?? {}),
+    } as Record<string, string | number>;
 
     // Handle consultation-type fragments
     if (definition.type === "consultation") {
@@ -213,9 +227,13 @@ export function resolveFragments(
         section: definition.section,
         artifact: definition.artifact,
         timeout: definition.timeout,
+        min_waves: definition.min_waves,
+        // Propagate skip_when from fragment definition
+        ...(definition.skip_when !== undefined ? { skip_when: definition.skip_when } : {}),
       };
 
-      const substituted = Object.keys(effectiveParams).length > 0
+      const hasParams = Object.keys(effectiveParams).length > 0;
+      const substituted = hasParams
         ? substituteParams(consultation, effectiveParams)
         : consultation;
 
@@ -223,7 +241,7 @@ export function resolveFragments(
       consultations[consultName] = substituted;
 
       // Merge spawn instructions for consultation
-      const fragSpawn = Object.keys(effectiveParams).length > 0
+      const fragSpawn = hasParams
         ? substituteSpawnInstructions(spawnInstructions, effectiveParams)
         : { ...spawnInstructions };
 
@@ -237,7 +255,8 @@ export function resolveFragments(
 
     // Regular fragment: merge states
     if (definition.states) {
-      let states = Object.keys(effectiveParams).length > 0
+      const hasParams = Object.keys(effectiveParams).length > 0;
+      let states = hasParams
         ? substituteParams(definition.states, effectiveParams)
         : { ...definition.states };
 
@@ -271,12 +290,14 @@ export function resolveFragments(
     }
 
     // Merge spawn instructions
-    const fragSpawn = Object.keys(effectiveParams).length > 0
+    const hasParams = Object.keys(effectiveParams).length > 0;
+    const fragSpawn = hasParams
       ? substituteSpawnInstructions(spawnInstructions, effectiveParams)
       : { ...spawnInstructions };
 
     for (const [sId, sText] of Object.entries(fragSpawn)) {
-      mergedSpawnInstructions[sId] = sText;
+      const spawnKey = include.as ? sId.replace(definition.fragment, include.as) : sId;
+      mergedSpawnInstructions[spawnKey] = sText;
     }
   }
 
@@ -372,8 +393,58 @@ export function buildStateGraph(flow: ResolvedFlow): Record<string, string[]> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve a flow file using two-tier lookup:
+ * 1. Check `${projectDir}/.canon/flows/${flowName}.md` first (if projectDir provided)
+ * 2. Fall back to `${pluginDir}/flows/${flowName}.md`
+ * Throws a descriptive error listing available flows if neither exists.
+ */
+async function resolveFlowFile(
+  pluginDir: string,
+  flowName: string,
+  projectDir?: string,
+): Promise<string> {
+  if (projectDir) {
+    const projectPath = `${projectDir}/.canon/flows/${flowName}.md`;
+    try {
+      return await readFile(projectPath, "utf-8");
+    } catch { /* not in project dir, fall through */ }
+  }
+  const pluginPath = `${pluginDir}/flows/${flowName}.md`;
+  try {
+    return await readFile(pluginPath, "utf-8");
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      const flowsDir = `${pluginDir}/flows`;
+      let available: string[] = [];
+      try {
+        const entries = await readdir(flowsDir);
+        available = entries
+          .filter((e) => e.endsWith(".md") && !e.startsWith(".") && e !== "README.md" && e !== "SCHEMA.md" && e !== "GATES.md")
+          .map((e) => e.replace(/\.md$/, ""))
+          .sort();
+      } catch { /* flows dir missing — leave empty */ }
+      // Also include project-level flows in the available list if projectDir given
+      if (projectDir) {
+        const projectFlowsDir = `${projectDir}/.canon/flows`;
+        try {
+          const projectEntries = await readdir(projectFlowsDir);
+          const projectFlows = projectEntries
+            .filter((e) => e.endsWith(".md") && !e.startsWith(".") && e !== "README.md" && e !== "SCHEMA.md" && e !== "GATES.md")
+            .map((e) => e.replace(/\.md$/, ""))
+            .sort();
+          available = [...new Set([...available, ...projectFlows])].sort();
+        } catch { /* project flows dir missing — leave empty */ }
+      }
+      const list = available.length > 0 ? `: ${available.join(", ")}` : "";
+      throw new Error(`Flow "${flowName}" not found (checked ${projectDir ? `${projectDir}/.canon/flows/ and ` : ""}${pluginPath}). Available flows${list}`);
+    }
+    throw err;
+  }
+}
+
+/**
  * Orchestrates the full flow loading pipeline:
- * 1. Read and parse the flow file
+ * 1. Read and parse the flow file (project dir first, then plugin dir)
  * 2. Validate frontmatter
  * 3. Resolve fragment includes
  * 4. Build ResolvedFlow
@@ -382,14 +453,14 @@ export function buildStateGraph(flow: ResolvedFlow): Record<string, string[]> {
 export async function loadAndResolveFlow(
   pluginDir: string,
   flowName: string,
+  projectDir?: string,
 ): Promise<{ flow: ResolvedFlow; errors: string[] }> {
   if (!/^[a-zA-Z0-9_-]+$/.test(flowName)) {
     throw new Error(
       `Invalid flow name "${flowName}": only alphanumeric characters, hyphens, and underscores are allowed`,
     );
   }
-  const filePath = `${pluginDir}/flows/${flowName}.md`;
-  const raw = await readFile(filePath, "utf-8");
+  const raw = await resolveFlowFile(pluginDir, flowName, projectDir);
   const { frontmatter, spawnInstructions } = parseFlowContent(raw);
 
   // Validate frontmatter against FlowDefinitionSchema
@@ -409,10 +480,10 @@ export async function loadAndResolveFlow(
 
   // If includes exist, load all fragments and resolve
   if (flowDef.includes && flowDef.includes.length > 0) {
-    // Load all unique fragments
+    // Load all unique fragments — project dir first, then plugin dir
     const fragmentNames = [...new Set(flowDef.includes.map((i) => i.fragment))];
     const loadedFragments = await Promise.all(
-      fragmentNames.map((name) => loadFragment(pluginDir, name)),
+      fragmentNames.map((name) => loadFragment(pluginDir, name, projectDir)),
     );
 
     const resolved = resolveFragments(flowDef, loadedFragments, flowDef.includes);
