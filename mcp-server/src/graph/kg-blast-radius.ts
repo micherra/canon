@@ -6,10 +6,14 @@
  * then performs a recursive CTE traversal to find all transitively affected entities.
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { KgQuery } from './kg-query.ts';
 import { KgStore } from './kg-store.ts';
 import type { BlastRadiusResult } from './kg-types.ts';
+import { CANON_DIR, CANON_FILES } from '../constants.ts';
+import { inferLayer } from '../matcher.ts';
 
 // ---------------------------------------------------------------------------
 // Exported Interfaces
@@ -184,6 +188,12 @@ export interface UnifiedBlastRadiusOptions {
   maxDepth?: number;
   /** Currently unused — test files are always included in `affected` but excluded from severity. Default: false */
   includeTests?: boolean;
+  /**
+   * Project root directory. When provided and the KG has no file_edges or entity
+   * edges for the seed file (common for markdown/doc files), the function falls back
+   * to reading `.canon/reverse-deps.json` to populate direct dependents (depth=1).
+   */
+  projectDir?: string;
 }
 
 /**
@@ -283,8 +293,59 @@ export function computeUnifiedBlastRadius(
     }
   }
 
+  // Step 4 (fallback): When the KG has no edges for this file (common for markdown/doc
+  // files whose cross-file references aren't captured by the KG pipeline), fall back to
+  // reading `.canon/reverse-deps.json` for direct dependents (depth=1).
+  // This ensures blast radius correctly reflects relationships detected by the codebase
+  // graph scanner (inferMdRelations) even when the KG hasn't indexed those edges.
+  if (fileMap.size === 0 && options?.projectDir) {
+    try {
+      const reverseDepsPath = join(options.projectDir, CANON_DIR, CANON_FILES.REVERSE_DEPS);
+      const raw = readFileSync(reverseDepsPath, 'utf-8');
+      const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
+      const directDependents = reverseIndex[filePath] ?? [];
+
+      for (const depPath of directDependents) {
+        // Try to find the file in the KG store to get its file_id
+        const depFileRow = store.getFile(depPath);
+        if (depFileRow?.file_id != null) {
+          if (!fileMap.has(depFileRow.file_id)) {
+            const depLayer = depFileRow.layer ?? inferLayer(depPath) ?? '';
+            fileMap.set(depFileRow.file_id, {
+              path: depPath,
+              depth: 1,
+              relationship: 'reverse-dep',
+              layer: depLayer,
+              is_test: isTestFile(depPath),
+              in_degree: 0, // populated below
+              affected_entities: [],
+            });
+          }
+        } else {
+          // File not in KG — synthesize a BlastRadiusFile with a sentinel id
+          // We use a negative key to avoid collisions with real file_ids
+          const syntheticKey = -(fileMap.size + 1);
+          const depLayer = inferLayer(depPath) ?? '';
+          fileMap.set(syntheticKey, {
+            path: depPath,
+            depth: 1,
+            relationship: 'reverse-dep',
+            layer: depLayer,
+            is_test: isTestFile(depPath),
+            in_degree: 0,
+            affected_entities: [],
+          });
+        }
+      }
+    } catch {
+      // reverse-deps.json absent or malformed — skip fallback silently
+    }
+  }
+
   // Step 7: Populate in_degree for each affected file from file_edges
   for (const [affectedFileId, entry] of fileMap) {
+    // Skip synthetic (negative) file IDs — they have no KG edges
+    if (affectedFileId < 0) continue;
     entry.in_degree = store.getFileEdgesTo(affectedFileId).length;
   }
 

@@ -355,16 +355,16 @@
       ctx.textAlign = "start";
       ctx.fillText(truncate(shortName(pos.path), maxLabelChars), pos.x + LABEL_GAP, pos.y + 3);
 
-      // Layer badge for cross-layer dependents
+      // Layer badge for cross-layer dependents — drawn below the filename to avoid overflow
       if (isCross) {
         const depLayer = importedByLayerMap.get(pos.path);
         if (depLayer) {
-          const label = truncate(shortName(pos.path), maxLabelChars);
-          const labelW = ctx.measureText(label).width;
           ctx.font = "8px monospace";
           ctx.fillStyle = "#EF9F27";
           ctx.globalAlpha = 0.7;
-          ctx.fillText(depLayer, pos.x + LABEL_GAP + labelW + 6, pos.y + 3);
+          const maxBadgeChars = 18;
+          const badgeText = truncate(depLayer, maxBadgeChars);
+          ctx.fillText(badgeText, pos.x + LABEL_GAP, pos.y + 13);
           ctx.globalAlpha = 1;
         }
       }
