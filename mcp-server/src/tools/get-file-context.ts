@@ -335,7 +335,7 @@ export async function getFileContext(
         }
       }
 
-      blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2 });
+      blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2, projectDir });
     } catch {
       // KG unavailable — skip entity data gracefully
     } finally {
