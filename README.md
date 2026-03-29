@@ -4,6 +4,20 @@ Canon is a Claude Code plugin that brings engineering principles and an agent-dr
 
 ---
 
+## Why Canon
+
+Most AI coding agents are capable — but unstructured. Without Canon, common patterns emerge:
+
+- **Agents don't follow your standards.** Without explicit principles, agents generate code that works but doesn't match your team's patterns, conventions, or quality bar. Every conversation starts from scratch.
+- **Complex tasks get one shot.** Ask an agent to "refactor the auth system" and you get a single attempt at a big change — no research, no design review, no plan approval before code is written.
+- **Reviews catch problems too late.** Code is written first, reviewed after. Violations get fixed reactively instead of prevented during implementation.
+- **Knowledge doesn't accumulate.** Conversations are stateless. Decisions, conventions, and review findings disappear. Nothing improves over time.
+- **One approach for everything.** A quick bug fix and a large migration get the same treatment: one prompt, one agent, one shot.
+
+Canon addresses each of these. You define principles — rules, opinions, and conventions — and Canon loads the relevant ones automatically for every task. Complex work is broken into phases (research → design → implement → test → review) with specialist agents at each step. Principles are enforced during implementation, not just at review. Review findings and principle violations accumulate across sessions, and `/canon:learn` surfaces improvements. Workflows scale from a quick hotfix to a multi-wave epic, selected automatically.
+
+---
+
 ## Installation
 
 Canon is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins). Install it from GitHub:
@@ -161,25 +175,23 @@ Canon spins up parallel research agents, synthesizes their findings, and gives y
 
 When you're using Claude Desktop or another MCP-compatible client, Canon opens interactive dashboards right in the conversation.
 
-**PR Review** — Run a review first (`/canon:pr-review` or "review my changes"), then Canon opens a dashboard with a verdict banner, compliance score, fix-before-merge checklist, violations grouped by principle, blast radius chart, and layer distribution. You can also open it before a review to see a prep view with your change story and impact assessment. Click any violation to ask Claude to explain it.
+**PR Impact** — Run a review first (`/canon:pr-impact` or "what is the impact of this PR?"), then Canon opens a dashboard with a verdict banner, compliance score, fix-before-merge checklist, violations grouped by principle, blast radius chart, and layer distribution. You can also open it before a review to see a prep view with your change story and impact assessment. Click any violation to ask Claude to explain it.
+
+![PR Impact](./images/pr_impact.png)
 
 **Codebase Graph** — An interactive dependency graph of your project. Fully standalone — just ask for it and Canon builds the graph from your source files. It parses both code relationships (imports, exports, function calls, inheritance across JS/TS/Python) and markdown relationships (frontmatter references, links between docs, backtick identifiers) into a unified graph. Nodes are colored by architectural layer and highlighted when they have violations or are part of a diff. Filter by layer, violations, or changed files. Click a node to see its dependencies.
 
 > "Show me the codebase graph"
 
+![Codebase Graph](./images/codebase_graph.png)
+
 **File Context** — Deep-dive on a single file: its layer, dependencies, exports, blast radius, and any principle violations. Works on its own for basic info, but shows richer data (entity-level blast radius, graph metrics) if you've run the codebase graph first. Click entities to explore further.
 
 > "Show me the context for src/routes/orders.ts"
 
+![File Context](./images/file_context.png)
+
 These dashboards are powered by Canon's MCP server and render automatically when the corresponding tools run. In terminal-only environments, you get the same data as structured text.
-
-### Compliance check
-
-```bash
-/canon:check
-```
-
-Runs a lightweight principle compliance check on staged files before you commit. Also runs automatically as a pre-commit hook after init.
 
 ### Learn from your history
 

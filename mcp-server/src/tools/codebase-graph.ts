@@ -674,3 +674,62 @@ export function summarizeGraph(graph: CodebaseGraphOutput) {
     graph_path: `${CANON_DIR}/${CANON_FILES.GRAPH_DATA}`,
   };
 }
+
+/** Index-encoded compact graph for the UI.
+ *  Node IDs are replaced with numeric indices to avoid repeating long file paths
+ *  in the edge list. Scales to large codebases — ~37K for 316 nodes vs 237K raw.
+ *  The full graph is always available at .canon/graph-data.json. */
+export interface CompactGraphOutput {
+  /** Ordered node IDs — index in this array is the numeric key used in edges/nodes. */
+  node_ids: string[];
+  /** Per-node data (same order as node_ids). Only non-default fields included. */
+  nodes: Array<{
+    /** layer name */
+    l: string;
+    /** violation count (omitted when 0) */
+    v?: number;
+    /** top violation IDs (omitted when empty) */
+    t?: string[];
+    /** changed flag (omitted when false) */
+    c?: boolean;
+    /** node kind e.g. "agent", "flow" (omitted when absent) */
+    k?: string;
+  }>;
+  /** Edges as [sourceIndex, targetIndex] pairs. */
+  edges: [number, number][];
+  layers: CodebaseGraphOutput["layers"];
+  generated_at: string;
+  /** Signals this is index-encoded so the UI knows to decode. */
+  _compact: true;
+}
+
+export function compactGraph(graph: CodebaseGraphOutput): CompactGraphOutput {
+  const nodeIds = graph.nodes.map((n) => n.id);
+  const idToIndex = new Map<string, number>();
+  for (let i = 0; i < nodeIds.length; i++) idToIndex.set(nodeIds[i], i);
+
+  const nodes = graph.nodes.map((n) => {
+    const compact: CompactGraphOutput["nodes"][number] = { l: n.layer };
+    if (n.violation_count) compact.v = n.violation_count;
+    if (n.top_violations?.length) compact.t = n.top_violations;
+    if (n.changed) compact.c = true;
+    if (n.kind) compact.k = n.kind;
+    return compact;
+  });
+
+  const edges: [number, number][] = [];
+  for (const e of graph.edges) {
+    const si = idToIndex.get(e.source);
+    const ti = idToIndex.get(e.target);
+    if (si !== undefined && ti !== undefined) edges.push([si, ti]);
+  }
+
+  return {
+    node_ids: nodeIds,
+    nodes,
+    edges,
+    layers: graph.layers,
+    generated_at: graph.generated_at,
+    _compact: true,
+  };
+}

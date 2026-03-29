@@ -171,6 +171,28 @@
 
   let blastRadiusSummary = $derived(blastRadiusReport?.summary ?? null);
 
+  // ── Reverse-dependency layer lookup ────────────────────────────────────────
+
+  let importedByLayerMap = $derived.by(() => {
+    if (!data?.imported_by_layer) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const [layer, files] of Object.entries(data.imported_by_layer)) {
+      for (const f of files) map.set(f, layer);
+    }
+    return map;
+  });
+
+  let crossLayerDependents = $derived.by(() => {
+    if (!data) return new Set<string>();
+    const result = new Set<string>();
+    for (const [layer, files] of Object.entries(data.imported_by_layer ?? {})) {
+      if (layer !== data.layer) {
+        for (const f of files) result.add(f);
+      }
+    }
+    return result;
+  });
+
   // ── Canvas graph ──────────────────────────────────────────────────────────
 
   function drawGraph(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
@@ -178,7 +200,10 @@
 
     const dpr = window.devicePixelRatio || 1;
     const W = canvas.offsetWidth;
-    const H = 280;
+    const imports = data.imports ?? [];
+    const dependents = data.imported_by ?? [];
+    const maxNodes = Math.max(imports.length, dependents.length, 1);
+    const H = Math.max(280, maxNodes * 28 + 80);
     canvas.width = W * dpr;
     canvas.height = H * dpr;
     canvas.style.height = `${H}px`;
@@ -186,98 +211,125 @@
 
     ctx.clearRect(0, 0, W, H);
 
-    const imports = data.imports ?? [];
-    const dependents = data.imported_by ?? [];
-
     const CX = W / 2;
     const CY = H / 2;
     const NODE_R = 5;
-    const LABEL_GAP = 9;
-    const EDGE_PAD = 6; // minimum padding from canvas edge
+    const LABEL_GAP = 10;
+    const EDGE_PAD = 8;
+    const HEADER_Y = 16;
 
-    // Measure the widest label on each side to size margins dynamically
+    // Measure widest labels
     ctx.font = "10px monospace";
-    const maxLabelChars = 28;
+    const maxLabelChars = 26;
     let maxLeftLabel = 0;
     for (const imp of imports) {
-      const label = truncate(shortName(imp), maxLabelChars);
-      maxLeftLabel = Math.max(maxLeftLabel, ctx.measureText(label).width);
+      maxLeftLabel = Math.max(maxLeftLabel, ctx.measureText(truncate(shortName(imp), maxLabelChars)).width);
     }
     let maxRightLabel = 0;
     for (const dep of dependents) {
-      const label = truncate(shortName(dep), maxLabelChars);
-      maxRightLabel = Math.max(maxRightLabel, ctx.measureText(label).width);
+      maxRightLabel = Math.max(maxRightLabel, ctx.measureText(truncate(shortName(dep), maxLabelChars)).width);
     }
 
-    const LEFT_X = Math.max(EDGE_PAD + maxLeftLabel + LABEL_GAP + NODE_R, 60);
-    const RIGHT_X = Math.min(W - EDGE_PAD - maxRightLabel - LABEL_GAP - NODE_R, W - 60);
+    const LEFT_X = Math.max(EDGE_PAD + maxLeftLabel + LABEL_GAP + NODE_R, 80);
+    const RIGHT_X = Math.min(W - EDGE_PAD - maxRightLabel - LABEL_GAP - NODE_R, W - 80);
+
+    // Column headers
+    ctx.font = "9px monospace";
+    ctx.textAlign = "center";
+    ctx.letterSpacing = "0.08em";
+    ctx.fillStyle = "#636a80";
+    if (imports.length > 0) {
+      ctx.textAlign = "center";
+      ctx.fillText("DEPENDS ON", LEFT_X, HEADER_Y);
+    }
+    if (dependents.length > 0) {
+      ctx.textAlign = "center";
+      ctx.fillText("USED BY", RIGHT_X, HEADER_Y);
+    }
+    ctx.letterSpacing = "0em";
+
+    const graphTop = HEADER_Y + 16;
+    const graphH = H - graphTop - 12;
 
     // Node positions
-    const importPositions: Array<{ x: number; y: number; path: string }> = imports.map((imp, i) => ({
+    const importPositions = imports.map((imp, i) => ({
       x: LEFT_X,
-      y: (H / (imports.length + 1)) * (i + 1),
+      y: graphTop + (graphH / (imports.length + 1)) * (i + 1),
       path: imp,
     }));
 
-    const dependentPositions: Array<{ x: number; y: number; path: string }> = dependents.map((dep, i) => ({
+    const dependentPositions = dependents.map((dep, i) => ({
       x: RIGHT_X,
-      y: (H / (dependents.length + 1)) * (i + 1),
+      y: graphTop + (graphH / (dependents.length + 1)) * (i + 1),
       path: dep,
     }));
 
-    // Draw edges
-    function drawEdge(
+    // ── Draw edges ──────────────────────────────────────────────────────
+
+    function drawCurvedEdge(
       x1: number, y1: number,
       x2: number, y2: number,
       color: string,
+      arrowAtEnd: boolean,
     ) {
+      const dx = x2 - x1;
+      const cpOffset = Math.min(Math.abs(dx) * 0.4, 60);
+
       ctx.beginPath();
       ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      ctx.bezierCurveTo(x1 + cpOffset, y1, x2 - cpOffset, y2, x2, y2);
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.6;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.5;
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Arrowhead at target
-      const angle = Math.atan2(y2 - y1, x2 - x1);
-      const AL = 7;
-      const AW = Math.PI / 7;
+      // Arrowhead — compute tangent at the arrow end of the bezier
+      const t = arrowAtEnd ? 0.97 : 0.03;
+      const tI = 1 - t;
+      // Derivative of cubic bezier for tangent direction
+      const tx = 3 * tI * tI * (x1 + cpOffset - x1)
+               + 6 * tI * t * ((x2 - cpOffset) - (x1 + cpOffset))
+               + 3 * t * t * (x2 - (x2 - cpOffset));
+      const ty = 3 * tI * tI * (y1 - y1)
+               + 6 * tI * t * (y2 - y1)
+               + 3 * t * t * (y2 - y2);
+      const angle = arrowAtEnd ? Math.atan2(ty, tx) : Math.atan2(-ty, -tx);
+      const tip = arrowAtEnd ? { x: x2, y: y2 } : { x: x1, y: y1 };
+      const AL = 8;
+      const AW = Math.PI / 6;
+
       ctx.beginPath();
-      ctx.moveTo(x2, y2);
-      ctx.lineTo(
-        x2 - AL * Math.cos(angle - AW),
-        y2 - AL * Math.sin(angle - AW),
-      );
-      ctx.lineTo(
-        x2 - AL * Math.cos(angle + AW),
-        y2 - AL * Math.sin(angle + AW),
-      );
+      ctx.moveTo(tip.x, tip.y);
+      ctx.lineTo(tip.x - AL * Math.cos(angle - AW), tip.y - AL * Math.sin(angle - AW));
+      ctx.lineTo(tip.x - AL * Math.cos(angle + AW), tip.y - AL * Math.sin(angle + AW));
       ctx.closePath();
       ctx.fillStyle = color;
-      ctx.globalAlpha = 0.7;
+      ctx.globalAlpha = 0.8;
       ctx.fill();
       ctx.globalAlpha = 1;
     }
 
-    // Import edges: import node → centre
+    // Import edges: arrow points FROM import node → TO centre (this file uses them)
     for (const pos of importPositions) {
       const isCross = crossLayerImports.has(pos.path);
-      drawEdge(pos.x, pos.y, CX, CY, isCross ? "#EF9F27" : "#B4B2A9");
+      drawCurvedEdge(pos.x, pos.y, CX, CY, isCross ? "#EF9F27" : "#888780", true);
     }
 
-    // Dependent edges: centre → dependent node
+    // Dependent edges: arrow points FROM centre → TO dependent (they use this file)
     for (const pos of dependentPositions) {
-      drawEdge(CX, CY, pos.x, pos.y, "#5DCAA5");
+      const isCross = crossLayerDependents.has(pos.path);
+      drawCurvedEdge(CX, CY, pos.x, pos.y, isCross ? "#EF9F27" : "#1D9E75", true);
     }
 
-    // Draw import nodes
+    // ── Draw nodes ──────────────────────────────────────────────────────
+
+    // Import nodes (left side)
     for (const pos of importPositions) {
       const isCross = crossLayerImports.has(pos.path);
       const color = isCross ? "#EF9F27" : "#888780";
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, NODE_R, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
 
@@ -285,32 +337,48 @@
       ctx.font = "10px monospace";
       ctx.fillStyle = "#b4b8c8";
       ctx.textAlign = "end";
-      ctx.fillText(truncate(shortName(pos.path), 28), pos.x - 9, pos.y + 3);
+      ctx.fillText(truncate(shortName(pos.path), maxLabelChars), pos.x - LABEL_GAP, pos.y + 3);
     }
 
-    // Draw dependent nodes
+    // Dependent nodes (right side)
     for (const pos of dependentPositions) {
+      const isCross = crossLayerDependents.has(pos.path);
+      const color = isCross ? "#EF9F27" : "#1D9E75";
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = "#1D9E75";
+      ctx.arc(pos.x, pos.y, NODE_R, 0, Math.PI * 2);
+      ctx.fillStyle = color;
       ctx.fill();
 
       // Label right of node
       ctx.font = "10px monospace";
       ctx.fillStyle = "#b4b8c8";
       ctx.textAlign = "start";
-      ctx.fillText(truncate(shortName(pos.path), 28), pos.x + 9, pos.y + 3);
+      ctx.fillText(truncate(shortName(pos.path), maxLabelChars), pos.x + LABEL_GAP, pos.y + 3);
+
+      // Layer badge for cross-layer dependents
+      if (isCross) {
+        const depLayer = importedByLayerMap.get(pos.path);
+        if (depLayer) {
+          const label = truncate(shortName(pos.path), maxLabelChars);
+          const labelW = ctx.measureText(label).width;
+          ctx.font = "8px monospace";
+          ctx.fillStyle = "#EF9F27";
+          ctx.globalAlpha = 0.7;
+          ctx.fillText(depLayer, pos.x + LABEL_GAP + labelW + 6, pos.y + 3);
+          ctx.globalAlpha = 1;
+        }
+      }
     }
 
-    // Draw centre node (this file) with halo
+    // Centre node with halo
     ctx.beginPath();
-    ctx.arc(CX, CY, 14, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(127, 119, 221, 0.3)";
+    ctx.arc(CX, CY, 16, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(127, 119, 221, 0.25)";
     ctx.lineWidth = 3;
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(CX, CY, 9, 0, Math.PI * 2);
+    ctx.arc(CX, CY, 10, 0, Math.PI * 2);
     ctx.fillStyle = "#7F77DD";
     ctx.fill();
 
@@ -319,6 +387,17 @@
     ctx.fillStyle = "#e8eaf0";
     ctx.textAlign = "center";
     ctx.fillText(truncate(fileName, 28), CX, CY + 28);
+
+    // Export count badge above centre node
+    const exportCount = data.exports?.length ?? 0;
+    if (exportCount > 0 && dependents.length > 0) {
+      ctx.font = "8px monospace";
+      ctx.fillStyle = "#7F77DD";
+      ctx.globalAlpha = 0.7;
+      ctx.textAlign = "center";
+      ctx.fillText(`${exportCount} exports`, CX, CY - 22);
+      ctx.globalAlpha = 1;
+    }
   }
 
   $effect(() => {
@@ -435,9 +514,9 @@
       <div class="section">
         <div class="graph-legend">
           <span class="legend-item"><span class="legend-dot" style="background:#7F77DD"></span>this file</span>
-          <span class="legend-item"><span class="legend-dot" style="background:#888780"></span>imports</span>
-          <span class="legend-item"><span class="legend-dot" style="background:#1D9E75"></span>imported by</span>
-          {#if hasCrossLayerImports}
+          <span class="legend-item"><span class="legend-dot" style="background:#888780"></span>depends on</span>
+          <span class="legend-item"><span class="legend-dot" style="background:#1D9E75"></span>used by</span>
+          {#if hasCrossLayerImports || crossLayerDependents.size > 0}
             <span class="legend-item"><span class="legend-dot" style="background:#EF9F27"></span>cross-layer</span>
           {/if}
         </div>

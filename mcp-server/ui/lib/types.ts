@@ -45,3 +45,39 @@ export interface GraphData {
   insights?: any;
   principles?: Record<string, PrincipleInfo>;
 }
+
+/** Index-encoded compact graph from the MCP tool. */
+export interface CompactGraphData {
+  _compact: true;
+  node_ids: string[];
+  nodes: Array<{
+    l: string;
+    v?: number;
+    t?: string[];
+    c?: boolean;
+    k?: string;
+  }>;
+  edges: [number, number][];
+  layers: GraphData["layers"];
+  generated_at: string;
+}
+
+/** Decode a compact graph into the standard GraphData the UI expects. */
+export function decodeCompactGraph(compact: CompactGraphData): GraphData {
+  const nodes: GraphNode[] = compact.node_ids.map((id, i) => {
+    const n = compact.nodes[i];
+    return {
+      id,
+      layer: n.l,
+      violation_count: n.v ?? 0,
+      top_violations: n.t ?? [],
+      changed: n.c ?? false,
+      kind: n.k,
+    };
+  });
+  const edges: GraphEdge[] = compact.edges.map(([si, ti]) => ({
+    source: compact.node_ids[si],
+    target: compact.node_ids[ti],
+  }));
+  return { nodes, edges, layers: compact.layers };
+}

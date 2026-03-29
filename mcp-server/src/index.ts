@@ -12,7 +12,7 @@ import { listPrinciples } from "./tools/list-principles.ts";
 import { reviewCode } from "./tools/review-code.ts";
 import { getCompliance } from "./tools/get-compliance.ts";
 import { report } from "./tools/report.ts";
-import { codebaseGraph } from "./tools/codebase-graph.ts";
+import { codebaseGraph, compactGraph } from "./tools/codebase-graph.ts";
 import { getFileContext } from "./tools/get-file-context.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
 
@@ -209,7 +209,7 @@ registerToolWithUi(
   "codebase-graph.html",
   async (input) => {
     const result = await codebaseGraph(input, projectDir, pluginDir);
-    return jsonResponse(result);
+    return jsonResponse(compactGraph(result));
   },
 );
 

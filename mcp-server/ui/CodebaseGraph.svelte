@@ -4,16 +4,19 @@
   import EmptyState from "./components/EmptyState.svelte";
   import SubGraph from "./components/SubGraph.svelte";
   import CodebaseGraphDetailPanel from "./components/CodebaseGraphDetailPanel.svelte";
-  import type { GraphData, GraphNode } from "./lib/types";
+  import type { GraphData, GraphNode, CompactGraphData } from "./lib/types";
+  import { decodeCompactGraph } from "./lib/types";
   import type { FilterOptions } from "./lib/sigmaGraph";
 
   // ── Data loading ──────────────────────────────────────────────────────────
 
   const loader = useDataLoader(async () => {
     await bridge.init();
-    const result = await bridge.waitForToolResult() as GraphData;
-    if (!result) throw new Error("No data received from tool");
-    return result;
+    const raw = await bridge.waitForToolResult();
+    if (!raw) throw new Error("No data received from tool");
+    // Support both compact (index-encoded) and full graph formats
+    if (raw._compact) return decodeCompactGraph(raw as CompactGraphData);
+    return raw as GraphData;
   });
 
   let status = $derived(loader.status);
