@@ -45,6 +45,137 @@ export interface BlastRadiusReport {
 }
 
 // ---------------------------------------------------------------------------
+// Unified Blast Radius Types (new design — see br-03 for wiring)
+// ---------------------------------------------------------------------------
+
+export interface BlastRadiusFile {
+  path: string;
+  depth: number;
+  /** edge_type from file_edges or entity edges */
+  relationship: string;
+  layer: string;
+  is_test: boolean;
+  in_degree: number;
+  affected_entities?: string[];
+}
+
+export type BlastSeverity = 'contained' | 'low' | 'moderate' | 'high' | 'critical';
+
+export interface BlastRadiusSummary {
+  severity: BlastSeverity;
+  total_files: number;
+  total_production_files: number;
+  cross_layer_count: number;
+  max_depth_reached: number;
+  amplification_risk: boolean;
+  description: string;
+}
+
+export interface UnifiedBlastRadiusReport {
+  seed_file: string;
+  seed_layer: string;
+  summary: BlastRadiusSummary;
+  by_depth: Record<number, BlastRadiusFile[]>;
+  affected: BlastRadiusFile[];
+}
+
+// ---------------------------------------------------------------------------
+// Pure functions for unified blast radius analysis
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect whether a file path belongs to a test file.
+ * Matches __tests__/, test/, tests/ directories and .test.* / .spec.* extensions.
+ */
+function isTestFile(path: string): boolean {
+  return /(?:^|\/)__tests__\/|(?:^|\/)test\/|(?:^|\/)tests\/|(?:^|\/)[^.]+\.(?:test|spec)\.[^.]+$/i.test(
+    path,
+  );
+}
+
+/**
+ * Classify the blast radius severity of a change and produce a human-readable summary.
+ *
+ * Severity rules (evaluated on production files only):
+ *   contained — 0 production files affected
+ *   low       — 1–3 prod files, all same layer as seed, no file with in_degree > 5
+ *   moderate  — 4–8 prod files, OR any cross-layer dependency
+ *   high      — 9+ prod files, OR any affected file with in_degree > 10
+ *   critical  — any file with in_degree > 10 AND cross-layer (hub amplification)
+ *
+ * Test files are excluded from severity computation but counted in total_files.
+ */
+export function classifyBlastSeverity(
+  affected: BlastRadiusFile[],
+  seedLayer: string,
+): BlastRadiusSummary {
+  const total_files = affected.length;
+  const prodFiles = affected.filter((f) => !f.is_test);
+  const total_production_files = prodFiles.length;
+
+  const crossLayerFiles = prodFiles.filter((f) => f.layer !== seedLayer);
+  const cross_layer_count = crossLayerFiles.length;
+
+  const maxDepthReached =
+    affected.length > 0 ? Math.max(...affected.map((f) => f.depth)) : 0;
+  const max_depth_reached = maxDepthReached;
+
+  const hubFiles = prodFiles.filter((f) => f.in_degree > 10);
+  const amplification_risk = hubFiles.length > 0;
+
+  let severity: BlastSeverity;
+  let description: string;
+
+  if (total_production_files === 0) {
+    severity = 'contained';
+    description = 'Changes are fully contained. No production files depend on this.';
+  } else if (
+    amplification_risk &&
+    cross_layer_count > 0
+  ) {
+    // critical: hub file affected AND crosses layer boundaries
+    severity = 'critical';
+    const hubFile = hubFiles[0];
+    const uniqueLayers = new Set(prodFiles.map((f) => f.layer));
+    description = `Critical blast radius — hub file ${hubFile.path} in ${hubFile.layer} layer is affected, amplifying impact across ${uniqueLayers.size} layers.`;
+  } else if (total_production_files >= 9 || amplification_risk) {
+    // high: 9+ prod files OR any file with in_degree > 10
+    severity = 'high';
+    const hubFile = hubFiles[0];
+    if (hubFile) {
+      description = `High blast radius — ${total_production_files} files affected. ${hubFile.path} is a hub with ${hubFile.in_degree} dependents of its own.`;
+    } else {
+      description = `High blast radius — ${total_production_files} files affected.`;
+    }
+  } else if (total_production_files >= 4 || cross_layer_count > 0) {
+    // moderate: 4–8 prod files OR any cross-layer dependency
+    severity = 'moderate';
+    description = `Moderate blast radius — ${total_production_files} files affected, ${cross_layer_count} across layer boundaries.`;
+  } else {
+    // low: 1–3 prod files, all same layer, no high in_degree
+    const highDegreeFiles = prodFiles.filter((f) => f.in_degree > 5);
+    if (highDegreeFiles.length > 0) {
+      // If some have in_degree > 5 but count is still 1–3 and same layer, bump to moderate
+      severity = 'moderate';
+      description = `Moderate blast radius — ${total_production_files} files affected, ${cross_layer_count} across layer boundaries.`;
+    } else {
+      severity = 'low';
+      description = `Low blast radius — ${total_production_files} direct dependents, all within the ${seedLayer} layer.`;
+    }
+  }
+
+  return {
+    severity,
+    total_files,
+    total_production_files,
+    cross_layer_count,
+    max_depth_reached,
+    amplification_risk,
+    description,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -119,6 +250,9 @@ function getFilePath(store: KgStore, fileId: number): string {
  * @param targets - Entity names or file paths to use as seed points
  * @param options - Optional depth and test-file inclusion controls
  * @returns       A BlastRadiusReport summarising all transitively affected entities
+ *
+ * @deprecated Use the unified blast radius pipeline (to be wired in br-03) that returns
+ *             UnifiedBlastRadiusReport with classifyBlastSeverity() severity classification.
  */
 export function analyzeBlastRadius(
   db: Database.Database,
