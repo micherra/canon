@@ -304,6 +304,7 @@ export async function getFileContext(
   // Load entity data from the knowledge graph DB if it exists
   let entities: FileEntitySummary[] | undefined;
   let blast_radius: UnifiedBlastRadiusReport | undefined;
+  let dbSummary: string | null = null;
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   if (existsSync(dbPath)) {
     let db: ReturnType<typeof initDatabase> | undefined;
@@ -322,6 +323,16 @@ export async function getFileContext(
           line_start: e.line_start,
           line_end: e.line_end,
         }));
+
+        // DB-first summary lookup
+        try {
+          const summaryRow = store.getSummaryByFile(fileRow.file_id);
+          if (summaryRow) {
+            dbSummary = summaryRow.summary;
+          }
+        } catch {
+          // ignore DB summary errors
+        }
       }
 
       blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2 });
@@ -332,16 +343,18 @@ export async function getFileContext(
     }
   }
 
-  // Load summary from summaries.json
-  let summary: string | null = null;
-  try {
-    const summaries = await loadSummariesFile(projectDir);
-    const entry = summaries[filePath];
-    if (entry) {
-      summary = entry.summary;
+  // Load summary — DB first, fall back to summaries.json
+  let summary: string | null = dbSummary;
+  if (summary === null) {
+    try {
+      const summaries = await loadSummariesFile(projectDir);
+      const entry = summaries[filePath];
+      if (entry) {
+        summary = entry.summary;
+      }
+    } catch {
+      // no summaries file
     }
-  } catch {
-    // no summaries file
   }
 
   // Group imports by layer

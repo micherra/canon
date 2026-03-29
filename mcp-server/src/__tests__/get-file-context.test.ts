@@ -603,6 +603,146 @@ describe("getFileContext", () => {
     });
   });
 
+  describe("summary field — DB-first reads", () => {
+    it("returns summary from DB when present (DB-first path)", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const fileRow: Omit<FileRow, "file_id"> = {
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      };
+      store.upsertFile(fileRow);
+      const insertedRow = store.getFile("src/api/handler.ts")!;
+      store.upsertSummary({
+        file_id: insertedRow.file_id!,
+        entity_id: null,
+        scope: "file",
+        summary: "DB-sourced summary",
+        model: null,
+        content_hash: "abc123",
+        updated_at: new Date().toISOString(),
+      });
+      db.close();
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.summary).toBe("DB-sourced summary");
+    });
+
+    it("falls back to summaries.json when no DB summary exists", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+      // KG DB exists with file registered, but no summary in DB
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const fileRow: Omit<FileRow, "file_id"> = {
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      };
+      store.upsertFile(fileRow);
+      db.close();
+
+      // Write JSON summary
+      await writeFile(
+        join(tmpDir, ".canon", "summaries.json"),
+        JSON.stringify({
+          "src/api/handler.ts": { summary: "JSON-sourced summary", updated_at: "2025-01-01T00:00:00Z" },
+        }),
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.summary).toBe("JSON-sourced summary");
+    });
+
+    it("returns DB summary when both DB and JSON have a summary (DB takes priority)", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const fileRow: Omit<FileRow, "file_id"> = {
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      };
+      store.upsertFile(fileRow);
+      const insertedRow = store.getFile("src/api/handler.ts")!;
+      store.upsertSummary({
+        file_id: insertedRow.file_id!,
+        entity_id: null,
+        scope: "file",
+        summary: "DB is canonical",
+        model: null,
+        content_hash: "abc123",
+        updated_at: new Date().toISOString(),
+      });
+      db.close();
+
+      await writeFile(
+        join(tmpDir, ".canon", "summaries.json"),
+        JSON.stringify({
+          "src/api/handler.ts": { summary: "JSON version (stale)", updated_at: "2025-01-01T00:00:00Z" },
+        }),
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.summary).toBe("DB is canonical");
+    });
+
+    it("returns null when neither DB nor JSON has a summary", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      // KG DB exists but no summary for the file
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const fileRow: Omit<FileRow, "file_id"> = {
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      };
+      store.upsertFile(fileRow);
+      db.close();
+
+      // No summaries.json written
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+      expect(result.summary).toBeNull();
+    });
+  });
+
   describe("blast_radius field — UnifiedBlastRadiusReport shape", () => {
     it("returns UnifiedBlastRadiusReport shape when KG database is available", async () => {
       await writeFile(
