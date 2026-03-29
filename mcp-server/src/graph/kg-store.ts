@@ -7,7 +7,7 @@
  */
 
 import Database from 'better-sqlite3';
-import type { FileRow, EntityRow, EdgeRow, FileEdgeRow } from './kg-types.ts';
+import type { FileRow, EntityRow, EdgeRow, FileEdgeRow, SummaryRow } from './kg-types.ts';
 
 // ---------------------------------------------------------------------------
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
@@ -53,6 +53,14 @@ export class KgStore {
   private readonly stmtGetFileEdgesFrom: Database.Statement;
   private readonly stmtGetFileEdgesTo: Database.Statement;
   private readonly stmtDeleteFileEdgesByFile: Database.Statement;
+
+  // ---- Summary statements ----
+  private readonly stmtUpsertSummary: Database.Statement;
+  private readonly stmtDeleteExistingNullEntitySummary: Database.Statement;
+  private readonly stmtInsertSummaryReturning: Database.Statement;
+  private readonly stmtGetSummaryByFile: Database.Statement;
+  private readonly stmtDeleteSummariesByFile: Database.Statement;
+  private readonly stmtGetStaleSummaries: Database.Statement;
 
   // ---- Stats statements ----
   private readonly stmtCountFiles: Database.Statement;
@@ -157,6 +165,50 @@ export class KgStore {
     this.stmtDeleteFileEdgesByFile = db.prepare(`
       DELETE FROM file_edges
       WHERE source_file_id = ? OR target_file_id = ?
+    `);
+
+    // Summaries
+    // Note: ON CONFLICT cannot target NULL columns in SQLite (NULLs are always distinct
+    // in UNIQUE constraints). For entity_id IS NULL rows we do a manual DELETE + INSERT.
+    // For non-NULL entity_id the UNIQUE constraint fires normally.
+    this.stmtUpsertSummary = db.prepare(`
+      INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
+      VALUES (@file_id, @entity_id, @scope, @summary, @model, @content_hash, @updated_at)
+      ON CONFLICT(file_id, entity_id, scope) DO UPDATE SET
+        summary      = excluded.summary,
+        model        = excluded.model,
+        content_hash = excluded.content_hash,
+        updated_at   = excluded.updated_at
+      RETURNING *
+    `);
+
+    // For NULL entity_id rows: explicitly delete existing then re-insert (RETURNING *)
+    this.stmtDeleteExistingNullEntitySummary = db.prepare(`
+      DELETE FROM summaries WHERE file_id = @file_id AND entity_id IS NULL AND scope = @scope
+    `);
+
+    this.stmtInsertSummaryReturning = db.prepare(`
+      INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
+      VALUES (@file_id, @entity_id, @scope, @summary, @model, @content_hash, @updated_at)
+      RETURNING *
+    `);
+
+    this.stmtGetSummaryByFile = db.prepare(`
+      SELECT * FROM summaries
+      WHERE file_id = ? AND entity_id IS NULL AND scope = 'file'
+    `);
+
+    this.stmtDeleteSummariesByFile = db.prepare(`
+      DELETE FROM summaries WHERE file_id = ?
+    `);
+
+    this.stmtGetStaleSummaries = db.prepare(`
+      SELECT s.*, f.path, f.content_hash AS file_content_hash
+      FROM summaries s
+      JOIN files f ON f.file_id = s.file_id
+      WHERE s.content_hash IS NOT NULL
+        AND s.content_hash != f.content_hash
+      LIMIT ?
     `);
 
     // Stats
@@ -274,6 +326,43 @@ export class KgStore {
 
   deleteFileEdgesByFile(fileId: number): void {
     this.stmtDeleteFileEdgesByFile.run(fileId, fileId);
+  }
+
+  // --------------------------------------------------------------------------
+  // Summaries
+  // --------------------------------------------------------------------------
+
+  upsertSummary(params: Omit<SummaryRow, 'summary_id'>): SummaryRow {
+    // SQLite UNIQUE constraints treat NULLs as distinct, so ON CONFLICT never fires
+    // for rows where entity_id IS NULL. Handle that case with DELETE + INSERT.
+    if (params.entity_id === null) {
+      this.stmtDeleteExistingNullEntitySummary.run(params);
+      return this.stmtInsertSummaryReturning.get(params) as SummaryRow;
+    }
+    return this.stmtUpsertSummary.get(params) as SummaryRow;
+  }
+
+  getSummaryByFile(fileId: number): SummaryRow | undefined {
+    return this.stmtGetSummaryByFile.get(fileId) as SummaryRow | undefined;
+  }
+
+  getSummariesByFiles(fileIds: number[]): SummaryRow[] {
+    if (fileIds.length === 0) return [];
+    const placeholders = fileIds.map(() => '?').join(',');
+    const stmt = this.db.prepare(
+      `SELECT * FROM summaries WHERE file_id IN (${placeholders}) AND entity_id IS NULL AND scope = 'file'`,
+    );
+    return stmt.all(...fileIds) as SummaryRow[];
+  }
+
+  deleteSummariesByFile(fileId: number): void {
+    this.stmtDeleteSummariesByFile.run(fileId);
+  }
+
+  getStaleSummaries(limit = 100): Array<SummaryRow & { path: string; file_content_hash: string }> {
+    return this.stmtGetStaleSummaries.all(limit) as Array<
+      SummaryRow & { path: string; file_content_hash: string }
+    >;
   }
 
   // --------------------------------------------------------------------------

@@ -582,6 +582,115 @@ describe('Knowledge Graph Store', () => {
       });
     });
 
+    // ---- Summaries ----
+
+    describe('Summaries', () => {
+      let file: FileRow;
+
+      beforeEach(() => {
+        file = store.upsertFile(makeFileRow({ path: 'src/sumFile.ts', content_hash: 'hash-v1' }));
+      });
+
+      function makeSummaryParams(overrides: Partial<Omit<import('../graph/kg-types.ts').SummaryRow, 'summary_id'>> = {}) {
+        return {
+          file_id: file.file_id!,
+          entity_id: null,
+          scope: 'file' as const,
+          summary: 'This file does X.',
+          model: 'gpt-4',
+          content_hash: 'hash-v1',
+          updated_at: '2024-01-01T00:00:00Z',
+          ...overrides,
+        };
+      }
+
+      test('upsertSummary inserts a new row and returns it with summary_id set', () => {
+        const row = store.upsertSummary(makeSummaryParams());
+        expect(row.summary_id).toBeDefined();
+        expect(typeof row.summary_id).toBe('number');
+        expect(row.file_id).toBe(file.file_id);
+        expect(row.scope).toBe('file');
+        expect(row.summary).toBe('This file does X.');
+      });
+
+      test('upsertSummary on duplicate (file_id, null, "file") replaces existing row', () => {
+        // NULL entity_id: SQLite UNIQUE treats NULLs as distinct, so we use DELETE+INSERT.
+        // The summary_id changes (new AUTOINCREMENT), but only one row exists afterwards.
+        store.upsertSummary(makeSummaryParams({ summary: 'First summary.' }));
+        const second = store.upsertSummary(makeSummaryParams({ summary: 'Updated summary.', content_hash: 'hash-v2' }));
+        expect(second.summary).toBe('Updated summary.');
+        expect(second.content_hash).toBe('hash-v2');
+        // Verify only one row exists for this file (no duplicates)
+        const rows = db
+          .prepare(`SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ? AND entity_id IS NULL AND scope = 'file'`)
+          .get(file.file_id) as { cnt: number };
+        expect(rows.cnt).toBe(1);
+      });
+
+      test('getSummaryByFile returns the file-level summary for a given file_id', () => {
+        store.upsertSummary(makeSummaryParams());
+        const found = store.getSummaryByFile(file.file_id!);
+        expect(found).toBeDefined();
+        expect(found!.file_id).toBe(file.file_id);
+        expect(found!.scope).toBe('file');
+      });
+
+      test('getSummaryByFile returns undefined when no summary exists', () => {
+        const other = store.upsertFile(makeFileRow({ path: 'src/noSummary.ts' }));
+        const found = store.getSummaryByFile(other.file_id!);
+        expect(found).toBeUndefined();
+      });
+
+      test('getSummariesByFiles returns summaries for all given file IDs', () => {
+        const file2 = store.upsertFile(makeFileRow({ path: 'src/sumFile2.ts', content_hash: 'hash-a' }));
+        const file3 = store.upsertFile(makeFileRow({ path: 'src/sumFile3.ts', content_hash: 'hash-b' }));
+        store.upsertSummary(makeSummaryParams({ file_id: file.file_id! }));
+        store.upsertSummary(makeSummaryParams({ file_id: file2.file_id! }));
+        store.upsertSummary(makeSummaryParams({ file_id: file3.file_id! }));
+
+        const results = store.getSummariesByFiles([file.file_id!, file2.file_id!]);
+        expect(results).toHaveLength(2);
+        const ids = results.map((r) => r.file_id);
+        expect(ids).toContain(file.file_id);
+        expect(ids).toContain(file2.file_id);
+        expect(ids).not.toContain(file3.file_id);
+      });
+
+      test('getSummariesByFiles returns empty array for empty input', () => {
+        store.upsertSummary(makeSummaryParams());
+        const results = store.getSummariesByFiles([]);
+        expect(results).toHaveLength(0);
+      });
+
+      test('deleteSummariesByFile removes the summary for a file', () => {
+        store.upsertSummary(makeSummaryParams());
+        expect(store.getSummaryByFile(file.file_id!)).toBeDefined();
+        store.deleteSummariesByFile(file.file_id!);
+        expect(store.getSummaryByFile(file.file_id!)).toBeUndefined();
+      });
+
+      test('getStaleSummaries returns summaries where content_hash differs from file', () => {
+        // Summary has hash-v1, but now update the file to hash-v2
+        store.upsertSummary(makeSummaryParams({ content_hash: 'hash-v1' }));
+        // Directly update the file's content_hash to simulate re-indexing
+        db.prepare(`UPDATE files SET content_hash = 'hash-v2' WHERE file_id = ?`).run(file.file_id);
+
+        const stale = store.getStaleSummaries();
+        expect(stale.length).toBeGreaterThanOrEqual(1);
+        const found = stale.find((s) => s.file_id === file.file_id);
+        expect(found).toBeDefined();
+        expect(found!.file_content_hash).toBe('hash-v2');
+        expect(found!.content_hash).toBe('hash-v1');
+      });
+
+      test('getStaleSummaries returns empty array when all summaries are current', () => {
+        // Summary content_hash matches the file's content_hash (both 'hash-v1')
+        store.upsertSummary(makeSummaryParams({ content_hash: 'hash-v1' }));
+        const stale = store.getStaleSummaries();
+        expect(stale).toHaveLength(0);
+      });
+    });
+
     // ---- Stats ----
 
     describe('Stats', () => {
