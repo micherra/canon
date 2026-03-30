@@ -68,7 +68,7 @@ done <<< "$STAGED_FILES"
 
 # If secrets detected, BLOCK the commit (exit 2)
 if [[ -n "$SECRET_VIOLATIONS" ]]; then
-  cat <<EOF
+  cat <<EOF >&2
 CANON PRE-COMMIT BLOCK: secrets-never-in-code (rule) — potential secrets detected in staged files.
 
 ${SECRET_VIOLATIONS}

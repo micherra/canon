@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-cat <<'EOF'
+cat <<'EOF' >&2
 CANON: Planning mode intercepted. Native planning bypasses Canon's orchestration — plans won't be persisted or checked against principles.
 
 Route this through Canon instead: classify as a **plan** intent and spawn the architect in interactive mode. The architect will propose approaches, ask for your input, and persist the plan to the workspace where downstream agents can use it.

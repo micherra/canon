@@ -24,28 +24,28 @@ fi
 
 # Check for destructive git operations
 if echo "$COMMAND" | grep -qE '\bgit\b.*\breset\b.*--hard'; then
-  cat <<EOF
+  cat <<EOF >&2
 CANON: Destructive git operation detected — git reset --hard. This discards all uncommitted changes and cannot be undone. Ensure you have committed or stashed any work you want to keep.
 EOF
   exit 2
 fi
 
 if echo "$COMMAND" | grep -qE '\bgit\b.*\bclean\b.*-[a-zA-Z]*f'; then
-  cat <<EOF
+  cat <<EOF >&2
 CANON: Destructive git operation detected — git clean -f. This permanently deletes untracked files. Ensure no important untracked files will be lost.
 EOF
   exit 2
 fi
 
 if echo "$COMMAND" | grep -qE '\bgit\b.*\bcheckout\b.*--\s*\.'; then
-  cat <<EOF
+  cat <<EOF >&2
 CANON: Destructive git operation detected — git checkout -- . This discards all unstaged changes in the working tree and cannot be undone.
 EOF
   exit 2
 fi
 
 if echo "$COMMAND" | grep -qE '\bgit\b.*\bbranch\b.*-D\b'; then
-  cat <<EOF
+  cat <<EOF >&2
 CANON: Destructive git operation detected — git branch -D. This force-deletes a branch even if it has unmerged changes.
 EOF
   exit 2
