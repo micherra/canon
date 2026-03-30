@@ -5,9 +5,9 @@
 # for hardcoded secrets. Blocks the commit if any are found.
 #
 # Input: JSON on stdin with the tool call details
-# Output: plain-text diagnostic on stdout (when blocking)
+# Output: plain-text diagnostic on stderr (when blocking)
 # Exit 0: allow the tool call
-# Exit 2: block the tool call (plain-text reason on stdout)
+# Exit 2: block the tool call (plain-text reason on stderr)
 
 set -euo pipefail
 

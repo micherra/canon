@@ -5,7 +5,7 @@
 # which persists plans to the workspace and checks them against principles.
 #
 # Input: JSON on stdin with the tool call details
-# Output: Redirect message on stdout (when blocking)
+# Output: Redirect message on stderr (when blocking)
 # Exit 0: allow the tool call
 # Exit 2: block the tool call (user will be prompted)
 
