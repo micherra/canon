@@ -293,7 +293,7 @@ export class DriftDb {
           : null,
       });
 
-      for (const v of entry.violations) {
+      for (const v of entry.violations ?? []) {
         this.stmtInsertViolation.run({
           review_id: entry.review_id,
           principle_id: v.principle_id,

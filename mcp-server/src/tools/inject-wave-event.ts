@@ -1,7 +1,6 @@
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { generateId } from "../utils/id.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { createJsonlLogger } from "../orchestration/events.ts";
 import type { WaveEvent, WaveEventType } from "../orchestration/flow-schema.ts";
 
 export interface InjectWaveEventInput {
@@ -57,11 +56,10 @@ export async function injectWaveEvent(input: InjectWaveEventInput): Promise<Inje
   const pending = store.getWaveEvents({ status: "pending" });
 
   // Emit wave_event_injected (best-effort — same pattern as update-board.ts)
-  const log = createJsonlLogger(input.workspace);
   const onWaveEventInjected = (
     e: import("../orchestration/events.js").FlowEventMap["wave_event_injected"],
   ) => {
-    log("wave_event_injected", e).catch(() => {});
+    try { store.appendEvent("wave_event_injected", e as Record<string, unknown>); } catch { /* best-effort */ }
   };
   flowEventBus.once("wave_event_injected", onWaveEventInjected);
   try {

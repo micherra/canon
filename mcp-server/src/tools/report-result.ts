@@ -22,7 +22,6 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow, CannotFixItem, GateResult, PostconditionResult, DiscoveredGate, PostconditionAssertion, ViolationSeverities, TestResults } from "../orchestration/flow-schema.ts";
 import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { createJsonlLogger } from "../orchestration/events.ts";
 import { executeEffects } from "../orchestration/effects.ts";
 import { inspectDebateProgress } from "../orchestration/debate.ts";
 
@@ -517,12 +516,11 @@ async function reportResultLocked(
   // Emit events (best-effort — listeners must swallow errors).
   // once() auto-removes listeners on first fire; the finally block removes any
   // listeners that were registered but not fired due to an error mid-sequence.
-  const log = createJsonlLogger(input.workspace);
   const onStateCompleted = (event: import("../orchestration/events.js").FlowEventMap["state_completed"]) => {
-    log("state_completed", event).catch(() => {});
+    try { store.appendEvent("state_completed", event as Record<string, unknown>); } catch { /* best-effort */ }
   };
   const onTransitionEvaluated = (event: import("../orchestration/events.js").FlowEventMap["transition_evaluated"]) => {
-    log("transition_evaluated", event).catch(() => {});
+    try { store.appendEvent("transition_evaluated", event as Record<string, unknown>); } catch { /* best-effort */ }
   };
   flowEventBus.once("state_completed", onStateCompleted);
   flowEventBus.once("transition_evaluated", onTransitionEvaluated);

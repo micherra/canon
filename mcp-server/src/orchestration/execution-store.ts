@@ -792,7 +792,31 @@ const storeCache = new Map<string, ExecutionStore>();
  * Returns a cached ExecutionStore for the given workspace directory.
  * Creates orchestration.db in the workspace on first call.
  */
+/**
+ * Guards that a workspace path follows the canonical `.canon/workspaces/` convention.
+ * Throws when the path does not contain the expected segment, preventing accidental
+ * misuse (e.g. passing a project root instead of a workspace subdirectory).
+ *
+ * Skipped when `CANON_SKIP_WORKSPACE_VALIDATION=true` or when running under Vitest
+ * (`VITEST` env var set). Tests that operate on temp dirs typically do not include
+ * the `.canon/workspaces/` segment in their paths.
+ */
+export function assertWorkspacePath(workspace: string): void {
+  if (
+    !workspace.includes('.canon/workspaces/') &&
+    !workspace.includes('.canon\\workspaces\\') &&
+    process.env.CANON_SKIP_WORKSPACE_VALIDATION !== 'true' &&
+    !process.env.VITEST
+  ) {
+    throw new Error(
+      `Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`,
+    );
+  }
+}
+
 export function getExecutionStore(workspace: string): ExecutionStore {
+  assertWorkspacePath(workspace);
+
   const existing = storeCache.get(workspace);
   if (existing) return existing;
 

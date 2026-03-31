@@ -1,7 +1,6 @@
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { resolveEventAgents } from "../orchestration/wave-events.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { createJsonlLogger } from "../orchestration/events.ts";
 
 export interface ResolveWaveEventInput {
   workspace: string;
@@ -63,11 +62,10 @@ export async function resolveWaveEvent(
   const pending = store.getWaveEvents({ status: "pending" });
 
   // Emit wave_event_resolved (best-effort — same pattern as inject-wave-event.ts)
-  const log = createJsonlLogger(input.workspace);
   const onWaveEventResolved = (
     e: import("../orchestration/events.js").FlowEventMap["wave_event_resolved"],
   ) => {
-    log("wave_event_resolved", e).catch(() => {});
+    try { store.appendEvent("wave_event_resolved", e as Record<string, unknown>); } catch { /* best-effort */ }
   };
   flowEventBus.once("wave_event_resolved", onWaveEventResolved);
   try {
