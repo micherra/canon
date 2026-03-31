@@ -426,6 +426,7 @@ The flow system has five sources of brittleness: fragment params are string inte
 
 #### Decision
 
+
 Keep the YAML+MD format. Add strict load-time validation, move execution state management to SQLite, and validate agent-produced artifacts that drive execution.
 
 **Load-time validation (strict):**
