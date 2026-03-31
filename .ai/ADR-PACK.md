@@ -249,24 +249,44 @@ Negative: pipeline abstraction adds indirection, must migrate ~500 lines of impl
 
 ### Context
 
-Agents (researchers, implementors, etc.) spend significant tool calls grepping to orient themselves — finding file locations, discovering patterns, tracing dependencies, understanding conventions. This data already exists in Canon's knowledge graph (ADR-005), summaries system, and file context tools, but nothing bridges it into agent spawn prompts automatically. The prompt assembly pipeline (ADR-006) has explicit injection stages but no policy for what project context to inject.
+Canon is a Claude Code plugin. Agents are Claude Code subagents with 200k-token context windows. The real cost of agent disorientation isn't tokens — it's **tool-call round-trips**. Each Grep/Glob/Read call burns a turn in the agent's conversation, and discovered context inflates the window, pushing toward compression and competing with the agent's working attention for the actual task.
+
+Currently ~25–35% of each agent's instruction weight is **orientation protocol** — steps like "read your plan", "load principles", "check context.md" that exist because agents arrive cold. This data already exists in Canon's knowledge graph (ADR-005), summaries system, and file context tools, but nothing bridges it into spawn prompts automatically. The prompt assembly pipeline (ADR-006) has explicit injection stages but no policy for what project context to inject.
+
+The current pipeline has essentially no budget model. The only hard limit is a 4,000-char cap on wave message injection. Everything else — injected artifacts, progress, wave briefings — concatenates unbounded with no tokenizer or size guard.
 
 ### Decision
 
-Define a context assembly policy that the prompt pipeline (ADR-006) executes at spawn time:
+Define a context assembly policy that the prompt pipeline (ADR-006) executes at spawn time. The goal is **tool-call reduction**, not token minimization — spend tokens upfront on pre-computed context to avoid sequential discovery tool calls.
 
-1. **File affinity resolution** — When a task plan references specific files, pipeline stage 1 (resolve-context) resolves `get_file_context` for each file and injects summaries, imports, exports, blast radius. The architect writes the affected-files list to a structured board variable.
-2. **KG summary injection** — Pipeline stage 6 (inject-wave-briefing) queries SQLite KG (ADR-005) for file-level summaries of files in task scope. Compact format replaces verbose research prose.
-3. **Project topology variable** — `${project_structure}` computed at workspace init from KG layer/degree data: layer breakdown, hub files (high in-degree), recent changes since base branch.
-4. **Conventions pre-indexing** — Lightweight scan at workspace init captures test framework, import style, error handling patterns into a `${conventions}` variable. This is the scribe's CONVENTIONS.md content, but computed before implementation rather than after.
-5. **Budget-aware injection** — Each pipeline stage has a configurable token budget cap. When context exceeds budget, prioritize by blast radius (highest impact files first). Prevents prompt overflow.
-6. **graph_query as agent default** — Agent definition files (.md) explicitly instruct agents to prefer `graph_query` MCP tool over Grep for dependency/caller/callee questions. Zero system changes, convention update only.
+**Context injection mechanisms:**
+
+1. **File affinity resolution** — When a task plan references specific files, pipeline stage 1 (resolve-context) resolves `get_file_context` for each and injects summaries, imports, exports, blast radius. The architect writes the affected-files list to a structured board variable. Eliminates 3–5 Read/Glob/Grep calls per file.
+2. **KG summary injection** — Pipeline stage 6 (inject-wave-briefing) queries SQLite KG (ADR-005) for file-level summaries of files in task scope. Compact format replaces verbose research prose. Eliminates the "read callers, read callees, understand blast radius" discovery cluster.
+3. **Project topology variable** — `${project_structure}` computed at workspace init from KG layer/degree data: layer breakdown, hub files (high in-degree), recent changes since base branch. Low injection cost, eliminates "where does this kind of file live?" orientation.
+4. **Conventions pre-indexing** — Lightweight scan at workspace init captures test framework, import style, error handling patterns into a `${conventions}` variable. This is the scribe's CONVENTIONS.md content, but computed before implementation rather than after. Eliminates the "read CLAUDE.md + grep for patterns" cluster.
+5. **graph_query as agent default** — Agent definition files (.md) explicitly instruct agents to prefer `graph_query` MCP tool over Grep for dependency/caller/callee questions. Zero system changes, convention update only.
+
+**Injection budgeting (item-count, not token-count):**
+
+The 200k context window is not the constraint — **attention efficiency** is. Pre-injecting 2,000 tokens of structured context to avoid 8–10 tool calls is always worthwhile. Budget by item count rather than token count:
+
+- File affinity: max N files (ordered by blast radius), where N is configurable per flow tier (e.g., 5 for hotfix, 15 for feature, 30 for epic)
+- KG summaries: one line per file in scope, capped at the same N
+- `${project_structure}`: fixed-size snapshot, always injected
+- `${conventions}`: fixed-size snapshot, always injected
+
+No tokenizer needed. Item-count caps naturally bound injection size as a side effect.
+
+**Agent instruction compression (consequence, not prerequisite):**
+
+Once context injection is reliable, agent `.md` files can be revised to remove orientation protocol (~25–35% of current instruction weight) and retain only behavioral constraints, process steps, and output format requirements. This is a follow-on task — do not compress instructions until the pipeline reliably delivers the context they compensate for.
 
 ### Consequences
 
-Positive: agents arrive pre-oriented, fewer grep/glob/read calls, faster execution, reduced token usage, better context quality (structured vs. discovered).
+Positive: agents arrive pre-oriented, tool calls per agent run drop significantly (target: 50%+ reduction in orientation Grep/Glob/Read), faster execution, better attention efficiency (structured context vs. discovered context competing in the window).
 
-Negative: stale context risk if KG/summaries are outdated (mitigated by ADR-007 background refresh), budget tuning required, affected-files extraction adds architect responsibility.
+Negative: stale context risk if KG/summaries are outdated (mitigated by ADR-007 background refresh), affected-files extraction adds architect responsibility, agent instruction compression requires careful sequencing (only after reliable delivery).
 
 ### Implementation
 
@@ -274,9 +294,10 @@ Negative: stale context risk if KG/summaries are outdated (mitigated by ADR-007 
 - Add KG summary query to stage 6 wave briefing assembly
 - Implement `${project_structure}` variable computation at workspace init
 - Implement `${conventions}` variable via lightweight pattern scan at workspace init
-- Add per-stage token budget configuration to flow schema
-- Update researcher and implementor agent .md files to prefer graph_query
-- Acceptance: measure grep/glob call reduction in agent runs before/after
+- Add item-count caps per flow tier to flow schema (not token budgets)
+- Update researcher and implementor agent `.md` files to prefer `graph_query`
+- Acceptance metric: measure tool calls per agent run (Grep + Glob + Read) before/after, target 50%+ reduction in orientation calls
+- Follow-on: compress agent `.md` orientation sections once injection is proven reliable
 
 ### Dependencies
 
@@ -335,5 +356,5 @@ ADRs 002, 003, 004 can progress in parallel once 001 is in place. ADR 005 is ind
 - Strict flow validation at load time, SQL-backed stuck detection, explicit wave policy
 - Single graph representation (SQLite KG)
 - Explicit prompt assembly pipeline with structural escaping
-- Context assembly policy: pre-orient agents via file affinity, KG summaries, topology variable, conventions pre-indexing, and budget-aware injection
+- Context assembly policy: pre-orient agents via file affinity, KG summaries, topology and conventions variables to reduce tool-call overhead; item-count budgeting, not token budgeting; agent instruction compression as a follow-on
 - Background jobs via child processes for heavy analysis
