@@ -43,6 +43,7 @@ describe("getFileContext", () => {
     );
 
     const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+    if (!result.ok) throw new Error(result.message);
 
     expect(result.file_path).toBe("src/api/handler.ts");
     expect(result.layer).toBe("api");
@@ -62,6 +63,7 @@ describe("getFileContext", () => {
     );
 
     const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+    if (!result.ok) throw new Error(result.message);
 
     expect(result.imports).toContain("src/utils/helper.ts");
   });
@@ -81,18 +83,44 @@ describe("getFileContext", () => {
     );
 
     const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
+    if (!result.ok) throw new Error(result.message);
 
     expect(result.imported_by).toHaveLength(2);
     expect(result.imported_by).toContain("src/api/handler.ts");
     expect(result.imported_by).toContain("src/services/svc.ts");
   });
 
-  it("returns empty for missing file", async () => {
+  it("returns INVALID_INPUT for path traversal outside project directory", async () => {
+    const result = await getFileContext({ file_path: "../../etc/passwd" }, tmpDir);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("traverses");
+    }
+  });
+
+  it("returns INVALID_INPUT for missing file", async () => {
     const result = await getFileContext({ file_path: "src/nonexistent.ts" }, tmpDir);
 
-    expect(result.content).toBe("");
-    expect(result.imports).toEqual([]);
-    expect(result.exports).toEqual([]);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("src/nonexistent.ts");
+    }
+  });
+
+  it("returns ok: true for existing file", async () => {
+    await writeFile(
+      join(tmpDir, "src", "api", "handler.ts"),
+      `export function handleRequest() {}`,
+    );
+
+    const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.content).toContain("handleRequest");
   });
 
   it("truncates content at 200 lines", async () => {
@@ -100,6 +128,7 @@ describe("getFileContext", () => {
     await writeFile(join(tmpDir, "src", "utils", "big.ts"), lines.join("\n"));
 
     const result = await getFileContext({ file_path: "src/utils/big.ts" }, tmpDir);
+    if (!result.ok) throw new Error(result.message);
 
     expect(result.content).toContain("... (truncated)");
     expect(result.content.split("\n").length).toBeLessThanOrEqual(202);
@@ -115,6 +144,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.summary).toBeNull();
     });
@@ -132,6 +162,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.summary).toBe("Handles HTTP requests");
     });
@@ -149,6 +180,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.summary).toBeNull();
     });
@@ -166,6 +198,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.summary).toBe("Legacy plain text summary");
     });
@@ -179,6 +212,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.violations).toEqual([]);
     });
@@ -204,6 +238,7 @@ describe("getFileContext", () => {
       });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.violations).toHaveLength(2);
       expect(result.violations[0]).toEqual({ principle_id: "thin-handlers", severity: "strong-opinion", message: "Handler is too thick" });
@@ -240,6 +275,7 @@ describe("getFileContext", () => {
       });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.violations).toHaveLength(1);
       expect(result.violations[0].principle_id).toBe("new-violation");
@@ -264,6 +300,7 @@ describe("getFileContext", () => {
       });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.violation_count).toBeGreaterThan(0);
       expect(result.violations).toHaveLength(1);
@@ -278,6 +315,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.imports_by_layer).toEqual({});
     });
@@ -297,6 +335,7 @@ describe("getFileContext", () => {
       await writeFile(join(tmpDir, "src", "domain", "model.ts"), `export function model() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.imports_by_layer).toBeDefined();
       const layers = Object.keys(result.imports_by_layer);
@@ -318,6 +357,7 @@ describe("getFileContext", () => {
       await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.imports).toContain("src/utils/helper.ts");
       expect(result.imports_by_layer["utils"]).toContain("src/utils/helper.ts");
@@ -332,6 +372,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       // Default layer mappings are always provided (api, ui, domain, data, infra, shared)
       expect(result.layer_stack.length).toBeGreaterThan(0);
@@ -357,6 +398,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.layer_stack).toEqual(["api", "services", "utils"]);
     });
@@ -370,6 +412,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.role).toBe("internal");
     });
@@ -383,6 +426,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.imported_by_layer).toEqual({});
     });
@@ -406,6 +450,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.imported_by_layer).toBeDefined();
       const layers = Object.keys(result.imported_by_layer);
@@ -430,6 +475,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.imported_by).toContain("src/api/handler.ts");
       expect(result.imported_by_layer["api"]).toContain("src/api/handler.ts");
@@ -444,6 +490,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.shape).toBeDefined();
       expect(result.shape.label).toBe("Internal");
@@ -470,6 +517,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.shape.label).toBe("Leaf");
       expect(result.shape.description).toBe("Nothing depends on this. Safe to change.");
@@ -498,6 +546,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.shape.label).toBe("Sink");
     });
@@ -525,6 +574,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.shape.label).toBe("High fan-out hub");
     });
@@ -549,6 +599,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.shape.label).toBe("Leaf");
     });
@@ -577,6 +628,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.shape.label).toMatch(/^Cycle member — /);
     });
@@ -590,6 +642,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.project_max_impact).toBe(0);
     });
@@ -627,6 +680,7 @@ describe("getFileContext", () => {
       db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.summary).toBe("DB-sourced summary");
     });
@@ -660,6 +714,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.summary).toBe("JSON-sourced summary");
     });
@@ -702,6 +757,7 @@ describe("getFileContext", () => {
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.summary).toBe("DB is canonical");
     });
@@ -730,6 +786,7 @@ describe("getFileContext", () => {
       // No summaries.json written
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.summary).toBeNull();
     });
@@ -759,6 +816,7 @@ describe("getFileContext", () => {
       db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       // blast_radius should be present and have UnifiedBlastRadiusReport shape
       expect(result.blast_radius).toBeDefined();
@@ -780,6 +838,7 @@ describe("getFileContext", () => {
 
       // No KG database created
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
 
       expect(result.blast_radius).toBeUndefined();
     });

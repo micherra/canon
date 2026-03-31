@@ -337,6 +337,7 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
 describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
   it("loadFlow loads epic.md and returns state_graph", async () => {
     const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
+    if (!result.ok) throw new Error(result.message);
 
     expect(result.flow.name).toBe("epic");
     expect(result.errors).toEqual([]);
@@ -346,6 +347,7 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
 
   it("loadFlow state_graph for epic includes research → design edge", async () => {
     const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
+    if (!result.ok) throw new Error(result.message);
 
     // research state transitions done → design
     const researchEdges = result.state_graph["research"];
@@ -355,6 +357,7 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
 
   it("loadFlow state_graph for epic includes implement → ship edge (epic_complete)", async () => {
     const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
+    if (!result.ok) throw new Error(result.message);
 
     const implementEdges = result.state_graph["implement"];
     expect(implementEdges).toBeDefined();
