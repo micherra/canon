@@ -362,7 +362,7 @@ export class ExecutionStore {
           applied_at       = COALESCE(@applied_at, applied_at),
           resolution       = COALESCE(@resolution, resolution),
           rejection_reason = COALESCE(@rejection_reason, rejection_reason)
-      WHERE id = @id
+      WHERE id = @id AND status = 'pending'
     `);
 
     // Events
@@ -628,7 +628,7 @@ export class ExecutionStore {
       rows = this.stmtGetProgressAll.all() as ProgressRow[];
     }
     if (rows.length === 0) return '';
-    return rows.map(r => `- ${r.line}`).join('\n');
+    return rows.map(r => r.line).join('\n');
   }
 
   // --------------------------------------------------------------------------
@@ -688,13 +688,16 @@ export class ExecutionStore {
   }
 
   updateWaveEvent(id: string, fields: UpdateWaveEventFields): void {
-    this.stmtUpdateWaveEvent.run({
+    const result = this.stmtUpdateWaveEvent.run({
       id,
       status: fields.status ?? null,
       applied_at: fields.applied_at ?? null,
       resolution: fields.resolution !== undefined ? JSON.stringify(fields.resolution) : null,
       rejection_reason: fields.rejection_reason ?? null,
     });
+    if (result.changes === 0) {
+      throw new Error(`Event ${id} is already not pending — CAS update rejected (no rows changed)`);
+    }
   }
 
   // --------------------------------------------------------------------------

@@ -408,12 +408,16 @@ describe('appendProgress + getProgress', () => {
     expect(store.getProgress()).toBe('');
   });
 
-  test('appends and retrieves progress entries as markdown bullet list', () => {
+  test('appends and retrieves progress entries verbatim (no prefix added)', () => {
     store.appendProgress('Research complete');
     store.appendProgress('Implementation started');
     const progress = store.getProgress();
-    expect(progress).toContain('- Research complete');
-    expect(progress).toContain('- Implementation started');
+    // getProgress returns lines verbatim — no "- " prefix is added
+    expect(progress).toContain('Research complete');
+    expect(progress).toContain('Implementation started');
+    // No double-bullet: "- " is NOT added by getProgress
+    expect(progress).not.toContain('- Research complete');
+    expect(progress).not.toContain('- Implementation started');
   });
 
   test('entries are ordered by insertion order', () => {

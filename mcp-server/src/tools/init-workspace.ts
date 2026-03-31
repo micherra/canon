@@ -172,8 +172,20 @@ export async function initWorkspaceFlow(
         resume_state: board.current_state,
       };
     }
-  } catch {
-    // No existing workspace for this slug — proceed with creation
+  } catch (err) {
+    // Only swallow expected "no existing DB" errors (file not found / can't open).
+    // Rethrow unexpected errors such as permission denied or disk errors.
+    const code = (err as NodeJS.ErrnoException).code;
+    const message = (err instanceof Error) ? err.message : String(err);
+    const isExpectedNoDb =
+      code === "SQLITE_CANTOPEN" ||
+      code === "ENOENT" ||
+      message.includes("SQLITE_CANTOPEN") ||
+      message.includes("no such file") ||
+      message.includes("directory does not exist") ||
+      message.includes("Cannot open database");
+    if (!isExpectedNoDb) throw err;
+    // else: no existing workspace for this slug — proceed with creation
   }
 
   // Workspace path: .canon/workspaces/{branch}/{slug}/

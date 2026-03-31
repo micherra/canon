@@ -162,7 +162,7 @@ export async function enterAndPrepareState(
 
   // Emit events (best-effort)
   const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
-    store.appendEvent("board_updated", event as Record<string, unknown>);
+    try { store.appendEvent("board_updated", event as Record<string, unknown>); } catch { /* best-effort */ }
   };
   flowEventBus.once("board_updated", onBoardUpdated);
   try {
@@ -172,7 +172,7 @@ export async function enterAndPrepareState(
       timestamp: now,
     });
     const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
-      store.appendEvent("state_entered", event as Record<string, unknown>);
+      try { store.appendEvent("state_entered", event as Record<string, unknown>); } catch { /* best-effort */ }
     };
     flowEventBus.once("state_entered", onStateEntered);
     try {
