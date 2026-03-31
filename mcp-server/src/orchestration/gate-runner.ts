@@ -6,9 +6,9 @@
  * Only the resolved command (from the map or built-in resolution) reaches the shell.
  */
 
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { runShell } from "../adapters/process-adapter.ts";
 import type { GateResult, StateDefinition, ResolvedFlow, BoardStateEntry } from "./flow-schema.ts";
 
 // GateResult is the source of truth from flow-schema.ts — no local interface needed.
@@ -86,24 +86,15 @@ export function runGate(
     };
   }
 
-  const result = spawnSync(command, {
-    shell: true,
-    cwd,
-    encoding: "utf-8",
-    timeout: 300_000,
-  });
-
-  const stdout: string = result.stdout ?? "";
-  const stderr: string = result.stderr ?? "";
-  const output = (stdout + stderr).trim();
-  const exitCode: number = result.status ?? 1;
+  const result = runShell(command, cwd, 300_000);
+  const output = (result.stdout + result.stderr).trim();
 
   return {
-    passed: exitCode === 0,
+    passed: result.exitCode === 0,
     gate: gateName,
     command,
     output,
-    exitCode,
+    exitCode: result.exitCode,
   };
 }
 
@@ -178,24 +169,15 @@ export function runGates(
       };
     }
 
-    const result = spawnSync(command, {
-      shell: true,
-      cwd,
-      encoding: "utf-8",
-      timeout: 300_000,
-    });
-
-    const stdout: string = result.stdout ?? "";
-    const stderr: string = result.stderr ?? "";
-    const output = (stdout + stderr).trim();
-    const exitCode: number = result.status ?? 1;
+    const result = runShell(command, cwd, 300_000);
+    const output = (result.stdout + result.stderr).trim();
 
     return {
-      passed: exitCode === 0,
+      passed: result.exitCode === 0,
       gate: name,
       command,
       output,
-      exitCode,
+      exitCode: result.exitCode,
     };
   });
 }

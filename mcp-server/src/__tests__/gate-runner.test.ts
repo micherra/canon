@@ -5,16 +5,16 @@ import type { ResolvedFlow, BoardStateEntry } from "../orchestration/flow-schema
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-// spawnSync mock — mutable implementation swapped per test
-type SpawnSyncArgs = { shell?: boolean; cwd?: string; encoding?: string; timeout?: number };
-let spawnSyncImpl: ((cmd: string, opts: SpawnSyncArgs) => { stdout: string; stderr: string; status: number; error?: Error }) | null = null;
-let lastSpawnSyncArgs: { cmd: string; opts: SpawnSyncArgs } | null = null;
+// runShell mock — mutable implementation swapped per test
+type RunShellResult = { ok: boolean; stdout: string; stderr: string; exitCode: number; timedOut: boolean };
+let runShellImpl: ((cmd: string, cwd: string, timeout?: number) => RunShellResult) | null = null;
+let lastRunShellArgs: { cmd: string; cwd: string; timeout?: number } | null = null;
 
-vi.mock("node:child_process", () => ({
-  spawnSync: (cmd: string, opts: SpawnSyncArgs) => {
-    lastSpawnSyncArgs = { cmd, opts };
-    if (spawnSyncImpl) return spawnSyncImpl(cmd, opts);
-    return { stdout: "", stderr: "", status: 0 };
+vi.mock("../adapters/process-adapter.ts", () => ({
+  runShell: (cmd: string, cwd: string, timeout?: number) => {
+    lastRunShellArgs = { cmd, cwd, timeout };
+    if (runShellImpl) return runShellImpl(cmd, cwd, timeout);
+    return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
   },
 }));
 
@@ -65,9 +65,9 @@ function makeBoardState(discovered_gates?: Array<{ command: string; source: stri
 }
 
 beforeEach(() => {
-  spawnSyncImpl = null;
+  runShellImpl = null;
   readFileSyncImpl = null;
-  lastSpawnSyncArgs = null;
+  lastRunShellArgs = null;
 });
 
 // ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ describe("resolveGateCommand — test-suite auto-detection from package.json", (
 
 describe("runGate — gate exits 0 (passed)", () => {
   it("returns passed: true when command exits with code 0", () => {
-    spawnSyncImpl = () => ({ stdout: "all tests passed", stderr: "", status: 0 });
+    runShellImpl = () => ({ ok: true, stdout: "all tests passed", stderr: "", exitCode: 0, timedOut: false });
     const flow = makeFlow({ "test-suite": "npm test" });
     const result = runGate("test-suite", flow, "/project");
 
@@ -151,7 +151,7 @@ describe("runGate — gate exits 0 (passed)", () => {
 
 describe("runGate — gate exits non-zero (failed)", () => {
   it("returns passed: false when command exits with non-zero code", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "2 tests failed", status: 1 });
+    runShellImpl = () => ({ ok: false, stdout: "", stderr: "2 tests failed", exitCode: 1, timedOut: false });
     const flow = makeFlow({ "test-suite": "npm test" });
     const result = runGate("test-suite", flow, "/project");
 
@@ -179,23 +179,23 @@ describe("runGate — gate not configured (fail-closed)", () => {
     expect(result.output).toContain("nonexistent-gate");
   });
 
-  it("does NOT call spawnSync when gate is not configured", () => {
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must NOT be called for unconfigured gate");
+  it("does NOT call runShell when gate is not configured", () => {
+    runShellImpl = () => {
+      throw new Error("runShell must NOT be called for unconfigured gate");
     };
     const flow = makeFlow();
-    // Should not throw — spawnSync is not called
+    // Should not throw — runShell is not called
     expect(() => runGate("nonexistent-gate", flow, "/project")).not.toThrow();
   });
 });
 
 describe("runGate — command injection protection", () => {
   it("does NOT execute an arbitrary gateName string as a shell command", () => {
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must NOT be called for arbitrary gate name");
+    runShellImpl = () => {
+      throw new Error("runShell must NOT be called for arbitrary gate name");
     };
     const flow = makeFlow(); // no gates map
-    // Even though spawnSyncImpl would throw if called, runGate must not call it
+    // Even though runShellImpl would throw if called, runGate must not call it
     const result = runGate("rm -rf /", flow, "/project");
 
     // Gate was not configured (null) — fail-closed
@@ -205,43 +205,48 @@ describe("runGate — command injection protection", () => {
 
   it("only executes the resolved command from flow.gates, not the gateName", () => {
     let executedCommand: string | null = null;
-    spawnSyncImpl = (cmd) => {
+    runShellImpl = (cmd) => {
       executedCommand = cmd;
-      return { stdout: "ok", stderr: "", status: 0 };
+      return { ok: true, stdout: "ok", stderr: "", exitCode: 0, timedOut: false };
     };
     const flow = makeFlow({ "safe-gate": "npm run lint" });
     runGate("safe-gate", flow, "/project");
 
-    // The command that reached spawnSync is the resolved value, not "safe-gate"
+    // The command that reached runShell is the resolved value, not "safe-gate"
     expect(executedCommand).toBe("npm run lint");
     expect(executedCommand).not.toBe("safe-gate");
   });
 });
 
-describe("runGate — spawnSync timeout configuration", () => {
-  it("passes timeout option to spawnSync", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: 0 });
+describe("runGate — runShell timeout and cwd configuration", () => {
+  it("passes 300_000 timeout to runShell", () => {
+    runShellImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
     const flow = makeFlow({ "test-suite": "npm test" });
     runGate("test-suite", flow, "/project");
 
-    expect(lastSpawnSyncArgs).not.toBeNull();
-    expect(lastSpawnSyncArgs!.opts.timeout).toBe(300_000);
+    expect(lastRunShellArgs).not.toBeNull();
+    expect(lastRunShellArgs!.timeout).toBe(300_000);
   });
 
-  it("passes shell: true to spawnSync", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: 0 });
-    const flow = makeFlow({ "lint": "eslint ." });
-    runGate("lint", flow, "/project");
-
-    expect(lastSpawnSyncArgs!.opts.shell).toBe(true);
-  });
-
-  it("passes cwd to spawnSync", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: 0 });
+  it("passes cwd to runShell", () => {
+    runShellImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
     const flow = makeFlow({ "check": "tsc" });
     runGate("check", flow, "/my/project");
 
-    expect(lastSpawnSyncArgs!.opts.cwd).toBe("/my/project");
+    expect(lastRunShellArgs!.cwd).toBe("/my/project");
+  });
+
+  it("uses process-adapter (runShell) not child_process directly", () => {
+    // runShellImpl being called confirms gate-runner uses the adapter
+    let adapterCalled = false;
+    runShellImpl = () => {
+      adapterCalled = true;
+      return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+    };
+    const flow = makeFlow({ "lint": "eslint ." });
+    runGate("lint", flow, "/project");
+
+    expect(adapterCalled).toBe(true);
   });
 });
 
@@ -430,9 +435,9 @@ describe("runGates — empty when no gates declared", () => {
 describe("runGates — multi-gate execution from explicit gates array", () => {
   it("runs all gates and returns array of results", () => {
     let callCount = 0;
-    spawnSyncImpl = (_cmd) => {
+    runShellImpl = (_cmd) => {
       callCount++;
-      return { stdout: `output-${callCount}`, stderr: "", status: 0 };
+      return { ok: true, stdout: `output-${callCount}`, stderr: "", exitCode: 0, timedOut: false };
     };
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["echo hello", "echo world"] });
@@ -445,7 +450,7 @@ describe("runGates — multi-gate execution from explicit gates array", () => {
   });
 
   it("executes direct shell commands from gates array — echo exits 0", () => {
-    spawnSyncImpl = () => ({ stdout: "hello", stderr: "", status: 0 });
+    runShellImpl = () => ({ ok: true, stdout: "hello", stderr: "", exitCode: 0, timedOut: false });
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["echo hello"] });
     const results = runGates(stateDef, flow, "/project");
@@ -457,7 +462,7 @@ describe("runGates — multi-gate execution from explicit gates array", () => {
   });
 
   it("executes direct shell commands from gates array — false exits 1", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: 1 });
+    runShellImpl = () => ({ ok: false, stdout: "", stderr: "", exitCode: 1, timedOut: false });
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["false"] });
     const results = runGates(stateDef, flow, "/project");
@@ -469,9 +474,9 @@ describe("runGates — multi-gate execution from explicit gates array", () => {
 
   it("handles mixed pass/fail: one gate passes, one fails", () => {
     let callCount = 0;
-    spawnSyncImpl = () => {
+    runShellImpl = () => {
       callCount++;
-      return { stdout: "", stderr: "", status: callCount === 1 ? 0 : 1 };
+      return { ok: callCount === 1, stdout: "", stderr: "", exitCode: callCount === 1 ? 0 : 1, timedOut: false };
     };
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["echo ok", "false"] });
@@ -495,9 +500,9 @@ describe("runGates — fail-closed for unresolvable legacy named gate", () => {
     expect(results[0].output).toContain("fail-closed");
   });
 
-  it("does NOT call spawnSync for unresolvable legacy gate", () => {
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must not be called for unresolvable gate");
+  it("does NOT call runShell for unresolvable legacy gate", () => {
+    runShellImpl = () => {
+      throw new Error("runShell must not be called for unresolvable gate");
     };
     const flow = makeFlow();
     const stateDef = makeStateDef({ gate: "nonexistent-gate" });
@@ -507,8 +512,8 @@ describe("runGates — fail-closed for unresolvable legacy named gate", () => {
 
 describe("runGates — discovered gates are NOT executed (stored as metadata only)", () => {
   it("returns empty array when only discovered gates exist — they are not executed", () => {
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must NOT be called for discovered gates");
+    runShellImpl = () => {
+      throw new Error("runShell must NOT be called for discovered gates");
     };
     const flow = makeFlow();
     const stateDef = makeStateDef();
@@ -529,7 +534,7 @@ describe("runGates — discovered gates are NOT executed (stored as metadata onl
   });
 
   it("still executes explicit gates even when discovered gates are also present", () => {
-    spawnSyncImpl = () => ({ stdout: "ok", stderr: "", status: 0 });
+    runShellImpl = () => ({ ok: true, stdout: "ok", stderr: "", exitCode: 0, timedOut: false });
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["npm test"] });
     const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);

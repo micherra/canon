@@ -16,7 +16,7 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { z } from "zod";
 import { mkdir } from "fs/promises";
 import { join } from "path";
-import { spawnSync } from "child_process";
+import { gitStatus } from "../adapters/git-adapter.ts";
 
 interface InitWorkspaceInput {
   flow_name: string;
@@ -93,12 +93,8 @@ async function runPreflightChecks(
 
   // 1. Check for uncommitted changes
   try {
-    const result = spawnSync("git", ["status", "--porcelain"], {
-      cwd: projectDir,
-      encoding: "utf-8",
-      timeout: 10_000,
-    });
-    const output = (result.stdout ?? "").trim();
+    const result = gitStatus(projectDir, 10_000);
+    const output = result.stdout.trim();
     if (output) {
       const lineCount = output.split("\n").length;
       issues.push(`Uncommitted changes: ${lineCount} file(s) modified`);

@@ -251,12 +251,9 @@ export async function enterAndPrepareState(
     const baseRef = enteredBoard.base_commit;
     if (baseRef && /^[a-f0-9]{7,40}$/.test(baseRef)) {
       try {
-        const { spawnSync } = await import("node:child_process");
-        const result = spawnSync("git", ["diff", "--name-only", `${baseRef}..HEAD`], {
-          encoding: "utf-8",
-          timeout: 5000,
-        });
-        if (result.status === 0 && result.stdout) {
+        const { gitExec } = await import("../adapters/git-adapter.ts");
+        const result = gitExec(["diff", "--name-only", `${baseRef}..HEAD`], process.cwd(), 5000);
+        if (result.ok && result.stdout) {
           const files = result.stdout.trim().split("\n").filter(Boolean);
           reviewScopeVars.review_scope = files.length > 0
             ? `Scoped re-review. Files changed since last review:\n${files.join("\n")}`

@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rmSync } from "node:fs";
 
-// We mock node:child_process before importing the module under test
-// so that wave_diff tests can control spawnSync behavior.
-vi.mock("node:child_process", () => ({
-  spawnSync: vi.fn(),
+// We mock ../adapters/git-adapter.ts before importing the module under test
+// so that wave_diff tests can control gitExec behavior.
+vi.mock("../adapters/git-adapter.ts", () => ({
+  gitExec: vi.fn(),
 }));
 
 import {
@@ -16,9 +16,9 @@ import {
   parseTaskIdsForWave,
   extractFilePaths,
 } from "../orchestration/wave-variables.ts";
-import { spawnSync } from "node:child_process";
+import { gitExec } from "../adapters/git-adapter.ts";
 
-const mockSpawnSync = vi.mocked(spawnSync);
+const mockGitExec = vi.mocked(gitExec);
 
 // ---------------------------------------------------------------------------
 // escapeDollarBrace — pure function, no I/O
@@ -128,22 +128,20 @@ describe("resolveWaveVariables", () => {
   let plansDir: string;
   const slug = "my-task";
 
-  // Default spawnSync mock: successful empty diff
+  // Default gitExec mock: successful empty diff
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "wave-variables-test-"));
     plansDir = join(tmpDir, "plans", slug);
     await mkdir(plansDir, { recursive: true });
 
     // Default: successful git diff returning empty output
-    mockSpawnSync.mockReturnValue({
-      status: 0,
+    mockGitExec.mockReturnValue({
+      ok: true,
       stdout: "",
       stderr: "",
-      pid: 1,
-      output: [],
-      signal: null,
-      error: undefined,
-    } as any);
+      exitCode: 0,
+      timedOut: false,
+    });
   });
 
   afterEach(() => {
@@ -249,17 +247,15 @@ describe("resolveWaveVariables", () => {
   // wave_diff
   // ------------------------------------------------------------------
 
-  it("wave_diff: returns git diff output when git succeeds", async () => {
+  it("wave_diff: returns git diff output when gitExec succeeds", async () => {
     await writeIndex([{ id: "iwc-01", wave: 1 }]);
-    mockSpawnSync.mockReturnValue({
-      status: 0,
+    mockGitExec.mockReturnValue({
+      ok: true,
       stdout: "diff --git a/foo.ts b/foo.ts\n+added line",
       stderr: "",
-      pid: 1,
-      output: [],
-      signal: null,
-      error: undefined,
-    } as any);
+      exitCode: 0,
+      timedOut: false,
+    });
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);
 
@@ -267,38 +263,47 @@ describe("resolveWaveVariables", () => {
     expect(vars.wave_diff).toContain("+added line");
   });
 
-  it("wave_diff: returns empty string when git fails (non-zero status)", async () => {
+  it("wave_diff: returns empty string when gitExec returns ok: false (non-zero status)", async () => {
     await writeIndex([{ id: "iwc-01", wave: 1 }]);
-    mockSpawnSync.mockReturnValue({
-      status: 128,
+    mockGitExec.mockReturnValue({
+      ok: false,
       stdout: "",
       stderr: "fatal: not a git repository",
-      pid: 1,
-      output: [],
-      signal: null,
-      error: undefined,
-    } as any);
+      exitCode: 128,
+      timedOut: false,
+    });
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);
 
     expect(vars.wave_diff).toBe("");
   });
 
-  it("wave_diff: returns empty string when spawnSync throws an error", async () => {
+  it("wave_diff: returns empty string when gitExec times out (timedOut: true)", async () => {
+    // Risk mitigation: adapter timeout → graceful degradation to empty string
     await writeIndex([{ id: "iwc-01", wave: 1 }]);
-    mockSpawnSync.mockReturnValue({
-      status: null,
+    mockGitExec.mockReturnValue({
+      ok: false,
       stdout: "",
       stderr: "",
-      pid: 0,
-      output: [],
-      signal: null,
-      error: new Error("ENOENT: git not found"),
-    } as any);
+      exitCode: 1,
+      timedOut: true,
+    });
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);
 
     expect(vars.wave_diff).toBe("");
+  });
+
+  it("wave_diff: calls gitExec with diff HEAD~1 args", async () => {
+    await writeIndex([{ id: "iwc-01", wave: 1 }]);
+    mockGitExec.mockReturnValue({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
+
+    await resolveWaveVariables(tmpDir, 1, slug, 1);
+
+    expect(mockGitExec).toHaveBeenCalledWith(
+      ["diff", "HEAD~1"],
+      expect.any(String),
+    );
   });
 
   // ------------------------------------------------------------------
@@ -406,15 +411,13 @@ describe("resolveWaveVariables", () => {
 
   it("escapes ${...} in git diff output (prompt injection via diff)", async () => {
     await writeIndex([{ id: "iwc-01", wave: 1 }]);
-    mockSpawnSync.mockReturnValue({
-      status: 0,
+    mockGitExec.mockReturnValue({
+      ok: true,
       stdout: "+const x = `${injected_variable}`;",
       stderr: "",
-      pid: 1,
-      output: [],
-      signal: null,
-      error: undefined,
-    } as any);
+      exitCode: 0,
+      timedOut: false,
+    });
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);
 
