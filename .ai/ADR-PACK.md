@@ -66,13 +66,47 @@ Subprocess calls (git, test runners, gate commands) are scattered across orchest
 
 ### Decision
 
-Centralize all subprocess execution behind adapter modules with standardized timeout, error mapping, output capture, and retry behavior.
+Centralize all subprocess execution behind adapter modules with standardized timeout, error mapping, output capture, and retry behavior. Extend the same error contract to the MCP tool boundary — typed, discriminated error shapes replace ad-hoc throws and stringly-typed error arrays.
+
+**Subprocess adapters:**
+
+Standardized modules for git and shell execution with consistent timeout, error mapping, output capture, and retry behavior.
+
+**Typed error contract at the MCP tool boundary:**
+
+Tools currently surface errors in three inconsistent shapes: plain `throw new Error(...)` (converted to untyped MCP error responses), soft `errors: string[]` fields in success-shaped responses, and silent empty results for invalid input. The orchestrator infers recoverability from text patterns.
+
+Define a `CanonToolError` discriminated union returned from all tool functions for expected error conditions:
+
+```typescript
+type ToolResult<T> = { ok: true; /* ...T fields */ } | CanonToolError;
+
+interface CanonToolError {
+  ok: false;
+  error_code: CanonErrorCode;
+  message: string;
+  recoverable: boolean;
+  context?: Record<string, unknown>;
+}
+
+type CanonErrorCode =
+  | "WORKSPACE_NOT_FOUND"    // workspace doesn't exist or is corrupt
+  | "FLOW_NOT_FOUND"         // flow YAML file doesn't exist
+  | "FLOW_PARSE_ERROR"       // YAML parse or schema validation failure
+  | "KG_NOT_INDEXED"         // knowledge-graph.db absent
+  | "BOARD_LOCKED"           // workspace locked by another process
+  | "CONVERGENCE_EXCEEDED"   // max iterations reached
+  | "INVALID_INPUT"          // caller passed invalid parameters
+  | "PREFLIGHT_FAILED";      // pre-flight checks blocked workspace creation
+```
+
+Only truly unexpected conditions (bugs, I/O failures) throw. The top-level MCP handler catches throws and wraps them as `{ ok: false, error_code: "UNEXPECTED", recoverable: false }`. Orchestrator protocol becomes a typed branch (`if !result.ok → check recoverable → HITL or abort`) instead of text-pattern matching. Recoverable errors like `KG_NOT_INDEXED` can trigger automatic recovery actions.
 
 ### Consequences
 
-Positive: single risk boundary, consistent errors, clean test mocking, natural instrumentation point for ADR-003.
+Positive: single risk boundary for subprocesses, consistent typed errors across all tool boundaries, clean test mocking, natural instrumentation point for ADR-003, orchestrator error handling becomes a code contract rather than text inference.
 
-Negative: refactoring scattered calls, may surface inconsistent legacy behavior.
+Negative: refactoring scattered calls, may surface inconsistent legacy behavior, every tool return type changes (migration cost).
 
 ### Implementation
 
@@ -80,6 +114,13 @@ Negative: refactoring scattered calls, may surface inconsistent legacy behavior.
 - Decompose gate-runner.ts: resolution (domain) vs execution (adapter)
 - Route all orchestration subprocess calls through adapters
 - Standardize: default timeouts, output truncation limits, error shapes, retry policy
+- Define `CanonToolError` type and `CanonErrorCode` enum in shared types
+- Replace `errors: string[]` in `LoadFlowResult` with discriminated union
+- Replace plain throws in `update_board`, `graph_query`, `init_workspace` with typed error returns
+- Replace silent empty results in `get_file_context` with typed `INVALID_INPUT` error
+- Add top-level MCP handler catch-all that wraps unexpected throws
+- Update orchestrator agent instructions to use `result.ok` branching instead of text-pattern checks
+- Migration: introduce for new tools first, sweep existing tools in a single pass
 
 ---
 
@@ -124,7 +165,7 @@ The flow system has five sources of brittleness:
 
 ### Decision
 
-Keep the YAML+MD format. Add strict load-time validation and move execution state management to SQLite.
+Keep the YAML+MD format. Add strict load-time validation, move execution state management to SQLite, and validate agent-produced artifacts that drive execution.
 
 **Load-time validation (strict):**
 - Every transition target resolves to a real state ID or `hitl`
@@ -167,6 +208,32 @@ Positive: flow authoring errors caught at load time, stuck detection can't silen
 
 Negative: existing flows must pass stricter validation (migration), fragment param syntax changes (auto-migratable), wave_policy is new surface area.
 
+**Agent-produced artifact validation (INDEX.md):**
+
+Wave execution depends on the architect producing INDEX.md with a specific markdown table format, parsed by regex in `wave-variables.ts`. If the architect writes backtick-wrapped IDs or different formatting, the wave runner silently gets zero task IDs and proceeds with empty wave plans — a silent, catastrophic failure.
+
+Two-phase remediation:
+
+1. **Immediate safety net** — Harden the `parseTaskIdsForWave` regex to handle backtick-wrapped IDs. Add a `validate_plan_index` check between architect state and first wave — if zero tasks parsed, block flow and surface the error instead of proceeding silently.
+
+2. **Structured write path** — Create a `write_plan_index` MCP tool that accepts a typed structure and produces normalized markdown:
+
+```typescript
+interface PlanIndexInput {
+  workspace: string;
+  slug: string;
+  tasks: Array<{
+    task_id: string;       // validated: /^[a-zA-Z0-9_-]+$/
+    wave: number;          // validated: >= 1
+    depends_on?: string[];
+    files?: string[];
+    principles?: string[];
+  }>;
+}
+```
+
+The architect calls this tool instead of writing raw markdown. The regex always sees clean input because the tool controls the output format. The `plan-index.md` template becomes documentation only.
+
 ### Implementation
 
 - Add validation pass to `load_flow`: transitions, spawn instructions, params, reachability
@@ -174,6 +241,10 @@ Negative: existing flows must pass stricter validation (migration), fragment par
 - Implement discriminated union state schemas
 - Move stuck detection from caller-constructed history to SQL query in execution store
 - Add `wave_policy` to WaveStateSchema with defaults matching current behavior
+- Harden `parseTaskIdsForWave` regex to handle backtick-wrapped IDs and extra whitespace
+- Add `validate_plan_index` orchestrator check between architect and wave states (zero tasks = block, not proceed)
+- Implement `write_plan_index` MCP tool with typed input and normalized markdown output
+- Update architect spawn instructions to call `write_plan_index` instead of writing raw INDEX.md
 - Run all existing flows through strict validation as acceptance test
 
 ---
@@ -186,13 +257,15 @@ Two parallel graph representations: file-level (graph-data.json, in-memory queri
 
 ### Decision
 
-SQLite KG is the sole graph representation. Eliminate graph-data.json and the legacy in-memory query path. All consumers (codebase_graph, graph_query, get_file_context, UI) read from SQLite via KgQuery.
+SQLite KG is the sole graph representation. Eliminate graph-data.json, summaries.json, and the legacy in-memory query path. All consumers (codebase_graph, graph_query, get_file_context, store_summaries, UI) read from and write to SQLite via KgQuery.
+
+**`summaries.json` has the same dual-representation problem.** Currently `store_summaries` writes JSON to disk first (primary), then attempts a best-effort DB write (secondary, silently skipped if the DB doesn't exist or the file isn't indexed). `get_file_context` reads DB-first, falls back to JSON. The write path is JSON-primary but the read path is DB-primary — they diverge permanently for projects without a full KG index. The `writeSummariesToDb` guard that skips files not in the KG's `files` table makes the JSON file permanently indispensable.
 
 ### Consequences
 
-Positive: one query API, transactional updates, no consistency drift, entity-level precision everywhere.
+Positive: one query API, transactional updates, no consistency drift, entity-level precision everywhere, summaries always in sync with the graph.
 
-Negative: migration for any consumers reading graph-data.json directly, view-materializer deletion.
+Negative: migration for any consumers reading graph-data.json or summaries.json directly, view-materializer deletion, one-time migration needed for existing summaries.json files.
 
 ### Implementation
 
@@ -201,6 +274,12 @@ Negative: migration for any consumers reading graph-data.json directly, view-mat
 - Delete view-materializer.ts, graph-data.json generation, reverse-deps.json
 - Add any missing query methods to KgQuery (degree analysis, layer violations currently in insights.ts)
 - graph-data.json consumers get a deprecation period with warnings before removal
+- **Summaries migration:**
+  - Flip `store_summaries` write primary: SQLite first (in transaction), JSON as optional export
+  - Remove the file-must-exist guard in `writeSummariesToDb` — upsert a stub file row (with `mtime_ms: 0`, `content_hash: "unknown"`) so summaries can be stored without a full KG index
+  - Add one-time migration: on first `storeSummaries` call, read `summaries.json` and upsert missing entries into DB, rename to `summaries.json.migrated`
+  - Remove `loadSummariesFile` fallback from `get-file-context.ts`
+  - Delete: `loadSummariesFile`, `flattenSummaries` exports
 
 ---
 
@@ -351,10 +430,10 @@ ADRs 002, 003, 004 can progress in parallel once 001 is in place. ADR 005 is ind
 
 - SQLite as the single canonical store — no file projections for orchestration state
 - Agent work-product files remain (DESIGN.md, SUMMARY.md, etc.)
-- Shell/git behind adapter boundaries
+- Shell/git behind adapter boundaries; typed error contract (`CanonToolError` discriminated union) at MCP tool boundary
 - Structured local diagnostics via SQLite events
-- Strict flow validation at load time, SQL-backed stuck detection, explicit wave policy
-- Single graph representation (SQLite KG)
+- Strict flow validation at load time, SQL-backed stuck detection, explicit wave policy, validated schema for agent-produced INDEX.md via structured write tool
+- Single graph representation (SQLite KG) including summaries migration from JSON to DB-primary
 - Explicit prompt assembly pipeline with structural escaping
 - Context assembly policy: pre-orient agents via file affinity, KG summaries, topology and conventions variables to reduce tool-call overhead; item-count budgeting, not token budgeting; agent instruction compression as a follow-on
 - Background jobs via child processes for heavy analysis
