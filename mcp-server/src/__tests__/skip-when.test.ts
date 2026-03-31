@@ -3,17 +3,17 @@ import type { Board } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen, matchGlob } from "../orchestration/skip-when.ts";
 
 // Hoist the mock factory so it runs before module import.
-// spawnSyncImpl is a mutable reference we swap per test.
-type SpawnSyncResult = { stdout: string; status: number; error?: Error };
-let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
-let lastSpawnArgs: unknown[] = [];
+// gitExecImpl is a mutable reference we swap per test.
+type GitExecResult = { ok: boolean; stdout: string; stderr: string; exitCode: number; timedOut: boolean };
+let gitExecImpl: (() => GitExecResult) | null = null;
+let lastGitExecArgs: { args: string[]; cwd: string } | null = null;
 
-vi.mock("node:child_process", () => ({
-  spawnSync: (...args: unknown[]) => {
-    lastSpawnArgs = args;
-    if (spawnSyncImpl) return spawnSyncImpl();
+vi.mock("../adapters/git-adapter.ts", () => ({
+  gitExec: (args: string[], cwd: string) => {
+    lastGitExecArgs = { args, cwd };
+    if (gitExecImpl) return gitExecImpl();
     // Default: simulate git failure (safe default — do not skip)
-    return { stdout: "", status: 1, error: new Error("spawnSync not configured in test") };
+    return { ok: false, stdout: "", stderr: "gitExec not configured in test", exitCode: 1, timedOut: false };
   },
 }));
 
@@ -40,8 +40,8 @@ function makeBoard(overrides?: Partial<Board>): Board {
 }
 
 beforeEach(() => {
-  spawnSyncImpl = null;
-  lastSpawnArgs = [];
+  gitExecImpl = null;
+  lastGitExecArgs = null;
 });
 
 // ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ describe("evaluateSkipWhen — no_open_questions", () => {
 
 describe("evaluateSkipWhen — no_contract_changes", () => {
   it("returns skip: true when only non-contract files changed", async () => {
-    spawnSyncImpl = () => ({ stdout: "src/some-internal.ts\nsrc/utils/helper.ts\n", status: 0 });
+    gitExecImpl = () => ({ ok: true, stdout: "src/some-internal.ts\nsrc/utils/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -268,7 +268,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when API files changed", async () => {
-    spawnSyncImpl = () => ({ stdout: "src/api/users.ts\nsrc/internal/helper.ts\n", status: 0 });
+    gitExecImpl = () => ({ ok: true, stdout: "src/api/users.ts\nsrc/internal/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -276,7 +276,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when index.ts changed", async () => {
-    spawnSyncImpl = () => ({ stdout: "src/index.ts\n", status: 0 });
+    gitExecImpl = () => ({ ok: true, stdout: "src/index.ts\n", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -284,7 +284,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when package.json changed", async () => {
-    spawnSyncImpl = () => ({ stdout: "package.json\n", status: 0 });
+    gitExecImpl = () => ({ ok: true, stdout: "package.json\n", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -293,7 +293,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
 
   it("returns skip: true when contract files are only deleted (not added/modified)", async () => {
     // --diff-filter=d excludes deleted files, so git returns only the non-contract file
-    spawnSyncImpl = () => ({ stdout: "src/utils/helper.ts\n", status: 0 });
+    gitExecImpl = () => ({ ok: true, stdout: "src/utils/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -301,24 +301,24 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     expect(result.reason).toContain("No contract changes detected");
   });
 
-  it("passes --diff-filter=d to exclude deleted files from contract check", async () => {
-    spawnSyncImpl = () => ({ stdout: "", status: 0 });
+  it("passes --diff-filter=d to gitExec to exclude deleted files from contract check", async () => {
+    gitExecImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
-    expect(lastSpawnArgs[1]).toContain("--diff-filter=d");
+    expect(lastGitExecArgs?.args).toContain("--diff-filter=d");
   });
 
   it("returns skip: true when diff output is empty (no changes at all)", async () => {
-    spawnSyncImpl = () => ({ stdout: "", status: 0 });
+    gitExecImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
     expect(result.skip).toBe(true);
   });
 
-  it("returns skip: false when git diff returns non-zero exit code", async () => {
-    spawnSyncImpl = () => ({ stdout: "", status: 128 });
+  it("returns skip: false when gitExec returns ok: false (non-zero exit)", async () => {
+    gitExecImpl = () => ({ ok: false, stdout: "", stderr: "fatal: not a repository", exitCode: 128, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -326,16 +326,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     expect(result.skip).toBe(false);
   });
 
-  it("returns skip: false when spawnSync returns an error — fail-open means agent still runs", async () => {
-    spawnSyncImpl = () => ({
-      stdout: "",
-      status: -1,
-      error: new Error("fatal: not a git repository"),
-    });
+  it("returns skip: false when gitExec returns ok: false (timeout)", async () => {
+    // Risk 9: adapter returns timedOut: true → function degrades gracefully
+    gitExecImpl = () => ({ ok: false, stdout: "", stderr: "", exitCode: 1, timedOut: true });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
-    // Fail-open for skip = fail-closed for execution
+    // Timed out — fail-open for skip, fail-closed for execution
     expect(result.skip).toBe(false);
   });
 
@@ -344,9 +341,9 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   // -------------------------------------------------------------------------
 
   it("rejects base_commit with shell metacharacters (command injection attempt)", async () => {
-    // spawnSyncImpl should never be called — validation rejects before reaching spawn
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must NOT be called for malicious input");
+    // gitExecImpl should never be called — validation rejects before reaching adapter
+    gitExecImpl = () => {
+      throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "abc123; rm -rf /" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
@@ -355,8 +352,8 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("rejects base_commit with backtick injection", async () => {
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must NOT be called for malicious input");
+    gitExecImpl = () => {
+      throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "`whoami`" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
@@ -365,8 +362,8 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("rejects base_commit with newline injection", async () => {
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must NOT be called for malicious input");
+    gitExecImpl = () => {
+      throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "abc123\nrm -rf /" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
@@ -375,8 +372,8 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("rejects empty base_commit string", async () => {
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must NOT be called for malicious input");
+    gitExecImpl = () => {
+      throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
@@ -385,8 +382,8 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("rejects base_commit that is too short (fewer than 7 hex chars)", async () => {
-    spawnSyncImpl = () => {
-      throw new Error("spawnSync must NOT be called for malicious input");
+    gitExecImpl = () => {
+      throw new Error("gitExec must NOT be called for malicious input");
     };
     const board = makeBoard({ base_commit: "abc12" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
@@ -395,7 +392,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("accepts a valid 7-char short SHA", async () => {
-    spawnSyncImpl = () => ({ stdout: "", status: 0 });
+    gitExecImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -404,7 +401,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("accepts a valid 40-char full SHA", async () => {
-    spawnSyncImpl = () => ({ stdout: "src/internal.ts\n", status: 0 });
+    gitExecImpl = () => ({ ok: true, stdout: "src/internal.ts\n", stderr: "", exitCode: 0, timedOut: false });
     const board = makeBoard({ base_commit: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 

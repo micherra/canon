@@ -10,7 +10,7 @@
 
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { gitExec } from "../adapters/git-adapter.ts";
 import path from "node:path";
 
 /**
@@ -161,24 +161,12 @@ async function readWaveFiles(plansDir: string, wave: number): Promise<string> {
  * MCP server process cwd differs from the project root.
  */
 function readWaveDiff(cwd: string): string {
-  try {
-    const result = spawnSync("git", ["diff", "HEAD~1"], {
-      encoding: "utf-8",
-      cwd,
-    });
-
-    if (result.error || result.status !== 0) {
-      console.error(
-        `wave_diff: git diff failed — status=${result.status}, error=${result.error?.message ?? "none"}`,
-      );
-      return "";
-    }
-
-    return escapeDollarBrace(result.stdout ?? "");
-  } catch (err) {
-    console.error(`wave_diff: unexpected error running git diff — ${String(err)}`);
+  const result = gitExec(["diff", "HEAD~1"], cwd);
+  if (!result.ok) {
+    console.error(`wave_diff: git diff failed — exitCode=${result.exitCode}`);
     return "";
   }
+  return escapeDollarBrace(result.stdout);
 }
 
 /**

@@ -4,8 +4,8 @@
  * large diffs across multiple parallel agent spawns.
  */
 
-import { spawnSync } from "node:child_process";
 import { dirname } from "path";
+import { gitExec } from "../adapters/git-adapter.ts";
 import { inferLayer } from "../matcher.ts";
 
 export interface FileCluster {
@@ -18,18 +18,12 @@ const BASE_COMMIT_RE = /^[a-f0-9]{7,40}$/;
 /**
  * Get the list of changed files since the base commit.
  */
-export function getChangedFiles(baseCommit: string): string[] {
+export function getChangedFiles(baseCommit: string, cwd?: string): string[] {
   if (!BASE_COMMIT_RE.test(baseCommit)) return [];
 
-  try {
-    const result = spawnSync("git", ["diff", "--name-only", `${baseCommit}..HEAD`], {
-      encoding: "utf-8",
-    });
-    if (result.error || result.status !== 0) return [];
-    return (result.stdout ?? "").trim().split("\n").filter(Boolean);
-  } catch {
-    return [];
-  }
+  const result = gitExec(["diff", "--name-only", `${baseCommit}..HEAD`], cwd ?? process.cwd());
+  if (!result.ok) return [];
+  return result.stdout.trim().split("\n").filter(Boolean);
 }
 
 /**
