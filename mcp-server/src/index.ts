@@ -38,6 +38,7 @@ import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
+import { wrapHandler } from "./utils/wrap-handler.ts";
 
 // Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
 // Falls back to cwd which is typically set by Claude Code to the user's project root.
@@ -57,11 +58,6 @@ const server = new McpServer({
 
 // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
 installFuzzyValidation(server);
-
-/** Standard JSON response wrapper for MCP tool results. */
-function jsonResponse(result: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
-}
 
 /** Helper to register a tool + resource pair for an MCP App UI. */
 function registerToolWithUi<Schema extends ZodRawShapeCompat>(
@@ -100,15 +96,14 @@ registerToolWithUi(
     incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
   },
   "pr-review.html",
-  async (input) => {
-    const result = await showPrImpact(projectDir, {
+  wrapHandler(async (input) => {
+    return showPrImpact(projectDir, {
       branch: input.branch,
       pr_number: input.pr_number,
       diff_base: input.diff_base,
       incremental: input.incremental,
     });
-    return jsonResponse(result);
-  },
+  }),
 );
 
 server.registerTool(
@@ -122,10 +117,9 @@ server.registerTool(
       summary_only: z.boolean().optional().describe("Return only the summary paragraph instead of full body — reduces context usage by ~60%"),
     },
   },
-  async (input) => {
-    const result = await getPrinciples(input, projectDir, pluginDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return getPrinciples(input, projectDir, pluginDir);
+  })
 );
 
 server.registerTool(
@@ -142,10 +136,9 @@ server.registerTool(
       include_archived: z.boolean().optional().describe("Include archived principles in results (default: false)"),
     },
   },
-  async (input) => {
-    const result = await listPrinciples(input, projectDir, pluginDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return listPrinciples(input, projectDir, pluginDir);
+  })
 );
 
 server.registerTool(
@@ -158,10 +151,9 @@ server.registerTool(
       context: z.string().optional().describe("Brief description of what the code does"),
     },
   },
-  async (input) => {
-    const result = await reviewCode(input, projectDir, pluginDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return reviewCode(input, projectDir, pluginDir);
+  })
 );
 
 server.registerTool(
@@ -172,10 +164,9 @@ server.registerTool(
       principle_id: z.string().describe("ID of the principle to check compliance for"),
     },
   },
-  async (input) => {
-    const result = await getCompliance(input, projectDir, pluginDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return getCompliance(input, projectDir, pluginDir);
+  })
 );
 
 // Tool: report (unified — decisions, patterns, and reviews)
@@ -186,10 +177,9 @@ server.registerTool(
       "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
     inputSchema: reportInputSchema,
   },
-  async (input) => {
-    const result = await report(input, projectDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return report(input, projectDir);
+  })
 );
 
 
@@ -207,10 +197,10 @@ registerToolWithUi(
     changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
   },
   "codebase-graph.html",
-  async (input) => {
+  wrapHandler(async (input) => {
     const result = await codebaseGraph(input, projectDir, pluginDir);
-    return jsonResponse(compactGraph(result));
-  },
+    return compactGraph(result);
+  }),
 );
 
 registerToolWithUi(
@@ -222,10 +212,9 @@ registerToolWithUi(
     file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
   },
   "file-context.html",
-  async (input) => {
-    const result = await getFileContext(input, projectDir);
-    return jsonResponse(result);
-  },
+  wrapHandler(async (input) => {
+    return getFileContext(input, projectDir);
+  }),
 );
 
 server.registerTool(
@@ -239,10 +228,9 @@ server.registerTool(
       })).describe("Array of file summaries to store"),
     },
   },
-  async (input) => {
-    const result = await storeSummaries(input, projectDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return storeSummaries(input, projectDir);
+  })
 );
 
 server.registerTool(
@@ -255,10 +243,9 @@ server.registerTool(
       directory: z.string().optional().describe("Filter to files in a specific directory"),
     },
   },
-  async (input) => {
-    const result = await getDriftReport(input, projectDir, pluginDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return getDriftReport(input, projectDir, pluginDir);
+  })
 );
 
 server.registerTool(
@@ -269,10 +256,9 @@ server.registerTool(
       flow_name: z.string().describe("Name of the flow file (without .md extension)"),
     },
   },
-  async (input) => {
-    const result = await loadFlow(input, pluginDir, projectDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return loadFlow(input, pluginDir, projectDir);
+  })
 );
 
 server.registerTool(
@@ -290,10 +276,9 @@ server.registerTool(
       preflight: z.boolean().optional().describe("Run pre-flight checks (git status, lock, stale sessions) before creating workspace"),
     },
   },
-  async (input) => {
-    const result = await initWorkspaceFlow(input, projectDir, pluginDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return initWorkspaceFlow(input, projectDir, pluginDir);
+  })
 );
 
 server.registerTool(
@@ -311,10 +296,9 @@ server.registerTool(
       peer_count: z.number().optional().describe("Number of peer agents in the wave"),
     },
   },
-  async (input) => {
-    const result = await getSpawnPrompt({ ...input, project_dir: projectDir });
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return getSpawnPrompt({ ...input, project_dir: projectDir });
+  })
 );
 
 server.registerTool(
@@ -383,10 +367,9 @@ server.registerTool(
       progress_line: z.string().optional().describe("One-line progress entry to append to progress.md (e.g. '- [state_id] done: summary')"),
     },
   },
-  async (input) => {
-    const result = await reportResult({ ...input, project_dir: projectDir });
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return reportResult({ ...input, project_dir: projectDir });
+  })
 );
 
 server.registerTool(
@@ -398,10 +381,9 @@ server.registerTool(
       state_id: z.string(),
     },
   },
-  async (input) => {
-    const result = await checkConvergence(input);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return checkConvergence(input);
+  })
 );
 
 server.registerTool(
@@ -420,10 +402,9 @@ server.registerTool(
       metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe("Key-value metadata to merge into board (used with set_metadata)"),
     },
   },
-  async (input) => {
-    const result = await updateBoard(input);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return updateBoard(input);
+  })
 );
 
 server.registerTool(
@@ -441,10 +422,9 @@ server.registerTool(
       }),
     },
   },
-  async (input) => {
-    const result = await injectWaveEvent(input);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return injectWaveEvent(input);
+  })
 );
 
 server.registerTool(
@@ -459,10 +439,9 @@ server.registerTool(
       reason: z.string().optional().describe("Reason for rejection (required when action is reject)"),
     },
   },
-  async (input) => {
-    const result = await resolveWaveEvent(input);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return resolveWaveEvent(input);
+  })
 );
 
 server.registerTool(
@@ -480,10 +459,9 @@ server.registerTool(
       peer_count: z.number().optional().describe("Number of peer agents in the wave"),
     },
   },
-  async (input) => {
-    const result = await enterAndPrepareState({ ...input, project_dir: projectDir });
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return enterAndPrepareState({ ...input, project_dir: projectDir });
+  })
 );
 
 server.registerTool(
@@ -497,10 +475,9 @@ server.registerTool(
       variables: z.record(z.string(), z.string()),
     },
   },
-  async (input) => {
-    const result = await resolveAfterConsultations(input);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return resolveAfterConsultations(input);
+  })
 );
 
 server.registerTool(
@@ -514,10 +491,9 @@ server.registerTool(
       content: z.string().describe("Markdown message content"),
     },
   },
-  async (input) => {
-    const result = await postMessage(input);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return postMessage(input);
+  })
 );
 
 server.registerTool(
@@ -531,10 +507,9 @@ server.registerTool(
       include_events: z.boolean().optional().describe("Also return pending wave events"),
     },
   },
-  async (input) => {
-    const result = await getMessages(input);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return getMessages(input);
+  })
 );
 
 server.registerTool(
@@ -578,10 +553,9 @@ server.registerTool(
       ).optional().describe("Top-5 prioritized recommendations mixing principle violations and holistic suggestions"),
     },
   },
-  async (input) => {
-    const result = await storePrReview(input, projectDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return storePrReview(input, projectDir);
+  })
 );
 
 server.registerTool(
@@ -605,10 +579,9 @@ server.registerTool(
         .optional(),
     },
   },
-  async (input) => {
-    const result = graphQuery(input, projectDir);
-    return jsonResponse(result);
-  }
+  wrapHandler(async (input) => {
+    return graphQuery(input, projectDir);
+  })
 );
 
 // Start the server
