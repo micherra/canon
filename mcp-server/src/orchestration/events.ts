@@ -1,7 +1,4 @@
 import { EventEmitter } from "node:events";
-import { appendFile } from "node:fs/promises";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import type { HistoryEntry, ConcernEntry, GateResult, PostconditionResult, ViolationSeverities, TestResults } from "./flow-schema.ts";
 
 export type FlowEventType =
@@ -106,26 +103,6 @@ export class FlowEventBus extends EventEmitter {
   ): this {
     return super.on(type, handler);
   }
-}
-
-export function createJsonlLogger(
-  workspace: string,
-): (type: FlowEventType, event: FlowEventMap[FlowEventType]) => Promise<void> {
-  const logPath = `${workspace}/log.jsonl`;
-  mkdirSync(dirname(logPath), { recursive: true });
-
-  // Chain writes sequentially to preserve ordering
-  let pending: Promise<void> = Promise.resolve();
-
-  return (type: FlowEventType, event: FlowEventMap[FlowEventType]) => {
-    const line = JSON.stringify({ type, ...event });
-    pending = pending
-      .then(() => appendFile(logPath, line + "\n"))
-      .catch(() => {
-        // Best-effort logging — don't crash the flow on write failure
-      });
-    return pending;
-  };
 }
 
 export function createMetricsAccumulator(): {

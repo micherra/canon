@@ -495,8 +495,12 @@ async function reportResultLocked(
     };
   }
 
-  // Write board back to ExecutionStore
-  syncBoardToStore(store, board);
+  // Write board back to ExecutionStore — all store writes are wrapped in a
+  // single SQLite transaction so the board, states, and iterations are
+  // updated atomically (explicit-transaction-boundaries principle).
+  store.transaction(() => {
+    syncBoardToStore(store, board);
+  });
 
   // Append progress line (best-effort — cosmetic, never blocks the flow)
   if (input.progress_line) {

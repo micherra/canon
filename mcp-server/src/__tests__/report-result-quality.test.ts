@@ -45,7 +45,6 @@ vi.mock("../orchestration/effects.ts", () => ({
 
 import { withBoardLock } from "../orchestration/workspace.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { createJsonlLogger } from "../orchestration/events.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
@@ -144,8 +143,6 @@ describe("report_result: quality metrics enrichment", () => {
     vi.clearAllMocks();
     // withBoardLock pass-through
     vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
-    // createJsonlLogger pass-through
-    vi.mocked(createJsonlLogger).mockReturnValue(vi.fn().mockResolvedValue(undefined));
   });
 
   afterEach(() => {

@@ -9,7 +9,7 @@
  * methods, transaction wrapper. Callers never see SQL.
  */
 
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { mkdirSync } from 'fs';
 import Database from 'better-sqlite3';
 import { initDriftDb } from './drift-schema.ts';
@@ -533,15 +533,16 @@ const cache = new Map<string, DriftDb>();
  * better-sqlite3 is synchronous.
  */
 export function getDriftDb(projectDir: string): DriftDb {
-  const existing = cache.get(projectDir);
+  const key = resolve(projectDir);
+  const existing = cache.get(key);
   if (existing !== undefined) return existing;
 
-  const canonDir = join(projectDir, CANON_DIR);
+  const canonDir = join(key, CANON_DIR);
   mkdirSync(canonDir, { recursive: true });
 
   const dbPath = join(canonDir, 'drift.db');
   const db = initDriftDb(dbPath);
   const store = new DriftDb(db);
-  cache.set(projectDir, store);
+  cache.set(key, store);
   return store;
 }

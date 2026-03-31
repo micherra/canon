@@ -9,7 +9,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type {
   Board,
   Session,
@@ -803,27 +803,33 @@ const storeCache = new Map<string, ExecutionStore>();
  */
 export function assertWorkspacePath(workspace: string): void {
   if (
-    !workspace.includes('.canon/workspaces/') &&
-    !workspace.includes('.canon\\workspaces\\') &&
     process.env.CANON_SKIP_WORKSPACE_VALIDATION !== 'true' &&
     !process.env.VITEST
   ) {
-    throw new Error(
-      `Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`,
-    );
+    // Use the raw string for the segment check so Windows-style paths work
+    // cross-platform (resolve() would rewrite them on macOS).
+    const hasValidSegment =
+      workspace.includes('.canon/workspaces/') ||
+      workspace.includes('.canon\\workspaces\\');
+    if (!hasValidSegment) {
+      throw new Error(
+        `Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`,
+      );
+    }
   }
 }
 
 export function getExecutionStore(workspace: string): ExecutionStore {
   assertWorkspacePath(workspace);
 
-  const existing = storeCache.get(workspace);
+  const key = resolve(workspace);
+  const existing = storeCache.get(key);
   if (existing) return existing;
 
-  const dbPath = join(workspace, CANON_FILES.ORCHESTRATION_DB);
+  const dbPath = join(key, CANON_FILES.ORCHESTRATION_DB);
   const db = initExecutionDb(dbPath);
   const store = new ExecutionStore(db);
-  storeCache.set(workspace, store);
+  storeCache.set(key, store);
   return store;
 }
 
