@@ -226,24 +226,54 @@ export async function initWorkspaceFlow(
     status: "active",
   };
 
-  // Persist execution to SQLite
-  store.initExecution({
-    flow: board.flow,
-    task: board.task,
-    entry: board.entry,
-    current_state: board.current_state,
-    base_commit: board.base_commit,
-    started: board.started,
-    last_updated: board.last_updated,
-    branch: session.branch,
-    sanitized: session.sanitized,
-    created: session.created,
-    original_task: session.original_task,
-    tier: session.tier,
-    flow_name: session.flow,
-    slug: session.slug,
-    status: session.status,
-  });
+  // Persist execution to SQLite.
+  // Two concurrent callers can both pass the re-check above (both see no session)
+  // and race to insert the singleton execution row. The loser gets a UNIQUE
+  // constraint error. We catch that here and fall back to reading the row the
+  // winner already inserted, returning a clean resume instead of propagating
+  // the constraint error.
+  try {
+    store.initExecution({
+      flow: board.flow,
+      task: board.task,
+      entry: board.entry,
+      current_state: board.current_state,
+      base_commit: board.base_commit,
+      started: board.started,
+      last_updated: board.last_updated,
+      branch: session.branch,
+      sanitized: session.sanitized,
+      created: session.created,
+      original_task: session.original_task,
+      tier: session.tier,
+      flow_name: session.flow,
+      slug: session.slug,
+      status: session.status,
+    });
+  } catch (err) {
+    // Another concurrent caller already inserted the execution row.
+    // Treat this as a resume: read what the winner wrote and return it.
+    const isConstraintError =
+      (err as { code?: string }).code === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
+      (err as { code?: string }).code === 'SQLITE_CONSTRAINT' ||
+      (err instanceof Error && err.message.includes('UNIQUE constraint'));
+    if (!isConstraintError) throw err;
+
+    const winnerSession = store.getSession();
+    if (winnerSession && winnerSession.status === 'active') {
+      const winnerBoard = store.getBoard()!;
+      return {
+        workspace,
+        slug: winnerSession.slug,
+        board: winnerBoard,
+        session: winnerSession,
+        created: false,
+        resume_state: winnerBoard.current_state,
+      };
+    }
+    // Constraint error but still no session readable — re-throw.
+    throw err;
+  }
 
   // Persist initial state records
   for (const [stateId] of Object.entries(flow.states)) {

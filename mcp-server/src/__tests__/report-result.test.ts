@@ -1063,3 +1063,65 @@ describe("reportResult — store persistence", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Concurrent read-modify-write — P1 fix: entire RMW inside transaction
+// ---------------------------------------------------------------------------
+
+describe("reportResult — concurrent RMW serialization (P1)", () => {
+  it("two concurrent calls accumulating discovered_gates preserve both sets", async () => {
+    // Demonstrates the lost-update bug: without the entire RMW inside a
+    // transaction, the second concurrent writer reads stale board state
+    // (before the first writer's discovered_gates were committed) and
+    // overwrites them. With the fix, both gate sets survive.
+    const workspace = makeTmpWorkspace();
+
+    // Use a state that transitions to itself so both callers can use the same state_id
+    const flow = makeMinimalFlow({
+      states: {
+        build: {
+          type: "single",
+          transitions: { done: "review", failed: "build" },
+        },
+        review: { type: "single", transitions: { done: "ship" } },
+        ship: { type: "terminal" },
+        hitl: { type: "terminal" },
+      },
+    });
+    setupWorkspace(workspace, flow);
+
+    // Two concurrent calls each reporting a distinct discovered gate
+    const [r1, r2] = await Promise.all([
+      reportResult({
+        workspace,
+        state_id: "build",
+        status_keyword: "DONE",
+        flow,
+        discovered_gates: [{ command: "npm test", source: "agent-1" }],
+      }),
+      reportResult({
+        workspace,
+        state_id: "build",
+        status_keyword: "DONE",
+        flow,
+        discovered_gates: [{ command: "npm run lint", source: "agent-2" }],
+      }),
+    ]);
+
+    // Both calls should succeed
+    expect(r1.transition_condition).toBe("done");
+    expect(r2.transition_condition).toBe("done");
+
+    // The persisted state should contain discovered_gates from BOTH calls
+    // (accumulated, not overwritten). With the stale-read bug present,
+    // only one set survives; with the fix both are present.
+    const store = getExecutionStore(workspace);
+    const state = store.getState("build");
+    const gates = state?.discovered_gates ?? [];
+
+    // Both gate commands must be present after concurrent accumulation
+    const commands = gates.map((g: { command: string }) => g.command);
+    expect(commands).toContain("npm test");
+    expect(commands).toContain("npm run lint");
+  });
+});

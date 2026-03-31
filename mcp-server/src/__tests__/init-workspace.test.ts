@@ -196,3 +196,43 @@ describe("listBranchWorkspaces", () => {
     expect(workspaces).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// initWorkspaceFlow — concurrent initialization (P1 fix)
+// ---------------------------------------------------------------------------
+
+describe("initWorkspaceFlow — concurrent initialization race (P1)", () => {
+  it("concurrent calls for the same task/branch both succeed — loser resumes instead of throwing", async () => {
+    // Demonstrates the check-then-insert race: without the fix, two concurrent
+    // calls can both see 'no session' and both try to INSERT the singleton
+    // execution row (id=1). The loser throws a SQLITE_CONSTRAINT error.
+    // With the fix, the loser catches the constraint error and returns a clean
+    // resume (created: false) instead of propagating the error.
+    const projectDir = makeTmpProjectDir();
+
+    // Fire both calls simultaneously with the same input (same slug → same DB path)
+    const [r1, r2] = await Promise.all([
+      initWorkspaceFlow(baseInput, projectDir, "/fake/plugin"),
+      initWorkspaceFlow(baseInput, projectDir, "/fake/plugin"),
+    ]);
+
+    // Both should resolve without throwing
+    expect(r1.workspace).toBeTruthy();
+    expect(r2.workspace).toBeTruthy();
+
+    // They should land in the same workspace
+    expect(r1.workspace).toBe(r2.workspace);
+
+    // Exactly one created the workspace; the other resumed
+    const createdCount = [r1.created, r2.created].filter(Boolean).length;
+    // With the fix: exactly one created=true, one created=false
+    // We accept both=false as well (if both see the existing row) but NOT a throw
+    expect(createdCount).toBeLessThanOrEqual(1);
+
+    // Both board/session results must be valid
+    expect(r1.board).toBeDefined();
+    expect(r2.board).toBeDefined();
+    expect(r1.session.status).toBe("active");
+    expect(r2.session.status).toBe("active");
+  });
+});
