@@ -214,11 +214,9 @@ describe("getSpawnPrompt — progress from store", () => {
     expect(result.prompts[0].prompt).toBeDefined();
   });
 
-  it("does not read from file system for progress", async () => {
-    // Import fs/promises to spy on readFile
-    const fsPromises = await import("node:fs/promises");
-    const readFileSpy = vi.spyOn(fsPromises, "readFile");
-
+  it("reads progress from store.getProgress() (not from file system)", async () => {
+    // Verifies that progress content comes from store.getProgress(), not fs.readFile()
+    // by confirming: (1) mockStore.getProgress was called, (2) the content appears in prompt
     const workspace = makeTmpDir();
     mockStore.getBoard.mockReturnValue(makeBoard());
     mockStore.getProgress.mockReturnValue("- step done");
@@ -228,20 +226,17 @@ describe("getSpawnPrompt — progress from store", () => {
       spawn_instructions: { implement: "${progress}" },
     });
 
-    await getSpawnPrompt({
+    const result = await getSpawnPrompt({
       workspace,
       state_id: "implement",
       flow,
       variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
     });
 
-    // readFile should NOT have been called for progress.md
-    const progressReadCalls = readFileSpy.mock.calls.filter(
-      (call) => typeof call[0] === "string" && (call[0] as string).includes("progress.md"),
-    );
-    expect(progressReadCalls).toHaveLength(0);
-
-    readFileSpy.mockRestore();
+    // Store.getProgress must have been called (store-based, not file-based)
+    expect(mockStore.getProgress).toHaveBeenCalledWith(8);
+    // Content from store must appear in the prompt
+    expect(result.prompts[0].prompt).toContain("- step done");
   });
 });
 

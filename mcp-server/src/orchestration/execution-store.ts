@@ -802,3 +802,15 @@ export function getExecutionStore(workspace: string): ExecutionStore {
   storeCache.set(workspace, store);
   return store;
 }
+
+/**
+ * Close and evict all cached ExecutionStore instances.
+ * Call this in test afterEach/afterAll to release SQLite file handles
+ * before deleting temp workspace directories.
+ */
+export function clearStoreCache(): void {
+  for (const store of storeCache.values()) {
+    try { store.close(); } catch { /* ignore close errors */ }
+  }
+  storeCache.clear();
+}

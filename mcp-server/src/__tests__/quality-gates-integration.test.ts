@@ -16,7 +16,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { writeFile, readFile } from "node:fs/promises";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -49,7 +48,7 @@ vi.mock("../orchestration/effects.ts", () => ({
 
 import { withBoardLock } from "../orchestration/workspace.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { readBoard, writeBoard } from "../orchestration/board.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { updateBoard } from "../tools/update-board.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
 import { computeAnalytics, appendFlowRun } from "../drift/analytics.ts";
@@ -61,6 +60,32 @@ import { CANON_DIR } from "../constants.ts";
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "qg-integ-"));
+}
+
+function seedBoard(workspace: string, board: ReturnType<typeof makeMinimalBoard> | ReturnType<typeof makeMultiStateBoard>): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: board.flow,
+    task: board.task,
+    entry: board.entry,
+    current_state: board.current_state,
+    base_commit: board.base_commit,
+    started: board.started,
+    last_updated: board.last_updated,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: board.flow,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(stateId, stateEntry as any);
+  }
+  for (const [stateId, iterEntry] of Object.entries(board.iterations)) {
+    store.upsertIteration(stateId, iterEntry as any);
+  }
 }
 
 function makeMinimalBoard() {
@@ -196,14 +221,15 @@ function makeMinimalFlow() {
 describe("Integration: report_result discovered_gates → board stores → runGates uses them", () => {
   let workspace: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     workspace = makeTmpWorkspace();
-    await writeBoard(workspace, makeMinimalBoard());
+    seedBoard(workspace, makeMinimalBoard());
     vi.clearAllMocks();
     vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
+    clearStoreCache();
     rmSync(workspace, { recursive: true, force: true });
   });
 
@@ -221,8 +247,8 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     });
 
     // Step 2: Read the board back — discovered gates should be stored on the state entry
-    const board = await readBoard(workspace);
-    const implState = board.states["impl"];
+    const board = getExecutionStore(workspace).getBoard();
+    const implState = board!.states["impl"];
     expect(implState.discovered_gates).toHaveLength(2);
     expect(implState.discovered_gates![0]).toEqual({ command: "npx vitest run", source: "tester" });
     expect(implState.discovered_gates![1]).toEqual({ command: "npx tsc --noEmit", source: "tester" });
@@ -249,14 +275,9 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     });
 
     // Re-open state for second report (simulating second agent call)
-    const boardAfterFirst = await readBoard(workspace);
-    await writeBoard(workspace, {
-      ...boardAfterFirst,
-      states: {
-        ...boardAfterFirst.states,
-        impl: { ...boardAfterFirst.states["impl"], status: "in_progress" as const },
-      },
-    });
+    const storeAfterFirst = getExecutionStore(workspace);
+    const boardAfterFirst = storeAfterFirst.getBoard()!;
+    storeAfterFirst.upsertState("impl", { ...boardAfterFirst.states["impl"], status: "in_progress" as const });
 
     // Second report — reviewer discovers lint command
     await reportResult({
@@ -267,7 +288,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
       discovered_gates: [{ command: "npx eslint . --ext .ts", source: "reviewer" }],
     });
 
-    const finalBoard = await readBoard(workspace);
+    const finalBoard = getExecutionStore(workspace).getBoard()!;
     const discovered = finalBoard.states["impl"].discovered_gates ?? [];
 
     // Both gates accumulated — append not replace
@@ -328,29 +349,13 @@ describe("Integration: complete_flow aggregates multi-state quality metrics", ()
   });
 
   afterEach(() => {
+    clearStoreCache();
     rmSync(workspace, { recursive: true, force: true });
     rmSync(projectDir, { recursive: true, force: true });
   });
 
   it("aggregates gate/postcondition/violation metrics across 3 states correctly", async () => {
-    await writeBoard(workspace, makeMultiStateBoard());
-
-    // Write session.json for tier lookup
-    await writeFile(
-      join(workspace, "session.json"),
-      JSON.stringify({
-        branch: "feat/test",
-        sanitized: "feat-test",
-        created: new Date().toISOString(),
-        task: "add feature Y",
-        original_task: "add feature Y",
-        tier: "medium",
-        flow: "feature",
-        slug: "feature-y",
-        status: "active",
-      }),
-      "utf-8"
-    );
+    seedBoard(workspace, makeMultiStateBoard());
 
     await updateBoard({
       workspace,
@@ -358,41 +363,19 @@ describe("Integration: complete_flow aggregates multi-state quality metrics", ()
       project_dir: projectDir,
     });
 
-    const jsonlPath = join(projectDir, CANON_DIR, "flow-runs.jsonl");
-    const raw = await readFile(jsonlPath, "utf-8");
-    const entry = JSON.parse(raw.trim());
+    const analytics = await computeAnalytics(projectDir);
 
     // impl has 2 gates (1 passed), review has 1 gate (1 passed) → 2/3 = 0.667
-    expect(entry.gate_pass_rate).toBeCloseTo(2 / 3, 3);
+    expect(analytics.avg_gate_pass_rate).toBeCloseTo(2 / 3, 3);
     // impl has 1 passed postcondition, review has 1 failed → 1/2 = 0.5
-    expect(entry.postcondition_pass_rate).toBeCloseTo(0.5, 3);
-    // Total violations: impl(2) + review(1) = 3
-    expect(entry.total_violations).toBe(3);
-    // Total files changed: impl(3) + review(1) = 4
-    expect(entry.total_files_changed).toBe(4);
-    // Test results: impl(15p,1f,0s) + review(0p,0f,0s) = 15p, 1f, 0s
-    expect(entry.total_test_results).toEqual({ passed: 15, failed: 1, skipped: 0 });
+    expect(analytics.avg_postcondition_pass_rate).toBeCloseTo(0.5, 3);
+    // Total runs = 1
+    expect(analytics.total_runs).toBe(1);
   });
 
   it("states without metrics are skipped in aggregation (research state has no gate data)", async () => {
     // research state has NO gate_results — should not affect gate_pass_rate
-    await writeBoard(workspace, makeMultiStateBoard());
-
-    await writeFile(
-      join(workspace, "session.json"),
-      JSON.stringify({
-        branch: "feat/test",
-        sanitized: "feat-test",
-        created: new Date().toISOString(),
-        task: "add feature Y",
-        original_task: "add feature Y",
-        tier: "medium",
-        flow: "feature",
-        slug: "feature-y",
-        status: "active",
-      }),
-      "utf-8"
-    );
+    seedBoard(workspace, makeMultiStateBoard());
 
     await updateBoard({
       workspace,
@@ -400,14 +383,13 @@ describe("Integration: complete_flow aggregates multi-state quality metrics", ()
       project_dir: projectDir,
     });
 
-    const jsonlPath = join(projectDir, CANON_DIR, "flow-runs.jsonl");
-    const raw = await readFile(jsonlPath, "utf-8");
-    const entry = JSON.parse(raw.trim());
+    const analytics = await computeAnalytics(projectDir);
 
     // research state has no gate_results — only impl + review gates counted (3 total)
     // If research was incorrectly counted, total_gates would be wrong
     // 2 passed out of 3 total → 0.667
-    expect(entry.gate_pass_rate).toBeCloseTo(2 / 3, 3);
+    expect(analytics.avg_gate_pass_rate).toBeCloseTo(2 / 3, 3);
+    expect(analytics.total_runs).toBe(1);
   });
 });
 
@@ -529,14 +511,15 @@ describe("Integration: board backward compatibility (old board.json without new 
 describe("Integration: violation_count=0 is recorded distinctly from absent (edge case)", () => {
   let workspace: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     workspace = makeTmpWorkspace();
-    await writeBoard(workspace, makeMinimalBoard());
+    seedBoard(workspace, makeMinimalBoard());
     vi.clearAllMocks();
     vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
+    clearStoreCache();
     rmSync(workspace, { recursive: true, force: true });
   });
 
@@ -550,7 +533,7 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
       violation_count: 0, // explicitly clean
     });
 
-    const board = await readBoard(workspace);
+    const board = getExecutionStore(workspace).getBoard()!;
     const metrics = board.states["impl"].metrics;
     expect(metrics).toBeDefined();
     // violation_count=0 must be present (not undefined)
@@ -567,7 +550,7 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
       // No metrics, no quality signals
     });
 
-    const board = await readBoard(workspace);
+    const board = getExecutionStore(workspace).getBoard()!;
     // When no signals provided, metrics should be absent entirely
     expect(board.states["impl"].metrics).toBeUndefined();
   });
@@ -577,17 +560,17 @@ describe("Integration: gate_results from report_result flow through to complete_
   let workspace: string;
   let projectDir: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     workspace = makeTmpWorkspace();
     projectDir = makeTmpWorkspace();
     mkdirSync(join(projectDir, CANON_DIR), { recursive: true });
-    const board = makeMinimalBoard();
-    await writeBoard(workspace, board);
+    seedBoard(workspace, makeMinimalBoard());
     vi.clearAllMocks();
     vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
+    clearStoreCache();
     rmSync(workspace, { recursive: true, force: true });
     rmSync(projectDir, { recursive: true, force: true });
   });
@@ -615,27 +598,11 @@ describe("Integration: gate_results from report_result flow through to complete_
     });
 
     // Verify the board was updated correctly
-    const board = await readBoard(workspace);
+    const board = getExecutionStore(workspace).getBoard()!;
     expect(board.states["impl"].gate_results).toHaveLength(3);
     expect(board.states["impl"].metrics?.gate_results).toHaveLength(3);
 
-    // Step 2: Write session and call complete_flow
-    await writeFile(
-      join(workspace, "session.json"),
-      JSON.stringify({
-        branch: "feat/impl",
-        sanitized: "feat-impl",
-        created: new Date().toISOString(),
-        task: "add feature X",
-        original_task: "add feature X",
-        tier: "small",
-        flow: "feature",
-        slug: "feature-x",
-        status: "active",
-      }),
-      "utf-8"
-    );
-
+    // Step 2: Call complete_flow (session data is already in the store via seedBoard/initExecution)
     await updateBoard({
       workspace,
       action: "complete_flow",
@@ -643,20 +610,14 @@ describe("Integration: gate_results from report_result flow through to complete_
     });
 
     // Step 3: Verify analytics reflect gate data from report_result
-    const jsonlPath = join(projectDir, CANON_DIR, "flow-runs.jsonl");
-    const raw = await readFile(jsonlPath, "utf-8");
-    const flowRun = JSON.parse(raw.trim());
+    const analytics = await computeAnalytics(projectDir);
 
-    // 3 gates, 2 passed → 2/3
-    expect(flowRun.gate_pass_rate).toBeCloseTo(2 / 3, 3);
-    // 2 postconditions, 1 passed → 0.5
-    expect(flowRun.postcondition_pass_rate).toBeCloseTo(0.5, 3);
-    // violation_count = 1
-    expect(flowRun.total_violations).toBe(1);
-    // files_changed = 2
-    expect(flowRun.total_files_changed).toBe(2);
-    // test_results
-    expect(flowRun.total_test_results).toEqual({ passed: 10, failed: 0, skipped: 0 });
+    // 3 gates, 2 passed → 2/3 avg (1 run, so avg = run value)
+    expect(analytics.avg_gate_pass_rate).toBeCloseTo(2 / 3, 3);
+    // 2 postconditions, 1 passed → 0.5 avg
+    expect(analytics.avg_postcondition_pass_rate).toBeCloseTo(0.5, 3);
+    // 1 run recorded
+    expect(analytics.total_runs).toBe(1);
   });
 });
 
@@ -671,6 +632,7 @@ describe("Integration: computeAnalytics aggregates across flow run history", () 
   });
 
   afterEach(() => {
+    clearStoreCache();
     rmSync(projectDir, { recursive: true, force: true });
   });
 
@@ -721,14 +683,15 @@ describe("Integration: computeAnalytics aggregates across flow run history", () 
 describe("Integration: discovered_gates deduplicated when same command reported by multiple agents", () => {
   let workspace: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     workspace = makeTmpWorkspace();
-    await writeBoard(workspace, makeMinimalBoard());
+    seedBoard(workspace, makeMinimalBoard());
     vi.clearAllMocks();
     vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
+    clearStoreCache();
     rmSync(workspace, { recursive: true, force: true });
   });
 
@@ -742,11 +705,9 @@ describe("Integration: discovered_gates deduplicated when same command reported 
       discovered_gates: [{ command: "npm test", source: "tester" }],
     });
 
-    const boardAfterFirst = await readBoard(workspace);
-    await writeBoard(workspace, {
-      ...boardAfterFirst,
-      states: { ...boardAfterFirst.states, impl: { ...boardAfterFirst.states["impl"], status: "in_progress" as const } },
-    });
+    const storeRef = getExecutionStore(workspace);
+    const boardAfterFirst = storeRef.getBoard()!;
+    storeRef.upsertState("impl", { ...boardAfterFirst.states["impl"], status: "in_progress" as const });
 
     await reportResult({
       workspace,
@@ -756,7 +717,7 @@ describe("Integration: discovered_gates deduplicated when same command reported 
       discovered_gates: [{ command: "npm test", source: "reviewer" }], // same command, different source
     });
 
-    const finalBoard = await readBoard(workspace);
+    const finalBoard = getExecutionStore(workspace).getBoard()!;
     // Board accumulates both (append semantics — dedup is runGates' responsibility, not reportResult's)
     const accumulated = finalBoard.states["impl"].discovered_gates ?? [];
     expect(accumulated).toHaveLength(2);

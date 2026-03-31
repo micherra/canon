@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { canEnterState, filterCannotFix } from "../orchestration/convergence.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { checkConvergence } from "../tools/check-convergence.ts";
-import { writeBoard, initBoard } from "../orchestration/board.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
@@ -38,6 +38,7 @@ function makeTmpWorkspace(): string {
 }
 
 afterEach(() => {
+  clearStoreCache();
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });
   }
@@ -64,6 +65,36 @@ function makeFlowWithCannotFix(): ResolvedFlow {
       hitl: { type: "terminal" },
     },
   };
+}
+
+/**
+ * Seed a workspace's ExecutionStore with the given flow's initial state.
+ * Replaces the old `initBoard(flow) + writeBoard(workspace, board)` pattern.
+ */
+function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: flow.name,
+    task: "test task",
+    entry: flow.entry,
+    current_state: flow.entry,
+    base_commit: "abc123",
+    started: now,
+    last_updated: now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: flow.name,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateDef] of Object.entries(flow.states)) {
+    store.upsertState(stateId, { status: "pending", entries: 0 });
+    if (stateDef.max_iterations !== undefined) {
+      store.upsertIteration(stateId, { count: 0, max: stateDef.max_iterations, history: [], cannot_fix: [] });
+    }
+  }
 }
 
 describe("canEnterState", () => {
@@ -157,8 +188,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("accumulates CannotFixItem entries when condition is cannot_fix with principle_ids and file_paths", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -179,8 +209,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("builds cartesian product of principle_ids x file_paths", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -206,8 +235,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("does not add duplicate items on repeated cannot_fix reports", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     // First report
     await reportResult({
@@ -254,8 +282,7 @@ describe("reportResult — cannot_fix accumulation", () => {
         hitl: { type: "terminal" },
       },
     };
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -273,8 +300,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("skips accumulation when principle_ids is missing", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -292,8 +318,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("skips accumulation when file_paths is missing", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -311,8 +336,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("does not accumulate when condition is not cannot_fix", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -336,8 +360,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
   it("check-convergence returns accumulated cannot_fix_items after report-result", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     await reportResult({
       workspace,
@@ -358,8 +381,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
   it("round-trip: multiple reports accumulate items, check-convergence returns all", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     // First agent report
     await reportResult({
@@ -395,8 +417,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
   it("filterCannotFix can filter items returned by check-convergence", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     await reportResult({
       workspace,

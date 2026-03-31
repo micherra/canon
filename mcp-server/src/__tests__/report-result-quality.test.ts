@@ -47,7 +47,7 @@ import { withBoardLock } from "../orchestration/workspace.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { createJsonlLogger } from "../orchestration/events.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { readBoard, writeBoard } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -118,10 +118,28 @@ function makeMinimalFlow() {
 describe("report_result: quality metrics enrichment", () => {
   let workspace: string;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     workspace = makeTmpWorkspace();
     const board = makeMinimalBoard();
-    await writeBoard(workspace, board);
+    const store = getExecutionStore(workspace);
+    const now = new Date().toISOString();
+    store.initExecution({
+      flow: board.flow,
+      task: board.task,
+      entry: board.entry,
+      current_state: board.current_state,
+      base_commit: board.base_commit,
+      started: board.started,
+      last_updated: board.last_updated,
+      branch: "main",
+      sanitized: "main",
+      created: now,
+      tier: "medium",
+      flow_name: board.flow,
+      slug: "test-slug",
+    });
+    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertIteration("impl", { count: 2, max: 3, history: [], cannot_fix: [] });
     // Reset mock call counts
     vi.clearAllMocks();
     // withBoardLock pass-through
@@ -189,20 +207,16 @@ describe("report_result: quality metrics enrichment", () => {
       discovered_gates: [{ command: "npm test", source: "tester" }],
     });
 
-    // Read board back and write it as the new starting point
-    const boardAfterFirst = await readBoard(workspace);
-    expect(boardAfterFirst.states["impl"].discovered_gates).toHaveLength(1);
+    // Read board back and verify first gate was stored
+    const storeAfterFirst = getExecutionStore(workspace);
+    const stateAfterFirst = storeAfterFirst.getState("impl");
+    expect(stateAfterFirst?.discovered_gates).toHaveLength(1);
 
     // Reset board state to in_progress so we can call reportResult again
-    await writeBoard(workspace, {
-      ...boardAfterFirst,
-      states: {
-        ...boardAfterFirst.states,
-        impl: {
-          ...boardAfterFirst.states["impl"],
-          status: "in_progress" as const,
-        },
-      },
+    storeAfterFirst.upsertState("impl", {
+      ...(stateAfterFirst ?? {}),
+      status: "in_progress" as const,
+      entries: stateAfterFirst?.entries ?? 1,
     });
 
     // Second report — reviewer discovers another gate
@@ -214,7 +228,7 @@ describe("report_result: quality metrics enrichment", () => {
       discovered_gates: [{ command: "npx eslint .", source: "reviewer" }],
     });
 
-    const boardAfterSecond = await readBoard(workspace);
+    const boardAfterSecond = getExecutionStore(workspace).getBoard()!;
     expect(boardAfterSecond.states["impl"].discovered_gates).toHaveLength(2);
     expect(boardAfterSecond.states["impl"].discovered_gates).toEqual(
       expect.arrayContaining([
@@ -241,19 +255,15 @@ describe("report_result: quality metrics enrichment", () => {
       ],
     });
 
-    const boardAfterFirst = await readBoard(workspace);
-    expect(boardAfterFirst.states["impl"].discovered_postconditions).toHaveLength(1);
+    const storeAfterFirst2 = getExecutionStore(workspace);
+    const stateAfterFirst2 = storeAfterFirst2.getState("impl");
+    expect(stateAfterFirst2?.discovered_postconditions).toHaveLength(1);
 
     // Reset state for second call
-    await writeBoard(workspace, {
-      ...boardAfterFirst,
-      states: {
-        ...boardAfterFirst.states,
-        impl: {
-          ...boardAfterFirst.states["impl"],
-          status: "in_progress" as const,
-        },
-      },
+    storeAfterFirst2.upsertState("impl", {
+      ...(stateAfterFirst2 ?? {}),
+      status: "in_progress" as const,
+      entries: stateAfterFirst2?.entries ?? 1,
     });
 
     // Second report
@@ -267,7 +277,7 @@ describe("report_result: quality metrics enrichment", () => {
       ],
     });
 
-    const boardAfterSecond = await readBoard(workspace);
+    const boardAfterSecond = getExecutionStore(workspace).getBoard()!;
     expect(boardAfterSecond.states["impl"].discovered_postconditions).toHaveLength(2);
     expect(boardAfterSecond.states["impl"].discovered_postconditions).toEqual(
       expect.arrayContaining([
@@ -369,8 +379,8 @@ describe("report_result: quality metrics enrichment", () => {
       files_changed: 2,
     });
 
-    // Read back from disk and parse with BoardSchema
-    const board = await readBoard(workspace);
+    // Read back from store and parse with BoardSchema
+    const board = getExecutionStore(workspace).getBoard();
     const parsed = BoardSchema.parse(board);
 
     expect(parsed.states["impl"].gate_results).toHaveLength(1);

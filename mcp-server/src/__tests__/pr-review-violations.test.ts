@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
+import { mkdtemp, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { buildFileViolationMap } from "../tools/pr-review-data.ts";
+import { DriftStore } from "../drift/store.ts";
 import type { ReviewEntry } from "../schema.ts";
 
 // ── buildFileViolationMap unit tests ──
@@ -234,10 +235,9 @@ describe("getPrReviewData — violations integration", () => {
       },
       verdict: "WARNING",
     };
-    await writeFile(
-      join(tmpDir, ".canon", "reviews.jsonl"),
-      JSON.stringify(review) + "\n",
-    );
+    // Seed review via DriftStore (which uses SQLite, not reviews.jsonl)
+    const driftStore = new DriftStore(tmpDir);
+    await driftStore.appendReview(review);
 
     const diffOutput = "M\tsrc/tools/some-tool.ts\nA\tsrc/tools/new-file.ts\n";
     vi.doMock("child_process", () => ({

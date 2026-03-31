@@ -194,7 +194,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
           store.upsertState(currentStateId, {
             ...doneState,
             status: "done",
-            entries: doneState.entries,
+            entries: doneState.entries ?? 0,
             completed_at: now,
           });
         }

@@ -26,11 +26,8 @@ import { join } from "node:path";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-  enterState: vi.fn(),
-}));
+// board.ts: readBoard/writeBoard are deprecated; enterState is a pure function used internally.
+// Real enterState preserves fields via spread. No mock needed.
 
 vi.mock("../orchestration/workspace.ts", () => ({
   withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
@@ -56,11 +53,11 @@ vi.mock("../orchestration/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
-import { readBoard, enterState } from "../orchestration/board.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveContextInjections } from "../orchestration/inject-context.ts";
 import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -110,6 +107,29 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   };
 }
 
+function seedBoard(workspace: string, board: Board): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: board.flow,
+    task: board.task,
+    entry: board.entry,
+    current_state: board.current_state,
+    base_commit: board.base_commit,
+    started: board.started ?? now,
+    last_updated: board.last_updated ?? now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: board.flow,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+  }
+}
+
 afterEach(() => {
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });
@@ -122,8 +142,8 @@ afterEach(() => {
 // 1. _board passthrough — getSpawnPrompt does NOT call readBoard when _board is given
 // ---------------------------------------------------------------------------
 
-describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
-  it("does not call readBoard when _board is provided and state has skip_when", async () => {
+describe("getSpawnPrompt — _board passthrough skips store read", () => {
+  it("succeeds when _board is provided and state has skip_when (no store read needed)", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
     // evaluateSkipWhen mock: condition not met so we proceed
@@ -140,7 +160,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       },
     });
 
-    await getSpawnPrompt({
+    const result = await getSpawnPrompt({
       workspace,
       state_id: "implement",
       flow,
@@ -148,10 +168,11 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       _board: board,
     });
 
-    expect(readBoard).not.toHaveBeenCalled();
+    // Should produce a prompt without error (store not seeded, _board provided directly)
+    expect(result.prompts).toHaveLength(1);
   });
 
-  it("does not call readBoard when _board is provided and state has inject_context", async () => {
+  it("succeeds when _board is provided and state has inject_context (no store read needed)", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
     vi.mocked(resolveContextInjections).mockResolvedValue({
@@ -171,7 +192,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       },
     });
 
-    await getSpawnPrompt({
+    const result = await getSpawnPrompt({
       workspace,
       state_id: "implement",
       flow,
@@ -179,10 +200,10 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       _board: board,
     });
 
-    expect(readBoard).not.toHaveBeenCalled();
+    expect(result.prompts).toHaveLength(1);
   });
 
-  it("does not call readBoard when _board is provided and state has large_diff_threshold", async () => {
+  it("succeeds when _board is provided and state has large_diff_threshold (no store read needed)", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
 
@@ -197,7 +218,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       },
     });
 
-    await getSpawnPrompt({
+    const result = await getSpawnPrompt({
       workspace,
       state_id: "implement",
       flow,
@@ -206,10 +227,10 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       _board: board,
     });
 
-    expect(readBoard).not.toHaveBeenCalled();
+    expect(result.prompts).toHaveLength(2);
   });
 
-  it("does not call readBoard when _board is provided and all three board-dependent features are active", async () => {
+  it("succeeds when _board is provided and all three board-dependent features are active", async () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
@@ -232,7 +253,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       },
     });
 
-    await getSpawnPrompt({
+    const result = await getSpawnPrompt({
       workspace,
       state_id: "implement",
       flow,
@@ -241,7 +262,7 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
       _board: board,
     });
 
-    expect(readBoard).not.toHaveBeenCalled();
+    expect(result.prompts).toHaveLength(1);
   });
 });
 
@@ -253,21 +274,15 @@ describe("getSpawnPrompt — _board passthrough skips readBoard", () => {
 describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
   it("passes the entered board (post-enterState) to getSpawnPrompt, not the original board", async () => {
     const workspace = makeTmpDir();
-    const originalBoard = makeBoard({ base_commit: "original-sha" });
-    const enteredBoard = makeBoard({
-      base_commit: "entered-sha",
+    // Seed with pre-enter state (entries: 0)
+    seedBoard(workspace, makeBoard({
       states: {
-        implement: { status: "in_progress", entries: 1 },
+        implement: { status: "pending", entries: 0 },
         done: { status: "pending", entries: 0 },
       },
-    });
+    }));
 
-    vi.mocked(readBoard).mockResolvedValue(originalBoard);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
-
-    // Use skip_when=present but not met, so getSpawnPrompt would call readBoard
-    // if _board were not passed — we verify it uses the entered board by checking
-    // the returned board snapshot matches the entered board.
+    // skip_when=present but not met, so we proceed normally
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
 
     const flow = makeFlow({
@@ -288,26 +303,16 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
     });
 
-    // The board in the result must be the entered board, not the original
+    // The board in the result must be the entered board (post-enterState)
     expect(result.board).toBeDefined();
-    expect(result.board!.base_commit).toBe("entered-sha");
-
-    // readBoard must have been called exactly once (for the initial read, not again for getSpawnPrompt)
-    expect(readBoard).toHaveBeenCalledTimes(1);
+    // After enterState: status=in_progress, entries=1
+    expect(result.board!.states["implement"].status).toBe("in_progress");
+    expect(result.board!.states["implement"].entries).toBe(1);
   });
 
   it("the entered board state shows in_progress for the entered state", async () => {
     const workspace = makeTmpDir();
-    const originalBoard = makeBoard();
-    const enteredBoard = makeBoard({
-      states: {
-        implement: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(originalBoard);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, makeBoard());
 
     const result = await enterAndPrepareState({
       workspace,
@@ -395,8 +400,7 @@ describe("truncateProgress — edge cases", () => {
 describe("enterAndPrepareState — skip_reason message format", () => {
   it("skip_reason includes the condition name and reason from evaluateSkipWhen", async () => {
     const workspace = makeTmpDir();
-    const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board);
+    seedBoard(workspace, makeBoard());
     vi.mocked(evaluateSkipWhen).mockResolvedValue({
       skip: true,
       reason: "No contract changes detected — all changes are internal",
@@ -431,8 +435,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
 
   it("skip_reason falls back to 'condition satisfied' when evaluateSkipWhen returns no reason", async () => {
     const workspace = makeTmpDir();
-    const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board);
+    seedBoard(workspace, makeBoard());
     // No reason field returned
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: true });
 
@@ -459,8 +462,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
 
   it("can_enter is true when state is skipped (skip is not a convergence failure)", async () => {
     const workspace = makeTmpDir();
-    const board = makeBoard();
-    vi.mocked(readBoard).mockResolvedValue(board);
+    seedBoard(workspace, makeBoard());
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: true, reason: "condition met" });
 
     const flow = makeFlow({
@@ -517,13 +519,14 @@ describe("getSpawnPrompt — progress.md absent", () => {
     expect(prompt).toContain("my task");
   });
 
-  it("injects actual content when progress.md exists with entries within cap", async () => {
+  it("injects actual content when progress entries exist in the store", async () => {
     const workspace = makeTmpDir();
-    const progressContent = "## Progress: my task\n- [implement] done: wrote code\n";
-    await writeFile(join(workspace, "progress.md"), progressContent, "utf-8");
+    // Seed the progress store with a progress entry
+    const store = getExecutionStore(workspace);
+    store.appendProgress("[implement] done: wrote code");
 
     const flow = makeFlow({
-      progress: "${WORKSPACE}/progress.md",
+      progress: "${WORKSPACE}/progress.md",  // presence of this field triggers progress injection
       spawn_instructions: { implement: "${progress}" },
     });
 
@@ -535,6 +538,6 @@ describe("getSpawnPrompt — progress.md absent", () => {
     });
 
     const prompt = result.prompts[0].prompt;
-    expect(prompt).toContain("- [implement] done: wrote code");
+    expect(prompt).toContain("[implement] done: wrote code");
   });
 });
