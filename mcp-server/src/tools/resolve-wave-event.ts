@@ -1,11 +1,5 @@
-import {
-  readAllEvents,
-  readPendingEvents,
-  markEventApplied,
-  markEventRejected,
-  resolveEventAgents,
-} from "../orchestration/wave-events.ts";
-import { withBoardLock } from "../orchestration/workspace.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { resolveEventAgents } from "../orchestration/wave-events.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { createJsonlLogger } from "../orchestration/events.ts";
 
@@ -28,64 +22,71 @@ export interface ResolveWaveEventResult {
 export async function resolveWaveEvent(
   input: ResolveWaveEventInput,
 ): Promise<ResolveWaveEventResult> {
-  return withBoardLock(input.workspace, async () => {
-    // Validate: reject requires reason
-    if (input.action === "reject" && !input.reason) {
-      throw new Error("reason is required when action is reject");
-    }
+  // Validate: reject requires reason
+  if (input.action === "reject" && !input.reason) {
+    throw new Error("reason is required when action is reject");
+  }
 
-    // Find the event by ID
-    const allEvents = await readAllEvents(input.workspace);
-    const event = allEvents.find((e) => e.id === input.event_id);
+  const store = getExecutionStore(input.workspace);
 
-    if (!event) {
-      throw new Error(`Event not found: ${input.event_id}`);
-    }
+  // Find the event by ID — getWaveEvents returns all, we filter by id
+  const allEvents = store.getWaveEvents();
+  const event = allEvents.find((e) => e.id === input.event_id);
 
-    // Validate event is pending
-    if (event.status !== "pending") {
-      throw new Error(`Event ${input.event_id} is already ${event.status}`);
-    }
+  if (!event) {
+    throw new Error(`Event not found: ${input.event_id}`);
+  }
 
-    // Apply or reject the event
-    if (input.action === "apply") {
-      await markEventApplied(input.workspace, input.event_id, input.resolution);
-    } else {
-      await markEventRejected(input.workspace, input.event_id, input.reason!);
-    }
+  // Validate event is pending
+  if (event.status !== "pending") {
+    throw new Error(`Event ${input.event_id} is already ${event.status}`);
+  }
 
-    // Resolve agents for the event type
-    const { agents, descriptions } = resolveEventAgents(event.type);
+  // Apply or reject the event via store — SQLite UPDATE is naturally atomic
+  if (input.action === "apply") {
+    store.updateWaveEvent(input.event_id, {
+      status: "applied",
+      applied_at: new Date().toISOString(),
+      ...(input.resolution !== undefined ? { resolution: input.resolution } : {}),
+    });
+  } else {
+    store.updateWaveEvent(input.event_id, {
+      status: "rejected",
+      rejection_reason: input.reason!,
+    });
+  }
 
-    // Count remaining pending events
-    const pending = await readPendingEvents(input.workspace);
+  // Resolve agents for the event type
+  const { agents, descriptions } = resolveEventAgents(event.type);
 
-    // Emit wave_event_resolved (best-effort — same pattern as inject-wave-event.ts)
-    const log = createJsonlLogger(input.workspace);
-    const onWaveEventResolved = (
-      e: import("../orchestration/events.js").FlowEventMap["wave_event_resolved"],
-    ) => {
-      log("wave_event_resolved", e).catch(() => {});
-    };
-    flowEventBus.once("wave_event_resolved", onWaveEventResolved);
-    try {
-      flowEventBus.emit("wave_event_resolved", {
-        eventId: input.event_id,
-        eventType: event.type,
-        action: input.action,
-        workspace: input.workspace,
-        timestamp: new Date().toISOString(),
-      });
-    } finally {
-      flowEventBus.removeListener("wave_event_resolved", onWaveEventResolved);
-    }
+  // Count remaining pending events
+  const pending = store.getWaveEvents({ status: "pending" });
 
-    return {
-      event_id: input.event_id,
+  // Emit wave_event_resolved (best-effort — same pattern as inject-wave-event.ts)
+  const log = createJsonlLogger(input.workspace);
+  const onWaveEventResolved = (
+    e: import("../orchestration/events.js").FlowEventMap["wave_event_resolved"],
+  ) => {
+    log("wave_event_resolved", e).catch(() => {});
+  };
+  flowEventBus.once("wave_event_resolved", onWaveEventResolved);
+  try {
+    flowEventBus.emit("wave_event_resolved", {
+      eventId: input.event_id,
+      eventType: event.type,
       action: input.action,
-      agents,
-      descriptions,
-      pending_count: pending.length,
-    };
-  });
+      workspace: input.workspace,
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    flowEventBus.removeListener("wave_event_resolved", onWaveEventResolved);
+  }
+
+  return {
+    event_id: input.event_id,
+    action: input.action,
+    agents,
+    descriptions,
+    pending_count: pending.length,
+  };
 }

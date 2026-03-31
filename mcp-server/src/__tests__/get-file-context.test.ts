@@ -6,6 +6,7 @@ import { getFileContext } from "../tools/get-file-context.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
+import { DriftStore } from "../drift/store.ts";
 
 describe("getFileContext", () => {
   let tmpDir: string;
@@ -188,7 +189,8 @@ describe("getFileContext", () => {
         `export function handleRequest() {}`,
       );
       // Write a review with per-file violations
-      const review = {
+      const driftStore = new DriftStore(tmpDir);
+      await driftStore.appendReview({
         review_id: "r1",
         timestamp: "2025-01-10T00:00:00Z",
         files: ["src/api/handler.ts"],
@@ -199,11 +201,7 @@ describe("getFileContext", () => {
         honored: [],
         verdict: "BLOCKING",
         score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 0 } },
-      };
-      await writeFile(
-        join(tmpDir, ".canon", "reviews.jsonl"),
-        JSON.stringify(review) + "\n",
-      );
+      });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
 
@@ -217,7 +215,8 @@ describe("getFileContext", () => {
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
       );
-      const oldReview = {
+      const driftStore = new DriftStore(tmpDir);
+      await driftStore.appendReview({
         review_id: "r1",
         timestamp: "2025-01-05T00:00:00Z",
         files: ["src/api/handler.ts"],
@@ -227,8 +226,8 @@ describe("getFileContext", () => {
         honored: [],
         verdict: "WARNING",
         score: { rules: { passed: 1, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 0, total: 1 } },
-      };
-      const newReview = {
+      });
+      await driftStore.appendReview({
         review_id: "r2",
         timestamp: "2025-01-15T00:00:00Z",
         files: ["src/api/handler.ts"],
@@ -238,11 +237,7 @@ describe("getFileContext", () => {
         honored: [],
         verdict: "BLOCKING",
         score: { rules: { passed: 0, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 1, total: 1 } },
-      };
-      await writeFile(
-        join(tmpDir, ".canon", "reviews.jsonl"),
-        JSON.stringify(oldReview) + "\n" + JSON.stringify(newReview) + "\n",
-      );
+      });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
 
@@ -255,7 +250,8 @@ describe("getFileContext", () => {
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
       );
-      const review = {
+      const driftStore = new DriftStore(tmpDir);
+      await driftStore.appendReview({
         review_id: "r1",
         timestamp: "2025-01-10T00:00:00Z",
         files: ["src/api/handler.ts"],
@@ -265,11 +261,7 @@ describe("getFileContext", () => {
         honored: [],
         verdict: "WARNING",
         score: { rules: { passed: 1, total: 1 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 0 } },
-      };
-      await writeFile(
-        join(tmpDir, ".canon", "reviews.jsonl"),
-        JSON.stringify(review) + "\n",
-      );
+      });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
 

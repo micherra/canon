@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, readFile, writeFile, mkdir, access } from "fs/promises";
+import { mkdtemp, rm, mkdir, access } from "fs/promises";
 import path from "path";
 import os from "os";
 import {
@@ -7,11 +7,7 @@ import {
   generateSlug,
   checkSlugCollision,
   initWorkspace,
-  acquireLock,
-  releaseLock,
-  writeSession,
 } from "../orchestration/workspace.ts";
-import type { Session } from "../orchestration/flow-schema.ts";
 
 let tmpDir: string;
 
@@ -135,137 +131,3 @@ describe("initWorkspace", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// writeSession
-// ---------------------------------------------------------------------------
-
-describe("writeSession", () => {
-  it("writes session.json to the workspace", async () => {
-    const ws = await initWorkspace(tmpDir, "session-test");
-    const session: Session = {
-      branch: "main",
-      sanitized: "main",
-      created: "2026-01-01T00:00:00.000Z",
-      task: "test task",
-      tier: "small",
-      flow: "quick-fix",
-      slug: "test-task",
-      status: "active",
-    };
-    await writeSession(ws, session);
-    const raw = await readFile(path.join(ws, "session.json"), "utf-8");
-    const parsed = JSON.parse(raw);
-    expect(parsed.branch).toBe("main");
-    expect(parsed.status).toBe("active");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// acquireLock / releaseLock
-// ---------------------------------------------------------------------------
-
-describe("acquireLock / releaseLock", () => {
-  it("acquires lock when no lock exists", async () => {
-    const ws = await initWorkspace(tmpDir, "lock-test");
-    const result = await acquireLock(ws);
-    expect(result.acquired).toBe(true);
-    // Lock file should exist
-    const raw = await readFile(path.join(ws, ".lock"), "utf-8");
-    const lock = JSON.parse(raw);
-    expect(lock.pid).toBe(process.pid);
-  });
-
-  it("fails to acquire when a fresh lock exists from a live process", async () => {
-    const ws = await initWorkspace(tmpDir, "lock-fresh");
-    // Use current process PID so liveness check passes
-    const lockData = {
-      pid: process.pid,
-      started: new Date().toISOString(),
-    };
-    await writeFile(
-      path.join(ws, ".lock"),
-      JSON.stringify(lockData),
-      "utf-8",
-    );
-    const result = await acquireLock(ws);
-    expect(result.acquired).toBe(false);
-    expect(result.reason).toContain("Another build is active");
-  });
-
-  it("removes lock from dead process and re-acquires", async () => {
-    const ws = await initWorkspace(tmpDir, "lock-dead-pid");
-    // Use a PID that is almost certainly not running
-    const lockData = {
-      pid: 2147483647,
-      started: new Date().toISOString(),
-    };
-    await writeFile(
-      path.join(ws, ".lock"),
-      JSON.stringify(lockData),
-      "utf-8",
-    );
-    const result = await acquireLock(ws);
-    expect(result.acquired).toBe(true);
-  });
-
-  it("removes stale lock and re-acquires", async () => {
-    const ws = await initWorkspace(tmpDir, "lock-stale");
-    const staleDate = new Date(Date.now() - 3 * 60 * 60 * 1000); // 3 hours ago
-    const lockData = {
-      pid: 99999,
-      started: staleDate.toISOString(),
-    };
-    await writeFile(
-      path.join(ws, ".lock"),
-      JSON.stringify(lockData),
-      "utf-8",
-    );
-    const result = await acquireLock(ws);
-    expect(result.acquired).toBe(true);
-    // New lock should have current pid
-    const raw = await readFile(path.join(ws, ".lock"), "utf-8");
-    const newLock = JSON.parse(raw);
-    expect(newLock.pid).toBe(process.pid);
-  });
-
-  it("releaseLock removes the lock file", async () => {
-    const ws = await initWorkspace(tmpDir, "lock-release");
-    await acquireLock(ws);
-    await releaseLock(ws);
-    await expect(
-      access(path.join(ws, ".lock")).then(() => true),
-    ).rejects.toThrow();
-  });
-
-  it("releaseLock does not throw when no lock exists", async () => {
-    const ws = await initWorkspace(tmpDir, "lock-noop");
-    await expect(releaseLock(ws)).resolves.toBeUndefined();
-  });
-
-  it("releaseLock does not remove lock owned by another process", async () => {
-    const ws = await initWorkspace(tmpDir, "lock-foreign");
-    const foreignLock = {
-      pid: 2147483646, // A PID that is not ours
-      started: new Date().toISOString(),
-    };
-    await writeFile(
-      path.join(ws, ".lock"),
-      JSON.stringify(foreignLock),
-      "utf-8",
-    );
-    await releaseLock(ws);
-    // Lock should still exist
-    const raw = await readFile(path.join(ws, ".lock"), "utf-8");
-    const lock = JSON.parse(raw);
-    expect(lock.pid).toBe(2147483646);
-  });
-
-  it("releaseLock removes corrupt lock file", async () => {
-    const ws = await initWorkspace(tmpDir, "lock-corrupt");
-    await writeFile(path.join(ws, ".lock"), "NOT JSON", "utf-8");
-    await releaseLock(ws);
-    await expect(
-      access(path.join(ws, ".lock")).then(() => true),
-    ).rejects.toThrow();
-  });
-});

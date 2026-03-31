@@ -1,42 +1,43 @@
+/**
+ * resolve-wave-event.test.ts — Store-backed wave event resolution
+ *
+ * Tests now go against ExecutionStore (SQLite) instead of file-based JSONL.
+ * withBoardLock removed — SQLite transaction handles atomicity.
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, writeFile, access } from "fs/promises";
+import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { postWaveEvent } from "../orchestration/wave-events.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { InitExecutionParams } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function writeBoard(workspace: string, board: unknown): Promise<void> {
-  await writeFile(join(workspace, "board.json"), JSON.stringify(board, null, 2) + "\n", "utf-8");
-}
+const BASE_EXECUTION: InitExecutionParams = {
+  flow: "test-flow",
+  task: "Test task",
+  entry: "research",
+  current_state: "implement",
+  base_commit: "abc1234",
+  started: new Date().toISOString(),
+  last_updated: new Date().toISOString(),
+  branch: "main",
+  sanitized: "main",
+  created: new Date().toISOString(),
+  tier: "small",
+  flow_name: "test-flow",
+  slug: "test-task",
+};
 
-function makeBoard(overrides: Record<string, unknown> = {}): unknown {
-  const now = new Date().toISOString();
-  return {
-    flow: "test-flow",
-    task: "Test task",
-    entry: "research",
-    current_state: "implement",
-    base_commit: "abc1234",
-    started: now,
-    last_updated: now,
-    states: {
-      implement: {
-        status: "in_progress",
-        entries: 1,
-        wave: 1,
-      },
-    },
-    iterations: {},
-    blocked: null,
-    concerns: [],
-    skipped: [],
-    ...overrides,
-  };
+function postEvent(workspace: string, type: string, payload: Record<string, unknown> = {}) {
+  const store = getExecutionStore(workspace);
+  const id = `evt_test_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  store.postWaveEvent({ id, type, payload, timestamp: new Date().toISOString(), status: "pending" });
+  return { id, type, payload };
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +48,8 @@ let workspace: string;
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), "canon-resolve-wave-event-"));
-  await writeBoard(workspace, makeBoard());
+  const store = getExecutionStore(workspace);
+  store.initExecution(BASE_EXECUTION);
 });
 
 afterEach(async () => {
@@ -56,61 +58,12 @@ afterEach(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 1. Board lock — acquisition and release
-// ---------------------------------------------------------------------------
-
-describe("withBoardLock acquisition and release", () => {
-  it("releases the lock after a successful call (no .lock file remains)", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
-
-    await resolveWaveEvent({
-      workspace,
-      event_id: event.id,
-      action: "apply",
-    });
-
-    await expect(access(join(workspace, ".lock"))).rejects.toThrow();
-  });
-
-  it("releases the lock even when an error is thrown (no .lock file remains)", async () => {
-    await expect(
-      resolveWaveEvent({ workspace, event_id: "evt_nonexistent", action: "apply" }),
-    ).rejects.toThrow("Event not found");
-
-    await expect(access(join(workspace, ".lock"))).rejects.toThrow();
-  });
-
-  it("creates the lock file during callback execution", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
-
-    let lockExistedDuringCall = false;
-
-    const { markEventApplied } = await import("../orchestration/wave-events.ts");
-    vi.spyOn(
-      await import("../orchestration/wave-events.ts"),
-      "markEventApplied",
-    ).mockImplementationOnce(async (...args) => {
-      try {
-        await access(join(workspace, ".lock"));
-        lockExistedDuringCall = true;
-      } catch {
-        // lock not present
-      }
-      return markEventApplied(...args);
-    });
-
-    await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
-    expect(lockExistedDuringCall).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 2. Apply action
+// 1. Apply action
 // ---------------------------------------------------------------------------
 
 describe("apply action", () => {
   it("marks event applied and returns the event_id", async () => {
-    const event = await postWaveEvent(workspace, { type: "add_task", payload: { description: "do something" } });
+    const event = postEvent(workspace, "add_task", { description: "do something" });
 
     const result = await resolveWaveEvent({
       workspace,
@@ -122,8 +75,21 @@ describe("apply action", () => {
     expect(result.action).toBe("apply");
   });
 
+  it("persists applied status in store", async () => {
+    const event = postEvent(workspace, "add_task", { description: "persist test" });
+
+    await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getWaveEvents();
+    const updated = events.find((e) => e.id === event.id)!;
+    expect(updated.status).toBe("applied");
+    expect(updated.applied_at).toBeDefined();
+    expect(new Date(updated.applied_at!).getTime()).not.toBeNaN();
+  });
+
   it("returns agents from resolveEventAgents for the event type", async () => {
-    const event = await postWaveEvent(workspace, { type: "add_task", payload: { description: "new task" } });
+    const event = postEvent(workspace, "add_task", { description: "new task" });
 
     const result = await resolveWaveEvent({
       workspace,
@@ -131,15 +97,13 @@ describe("apply action", () => {
       action: "apply",
     });
 
-    // add_task resolves to canon-architect
     expect(result.agents).toEqual(["canon-architect"]);
     expect(result.descriptions["canon-architect"]).toBeDefined();
   });
 
   it("resolution is optional for apply", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
+    const event = postEvent(workspace, "guidance");
 
-    // Should not throw even without resolution
     const result = await resolveWaveEvent({
       workspace,
       event_id: event.id,
@@ -150,10 +114,9 @@ describe("apply action", () => {
   });
 
   it("pending_count decrements after applying an event", async () => {
-    const event1 = await postWaveEvent(workspace, { type: "guidance", payload: {} });
-    await postWaveEvent(workspace, { type: "pause", payload: {} });
+    const event1 = postEvent(workspace, "guidance");
+    postEvent(workspace, "pause");
 
-    // Two pending events initially. After applying event1, should be 1.
     const result = await resolveWaveEvent({
       workspace,
       event_id: event1.id,
@@ -164,7 +127,7 @@ describe("apply action", () => {
   });
 
   it("accepts a resolution object when applying", async () => {
-    const event = await postWaveEvent(workspace, { type: "add_task", payload: { description: "task" } });
+    const event = postEvent(workspace, "add_task", { description: "task" });
 
     const result = await resolveWaveEvent({
       workspace,
@@ -174,16 +137,22 @@ describe("apply action", () => {
     });
 
     expect(result.action).toBe("apply");
+
+    // Verify resolution was persisted
+    const store = getExecutionStore(workspace);
+    const events = store.getWaveEvents();
+    const updated = events.find((e) => e.id === event.id)!;
+    expect(updated.resolution).toEqual({ plan_id: "plan-01", tasks: ["a", "b"] });
   });
 });
 
 // ---------------------------------------------------------------------------
-// 3. Reject action
+// 2. Reject action
 // ---------------------------------------------------------------------------
 
 describe("reject action", () => {
   it("marks event rejected with reason and returns the event_id", async () => {
-    const event = await postWaveEvent(workspace, { type: "add_task", payload: {} });
+    const event = postEvent(workspace, "add_task");
 
     const result = await resolveWaveEvent({
       workspace,
@@ -196,8 +165,25 @@ describe("reject action", () => {
     expect(result.action).toBe("reject");
   });
 
+  it("persists rejected status and reason in store", async () => {
+    const event = postEvent(workspace, "add_task");
+
+    await resolveWaveEvent({
+      workspace,
+      event_id: event.id,
+      action: "reject",
+      reason: "Out of scope",
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getWaveEvents();
+    const updated = events.find((e) => e.id === event.id)!;
+    expect(updated.status).toBe("rejected");
+    expect(updated.rejection_reason).toBe("Out of scope");
+  });
+
   it("throws if reason is missing when action is reject", async () => {
-    const event = await postWaveEvent(workspace, { type: "add_task", payload: {} });
+    const event = postEvent(workspace, "add_task");
 
     await expect(
       resolveWaveEvent({ workspace, event_id: event.id, action: "reject" }),
@@ -205,7 +191,7 @@ describe("reject action", () => {
   });
 
   it("returns agents from resolveEventAgents even for reject", async () => {
-    const event = await postWaveEvent(workspace, { type: "add_task", payload: {} });
+    const event = postEvent(workspace, "add_task");
 
     const result = await resolveWaveEvent({
       workspace,
@@ -214,13 +200,12 @@ describe("reject action", () => {
       reason: "Not needed",
     });
 
-    // add_task still returns canon-architect even on reject
     expect(result.agents).toEqual(["canon-architect"]);
   });
 
   it("pending_count decrements after rejecting an event", async () => {
-    const event1 = await postWaveEvent(workspace, { type: "guidance", payload: {} });
-    await postWaveEvent(workspace, { type: "pause", payload: {} });
+    const event1 = postEvent(workspace, "guidance");
+    postEvent(workspace, "pause");
 
     const result = await resolveWaveEvent({
       workspace,
@@ -234,7 +219,7 @@ describe("reject action", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. Validation: unknown event, already-applied/rejected
+// 3. Validation: unknown event, already-applied/rejected
 // ---------------------------------------------------------------------------
 
 describe("validation", () => {
@@ -245,27 +230,86 @@ describe("validation", () => {
   });
 
   it("throws on already-applied event", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
+    const event = postEvent(workspace, "guidance");
 
-    // Apply it once
     await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
 
-    // Attempt to apply again — should throw
     await expect(
       resolveWaveEvent({ workspace, event_id: event.id, action: "apply" }),
     ).rejects.toThrow(`Event ${event.id} is already applied`);
   });
 
   it("throws on already-rejected event", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
+    const event = postEvent(workspace, "guidance");
 
-    // Reject it once
     await resolveWaveEvent({ workspace, event_id: event.id, action: "reject", reason: "nope" });
 
-    // Attempt to resolve again — should throw
     await expect(
       resolveWaveEvent({ workspace, event_id: event.id, action: "apply" }),
     ).rejects.toThrow(`Event ${event.id} is already rejected`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. Full lifecycle: inject → resolve → verify
+// ---------------------------------------------------------------------------
+
+describe("full lifecycle", () => {
+  it("inject → apply → verify applied status in store", async () => {
+    const store = getExecutionStore(workspace);
+    store.upsertState("implement", { status: "in_progress", entries: 1, wave: 1 });
+
+    const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
+    const injected = await injectWaveEvent({
+      workspace,
+      type: "add_task",
+      payload: { description: "Full lifecycle task" },
+    });
+
+    expect(injected.event.status).toBe("pending");
+    expect(injected.pending_count).toBe(1);
+
+    const resolved = await resolveWaveEvent({
+      workspace,
+      event_id: injected.event.id,
+      action: "apply",
+    });
+
+    expect(resolved.pending_count).toBe(0);
+
+    const events = store.getWaveEvents({ status: "pending" });
+    expect(events).toHaveLength(0);
+
+    const allEvents = store.getWaveEvents();
+    const evt = allEvents.find((e) => e.id === injected.event.id)!;
+    expect(evt.status).toBe("applied");
+    expect(evt.applied_at).toBeDefined();
+  });
+
+  it("inject → reject with reason → verify rejected status", async () => {
+    const store = getExecutionStore(workspace);
+    store.upsertState("implement", { status: "in_progress", entries: 1, wave: 1 });
+
+    const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
+    const injected = await injectWaveEvent({
+      workspace,
+      type: "guidance",
+      payload: { context: "Reject this" },
+    });
+
+    const resolved = await resolveWaveEvent({
+      workspace,
+      event_id: injected.event.id,
+      action: "reject",
+      reason: "Not applicable",
+    });
+
+    expect(resolved.pending_count).toBe(0);
+
+    const allEvents = store.getWaveEvents();
+    const evt = allEvents.find((e) => e.id === injected.event.id)!;
+    expect(evt.status).toBe("rejected");
+    expect(evt.rejection_reason).toBe("Not applicable");
   });
 });
 
@@ -275,7 +319,7 @@ describe("validation", () => {
 
 describe("event bus emission and listener cleanup", () => {
   it("emits wave_event_resolved with correct fields", async () => {
-    const event = await postWaveEvent(workspace, { type: "add_task", payload: { description: "Bus test" } });
+    const event = postEvent(workspace, "add_task", { description: "Bus test" });
     const emitSpy = vi.spyOn(flowEventBus, "emit");
 
     await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
@@ -301,7 +345,7 @@ describe("event bus emission and listener cleanup", () => {
   });
 
   it("emits wave_event_resolved with action=reject when rejecting", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
+    const event = postEvent(workspace, "guidance");
     const emitSpy = vi.spyOn(flowEventBus, "emit");
 
     await resolveWaveEvent({ workspace, event_id: event.id, action: "reject", reason: "not needed" });
@@ -315,7 +359,7 @@ describe("event bus emission and listener cleanup", () => {
   });
 
   it("removes the once listener after the call (no lingering listeners)", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
+    const event = postEvent(workspace, "guidance");
     const removeListenerSpy = vi.spyOn(flowEventBus, "removeListener");
 
     await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
@@ -327,10 +371,9 @@ describe("event bus emission and listener cleanup", () => {
   });
 
   it("removes the once listener in the finally block even when emit throws", async () => {
-    const event = await postWaveEvent(workspace, { type: "guidance", payload: {} });
+    const event = postEvent(workspace, "guidance");
     const removeListenerSpy = vi.spyOn(flowEventBus, "removeListener");
 
-    // Make emit throw synchronously for wave_event_resolved only
     vi.spyOn(flowEventBus, "emit").mockImplementationOnce((eventName: string) => {
       if (eventName === "wave_event_resolved") {
         throw new Error("Simulated emit failure");
@@ -342,7 +385,6 @@ describe("event bus emission and listener cleanup", () => {
       resolveWaveEvent({ workspace, event_id: event.id, action: "apply" }),
     ).rejects.toThrow("Simulated emit failure");
 
-    // removeListener must still have been called in the finally block
     const removalCall = removeListenerSpy.mock.calls.find(
       ([name]) => name === "wave_event_resolved",
     );

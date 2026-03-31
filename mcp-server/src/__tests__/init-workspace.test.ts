@@ -1,0 +1,198 @@
+/**
+ * Tests for init-workspace.ts — SQLite-backed workspace initialization.
+ *
+ * Covers:
+ * - initWorkspaceFlow creates orchestration.db in workspace
+ * - Resume detection works via store.getExecution()
+ * - listBranchWorkspaces returns active workspaces; skips dirs without DB
+ * - No .lock file created during init
+ * - No board.json or session.json created
+ * - Progress entry exists in DB after init
+ */
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { access } from "node:fs/promises";
+
+// Mock loadAndResolveFlow to avoid needing real flow files
+vi.mock("../orchestration/flow-parser.ts", () => ({
+  loadAndResolveFlow: vi.fn().mockResolvedValue({
+    flow: {
+      name: "quick-fix",
+      description: "test",
+      entry: "build",
+      states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
+      spawn_instructions: {},
+    },
+    errors: [],
+  }),
+}));
+
+import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+
+let tmpDirs: string[] = [];
+
+function makeTmpProjectDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "init-ws-test-"));
+  tmpDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  for (const dir of tmpDirs) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  tmpDirs = [];
+});
+
+const baseInput = {
+  flow_name: "quick-fix",
+  task: "fix the bug",
+  branch: "main",
+  base_commit: "abc123",
+  tier: "small" as const,
+};
+
+// ---------------------------------------------------------------------------
+// initWorkspaceFlow — SQLite creation
+// ---------------------------------------------------------------------------
+
+describe("initWorkspaceFlow — SQLite creation", () => {
+  it("creates orchestration.db in the workspace directory", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    expect(result.created).toBe(true);
+    const dbPath = join(result.workspace, "orchestration.db");
+    await expect(access(dbPath)).resolves.toBeUndefined();
+  });
+
+  it("does NOT create board.json", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    const boardPath = join(result.workspace, "board.json");
+    expect(existsSync(boardPath)).toBe(false);
+  });
+
+  it("does NOT create session.json", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    const sessionPath = join(result.workspace, "session.json");
+    expect(existsSync(sessionPath)).toBe(false);
+  });
+
+  it("does NOT create a .lock file", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    const lockPath = join(result.workspace, ".lock");
+    expect(existsSync(lockPath)).toBe(false);
+  });
+
+  it("progress entry exists in DB after init", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    const store = getExecutionStore(result.workspace);
+    const progress = store.getProgress();
+    expect(progress).toContain("fix the bug");
+  });
+
+  it("getExecution() succeeds immediately after initWorkspaceFlow returns", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    const store = getExecutionStore(result.workspace);
+    const execution = store.getExecution();
+    expect(execution).not.toBeNull();
+    expect(execution!.task).toBe("fix the bug");
+    expect(execution!.status).toBe("active");
+  });
+
+  it("returns board and session objects from the store", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    expect(result.board).toBeDefined();
+    expect(result.board.flow).toBe("quick-fix");
+    expect(result.session).toBeDefined();
+    expect(result.session.branch).toBe("main");
+    expect(result.session.status).toBe("active");
+    expect(result.slug).toBeTruthy();
+  });
+
+  it("creates standard workspace subdirectories", async () => {
+    const projectDir = makeTmpProjectDir();
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    for (const dir of ["research", "decisions", "plans", "reviews"]) {
+      await expect(access(join(result.workspace, dir))).resolves.toBeUndefined();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// initWorkspaceFlow — resume detection
+// ---------------------------------------------------------------------------
+
+describe("initWorkspaceFlow — resume detection via store", () => {
+  it("returns created:false and existing board when workspace already exists", async () => {
+    const projectDir = makeTmpProjectDir();
+
+    // First creation
+    const first = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+    expect(first.created).toBe(true);
+
+    // Second call with same task/branch should detect existing workspace
+    const second = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+    expect(second.created).toBe(false);
+    expect(second.workspace).toBe(first.workspace);
+    expect(second.resume_state).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listBranchWorkspaces
+// ---------------------------------------------------------------------------
+
+describe("listBranchWorkspaces", () => {
+  it("returns workspaces with SQLite DB", async () => {
+    const projectDir = makeTmpProjectDir();
+    await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    const workspaces = await listBranchWorkspaces(projectDir, "main");
+    expect(workspaces.length).toBeGreaterThanOrEqual(1);
+    expect(workspaces[0].session.status).toBe("active");
+  });
+
+  it("silently skips directories without orchestration.db", async () => {
+    const projectDir = makeTmpProjectDir();
+    // Create a workspace directory without an orchestration.db
+    const fakeWsDir = join(projectDir, ".canon", "workspaces", "main", "old-workspace");
+    mkdirSync(fakeWsDir, { recursive: true });
+    // No orchestration.db written — should be skipped
+
+    const workspaces = await listBranchWorkspaces(projectDir, "main");
+    // None of the returned workspaces should be the old directory
+    for (const ws of workspaces) {
+      expect(ws.workspace).not.toBe(fakeWsDir);
+    }
+  });
+
+  it("returns empty array for branch with no workspaces", async () => {
+    const projectDir = makeTmpProjectDir();
+    const workspaces = await listBranchWorkspaces(projectDir, "nonexistent-branch");
+    expect(workspaces).toEqual([]);
+  });
+
+  it("returns empty array when branch dir does not exist", async () => {
+    const projectDir = makeTmpProjectDir();
+    const workspaces = await listBranchWorkspaces(projectDir, "feat/some-new-branch");
+    expect(workspaces).toEqual([]);
+  });
+});

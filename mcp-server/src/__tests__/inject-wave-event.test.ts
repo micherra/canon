@@ -1,41 +1,55 @@
+/**
+ * inject-wave-event.test.ts — Store-backed wave event injection
+ *
+ * The tool now uses ExecutionStore (SQLite) instead of file-based JSONL.
+ * Board state is read from store, not from board.json.
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, writeFile, access } from "fs/promises";
+import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { injectWaveEvent } from "../tools/inject-wave-event.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { InitExecutionParams } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeBoard(overrides: Record<string, unknown> = {}): unknown {
-  const now = new Date().toISOString();
-  return {
-    flow: "test-flow",
-    task: "Test task",
-    entry: "research",
-    current_state: "implement",
-    base_commit: "abc1234",
-    started: now,
-    last_updated: now,
-    states: {
-      implement: {
-        status: "in_progress",
-        entries: 1,
-        wave: 1,
-      },
-    },
-    iterations: {},
-    blocked: null,
-    concerns: [],
-    skipped: [],
-    ...overrides,
-  };
+const BASE_EXECUTION: InitExecutionParams = {
+  flow: "test-flow",
+  task: "Test task",
+  entry: "research",
+  current_state: "implement",
+  base_commit: "abc1234",
+  started: new Date().toISOString(),
+  last_updated: new Date().toISOString(),
+  branch: "main",
+  sanitized: "main",
+  created: new Date().toISOString(),
+  tier: "small",
+  flow_name: "test-flow",
+  slug: "test-task",
+};
+
+function setupStoreWithWave(workspace: string, stateId = "implement"): void {
+  const store = getExecutionStore(workspace);
+  store.initExecution(BASE_EXECUTION);
+  store.upsertState(stateId, {
+    status: "in_progress",
+    entries: 1,
+    wave: 1,
+  });
 }
 
-async function writeBoard(workspace: string, board: unknown): Promise<void> {
-  await writeFile(join(workspace, "board.json"), JSON.stringify(board, null, 2) + "\n", "utf-8");
+function setupStoreWithNoWave(workspace: string): void {
+  const store = getExecutionStore(workspace);
+  store.initExecution(BASE_EXECUTION);
+  store.upsertState("research", {
+    status: "pending",
+    entries: 0,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -46,8 +60,7 @@ let workspace: string;
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), "canon-inject-wave-event-"));
-  // Write a valid board with one state in_progress + wave set (happy path default)
-  await writeBoard(workspace, makeBoard());
+  setupStoreWithWave(workspace);
 });
 
 afterEach(async () => {
@@ -56,128 +69,79 @@ afterEach(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// 1. withBoardLock — acquisition and release
-// ---------------------------------------------------------------------------
-
-describe("withBoardLock acquisition and release", () => {
-  it("releases the lock after a successful call (no .lock file remains)", async () => {
-    await injectWaveEvent({
-      workspace,
-      type: "guidance",
-      payload: { context: "Test guidance" },
-    });
-
-    // Lock file must be gone after a successful call
-    await expect(access(join(workspace, ".lock"))).rejects.toThrow();
-  });
-
-  it("releases the lock even when an error is thrown (no .lock file remains)", async () => {
-    // Board with no active wave — triggers the guard error
-    await writeBoard(workspace, makeBoard({ states: { research: { status: "pending", entries: 0 } } }));
-
-    await expect(
-      injectWaveEvent({ workspace, type: "guidance", payload: {} }),
-    ).rejects.toThrow("No active wave state found");
-
-    // Lock must still be released
-    await expect(access(join(workspace, ".lock"))).rejects.toThrow();
-  });
-
-  it("creates the lock file during callback execution", async () => {
-    let lockExistedDuringCall = false;
-
-    // Spy on postWaveEvent to check lock presence at call time
-    const { postWaveEvent } = await import("../orchestration/wave-events.ts");
-    vi.spyOn(
-      await import("../orchestration/wave-events.ts"),
-      "postWaveEvent",
-    ).mockImplementationOnce(async (...args) => {
-      try {
-        await access(join(workspace, ".lock"));
-        lockExistedDuringCall = true;
-      } catch {
-        // lock not present
-      }
-      return postWaveEvent(...args);
-    });
-
-    await injectWaveEvent({ workspace, type: "guidance", payload: { context: "check lock" } });
-    expect(lockExistedDuringCall).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 2. Active-wave guard
+// 1. Active-wave guard
 // ---------------------------------------------------------------------------
 
 describe("active-wave guard", () => {
-  it("throws when states object is empty", async () => {
-    await writeBoard(workspace, makeBoard({ states: {} }));
-
-    await expect(
-      injectWaveEvent({ workspace, type: "add_task", payload: { description: "New task" } }),
-    ).rejects.toThrow("No active wave state found");
+  it("throws when no execution exists in store", async () => {
+    const emptyWorkspace = await mkdtemp(join(tmpdir(), "canon-empty-ws-"));
+    try {
+      await expect(
+        injectWaveEvent({ workspace: emptyWorkspace, type: "guidance", payload: {} }),
+      ).rejects.toThrow("No active wave state found");
+    } finally {
+      await rm(emptyWorkspace, { recursive: true, force: true });
+    }
   });
 
   it("throws when states exist but none are in_progress", async () => {
-    await writeBoard(
-      workspace,
-      makeBoard({
-        states: {
-          research: { status: "done", entries: 1, wave: 1 },
-          implement: { status: "pending", entries: 0, wave: 2 },
-        },
-      }),
-    );
+    const ws2 = await mkdtemp(join(tmpdir(), "canon-no-wave-ws-"));
+    try {
+      const store = getExecutionStore(ws2);
+      store.initExecution(BASE_EXECUTION);
+      store.upsertState("research", { status: "done", entries: 1, wave: 1 });
+      store.upsertState("implement", { status: "pending", entries: 0, wave: 2 });
 
-    await expect(
-      injectWaveEvent({ workspace, type: "guidance", payload: {} }),
-    ).rejects.toThrow("No active wave state found");
+      await expect(
+        injectWaveEvent({ workspace: ws2, type: "guidance", payload: {} }),
+      ).rejects.toThrow("No active wave state found");
+    } finally {
+      await rm(ws2, { recursive: true, force: true });
+    }
   });
 
   it("throws when a state is in_progress but has no wave field", async () => {
-    await writeBoard(
-      workspace,
-      makeBoard({
-        states: {
-          implement: { status: "in_progress", entries: 1 },
-          // no wave field
-        },
-      }),
-    );
+    const ws3 = await mkdtemp(join(tmpdir(), "canon-no-wave-field-"));
+    try {
+      const store = getExecutionStore(ws3);
+      store.initExecution(BASE_EXECUTION);
+      store.upsertState("implement", { status: "in_progress", entries: 1 }); // no wave
 
-    await expect(
-      injectWaveEvent({ workspace, type: "skip_task", payload: { task_id: "task-01" } }),
-    ).rejects.toThrow("No active wave state found");
+      await expect(
+        injectWaveEvent({ workspace: ws3, type: "skip_task", payload: { task_id: "task-01" } }),
+      ).rejects.toThrow("No active wave state found");
+    } finally {
+      await rm(ws3, { recursive: true, force: true });
+    }
   });
 
   it("succeeds when exactly one state has both wave set and status in_progress", async () => {
-    // Default board fixture has exactly this — should not throw
+    // Default workspace has this setup
     await expect(
       injectWaveEvent({ workspace, type: "guidance", payload: { context: "ok" } }),
     ).resolves.toBeDefined();
   });
 
   it("succeeds when multiple states exist but only one satisfies the guard", async () => {
-    await writeBoard(
-      workspace,
-      makeBoard({
-        states: {
-          research: { status: "done", entries: 1 },
-          implement: { status: "in_progress", entries: 1, wave: 2 },
-          review: { status: "pending", entries: 0 },
-        },
-      }),
-    );
+    const ws4 = await mkdtemp(join(tmpdir(), "canon-multi-state-"));
+    try {
+      const store = getExecutionStore(ws4);
+      store.initExecution(BASE_EXECUTION);
+      store.upsertState("research", { status: "done", entries: 1 });
+      store.upsertState("implement", { status: "in_progress", entries: 1, wave: 2 });
+      store.upsertState("review", { status: "pending", entries: 0 });
 
-    await expect(
-      injectWaveEvent({ workspace, type: "inject_context", payload: { context: "ctx" } }),
-    ).resolves.toBeDefined();
+      await expect(
+        injectWaveEvent({ workspace: ws4, type: "inject_context", payload: { context: "ctx" } }),
+      ).resolves.toBeDefined();
+    } finally {
+      await rm(ws4, { recursive: true, force: true });
+    }
   });
 });
 
 // ---------------------------------------------------------------------------
-// 3. Event posting and result shape
+// 2. Event posting and result shape
 // ---------------------------------------------------------------------------
 
 describe("event posting and result shape", () => {
@@ -197,7 +161,6 @@ describe("event posting and result shape", () => {
   });
 
   it("returns pending_count equal to the number of pending events", async () => {
-    // First call — 1 pending event
     const result1 = await injectWaveEvent({
       workspace,
       type: "guidance",
@@ -205,7 +168,6 @@ describe("event posting and result shape", () => {
     });
     expect(result1.pending_count).toBe(1);
 
-    // Second call — 2 pending events
     const result2 = await injectWaveEvent({
       workspace,
       type: "inject_context",
@@ -234,10 +196,22 @@ describe("event posting and result shape", () => {
 
     expect(result.event.status).toBe("pending");
   });
+
+  it("event is persisted in store after injection", async () => {
+    const result = await injectWaveEvent({
+      workspace,
+      type: "add_task",
+      payload: { description: "Persisted task" },
+    });
+
+    const store = getExecutionStore(workspace);
+    const events = store.getWaveEvents({ status: "pending" });
+    expect(events.some((e) => e.id === result.event.id)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
-// 4. Event bus emission and listener cleanup
+// 3. Event bus emission and listener cleanup
 // ---------------------------------------------------------------------------
 
 describe("event bus emission and listener cleanup", () => {
@@ -277,11 +251,9 @@ describe("event bus emission and listener cleanup", () => {
       payload: { context: "listener order check" },
     });
 
-    // Find the once call for wave_event_injected
     const onceCall = onceSpy.mock.calls.find(([name]) => name === "wave_event_injected");
     expect(onceCall).toBeDefined();
 
-    // Find the emit call for wave_event_injected
     const emitCallIndex = emitSpy.mock.calls.findIndex(
       ([name]) => name === "wave_event_injected",
     );
@@ -290,7 +262,6 @@ describe("event bus emission and listener cleanup", () => {
     ];
     const emitCallOrder = emitSpy.mock.invocationCallOrder[emitCallIndex];
 
-    // once must be registered before emit fires
     expect(onceCallIndex).toBeLessThan(emitCallOrder);
   });
 
@@ -310,11 +281,8 @@ describe("event bus emission and listener cleanup", () => {
   });
 
   it("removes the once listener in the finally block even when emit throws", async () => {
-    // The finally block that calls removeListener wraps only the emit call.
-    // Verify that if emit throws synchronously, the listener is still removed.
     const removeListenerSpy = vi.spyOn(flowEventBus, "removeListener");
 
-    // Make emit throw synchronously for wave_event_injected only
     vi.spyOn(flowEventBus, "emit").mockImplementationOnce((eventName: string) => {
       if (eventName === "wave_event_injected") {
         throw new Error("Simulated emit failure");
@@ -326,7 +294,6 @@ describe("event bus emission and listener cleanup", () => {
       injectWaveEvent({ workspace, type: "pause", payload: {} }),
     ).rejects.toThrow("Simulated emit failure");
 
-    // removeListener must still have been called in the finally block
     const removalCall = removeListenerSpy.mock.calls.find(
       ([name]) => name === "wave_event_injected",
     );

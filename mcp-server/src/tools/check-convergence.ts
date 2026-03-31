@@ -4,7 +4,7 @@
  * and surfaces cannot-fix items and history.
  */
 
-import { readBoard } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { canEnterState } from "../orchestration/convergence.ts";
 import type { CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
 
@@ -25,7 +25,7 @@ interface CheckConvergenceResult {
 export async function checkConvergence(
   input: CheckConvergenceInput,
 ): Promise<CheckConvergenceResult> {
-  const board = await readBoard(input.workspace);
+  const board = getExecutionStore(input.workspace).getBoard() ?? { iterations: {}, states: {} } as any;
 
   const { allowed, reason } = canEnterState(board, input.state_id);
 

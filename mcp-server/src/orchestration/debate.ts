@@ -7,9 +7,8 @@
  * convergence detection, and summary building.
  */
 
-import { readdir } from "fs/promises";
-import { join } from "path";
 import { readChannelAsContext, readMessages, type Message } from "./messages.ts";
+import { getExecutionStore } from "./execution-store.ts";
 
 export interface DebateConfig {
   /** Number of competing teams (default 3) */
@@ -71,19 +70,19 @@ export async function inspectDebateProgress(
   workspace: string,
   config: DebateConfig,
 ): Promise<DebateProgress> {
-  const messagesRoot = join(workspace, "messages");
+  // Discover populated debate-round-N channels from the SQLite messages table
   let roundNumbers: number[] = [];
 
   try {
-    const entries = await readdir(messagesRoot, { withFileTypes: true });
-    roundNumbers = entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => {
-        const match = entry.name.match(/^debate-round-(\d+)$/);
-        return match ? Number.parseInt(match[1], 10) : null;
-      })
-      .filter((round): round is number => round != null)
-      .sort((a, b) => a - b);
+    const store = getExecutionStore(workspace);
+    // Probe each possible round channel up to max_rounds to find populated ones
+    for (let r = 1; r <= config.max_rounds; r++) {
+      const channel = debateChannel(r);
+      const msgs = store.getMessages(channel);
+      if (msgs.length > 0) {
+        roundNumbers.push(r);
+      }
+    }
   } catch {
     roundNumbers = [];
   }

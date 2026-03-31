@@ -1,17 +1,12 @@
 /**
- * Board CRUD operations using atomic writes.
+ * Board pure mutation helpers.
  * All state-mutating functions return new Board objects (immutable pattern).
+ *
+ * File I/O functions (readBoard, writeBoard) have been migrated to ExecutionStore
+ * (SQLite). Only pure mutation helpers remain in this file.
  */
 
-import { readFile } from "fs/promises";
-import { join } from "path";
-import { z } from "zod";
 import type { Board, ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
-import { BoardSchema } from "./flow-schema.ts";
-import { atomicWriteFile } from "../utils/atomic-write.ts";
-
-const BOARD_FILE = "board.json";
-const BOARD_BACKUP = "board.json.bak";
 
 /**
  * Create a new Board from a resolved flow.
@@ -55,58 +50,19 @@ export function initBoard(
   };
 }
 
-/**
- * Read board.json from workspace. Falls back to board.json.bak if primary is
- * invalid or missing.
- */
-export async function readBoard(workspace: string): Promise<Board> {
-  const primaryPath = join(workspace, BOARD_FILE);
-  const backupPath = join(workspace, BOARD_BACKUP);
+// ---------------------------------------------------------------------------
+// Deprecated stubs — migrated to ExecutionStore
+// These exports are kept for backward compatibility during wave migration.
+// ---------------------------------------------------------------------------
 
-  async function tryRead(filePath: string): Promise<Board | null> {
-    try {
-      const data = await readFile(filePath, "utf-8");
-      return BoardSchema.parse(JSON.parse(data));
-    } catch (err: any) {
-      const isCorruptOrMissing =
-        err.code === "ENOENT" || err instanceof SyntaxError || err instanceof z.ZodError;
-      if (!isCorruptOrMissing) throw err;
-      return null;
-    }
-  }
-
-  const board = (await tryRead(primaryPath)) ?? (await tryRead(backupPath));
-  if (board) return board;
-
-  throw new Error(`Failed to read board from ${primaryPath} or ${backupPath}`);
+/** @deprecated Migrated to ExecutionStore (SQLite). Use getExecutionStore(workspace).getBoard() */
+export async function readBoard(_workspace: string): Promise<Board> {
+  throw new Error("readBoard is deprecated: use getExecutionStore(workspace).getBoard() instead");
 }
 
-/**
- * Write board.json atomically, keeping a .bak copy of the previous version.
- */
-export async function writeBoard(
-  workspace: string,
-  board: Board,
-): Promise<void> {
-  const primaryPath = join(workspace, BOARD_FILE);
-  const backupPath = join(workspace, BOARD_BACKUP);
-
-  // Atomically copy current board.json to .bak (read + atomic write instead of
-  // copyFile, which truncates the destination before writing — creating a window
-  // where concurrent readBoard calls can find a corrupt/empty backup).
-  try {
-    const existing = await readFile(primaryPath, "utf-8");
-    await atomicWriteFile(backupPath, existing);
-  } catch (err: any) {
-    if (err.code !== "ENOENT") throw err;
-  }
-
-  const updated: Board = {
-    ...board,
-    last_updated: new Date().toISOString(),
-  };
-
-  await atomicWriteFile(primaryPath, JSON.stringify(updated, null, 2));
+/** @deprecated Migrated to ExecutionStore (SQLite). Use getExecutionStore(workspace).upsertState() etc. */
+export async function writeBoard(_workspace: string, _board: Board): Promise<void> {
+  throw new Error("writeBoard is deprecated: use ExecutionStore methods instead");
 }
 
 /**
@@ -207,7 +163,6 @@ export function setBlocked(
 
 /**
  * Record a consultation result into the board. Pure — returns a new Board.
- * The caller is responsible for sequencing this with withBoardLock + writeBoard.
  */
 export function recordConsultationResult(
   board: Board,
@@ -250,7 +205,6 @@ export function recordConsultationResult(
 
 /**
  * Record a gate result (gate name + output) into the board. Pure — returns a new Board.
- * The caller is responsible for sequencing this with withBoardLock + writeBoard.
  */
 export function recordGateResult(
   board: Board,

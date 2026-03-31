@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import {
@@ -7,6 +7,8 @@ import {
   parseReviewArtifact,
 } from "../orchestration/effects.ts";
 import type { StateDefinition, Board } from "../orchestration/flow-schema.ts";
+import { DriftStore } from "../drift/store.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 
 const SAMPLE_REVIEW = `---
 verdict: "WARNING"
@@ -153,9 +155,8 @@ describe("executeEffects", () => {
     expect(results[0].recorded).toBe(1);
     expect(results[0].errors).toHaveLength(0);
 
-    // Verify JSONL was written
-    const jsonl = await readFile(join(tmpDir, ".canon", "reviews.jsonl"), "utf-8");
-    const entries = jsonl.trim().split("\n").map((l) => JSON.parse(l));
+    // Verify entry was written to drift store
+    const entries = await new DriftStore(tmpDir).getReviews();
     expect(entries).toHaveLength(1);
     expect(entries[0].verdict).toBe("WARNING");
     expect(entries[0].violations).toHaveLength(2);
@@ -268,19 +269,31 @@ describe("executeEffects — check_postconditions", () => {
     // Create the file the discovered postcondition checks
     await writeFile(join(projectDir, "discovered.ts"), "export const x = 1;");
 
-    // Board with discovered_postconditions on state "review"
-    const board = makeBoard({
-      states: {
-        review: {
-          status: "in_progress",
-          entries: 1,
-          discovered_postconditions: [
-            { type: "file_exists", target: "discovered.ts" },
-          ],
-        },
-      },
+    // Seed ExecutionStore with discovered_postconditions on state "review"
+    const store = getExecutionStore(workspace);
+    const now = new Date().toISOString();
+    store.initExecution({
+      flow: "test-flow",
+      task: "test-task",
+      entry: "review",
+      current_state: "review",
+      base_commit: "abc123",
+      started: now,
+      last_updated: now,
+      branch: "main",
+      sanitized: "main",
+      created: now,
+      tier: "medium",
+      flow_name: "test-flow",
+      slug: "test-slug",
     });
-    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
+    store.upsertState("review", {
+      status: "in_progress",
+      entries: 1,
+      discovered_postconditions: [
+        { type: "file_exists", target: "discovered.ts" },
+      ],
+    });
 
     // stateDef has NO explicit postconditions — only discovered
     const stateDef: StateDefinition = {

@@ -10,11 +10,12 @@
  */
 
 import { join } from 'path';
+import { mkdirSync } from 'fs';
 import Database from 'better-sqlite3';
 import { initDriftDb } from './drift-schema.ts';
 import { CANON_DIR } from '../constants.ts';
 import type { ReviewEntry, ReviewViolation } from '../schema.ts';
-import type { FlowRunEntry, FlowAnalytics } from './analytics.ts';
+import type { FlowRunEntry, FlowAnalytics } from './drift-analytics-types.ts';
 
 // ---------------------------------------------------------------------------
 // Re-export WeeklyTrendPoint so callers can import from drift-db
@@ -535,7 +536,10 @@ export function getDriftDb(projectDir: string): DriftDb {
   const existing = cache.get(projectDir);
   if (existing !== undefined) return existing;
 
-  const dbPath = join(projectDir, CANON_DIR, 'drift.db');
+  const canonDir = join(projectDir, CANON_DIR);
+  mkdirSync(canonDir, { recursive: true });
+
+  const dbPath = join(canonDir, 'drift.db');
   const db = initDriftDb(dbPath);
   const store = new DriftDb(db);
   cache.set(projectDir, store);

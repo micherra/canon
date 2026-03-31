@@ -1,4 +1,3 @@
-import { readFile } from "fs/promises";
 import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.ts";
 import { buildMessageInstructions } from "../orchestration/messages.ts";
 import { buildDebatePrompt, debateTeamLabel, inspectDebateProgress } from "../orchestration/debate.ts";
@@ -6,7 +5,7 @@ import { readWaveGuidance, assembleWaveBriefing } from "../orchestration/wave-br
 import type { ResolvedFlow, StateDefinition, CompeteConfig } from "../orchestration/flow-schema.ts";
 import { expandCompetitorPrompts, type CompeteConfig as ExpandedCompeteConfig } from "../orchestration/compete.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { readBoard } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { resolveContextInjections } from "../orchestration/inject-context.ts";
 import { clusterDiff, type FileCluster } from "../orchestration/diff-cluster.ts";
 
@@ -153,12 +152,12 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
 
   // Read board once if any board-dependent feature is active.
   // If a pre-read board is provided (e.g., from enterAndPrepareState), use it directly
-  // to avoid a redundant readBoard call.
+  // to avoid a redundant store call.
   const needsBoard =
     !!state.skip_when ||
     (state.inject_context != null && state.inject_context.length > 0) ||
     state.large_diff_threshold != null;
-  const board = input._board ?? (needsBoard ? await readBoard(input.workspace) : undefined);
+  const board = input._board ?? (needsBoard ? getExecutionStore(input.workspace).getBoard() ?? undefined : undefined);
 
   // Evaluate skip_when condition before spawning
   if (state.skip_when) {
@@ -201,20 +200,11 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     mergedVariables = { ...mergedVariables, ...injectionResult.variables };
   }
 
-  // Resolve progress.md if the flow declares a progress path
+  // Resolve progress if the flow declares a progress path
   if (input.flow.progress) {
-    const progressPath = input.flow.progress.replace(
-      /\$\{WORKSPACE\}/g,
-      input.workspace
-    );
-    try {
-      const rawProgress = await readFile(progressPath, "utf-8");
-      const progressContent = truncateProgress(rawProgress, 8);
-      mergedVariables = { ...mergedVariables, progress: progressContent };
-    } catch {
-      // progress.md may not exist yet -- degrade gracefully
-      mergedVariables = { ...mergedVariables, progress: "" };
-    }
+    const store = getExecutionStore(input.workspace);
+    const progressContent = store.getProgress(8);
+    mergedVariables = { ...mergedVariables, progress: progressContent };
   }
 
   // Substitute flow-level variables (using merged variables that include injected context)

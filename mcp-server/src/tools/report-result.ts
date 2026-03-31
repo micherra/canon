@@ -14,15 +14,11 @@ import {
   aggregateReviewResults,
   isRoleOptional,
 } from "../orchestration/transitions.ts";
-import { appendFile } from "fs/promises";
-import { join } from "path";
 import {
-  readBoard,
-  writeBoard,
   completeState,
   setBlocked,
 } from "../orchestration/board.ts";
-import { withBoardLock } from "../orchestration/workspace.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow, CannotFixItem, GateResult, PostconditionResult, DiscoveredGate, PostconditionAssertion, ViolationSeverities, TestResults } from "../orchestration/flow-schema.ts";
 import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
@@ -104,16 +100,46 @@ interface ReportResultResult {
   log_entry: LogEntry;
 }
 
+/**
+ * Sync a Board object back to the ExecutionStore after mutation.
+ * Updates execution-level fields, states, and iterations.
+ */
+function syncBoardToStore(store: ReturnType<typeof getExecutionStore>, board: Board): void {
+  store.updateExecution({
+    current_state: board.current_state,
+    blocked: board.blocked,
+    concerns: board.concerns,
+    skipped: board.skipped,
+    metadata: board.metadata,
+    last_updated: board.last_updated,
+  });
+  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries });
+  }
+  for (const [stateId, iterEntry] of Object.entries(board.iterations)) {
+    store.upsertIteration(stateId, {
+      count: iterEntry.count,
+      max: iterEntry.max,
+      history: iterEntry.history,
+      cannot_fix: iterEntry.cannot_fix,
+    });
+  }
+}
+
 export async function reportResult(
   input: ReportResultInput,
 ): Promise<ReportResultResult> {
-  return withBoardLock(input.workspace, () => reportResultLocked(input));
+  return reportResultLocked(input);
 }
 
 async function reportResultLocked(
   input: ReportResultInput,
 ): Promise<ReportResultResult> {
-  let board = await readBoard(input.workspace);
+  const store = getExecutionStore(input.workspace);
+  let board = store.getBoard();
+  if (!board) {
+    throw new Error(`No execution found in workspace: ${input.workspace}`);
+  }
 
   // Normalize status keyword
   let condition = normalizeStatus(input.status_keyword);
@@ -470,13 +496,16 @@ async function reportResultLocked(
     };
   }
 
-  // Write board
-  await writeBoard(input.workspace, board);
+  // Write board back to ExecutionStore
+  syncBoardToStore(store, board);
 
   // Append progress line (best-effort — cosmetic, never blocks the flow)
   if (input.progress_line) {
-    const progressPath = join(input.workspace, "progress.md");
-    await appendFile(progressPath, input.progress_line + "\n", "utf-8").catch(() => {});
+    try {
+      store.appendProgress(input.progress_line);
+    } catch {
+      // best-effort — never blocks the flow
+    }
   }
 
   // Execute drift effects (best-effort — never blocks the flow)

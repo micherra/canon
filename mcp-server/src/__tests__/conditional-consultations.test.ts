@@ -18,11 +18,8 @@ import { join } from "node:path";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-  enterState: vi.fn(),
-}));
+// board.ts: enterState is used by enter-and-prepare-state; readBoard/writeBoard are deprecated.
+// We do not mock enterState — the real pure function preserves wave_total via spread.
 
 vi.mock("../orchestration/workspace.ts", () => ({
   withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
@@ -52,7 +49,7 @@ vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
   };
 });
 
-import { readBoard, enterState } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { ConsultationFragmentSchema } from "../orchestration/flow-schema.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
@@ -88,6 +85,29 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     skipped: [],
     ...overrides,
   } as Board;
+}
+
+function seedBoard(workspace: string, board: Board): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: board.flow,
+    task: board.task,
+    entry: board.entry,
+    current_state: board.current_state,
+    base_commit: board.base_commit,
+    started: board.started ?? now,
+    last_updated: board.last_updated ?? now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: board.flow,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+  }
 }
 
 /**
@@ -249,26 +269,24 @@ describe("ConsultationFragmentSchema — min_waves field", () => {
 // ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — min_waves filtering for between consultations", () => {
-  function setupMocks(waveTotalOverride?: number) {
-    const board = makeBoard();
-    // wave_total set on the state entry to simulate board state
-    const stateEntry: Record<string, unknown> = { status: "in_progress", entries: 1 };
+  function setupBoard(workspace: string, waveTotalOverride?: number) {
+    // wave_total set on the state entry BEFORE entering so enterState preserves it
+    const stateEntry: Record<string, unknown> = { status: "pending", entries: 0 };
     if (waveTotalOverride !== undefined) {
       stateEntry.wave_total = waveTotalOverride;
     }
-    const enteredBoard = makeBoard({
+    const board = makeBoard({
       states: {
         implement: stateEntry,
         done: { status: "pending", entries: 0 },
       },
     });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, board);
   }
 
   it("skips between consultation with min_waves:2 when wave_total is 1", async () => {
-    setupMocks(1);
     const workspace = makeTmpDir();
+    setupBoard(workspace, 1);
     const flow = makeFlowWithMinWavesConsultation(2);
 
     const result = await enterAndPrepareState({
@@ -285,8 +303,8 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
   });
 
   it("includes between consultation with min_waves:2 when wave_total is 2", async () => {
-    setupMocks(2);
     const workspace = makeTmpDir();
+    setupBoard(workspace, 2);
     const flow = makeFlowWithMinWavesConsultation(2);
 
     const result = await enterAndPrepareState({
@@ -304,8 +322,8 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
   });
 
   it("includes between consultation with min_waves:2 when wave_total is 3", async () => {
-    setupMocks(3);
     const workspace = makeTmpDir();
+    setupBoard(workspace, 3);
     const flow = makeFlowWithMinWavesConsultation(2);
 
     const result = await enterAndPrepareState({
@@ -322,8 +340,8 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
 
   it("includes between consultation when wave_total is undefined (fail-open)", async () => {
     // wave_total NOT set on board state -- should fail-open and include the consultation
-    setupMocks(undefined);
     const workspace = makeTmpDir();
+    setupBoard(workspace, undefined);
     const flow = makeFlowWithMinWavesConsultation(2);
 
     const result = await enterAndPrepareState({
@@ -340,8 +358,8 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
   });
 
   it("always includes between consultation without min_waves regardless of wave_total", async () => {
-    setupMocks(1);
     const workspace = makeTmpDir();
+    setupBoard(workspace, 1);
     const flow = makeFlowWithUnconditionalConsultation();
 
     const result = await enterAndPrepareState({
@@ -362,25 +380,23 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
 // ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — min_waves filtering for before consultations", () => {
-  function setupMocks(waveTotalOverride?: number) {
-    const board = makeBoard();
-    const stateEntry: Record<string, unknown> = { status: "in_progress", entries: 1 };
+  function setupBoard(workspace: string, waveTotalOverride?: number) {
+    const stateEntry: Record<string, unknown> = { status: "pending", entries: 0 };
     if (waveTotalOverride !== undefined) {
       stateEntry.wave_total = waveTotalOverride;
     }
-    const enteredBoard = makeBoard({
+    const board = makeBoard({
       states: {
         implement: stateEntry,
         done: { status: "pending", entries: 0 },
       },
     });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, board);
   }
 
   it("skips before consultation with min_waves:2 when wave_total is 1", async () => {
-    setupMocks(1);
     const workspace = makeTmpDir();
+    setupBoard(workspace, 1);
     const flow = makeFlowWithMinWavesBeforeConsultation();
 
     const result = await enterAndPrepareState({
@@ -396,8 +412,8 @@ describe("enterAndPrepareState — min_waves filtering for before consultations"
   });
 
   it("includes before consultation with min_waves:2 when wave_total is 2", async () => {
-    setupMocks(2);
     const workspace = makeTmpDir();
+    setupBoard(workspace, 2);
     const flow = makeFlowWithMinWavesBeforeConsultation();
 
     const result = await enterAndPrepareState({
