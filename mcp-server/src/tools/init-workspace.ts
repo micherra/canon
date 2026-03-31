@@ -12,10 +12,9 @@ import {
 import { initBoard } from "../orchestration/board.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
-import { BoardSchema, SessionSchema } from "../orchestration/flow-schema.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { z } from "zod";
-import { readFile, mkdir, access } from "fs/promises";
+import { mkdir } from "fs/promises";
 import { join } from "path";
 import { spawnSync } from "child_process";
 
@@ -108,28 +107,13 @@ async function runPreflightChecks(
     // git not available — skip this check
   }
 
-  // 2. Check for existing lock on candidate workspace
-  try {
-    const lockPath = join(candidateWorkspace, ".lock");
-    await access(lockPath);
-    const raw = await readFile(lockPath, "utf-8");
-    const lock = JSON.parse(raw) as { pid: number; started: string };
-    const age = Date.now() - new Date(lock.started).getTime();
-    if (age < FOUR_HOURS_MS) {
-      issues.push(`Active lock on workspace (pid ${lock.pid}, started ${lock.started})`);
-    }
-  } catch {
-    // No lock file or unreadable — clean
-  }
-
-  // 3. Check for stale sessions on the same branch
+  // 2. Check for stale sessions on the same branch
   try {
     const active = await listBranchWorkspaces(projectDir, branch);
     for (const ws of active) {
-      const lockExists = await access(join(ws.workspace, ".lock")).then(() => true, () => false);
       const sessionAge = Date.now() - new Date(ws.session.created).getTime();
-      if (!lockExists && sessionAge > FOUR_HOURS_MS) {
-        issues.push(`Stale session: "${ws.session.task}" (created ${ws.session.created}, no lock)`);
+      if (sessionAge > FOUR_HOURS_MS) {
+        issues.push(`Stale session: "${ws.session.task}" (created ${ws.session.created})`);
       }
     }
   } catch {

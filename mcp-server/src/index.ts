@@ -278,7 +278,7 @@ server.registerTool(
 server.registerTool(
   "init_workspace",
   {
-    description: "Initialize a Canon workspace for flow execution. Creates workspace directory, session.json, and board.json. Resumes from existing board if present.",
+    description: "Initialize a Canon workspace for flow execution. Creates workspace directory and initializes SQLite store. Resumes from existing store if present.",
     inputSchema: {
       flow_name: z.string(),
       task: z.string(),

@@ -2,8 +2,7 @@
  * Board pure mutation helpers.
  * All state-mutating functions return new Board objects (immutable pattern).
  *
- * File I/O functions (readBoard, writeBoard) have been migrated to ExecutionStore
- * (SQLite). Only pure mutation helpers remain in this file.
+ * File I/O (readBoard, writeBoard) has been removed — use ExecutionStore (SQLite).
  */
 
 import type { Board, ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
@@ -48,21 +47,6 @@ export function initBoard(
     concerns: [],
     skipped: [],
   };
-}
-
-// ---------------------------------------------------------------------------
-// Deprecated stubs — migrated to ExecutionStore
-// These exports are kept for backward compatibility during wave migration.
-// ---------------------------------------------------------------------------
-
-/** @deprecated Migrated to ExecutionStore (SQLite). Use getExecutionStore(workspace).getBoard() */
-export async function readBoard(_workspace: string): Promise<Board> {
-  throw new Error("readBoard is deprecated: use getExecutionStore(workspace).getBoard() instead");
-}
-
-/** @deprecated Migrated to ExecutionStore (SQLite). Use getExecutionStore(workspace).upsertState() etc. */
-export async function writeBoard(_workspace: string, _board: Board): Promise<void> {
-  throw new Error("writeBoard is deprecated: use ExecutionStore methods instead");
 }
 
 /**

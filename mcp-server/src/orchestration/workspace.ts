@@ -1,8 +1,8 @@
 /**
  * Workspace utilities — creates directory structures and generates slug/branch helpers.
  *
- * File I/O functions (acquireLock, releaseLock, withBoardLock, writeSession) have been
- * migrated to ExecutionStore (SQLite). Only pure utilities remain.
+ * File locking (acquireLock, releaseLock, withBoardLock) and session persistence
+ * (writeSession) have been removed — SQLite WAL handles write serialization.
  */
 
 import { access, mkdir } from "fs/promises";
@@ -87,31 +87,3 @@ export async function initWorkspace(
   return workspace;
 }
 
-// ---------------------------------------------------------------------------
-// Deprecated stubs — migrated to ExecutionStore
-// These exports are kept for backward compatibility during wave migration.
-// They throw at runtime to catch any callers that have not been migrated yet.
-// ---------------------------------------------------------------------------
-
-/** @deprecated Migrated to ExecutionStore (SQLite). Use getExecutionStore(workspace).initExecution() */
-export async function writeSession(_workspace: string, _session: unknown): Promise<void> {
-  throw new Error("writeSession is deprecated: use ExecutionStore.initExecution() instead");
-}
-
-/** @deprecated Migrated to ExecutionStore (SQLite). File locking is no longer needed. */
-export async function acquireLock(_workspace: string): Promise<{ acquired: boolean; reason?: string }> {
-  throw new Error("acquireLock is deprecated: SQLite WAL handles write serialization");
-}
-
-/** @deprecated Migrated to ExecutionStore (SQLite). File locking is no longer needed. */
-export async function releaseLock(_workspace: string): Promise<void> {
-  throw new Error("releaseLock is deprecated: SQLite WAL handles write serialization");
-}
-
-/** @deprecated Migrated to ExecutionStore (SQLite). SQLite transactions replace file locking. */
-export async function withBoardLock<T>(
-  _workspace: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  throw new Error("withBoardLock is deprecated: SQLite transactions replace file locking. Call fn() directly.");
-}

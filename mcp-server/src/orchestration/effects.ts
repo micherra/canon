@@ -111,7 +111,7 @@ async function checkPostconditions(
 }
 
 // ---------------------------------------------------------------------------
-// persist_review — parse REVIEW.md → reviews.jsonl
+// persist_review — parse REVIEW.md → DriftStore (SQLite)
 // ---------------------------------------------------------------------------
 
 async function persistReview(

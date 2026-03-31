@@ -19,10 +19,6 @@ import { aggregateParallelPerResults, isRoleOptional } from "../orchestration/tr
 // Hoist mocks before module imports for reportResult integration tests
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
@@ -31,15 +27,10 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
-}));
-
 vi.mock("../orchestration/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { withBoardLock } from "../orchestration/workspace.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
@@ -218,7 +209,6 @@ describe("reportResult — optional roles in parallel state", () => {
   beforeEach(async () => {
     workspace = makeTmpWorkspace();
     vi.clearAllMocks();
-    vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {

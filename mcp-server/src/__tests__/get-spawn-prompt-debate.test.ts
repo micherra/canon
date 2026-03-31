@@ -3,11 +3,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-}));
-
 vi.mock("../orchestration/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
@@ -17,7 +12,6 @@ vi.mock("../orchestration/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
-import { readBoard } from "../orchestration/board.ts";
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
 import { writeMessage } from "../orchestration/messages.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
@@ -89,7 +83,6 @@ afterEach(() => {
 describe("getSpawnPrompt — debate expansion", () => {
   it("expands the entry state into team debate prompts", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
@@ -107,7 +100,6 @@ describe("getSpawnPrompt — debate expansion", () => {
 
   it("includes prior debate transcript in later rounds", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "Use event sourcing.");

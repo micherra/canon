@@ -18,13 +18,6 @@ import { join } from "node:path";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-// board.ts: enterState is used by enter-and-prepare-state; readBoard/writeBoard are deprecated.
-// We do not mock enterState — the real pure function preserves wave_total via spread.
-
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
@@ -35,10 +28,6 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
     once: vi.fn(),
     removeListener: vi.fn(),
   },
-}));
-
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
 vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {

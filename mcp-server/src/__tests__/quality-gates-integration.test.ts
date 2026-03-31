@@ -21,21 +21,12 @@ import { tmpdir } from "node:os";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-  writeSession: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
     removeListener: vi.fn(),
   },
-}));
-
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
 vi.mock("../orchestration/effects.ts", () => ({
@@ -46,7 +37,6 @@ vi.mock("../orchestration/effects.ts", () => ({
 // Imports after mocks
 // ---------------------------------------------------------------------------
 
-import { withBoardLock } from "../orchestration/workspace.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { updateBoard } from "../tools/update-board.ts";
@@ -225,7 +215,6 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     workspace = makeTmpWorkspace();
     seedBoard(workspace, makeMinimalBoard());
     vi.clearAllMocks();
-    vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
@@ -345,7 +334,6 @@ describe("Integration: complete_flow aggregates multi-state quality metrics", ()
     projectDir = makeTmpWorkspace();
     mkdirSync(join(projectDir, CANON_DIR), { recursive: true });
     vi.clearAllMocks();
-    vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
@@ -515,7 +503,6 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
     workspace = makeTmpWorkspace();
     seedBoard(workspace, makeMinimalBoard());
     vi.clearAllMocks();
-    vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
@@ -566,7 +553,6 @@ describe("Integration: gate_results from report_result flow through to complete_
     mkdirSync(join(projectDir, CANON_DIR), { recursive: true });
     seedBoard(workspace, makeMinimalBoard());
     vi.clearAllMocks();
-    vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
@@ -628,7 +614,6 @@ describe("Integration: computeAnalytics aggregates across flow run history", () 
     projectDir = makeTmpWorkspace();
     mkdirSync(join(projectDir, CANON_DIR), { recursive: true });
     vi.clearAllMocks();
-    vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
@@ -687,7 +672,6 @@ describe("Integration: discovered_gates deduplicated when same command reported 
     workspace = makeTmpWorkspace();
     seedBoard(workspace, makeMinimalBoard());
     vi.clearAllMocks();
-    vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {

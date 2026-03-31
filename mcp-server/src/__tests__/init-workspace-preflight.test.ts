@@ -1,8 +1,11 @@
 /**
  * Tests for init_workspace preflight checks.
  *
- * Covers: git status detection, lock detection, stale session detection,
+ * Covers: git status detection, stale session detection,
  * and backward compatibility when preflight is omitted.
+ *
+ * Note: .lock file detection removed 2026-03-30 — SQLite WAL handles
+ * write serialization; file-based locking is no longer used.
  */
 
 import { describe, it, expect, afterEach, vi } from "vitest";
@@ -112,10 +115,10 @@ describe("init_workspace — preflight checks", () => {
     expect(result.preflight_issues!.some(i => i.includes("Uncommitted changes"))).toBe(true);
   });
 
-  it("reports active lock on candidate workspace", async () => {
+  it("does not report a lock issue even when .lock file exists (SQLite handles concurrency)", async () => {
     const projectDir = makeTmpProjectDir();
 
-    // Create a workspace directory with an active lock
+    // Create a workspace directory with a .lock file (legacy artifact)
     const wsDir = join(projectDir, ".canon", "workspaces", "main", "fix-the-bug");
     mkdirSync(wsDir, { recursive: true });
     const lock = { pid: process.pid, started: new Date().toISOString() };
@@ -136,8 +139,8 @@ describe("init_workspace — preflight checks", () => {
       "/fake/plugin",
     );
 
-    expect(result.created).toBe(false);
-    expect(result.preflight_issues).toBeDefined();
-    expect(result.preflight_issues!.some(i => i.includes("Active lock"))).toBe(true);
+    // .lock file is ignored — SQLite WAL handles concurrency
+    // The workspace may be created (no lock issues reported)
+    expect(result.preflight_issues?.some(i => i.includes("lock"))).toBeFalsy();
   });
 });

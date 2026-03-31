@@ -29,13 +29,6 @@ const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ â†
 // Mocks for enterAndPrepareState tests
 // ---------------------------------------------------------------------------
 
-// board.ts: readBoard/writeBoard are deprecated; enterState is a pure function used internally.
-// Real enterState preserves fields via spread. No mock needed.
-
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
@@ -46,10 +39,6 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
     once: vi.fn(),
     removeListener: vi.fn(),
   },
-}));
-
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
 vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {

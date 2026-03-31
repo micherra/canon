@@ -14,11 +14,6 @@ import type { SpawnPromptEntry } from "../tools/get-spawn-prompt.ts";
 // Mocks for getSpawnPrompt compete path tests
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-}));
-
 vi.mock("../orchestration/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
@@ -147,10 +142,9 @@ describe("compete", () => {
 // resolveCompeteConfig("auto") and compete path through get-spawn-prompt
 // ---------------------------------------------------------------------------
 
-import { readBoard } from "../orchestration/board.ts";
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 let tmpDirs: string[] = [];
 
@@ -158,24 +152,6 @@ function makeTmpDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "gsp-compete-test-"));
   tmpDirs.push(dir);
   return dir;
-}
-
-function makeBoard(overrides: Record<string, unknown> = {}): Board {
-  return {
-    flow: "compete-flow",
-    task: "test task",
-    entry: "design",
-    current_state: "design",
-    base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
-    blocked: null,
-    concerns: [],
-    skipped: [],
-    ...overrides,
-  } as Board;
 }
 
 function makeCompeteFlow(competeValue: "auto" | { count: number; strategy: "synthesize" | "select"; lenses?: string[] } = "auto"): ResolvedFlow {
@@ -209,7 +185,6 @@ afterEach(() => {
 describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () => {
   it("resolveCompeteConfig('auto') expands to 3 competitors with synthesize strategy", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
@@ -229,7 +204,6 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
 
   it("compete path preserves agent type from state", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
@@ -246,7 +220,6 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
 
   it("compete path with explicit count and lenses fans out correctly", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeCompeteFlow({ count: 2, strategy: "select", lenses: ["simplicity", "performance"] });
@@ -264,7 +237,6 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
 
   it("compete with non-single state type produces a warning", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow: ResolvedFlow = {

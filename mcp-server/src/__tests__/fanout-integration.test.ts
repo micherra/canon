@@ -27,13 +27,6 @@ import { join } from "node:path";
 // Hoist mocks — must appear before module imports
 // ---------------------------------------------------------------------------
 
-// board.ts: readBoard/writeBoard are deprecated; enterState is still a pure function used internally.
-// Real enterState preserves fields via spread. No mock needed.
-
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
@@ -54,10 +47,6 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
     removeListener: vi.fn(),
     removeAllListeners: vi.fn(),
   },
-}));
-
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
 vi.mock("../orchestration/consultation-executor.ts", () => ({
