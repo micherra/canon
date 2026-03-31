@@ -70,6 +70,7 @@ vi.mock("node:child_process", () => ({
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import { loadFlow } from "../tools/load-flow.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { spawnSync } from "node:child_process";
@@ -136,6 +137,31 @@ afterEach(() => {
   }
   tmpDirs = [];
   vi.clearAllMocks();
+});
+
+// ===========================================================================
+// 0. loadFlow REGRESSION GUARD — errors: string[] retained on success path
+// ===========================================================================
+
+describe("loadFlow — errors:string[] retained on success path (dec-01 regression guard)", () => {
+  it("loadFlow returns ok: true with errors: string[] on success", async () => {
+    const result = await loadFlow({ flow_name: "feature" }, pluginDir);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Array.isArray(result.errors)).toBe(true);
+    expect(result.flow).toBeDefined();
+    expect(result.state_graph).toBeDefined();
+  });
+
+  it("loadFlow returns ok: false with FLOW_NOT_FOUND for missing flow", async () => {
+    const result = await loadFlow({ flow_name: "nonexistent-flow-xyz" }, pluginDir);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("FLOW_NOT_FOUND");
+    }
+  });
 });
 
 // ===========================================================================

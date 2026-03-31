@@ -117,6 +117,8 @@ describe("updateBoard — enter_state", () => {
       state_id: "research",
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.states["research"].status).toBe("in_progress");
     expect(result.board.states["research"].entries).toBe(1);
 
@@ -154,14 +156,34 @@ describe("updateBoard — enter_state", () => {
     expect(existsSync(join(workspace, ".lock"))).toBe(false);
   });
 
-  it("throws when state_id is not provided", async () => {
+  it("returns INVALID_INPUT when state_id is not provided", async () => {
     const workspace = makeTmpDir();
     seedWorkspace(workspace);
 
-    await expect(updateBoard({
+    const result = await updateBoard({
       workspace,
       action: "enter_state",
-    })).rejects.toThrow("enter_state requires state_id");
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("requires state_id");
+    }
+  });
+
+  it("returns ok: true on success", async () => {
+    const workspace = makeTmpDir();
+    seedWorkspace(workspace);
+
+    const result = await updateBoard({
+      workspace,
+      action: "enter_state",
+      state_id: "research",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.board).toBeDefined();
+    }
   });
 });
 
@@ -176,6 +198,8 @@ describe("updateBoard — skip_state", () => {
       state_id: "research",
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.states["research"].status).toBe("skipped");
     expect(result.board.skipped).toContain("research");
 
@@ -194,6 +218,8 @@ describe("updateBoard — skip_state", () => {
       next_state_id: "implement",
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.current_state).toBe("implement");
     const exec = store.getExecution();
     expect(exec?.current_state).toBe("implement");
@@ -212,6 +238,8 @@ describe("updateBoard — block", () => {
       blocked_reason: "External API is down",
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.blocked).toBeDefined();
     expect(result.board.blocked!.state).toBe("research");
     expect(result.board.blocked!.reason).toBe("External API is down");
@@ -221,14 +249,19 @@ describe("updateBoard — block", () => {
     expect(exec?.blocked?.reason).toBe("External API is down");
   });
 
-  it("throws when state_id is not provided", async () => {
+  it("returns INVALID_INPUT when state_id is not provided", async () => {
     const workspace = makeTmpDir();
     seedWorkspace(workspace);
 
-    await expect(updateBoard({
+    const result = await updateBoard({
       workspace,
       action: "block",
-    })).rejects.toThrow("block requires state_id");
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("requires state_id");
+    }
   });
 });
 
@@ -251,6 +284,8 @@ describe("updateBoard — unblock", () => {
       state_id: "research",
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.blocked).toBeNull();
     expect(result.board.states["research"].status).toBe("in_progress");
 
@@ -275,6 +310,8 @@ describe("updateBoard — complete_flow", () => {
       action: "complete_flow",
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.states["done"].status).toBe("done");
     expect(result.board.states["done"].completed_at).toBeDefined();
     expect(result.board.blocked).toBeNull();
@@ -313,6 +350,8 @@ describe("updateBoard — set_wave_progress", () => {
       wave_data: { wave: 1, wave_total: 3, tasks: ["task-01", "task-02"] },
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.states["research"].wave).toBe(1);
     expect(result.board.states["research"].wave_total).toBe(3);
     expect(result.board.states["research"].wave_results?.["wave_1"]).toBeDefined();
@@ -323,15 +362,20 @@ describe("updateBoard — set_wave_progress", () => {
     expect(state?.wave_results?.["wave_1"].tasks).toEqual(["task-01", "task-02"]);
   });
 
-  it("throws when wave_data is not provided", async () => {
+  it("returns INVALID_INPUT when wave_data is not provided", async () => {
     const workspace = makeTmpDir();
     seedWorkspace(workspace);
 
-    await expect(updateBoard({
+    const result = await updateBoard({
       workspace,
       action: "set_wave_progress",
       state_id: "research",
-    })).rejects.toThrow("set_wave_progress requires wave_data");
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("requires wave_data");
+    }
   });
 });
 
@@ -346,6 +390,8 @@ describe("updateBoard — set_metadata", () => {
       metadata: { foo: "bar", count: 42 },
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.metadata?.["foo"]).toBe("bar");
     expect(result.board.metadata?.["count"]).toBe(42);
 
@@ -364,17 +410,42 @@ describe("updateBoard — set_metadata", () => {
       metadata: { new_key: "new_value" },
     });
 
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
     expect(result.board.metadata?.["existing"]).toBe("value");
     expect(result.board.metadata?.["new_key"]).toBe("new_value");
   });
 
-  it("throws when metadata is not provided", async () => {
+  it("returns INVALID_INPUT when metadata is not provided", async () => {
     const workspace = makeTmpDir();
     seedWorkspace(workspace);
 
-    await expect(updateBoard({
+    const result = await updateBoard({
       workspace,
       action: "set_metadata",
-    })).rejects.toThrow("set_metadata requires metadata");
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("requires metadata");
+    }
+  });
+});
+
+describe("updateBoard — error returns", () => {
+  it("returns WORKSPACE_NOT_FOUND when workspace has no execution", async () => {
+    const workspace = makeTmpDir();
+    // Do NOT seed — no execution store for this workspace
+
+    const result = await updateBoard({
+      workspace,
+      action: "enter_state",
+      state_id: "research",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toContain(workspace);
+    }
   });
 });

@@ -4,6 +4,7 @@ import { KgQuery } from '../graph/kg-query.ts';
 import { initDatabase } from '../graph/kg-schema.ts';
 import { CANON_DIR, CANON_FILES } from '../constants.ts';
 import type { SearchResult } from '../graph/kg-types.ts';
+import { toolError, toolOk, type ToolResult } from '../utils/tool-result.ts';
 
 // ---------------------------------------------------------------------------
 // Input / Output types
@@ -62,17 +63,18 @@ function findEntityId(kq: KgQuery, target: string): number | null {
 export function graphQuery(
   input: GraphQueryInput,
   projectDir: string
-): GraphQueryOutput {
+): ToolResult<GraphQueryOutput> {
   const { query_type, target, options = {} } = input;
 
   // ------------------------------------------------------------------
-  // 1. Locate the DB — if absent, return a helpful message as an error
+  // 1. Locate the DB — if absent, return a recoverable error
   // ------------------------------------------------------------------
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   if (!existsSync(dbPath)) {
-    throw new Error(
-      `Knowledge graph database not found at "${dbPath}". ` +
-      `Run the codebase_graph tool first to index your codebase.`
+    return toolError(
+      "KG_NOT_INDEXED",
+      `Knowledge graph database not found at "${dbPath}". Run the codebase_graph tool first to index your codebase.`,
+      true, // recoverable
     );
   }
 
@@ -89,91 +91,71 @@ export function graphQuery(
     switch (query_type) {
       case 'search': {
         if (!target) {
-          throw new Error(`query_type "search" requires a target string.`);
+          return toolError("INVALID_INPUT", `query_type "search" requires a target string.`);
         }
         const limit = options.limit ?? 50;
         const results = kq.search(target, limit);
-        return { query_type, target, results, count: results.length };
+        return toolOk({ query_type, target, results, count: results.length });
       }
 
       case 'dead_code': {
         const results = kq.findDeadCode({
           includeTests: options.include_tests ?? false,
         });
-        return { query_type, target, results, count: results.length };
+        return toolOk({ query_type, target, results, count: results.length });
       }
 
       case 'callers': {
         if (!target) {
-          throw new Error(`query_type "callers" requires a target entity name.`);
+          return toolError("INVALID_INPUT", `query_type "callers" requires a target entity name.`);
         }
         const entityId = findEntityId(kq, target);
         if (entityId === null) {
-          return {
-            query_type,
-            target,
-            results: [],
-            count: 0,
-          };
+          return toolOk({ query_type, target, results: [], count: 0 });
         }
         const results = kq.getCallers(entityId);
-        return { query_type, target, results, count: results.length };
+        return toolOk({ query_type, target, results, count: results.length });
       }
 
       case 'callees': {
         if (!target) {
-          throw new Error(`query_type "callees" requires a target entity name.`);
+          return toolError("INVALID_INPUT", `query_type "callees" requires a target entity name.`);
         }
         const entityId = findEntityId(kq, target);
         if (entityId === null) {
-          return {
-            query_type,
-            target,
-            results: [],
-            count: 0,
-          };
+          return toolOk({ query_type, target, results: [], count: 0 });
         }
         const results = kq.getCallees(entityId);
-        return { query_type, target, results, count: results.length };
+        return toolOk({ query_type, target, results, count: results.length });
       }
 
       case 'blast_radius': {
         if (!target) {
-          throw new Error(`query_type "blast_radius" requires a target entity name.`);
+          return toolError("INVALID_INPUT", `query_type "blast_radius" requires a target entity name.`);
         }
         const entityId = findEntityId(kq, target);
         if (entityId === null) {
-          return {
-            query_type,
-            target,
-            results: [],
-            count: 0,
-          };
+          return toolOk({ query_type, target, results: [], count: 0 });
         }
         const maxDepth = options.max_depth ?? 3;
         const results = kq.getBlastRadius([entityId], maxDepth);
-        return { query_type, target, results, count: results.length };
+        return toolOk({ query_type, target, results, count: results.length });
       }
 
       case 'ancestors': {
         if (!target) {
-          throw new Error(`query_type "ancestors" requires a target entity name.`);
+          return toolError("INVALID_INPUT", `query_type "ancestors" requires a target entity name.`);
         }
         const entityId = findEntityId(kq, target);
         if (entityId === null) {
-          return {
-            query_type,
-            target,
-            results: [],
-            count: 0,
-          };
+          return toolOk({ query_type, target, results: [], count: 0 });
         }
         const results = kq.getAncestors(entityId);
-        return { query_type, target, results, count: results.length };
+        return toolOk({ query_type, target, results, count: results.length });
       }
 
       default: {
-        // TypeScript exhaustiveness guard
+        // TypeScript exhaustiveness guard — this is a bug, not an expected error
         const exhaustive: never = query_type;
         throw new Error(`Unknown query_type: ${String(exhaustive)}`);
       }

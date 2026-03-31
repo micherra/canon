@@ -10,6 +10,7 @@ import { scanSourceFiles } from "../graph/scanner.ts";
 import { DriftStore } from "../drift/store.ts";
 import { deriveSourceDirsFromLayers, loadLayerMappings, buildLayerInferrer } from "../utils/config.ts";
 import { isNotFound } from "../utils/errors.ts";
+import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
 import { loadCachedGraph, getNodeMetrics, computeImpactScore, type GraphMetrics } from "../graph/query.ts";
 import { toPosix, loadPathAliases } from "../utils/paths.ts";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.ts";
@@ -118,7 +119,7 @@ function deriveRole(metrics: FileGraphMetrics | undefined): string {
 export async function getFileContext(
   input: FileContextInput,
   projectDir: string,
-): Promise<FileContextOutput> {
+): Promise<ToolResult<FileContextOutput>> {
   // Normalize to POSIX separators — graph IDs and layer patterns use '/' consistently
   const filePath = toPosix(input.file_path);
 
@@ -149,7 +150,7 @@ export async function getFileContext(
   const absPath = resolve(projectDir, filePath);
   const projectRoot = resolve(projectDir) + sep;
   if (absPath !== resolve(projectDir) && !absPath.startsWith(projectRoot)) {
-    return emptyResult("unknown");
+    return toolError("INVALID_INPUT", "File path traverses outside project directory");
   }
 
   let content: string;
@@ -161,7 +162,7 @@ export async function getFileContext(
       : raw;
   } catch (err: unknown) {
     if (isNotFound(err)) {
-      return emptyResult(inferLayer(filePath) || "unknown");
+      return toolError("INVALID_INPUT", `File not found: ${filePath}`);
     }
     throw err;
   }
@@ -382,7 +383,7 @@ export async function getFileContext(
   // Derive shape characterization from graph metrics
   const shape = deriveShape(graph_metrics);
 
-  return {
+  return toolOk({
     file_path: filePath,
     layer,
     content,
@@ -402,5 +403,5 @@ export async function getFileContext(
     graph_metrics,
     ...(entities !== undefined && { entities }),
     ...(blast_radius !== undefined && { blast_radius }),
-  };
+  });
 }

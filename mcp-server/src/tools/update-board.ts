@@ -4,6 +4,7 @@ import type { Board } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { appendFlowRun, type FlowRunEntry } from "../drift/analytics.ts";
 import { generateId } from "../utils/id.ts";
+import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
 
 interface UpdateBoardInput {
   workspace: string;
@@ -22,13 +23,13 @@ interface UpdateBoardResult {
   board: Board;
 }
 
-export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardResult> {
+export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<UpdateBoardResult>> {
   const store = getExecutionStore(input.workspace);
 
   // Read the current board state (synchronous)
   const boardOrNull = store.getBoard();
   if (!boardOrNull) {
-    throw new Error(`No execution found for workspace: ${input.workspace}`);
+    return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
   }
   let board: Board = boardOrNull;
 
@@ -37,7 +38,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
   switch (input.action) {
     case "enter_state": {
       if (!input.state_id) {
-        throw new Error("enter_state requires state_id");
+        return toolError("INVALID_INPUT", "enter_state requires state_id");
       }
       board = enterState(board, input.state_id);
 
@@ -69,12 +70,10 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
 
     case "skip_state": {
       if (!input.state_id) {
-        throw new Error("skip_state requires state_id");
+        return toolError("INVALID_INPUT", "skip_state requires state_id");
       }
       if (input.next_state_id && !board.states[input.next_state_id]) {
-        throw new Error(
-          `skip_state next_state_id "${input.next_state_id}" does not exist in board states`,
-        );
+        return toolError("INVALID_INPUT", `skip_state next_state_id "${input.next_state_id}" does not exist in board states`);
       }
       const stateEntry = board.states[input.state_id];
       if (stateEntry) {
@@ -111,7 +110,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
 
     case "block": {
       if (!input.state_id) {
-        throw new Error("block requires state_id");
+        return toolError("INVALID_INPUT", "block requires state_id");
       }
       const reason = input.blocked_reason ?? "No reason provided";
       board = setBlocked(board, input.state_id, reason);
@@ -135,7 +134,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
 
     case "unblock": {
       if (!input.state_id) {
-        throw new Error("unblock requires state_id");
+        return toolError("INVALID_INPUT", "unblock requires state_id");
       }
       const stateEntry = board.states[input.state_id];
       board = {
@@ -280,10 +279,10 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
 
     case "set_wave_progress": {
       if (!input.state_id) {
-        throw new Error("set_wave_progress requires state_id");
+        return toolError("INVALID_INPUT", "set_wave_progress requires state_id");
       }
       if (!input.wave_data) {
-        throw new Error("set_wave_progress requires wave_data");
+        return toolError("INVALID_INPUT", "set_wave_progress requires wave_data");
       }
       const stateEntry = board.states[input.state_id];
       const waveKey = `wave_${input.wave_data.wave}`;
@@ -325,7 +324,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
 
     case "set_metadata": {
       if (!input.metadata) {
-        throw new Error("set_metadata requires metadata");
+        return toolError("INVALID_INPUT", "set_metadata requires metadata");
       }
       board = {
         ...board,
@@ -343,7 +342,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
     }
 
     default:
-      throw new Error(`Unknown action: ${(input as UpdateBoardInput).action}`);
+      return toolError("INVALID_INPUT", `Unknown action: ${(input as UpdateBoardInput).action}`);
   }
 
   // Emit events (best-effort)
@@ -377,5 +376,5 @@ export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardR
     flowEventBus.removeListener("board_updated", onBoardUpdated);
   }
 
-  return { board };
+  return toolOk({ board });
 }
