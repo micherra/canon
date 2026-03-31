@@ -1,10 +1,7 @@
-import { readBoard, writeBoard, enterState, setBlocked } from "../orchestration/board.ts";
-import { withBoardLock, writeSession } from "../orchestration/workspace.ts";
-import { SessionSchema, type Board } from "../orchestration/flow-schema.ts";
-import { readFile } from "fs/promises";
-import { join } from "path";
+import { enterState, setBlocked } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Board } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { createJsonlLogger } from "../orchestration/events.ts";
 import { appendFlowRun, type FlowRunEntry } from "../drift/analytics.ts";
 import { generateId } from "../utils/id.ts";
 
@@ -26,11 +23,16 @@ interface UpdateBoardResult {
 }
 
 export async function updateBoard(input: UpdateBoardInput): Promise<UpdateBoardResult> {
-  return withBoardLock(input.workspace, () => updateBoardLocked(input));
-}
+  const store = getExecutionStore(input.workspace);
 
-async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardResult> {
-  let board = await readBoard(input.workspace);
+  // Read the current board state (synchronous)
+  const boardOrNull = store.getBoard();
+  if (!boardOrNull) {
+    throw new Error(`No execution found for workspace: ${input.workspace}`);
+  }
+  let board: Board = boardOrNull;
+
+  const now = new Date().toISOString();
 
   switch (input.action) {
     case "enter_state": {
@@ -38,6 +40,30 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
         throw new Error("enter_state requires state_id");
       }
       board = enterState(board, input.state_id);
+
+      store.transaction(() => {
+        store.updateExecution({
+          current_state: input.state_id!,
+          last_updated: now,
+        });
+        const stateEntry = board.states[input.state_id!];
+        if (stateEntry) {
+          store.upsertState(input.state_id!, {
+            ...stateEntry,
+            status: stateEntry.status,
+            entries: stateEntry.entries,
+          });
+        }
+        if (board.iterations[input.state_id!]) {
+          const iter = board.iterations[input.state_id!];
+          store.upsertIteration(input.state_id!, {
+            count: iter.count,
+            max: iter.max,
+            history: iter.history,
+            cannot_fix: iter.cannot_fix,
+          });
+        }
+      });
       break;
     }
 
@@ -52,6 +78,7 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
       }
       const stateEntry = board.states[input.state_id];
       if (stateEntry) {
+        const newSkipped = [...board.skipped, input.state_id];
         board = {
           ...board,
           states: {
@@ -61,11 +88,23 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
               status: "skipped",
             },
           },
-          skipped: [...board.skipped, input.state_id],
-          // Advance current_state if caller provides the next state
+          skipped: newSkipped,
           ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
-          last_updated: new Date().toISOString(),
+          last_updated: now,
         };
+
+        store.transaction(() => {
+          store.upsertState(input.state_id!, {
+            ...board.states[input.state_id!],
+            status: "skipped",
+            entries: stateEntry.entries,
+          });
+          store.updateExecution({
+            skipped: newSkipped,
+            last_updated: now,
+            ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
+          });
+        });
       }
       break;
     }
@@ -76,6 +115,21 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
       }
       const reason = input.blocked_reason ?? "No reason provided";
       board = setBlocked(board, input.state_id, reason);
+
+      store.transaction(() => {
+        store.updateExecution({
+          blocked: board.blocked,
+          last_updated: now,
+        });
+        const blockedState = board.states[input.state_id!];
+        if (blockedState) {
+          store.upsertState(input.state_id!, {
+            ...blockedState,
+            status: "blocked",
+            entries: blockedState.entries,
+          });
+        }
+      });
       break;
     }
 
@@ -95,13 +149,27 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
             error: undefined,
           },
         },
-        last_updated: new Date().toISOString(),
+        last_updated: now,
       };
+
+      store.transaction(() => {
+        store.updateExecution({
+          blocked: null,
+          last_updated: now,
+        });
+        const unblocked = board.states[input.state_id!];
+        if (unblocked) {
+          store.upsertState(input.state_id!, {
+            ...unblocked,
+            status: "in_progress",
+            entries: unblocked.entries,
+          });
+        }
+      });
       break;
     }
 
     case "complete_flow": {
-      const now = new Date().toISOString();
       const currentEntry = board.states[board.current_state];
       board = {
         ...board,
@@ -117,21 +185,32 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
         last_updated: now,
       };
 
-      // Update session status to completed
-      let sessionTier = "unknown";
-      try {
-        const sessionPath = join(input.workspace, "session.json");
-        const sessionData = await readFile(sessionPath, "utf-8");
-        const session = SessionSchema.parse(JSON.parse(sessionData));
-        sessionTier = session.tier;
-        await writeSession(input.workspace, {
-          ...session,
+      const currentStateId = board.current_state;
+
+      store.transaction(() => {
+        // Mark current state as done
+        const doneState = board.states[currentStateId];
+        if (doneState) {
+          store.upsertState(currentStateId, {
+            ...doneState,
+            status: "done",
+            entries: doneState.entries,
+            completed_at: now,
+          });
+        }
+
+        // Update execution status to completed (replaces writeSession)
+        store.updateExecution({
+          blocked: null,
           status: "completed",
           completed_at: now,
+          last_updated: now,
         });
-      } catch {
-        // Best-effort — don't fail the board update if session can't be updated
-      }
+      });
+
+      // Get tier from session (now embedded in execution row)
+      const session = store.getSession();
+      const sessionTier = session?.tier ?? "unknown";
 
       // Persist flow-run analytics (best-effort)
       const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
@@ -208,6 +287,14 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
       }
       const stateEntry = board.states[input.state_id];
       const waveKey = `wave_${input.wave_data.wave}`;
+      const newWaveResults = {
+        ...(stateEntry?.wave_results ?? {}),
+        [waveKey]: {
+          tasks: input.wave_data.tasks,
+          status: input.result ?? "pending",
+        },
+      };
+
       board = {
         ...board,
         states: {
@@ -216,17 +303,23 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
             ...stateEntry,
             wave: input.wave_data.wave,
             wave_total: input.wave_data.wave_total,
-            wave_results: {
-              ...(stateEntry?.wave_results ?? {}),
-              [waveKey]: {
-                tasks: input.wave_data.tasks,
-                status: input.result ?? "pending",
-              },
-            },
+            wave_results: newWaveResults,
           },
         },
-        last_updated: new Date().toISOString(),
+        last_updated: now,
       };
+
+      store.transaction(() => {
+        store.upsertState(input.state_id!, {
+          ...(stateEntry ?? { status: "pending" as const, entries: 0 }),
+          status: (stateEntry?.status as any) ?? "pending",
+          entries: stateEntry?.entries ?? 0,
+          wave: input.wave_data!.wave,
+          wave_total: input.wave_data!.wave_total,
+          wave_results: newWaveResults,
+        });
+        store.updateExecution({ last_updated: now });
+      });
       break;
     }
 
@@ -237,41 +330,43 @@ async function updateBoardLocked(input: UpdateBoardInput): Promise<UpdateBoardRe
       board = {
         ...board,
         metadata: { ...(board.metadata ?? {}), ...input.metadata },
-        last_updated: new Date().toISOString(),
+        last_updated: now,
       };
+
+      store.transaction(() => {
+        store.updateExecution({
+          metadata: board.metadata,
+          last_updated: now,
+        });
+      });
       break;
     }
 
     default:
-      throw new Error(`Unknown action: ${input.action}`);
+      throw new Error(`Unknown action: ${(input as UpdateBoardInput).action}`);
   }
 
-  await writeBoard(input.workspace, board);
-
-  // Emit events (best-effort — listeners must swallow errors).
-  // once() auto-removes listeners on first fire; the finally block removes any
-  // listeners that were registered but not fired due to an error mid-sequence.
-  const log = createJsonlLogger(input.workspace);
+  // Emit events (best-effort)
   const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
-    log("board_updated", event).catch(() => {});
+    store.appendEvent("board_updated", event as Record<string, unknown>);
   };
   flowEventBus.once("board_updated", onBoardUpdated);
   try {
     flowEventBus.emit("board_updated", {
       action: input.action,
       stateId: input.state_id,
-      timestamp: new Date().toISOString(),
+      timestamp: now,
     });
     if (input.action === "enter_state" && input.state_id) {
       const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
-        log("state_entered", event).catch(() => {});
+        store.appendEvent("state_entered", event as Record<string, unknown>);
       };
       flowEventBus.once("state_entered", onStateEntered);
       try {
         flowEventBus.emit("state_entered", {
           stateId: input.state_id,
-          stateType: "unknown", // state type not available in update-board context
-          timestamp: new Date().toISOString(),
+          stateType: "unknown",
+          timestamp: now,
           iterationCount: board.iterations[input.state_id]?.count ?? 0,
         });
       } finally {

@@ -216,7 +216,7 @@ export async function buildDebateSummary(
   // Group messages by round (parsed from filename prefix pattern: round-N-)
   const rounds = new Map<number, Message[]>();
   for (const msg of messages) {
-    const roundMatch = msg.from.match(/round-(\d+)/i) ?? msg.path.match(/round-(\d+)/i);
+    const roundMatch = msg.from.match(/round-(\d+)/i);
     const roundNum = roundMatch ? parseInt(roundMatch[1], 10) : 0;
     if (!rounds.has(roundNum)) rounds.set(roundNum, []);
     rounds.get(roundNum)!.push(msg);

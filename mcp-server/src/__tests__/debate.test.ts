@@ -65,7 +65,6 @@ describe("debate", () => {
         from: "team",
         timestamp: new Date().toISOString(),
         content,
-        path: "/fake/path.md",
       };
     }
 
