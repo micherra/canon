@@ -1,7 +1,8 @@
 import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
-import { execFile } from "child_process";
+import { gitExecAsync } from "../adapters/git-adapter-async.ts";
+import { runShell } from "../adapters/process-adapter.ts";
 import { DriftStore } from "../drift/store.ts";
 import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
@@ -489,13 +490,20 @@ interface DiffCommand {
   args: string[];
 }
 
-function runDiffCommand({ cmd, args }: DiffCommand, cwd: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(cmd, args, { cwd }, (err, stdout) => {
-      if (err) { reject(err); return; }
-      resolve(stdout);
-    });
-  });
+async function runDiffCommand({ cmd, args }: DiffCommand, cwd: string): Promise<string> {
+  if (cmd === "git") {
+    const result = await gitExecAsync(args, cwd);
+    if (!result.ok) {
+      throw new Error(result.stderr || `git failed with exit code ${result.exitCode}`);
+    }
+    return result.stdout;
+  }
+  // Non-git commands (e.g. gh CLI) — use synchronous shell adapter
+  const result = runShell(`${cmd} ${args.join(" ")}`, cwd);
+  if (!result.ok) {
+    throw new Error(result.stderr || `${cmd} failed with exit code ${result.exitCode}`);
+  }
+  return result.stdout;
 }
 
 // ── Parsing helpers ──
