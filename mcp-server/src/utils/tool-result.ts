@@ -52,6 +52,7 @@ export function assertOk<T>(result: ToolResult<T>): asserts result is { ok: true
   }
 }
 
+
 /** Shared subprocess result type — returned by all adapter functions. */
 export interface ProcessResult {
   ok: boolean;
