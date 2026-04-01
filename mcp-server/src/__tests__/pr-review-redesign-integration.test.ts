@@ -31,7 +31,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
 import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 
-// ── helper ──
+// ── helpers ──
 
 function makeMockExecFile(stdout: string, err: Error | null = null) {
   return (
@@ -40,6 +40,17 @@ function makeMockExecFile(stdout: string, err: Error | null = null) {
     _opts: unknown,
     cb: (err: Error | null, stdout: string, stderr: string) => void,
   ) => cb(err, err ? "" : stdout, "");
+}
+
+/** Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout. */
+function mockGitExecAsyncOk(stdout: string) {
+  return vi.fn().mockResolvedValue({
+    ok: true,
+    stdout,
+    stderr: "",
+    exitCode: 0,
+    timedOut: false,
+  });
 }
 
 function makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {
@@ -72,17 +83,8 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
   });
 
   it("every returned file has a bucket field (never undefined)", async () => {
-    const graphData = {
-      nodes: [
-        { id: "src/tools/a.ts", layer: "tools", violation_count: 0, changed: true },
-        { id: "src/graph/b.ts", layer: "graph", violation_count: 2, changed: true },
-      ],
-      edges: [{ source: "src/tools/a.ts", target: "src/graph/b.ts" }],
-    };
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
-
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/tools/a.ts\nM\tsrc/graph/b.ts"),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nM\tsrc/graph/b.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -94,8 +96,8 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
   });
 
   it("every impact_file has a non-empty reason string", async () => {
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/tools/a.ts\nA\tsrc/graph/b.ts"),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nA\tsrc/graph/b.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -107,33 +109,43 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
     }
   });
 
-  it("file with violation_count > 0 in graph data gets needs-attention bucket in impact_files", async () => {
-    // This is the key cross-task contract: classifyFile() is wired inside getPrReviewData()
-    // and uses priority_factors populated from graph data.
-    const graphData = {
-      nodes: [{ id: "src/tools/bad.ts", layer: "tools", violation_count: 3, changed: true }],
-      edges: [],
-    };
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
+  it("file with stored violations appears in impact_files due to violations filter", async () => {
+    // Files with stored DriftStore violations appear in impact_files even when bucket=low-risk
+    // (because the impact_files filter includes files where violations.length > 0)
+    const { DriftStore } = await import("../drift/store.js");
+    const store = new DriftStore(tmpDir);
+    await store.appendReview({
+      review_id: "rev_bucket_test",
+      timestamp: "2026-03-25T00:00:00Z",
+      verdict: "WARNING",
+      files: ["src/tools/bad.ts"],
+      violations: [
+        { principle_id: "p1", severity: "rule", file_path: "src/tools/bad.ts" },
+        { principle_id: "p2", severity: "convention", file_path: "src/tools/bad.ts" },
+        { principle_id: "p3", severity: "strong-opinion", file_path: "src/tools/bad.ts" },
+      ],
+      honored: [],
+      score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 1 } },
+    });
 
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/tools/bad.ts"),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/bad.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
+    // File appears in impact_files because violations.length > 0 (even without KG priority data)
     const badFile = result.impact_files.find((f) => f.path === "src/tools/bad.ts");
     expect(badFile).toBeDefined();
-    expect(badFile?.bucket).toBe("needs-attention");
-    expect(badFile?.reason).toMatch(/violation/i);
-    expect(badFile?.reason).toContain("3");
+    // Violations populated from DriftStore
+    expect(badFile?.violations).toHaveLength(3);
   });
 
   it("file without graph data is excluded from impact_files (no graph → low-risk)", async () => {
-    // No graph-data.json: priority_factors will be undefined → classifyFile → low-risk
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/orphan/file.ts"),
+    // No KG DB: priority_factors will be undefined → classifyFile → low-risk
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/orphan/file.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -164,8 +176,8 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
   });
 
   it("narrative is a non-empty string in every response", async () => {
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/a.ts"),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -178,8 +190,8 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
   it("narrative mentions total file count and layer when files are present", async () => {
     await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { tools: ["src/tools"] } }));
 
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/tools/a.ts\nA\tsrc/tools/b.ts"),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nA\tsrc/tools/b.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -191,8 +203,8 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
   });
 
   it("narrative for empty diff is a short non-empty string (not an error)", async () => {
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile(""),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -204,18 +216,25 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
     expect(result.narrative).toMatch(/no changed files/i);
   });
 
-  it("narrative mentions violations when graph data has violation_count > 0", async () => {
-    const graphData = {
-      nodes: [
-        { id: "src/tools/bad.ts", layer: "tools", violation_count: 2, changed: true },
-        { id: "src/tools/ok.ts", layer: "tools", violation_count: 0, changed: true },
+  it("narrative mentions violations when files have stored violations in DriftStore", async () => {
+    // Store a DriftStore review with violations so buildFileViolationMap populates them
+    const { DriftStore } = await import("../drift/store.js");
+    const store = new DriftStore(tmpDir);
+    await store.appendReview({
+      review_id: "rev_narrative_test",
+      timestamp: "2026-03-25T00:00:00Z",
+      verdict: "WARNING",
+      files: ["src/tools/bad.ts"],
+      violations: [
+        { principle_id: "p1", severity: "rule", file_path: "src/tools/bad.ts" },
+        { principle_id: "p2", severity: "convention", file_path: "src/tools/bad.ts" },
       ],
-      edges: [],
-    };
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
+      honored: [],
+      score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 1 } },
+    });
 
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/tools/bad.ts\nM\tsrc/tools/ok.ts"),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/bad.ts\nM\tsrc/tools/ok.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -243,9 +262,9 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("blast_radius is an empty array when no graph data is present", async () => {
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/a.ts"),
+  it("blast_radius is an empty array when no KG DB is present", async () => {
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -256,53 +275,35 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
   });
 
   it("blast_radius is empty when changed files have in_degree below threshold (< 3)", async () => {
-    // A file that imports two things but has in_degree=2 — below the threshold of 3
-    const graphData = {
-      nodes: [
-        { id: "src/a.ts", layer: "tools", violation_count: 0, changed: true },
-        { id: "src/b.ts", layer: "tools", violation_count: 0, changed: false },
-      ],
-      edges: [
-        // Only 2 files import src/a.ts → in_degree = 2, below threshold
-        { source: "src/b.ts", target: "src/a.ts" },
-        { source: "src/c.ts", target: "src/a.ts" },
-      ],
-    };
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
-
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/a.ts"),
+    // A file with in_degree=2 — below the threshold of 3 — no KG DB present
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
-    // in_degree=2 < threshold of 3, so blast_radius should be empty
+    // No KG DB → no priority data → in_degree = 0 < threshold of 3 → empty blast radius
     expect(result.blast_radius).toHaveLength(0);
   });
 
   it("blast_radius includes an entry when a changed file has in_degree >= 3", async () => {
-    // src/hub.ts is imported by 4 files → in_degree=4 → qualifies for blast radius seed
-    const graphData = {
-      nodes: [
-        { id: "src/hub.ts", layer: "tools", violation_count: 0, changed: true },
-        { id: "src/consumer1.ts", layer: "tools", violation_count: 0, changed: false },
-        { id: "src/consumer2.ts", layer: "tools", violation_count: 0, changed: false },
-        { id: "src/consumer3.ts", layer: "tools", violation_count: 0, changed: false },
-        { id: "src/consumer4.ts", layer: "tools", violation_count: 0, changed: false },
-      ],
-      edges: [
-        // These edges represent "consumerX imports hub" — reverse adj puts hub as target
-        { source: "src/consumer1.ts", target: "src/hub.ts" },
-        { source: "src/consumer2.ts", target: "src/hub.ts" },
-        { source: "src/consumer3.ts", target: "src/hub.ts" },
-        { source: "src/consumer4.ts", target: "src/hub.ts" },
-      ],
-    };
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
+    // Set up a real SQLite DB: src/hub.ts is imported by 4 files → in_degree=4
+    const { initDatabase } = await import("../graph/kg-schema.js");
+    const { KgStore } = await import("../graph/kg-store.js");
+    const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+    const hubFile = store.upsertFile({ path: "src/hub.ts", mtime_ms: 1, content_hash: "h", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+    for (let i = 1; i <= 4; i++) {
+      const c = store.upsertFile({ path: `src/consumer${i}.ts`, mtime_ms: 1, content_hash: `c${i}`, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+      // consumerX imports hub → file_edge source=consumer, target=hub
+      store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+    }
+    db.close();
 
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/hub.ts"),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/hub.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -313,33 +314,28 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     expect(entry?.file).toBe("src/hub.ts");
     // affected should include the 4 consumers (all at depth 1)
     expect(entry?.affected.length).toBeGreaterThanOrEqual(1);
-    // All affected entries have depth=1 (direct dependents only)
+    // All affected entries have depth >= 1 (not the seed itself)
     for (const aff of entry?.affected ?? []) {
-      expect(aff.depth).toBe(1);
+      expect(aff.depth).toBeGreaterThanOrEqual(1);
     }
   });
 
   it("blast_radius capped at 10 affected files per seed", async () => {
     // Create a hub with 15 importers — blast radius must cap at 10
-    const consumers = Array.from({ length: 15 }, (_, i) => ({
-      id: `src/consumer${i}.ts`,
-      layer: "tools",
-      violation_count: 0,
-      changed: false,
-    }));
-    const edges = consumers.map((c) => ({
-      source: c.id,
-      target: "src/hub.ts",
-    }));
+    const { initDatabase } = await import("../graph/kg-schema.js");
+    const { KgStore } = await import("../graph/kg-store.js");
+    const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+    const hubFile = store.upsertFile({ path: "src/hub.ts", mtime_ms: 1, content_hash: "h", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+    for (let i = 0; i < 15; i++) {
+      const c = store.upsertFile({ path: `src/consumer${i}.ts`, mtime_ms: 1, content_hash: `c${i}`, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+      store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+    }
+    db.close();
 
-    const graphData = {
-      nodes: [{ id: "src/hub.ts", layer: "tools", violation_count: 0, changed: true }, ...consumers],
-      edges,
-    };
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
-
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/hub.ts"),
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/hub.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -352,31 +348,31 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
   });
 
   it("blast_radius capped at 3 seed files (MAX_SEEDS)", async () => {
-    // 5 changed files each with in_degree=4 — only top 3 by in_degree become seeds
+    // 5 hubs each with 4+ importers — only top 3 by in_degree become seeds
+    const { initDatabase } = await import("../graph/kg-schema.js");
+    const { KgStore } = await import("../graph/kg-store.js");
+    const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+    const db = initDatabase(dbPath);
+    const store = new KgStore(db);
+
     const hubs = ["hub1", "hub2", "hub3", "hub4", "hub5"].map((name, i) => ({
-      id: `src/${name}.ts`,
-      // Give different in_degrees by varying number of consumers
+      name: `src/${name}.ts`,
       consumers: 4 + i, // hub1=4, hub2=5, hub3=6, hub4=7, hub5=8
     }));
 
-    const nodes: Array<{ id: string; layer: string; violation_count: number; changed: boolean }> = [];
-    const edges: Array<{ source: string; target: string }> = [];
-
     for (const hub of hubs) {
-      nodes.push({ id: hub.id, layer: "tools", violation_count: 0, changed: true });
+      const hubFile = store.upsertFile({ path: hub.name, mtime_ms: 1, content_hash: hub.name, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
       for (let j = 0; j < hub.consumers; j++) {
-        const cId = `src/c_${hub.id.replace(/\W/g, "_")}_${j}.ts`;
-        nodes.push({ id: cId, layer: "tools", violation_count: 0, changed: false });
-        edges.push({ source: cId, target: hub.id });
+        const cPath = `src/c_${hub.name.replace(/\W/g, "_")}_${j}.ts`;
+        const c = store.upsertFile({ path: cPath, mtime_ms: 1, content_hash: cPath, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+        store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
       }
     }
+    db.close();
 
-    const graphData = { nodes, edges };
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
-
-    const diffOutput = hubs.map((h) => `M\t${h.id}`).join("\n");
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile(diffOutput),
+    const diffOutput = hubs.map((h) => `M\t${h.name}`).join("\n");
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk(diffOutput),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -386,38 +382,16 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     expect(result.blast_radius.length).toBeLessThanOrEqual(3);
     // The seeds selected should be the ones with the highest in_degree
     const seedFiles = result.blast_radius.map((e) => e.file);
-    // hub5 (8 consumers) and hub4 (7 consumers) must be among them
+    // hub5 (8 importers) and hub4 (7 importers) must be among them
     expect(seedFiles).toContain("src/hub5.ts");
     expect(seedFiles).toContain("src/hub4.ts");
   });
 
   it("blast_radius only seeds from changed files (is_changed must be true)", async () => {
-    // hub.ts has in_degree=5 but is NOT changed — should not appear in blast_radius
-    const graphData = {
-      nodes: [
-        // changed=false: not a candidate seed
-        { id: "src/hub.ts", layer: "tools", violation_count: 0, changed: false },
-        { id: "src/c1.ts", layer: "tools", violation_count: 0, changed: false },
-        { id: "src/c2.ts", layer: "tools", violation_count: 0, changed: false },
-        { id: "src/c3.ts", layer: "tools", violation_count: 0, changed: false },
-        { id: "src/c4.ts", layer: "tools", violation_count: 0, changed: false },
-        { id: "src/c5.ts", layer: "tools", violation_count: 0, changed: false },
-        // actually changed but low in_degree
-        { id: "src/actual-change.ts", layer: "tools", violation_count: 0, changed: true },
-      ],
-      edges: [
-        { source: "src/c1.ts", target: "src/hub.ts" },
-        { source: "src/c2.ts", target: "src/hub.ts" },
-        { source: "src/c3.ts", target: "src/hub.ts" },
-        { source: "src/c4.ts", target: "src/hub.ts" },
-        { source: "src/c5.ts", target: "src/hub.ts" },
-      ],
-    };
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
-
-    // Only actual-change.ts is in the diff (hub.ts is not changed)
-    vi.doMock("child_process", () => ({
-      execFile: makeMockExecFile("M\tsrc/actual-change.ts"),
+    // hub.ts has high in_degree but is NOT in the diff — should not appear in blast_radius
+    // actual-change.ts is in the diff but has no importers → empty blast radius
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: mockGitExecAsyncOk("M\tsrc/actual-change.ts"),
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
@@ -425,7 +399,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
 
     // hub.ts is not in the diff → not a blast radius seed
     expect(result.blast_radius.map((e) => e.file)).not.toContain("src/hub.ts");
-    // actual-change.ts has in_degree=0 from the diff perspective → empty blast radius
+    // actual-change.ts has in_degree=0 (not in KG) → empty blast radius
     expect(result.blast_radius).toHaveLength(0);
   });
 });

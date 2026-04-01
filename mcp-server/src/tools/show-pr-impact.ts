@@ -20,12 +20,12 @@
  */
 
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
+import { KgQuery } from "../graph/kg-query.ts";
 import type { ReviewEntry, ReviewViolation } from "../schema.ts";
 import type { PrReviewDataOutput } from "./pr-review-data.ts";
 import { getPrReviewData } from "./pr-review-data.ts";
@@ -302,31 +302,11 @@ function buildHotspots(review: ReviewEntry, blastRadius: PrImpactOutput["blastRa
 // ---------------------------------------------------------------------------
 // Helper: buildSubgraph
 //
-// Reads graph-data.json and extracts a subgraph containing:
+// Queries the KG database for a subgraph containing:
 //   - Nodes that are in changedFiles or in blastRadius.affected (by file_path)
 //   - Edges where BOTH source and target are in the filtered node set
 //   - Layers derived from the filtered nodes
 // ---------------------------------------------------------------------------
-
-interface RawGraphNode {
-  id: string;
-  layer?: string;
-  violation_count?: number;
-  [key: string]: unknown;
-}
-
-interface RawGraphEdge {
-  source: string;
-  target: string;
-  confidence?: number;
-  [key: string]: unknown;
-}
-
-interface RawGraphData {
-  nodes?: RawGraphNode[];
-  edges?: RawGraphEdge[];
-  [key: string]: unknown;
-}
 
 // Default layer colors (matches the dashboard palette)
 const LAYER_COLORS: Record<string, string> = {
@@ -340,23 +320,13 @@ const LAYER_COLORS: Record<string, string> = {
   unknown: "#888888",
 };
 
-async function buildSubgraph(
-  projectDir: string,
+function buildSubgraph(
+  db: ReturnType<typeof initDatabase> | null,
   changedFiles: string[],
   blastRadius: PrImpactOutput["blastRadius"] | undefined,
-): Promise<PrImpactSubgraph> {
-  const graphDataPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
-
-  let rawGraph: RawGraphData;
-  try {
-    const raw = await readFile(graphDataPath, "utf-8");
-    rawGraph = JSON.parse(raw) as RawGraphData;
-  } catch {
-    return { nodes: [], edges: [], layers: [] };
-  }
-
-  const allNodes: RawGraphNode[] = rawGraph.nodes ?? [];
-  const allEdges: RawGraphEdge[] = rawGraph.edges ?? [];
+  violationCountByFile?: Map<string, number>,
+): PrImpactSubgraph {
+  if (!db) return { nodes: [], edges: [], layers: [] };
 
   // Build inclusion set: changed files + blast radius affected files
   const includedPaths = new Set<string>(changedFiles);
@@ -368,26 +338,28 @@ async function buildSubgraph(
     }
   }
 
-  // Filter nodes
-  const filteredNodes: PrImpactSubgraphNode[] = allNodes
-    .filter((n) => includedPaths.has(n.id))
-    .map((n) => ({
-      id: n.id,
+  if (includedPaths.size === 0) return { nodes: [], edges: [], layers: [] };
+
+  const query = new KgQuery(db);
+  const rawSubgraph = query.getSubgraph([...includedPaths]);
+
+  // Map KgQuery nodes to PrImpactSubgraphNode
+  const changedSet = new Set(changedFiles);
+  const filteredNodes: PrImpactSubgraphNode[] = rawSubgraph.nodes
+    .filter(n => includedPaths.has(n.path))
+    .map(n => ({
+      id: n.path,
       layer: n.layer ?? "unknown",
-      changed: changedFiles.includes(n.id),
-      violation_count: n.violation_count ?? 0,
+      changed: changedSet.has(n.path),
+      violation_count: violationCountByFile?.get(n.path) ?? 0,
     }));
 
-  const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
+  const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
 
-  // Filter edges — both endpoints must be in the subgraph
-  const filteredEdges: PrImpactSubgraphEdge[] = allEdges
-    .filter((e) => filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target))
-    .map((e) => ({
-      source: e.source,
-      target: e.target,
-      confidence: e.confidence,
-    }));
+  // Filter edges — both endpoints must be in the subgraph inclusion set
+  const filteredEdges: PrImpactSubgraphEdge[] = rawSubgraph.edges
+    .filter(e => filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target))
+    .map(e => ({ source: e.source, target: e.target }));
 
   // Extract layer summary
   const layerCounts = new Map<string, number>();
@@ -469,8 +441,9 @@ export async function showPrImpact(
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   const hasKg = existsSync(dbPath);
 
-  // 4. Compute blast radius (if KG available)
+  // 4. Compute blast radius and subgraph from KG (if available)
   let blastRadius: PrImpactOutput["blastRadius"];
+  let subgraph: PrImpactSubgraph = { nodes: [], edges: [], layers: [] };
   if (hasKg) {
     const db = initDatabase(dbPath);
     try {
@@ -488,16 +461,27 @@ export async function showPrImpact(
       };
     } catch {
       // KG query failed — continue without blast radius
-    } finally {
-      db.close();
     }
+
+    // 6. Build subgraph from KG (filtered to changed + affected files)
+    try {
+      // Build per-file violation counts from the stored review
+      const violationCountByFile = new Map<string, number>();
+      for (const v of latestReview.violations) {
+        if (v.file_path) {
+          violationCountByFile.set(v.file_path, (violationCountByFile.get(v.file_path) ?? 0) + 1);
+        }
+      }
+      subgraph = buildSubgraph(db, latestReview.files, blastRadius, violationCountByFile);
+    } catch {
+      // Subgraph build failed — continue with empty subgraph
+    }
+
+    db.close();
   }
 
   // 5. Build hotspot list (ranked by risk_score)
   const hotspots = buildHotspots(latestReview, blastRadius);
-
-  // 6. Build subgraph from graph-data.json (filtered to changed + affected files)
-  const subgraph = await buildSubgraph(projectDir, latestReview.files, blastRadius);
 
   // 7. Detect subsystems — cross-reference review files with prep file statuses
   const statusMap = new Map<string, string>();

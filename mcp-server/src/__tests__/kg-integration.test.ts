@@ -3,22 +3,22 @@
  *
  * Tests cross-module boundaries not covered by implementor unit tests:
  *
- *   1. Pipeline → Materializer → graph-data.json shape (end-to-end flow)
- *   2. View Materializer unit contract (happy path, empty DB, edge type mapping, inferKind)
- *   3. Blast Radius analysis (analyzeBlastRadius — zero gaps in implementor coverage)
- *   4. graph_query tool dispatch (DB-not-found, entity-not-found, each query type)
- *   5. Adapter Registry contract (getAdapter, getLanguage)
- *   6. Incremental reindex correctness (file change → re-parse → updated edges)
- *   7. KgStore CRUD gaps (upsert conflict path, cascade verification, boolean coercion)
- *   8. KgQuery gaps (getAncestors, getAdjacencyList)
+ *   1. Pipeline → KgQuery end-to-end flow (graph-data.json write path removed — ADR-005)
+ *   2. Blast Radius analysis (analyzeBlastRadius — zero gaps in implementor coverage)
+ *   3. graph_query tool dispatch (DB-not-found, entity-not-found, each query type)
+ *   4. Adapter Registry contract (getAdapter, getLanguage)
+ *   5. Incremental reindex correctness (file change → re-parse → updated edges)
+ *   6. KgStore CRUD gaps (upsert conflict path, cascade verification, boolean coercion)
+ *   7. KgQuery gaps (getAncestors, getAdjacencyList)
  *
  * All filesystem-bound tests use OS temp directories created fresh per test.
  * All DB-bound tests use in-memory SQLite (:memory:).
  */
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import path from "node:path";
+import path, { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
@@ -30,8 +30,9 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { EdgeType, EntityRow, FileRow } from "../graph/kg-types.ts";
 import { initParsers } from "../graph/kg-wasm-parser.ts";
-import { materialize, materializeToFile } from "../graph/view-materializer.ts";
 import { graphQuery } from "../tools/graph-query.ts";
+import { getFileContext } from "../tools/get-file-context.ts";
+import { storeSummaries } from "../tools/store-summaries.ts";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -138,212 +139,11 @@ function populateTestGraph(store: KgStore) {
 }
 
 // ===========================================================================
-// 1. View Materializer — unit contract
+// 1. Pipeline → KgQuery end-to-end flow
+// (view-materializer.ts deleted — ADR-005; graph-data.json write path removed)
 // ===========================================================================
 
-describe("materialize — view materializer contract", () => {
-  let db: Database.Database;
-  let store: KgStore;
-
-  beforeEach(() => {
-    db = initDatabase(":memory:");
-    store = new KgStore(db);
-  });
-
-  afterEach(() => {
-    store.close();
-  });
-
-  test("returns empty nodes and edges for an empty database", () => {
-    const result = materialize(db, "/tmp/project");
-    expect(result.nodes).toHaveLength(0);
-    expect(result.edges).toHaveLength(0);
-    expect(result.insights.overview.total_files).toBe(0);
-    expect(result.insights.overview.total_edges).toBe(0);
-  });
-
-  test("populates nodes from files table with correct shape", () => {
-    populateTestGraph(store);
-    const result = materialize(db, "/tmp/project");
-
-    expect(result.nodes.length).toBe(3);
-    const nodeA = result.nodes.find((n) => n.id === "src/A.ts");
-    expect(nodeA).toBeDefined();
-    expect(nodeA!.layer).toBe("api");
-    expect(nodeA!.extension).toBe("ts");
-    expect(nodeA!.violation_count).toBe(0);
-    expect(nodeA!.changed).toBe(false);
-  });
-
-  test("populates KG enrichment fields (entity_count, export_count, dead_code_count)", () => {
-    populateTestGraph(store);
-    const result = materialize(db, "/tmp/project");
-
-    // fileB has funcB (exported) and funcD (dead)
-    const nodeB = result.nodes.find((n) => n.id === "src/B.ts");
-    expect(nodeB).toBeDefined();
-    expect(nodeB!.entity_count).toBeGreaterThanOrEqual(2); // funcB + funcD (+ possibly file entity)
-    expect(nodeB!.export_count).toBeGreaterThanOrEqual(1); // funcB
-    expect(nodeB!.dead_code_count).toBe(1); // funcD
-  });
-
-  test("populates edges from file_edges table with correct shape", () => {
-    populateTestGraph(store);
-    const result = materialize(db, "/tmp/project");
-
-    expect(result.edges.length).toBe(2);
-    const edgeAB = result.edges.find((e) => e.source === "src/A.ts" && e.target === "src/B.ts");
-    expect(edgeAB).toBeDefined();
-    expect(edgeAB!.type).toBe("import");
-    expect(edgeAB!.confidence).toBe(1.0);
-  });
-
-  test("mapEdgeType: imports → import, re-exports → re-export, composition → composition, others → import", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts" }));
-    const fileD = store.upsertFile(makeFileRow({ path: "src/D.ts" }));
-
-    store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileB.file_id!,
-      edge_type: "re-exports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
-    });
-    store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "composition",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
-    });
-    store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileD.file_id!,
-      edge_type: "some-unknown-type" as EdgeType,
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
-    });
-
-    const result = materialize(db, "/tmp/project");
-    const edges = result.edges;
-
-    const reExport = edges.find((e) => e.target === "src/B.ts");
-    expect(reExport!.type).toBe("re-export");
-
-    const composition = edges.find((e) => e.target === "src/C.ts");
-    expect(composition!.type).toBe("composition");
-
-    const unknown = edges.find((e) => e.target === "src/D.ts");
-    expect(unknown!.type).toBe("import"); // fallback
-  });
-
-  test("inferKind classifies paths correctly", () => {
-    const paths = [
-      { path: "src/__tests__/foo.test.ts", expectedKind: "test" },
-      { path: "src/bar.spec.js", expectedKind: "test" },
-      { path: "config.yaml", expectedKind: "config" },
-      { path: "tsconfig.json", expectedKind: "config" },
-      { path: "README.md", expectedKind: "doc" },
-      { path: "scripts/build.sh", expectedKind: "script" },
-      { path: "src/main.ts", expectedKind: "source" },
-    ];
-
-    for (const { path: filePath } of paths) {
-      const file = store.upsertFile(makeFileRow({ path: filePath, content_hash: `hash-${filePath}` }));
-      void file;
-    }
-
-    const result = materialize(db, "/tmp/project");
-    for (const { path: filePath, expectedKind } of paths) {
-      const node = result.nodes.find((n) => n.id === filePath);
-      expect(node, `expected node for ${filePath}`).toBeDefined();
-      expect(node!.kind, `kind for ${filePath}`).toBe(expectedKind);
-    }
-  });
-
-  test("insights overview counts match nodes and edges", () => {
-    populateTestGraph(store);
-    const result = materialize(db, "/tmp/project");
-
-    expect(result.insights.overview.total_files).toBe(result.nodes.length);
-    expect(result.insights.overview.total_edges).toBe(result.edges.length);
-  });
-
-  test("generated_at is a valid ISO timestamp", () => {
-    const result = materialize(db, "/tmp/project");
-    expect(() => new Date(result.generated_at)).not.toThrow();
-    expect(new Date(result.generated_at).getFullYear()).toBeGreaterThan(2020);
-  });
-});
-
-// ===========================================================================
-// 2. materializeToFile — file write integration
-// ===========================================================================
-
-describe("materializeToFile — file write integration", () => {
-  let db: Database.Database;
-  let store: KgStore;
-  let projectDir: string;
-
-  beforeEach(() => {
-    projectDir = makeTempDir();
-    db = initDatabase(":memory:");
-    store = new KgStore(db);
-  });
-
-  afterEach(() => {
-    store.close();
-    rmSync(projectDir, { recursive: true, force: true });
-  });
-
-  test("writes graph-data.json with correct shape", () => {
-    populateTestGraph(store);
-    materializeToFile(db, projectDir);
-
-    const outPath = path.join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
-    expect(existsSync(outPath)).toBe(true);
-
-    const raw = readFileSync(outPath, "utf8");
-    const data = JSON.parse(raw);
-    expect(data).toHaveProperty("nodes");
-    expect(data).toHaveProperty("edges");
-    expect(data).toHaveProperty("layers");
-    expect(data).toHaveProperty("insights");
-    expect(data).toHaveProperty("generated_at");
-    expect(Array.isArray(data.nodes)).toBe(true);
-    expect(Array.isArray(data.edges)).toBe(true);
-  });
-
-  test("is idempotent — calling twice overwrites cleanly", () => {
-    populateTestGraph(store);
-    materializeToFile(db, projectDir);
-    materializeToFile(db, projectDir);
-
-    const outPath = path.join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
-    const data = JSON.parse(readFileSync(outPath, "utf8"));
-    expect(data.nodes.length).toBe(3);
-  });
-
-  test("creates .canon directory if it does not exist", () => {
-    const canonDir = path.join(projectDir, CANON_DIR);
-    expect(existsSync(canonDir)).toBe(false);
-
-    materializeToFile(db, projectDir);
-
-    expect(existsSync(canonDir)).toBe(true);
-  });
-});
-
-// ===========================================================================
-// 3. Pipeline → Materializer end-to-end flow
-// ===========================================================================
-
-describe("Pipeline → Materializer end-to-end flow", () => {
+describe("Pipeline → KgQuery end-to-end flow", () => {
   let projectDir: string;
 
   beforeEach(() => {
@@ -354,7 +154,7 @@ describe("Pipeline → Materializer end-to-end flow", () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  test("pipeline populates DB and materializer produces valid graph-data.json", async () => {
+  test("pipeline populates DB and KgQuery returns correct nodes and edges", async () => {
     writeProjectFile(projectDir, "src/a.ts", "export function hello() {}");
     writeProjectFile(projectDir, "src/b.ts", "import { hello } from './a.ts';");
 
@@ -363,41 +163,26 @@ describe("Pipeline → Materializer end-to-end flow", () => {
 
     const db = new Database(dbPath);
     try {
-      // Materializer should produce valid output from pipeline DB
-      const graphData = materialize(db, projectDir);
+      const query = new KgQuery(db);
+      const filesWithStats = query.getAllFilesWithStats();
+      expect(filesWithStats.length).toBeGreaterThanOrEqual(2);
 
-      expect(graphData.nodes.length).toBeGreaterThanOrEqual(2);
-      expect(graphData.edges.length).toBeGreaterThanOrEqual(1);
+      // b.ts should have an import edge targeting a.ts
+      const fileEdgeRows = db
+        .prepare(
+          `SELECT fe.edge_type, src.path AS source_path, tgt.path AS target_path
+           FROM file_edges fe
+           JOIN files src ON src.file_id = fe.source_file_id
+           JOIN files tgt ON tgt.file_id = fe.target_file_id`,
+        )
+        .all() as Array<{ edge_type: string; source_path: string; target_path: string }>;
 
-      // a.ts should have an import edge from b.ts
-      const importEdge = graphData.edges.find((e) => e.source === "src/b.ts" && e.target === "src/a.ts");
+      const importEdge = fileEdgeRows.find((e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts");
       expect(importEdge).toBeDefined();
-      expect(importEdge!.type).toBe("import");
+      expect(importEdge!.edge_type).toBe("imports");
     } finally {
       db.close();
     }
-  });
-
-  test("materializeToFile writes correct data after pipeline run", async () => {
-    writeProjectFile(projectDir, "src/utils.ts", 'export const VERSION = "1.0";');
-
-    const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-    mkdirSync(path.dirname(dbPath), { recursive: true });
-    await runPipeline(projectDir, { dbPath, incremental: false });
-
-    const db = new Database(dbPath);
-    try {
-      materializeToFile(db, projectDir);
-    } finally {
-      db.close();
-    }
-
-    const outPath = path.join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
-    expect(existsSync(outPath)).toBe(true);
-    const data = JSON.parse(readFileSync(outPath, "utf8"));
-    // Should contain src/utils.ts node
-    const utilsNode = data.nodes.find((n: { id: string }) => n.id === "src/utils.ts");
-    expect(utilsNode).toBeDefined();
   });
 
   test("incremental reindex updates edges when import is added", async () => {
@@ -409,9 +194,16 @@ describe("Pipeline → Materializer end-to-end flow", () => {
 
     // Verify no edge from b.ts → a.ts initially
     const dbBefore = new Database(dbPath);
-    const graphBefore = materialize(dbBefore, projectDir);
+    const edgesBefore = dbBefore
+      .prepare(
+        `SELECT src.path AS source_path, tgt.path AS target_path
+         FROM file_edges fe
+         JOIN files src ON src.file_id = fe.source_file_id
+         JOIN files tgt ON tgt.file_id = fe.target_file_id`,
+      )
+      .all() as Array<{ source_path: string; target_path: string }>;
     dbBefore.close();
-    const edgeBefore = graphBefore.edges.find((e) => e.source === "src/b.ts" && e.target === "src/a.ts");
+    const edgeBefore = edgesBefore.find((e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts");
     expect(edgeBefore).toBeUndefined();
 
     // Update b.ts to import from a.ts
@@ -421,10 +213,17 @@ describe("Pipeline → Materializer end-to-end flow", () => {
     await runPipeline(projectDir, { dbPath, incremental: false });
 
     const dbAfter = new Database(dbPath);
-    const graphAfter = materialize(dbAfter, projectDir);
+    const edgesAfter = dbAfter
+      .prepare(
+        `SELECT src.path AS source_path, tgt.path AS target_path
+         FROM file_edges fe
+         JOIN files src ON src.file_id = fe.source_file_id
+         JOIN files tgt ON tgt.file_id = fe.target_file_id`,
+      )
+      .all() as Array<{ source_path: string; target_path: string }>;
     dbAfter.close();
 
-    const edgeAfter = graphAfter.edges.find((e) => e.source === "src/b.ts" && e.target === "src/a.ts");
+    const edgeAfter = edgesAfter.find((e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts");
     expect(edgeAfter).toBeDefined();
   });
 });
@@ -1307,5 +1106,156 @@ describe("Adapter edge cases — malformed input and empty files", () => {
     const result = adapter!.parse("src/utils.py", "");
     expect(result).toBeDefined();
     expect(Array.isArray(result.entities)).toBe(true);
+  });
+});
+
+// ===========================================================================
+// 11. DB-only workflow integration — risk mitigation for combined migration state
+//
+// Verifies: "KG present, DB-only summaries, no JSON files" works end-to-end.
+// This is the primary risk mitigation test for the ADR-005 consolidation.
+// All three tools (get_file_context, store_summaries) must return correct data
+// when the KG DB is the sole data source and no JSON artifact files exist on disk.
+// ===========================================================================
+
+describe("DB-only workflow — get_file_context + store_summaries without JSON artifacts", () => {
+  let tmpDir: string;
+  let dbPath: string;
+  let db: ReturnType<typeof initDatabase>;
+  let store: KgStore;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-kg-db-only-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+    await mkdir(join(tmpDir, "src", "api"), { recursive: true });
+
+    // Create a real source file that getFileContext can read
+    await writeFile(
+      join(tmpDir, "src", "api", "handler.ts"),
+      `export function handleRequest() {}\nexport const MAX_RETRIES = 3;`,
+    );
+
+    // Set up KG DB with the file registered and a summary stored
+    dbPath = join(tmpDir, ".canon", CANON_FILES.KNOWLEDGE_DB);
+    db = initDatabase(dbPath);
+    store = new KgStore(db);
+
+    const fileRow = store.upsertFile({
+      path: "src/api/handler.ts",
+      mtime_ms: Date.now(),
+      content_hash: "abc123",
+      language: "typescript",
+      layer: "api",
+      last_indexed_at: Date.now(),
+    });
+
+    // Pre-seed a summary directly into the DB (no JSON file)
+    store.upsertSummary({
+      file_id: fileRow.file_id!,
+      entity_id: null,
+      scope: "file",
+      summary: "DB-only summary for handler",
+      model: null,
+      content_hash: "abc123",
+      updated_at: new Date().toISOString(),
+    });
+
+    db.close();
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test("get_file_context returns DB summary when no summaries.json exists", async () => {
+    // Verify no JSON files exist on disk before calling the tool
+    expect(existsSync(join(tmpDir, ".canon", "summaries.json"))).toBe(false);
+    expect(existsSync(join(tmpDir, ".canon", "graph-data.json"))).toBe(false);
+    expect(existsSync(join(tmpDir, ".canon", "reverse-deps.json"))).toBe(false);
+
+    const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+    // Tool must succeed
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.message);
+
+    // Summary must come from DB, not from any JSON file
+    expect(result.summary).toBe("DB-only summary for handler");
+    expect(result.file_path).toBe("src/api/handler.ts");
+    expect(result.layer).toBe("api");
+    expect(result.content).toContain("handleRequest");
+  });
+
+  test("get_file_context returns correct data with DB-only state (idempotent on repeated calls)", async () => {
+    // Call twice — idempotent: same DB state, same result
+    const result1 = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+    const result2 = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+
+    expect(result1.ok).toBe(true);
+    expect(result2.ok).toBe(true);
+    if (!result1.ok || !result2.ok) throw new Error("Expected ok results");
+
+    expect(result1.summary).toBe(result2.summary);
+    expect(result1.summary).toBe("DB-only summary for handler");
+  });
+
+  test("store_summaries writes to DB when file is registered in KG (no JSON required for reading)", async () => {
+    // Verify no summaries.json before the call
+    expect(existsSync(join(tmpDir, ".canon", "summaries.json"))).toBe(false);
+
+    await storeSummaries(
+      { summaries: [{ file_path: "src/api/handler.ts", summary: "Updated via storeSummaries" }] },
+      tmpDir,
+    );
+
+    // Open the DB and verify the summary was written
+    const db2 = initDatabase(dbPath);
+    const store2 = new KgStore(db2);
+    const fileRow = store2.getFile("src/api/handler.ts");
+    expect(fileRow).toBeDefined();
+    const summaryRow = store2.getSummaryByFile(fileRow!.file_id!);
+    db2.close();
+
+    expect(summaryRow).toBeDefined();
+    expect(summaryRow!.summary).toBe("Updated via storeSummaries");
+    expect(summaryRow!.scope).toBe("file");
+  });
+
+  test("store_summaries is idempotent — calling twice with same data produces same DB state", async () => {
+    const summaryInput = { summaries: [{ file_path: "src/api/handler.ts", summary: "Stable summary" }] };
+
+    // Call twice
+    await storeSummaries(summaryInput, tmpDir);
+    await storeSummaries(summaryInput, tmpDir);
+
+    // DB should have exactly one summary for the file (upsert behavior)
+    const db2 = initDatabase(dbPath);
+    const store2 = new KgStore(db2);
+    const fileRow = store2.getFile("src/api/handler.ts");
+    const summaryRow = store2.getSummaryByFile(fileRow!.file_id!);
+    db2.close();
+
+    expect(summaryRow).toBeDefined();
+    expect(summaryRow!.summary).toBe("Stable summary");
+  });
+
+  test("get_file_context returns updated summary after store_summaries writes to DB", async () => {
+    // First read shows the pre-seeded summary
+    const before = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+    expect(before.ok).toBe(true);
+    if (!before.ok) throw new Error(before.message);
+    expect(before.summary).toBe("DB-only summary for handler");
+
+    // Write a new summary via storeSummaries
+    await storeSummaries(
+      { summaries: [{ file_path: "src/api/handler.ts", summary: "Refreshed summary" }] },
+      tmpDir,
+    );
+
+    // Second read reflects the updated summary
+    const after = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+    expect(after.ok).toBe(true);
+    if (!after.ok) throw new Error(after.message);
+    expect(after.summary).toBe("Refreshed summary");
   });
 });
