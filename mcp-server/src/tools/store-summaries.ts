@@ -54,17 +54,19 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
   // Write all summaries to DB — creates DB if absent
   const db = initDatabase(dbPath);
   let stored = 0;
+  let total = 0;
   try {
     const store = new KgStore(db);
     for (const { file_path, summary } of input.summaries) {
-      let fileRow = store.getFile(file_path);
+      const normalizedPath = file_path.replace(/\\/g, '/');
+      let fileRow = store.getFile(normalizedPath);
       if (fileRow?.file_id === undefined) {
         // File not in KG yet — auto-create a stub row so the summary is never silently dropped
         fileRow = store.upsertFile({
-          path: file_path,
+          path: normalizedPath,
           mtime_ms: Date.now(),
           content_hash: "stub",
-          language: inferLanguageFromExtension(file_path),
+          language: inferLanguageFromExtension(normalizedPath),
           layer: "unknown",
           last_indexed_at: Date.now(),
         });
@@ -80,13 +82,16 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
       });
       stored += 1;
     }
+
+    const totalRow = db.prepare("SELECT COUNT(*) as count FROM summaries WHERE scope = 'file'").get() as { count: number };
+    total = totalRow.count;
   } finally {
     db.close();
   }
 
   return {
     stored,
-    total: stored,
+    total,
     path: dbPath,
   };
 }

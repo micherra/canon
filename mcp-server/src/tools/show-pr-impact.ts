@@ -324,6 +324,7 @@ function buildSubgraph(
   db: ReturnType<typeof initDatabase> | null,
   changedFiles: string[],
   blastRadius: PrImpactOutput["blastRadius"] | undefined,
+  violationCountByFile?: Map<string, number>,
 ): PrImpactSubgraph {
   if (!db) return { nodes: [], edges: [], layers: [] };
 
@@ -350,7 +351,7 @@ function buildSubgraph(
       id: n.path,
       layer: n.layer ?? "unknown",
       changed: changedSet.has(n.path),
-      violation_count: 0,
+      violation_count: violationCountByFile?.get(n.path) ?? 0,
     }));
 
   const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
@@ -464,7 +465,14 @@ export async function showPrImpact(
 
     // 6. Build subgraph from KG (filtered to changed + affected files)
     try {
-      subgraph = buildSubgraph(db, latestReview.files, blastRadius);
+      // Build per-file violation counts from the stored review
+      const violationCountByFile = new Map<string, number>();
+      for (const v of latestReview.violations) {
+        if (v.file_path) {
+          violationCountByFile.set(v.file_path, (violationCountByFile.get(v.file_path) ?? 0) + 1);
+        }
+      }
+      subgraph = buildSubgraph(db, latestReview.files, blastRadius, violationCountByFile);
     } catch {
       // Subgraph build failed — continue with empty subgraph
     }

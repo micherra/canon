@@ -325,7 +325,7 @@ export async function getFileContext(
       if (fileIdRow?.file_id !== undefined) {
         const importerRows = db
           .prepare(
-            `SELECT f.path FROM file_edges fe JOIN files f ON f.file_id = fe.source_file_id WHERE fe.target_file_id = ?`,
+            `SELECT DISTINCT f.path FROM file_edges fe JOIN files f ON f.file_id = fe.source_file_id WHERE fe.target_file_id = ? ORDER BY f.path`,
           )
           .all(fileIdRow.file_id) as Array<{ path: string }>;
         imported_by = importerRows.map((r) => r.path);

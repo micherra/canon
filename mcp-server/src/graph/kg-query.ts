@@ -792,9 +792,28 @@ export class KgQuery {
    * entry — stale files drag down the entire graph's freshness guarantee.
    */
   getKgFreshnessMs(): number | null {
-    const row = this.stmtGetKgFreshness.get() as { min_ts: number | null } | undefined;
+    const row = this.stmtGetKgFreshness.get() as { min_ts: number | string | null } | undefined;
     if (!row || row.min_ts === null) return null;
-    return Date.now() - row.min_ts;
+
+    let epochMs: number;
+    if (typeof row.min_ts === "number") {
+      // Stored as numeric epoch ms
+      epochMs = row.min_ts;
+    } else if (typeof row.min_ts === "string") {
+      const asNumber = Number(row.min_ts);
+      if (!isNaN(asNumber) && row.min_ts.trim() !== "") {
+        // Numeric string (e.g. "1712345678000")
+        epochMs = asNumber;
+      } else {
+        // ISO string (e.g. "2024-04-05T12:34:56.000Z")
+        epochMs = Date.parse(row.min_ts);
+        if (isNaN(epochMs)) return null;
+      }
+    } else {
+      return null;
+    }
+
+    return Date.now() - epochMs;
   }
 
   /**
