@@ -110,9 +110,11 @@ describe('appendEvent — correlation_id', () => {
 
 describe('getEvents', () => {
   let store: ExecutionStore;
+  let db: ReturnType<typeof initExecutionDb>;
 
   beforeEach(() => {
-    store = makeStore();
+    db = initExecutionDb(':memory:');
+    store = new ExecutionStore(db);
     store.initExecution(BASE_INIT_PARAMS);
   });
 
@@ -200,9 +202,7 @@ describe('getEvents', () => {
     // Insert two valid events and one row with corrupt JSON directly via the DB
     store.appendEvent('board_updated', { action: 'before', timestamp: '2026-01-01T00:00:00.000Z' });
 
-    // Corrupt the events table by directly inserting invalid JSON
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = (store as any).db as import('better-sqlite3').Database;
+    // Corrupt the events table by directly inserting invalid JSON via the raw db handle
     db.prepare(
       `INSERT INTO events (type, payload, timestamp) VALUES ('corrupted_event', 'NOT_VALID_JSON{{{', '2026-01-01T00:01:00.000Z')`
     ).run();
