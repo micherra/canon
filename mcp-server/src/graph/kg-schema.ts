@@ -6,15 +6,16 @@
  */
 
 import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
 
 // ---------------------------------------------------------------------------
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = "2";
+export const SCHEMA_VERSION = "3";
 
 // ---------------------------------------------------------------------------
-// DDL statements
+// DDL statements (v1+v2 base schema)
 // ---------------------------------------------------------------------------
 
 const DDL_STATEMENTS = [
@@ -24,6 +25,8 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
+  // Note: schema_version is set to '3' for new databases.
+  // runMigrations() will upgrade existing v1/v2 databases.
   `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`,
 
   // Files table
@@ -131,7 +134,105 @@ const DDL_STATEMENTS = [
 
   `CREATE INDEX IF NOT EXISTS idx_summaries_file  ON summaries(file_id)`,
   `CREATE INDEX IF NOT EXISTS idx_summaries_scope ON summaries(scope)`,
+
+  // vec0 virtual tables for semantic search (require sqlite-vec extension loaded)
+  `CREATE VIRTUAL TABLE IF NOT EXISTS entity_vectors USING vec0(
+    entity_id INTEGER PRIMARY KEY,
+    embedding float[384]
+  )`,
+
+  `CREATE VIRTUAL TABLE IF NOT EXISTS summary_vectors USING vec0(
+    summary_id INTEGER PRIMARY KEY,
+    embedding float[384]
+  )`,
+
+  // Shadow meta tables for vector staleness tracking
+  // (vec0 doesn't support extra columns, so we use separate tables)
+  `CREATE TABLE IF NOT EXISTS entity_vector_meta (
+    entity_id   INTEGER PRIMARY KEY REFERENCES entities(entity_id) ON DELETE CASCADE,
+    text_hash   TEXT NOT NULL,
+    model_id    TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS summary_vector_meta (
+    summary_id  INTEGER PRIMARY KEY REFERENCES summaries(summary_id) ON DELETE CASCADE,
+    text_hash   TEXT NOT NULL,
+    model_id    TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  )`,
 ];
+
+// ---------------------------------------------------------------------------
+// Migration definitions
+// ---------------------------------------------------------------------------
+
+interface Migration {
+  version: string;
+  up: (db: Database.Database) => void;
+}
+
+/**
+ * Ordered list of schema migrations.
+ * Each migration runs only when the stored schema version is less than migration.version.
+ * Versions are compared as strings — use zero-padded integers if > 9.
+ */
+const MIGRATIONS: Migration[] = [
+  {
+    version: "3",
+    up: (db) => {
+      // sqlite-vec extension must be loaded before vec0 DDL executes.
+      // Load is idempotent — safe to call multiple times.
+      sqliteVec.load(db);
+
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS entity_vectors USING vec0(
+        entity_id INTEGER PRIMARY KEY,
+        embedding float[384]
+      )`);
+
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS summary_vectors USING vec0(
+        summary_id INTEGER PRIMARY KEY,
+        embedding float[384]
+      )`);
+
+      db.exec(`CREATE TABLE IF NOT EXISTS entity_vector_meta (
+        entity_id   INTEGER PRIMARY KEY REFERENCES entities(entity_id) ON DELETE CASCADE,
+        text_hash   TEXT NOT NULL,
+        model_id    TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      )`);
+
+      db.exec(`CREATE TABLE IF NOT EXISTS summary_vector_meta (
+        summary_id  INTEGER PRIMARY KEY REFERENCES summaries(summary_id) ON DELETE CASCADE,
+        text_hash   TEXT NOT NULL,
+        model_id    TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+      )`);
+
+      db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
+    },
+  },
+];
+
+/**
+ * Run any pending migrations against the given database.
+ * Version gated: only runs migrations whose version is greater than the current stored version.
+ * All DDL in migrations uses IF NOT EXISTS, making repeated calls safe.
+ *
+ * Exported for direct testing of upgrade scenarios.
+ */
+export function runMigrations(db: Database.Database): void {
+  const currentRow = db
+    .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
+    .get() as { value: string } | undefined;
+  const version = currentRow?.value ?? "1";
+
+  for (const migration of MIGRATIONS) {
+    if (migration.version > version) {
+      migration.up(db);
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // initDatabase
@@ -143,6 +244,9 @@ const DDL_STATEMENTS = [
  *
  * This function is synchronous — better-sqlite3 is a synchronous library.
  * All DDL statements use IF NOT EXISTS, making repeated calls idempotent.
+ *
+ * sqlite-vec extension is loaded before DDL execution so that vec0 virtual
+ * tables can be created as part of the initial schema.
  */
 export function initDatabase(dbPath: string): Database.Database {
   const db = new Database(dbPath);
@@ -152,6 +256,9 @@ export function initDatabase(dbPath: string): Database.Database {
   db.pragma("foreign_keys = ON");
   db.pragma("synchronous = NORMAL");
 
+  // Load sqlite-vec extension BEFORE DDL — vec0 tables require it
+  sqliteVec.load(db);
+
   // Execute all DDL inside a single transaction for atomicity and speed
   const applySchema = db.transaction(() => {
     for (const stmt of DDL_STATEMENTS) {
@@ -160,6 +267,11 @@ export function initDatabase(dbPath: string): Database.Database {
   });
 
   applySchema();
+
+  // Run version-gated migrations (idempotent — IF NOT EXISTS guards).
+  // New databases start at version '3' (the INSERT OR IGNORE above) and
+  // have no pending migrations. Existing v1/v2 databases are upgraded here.
+  runMigrations(db);
 
   return db;
 }
