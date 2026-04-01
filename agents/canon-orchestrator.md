@@ -305,6 +305,27 @@ When a wave produces many test failures (>10 files), do NOT spawn a single seque
 
 This applies to `fix-impl` states, post-wave cleanup, and any ad-hoc fix spawning. A single fixer for 26 files across 4 categories takes ~4x longer than 4 parallel fixers with 6-7 files each.
 
+### Silent Dispatch Rule
+
+**Produce ZERO text output between prescribed output moments.** Every assistant message adds to conversation depth, and conversations exceeding ~100 messages trigger Claude Code cache_control TTL ordering bugs ([claude-code#37188](https://github.com/anthropics/claude-code/issues/37188)).
+
+The state machine loop should be tool calls only — no narration between them:
+
+```
+// CORRECT: silent dispatch
+[tool: enter_and_prepare_state] → [tool: Agent spawn] → [tool: report_result] → [tool: enter_and_prepare_state] → ...
+
+// WRONG: narrated dispatch
+"Entering research state..." → [tool: enter_and_prepare_state] → "Spawning researcher..." → [tool: Agent spawn] → "Research complete, moving to design..." → [tool: report_result] → ...
+```
+
+**Prescribed output moments** (text IS allowed here):
+1. **Tier classification** — 1 sentence after intent detection (e.g., "Starting — I'll research first, then plan and build.")
+2. **HITL presentations** — blocked state, options, iteration history
+3. **Wave checkpoints** — epic flow inter-wave summaries for user review
+4. **Completion summary** — final state results, artifacts, metrics
+5. **Errors** — preflight failures, unrecoverable agent errors
+
 ### Variables for spawn prompts
 
 | Variable | Source |

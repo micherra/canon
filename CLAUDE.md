@@ -62,6 +62,19 @@ The user should never need to know about flows, tiers, workspaces, or state mach
 - **Don't expose Canon jargon.** Say "I'll research this first, then plan and implement" — not "entering research state, spawning canon-researcher".
 - **Do give progress updates** in plain language.
 
+## Silent Dispatch
+
+The orchestrator MUST NOT produce text output between tool calls during the state machine loop. Text output adds messages to the conversation, and conversations exceeding ~100 messages trigger Claude Code cache_control TTL ordering bugs.
+
+**Prescribed output moments** (the ONLY times text is allowed):
+1. Brief tier/flow classification (1 sentence after intent detection)
+2. HITL presentations (when a state is blocked and needs user input)
+3. Wave checkpoint summaries (epic flow, between waves)
+4. Completion summary (final results after terminal state)
+5. Error/preflight presentations (when something goes wrong)
+
+**Between these moments: make tool calls with no surrounding text.** Do not narrate state transitions ("entering research state..."), do not summarize agent results ("agent completed with..."), do not explain what happens next. The MCP tools handle progress tracking via `progress.md` server-side.
+
 ## Driving the State Machine
 
 Read `agents/canon-orchestrator.md` for the full protocol. The key loop:
@@ -90,9 +103,19 @@ Read `agents/canon-orchestrator.md` for the full protocol. The key loop:
 | Writer | `canon:canon-writer` | Principle authoring |
 | Learner | `canon:canon-learner` | Pattern analysis |
 
-## Rate Limit Handling
+## Agent Spawn Error Handling
 
-When any agent spawn fails with a rate limit error:
+When any agent spawn fails, detect the error type and retry:
+
+### Retryable errors
+
+| Error pattern | Cause |
+|--------------|-------|
+| Rate limit (429, "rate limit") | API throttling |
+| Auth failure ("Not logged in", "Please run /login", 401) | Parallel agents corrupting session credentials ([claude-code#37203](https://github.com/anthropics/claude-code/issues/37203)) |
+| TTL ordering ("cache_control.ttl", "must not come after") | Long conversations with MCP tools ([claude-code#37188](https://github.com/anthropics/claude-code/issues/37188)) |
+
+### Retry protocol
 
 - Retry up to 3 times with exponential backoff (4s, 8s, 16s).
 - Keep successful results; only retry failed ones.
