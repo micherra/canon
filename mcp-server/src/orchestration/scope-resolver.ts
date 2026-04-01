@@ -13,7 +13,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { Board } from "./flow-schema.ts";
 import { extractFilePaths } from "./wave-variables.ts";
 
@@ -54,7 +54,7 @@ export function resolveTaskScope(input: ScopeInput): string[] {
   const { workspace, stateId, board, planSlug, taskId } = input;
 
   // Source 1: board state artifacts
-  const artifactPaths = resolveFromBoardArtifacts(board, stateId);
+  const artifactPaths = resolveFromBoardArtifacts(board, stateId, workspace);
   if (artifactPaths.length > 0) {
     return artifactPaths;
   }
@@ -80,20 +80,27 @@ export function resolveTaskScope(input: ScopeInput): string[] {
  * Reads each artifact markdown file and extracts backtick-quoted paths.
  * Caps reads at MAX_ARTIFACT_BYTES. Returns deduplicated paths.
  */
-function resolveFromBoardArtifacts(board: Board, stateId: string): string[] {
+function resolveFromBoardArtifacts(board: Board, stateId: string, workspace: string): string[] {
   const state = board.states[stateId];
   if (!state?.artifacts || state.artifacts.length === 0) {
     return [];
   }
 
+  const resolvedWorkspace = resolve(workspace);
   const allPaths = new Set<string>();
 
   for (const artifactFile of state.artifacts) {
     try {
-      if (!existsSync(artifactFile)) {
+      // Guard: reject artifact paths that escape the workspace root
+      const resolvedArtifact = resolve(artifactFile);
+      if (!resolvedArtifact.startsWith(resolvedWorkspace + "/") && resolvedArtifact !== resolvedWorkspace) {
         continue;
       }
-      const raw = readFileSync(artifactFile);
+
+      if (!existsSync(resolvedArtifact)) {
+        continue;
+      }
+      const raw = readFileSync(resolvedArtifact);
       // Cap at MAX_ARTIFACT_BYTES
       const content = raw.slice(0, MAX_ARTIFACT_BYTES).toString("utf-8");
       for (const p of extractFilePaths(content)) {

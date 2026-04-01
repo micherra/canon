@@ -441,6 +441,17 @@ async function reportResultLocked(
           artifactCount: input.artifact_count,
         });
 
+        // Record iteration result to SQL table for SQL-based stuck detection
+        const iterationData: Record<string, unknown> = {
+          status: condition,
+          ...(input.principle_ids ? { principle_ids: input.principle_ids } : {}),
+          ...(input.file_paths ? { file_paths: input.file_paths } : {}),
+          ...(input.file_test_pairs ? { pairs: input.file_test_pairs } : {}),
+          ...(input.commit_sha ? { commit_sha: input.commit_sha } : {}),
+          ...(input.artifact_count != null ? { artifact_count: input.artifact_count } : {}),
+        };
+        store.recordIterationResult(input.state_id, iteration.count, condition, iterationData);
+
         // Append to history
         const updatedHistory = [...iteration.history, historyEntry];
         board = {

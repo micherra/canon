@@ -1,15 +1,12 @@
-/** Store file summaries to .canon/summaries.json — merges with existing */
+/** Store file summaries to the KG SQLite database (DB-only since ADR-005) */
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
-import { atomicWriteFile } from "../utils/atomic-write.ts";
-import { isNotFound } from "../utils/errors.ts";
 
 export interface SummaryEntry {
   summary: string;
@@ -26,59 +23,46 @@ export interface StoreSummariesOutput {
   path: string;
 }
 
-/** Read summaries from disk, supporting both old (string) and new (object) formats */
-export async function loadSummariesFile(projectDir: string): Promise<Record<string, SummaryEntry>> {
-  const summariesPath = join(projectDir, CANON_DIR, CANON_FILES.SUMMARIES);
-  try {
-    const raw = await readFile(summariesPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    // Migrate old format: { "file": "text" } → { "file": { summary, updated_at } }
-    const result: Record<string, SummaryEntry> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === "string") {
-        result[key] = { summary: value, updated_at: "" };
-      } else {
-        result[key] = value as SummaryEntry;
-      }
-    }
-    return result;
-  } catch (err: unknown) {
-    if (isNotFound(err)) return {};
-    throw err;
-  }
+/**
+ * Infer a programming language from the file extension.
+ * Used by the KG store when upserting file rows.
+ */
+export function inferLanguageFromExtension(filePath: string): string {
+  if (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) return "typescript";
+  if (filePath.endsWith(".js") || filePath.endsWith(".jsx")) return "javascript";
+  if (filePath.endsWith(".py")) return "python";
+  if (filePath.endsWith(".md")) return "markdown";
+  return "unknown";
 }
 
-/** Extract just the summary text for consumers that don't need timestamps */
-export function flattenSummaries(entries: Record<string, SummaryEntry>): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(entries)) {
-    result[key] = entry.summary;
-  }
-  return result;
-}
-
-/** Write summaries to the KG database if it exists. Best-effort — never throws. */
-async function writeSummariesToDb(
-  summaries: Array<{ file_path: string; summary: string }>,
-  projectDir: string,
-  now: string,
-): Promise<void> {
+export async function storeSummaries(input: StoreSummariesInput, projectDir: string): Promise<StoreSummariesOutput> {
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  if (!existsSync(dbPath)) return;
+  const now = new Date().toISOString();
 
   const db = initDatabase(dbPath);
+  let stored = 0;
   try {
     const store = new KgStore(db);
 
     // Track which summaries were written so we can embed them
     const writtenSummaries: Array<{ summary: string; summaryId: number }> = [];
 
-    for (const { file_path, summary } of summaries) {
-      const fileRow = store.getFile(file_path);
-      if (fileRow?.file_id === undefined) {
-        // File not in KG yet — JSON is the fallback
-        continue;
+    for (const { file_path, summary } of input.summaries) {
+      // Auto-stub missing file rows so summaries can always be stored
+      let fileRow = store.getFile(file_path);
+      if (!fileRow) {
+        store.upsertFile({
+          path: file_path,
+          language: inferLanguageFromExtension(file_path),
+          content_hash: "",
+          mtime_ms: Date.now(),
+          layer: null as unknown as string,
+          last_indexed_at: Date.now(),
+        });
+        fileRow = store.getFile(file_path);
       }
+      if (fileRow?.file_id === undefined) continue;
+
       const summaryRow = store.upsertSummary({
         file_id: fileRow.file_id,
         entity_id: null,
@@ -89,10 +73,10 @@ async function writeSummariesToDb(
         updated_at: now,
       });
 
-      // Collect summary_id for embedding — use the return value to avoid an extra DB read
       if (summaryRow.summary_id !== undefined) {
         writtenSummaries.push({ summary, summaryId: summaryRow.summary_id });
       }
+      stored++;
     }
 
     // Embed written summaries — best-effort, never fatal
@@ -119,35 +103,10 @@ async function writeSummariesToDb(
   } finally {
     db.close();
   }
-}
-
-export async function storeSummaries(input: StoreSummariesInput, projectDir: string): Promise<StoreSummariesOutput> {
-  const summariesPath = join(projectDir, CANON_DIR, CANON_FILES.SUMMARIES);
-
-  // Load existing summaries
-  const existing = await loadSummariesFile(projectDir);
-
-  // Merge new summaries with current timestamp
-  const now = new Date().toISOString();
-  for (const { file_path, summary } of input.summaries) {
-    existing[file_path] = { summary, updated_at: now };
-  }
-
-  // Write back
-  await mkdir(dirname(summariesPath), { recursive: true });
-  await atomicWriteFile(summariesPath, JSON.stringify(existing, null, 2));
-
-  // Also write to DB (best-effort — JSON write always wins)
-  try {
-    await writeSummariesToDb(input.summaries, projectDir, now);
-  } catch (err) {
-    // DB write failed — JSON file already written, so just log and continue
-    console.error("[store-summaries] DB write failed (non-fatal):", err);
-  }
 
   return {
-    stored: input.summaries.length,
-    total: Object.keys(existing).length,
-    path: summariesPath,
+    stored,
+    total: stored,
+    path: dbPath,
   };
 }

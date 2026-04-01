@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,7 +47,12 @@ describe("storeSummaries", () => {
     await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("writes summaries to JSON when KG DB does not exist", async () => {
+  it("writes summaries to DB and auto-stubs missing file rows", async () => {
+    // Create DB so storeSummaries can write to it
+    const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+    const db = initDatabase(dbPath);
+    db.close();
+
     const result = await storeSummaries(
       { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
       tmpDir,
@@ -55,20 +60,19 @@ describe("storeSummaries", () => {
 
     expect(result.stored).toBe(1);
     expect(result.total).toBe(1);
+    expect(result.path).toBe(dbPath);
 
-    const raw = await readFile(join(tmpDir, ".canon", "summaries.json"), "utf-8");
-    const parsed = JSON.parse(raw);
-    expect(parsed["src/api/handler.ts"].summary).toBe("Handles HTTP requests");
+    // Verify DB has the summary
+    const db2 = initDatabase(dbPath);
+    const store2 = new KgStore(db2);
+    const fileRow = store2.getFile("src/api/handler.ts");
+    expect(fileRow?.file_id).toBeDefined();
+    const summaryRow = store2.getSummaryByFile(fileRow!.file_id!);
+    expect(summaryRow?.summary).toBe("Handles HTTP requests");
+    db2.close();
   });
 
-  it("does not throw when KG DB does not exist", async () => {
-    await expect(
-      storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] }, tmpDir),
-    ).resolves.not.toThrow();
-  });
-
-  it("writes summary to both JSON and DB when KG DB exists and file is in KG", async () => {
-    // Set up KG DB with a file registered
+  it("writes summary to DB when file is already in KG", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
@@ -88,12 +92,6 @@ describe("storeSummaries", () => {
       tmpDir,
     );
 
-    // Check JSON was written
-    const raw = await readFile(join(tmpDir, ".canon", "summaries.json"), "utf-8");
-    const parsed = JSON.parse(raw);
-    expect(parsed["src/api/handler.ts"].summary).toBe("Handles HTTP requests");
-
-    // Check DB was written
     const db2 = initDatabase(dbPath);
     const store2 = new KgStore(db2);
     const insertedFileRow = store2.getFile("src/api/handler.ts");
@@ -105,63 +103,31 @@ describe("storeSummaries", () => {
     db2.close();
   });
 
-  it("writes to JSON only when KG DB exists but file is NOT in KG", async () => {
-    // Set up KG DB but don't register the file
+  it("stores multiple summaries in a single call", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     db.close();
 
-    await storeSummaries(
-      { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
+    const result = await storeSummaries(
+      {
+        summaries: [
+          { file_path: "src/a.ts", summary: "Module A" },
+          { file_path: "src/b.ts", summary: "Module B" },
+        ],
+      },
       tmpDir,
     );
 
-    // JSON should be written
-    const raw = await readFile(join(tmpDir, ".canon", "summaries.json"), "utf-8");
-    const parsed = JSON.parse(raw);
-    expect(parsed["src/api/handler.ts"].summary).toBe("Handles HTTP requests");
-
-    // DB should have no summary (file not in KG)
-    const db2 = initDatabase(dbPath);
-    const store2 = new KgStore(db2);
-    const insertedFileRow = store2.getFile("src/api/handler.ts");
-    expect(insertedFileRow).toBeUndefined();
-    db2.close();
-  });
-
-  it("swallows DB write failure — JSON is still written", async () => {
-    // Create an invalid DB file that will cause initDatabase to fail or the write to fail
-    const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
-    // Write garbage bytes so DB open will fail
-    await writeFile(dbPath, "not-a-valid-sqlite-db");
-
-    // Should not throw
-    await expect(
-      storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] }, tmpDir),
-    ).resolves.not.toThrow();
-
-    // JSON should still be written
-    const raw = await readFile(join(tmpDir, ".canon", "summaries.json"), "utf-8");
-    const parsed = JSON.parse(raw);
-    expect(parsed["src/api/handler.ts"].summary).toBe("Handles HTTP requests");
-  });
-
-  it("merges with existing summaries in JSON", async () => {
-    // Write initial summaries
-    await writeFile(
-      join(tmpDir, ".canon", "summaries.json"),
-      JSON.stringify({ "src/existing.ts": { summary: "Existing file", updated_at: "2025-01-01T00:00:00Z" } }),
-    );
-
-    const result = await storeSummaries({ summaries: [{ file_path: "src/new.ts", summary: "New file" }] }, tmpDir);
-
-    expect(result.stored).toBe(1);
+    expect(result.stored).toBe(2);
     expect(result.total).toBe(2);
 
-    const raw = await readFile(join(tmpDir, ".canon", "summaries.json"), "utf-8");
-    const parsed = JSON.parse(raw);
-    expect(parsed["src/existing.ts"].summary).toBe("Existing file");
-    expect(parsed["src/new.ts"].summary).toBe("New file");
+    const db2 = initDatabase(dbPath);
+    const store2 = new KgStore(db2);
+    const rowA = store2.getFile("src/a.ts");
+    const rowB = store2.getFile("src/b.ts");
+    expect(store2.getSummaryByFile(rowA!.file_id!)?.summary).toBe("Module A");
+    expect(store2.getSummaryByFile(rowB!.file_id!)?.summary).toBe("Module B");
+    db2.close();
   });
 
   // -------------------------------------------------------------------------
@@ -244,30 +210,6 @@ describe("storeSummaries", () => {
       db2.close();
 
       embedSpy.mockRestore();
-    });
-
-    it("JSON is still written even when embedding fails (best-effort)", async () => {
-      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
-      const db = initDatabase(dbPath);
-      const store = new KgStore(db);
-      store.upsertFile({
-        path: "src/api/handler.ts",
-        mtime_ms: Date.now(),
-        content_hash: "abc123",
-        language: "typescript",
-        layer: "api",
-        last_indexed_at: Date.now(),
-      });
-      db.close();
-
-      await storeSummaries(
-        { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
-        tmpDir,
-      );
-
-      const raw = await readFile(join(tmpDir, ".canon", "summaries.json"), "utf-8");
-      const parsed = JSON.parse(raw);
-      expect(parsed["src/api/handler.ts"].summary).toBe("Handles HTTP requests");
     });
   });
 });

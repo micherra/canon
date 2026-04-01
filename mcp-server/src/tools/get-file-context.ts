@@ -18,7 +18,6 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import { computeUnifiedBlastRadius, type UnifiedBlastRadiusReport } from "../graph/kg-blast-radius.ts";
 import type { EntityKind } from "../graph/kg-types.ts";
-import { loadSummariesFile } from "./store-summaries.ts";
 
 export interface FileContextInput {
   file_path: string;
@@ -344,19 +343,8 @@ export async function getFileContext(
     }
   }
 
-  // Load summary — DB first, fall back to summaries.json
-  let summary: string | null = dbSummary;
-  if (summary === null) {
-    try {
-      const summaries = await loadSummariesFile(projectDir);
-      const entry = summaries[filePath];
-      if (entry) {
-        summary = entry.summary;
-      }
-    } catch {
-      // no summaries file
-    }
-  }
+  // Load summary from DB (sole source since ADR-005)
+  const summary: string | null = dbSummary;
 
   // Group imports by layer
   const imports_by_layer: Record<string, string[]> = {};
