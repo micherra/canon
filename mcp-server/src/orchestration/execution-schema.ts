@@ -153,7 +153,7 @@ const DDL_STATEMENTS = [
 // whether a column exists before running ALTER TABLE to ensure idempotency.
 // ---------------------------------------------------------------------------
 
-/** Allowed characters for a SQLite table or column identifier. */
+/** Allowed characters for a SQLite table identifier. */
 const IDENTIFIER_RE = /^[A-Za-z0-9_]+$/;
 
 /**

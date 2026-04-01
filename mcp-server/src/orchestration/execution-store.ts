@@ -765,7 +765,7 @@ export class ExecutionStore {
 
   /**
    * Query events with optional filtering.
-   * Returns empty array when no events match — never throws.
+   * Returns empty array when no events match. SQLite errors may still be thrown.
    */
   getEvents(options?: GetEventsOptions): EventOutput[] {
     const { correlation_id, type, since, limit } = options ?? {};

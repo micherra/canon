@@ -8,6 +8,7 @@
  * 4. v1 DB with existing event rows preserves them (correlation_id is NULL)
  * 5. Migration is idempotent — running initExecutionDb twice does not error
  * 6. columnExists helper returns correct boolean for existing and non-existing columns
+ * 7. Schema version integer comparison
  */
 
 import { describe, it, expect, afterEach } from "vitest";
