@@ -195,6 +195,28 @@ describe('getEvents', () => {
     const events = store.getEvents({ correlation_id: 'nonexistent' });
     expect(events).toEqual([]);
   });
+
+  test('skips rows with corrupt JSON payload instead of throwing (never-throws contract)', () => {
+    // Insert two valid events and one row with corrupt JSON directly via the DB
+    store.appendEvent('board_updated', { action: 'before', timestamp: '2026-01-01T00:00:00.000Z' });
+
+    // Corrupt the events table by directly inserting invalid JSON
+    const db = (store as Record<string, unknown>).db as import('better-sqlite3').Database;
+    db.prepare(
+      `INSERT INTO events (type, payload, timestamp) VALUES ('corrupted_event', 'NOT_VALID_JSON{{{', '2026-01-01T00:01:00.000Z')`
+    ).run();
+
+    store.appendEvent('board_updated', { action: 'after', timestamp: '2026-01-01T00:02:00.000Z' });
+
+    // getEvents must not throw even with corrupt JSON in DB
+    let events: ReturnType<typeof store.getEvents>;
+    expect(() => { events = store.getEvents(); }).not.toThrow();
+
+    // The corrupt row must be silently skipped — only valid rows returned
+    expect(events!).toHaveLength(2);
+    expect((events![0].payload as Record<string, unknown>).action).toBe('before');
+    expect((events![1].payload as Record<string, unknown>).action).toBe('after');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -244,9 +266,9 @@ describe('getCorrelationId', () => {
 
   test('returns the correlation_id from the execution row after initExecution', () => {
     store.initExecution(BASE_INIT_PARAMS);
-    // After migration, the execution row should have a correlation_id (backfilled by migration)
+    // initExecution() should create the execution row with a generated correlation_id (random UUID)
     const corrId = store.getCorrelationId();
-    // The migration backfills with a UUID, so it should be a non-null string
+    // correlation_id is a UUID string, so it should be a non-null string
     expect(typeof corrId).toBe('string');
     expect(corrId).not.toBeNull();
     // Should look like a UUID

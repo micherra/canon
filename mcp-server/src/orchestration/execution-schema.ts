@@ -153,16 +153,26 @@ const DDL_STATEMENTS = [
 // whether a column exists before running ALTER TABLE to ensure idempotency.
 // ---------------------------------------------------------------------------
 
+/** Allowed characters for a SQLite table or column identifier. */
+const IDENTIFIER_RE = /^[A-Za-z0-9_]+$/;
+
 /**
  * Returns true if the given column exists on the given table.
  * Returns false if the table does not exist or the column is absent.
- * Never throws.
+ *
+ * Throws an Error if `table` contains characters outside `[A-Za-z0-9_]`
+ * to prevent SQL injection via PRAGMA string interpolation.
  */
 export function columnExists(
   db: Database.Database,
   table: string,
   column: string,
 ): boolean {
+  if (!IDENTIFIER_RE.test(table)) {
+    throw new Error(
+      `columnExists: invalid table name "${table}" — only [A-Za-z0-9_] characters are allowed`,
+    );
+  }
   try {
     const rows = db
       .prepare(`PRAGMA table_info(${table})`)
@@ -265,9 +275,11 @@ export function initExecutionDb(dbPath: string): Database.Database {
     .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
     .get() as { value: string } | undefined;
 
-  const storedVersion = versionRow?.value ?? '1';
+  const storedVersionRaw = versionRow?.value ?? '1';
+  const storedVersion = Number.parseInt(storedVersionRaw, 10);
+  const effectiveVersion = Number.isNaN(storedVersion) ? 1 : storedVersion;
 
-  if (storedVersion < '2') {
+  if (effectiveVersion < 2) {
     migrateV1ToV2(db);
   }
 

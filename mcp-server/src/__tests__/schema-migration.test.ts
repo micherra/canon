@@ -407,4 +407,74 @@ describe("columnExists helper", () => {
 
     db.close();
   });
+
+  it("throws on table names containing non-identifier characters (SQL injection guard)", () => {
+    const dbPath = makeTmpDb();
+    const db = initExecutionDb(dbPath);
+
+    // Table names with SQL metacharacters must be rejected
+    expect(() => columnExists(db, "execution; DROP TABLE meta", "id")).toThrow();
+    expect(() => columnExists(db, "execution--comment", "id")).toThrow();
+    expect(() => columnExists(db, "execution' OR '1'='1", "id")).toThrow();
+
+    db.close();
+  });
+
+  it("accepts valid identifier characters (letters, digits, underscores)", () => {
+    const dbPath = makeTmpDb();
+    const db = initExecutionDb(dbPath);
+
+    // Valid table names that exist — should work fine
+    expect(() => columnExists(db, "execution", "id")).not.toThrow();
+    expect(() => columnExists(db, "execution_states", "state_id")).not.toThrow();
+    expect(() => columnExists(db, "wave_events", "id")).not.toThrow();
+
+    db.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Schema version integer comparison
+// ---------------------------------------------------------------------------
+
+describe("schema version comparison uses integer parsing", () => {
+  it("runMigrations runs migration when stored version is '1' (integer 1 < 2)", () => {
+    // Create a DB that stays at v1 (no correlation_id columns yet)
+    const dbPath = makeTmpDb();
+    const v1db = createV1Db(dbPath);
+    v1db.close();
+
+    // Opening with initExecutionDb triggers migration — should NOT throw
+    // and should produce schema version '2'
+    const db = initExecutionDb(dbPath);
+
+    const row = db
+      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
+      .get() as { value: string } | undefined;
+
+    // Migration ran — version upgraded to 2
+    expect(row?.value).toBe("2");
+    db.close();
+  });
+
+  it("runMigrations does NOT run migration when stored version is '2' (already migrated)", () => {
+    // Fresh DB — already at v2 after initExecutionDb
+    const dbPath = makeTmpDb();
+    const db1 = initExecutionDb(dbPath);
+    // Both correlation_id indexes exist after first init
+    const indexesBefore = (db1
+      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='events'")
+      .all() as Array<{ name: string }>).map((i) => i.name);
+    db1.close();
+
+    // Second init must not error (idempotent)
+    const db2 = initExecutionDb(dbPath);
+    const indexesAfter = (db2
+      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='events'")
+      .all() as Array<{ name: string }>).map((i) => i.name);
+    db2.close();
+
+    // Index count must not change — migration did not re-run
+    expect(indexesBefore.length).toEqual(indexesAfter.length);
+  });
 });

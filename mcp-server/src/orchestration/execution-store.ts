@@ -790,13 +790,23 @@ export class ExecutionStore {
       rows = this.buildEventQuery(options ?? {});
     }
 
-    return rows.map(r => ({
-      id: r.id,
-      type: r.type,
-      payload: JSON.parse(r.payload) as Record<string, unknown>,
-      correlation_id: r.correlation_id,
-      timestamp: r.timestamp,
-    }));
+    const events: EventOutput[] = [];
+    for (const r of rows) {
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(r.payload) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      events.push({
+        id: r.id,
+        type: r.type,
+        payload,
+        correlation_id: r.correlation_id,
+        timestamp: r.timestamp,
+      });
+    }
+    return events;
   }
 
   /** Returns all events of the given type, ordered by id ASC. */
