@@ -528,3 +528,75 @@ describe("FragmentStateDefinitionSchema", () => {
     ).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// ADR-004 acceptance: discriminated union type safety (dc-02)
+// ---------------------------------------------------------------------------
+
+describe("ADR-004 acceptance: discriminated union state schemas (dc-02)", () => {
+  it("rejects a wave state with iterate_on (belongs to parallel-per)", () => {
+    // iterate_on is a parallel-per field; WaveStateSchema does not accept it.
+    // The discriminated union should route type:"wave" to WaveStateSchema, which
+    // strips iterate_on (Zod default) or rejects it if strict.
+    // The test verifies that iterate_on is NOT propagated into a wave state.
+    const result = StateDefinitionSchema.parse({
+      type: "wave",
+      agent: "test",
+      iterate_on: "items",
+    });
+    // Zod strips unknown fields — iterate_on must not appear on the parsed result
+    expect(result.type).toBe("wave");
+    expect((result as Record<string, unknown>)["iterate_on"]).toBeUndefined();
+  });
+
+  it("accepts wave state with wave_policy (dc-02 positive case)", () => {
+    const result = StateDefinitionSchema.parse({
+      type: "wave",
+      agent: "test",
+      wave_policy: { isolation: "branch", merge_strategy: "squash" },
+    });
+    expect(result.type).toBe("wave");
+    if (result.type === "wave") {
+      expect(result.wave_policy?.isolation).toBe("branch");
+      expect(result.wave_policy?.merge_strategy).toBe("squash");
+    }
+  });
+
+  it("wave state without wave_policy gets undefined wave_policy (dc-07: optional with defaults applied on access)", () => {
+    const result = StateDefinitionSchema.parse({
+      type: "wave",
+      agent: "test",
+    });
+    expect(result.type).toBe("wave");
+    // wave_policy is optional — absent when not provided
+    if (result.type === "wave") {
+      expect(result.wave_policy).toBeUndefined();
+    }
+  });
+
+  it("wave state with empty wave_policy object gets WavePolicySchema defaults (dc-07)", () => {
+    const result = StateDefinitionSchema.parse({
+      type: "wave",
+      agent: "test",
+      wave_policy: {},
+    });
+    expect(result.type).toBe("wave");
+    if (result.type === "wave") {
+      expect(result.wave_policy?.isolation).toBe("worktree");
+      expect(result.wave_policy?.merge_strategy).toBe("sequential");
+      expect(result.wave_policy?.on_conflict).toBe("hitl");
+    }
+  });
+
+  it("parallel-per state accepts iterate_on (correct field placement)", () => {
+    const result = StateDefinitionSchema.parse({
+      type: "parallel-per",
+      agent: "test",
+      iterate_on: "items",
+    });
+    expect(result.type).toBe("parallel-per");
+    if (result.type === "parallel-per") {
+      expect(result.iterate_on).toBe("items");
+    }
+  });
+});
