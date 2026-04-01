@@ -480,7 +480,7 @@ export async function codebaseGraph(
   const changedSet = await detectChangedFiles(input, projectDir);
 
   // Step 3: Run knowledge graph pipeline to populate/update SQLite DB,
-  // then materialize to get file-level nodes and edges.
+  // then read file-level nodes and edges directly from the DB via KgQuery.
   // Falls back to the legacy regex-based approach if the pipeline errors.
   let nodes: GraphNode[];
   let edges: GraphEdge[];
@@ -542,7 +542,7 @@ export async function codebaseGraph(
       db.close();
     }
 
-    // Filter materialized nodes to only those within the requested scope
+    // Filter DB-sourced nodes to only those within the requested scope
     const filteredNodes = rawNodes.filter((n) =>
       requestedFileSet.size === 0 || requestedFileSet.has(n.id),
     );
@@ -564,7 +564,7 @@ export async function codebaseGraph(
     const supplementMdEdges = await inferMdRelations(requestedFilePaths, requestedFileSet, nameMaps, projectDir);
     const supplementEdges = mergeEdges(supplementImportEdges, mergeEdges(supplementCompositionEdges, supplementMdEdges));
 
-    // Apply compliance overlay and layer colors onto materialized nodes
+    // Apply compliance overlay and layer colors onto DB-sourced nodes
     const store = new DriftStore(projectDir);
     const reviews = await store.getReviews();
 
