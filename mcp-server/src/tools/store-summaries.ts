@@ -1,8 +1,7 @@
 /** Store file summaries to the KG SQLite database (sole write path — ADR-005). */
 
 import { mkdir } from "node:fs/promises";
-import { extname } from "node:path";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
@@ -64,7 +63,7 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
     const writtenSummaries: Array<{ summary: string; summaryId: number }> = [];
 
     for (const { file_path, summary } of input.summaries) {
-      const normalizedPath = file_path.replace(/\\/g, '/');
+      const normalizedPath = file_path.replace(/\\/g, "/");
       let fileRow = store.getFile(normalizedPath);
       if (fileRow?.file_id === undefined) {
         // File not in KG yet — auto-create a stub row so the summary is never silently dropped
@@ -115,7 +114,9 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
       }
     }
 
-    const totalRow = db.prepare("SELECT COUNT(*) as count FROM summaries WHERE scope = 'file'").get() as { count: number };
+    const totalRow = db.prepare("SELECT COUNT(*) as count FROM summaries WHERE scope = 'file'").get() as {
+      count: number;
+    };
     total = totalRow.count;
   } finally {
     db.close();

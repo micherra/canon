@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
+import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { inferLanguageFromExtension, storeSummaries } from "../tools/store-summaries.ts";
 import { randomEmbedding } from "./embedding-test-helpers.ts";
 
@@ -149,12 +149,15 @@ describe("storeSummaries", () => {
   it("stores multiple summaries in DB — path is DB path", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
 
-    const result = await storeSummaries({
-      summaries: [
-        { file_path: "src/a.ts", summary: "File A" },
-        { file_path: "src/b.ts", summary: "File B" },
-      ],
-    }, tmpDir);
+    const result = await storeSummaries(
+      {
+        summaries: [
+          { file_path: "src/a.ts", summary: "File A" },
+          { file_path: "src/b.ts", summary: "File B" },
+        ],
+      },
+      tmpDir,
+    );
 
     expect(result.stored).toBe(2);
     expect(result.total).toBe(2);
@@ -238,9 +241,9 @@ describe("storeSummaries", () => {
     it("summaries are still written to DB even when embedding throws (best-effort)", async () => {
       // Make the mock's embed method throw for this test
       const { EmbeddingService } = await import("../graph/kg-embedding.ts");
-      const embedSpy = vi.spyOn(EmbeddingService.prototype, "embed").mockRejectedValue(
-        new Error("simulated embedding failure"),
-      );
+      const embedSpy = vi
+        .spyOn(EmbeddingService.prototype, "embed")
+        .mockRejectedValue(new Error("simulated embedding failure"));
 
       const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
       const db = initDatabase(dbPath);
@@ -257,10 +260,7 @@ describe("storeSummaries", () => {
 
       // Should NOT throw even though embedding fails
       await expect(
-        storeSummaries(
-          { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
-          tmpDir,
-        ),
+        storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] }, tmpDir),
       ).resolves.not.toThrow();
 
       // Summary should still be in DB

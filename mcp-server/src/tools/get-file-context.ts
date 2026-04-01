@@ -1,23 +1,23 @@
 /** Get rich context for a file — contents, graph relationships, exports.
  * Designed to give Claude everything needed to write a meaningful summary. */
 
-import { readFile } from "fs/promises";
 import { existsSync, statSync } from "fs";
+import { readFile } from "fs/promises";
 import { join, resolve, sep } from "path";
-import { extractImports, resolveImport } from "../graph/import-parser.ts";
-import { extractExports } from "../graph/export-parser.ts";
-import { scanSourceFiles } from "../graph/scanner.ts";
-import { DriftStore } from "../drift/store.ts";
-import { deriveSourceDirsFromLayers, loadLayerMappings, buildLayerInferrer } from "../utils/config.ts";
-import { isNotFound } from "../utils/errors.ts";
-import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
-import { toPosix, loadPathAliases } from "../utils/paths.ts";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.ts";
+import { DriftStore } from "../drift/store.ts";
+import { extractExports } from "../graph/export-parser.ts";
+import { extractImports, resolveImport } from "../graph/import-parser.ts";
+import { computeUnifiedBlastRadius, type UnifiedBlastRadiusReport } from "../graph/kg-blast-radius.ts";
+import { computeFileInsightMaps, computeImpactScore, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { KgQuery, computeFileInsightMaps, computeImpactScore } from "../graph/kg-query.ts";
-import { computeUnifiedBlastRadius, type UnifiedBlastRadiusReport } from "../graph/kg-blast-radius.ts";
 import type { EntityKind, FileMetrics } from "../graph/kg-types.ts";
+import { scanSourceFiles } from "../graph/scanner.ts";
+import { buildLayerInferrer, deriveSourceDirsFromLayers, loadLayerMappings } from "../utils/config.ts";
+import { isNotFound } from "../utils/errors.ts";
+import { loadPathAliases, toPosix } from "../utils/paths.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 export interface FileContextInput {
   file_path: string;
@@ -189,9 +189,10 @@ export async function getFileContext(
   try {
     const raw = await readFile(absPath, "utf-8");
     const lines = raw.split("\n");
-    content = lines.length > FILE_PREVIEW_MAX_LINES
-      ? lines.slice(0, FILE_PREVIEW_MAX_LINES).join("\n") + "\n... (truncated)"
-      : raw;
+    content =
+      lines.length > FILE_PREVIEW_MAX_LINES
+        ? lines.slice(0, FILE_PREVIEW_MAX_LINES).join("\n") + "\n... (truncated)"
+        : raw;
   } catch (err: unknown) {
     if (isNotFound(err)) {
       return toolError("INVALID_INPUT", `File not found: ${filePath}`);
@@ -213,7 +214,7 @@ export async function getFileContext(
 
   // Scan all project files to resolve this file's imports
   const sourceDirs = await deriveSourceDirsFromLayers(projectDir);
-  let allFiles: string[] = [];
+  const allFiles: string[] = [];
 
   if (sourceDirs && sourceDirs.length > 0) {
     for (const dir of sourceDirs) {
