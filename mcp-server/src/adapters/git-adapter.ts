@@ -37,3 +37,25 @@ export function gitDiff(args: string[], cwd: string, timeout?: number): ProcessR
 export function gitStatus(cwd: string, timeout?: number): ProcessResult {
   return gitExec(["status", "--porcelain"], cwd, timeout);
 }
+
+/**
+ * Create a git worktree at `worktreePath` on a new branch `branchName`
+ * starting from `baseCommit`.
+ *
+ * Equivalent to: `git worktree add "{worktreePath}" -b "{branchName}" "{baseCommit}"`
+ *
+ * SECURITY: Uses array args — no shell injection possible.
+ */
+export function gitWorktreeAdd(
+  worktreePath: string,
+  branchName: string,
+  baseCommit: string,
+  cwd: string,
+  timeout?: number,
+): ProcessResult {
+  return gitExec(
+    ["worktree", "add", worktreePath, "-b", branchName, baseCommit],
+    cwd,
+    timeout,
+  );
+}

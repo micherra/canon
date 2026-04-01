@@ -17,7 +17,8 @@ import { z } from "zod";
 import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import { join } from "path";
-import { gitStatus } from "../adapters/git-adapter.ts";
+import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
+import { existsSync } from "fs";
 
 interface InitWorkspaceInput {
   flow_name: string;
@@ -38,6 +39,8 @@ interface InitWorkspaceResult {
   created: boolean;
   resume_state?: string;
   preflight_issues?: string[];
+  worktree_path?: string;
+  worktree_branch?: string;
 }
 
 /**
@@ -163,6 +166,9 @@ export async function initWorkspaceFlow(
 
     // Only resume if the session is active
     if (session && session.status === "active" && board) {
+      // Check if the worktree still exists on disk
+      const resumeWorktreePath = join(projectDir, ".canon", "worktrees", session.slug);
+      const worktreeExists = existsSync(resumeWorktreePath);
       return {
         workspace: candidateWorkspace,
         slug: session.slug,
@@ -170,6 +176,8 @@ export async function initWorkspaceFlow(
         session,
         created: false,
         resume_state: board.current_state,
+        worktree_path: worktreeExists ? resumeWorktreePath : undefined,
+        worktree_branch: worktreeExists ? `canon-build/${session.slug}` : undefined,
       };
     }
   } catch (err) {
@@ -200,7 +208,18 @@ export async function initWorkspaceFlow(
   const existingSession = store.getSession();
   if (existingSession && existingSession.status === "active") {
     const existingBoard = store.getBoard()!;
-    return { workspace, slug: existingSession.slug, board: existingBoard, session: existingSession, created: false, resume_state: existingBoard.current_state };
+    const existingWorktreePath = join(projectDir, ".canon", "worktrees", existingSession.slug);
+    const existingWorktreeExists = existsSync(existingWorktreePath);
+    return {
+      workspace,
+      slug: existingSession.slug,
+      board: existingBoard,
+      session: existingSession,
+      created: false,
+      resume_state: existingBoard.current_state,
+      worktree_path: existingWorktreeExists ? existingWorktreePath : undefined,
+      worktree_branch: existingWorktreeExists ? `canon-build/${existingSession.slug}` : undefined,
+    };
   }
 
   // Load and resolve flow
@@ -262,6 +281,8 @@ export async function initWorkspaceFlow(
     const winnerSession = store.getSession();
     if (winnerSession && winnerSession.status === 'active') {
       const winnerBoard = store.getBoard()!;
+      const winnerWorktreePath = join(projectDir, ".canon", "worktrees", winnerSession.slug);
+      const winnerWorktreeExists = existsSync(winnerWorktreePath);
       return {
         workspace,
         slug: winnerSession.slug,
@@ -269,6 +290,8 @@ export async function initWorkspaceFlow(
         session: winnerSession,
         created: false,
         resume_state: winnerBoard.current_state,
+        worktree_path: winnerWorktreeExists ? winnerWorktreePath : undefined,
+        worktree_branch: winnerWorktreeExists ? `canon-build/${winnerSession.slug}` : undefined,
       };
     }
     // Constraint error but still no session readable — re-throw.
@@ -287,5 +310,26 @@ export async function initWorkspaceFlow(
   // Seed progress
   store.appendProgress(`## Progress: ${input.task}`);
 
-  return { workspace, slug, board, session, created: true };
+  // Create an isolated git worktree for this workspace.
+  // Only on new workspace creation (not resume).
+  // Falls back gracefully on any failure (not in a git repo, branch exists, etc.).
+  const worktreePath = join(projectDir, ".canon", "worktrees", slug);
+  const worktreeBranch = `canon-build/${slug}`;
+  let actualWorktreePath: string | undefined;
+  let actualWorktreeBranch: string | undefined;
+  try {
+    const result = gitWorktreeAdd(worktreePath, worktreeBranch, input.base_commit, projectDir);
+    if (result.ok) {
+      actualWorktreePath = worktreePath;
+      actualWorktreeBranch = worktreeBranch;
+      // Persist worktree metadata into execution row
+      store.updateExecution({ worktree_path: worktreePath, worktree_branch: worktreeBranch });
+      session.worktree_path = worktreePath;
+      session.worktree_branch = worktreeBranch;
+    }
+  } catch {
+    // Worktree creation failed — proceed without worktree
+  }
+
+  return { workspace, slug, board, session, created: true, worktree_path: actualWorktreePath, worktree_branch: actualWorktreeBranch };
 }

@@ -48,6 +48,8 @@ interface ExecutionRow {
   completed_at: string | null;
   rolled_back_at: string | null;
   rolled_back_to: string | null;
+  worktree_path: string | null;
+  worktree_branch: string | null;
 }
 
 interface ExecutionStateRow {
@@ -129,6 +131,8 @@ export interface InitExecutionParams {
   completed_at?: string;
   rolled_back_at?: string;
   rolled_back_to?: string;
+  worktree_path?: string;
+  worktree_branch?: string;
 }
 
 export interface UpdateExecutionFields {
@@ -142,6 +146,8 @@ export interface UpdateExecutionFields {
   completed_at?: string;
   rolled_back_at?: string;
   rolled_back_to?: string;
+  worktree_path?: string | null;
+  worktree_branch?: string | null;
 }
 
 export interface MessageOutput {
@@ -232,13 +238,15 @@ export class ExecutionStore {
         started, last_updated, blocked, concerns, skipped, metadata,
         branch, sanitized, created, original_task,
         tier, flow_name, slug, status, completed_at,
-        rolled_back_at, rolled_back_to
+        rolled_back_at, rolled_back_to,
+        worktree_path, worktree_branch
       ) VALUES (
         1, @flow, @task, @entry, @current_state, @base_commit,
         @started, @last_updated, @blocked, @concerns, @skipped, @metadata,
         @branch, @sanitized, @created, @original_task,
         @tier, @flow_name, @slug, @status, @completed_at,
-        @rolled_back_at, @rolled_back_to
+        @rolled_back_at, @rolled_back_to,
+        @worktree_path, @worktree_branch
       )
     `);
 
@@ -399,6 +407,8 @@ export class ExecutionStore {
       completed_at: params.completed_at ?? null,
       rolled_back_at: params.rolled_back_at ?? null,
       rolled_back_to: params.rolled_back_to ?? null,
+      worktree_path: params.worktree_path ?? null,
+      worktree_branch: params.worktree_branch ?? null,
     });
   }
 
@@ -428,6 +438,8 @@ export class ExecutionStore {
       completed_at: row.completed_at ?? undefined,
       rolled_back_at: row.rolled_back_at ?? undefined,
       rolled_back_to: row.rolled_back_to ?? undefined,
+      worktree_path: row.worktree_path ?? undefined,
+      worktree_branch: row.worktree_branch ?? undefined,
     };
   }
 
@@ -476,6 +488,14 @@ export class ExecutionStore {
     if (fields.rolled_back_to !== undefined) {
       parts.push('rolled_back_to = @rolled_back_to');
       params['rolled_back_to'] = fields.rolled_back_to;
+    }
+    if ('worktree_path' in fields) {
+      parts.push('worktree_path = @worktree_path');
+      params['worktree_path'] = fields.worktree_path ?? null;
+    }
+    if ('worktree_branch' in fields) {
+      parts.push('worktree_branch = @worktree_branch');
+      params['worktree_branch'] = fields.worktree_branch ?? null;
     }
 
     // Always update last_updated

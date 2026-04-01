@@ -310,11 +310,19 @@ export const ConsultationResultSchema = z.object({
   artifact: z.string().optional(),
 });
 
+export const WorktreeEntrySchema = z.object({
+  task_id: z.string(),
+  worktree_path: z.string(),
+  branch: z.string(),
+  status: z.enum(["active", "merged", "failed"]).default("active"),
+});
+
 export const WaveResultSchema = z.object({
   tasks: z.array(z.string()),
   status: z.string(),
   gate: z.string().optional(),
   gate_output: z.string().optional(),
+  worktree_entries: z.array(WorktreeEntrySchema).optional(),
   consultations: z
     .object({
       before: z
@@ -470,6 +478,8 @@ export const SessionSchema = z.object({
   completed_at: z.string().optional(),
   rolled_back_at: z.string().optional(),
   rolled_back_to: z.string().optional(),
+  worktree_path: z.string().optional(),
+  worktree_branch: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -498,6 +508,7 @@ export type ConsultationFragment = z.infer<typeof ConsultationFragmentSchema>;
 export type ResolvedFlow = z.infer<typeof ResolvedFlowSchema>;
 export type BoardStateStatus = z.infer<typeof BoardStateStatusSchema>;
 export type ConsultationResult = z.infer<typeof ConsultationResultSchema>;
+export type WorktreeEntry = z.infer<typeof WorktreeEntrySchema>;
 export type WaveResult = z.infer<typeof WaveResultSchema>;
 export type StateMetrics = z.infer<typeof StateMetricsSchema>;
 export type BoardStateEntry = z.infer<typeof BoardStateEntrySchema>;

@@ -1,6 +1,6 @@
 import { enterState, setBlocked } from "../orchestration/board.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board } from "../orchestration/flow-schema.ts";
+import type { Board, WorktreeEntry } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { appendFlowRun, type FlowRunEntry } from "../drift/analytics.ts";
 import { generateId } from "../utils/id.ts";
@@ -12,7 +12,12 @@ interface UpdateBoardInput {
   state_id?: string;
   next_state_id?: string;
   blocked_reason?: string;
-  wave_data?: { wave: number; wave_total: number; tasks: string[] };
+  wave_data?: {
+    wave: number;
+    wave_total: number;
+    tasks: string[];
+    worktree_entries?: WorktreeEntry[];
+  };
   result?: string;
   artifacts?: string[];
   metadata?: Record<string, string | number | boolean>;
@@ -335,6 +340,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
           [waveKey]: {
             tasks: input.wave_data!.tasks,
             status: input.result ?? "pending",
+            ...(input.wave_data!.worktree_entries ? { worktree_entries: input.wave_data!.worktree_entries } : {}),
           },
         };
         const now = new Date().toISOString();

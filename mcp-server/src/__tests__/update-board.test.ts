@@ -375,6 +375,60 @@ describe("updateBoard — set_wave_progress", () => {
       expect(result.message).toContain("requires wave_data");
     }
   });
+
+  it("persists worktree_entries when provided in wave_data", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+
+    const worktreeEntries = [
+      { task_id: "rwf-01", worktree_path: "/tmp/worktrees/rwf-01", branch: "feat/rwf-01", status: "active" as const },
+      { task_id: "rwf-02", worktree_path: "/tmp/worktrees/rwf-02", branch: "feat/rwf-02", status: "merged" as const },
+    ];
+
+    const result = await updateBoard({
+      workspace,
+      action: "set_wave_progress",
+      state_id: "research",
+      wave_data: {
+        wave: 1,
+        wave_total: 2,
+        tasks: ["rwf-01", "rwf-02"],
+        worktree_entries: worktreeEntries,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const waveResult = result.board.states["research"].wave_results?.["wave_1"];
+    expect(waveResult).toBeDefined();
+    expect(waveResult!.worktree_entries).toHaveLength(2);
+    expect(waveResult!.worktree_entries![0].task_id).toBe("rwf-01");
+    expect(waveResult!.worktree_entries![1].status).toBe("merged");
+
+    // Also verify persisted to SQLite
+    const state = store.getState("research");
+    expect(state?.wave_results?.["wave_1"].worktree_entries).toHaveLength(2);
+  });
+
+  it("does NOT include worktree_entries when omitted — backward compat", async () => {
+    const workspace = makeTmpDir();
+    seedWorkspace(workspace);
+
+    const result = await updateBoard({
+      workspace,
+      action: "set_wave_progress",
+      state_id: "research",
+      wave_data: { wave: 1, wave_total: 3, tasks: ["task-01", "task-02"] },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const waveResult = result.board.states["research"].wave_results?.["wave_1"];
+    expect(waveResult).toBeDefined();
+    expect(waveResult!.worktree_entries).toBeUndefined();
+  });
 });
 
 describe("updateBoard — set_metadata", () => {

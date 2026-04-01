@@ -53,7 +53,9 @@ const DDL_STATEMENTS = [
     status          TEXT NOT NULL DEFAULT 'active',
     completed_at    TEXT,
     rolled_back_at  TEXT,
-    rolled_back_to  TEXT
+    rolled_back_to  TEXT,
+    worktree_path   TEXT,
+    worktree_branch TEXT
   )`,
 
   // Execution states (replaces board.states)
