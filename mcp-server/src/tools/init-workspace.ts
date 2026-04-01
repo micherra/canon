@@ -31,6 +31,7 @@ interface InitWorkspaceInput {
 
 interface InitWorkspaceResult {
   workspace: string;
+  candidate_workspace?: string;
   slug: string;
   board: Board;
   session: Session;
@@ -137,9 +138,12 @@ export async function initWorkspaceFlow(
     const candidateWs = join(branchDirPf, baseSlug);
     const issues = await runPreflightChecks(projectDir, input.branch, candidateWs);
     if (issues.length > 0) {
-      // Return early with issues — no workspace created
+      // Return early with issues — no workspace created.
+      // Use candidate_workspace (not workspace) so callers can't accidentally
+      // pass a non-existent path to enter_and_prepare_state.
       return {
-        workspace: candidateWs,
+        workspace: "",
+        candidate_workspace: candidateWs,
         slug: baseSlug,
         board: {} as Board,
         session: {} as Session,
