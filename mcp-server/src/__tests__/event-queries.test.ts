@@ -201,7 +201,7 @@ describe('getEvents', () => {
     store.appendEvent('board_updated', { action: 'before', timestamp: '2026-01-01T00:00:00.000Z' });
 
     // Corrupt the events table by directly inserting invalid JSON
-    const db = (store as Record<string, unknown>).db as import('better-sqlite3').Database;
+    const db = (store as unknown as Record<string, unknown>).db as import('better-sqlite3').Database;
     db.prepare(
       `INSERT INTO events (type, payload, timestamp) VALUES ('corrupted_event', 'NOT_VALID_JSON{{{', '2026-01-01T00:01:00.000Z')`
     ).run();
