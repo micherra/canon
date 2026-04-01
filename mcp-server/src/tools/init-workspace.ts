@@ -316,18 +316,14 @@ export async function initWorkspaceFlow(
   const worktreeBranch = `canon-build/${slug}`;
   let actualWorktreePath: string | undefined;
   let actualWorktreeBranch: string | undefined;
-  try {
-    const result = gitWorktreeAdd(worktreePath, worktreeBranch, input.base_commit, projectDir);
-    if (result.ok) {
-      actualWorktreePath = worktreePath;
-      actualWorktreeBranch = worktreeBranch;
-      // Persist worktree metadata into execution row
-      store.updateExecution({ worktree_path: worktreePath, worktree_branch: worktreeBranch });
-      session.worktree_path = worktreePath;
-      session.worktree_branch = worktreeBranch;
-    }
-  } catch {
-    // Worktree creation failed — proceed without worktree
+  const result = gitWorktreeAdd(worktreePath, worktreeBranch, input.base_commit, projectDir);
+  if (result.ok) {
+    actualWorktreePath = worktreePath;
+    actualWorktreeBranch = worktreeBranch;
+    // Persist worktree metadata into execution row
+    store.updateExecution({ worktree_path: worktreePath, worktree_branch: worktreeBranch });
+    session.worktree_path = worktreePath;
+    session.worktree_branch = worktreeBranch;
   }
 
   return { workspace, slug, board, session, created: true, worktree_path: actualWorktreePath, worktree_branch: actualWorktreeBranch };
