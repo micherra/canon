@@ -698,4 +698,158 @@ describe("enterAndPrepareState", () => {
       expect(result.message).toContain(workspace);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // worktree_entries surfacing
+  // ---------------------------------------------------------------------------
+
+  describe("worktree_entries", () => {
+    function makeWaveFlow(): ResolvedFlow {
+      return {
+        name: "test-flow",
+        description: "Test flow",
+        entry: "implement",
+        states: {
+          implement: { type: "wave", agent: "canon-implementor" },
+          done: { type: "terminal" },
+        },
+        spawn_instructions: { implement: "Implement ${item}." },
+      };
+    }
+
+    it("returns worktree_entries from wave_results when re-entering a wave state", async () => {
+      const workspace = makeTmpDir();
+      const store = getExecutionStore(workspace);
+      const now = new Date().toISOString();
+      store.initExecution({
+        flow: "test-flow",
+        task: "test task",
+        entry: "implement",
+        current_state: "implement",
+        base_commit: "abc1234",
+        started: now,
+        last_updated: now,
+        branch: "feat/test",
+        sanitized: "feat-test",
+        created: now,
+        tier: "medium",
+        flow_name: "test-flow",
+        slug: "test-slug",
+      });
+
+      const worktreeEntries = [
+        { task_id: "rwf-01", worktree_path: "/tmp/wt/rwf-01", branch: "canon-build/rwf-01", status: "active" as const },
+        { task_id: "rwf-02", worktree_path: "/tmp/wt/rwf-02", branch: "canon-build/rwf-02", status: "active" as const },
+      ];
+
+      store.upsertState("implement", {
+        status: "in_progress",
+        entries: 1,
+        wave_results: {
+          wave_1: {
+            tasks: ["rwf-01", "rwf-02"],
+            status: "in_progress",
+            worktree_entries: worktreeEntries,
+          },
+        },
+      });
+      store.upsertState("done", { status: "pending", entries: 0 });
+
+      const flow = makeWaveFlow();
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 1,
+        items: ["rwf-01", "rwf-02"],
+      });
+
+      expect(result.worktree_entries).toBeDefined();
+      expect(result.worktree_entries).toHaveLength(2);
+      expect(result.worktree_entries![0].task_id).toBe("rwf-01");
+      expect(result.worktree_entries![1].task_id).toBe("rwf-02");
+    });
+
+    it("returns no worktree_entries on first entry of wave state (no prior wave_results)", async () => {
+      const workspace = makeTmpDir();
+      seedStore(workspace, {
+        states: {
+          implement: { status: "pending", entries: 0 },
+          done: { status: "pending", entries: 0 },
+        },
+      });
+
+      const flow = makeWaveFlow();
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 1,
+        items: ["rwf-01", "rwf-02"],
+      });
+
+      expect(result.worktree_entries).toBeUndefined();
+    });
+
+    it("populates worktree_path on SpawnPromptEntry when matching active worktree entry exists", async () => {
+      const workspace = makeTmpDir();
+      const store = getExecutionStore(workspace);
+      const now = new Date().toISOString();
+      store.initExecution({
+        flow: "test-flow",
+        task: "test task",
+        entry: "implement",
+        current_state: "implement",
+        base_commit: "abc1234",
+        started: now,
+        last_updated: now,
+        branch: "feat/test",
+        sanitized: "feat-test",
+        created: now,
+        tier: "medium",
+        flow_name: "test-flow",
+        slug: "test-slug",
+      });
+
+      const worktreeEntries = [
+        { task_id: "rwf-01", worktree_path: "/tmp/wt/rwf-01", branch: "canon-build/rwf-01", status: "active" as const },
+        { task_id: "rwf-02", worktree_path: "/tmp/wt/rwf-02", branch: "canon-build/rwf-02", status: "merged" as const },
+      ];
+
+      store.upsertState("implement", {
+        status: "in_progress",
+        entries: 1,
+        wave_results: {
+          wave_1: {
+            tasks: ["rwf-01", "rwf-02"],
+            status: "in_progress",
+            worktree_entries: worktreeEntries,
+          },
+        },
+      });
+      store.upsertState("done", { status: "pending", entries: 0 });
+
+      const flow = makeWaveFlow();
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        wave: 1,
+        items: ["rwf-01", "rwf-02"],
+      });
+
+      // rwf-01 is "active" — worktree_path should be set
+      const prompt01 = result.prompts.find(p => p.item === "rwf-01");
+      expect(prompt01).toBeDefined();
+      expect(prompt01!.worktree_path).toBe("/tmp/wt/rwf-01");
+
+      // rwf-02 is "merged" — worktree_path should NOT be set
+      const prompt02 = result.prompts.find(p => p.item === "rwf-02");
+      expect(prompt02).toBeDefined();
+      expect(prompt02!.worktree_path).toBeUndefined();
+    });
+  });
 });

@@ -22,7 +22,7 @@ import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { gitExec } from "../adapters/git-adapter.ts";
 import { toolError } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
-import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
+import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry, WorktreeEntry } from "../orchestration/flow-schema.ts";
 import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
 
@@ -67,6 +67,9 @@ export interface EnterAndPrepareStateResult {
 
   // Consultation prompts to spawn (only when state has consultations at the current breakpoint)
   consultation_prompts?: ConsultationPromptEntry[];
+
+  // Worktree tracking data for resumed wave states
+  worktree_entries?: WorktreeEntry[];
 
   // Updated board (only when state was entered)
   board?: Board;
@@ -271,6 +274,17 @@ export async function enterAndPrepareState(
     }
   }
 
+  // Step 4.4: Extract worktree entries for resumed wave states.
+  let worktreeEntries: EnterAndPrepareStateResult['worktree_entries'];
+  if (stateDef?.type === "wave" && input.wave != null) {
+    const stateEntry = enteredBoard.states[state_id];
+    const waveKey = `wave_${input.wave}`;
+    const waveResult = stateEntry?.wave_results?.[waveKey];
+    if (waveResult?.worktree_entries) {
+      worktreeEntries = waveResult.worktree_entries;
+    }
+  }
+
   // Step 5: Resolve spawn prompts.
   const spawnResult = await getSpawnPrompt({
     workspace,
@@ -285,6 +299,20 @@ export async function enterAndPrepareState(
     consultation_outputs: Object.keys(consultationOutputs).length > 0 ? consultationOutputs : undefined,
     _board: enteredBoard,
   });
+
+  // Cross-reference worktree entries with spawn prompts to populate worktree_path.
+  if (worktreeEntries && spawnResult.prompts.length > 0) {
+    const entryMap = new Map(worktreeEntries.map(e => [e.task_id, e]));
+    for (const prompt of spawnResult.prompts) {
+      const taskId = typeof prompt.item === "string" ? prompt.item : undefined;
+      if (taskId) {
+        const entry = entryMap.get(taskId);
+        if (entry && entry.status === "active") {
+          prompt.worktree_path = entry.worktree_path;
+        }
+      }
+    }
+  }
 
   return {
     ok: true as const,
@@ -301,6 +329,7 @@ export async function enterAndPrepareState(
     ...(spawnResult.timeout_ms != null ? { timeout_ms: spawnResult.timeout_ms } : {}),
     ...(spawnResult.fanned_out ? { fanned_out: true } : {}),
     ...(consultationPrompts.length > 0 ? { consultation_prompts: consultationPrompts } : {}),
+    ...(worktreeEntries ? { worktree_entries: worktreeEntries } : {}),
     board: enteredBoard,
   };
 }
