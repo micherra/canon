@@ -10,6 +10,7 @@ import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
 import type { ReviewEntry } from "../schema.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
+import { sanitizeGitRef } from "../utils/git-ref.ts";
 
 export interface PrReviewDataInput {
   pr_number?: number;
@@ -571,17 +572,3 @@ function parseDiffOutput(
   return results;
 }
 
-const GIT_REF_PATTERN = /^[a-zA-Z0-9_.\/\-]+$/;
-
-function sanitizeGitRef(ref: string): string {
-  if (!ref || !GIT_REF_PATTERN.test(ref)) {
-    throw new Error(`Invalid git ref: "${ref}". Only alphanumeric, '.', '/', '_', '-' allowed.`);
-  }
-  if (ref.startsWith("-")) {
-    throw new Error(`Invalid git ref: "${ref}". Refs must not start with '-'.`);
-  }
-  if (ref.includes("..")) {
-    throw new Error(`Invalid git ref: "${ref}". Refs must not contain '..'.`);
-  }
-  return ref;
-}
