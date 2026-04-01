@@ -28,6 +28,7 @@ import { listPrinciples } from "./tools/list-principles.ts";
 import { loadFlow } from "./tools/load-flow.ts";
 import { postMessage } from "./tools/post-message.ts";
 import { report } from "./tools/report.ts";
+import { reportAndEnterNextState } from "./tools/report-and-enter-next-state.ts";
 import { reportResult } from "./tools/report-result.ts";
 import { resolveAfterConsultations } from "./tools/resolve-after-consultations.ts";
 import { resolveWaveEvent } from "./tools/resolve-wave-event.ts";
@@ -451,6 +452,133 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return reportResult({ ...input, project_dir: projectDir });
+  })
+);
+
+server.registerTool(
+  "report_and_enter_next_state",
+  {
+    description:
+      "Combined tool: report_result + enter_and_prepare_state in a single round-trip. Reports the current state's result and, for non-terminal non-HITL transitions, immediately enters and prepares the next state. Reduces per-state MCP calls from 2 to 1 after the initial state entry.",
+    inputSchema: {
+      // Report-result fields
+      workspace: z.string(),
+      state_id: z.string(),
+      status_keyword: z.string(),
+      flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
+      artifacts: z.array(z.string()).optional(),
+      concern_text: z.string().optional(),
+      error: z.string().optional(),
+      metrics: z.object({ duration_ms: z.number(), spawns: z.number(), model: z.string() }).optional(),
+      principle_ids: z
+        .array(z.string())
+        .optional()
+        .describe("Violation principle IDs for same_violations stuck detection"),
+      file_paths: z.array(z.string()).optional().describe("Violating file paths for same_violations stuck detection"),
+      file_test_pairs: z
+        .array(z.object({ file: z.string(), test: z.string() }))
+        .optional()
+        .describe("File/test pairs for same_file_test stuck detection"),
+      commit_sha: z.string().optional().describe("Current commit SHA for no_progress stuck detection"),
+      artifact_count: z.number().optional().describe("Current artifact count for no_progress stuck detection"),
+      parallel_results: z
+        .array(
+          z.object({
+            item: z.string(),
+            status: z.string(),
+            artifacts: z.array(z.string()).optional(),
+          }),
+        )
+        .optional()
+        .describe("Results from parallel-per execution — triggers aggregation"),
+      gate_results: z
+        .array(
+          z.object({
+            passed: z.boolean(),
+            gate: z.string(),
+            command: z.string().optional(),
+            output: z.string().optional(),
+            exitCode: z.number().optional(),
+          }),
+        )
+        .optional()
+        .describe("Quality gate results reported by the agent"),
+      postcondition_results: z
+        .array(
+          z.object({
+            passed: z.boolean(),
+            name: z.string(),
+            type: z.string(),
+            output: z.string().optional(),
+          }),
+        )
+        .optional()
+        .describe("Postcondition check results reported by the agent"),
+      violation_count: z.number().optional().describe("Total number of principle violations found"),
+      violation_severities: z
+        .object({
+          blocking: z.number(),
+          warning: z.number(),
+        })
+        .optional()
+        .describe("Violation counts broken down by severity"),
+      test_results: z
+        .object({
+          passed: z.number(),
+          failed: z.number(),
+          skipped: z.number(),
+        })
+        .optional()
+        .describe("Test suite results"),
+      files_changed: z.number().optional().describe("Number of files changed in this state's work"),
+      discovered_gates: z
+        .array(
+          z.object({
+            command: z.string(),
+            source: z.string(),
+          }),
+        )
+        .optional()
+        .describe("Gate commands discovered by the agent for future runs"),
+      discovered_postconditions: z
+        .array(
+          z.object({
+            type: z.enum(["file_exists", "file_changed", "pattern_match", "no_pattern", "bash_check"]),
+            target: z.string().optional(),
+            pattern: z.string().optional(),
+            command: z.string().optional(),
+          }),
+        )
+        .optional()
+        .describe("Postcondition assertions discovered by the agent for future runs"),
+      compete_results: z
+        .array(
+          z.object({
+            lens: z.string().optional(),
+            status: z.string(),
+            artifacts: z.array(z.string()).optional(),
+          }),
+        )
+        .optional()
+        .describe("Results from competitive execution — persisted to board state"),
+      synthesized: z
+        .boolean()
+        .optional()
+        .describe("Whether the compete results have been synthesized into a single output"),
+      progress_line: z
+        .string()
+        .optional()
+        .describe("One-line progress entry to append to progress.md (e.g. '- [{state_id}] {status}: {one-sentence summary}')"),
+      // Enter-next-state fields
+      variables: z.record(z.string(), z.string()),
+      items: z.array(z.any()).optional(),
+      role: z.string().optional(),
+      wave: z.number().optional().describe("Current wave number (enables message instructions)"),
+      peer_count: z.number().optional().describe("Number of peer agents in the wave"),
+    },
+  },
+  wrapHandler(async (input) => {
+    return reportAndEnterNextState({ ...input, project_dir: projectDir });
   })
 );
 
