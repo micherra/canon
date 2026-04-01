@@ -17,7 +17,7 @@ output-path: ${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md
 - **{area}**: {what changed}
 
 ## Design Decisions
-{Only if DESIGN.md exists. 1-2 key decisions with brief rationale. Omit if quick-fix flow.}
+{Only if DESIGN.md exists. 1-2 key decisions with brief rationale. Omit if no design doc was produced.}
 
 ## Testing
 - Tests written: {count from summaries + test report}
