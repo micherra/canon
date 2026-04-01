@@ -85,10 +85,12 @@ export class KgVectorQuery {
       kindParams = kindFilter;
     }
 
-    // Build threshold clause
+    // Build threshold clause — use a bound parameter to avoid NaN/Infinity issues
     let thresholdClause = "";
+    let thresholdParams: number[] = [];
     if (threshold != null) {
-      thresholdClause = `AND ev.distance <= ${threshold}`;
+      thresholdClause = `AND ev.distance <= ?`;
+      thresholdParams = [threshold];
     }
 
     // vec0 KNN requires LIMIT as a WHERE constraint (k = ?) not a trailing LIMIT clause
@@ -111,7 +113,7 @@ export class KgVectorQuery {
       ORDER BY ev.distance
     `;
 
-    const rows = this.db.prepare(sql).all(queryBuf, limit, ...kindParams) as Array<{
+    const rows = this.db.prepare(sql).all(queryBuf, limit, ...kindParams, ...thresholdParams) as Array<{
       entity_id: number;
       distance: number;
       file_id: number;
@@ -138,9 +140,12 @@ export class KgVectorQuery {
     limit: number,
     threshold: number | undefined,
   ): SemanticSearchResult[] {
+    // Build threshold clause — use a bound parameter to avoid NaN/Infinity issues
     let thresholdClause = "";
+    let thresholdParams: number[] = [];
     if (threshold != null) {
-      thresholdClause = `AND sv.distance <= ${threshold}`;
+      thresholdClause = `AND sv.distance <= ?`;
+      thresholdParams = [threshold];
     }
 
     // vec0 KNN requires LIMIT as a WHERE constraint (k = ?) not a trailing LIMIT clause
@@ -165,7 +170,7 @@ export class KgVectorQuery {
       ORDER BY sv.distance
     `;
 
-    const rows = this.db.prepare(sql).all(queryBuf, limit) as Array<{
+    const rows = this.db.prepare(sql).all(queryBuf, limit, ...thresholdParams) as Array<{
       summary_id: number;
       distance: number;
       entity_id: number | null;

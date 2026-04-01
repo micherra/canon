@@ -21,24 +21,11 @@ import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
 import { semanticSearch } from "../tools/semantic-search.ts";
+import { randomEmbedding } from "./embedding-test-helpers.ts";
 
 // ---------------------------------------------------------------------------
 // Mock EmbeddingService (shared across all describe blocks in this file)
 // ---------------------------------------------------------------------------
-
-function randomEmbedding(seed = 0): Float32Array {
-  const vec = new Float32Array(384);
-  let s = seed + 1;
-  for (let i = 0; i < 384; i++) {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    vec[i] = (s / 0xffffffff) * 2 - 1;
-  }
-  let norm = 0;
-  for (const v of vec) norm += v * v;
-  norm = Math.sqrt(norm);
-  for (let i = 0; i < 384; i++) vec[i] /= norm;
-  return vec;
-}
 
 let _mockSeed = 0;
 

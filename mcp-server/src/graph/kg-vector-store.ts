@@ -102,6 +102,9 @@ export class KgVectorStore {
    * We use db.exec() with an inline JSON array literal instead.
    */
   upsertEntityVector(entityId: number, embedding: Float32Array, textHash: string): void {
+    if (!Number.isInteger(entityId) || !Number.isFinite(entityId)) {
+      throw new Error(`entityId must be a finite integer, got: ${entityId}`);
+    }
     const jsonVec = "[" + Array.from(embedding).join(",") + "]";
     const updatedAt = new Date().toISOString();
 
@@ -131,6 +134,9 @@ export class KgVectorStore {
    * Same workaround pattern as upsertEntityVector.
    */
   upsertSummaryVector(summaryId: number, embedding: Float32Array, textHash: string): void {
+    if (!Number.isInteger(summaryId) || !Number.isFinite(summaryId)) {
+      throw new Error(`summaryId must be a finite integer, got: ${summaryId}`);
+    }
     const jsonVec = "[" + Array.from(embedding).join(",") + "]";
     const updatedAt = new Date().toISOString();
 
@@ -183,6 +189,9 @@ export class KgVectorStore {
           .prepare("SELECT 1 FROM entities WHERE entity_id = ?")
           .get(entity_id);
         if (!exists) {
+          if (!Number.isInteger(entity_id) || !Number.isFinite(entity_id)) {
+            throw new Error(`entity_id must be a finite integer, got: ${entity_id}`);
+          }
           this.db.exec(`DELETE FROM entity_vectors WHERE entity_id = ${entity_id}`);
           deleted++;
         }
@@ -211,6 +220,9 @@ export class KgVectorStore {
           .prepare("SELECT 1 FROM summaries WHERE summary_id = ?")
           .get(summary_id);
         if (!exists) {
+          if (!Number.isInteger(summary_id) || !Number.isFinite(summary_id)) {
+            throw new Error(`summary_id must be a finite integer, got: ${summary_id}`);
+          }
           this.db.exec(`DELETE FROM summary_vectors WHERE summary_id = ${summary_id}`);
           deleted++;
         }
@@ -253,40 +265,8 @@ export class KgVectorStore {
 
     const limitClause = limit != null ? `LIMIT ${limit}` : "";
 
-    const rows = this.db
-      .prepare(
-        `
-        SELECT
-          e.entity_id,
-          e.kind,
-          e.qualified_name,
-          e.signature,
-          f.path AS file_path,
-          evm.text_hash AS stored_hash,
-          evm.model_id AS stored_model_id
-        FROM entities e
-        JOIN files f ON f.file_id = e.file_id
-        LEFT JOIN entity_vector_meta evm ON evm.entity_id = e.entity_id
-        WHERE e.kind != 'file'
-          AND (
-            evm.entity_id IS NULL
-            OR evm.model_id != ?
-          )
-        ${limitClause}
-      `,
-      )
-      .all(EMBEDDING_MODEL_ID) as Array<{
-      entity_id: number;
-      kind: string;
-      qualified_name: string;
-      signature: string | null;
-      file_path: string;
-      stored_hash: string | null;
-      stored_model_id: string | null;
-    }>;
-
-    // For entities already embedded, we also need those with text_hash mismatch.
-    // That requires computing the current hash for each entity.
+    // Fetch all entities (with optional limit) so we can compute current_hash in JS
+    // and filter by staleness (no meta, model mismatch, or text_hash mismatch).
     const allCandidates = this.db
       .prepare(
         `

@@ -79,7 +79,7 @@ async function writeSummariesToDb(
         // File not in KG yet — JSON is the fallback
         continue;
       }
-      store.upsertSummary({
+      const summaryRow = store.upsertSummary({
         file_id: fileRow.file_id,
         entity_id: null,
         scope: "file",
@@ -89,9 +89,8 @@ async function writeSummariesToDb(
         updated_at: now,
       });
 
-      // Collect summary_id for embedding
-      const summaryRow = store.getSummaryByFile(fileRow.file_id);
-      if (summaryRow?.summary_id !== undefined) {
+      // Collect summary_id for embedding — use the return value to avoid an extra DB read
+      if (summaryRow.summary_id !== undefined) {
         writtenSummaries.push({ summary, summaryId: summaryRow.summary_id });
       }
     }
