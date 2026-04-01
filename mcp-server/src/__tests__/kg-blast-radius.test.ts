@@ -7,9 +7,6 @@
  * file-level and entity-level blast radius queries.
  */
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type BlastRadiusFile, classifyBlastSeverity, computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
@@ -611,86 +608,40 @@ describe("computeUnifiedBlastRadius", () => {
     expect(result.seed_layer).toBe("api");
   });
 
-  // ── Reverse-deps fallback (markdown / doc files) ────────────────────────
+  // ── Files with no file_edges return empty (no fallback) ────────────────────
 
-  describe("reverse-deps.json fallback", () => {
-    let projectDir: string;
-
-    function writeReverseDeps(dir: string, data: Record<string, string[]>): void {
-      const canonDir = join(dir, ".canon");
-      mkdirSync(canonDir, { recursive: true });
-      writeFileSync(join(canonDir, "reverse-deps.json"), JSON.stringify(data));
-    }
-
-    beforeEach(() => {
-      projectDir = mkdtempSync(join(tmpdir(), "kg-br-test-"));
-    });
-
-    it("populates affected from reverse-deps.json when KG has no edges for a markdown file", () => {
-      // Seed: a template markdown file with no KG edges
+  describe("no-edges returns empty (no reverse-deps fallback)", () => {
+    it("returns contained report when markdown file has no file_edges (no fallback)", () => {
+      // Seed: a markdown file with no KG edges. Without the reverse-deps fallback,
+      // the result should be contained (no affected files).
       store.upsertFile(makeFileRow({ path: "templates/my-template.md", layer: "templates", language: "markdown" }));
-      // Dependents (flow files) are also in the KG
-      const _flowA = store.upsertFile(makeFileRow({ path: "flows/flow-a.md", layer: "flows", language: "markdown" }));
-      const _flowB = store.upsertFile(makeFileRow({ path: "flows/flow-b.md", layer: "flows", language: "markdown" }));
-      // No file_edges or entity edges exist
-
-      writeReverseDeps(projectDir, {
-        "templates/my-template.md": ["flows/flow-a.md", "flows/flow-b.md"],
-      });
-
-      const result = computeUnifiedBlastRadius(db, "templates/my-template.md", {
-        maxDepth: 2,
-        projectDir,
-      });
-
-      expect(result.affected).toHaveLength(2);
-      const paths = result.affected.map((f) => f.path).sort();
-      expect(paths).toEqual(["flows/flow-a.md", "flows/flow-b.md"]);
-      expect(result.affected.every((f) => f.depth === 1)).toBe(true);
-      expect(result.affected.every((f) => f.relationship === "reverse-dep")).toBe(true);
-    });
-
-    it("classifies cross-layer blast radius correctly from reverse-deps fallback", () => {
-      // Template in 'templates' layer, dependents in 'flows' layer — cross-layer
-      store.upsertFile(makeFileRow({ path: "templates/my-template.md", layer: "templates", language: "markdown" }));
+      // Other files exist but no edges to the seed
       store.upsertFile(makeFileRow({ path: "flows/flow-a.md", layer: "flows", language: "markdown" }));
-      store.upsertFile(makeFileRow({ path: "flows/flow-b.md", layer: "flows", language: "markdown" }));
-      store.upsertFile(makeFileRow({ path: "flows/flow-c.md", layer: "flows", language: "markdown" }));
-      store.upsertFile(makeFileRow({ path: "flows/flow-d.md", layer: "flows", language: "markdown" }));
-      store.upsertFile(makeFileRow({ path: "flows/flow-e.md", layer: "flows", language: "markdown" }));
 
-      writeReverseDeps(projectDir, {
-        "templates/my-template.md": [
-          "flows/flow-a.md",
-          "flows/flow-b.md",
-          "flows/flow-c.md",
-          "flows/flow-d.md",
-          "flows/flow-e.md",
-        ],
-      });
+      const result = computeUnifiedBlastRadius(db, "templates/my-template.md");
 
-      const result = computeUnifiedBlastRadius(db, "templates/my-template.md", {
-        maxDepth: 2,
-        projectDir,
-      });
-
-      expect(result.affected).toHaveLength(5);
-      // All dependents are in 'flows' layer, seed is in 'templates' — all cross-layer
-      expect(result.summary.cross_layer_count).toBe(5);
-      // 5 cross-layer files → moderate or higher
-      expect(["moderate", "high", "critical"]).toContain(result.summary.severity);
-      expect(result.summary.severity).not.toBe("contained");
+      expect(result.affected).toHaveLength(0);
+      expect(result.summary.severity).toBe("contained");
     });
 
-    it("does NOT use reverse-deps fallback when KG already has file edges", () => {
-      // When KG has edges, the fallback must not be triggered
+    it("returns contained report when a code file is in KG but has no dependents", () => {
+      // A file in the KG with no file_edges pointing to it should have contained blast radius
+      store.upsertFile(makeFileRow({ path: "src/leaf.ts", layer: "domain", language: "typescript" }));
+
+      const result = computeUnifiedBlastRadius(db, "src/leaf.ts");
+
+      expect(result.affected).toHaveLength(0);
+      expect(result.summary.severity).toBe("contained");
+    });
+
+    it("returns file-level blast radius when file_edges exist (not relying on any fallback)", () => {
+      // Verify the primary path still works: file with KG file_edges returns affected files
       const seedFile = store.upsertFile(
-        makeFileRow({ path: "templates/linked.md", layer: "templates", language: "markdown" }),
+        makeFileRow({ path: "src/core.ts", layer: "domain", language: "typescript" }),
       );
       const depFile = store.upsertFile(
-        makeFileRow({ path: "flows/real-dep.md", layer: "flows", language: "markdown" }),
+        makeFileRow({ path: "src/consumer.ts", layer: "api", language: "typescript" }),
       );
-      // KG edge exists
       store.insertFileEdge({
         source_file_id: depFile.file_id!,
         target_file_id: seedFile.file_id!,
@@ -699,56 +650,12 @@ describe("computeUnifiedBlastRadius", () => {
         evidence: null,
         relation: null,
       });
-      // reverse-deps lists a DIFFERENT file — if fallback triggers, both would appear
-      writeReverseDeps(projectDir, {
-        "templates/linked.md": ["flows/fallback-only.md"],
-      });
 
-      const result = computeUnifiedBlastRadius(db, "templates/linked.md", {
-        maxDepth: 2,
-        projectDir,
-      });
-
-      // Should only include the KG edge, not the fallback
-      expect(result.affected).toHaveLength(1);
-      expect(result.affected[0].path).toBe("flows/real-dep.md");
-    });
-
-    it("handles missing projectDir gracefully — returns contained when no KG edges", () => {
-      store.upsertFile(makeFileRow({ path: "templates/no-fallback.md", layer: "templates", language: "markdown" }));
-      // No projectDir → no fallback; no KG edges → contained
-      const result = computeUnifiedBlastRadius(db, "templates/no-fallback.md");
-      expect(result.summary.severity).toBe("contained");
-      expect(result.affected).toHaveLength(0);
-    });
-
-    it("handles nonexistent reverse-deps.json gracefully", () => {
-      store.upsertFile(makeFileRow({ path: "templates/no-rdeps.md", layer: "templates", language: "markdown" }));
-      // projectDir provided but no reverse-deps.json file exists
-      const result = computeUnifiedBlastRadius(db, "templates/no-rdeps.md", {
-        projectDir,
-      });
-      expect(result.summary.severity).toBe("contained");
-      expect(result.affected).toHaveLength(0);
-    });
-
-    it("synthesizes entries for dependents not in the KG", () => {
-      store.upsertFile(makeFileRow({ path: "templates/my-template.md", layer: "templates", language: "markdown" }));
-      // Dependent file NOT in the KG store
-      writeReverseDeps(projectDir, {
-        "templates/my-template.md": ["flows/unindexed-flow.md"],
-      });
-
-      const result = computeUnifiedBlastRadius(db, "templates/my-template.md", {
-        maxDepth: 2,
-        projectDir,
-      });
+      const result = computeUnifiedBlastRadius(db, "src/core.ts");
 
       expect(result.affected).toHaveLength(1);
-      expect(result.affected[0].path).toBe("flows/unindexed-flow.md");
-      expect(result.affected[0].depth).toBe(1);
-      // in_degree should be 0 (no KG data)
-      expect(result.affected[0].in_degree).toBe(0);
+      expect(result.affected[0].path).toBe("src/consumer.ts");
+      expect(result.summary.severity).not.toBe("contained");
     });
   });
 });

@@ -1,15 +1,15 @@
-import { readFile, stat } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 import { gitExecAsync } from "../adapters/git-adapter-async.ts";
 import { runShell } from "../adapters/process-adapter.ts";
 import { DriftStore } from "../drift/store.ts";
-import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.ts";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import type { FilePriorityScore } from "../graph/priority.ts";
+import { CANON_DIR, CANON_FILES, LAYER_CENTRALITY } from "../constants.ts";
 import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
 import type { ReviewEntry } from "../schema.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
+import { KgQuery, computeFileInsightMaps } from "../graph/kg-query.ts";
 import { sanitizeGitRef } from "../utils/git-ref.ts";
 
 export interface PrReviewDataInput {
@@ -60,7 +60,7 @@ export interface PrReviewDataOutput {
   incremental: boolean;
   last_reviewed_sha?: string;
   diff_command: string;
-  graph_data_age_ms?: number;
+  kg_freshness_ms?: number;
   error?: string;
   narrative: string;
   blast_radius: BlastRadiusEntry[];
@@ -166,11 +166,11 @@ export function generateNarrative(
     sentence3 = `The most consequential change is ${basename} (${maxInDegree} ${depWord} on it).`;
   }
 
-  // Violation sentence
+  // Violation sentence: prefer KG-computed violation_count, fall back to DriftStore violations
   let sentence4 = "";
   let totalViolations = 0;
   for (const f of files) {
-    totalViolations += f.priority_factors?.violation_count ?? 0;
+    totalViolations += f.priority_factors?.violation_count ?? f.violations?.length ?? 0;
   }
   if (totalViolations > 0) {
     const vWord = totalViolations === 1 ? "violation" : "violations";
@@ -265,36 +265,26 @@ export async function getPrReviewData(
   // Human-readable command string for display
   const diffCommand = `${diffCmd.cmd} ${diffCmd.args.join(" ")}`;
 
-  // Load graph data once — used for both priority enrichment and blast radius
-  let graphDataAgeMs: number | undefined;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let loadedGraph: { nodes: any[]; edges: Array<{ source: string; target: string }> } | undefined;
-  try {
-    const graphPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
-    const [raw, graphStat] = await Promise.all([
-      readFile(graphPath, "utf-8"),
-      stat(graphPath),
-    ]);
-    graphDataAgeMs = Date.now() - graphStat.mtimeMs;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
-      loadedGraph = parsed;
-    }
-  } catch {
-    // No graph data available — priority enrichment and blast radius skipped
-  }
-
-  // Enrich with graph-aware priority scores if graph data exists
-  let prioritizedFiles: FilePriorityScore[] | undefined;
-  if (loadedGraph) {
-    prioritizedFiles = computeFilePriorities(loadedGraph.nodes, loadedGraph.edges);
-  }
-
-  // Build a map from path -> priority score for fast merge
+  // Open KG DB once for priority enrichment, freshness, and blast radius
+  let kgFreshnessMs: number | undefined;
   const priorityMap = new Map<string, FilePriorityScore>();
-  if (prioritizedFiles) {
-    for (const pf of prioritizedFiles) {
-      priorityMap.set(pf.path, pf);
+  const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  let kgDb: ReturnType<typeof initDatabase> | undefined;
+  if (existsSync(kgDbPath)) {
+    try {
+      kgDb = initDatabase(kgDbPath);
+      const query = new KgQuery(kgDb);
+
+      // Freshness: age of oldest indexed file
+      const freshness = query.getKgFreshnessMs();
+      if (freshness !== null) kgFreshnessMs = freshness;
+
+      // Priority scoring: get all files with degrees, compute scores
+      // Note: changed files come from the diff (not stored in DB)
+      // We'll re-populate after parsing the diff — store the query instance for later
+    } catch {
+      // KG unavailable — skip priority enrichment and freshness
+      kgDb = undefined;
     }
   }
 
@@ -308,9 +298,60 @@ export async function getPrReviewData(
 
   try {
     const stdout = await runDiffCommand(diffCmd, projectDir);
-    files = parseDiffOutput(stdout, isPrNumberMode, inferLayer, priorityMap);
+    // Parse without priority map first — we need the changed file set to build priorities
+    files = parseDiffOutput(stdout, isPrNumberMode, inferLayer, new Map());
   } catch (err) {
     execError = err instanceof Error ? err.message : String(err);
+  }
+
+  // Priority scoring from KG: now that we have the diff file list, we know which are changed
+  if (kgDb) {
+    try {
+      const query = new KgQuery(kgDb);
+      const changedPaths = new Set(files.map(f => f.path));
+      const allFiles = query.getAllFilesWithStats();
+      const degreeMap = query.getAllFileDegrees();
+      const insightMaps = computeFileInsightMaps(kgDb);
+
+      for (const fileRow of allFiles) {
+        const fileId = fileRow.file_id;
+        if (fileId == null) continue;
+        const degrees = degreeMap.get(fileId) ?? { in_degree: 0, out_degree: 0 };
+        const path = fileRow.path;
+        const layer = fileRow.layer ?? "unknown";
+        const isChanged = changedPaths.has(path);
+        const layerViolations = insightMaps.layerViolationsByPath.get(path) ?? [];
+        const violationCount = layerViolations.length;
+
+        // Compute priority score using the same formula as computeFilePriorities:
+        // score = (in_degree × 3) + (violation_count × 2) + (changed ? 1 : 0) + layer_centrality
+        const layerCentrality = LAYER_CENTRALITY[layer] ?? 0;
+        const score = degrees.in_degree * 3 + violationCount * 2 + (isChanged ? 1 : 0) + layerCentrality;
+
+        priorityMap.set(path, {
+          path,
+          priority_score: Math.round(score * 100) / 100,
+          factors: {
+            in_degree: degrees.in_degree,
+            violation_count: violationCount,
+            is_changed: isChanged,
+            layer,
+            layer_centrality: layerCentrality,
+          },
+        });
+      }
+
+      // Merge priority data into the parsed file entries
+      for (const file of files) {
+        const priority = priorityMap.get(file.path);
+        if (priority) {
+          file.priority_score = priority.priority_score;
+          file.priority_factors = priority.factors;
+        }
+      }
+    } catch {
+      // Priority computation failed — continue without priority data
+    }
   }
 
   // Build layer grouping
@@ -347,24 +388,14 @@ export async function getPrReviewData(
   // Generate plain-English narrative
   const narrative = generateNarrative(files, layers);
 
-  // Compute blast radius — prefer KG-backed unified blast radius, fall back to graph-data.json
+  // Compute blast radius from KG only — no JSON fallback
   let blastRadius: BlastRadiusEntry[] = [];
-  const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  if (existsSync(kgDbPath)) {
-    let db: ReturnType<typeof initDatabase> | undefined;
+  if (kgDb) {
     try {
-      db = initDatabase(kgDbPath);
-      blastRadius = computeBlastRadiusFromKg(files, db);
+      blastRadius = computeBlastRadiusFromKg(files, kgDb);
     } catch {
-      // KG unavailable — fall back to graph-data.json approach
-      if (loadedGraph) {
-        blastRadius = computeBlastRadius(files, loadedGraph.edges);
-      }
-    } finally {
-      db?.close();
+      // KG blast radius failed — return empty
     }
-  } else if (loadedGraph) {
-    blastRadius = computeBlastRadius(files, loadedGraph.edges);
   }
 
   // Split files: lightweight summaries for clustering, full entries only for impactful files
@@ -387,6 +418,9 @@ export async function getPrReviewData(
   const added = files.filter(f => f.status === "added").length;
   const deleted = files.filter(f => f.status === "deleted").length;
 
+  // Close KG DB
+  kgDb?.close();
+
   return {
     files: fileSummaries,
     impact_files: impactFiles,
@@ -397,7 +431,7 @@ export async function getPrReviewData(
     incremental: !!lastReviewedSha,
     last_reviewed_sha: lastReviewedSha,
     diff_command: diffCommand,
-    graph_data_age_ms: graphDataAgeMs,
+    kg_freshness_ms: kgFreshnessMs,
     narrative,
     blast_radius: blastRadius,
     ...(execError ? { error: execError } : {}),
@@ -434,52 +468,6 @@ function computeBlastRadiusFromKg(
     const affected = report.affected
       .slice(0, MAX_AFFECTED_PER_SEED)
       .map((f) => ({ path: f.path, depth: f.depth }));
-    return { file: seed.path, affected };
-  });
-}
-
-/**
- * Compute blast radius for the top high-impact changed files.
- * Uses raw edges (source->target) to find direct importers (depth 1).
- * Takes top 2-3 files by in_degree (minimum threshold: 3).
- * Caps at 10 affected files per seed.
- * @deprecated Prefer computeBlastRadiusFromKg() when KG database is available.
- */
-function computeBlastRadius(
-  files: PrFileInfo[],
-  edges: Array<{ source: string; target: string }>,
-): BlastRadiusEntry[] {
-  const IN_DEGREE_THRESHOLD = 3;
-  const MAX_SEEDS = 3;
-  const MAX_AFFECTED_PER_SEED = 10;
-
-  // Find changed files with in_degree >= threshold, sorted descending
-  const candidates = files
-    .filter(
-      (f) =>
-        f.priority_factors?.is_changed &&
-        (f.priority_factors?.in_degree ?? 0) >= IN_DEGREE_THRESHOLD,
-    )
-    .sort((a, b) => (b.priority_factors?.in_degree ?? 0) - (a.priority_factors?.in_degree ?? 0))
-    .slice(0, MAX_SEEDS);
-
-  if (candidates.length === 0) return [];
-
-  // Build reverse adjacency: target -> set of importers (files that import it)
-  const reverseAdj = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (!reverseAdj.has(edge.target)) {
-      reverseAdj.set(edge.target, []);
-    }
-    reverseAdj.get(edge.target)!.push(edge.source);
-  }
-
-  return candidates.map((seed) => {
-    const importers = reverseAdj.get(seed.path) ?? [];
-    const affected = importers.slice(0, MAX_AFFECTED_PER_SEED).map((path) => ({
-      path,
-      depth: 1,
-    }));
     return { file: seed.path, affected };
   });
 }
