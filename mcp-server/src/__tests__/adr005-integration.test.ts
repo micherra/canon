@@ -664,7 +664,7 @@ describe("buildBlastRadiusByFile", () => {
   });
 
   it("groups affected entries by file_path and returns top 15 by dep_count", () => {
-    const affected: PrImpactOutput["blastRadius"]["affected"] = [
+    const affected: NonNullable<PrImpactOutput["blastRadius"]>["affected"] = [
       { entity_name: "funcA", entity_kind: "function", file_path: "src/A.ts", depth: 1 },
       { entity_name: "funcB", entity_kind: "function", file_path: "src/A.ts", depth: 1 },
       { entity_name: "funcC", entity_kind: "function", file_path: "src/B.ts", depth: 2 },
@@ -678,7 +678,7 @@ describe("buildBlastRadiusByFile", () => {
   });
 
   it("limits to 15 entries when more than 15 files in blast radius", () => {
-    const affected: PrImpactOutput["blastRadius"]["affected"] = Array.from({ length: 20 }, (_, i) => ({
+    const affected: NonNullable<PrImpactOutput["blastRadius"]>["affected"] = Array.from({ length: 20 }, (_, i) => ({
       entity_name: `func${i}`,
       entity_kind: "function",
       file_path: `src/file${i}.ts`,
@@ -689,7 +689,7 @@ describe("buildBlastRadiusByFile", () => {
   });
 
   it("skips entries with empty file_path", () => {
-    const affected: PrImpactOutput["blastRadius"]["affected"] = [
+    const affected: NonNullable<PrImpactOutput["blastRadius"]>["affected"] = [
       { entity_name: "funcA", entity_kind: "function", file_path: "src/A.ts", depth: 1 },
       { entity_name: "funcB", entity_kind: "function", file_path: "", depth: 1 },
     ];
