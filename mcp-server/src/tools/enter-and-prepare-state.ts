@@ -68,7 +68,6 @@ export interface EnterAndPrepareStateResult {
   // Consultation prompts to spawn (only when state has consultations at the current breakpoint)
   consultation_prompts?: ConsultationPromptEntry[];
 
-  // Worktree tracking data for resumed wave states
   worktree_entries?: WorktreeEntry[];
 
   // Updated board (only when state was entered)
@@ -274,7 +273,6 @@ export async function enterAndPrepareState(
     }
   }
 
-  // Step 4.4: Extract worktree entries for resumed wave states.
   let worktreeEntries: EnterAndPrepareStateResult['worktree_entries'];
   if (stateDef?.type === "wave" && input.wave != null) {
     const stateEntry = enteredBoard.states[state_id];
@@ -300,7 +298,6 @@ export async function enterAndPrepareState(
     _board: enteredBoard,
   });
 
-  // Cross-reference worktree entries with spawn prompts to populate worktree_path.
   if (worktreeEntries && spawnResult.prompts.length > 0) {
     const entryMap = new Map(worktreeEntries.map(e => [e.task_id, e]));
     for (const prompt of spawnResult.prompts) {

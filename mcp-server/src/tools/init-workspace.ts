@@ -165,7 +165,6 @@ export async function initWorkspaceFlow(
 
     // Only resume if the session is active
     if (session && session.status === "active" && board) {
-      // Check if the worktree still exists on disk
       const resumeWorktreePath = join(projectDir, ".canon", "worktrees", session.slug);
       const worktreeExists = existsSync(resumeWorktreePath);
       return {
@@ -309,9 +308,6 @@ export async function initWorkspaceFlow(
   // Seed progress
   store.appendProgress(`## Progress: ${input.task}`);
 
-  // Create an isolated git worktree for this workspace.
-  // Only on new workspace creation (not resume).
-  // Falls back gracefully on any failure (not in a git repo, branch exists, etc.).
   const worktreePath = join(projectDir, ".canon", "worktrees", slug);
   const worktreeBranch = `canon-build/${slug}`;
   let actualWorktreePath: string | undefined;
@@ -320,7 +316,6 @@ export async function initWorkspaceFlow(
   if (result.ok) {
     actualWorktreePath = worktreePath;
     actualWorktreeBranch = worktreeBranch;
-    // Persist worktree metadata into execution row
     store.updateExecution({ worktree_path: worktreePath, worktree_branch: worktreeBranch });
     session.worktree_path = worktreePath;
     session.worktree_branch = worktreeBranch;
