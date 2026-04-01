@@ -9,10 +9,10 @@
  * 5. Fail-open: when wave_total is undefined, consultation fires normally
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -39,9 +39,9 @@ vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
 });
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { ConsultationFragmentSchema } from "../orchestration/flow-schema.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { ConsultationFragmentSchema } from "../orchestration/flow-schema.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -289,7 +289,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     assertOk(result);
 
     // Should be skipped: wave_total (1) < min_waves (2)
-    const patternCheck = result.consultation_prompts?.find(e => e.name === "pattern-check");
+    const patternCheck = result.consultation_prompts?.find((e) => e.name === "pattern-check");
     expect(patternCheck).toBeUndefined();
   });
 
@@ -308,7 +308,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     assertOk(result);
 
     // Should be included: wave_total (2) >= min_waves (2)
-    const patternCheck = result.consultation_prompts?.find(e => e.name === "pattern-check");
+    const patternCheck = result.consultation_prompts?.find((e) => e.name === "pattern-check");
     expect(patternCheck).toBeDefined();
     expect(patternCheck?.name).toBe("pattern-check");
   });
@@ -327,7 +327,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     });
     assertOk(result);
 
-    const patternCheck = result.consultation_prompts?.find(e => e.name === "pattern-check");
+    const patternCheck = result.consultation_prompts?.find((e) => e.name === "pattern-check");
     expect(patternCheck).toBeDefined();
   });
 
@@ -347,7 +347,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     assertOk(result);
 
     // Fail-open: wave_total undefined → do NOT skip
-    const patternCheck = result.consultation_prompts?.find(e => e.name === "pattern-check");
+    const patternCheck = result.consultation_prompts?.find((e) => e.name === "pattern-check");
     expect(patternCheck).toBeDefined();
   });
 
@@ -365,7 +365,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     });
     assertOk(result);
 
-    const planReview = result.consultation_prompts?.find(e => e.name === "plan-review");
+    const planReview = result.consultation_prompts?.find((e) => e.name === "plan-review");
     expect(planReview).toBeDefined();
   });
 });
@@ -403,7 +403,7 @@ describe("enterAndPrepareState — min_waves filtering for before consultations"
     });
     assertOk(result);
 
-    const earlyScan = result.consultation_prompts?.find(e => e.name === "early-scan");
+    const earlyScan = result.consultation_prompts?.find((e) => e.name === "early-scan");
     expect(earlyScan).toBeUndefined();
   });
 
@@ -421,7 +421,7 @@ describe("enterAndPrepareState — min_waves filtering for before consultations"
     });
     assertOk(result);
 
-    const earlyScan = result.consultation_prompts?.find(e => e.name === "early-scan");
+    const earlyScan = result.consultation_prompts?.find((e) => e.name === "early-scan");
     expect(earlyScan).toBeDefined();
   });
 });

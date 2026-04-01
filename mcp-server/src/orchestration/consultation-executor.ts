@@ -39,9 +39,7 @@ export interface ConsultationOutput {
  * Missing consultations produce warnings, not exceptions — the function always
  * returns a result (handle-partial-failure).
  */
-export async function executeConsultations(
-  input: ConsultationInput,
-): Promise<ConsultationOutput> {
+export async function executeConsultations(input: ConsultationInput): Promise<ConsultationOutput> {
   const { consultationNames, flow } = input;
   const results: Record<string, ConsultationResult> = {};
   const warnings: string[] = [];
@@ -49,17 +47,13 @@ export async function executeConsultations(
   for (const name of consultationNames) {
     const fragment = flow.consultations?.[name];
     if (!fragment) {
-      warnings.push(
-        `Consultation "${name}" not found in flow.consultations — skipping.`,
-      );
+      warnings.push(`Consultation "${name}" not found in flow.consultations — skipping.`);
       continue;
     }
 
     const spawnInstruction = flow.spawn_instructions[name];
     if (!spawnInstruction) {
-      warnings.push(
-        `Spawn instruction for consultation "${name}" not found in flow.spawn_instructions — skipping.`,
-      );
+      warnings.push(`Spawn instruction for consultation "${name}" not found in flow.spawn_instructions — skipping.`);
       continue;
     }
 

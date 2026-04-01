@@ -1,177 +1,168 @@
 <script lang="ts">
-  import { bridge } from "./stores/bridge";
-  import { useDataLoader } from "./lib/useDataLoader.svelte";
-  import EmptyState from "./components/EmptyState.svelte";
-  import SubGraph from "./components/SubGraph.svelte";
-  import CodebaseGraphDetailPanel from "./components/CodebaseGraphDetailPanel.svelte";
-  import type { GraphData, GraphNode, CompactGraphData } from "./lib/types";
-  import { decodeCompactGraph } from "./lib/types";
-  import type { FilterOptions } from "./lib/sigmaGraph";
+import type { FilterOptions } from "./lib/sigmaGraph";
+import type { CompactGraphData, GraphData, GraphNode } from "./lib/types";
+import { decodeCompactGraph } from "./lib/types";
+import { useDataLoader } from "./lib/useDataLoader.svelte";
+import { bridge } from "./stores/bridge";
 
-  // ── Data loading ──────────────────────────────────────────────────────────
+// ── Data loading ──────────────────────────────────────────────────────────
 
-  const loader = useDataLoader(async () => {
-    await bridge.init();
-    const raw = await bridge.waitForToolResult();
-    if (!raw) throw new Error("No data received from tool");
-    // Support both compact (index-encoded) and full graph formats
-    if (raw._compact) return decodeCompactGraph(raw as CompactGraphData);
-    return raw as GraphData;
-  });
+const loader = useDataLoader(async () => {
+  await bridge.init();
+  const raw = await bridge.waitForToolResult();
+  if (!raw) throw new Error("No data received from tool");
+  // Support both compact (index-encoded) and full graph formats
+  if (raw._compact) return decodeCompactGraph(raw as CompactGraphData);
+  return raw as GraphData;
+});
 
-  let status = $derived(loader.status);
-  let graphData = $derived(loader.data);
-  let errorMsg = $derived(loader.errorMsg);
+let _status = $derived(loader.status);
+let graphData = $derived(loader.data);
+let _errorMsg = $derived(loader.errorMsg);
 
-  // ── View state ────────────────────────────────────────────────────────────
+// ── View state ────────────────────────────────────────────────────────────
 
-  let selectedNode = $state<GraphNode | null>(null);
+let _selectedNode = $state<GraphNode | null>(null);
 
-  // ── Filter state ──────────────────────────────────────────────────────────
+// ── Filter state ──────────────────────────────────────────────────────────
 
-  let filterViolations = $state(false);
-  let filterChanged = $state(false);
-  // activeLayers: all layer names start included; toggling a layer removes/adds it
-  let activeLayers = $state<Set<string>>(new Set());
-  // whether layer chips are expanded
-  let layersExpanded = $state(false);
+let filterViolations = $state(false);
+let filterChanged = $state(false);
+// activeLayers: all layer names start included; toggling a layer removes/adds it
+let activeLayers = $state<Set<string>>(new Set());
+// whether layer chips are expanded
+let layersExpanded = $state(false);
 
-  // Initialise activeLayers once data is loaded
-  $effect(() => {
-    if (graphData) {
-      activeLayers = new Set((graphData.layers ?? []).map((l) => l.name));
+// Initialise activeLayers once data is loaded
+$effect(() => {
+  if (graphData) {
+    activeLayers = new Set((graphData.layers ?? []).map((l) => l.name));
+  }
+});
+
+// allLayerNames: derived set of every layer name in the graph data
+let allLayerNames = $derived(new Set((graphData?.layers ?? []).map((l) => l.name)));
+
+// ── Derived helpers ───────────────────────────────────────────────────────
+
+let _layerColors = $derived.by(() => {
+  const map: Record<string, string> = {};
+  for (const layer of graphData?.layers ?? []) {
+    if (layer?.name && layer?.color) map[layer.name] = layer.color;
+  }
+  return map;
+});
+
+let changedNodeIds = $derived(new Set<string>((graphData?.nodes ?? []).filter((n) => n.changed).map((n) => n.id)));
+
+let _stats = $derived.by(() => {
+  if (!graphData) return null;
+  const nodes = graphData.nodes;
+  const violationCount = nodes.filter((n) => (n.violation_count ?? 0) > 0).length;
+  return {
+    nodes: nodes.length,
+    edges: graphData.edges.length,
+    layers: graphData.layers?.length ?? 0,
+    violations: violationCount,
+    changed: changedNodeIds.size,
+  };
+});
+
+// filtersActive: true when any filter deviates from the "show everything" default
+let filtersActive = $derived(
+  filterViolations || filterChanged || (allLayerNames.size > 0 && activeLayers.size < allLayerNames.size),
+);
+
+// Build FilterOptions to pass to SubGraph whenever any filter state changes.
+// Only set when at least one filter is active (null = no filtering).
+let _filterOptions = $derived.by((): FilterOptions | null => {
+  if (!graphData) return null;
+  if (!filtersActive) return null;
+  // Build insightFilter set: only these nodes stay visible when violation/changed toggles are on
+  let insight: Set<string> | null = null;
+  if (filterViolations || filterChanged) {
+    insight = new Set<string>();
+    for (const n of graphData.nodes) {
+      if (filterViolations && (n.violation_count ?? 0) > 0) insight.add(n.id);
+      if (filterChanged && n.changed) insight.add(n.id);
     }
-  });
-
-  // allLayerNames: derived set of every layer name in the graph data
-  let allLayerNames = $derived(
-    new Set((graphData?.layers ?? []).map((l) => l.name)),
-  );
-
-  // ── Derived helpers ───────────────────────────────────────────────────────
-
-  let layerColors = $derived.by(() => {
-    const map: Record<string, string> = {};
-    for (const layer of graphData?.layers ?? []) {
-      if (layer?.name && layer?.color) map[layer.name] = layer.color;
-    }
-    return map;
-  });
-
-  let changedNodeIds = $derived(
-    new Set<string>((graphData?.nodes ?? []).filter((n) => n.changed).map((n) => n.id)),
-  );
-
-  let stats = $derived.by(() => {
-    if (!graphData) return null;
-    const nodes = graphData.nodes;
-    const violationCount = nodes.filter((n) => (n.violation_count ?? 0) > 0).length;
-    return {
-      nodes: nodes.length,
-      edges: graphData.edges.length,
-      layers: graphData.layers?.length ?? 0,
-      violations: violationCount,
-      changed: changedNodeIds.size,
-    };
-  });
-
-  // filtersActive: true when any filter deviates from the "show everything" default
-  let filtersActive = $derived(
-    filterViolations ||
-    filterChanged ||
-    (allLayerNames.size > 0 && activeLayers.size < allLayerNames.size),
-  );
-
-  // Build FilterOptions to pass to SubGraph whenever any filter state changes.
-  // Only set when at least one filter is active (null = no filtering).
-  let filterOptions = $derived.by((): FilterOptions | null => {
-    if (!graphData) return null;
-    if (!filtersActive) return null;
-    // Build insightFilter set: only these nodes stay visible when violation/changed toggles are on
-    let insight: Set<string> | null = null;
-    if (filterViolations || filterChanged) {
-      insight = new Set<string>();
-      for (const n of graphData.nodes) {
-        if (filterViolations && (n.violation_count ?? 0) > 0) insight.add(n.id);
-        if (filterChanged && n.changed) insight.add(n.id);
-      }
-    }
-    return {
-      activeLayers: activeLayers.size > 0 ? activeLayers : allLayerNames,
-      searchQuery: "",
-      parsedSearch: {
-        textQuery: "",
-        filterLayer: null,
-        filterChanged: false,
-        filterViolation: false,
-      },
-      prReviewFiles: null,
-      insightFilter: insight,
-      showChangedOnly: false,
-    };
-  });
-
-  // ── Edge maps for detail panel ─────────────────────────────────────────────
-  // edgesIn[nodeId] = list of node IDs that import this node (in-edges)
-  // edgesOut[nodeId] = list of node IDs this node imports (out-edges)
-
-  function resolveEdgeId(endpoint: string | { id: string }): string {
-    return typeof endpoint === "string" ? endpoint : endpoint.id;
   }
+  return {
+    activeLayers: activeLayers.size > 0 ? activeLayers : allLayerNames,
+    searchQuery: "",
+    parsedSearch: {
+      textQuery: "",
+      filterLayer: null,
+      filterChanged: false,
+      filterViolation: false,
+    },
+    prReviewFiles: null,
+    insightFilter: insight,
+    showChangedOnly: false,
+  };
+});
 
-  let edgesIn = $derived.by((): Map<string, string[]> => {
-    const map = new Map<string, string[]>();
-    for (const edge of graphData?.edges ?? []) {
-      const src = resolveEdgeId(edge.source);
-      const tgt = resolveEdgeId(edge.target);
-      if (!map.has(tgt)) map.set(tgt, []);
-      map.get(tgt)!.push(src);
-    }
-    return map;
-  });
+// ── Edge maps for detail panel ─────────────────────────────────────────────
+// edgesIn[nodeId] = list of node IDs that import this node (in-edges)
+// edgesOut[nodeId] = list of node IDs this node imports (out-edges)
 
-  let edgesOut = $derived.by((): Map<string, string[]> => {
-    const map = new Map<string, string[]>();
-    for (const edge of graphData?.edges ?? []) {
-      const src = resolveEdgeId(edge.source);
-      const tgt = resolveEdgeId(edge.target);
-      if (!map.has(src)) map.set(src, []);
-      map.get(src)!.push(tgt);
-    }
-    return map;
-  });
+function resolveEdgeId(endpoint: string | { id: string }): string {
+  return typeof endpoint === "string" ? endpoint : endpoint.id;
+}
 
-  // ── Event handlers ────────────────────────────────────────────────────────
-
-  function handleNodeClick(node: GraphNode) {
-    selectedNode = node;
+let _edgesIn = $derived.by((): Map<string, string[]> => {
+  const map = new Map<string, string[]>();
+  for (const edge of graphData?.edges ?? []) {
+    const src = resolveEdgeId(edge.source);
+    const tgt = resolveEdgeId(edge.target);
+    if (!map.has(tgt)) map.set(tgt, []);
+    map.get(tgt)!.push(src);
   }
+  return map;
+});
 
-  function handleBackgroundClick() {
-    selectedNode = null;
+let _edgesOut = $derived.by((): Map<string, string[]> => {
+  const map = new Map<string, string[]>();
+  for (const edge of graphData?.edges ?? []) {
+    const src = resolveEdgeId(edge.source);
+    const tgt = resolveEdgeId(edge.target);
+    if (!map.has(src)) map.set(src, []);
+    map.get(src)!.push(tgt);
   }
+  return map;
+});
 
-  function toggleViolations() {
-    filterViolations = !filterViolations;
-  }
+// ── Event handlers ────────────────────────────────────────────────────────
 
-  function toggleChanged() {
-    filterChanged = !filterChanged;
-  }
+function _handleNodeClick(node: GraphNode) {
+  _selectedNode = node;
+}
 
-  function toggleLayersExpanded() {
-    layersExpanded = !layersExpanded;
-  }
+function _handleBackgroundClick() {
+  _selectedNode = null;
+}
 
-  function toggleLayer(layerName: string) {
-    const next = new Set(activeLayers);
-    if (next.has(layerName)) {
-      next.delete(layerName);
-    } else {
-      next.add(layerName);
-    }
-    activeLayers = next;
+function _toggleViolations() {
+  filterViolations = !filterViolations;
+}
+
+function _toggleChanged() {
+  filterChanged = !filterChanged;
+}
+
+function _toggleLayersExpanded() {
+  layersExpanded = !layersExpanded;
+}
+
+function _toggleLayer(layerName: string) {
+  const next = new Set(activeLayers);
+  if (next.has(layerName)) {
+    next.delete(layerName);
+  } else {
+    next.add(layerName);
   }
+  activeLayers = next;
+}
 </script>
 
 <div class="codebase-graph">

@@ -16,11 +16,10 @@
  * 5. getSpawnPrompt degrades gracefully when progress.md is absent.
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -42,12 +41,12 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { resolveContextInjections } from "../orchestration/inject-context.ts";
-import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { resolveContextInjections } from "../orchestration/inject-context.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { getSpawnPrompt, truncateProgress } from "../tools/get-spawn-prompt.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -265,12 +264,15 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
   it("passes the entered board (post-enterState) to getSpawnPrompt, not the original board", async () => {
     const workspace = makeTmpDir();
     // Seed with pre-enter state (entries: 0)
-    seedBoard(workspace, makeBoard({
-      states: {
-        implement: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        states: {
+          implement: { status: "pending", entries: 0 },
+          done: { status: "pending", entries: 0 },
+        },
+      }),
+    );
 
     // skip_when=present but not met, so we proceed normally
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
@@ -343,12 +345,12 @@ describe("truncateProgress — edge cases", () => {
     const header = "## Progress: My task";
     const entries = Array.from({ length: 10 }, (_, i) => `- [state-${i}] done: step ${i}`);
     // Add trailing blank lines after entries
-    const content = header + "\n" + entries.join("\n") + "\n\n";
+    const content = `${header}\n${entries.join("\n")}\n\n`;
 
     const result = truncateProgress(content, 8);
 
     // Should still have exactly 8 entry lines
-    const entryLines = result.split("\n").filter(l => l.startsWith("- ["));
+    const entryLines = result.split("\n").filter((l) => l.startsWith("- ["));
     expect(entryLines).toHaveLength(8);
 
     // Trailing blank lines must still be present (they don't start with "- [")
@@ -376,7 +378,7 @@ describe("truncateProgress — edge cases", () => {
 
     const result = truncateProgress(content, 3);
 
-    const entryLines = result.split("\n").filter(l => l.startsWith("- ["));
+    const entryLines = result.split("\n").filter((l) => l.startsWith("- ["));
     expect(entryLines).toHaveLength(3);
     // Must be the LAST 3, not the first 3
     expect(entryLines[0]).toContain("state-2");
@@ -521,7 +523,7 @@ describe("getSpawnPrompt — progress.md absent", () => {
     store.appendProgress("[implement] done: wrote code");
 
     const flow = makeFlow({
-      progress: "${WORKSPACE}/progress.md",  // presence of this field triggers progress injection
+      progress: "${WORKSPACE}/progress.md", // presence of this field triggers progress injection
       spawn_instructions: { implement: "${progress}" },
     });
 

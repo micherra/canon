@@ -1,14 +1,9 @@
-import { describe, it, expect } from "vitest";
-import {
-  substituteVariables,
-  buildTemplateInjection,
-} from "../orchestration/variables.ts";
+import { describe, expect, it } from "vitest";
+import { buildTemplateInjection, substituteVariables } from "../orchestration/variables.ts";
 
 describe("substituteVariables", () => {
   it("replaces a simple variable", () => {
-    expect(substituteVariables("Hello ${name}!", { name: "World" })).toBe(
-      "Hello World!"
-    );
+    expect(substituteVariables("Hello ${name}!", { name: "World" })).toBe("Hello World!");
   });
 
   it("replaces multiple variables", () => {
@@ -20,9 +15,7 @@ describe("substituteVariables", () => {
   });
 
   it("leaves missing variables unchanged", () => {
-    expect(substituteVariables("${known} and ${unknown}", { known: "yes" })).toBe(
-      "yes and ${unknown}"
-    );
+    expect(substituteVariables("${known} and ${unknown}", { known: "yes" })).toBe("yes and ${unknown}");
   });
 
   it("handles nested ${item.field} patterns", () => {
@@ -37,9 +30,7 @@ describe("substituteVariables", () => {
   });
 
   it("returns template unchanged when no variables present", () => {
-    expect(substituteVariables("no vars here", { key: "val" })).toBe(
-      "no vars here"
-    );
+    expect(substituteVariables("no vars here", { key: "val" })).toBe("no vars here");
   });
 });
 
@@ -47,15 +38,12 @@ describe("buildTemplateInjection", () => {
   it("generates instruction for a single template string", () => {
     const result = buildTemplateInjection("review-checklist", "/plugins/canon");
     expect(result).toBe(
-      "Use the review-checklist template at `/plugins/canon/templates/review-checklist.md`. Read the template first and follow its structure exactly."
+      "Use the review-checklist template at `/plugins/canon/templates/review-checklist.md`. Read the template first and follow its structure exactly.",
     );
   });
 
   it("generates instructions for an array of templates", () => {
-    const result = buildTemplateInjection(
-      ["design-decision", "test-report"],
-      "/plugins/canon"
-    );
+    const result = buildTemplateInjection(["design-decision", "test-report"], "/plugins/canon");
     const lines = result.split("\n");
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("design-decision");

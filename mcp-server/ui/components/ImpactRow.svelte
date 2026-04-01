@@ -1,62 +1,55 @@
 <script lang="ts">
-  /**
-   * ImpactRow.svelte
-   *
-   * A single file row in the impact list. Renders:
-   *   - File path with filename portion bold (split on last "/")
-   *   - Score bar proportional to maxScore, color-coded by severity threshold
-   *   - Dependency count badge
-   *   - Bucket badge with color scheme matching v1
-   *   - Click handler that calls onPrompt with a contextual prompt string
-   *
-   * Canon principles:
-   *   - compose-from-small-to-large: atom component, composed into the impact section
-   *   - props-are-the-component-contract: no bridge access, no global state
-   */
+/**
+ * ImpactRow.svelte
+ *
+ * A single file row in the impact list. Renders:
+ *   - File path with filename portion bold (split on last "/")
+ *   - Score bar proportional to maxScore, color-coded by severity threshold
+ *   - Dependency count badge
+ *   - Bucket badge with color scheme matching v1
+ *   - Click handler that calls onPrompt with a contextual prompt string
+ *
+ * Canon principles:
+ *   - compose-from-small-to-large: atom component, composed into the impact section
+ *   - props-are-the-component-contract: no bridge access, no global state
+ */
 
-  import FilePath from "./FilePath.svelte";
+interface ImpactRowProps {
+  filePath: string;
+  priorityScore: number;
+  maxScore: number;
+  depCount: number;
+  bucket: string;
+  onPrompt: (text: string) => void;
+}
 
-  interface ImpactRowProps {
-    filePath: string;
-    priorityScore: number;
-    maxScore: number;
-    depCount: number;
-    bucket: string;
-    onPrompt: (text: string) => void;
-  }
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { filePath, priorityScore, maxScore, depCount, bucket, onPrompt }: ImpactRowProps = $props();
 
-  let { filePath, priorityScore, maxScore, depCount, bucket, onPrompt }: ImpactRowProps = $props();
+/** Score bar width clamped to [0, 100]% */
+let _barWidth = $derived(maxScore > 0 ? Math.min(100, Math.round((priorityScore / maxScore) * 100)) : 0);
 
-  /** Score bar width clamped to [0, 100]% */
-  let barWidth = $derived(
-    maxScore > 0 ? Math.min(100, Math.round((priorityScore / maxScore) * 100)) : 0
-  );
+/** Bar color by severity threshold */
+let _barColor = $derived(
+  priorityScore >= 20
+    ? "var(--danger, #ff6b6b)"
+    : priorityScore >= 10
+      ? "var(--warning, #fbbf24)"
+      : "var(--accent, #6c8cff)",
+);
 
-  /** Bar color by severity threshold */
-  let barColor = $derived(
-    priorityScore >= 20
-      ? "var(--danger, #ff6b6b)"
-      : priorityScore >= 10
-        ? "var(--warning, #fbbf24)"
-        : "var(--accent, #6c8cff)"
-  );
+/** Bucket display label and color */
+let _bucketLabel = $derived(
+  bucket === "needs-attention" ? "Needs attention" : bucket === "worth-a-look" ? "Worth a look" : "Low risk",
+);
 
-  /** Bucket display label and color */
-  let bucketLabel = $derived(
-    bucket === "needs-attention" ? "Needs attention"
-    : bucket === "worth-a-look" ? "Worth a look"
-    : "Low risk"
-  );
+let _bucketClass = $derived(
+  bucket === "needs-attention" ? "bucket-danger" : bucket === "worth-a-look" ? "bucket-warning" : "bucket-muted",
+);
 
-  let bucketClass = $derived(
-    bucket === "needs-attention" ? "bucket-danger"
-    : bucket === "worth-a-look" ? "bucket-warning"
-    : "bucket-muted"
-  );
-
-  function handleClick() {
-    onPrompt(`Show me ${filePath} and explain what changed`);
-  }
+function _handleClick() {
+  onPrompt(`Show me ${filePath} and explain what changed`);
+}
 </script>
 
 <button class="impact-row btn-reset" onclick={handleClick} title={filePath}>

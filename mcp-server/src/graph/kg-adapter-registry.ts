@@ -7,12 +7,12 @@
  * their own hand-rolled adapters (no tree-sitter dependency).
  */
 
-import type { LanguageAdapter, AdapterResult } from './kg-types.ts';
-import { getParser } from './kg-wasm-parser.ts';
-import { walkTree } from './kg-generic-walker.ts';
-import { LANGUAGE_CONFIGS, type LanguageConfig } from './kg-language-configs.ts';
-import { markdownAdapter } from './kg-adapter-markdown.ts';
-import { yamlAdapter } from './kg-adapter-yaml.ts';
+import { markdownAdapter } from "./kg-adapter-markdown.ts";
+import { yamlAdapter } from "./kg-adapter-yaml.ts";
+import { walkTree } from "./kg-generic-walker.ts";
+import { LANGUAGE_CONFIGS, type LanguageConfig } from "./kg-language-configs.ts";
+import type { AdapterResult, LanguageAdapter } from "./kg-types.ts";
+import { getParser } from "./kg-wasm-parser.ts";
 
 // ---------------------------------------------------------------------------
 // Factory — build a LanguageAdapter from a LanguageConfig
@@ -65,13 +65,18 @@ export function getAdapter(extension: string): LanguageAdapter | undefined {
  */
 export function getLanguage(extension: string): string {
   const langMap: Record<string, string> = {
-    '.ts': 'typescript', '.tsx': 'typescript',
-    '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
-    '.py': 'python',
-    '.sh': 'bash',
-    '.java': 'java',
-    '.md': 'markdown',
-    '.yaml': 'yaml', '.yml': 'yaml',
+    ".ts": "typescript",
+    ".tsx": "typescript",
+    ".js": "javascript",
+    ".jsx": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".py": "python",
+    ".sh": "bash",
+    ".java": "java",
+    ".md": "markdown",
+    ".yaml": "yaml",
+    ".yml": "yaml",
   };
-  return langMap[extension] ?? 'unknown';
+  return langMap[extension] ?? "unknown";
 }

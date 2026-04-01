@@ -8,13 +8,12 @@
  *   2. useDataLoader.svelte.ts exports and behavior (Wave 2 composable)
  */
 
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-
-import { getSeverityColor } from "../lib/utils.ts";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 import { SEVERITY_COLORS } from "../lib/constants.ts";
+import { getSeverityColor } from "../lib/utils.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiDir = join(__dirname, "..");
@@ -41,8 +40,6 @@ describe("Cross-wave: getSeverityColor utility → ViolationCard integration", (
     expect(fallback).not.toBe("#888888");
   });
 });
-
-
 
 // =============================================================================
 // 2. useDataLoader.svelte.ts pure exports and behavior (Wave 2 composable)
@@ -76,4 +73,3 @@ describe("Cross-wave: useDataLoader composable (Wave 2) consumed by Wave 5 views
     expect(content).toContain("String(err)");
   });
 });
-

@@ -10,11 +10,7 @@ import type { Board, ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
 /**
  * Create a new Board from a resolved flow.
  */
-export function initBoard(
-  flow: ResolvedFlow,
-  task: string,
-  baseCommit: string,
-): Board {
+export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string): Board {
   const now = new Date().toISOString();
 
   const states: Board["states"] = {};
@@ -91,12 +87,7 @@ export function enterState(board: Board, stateId: string): Board {
 /**
  * Complete a state — sets status to done, records result and optional artifacts.
  */
-export function completeState(
-  board: Board,
-  stateId: string,
-  result: string,
-  artifacts?: string[],
-): Board {
+export function completeState(board: Board, stateId: string, result: string, artifacts?: string[]): Board {
   const now = new Date().toISOString();
   const prev = board.states[stateId];
 
@@ -124,11 +115,7 @@ export function completeState(
 /**
  * Mark a state as blocked.
  */
-export function setBlocked(
-  board: Board,
-  stateId: string,
-  reason: string,
-): Board {
+export function setBlocked(board: Board, stateId: string, reason: string): Board {
   const now = new Date().toISOString();
 
   return {

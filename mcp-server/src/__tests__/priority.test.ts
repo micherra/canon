@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { computeFilePriorities } from "../graph/priority.ts";
 
-function makeNode(id: string, overrides: Record<string, any> = {}) {
+function makeNode(id: string, overrides: Record<string, unknown> = {}) {
   return { id, layer: "domain", violation_count: 0, changed: true, ...overrides };
 }
 
@@ -36,10 +36,7 @@ describe("computeFilePriorities", () => {
   });
 
   it("adds 1 for changed flag", () => {
-    const nodes = [
-      makeNode("a.ts", { changed: true }),
-      makeNode("b.ts", { changed: false }),
-    ];
+    const nodes = [makeNode("a.ts", { changed: true }), makeNode("b.ts", { changed: false })];
     const result = computeFilePriorities(nodes, [], false);
     const a = result.find((r) => r.path === "a.ts")!;
     const b = result.find((r) => r.path === "b.ts")!;
@@ -48,7 +45,13 @@ describe("computeFilePriorities", () => {
 
   it("applies correct layer centrality for each layer", () => {
     const expected: Record<string, number> = {
-      shared: 3, domain: 2, data: 1.5, api: 1, infra: 1, ui: 0.5, unknown: 0,
+      shared: 3,
+      domain: 2,
+      data: 1.5,
+      api: 1,
+      infra: 1,
+      ui: 0.5,
+      unknown: 0,
     };
     for (const [layer, centrality] of Object.entries(expected)) {
       const result = computeFilePriorities([makeNode(`${layer}.ts`, { layer })], []);
@@ -60,9 +63,9 @@ describe("computeFilePriorities", () => {
 
   it("returns results sorted by priority_score descending", () => {
     const nodes = [
-      makeNode("low.ts", { layer: "ui" }),         // 0 + 0 + 1 + 0.5 = 1.5
-      makeNode("high.ts", { layer: "shared" }),     // 0 + 0 + 1 + 3 = 4
-      makeNode("mid.ts", { layer: "domain" }),      // 0 + 0 + 1 + 2 = 3
+      makeNode("low.ts", { layer: "ui" }), // 0 + 0 + 1 + 0.5 = 1.5
+      makeNode("high.ts", { layer: "shared" }), // 0 + 0 + 1 + 3 = 4
+      makeNode("mid.ts", { layer: "domain" }), // 0 + 0 + 1 + 2 = 3
     ];
     const result = computeFilePriorities(nodes, []);
     expect(result.map((r) => r.path)).toEqual(["high.ts", "mid.ts", "low.ts"]);

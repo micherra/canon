@@ -4,14 +4,14 @@
  * All effects are best-effort: parse failures are logged but never block the flow.
  */
 
-import { readFile, readdir } from "fs/promises";
-import { join, basename } from "path";
+import { readdir, readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { DriftStore } from "../drift/store.ts";
-import { generateId } from "../utils/id.ts";
-import type { StateDefinition, Effect } from "./flow-schema.ts";
 import type { ReviewEntry } from "../schema.ts";
+import { generateId } from "../utils/id.ts";
+import { evaluatePostconditions, resolvePostconditions } from "./contract-checker.ts";
 import { getExecutionStore } from "./execution-store.ts";
-import { resolvePostconditions, evaluatePostconditions } from "./contract-checker.ts";
+import type { Effect, StateDefinition } from "./flow-schema.ts";
 
 export interface EffectResult {
   type: string;
@@ -124,7 +124,7 @@ async function persistReview(
   const artifactName = effect.artifact ?? "REVIEW.md";
   const content = await resolveAndRead(artifactName, workspace, artifacts);
   if (!content) {
-    return { type: "persist_review", recorded: 0, errors: ["Artifact not found: " + artifactName] };
+    return { type: "persist_review", recorded: 0, errors: [`Artifact not found: ${artifactName}`] };
   }
 
   const parsed = parseReviewArtifact(content);
@@ -167,98 +167,125 @@ export interface ParsedReview {
  * Extracts: YAML frontmatter verdict, violations table, honored list, score table.
  */
 export function parseReviewArtifact(content: string): ParsedReview | null {
-  // Parse YAML frontmatter for verdict
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-  let verdict: ParsedReview["verdict"] = "CLEAN";
-  const filesReviewed: string[] = [];
+  const verdict = parseVerdict(content);
+  const { violations, filesReviewed } = parseViolationsTable(content);
+  const honored = parseHonoredList(content);
+  const score = parseScoreTable(content);
 
+  return { verdict, files: filesReviewed, violations, honored, score };
+}
+
+function parseVerdict(content: string): ParsedReview["verdict"] {
+  let verdict: ParsedReview["verdict"] = "CLEAN";
+
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
   if (fmMatch) {
-    const fm = fmMatch[1];
-    const verdictMatch = fm.match(/verdict:\s*"?(BLOCKING|WARNING|CLEAN)"?/i);
+    const verdictMatch = fmMatch[1].match(/verdict:\s*"?(BLOCKING|WARNING|CLEAN)"?/i);
     if (verdictMatch) {
       verdict = verdictMatch[1].toUpperCase() as ParsedReview["verdict"];
     }
   }
 
-  // Fallback: parse verdict from heading
+  // Fallback: parse verdict from heading (overwrites frontmatter if present)
   const headingMatch = content.match(/## Canon Review — Verdict:\s*(BLOCKING|WARNING|CLEAN)/i);
   if (headingMatch) {
     verdict = headingMatch[1].toUpperCase() as ParsedReview["verdict"];
   }
 
-  // Parse violations table
+  return verdict;
+}
+
+function parseViolationsTable(content: string): { violations: ParsedReview["violations"]; filesReviewed: string[] } {
   const violations: ParsedReview["violations"] = [];
-  const violationTableMatch = content.match(
+  const filesReviewed: string[] = [];
+
+  const tableMatch = content.match(
     /#### Violations\s*\n(?:<!--.*?-->\s*\n)?\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/,
   );
-  if (violationTableMatch) {
-    const rows = violationTableMatch[1].trim().split("\n");
-    for (const row of rows) {
-      const cells = row.split("|").map((c) => c.trim()).filter(Boolean);
-      if (cells.length >= 3) {
-        const filePath = cells[2]?.replace(/`/g, "").split(":")[0];
-        violations.push({
-          principle_id: cells[0],
-          severity: cells[1],
-          ...(filePath ? { file_path: filePath } : {}),
-        });
-        // Collect files from violations for the files array
-        if (filePath && !filesReviewed.includes(filePath)) {
-          filesReviewed.push(filePath);
-        }
-      }
+  if (!tableMatch) return { violations, filesReviewed };
+
+  const rows = tableMatch[1].trim().split("\n");
+  for (const row of rows) {
+    const cells = row
+      .split("|")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (cells.length < 3) continue;
+
+    const filePath = cells[2]?.replace(/`/g, "").split(":")[0];
+    violations.push({
+      principle_id: cells[0],
+      severity: cells[1],
+      ...(filePath ? { file_path: filePath } : {}),
+    });
+    if (filePath && !filesReviewed.includes(filePath)) {
+      filesReviewed.push(filePath);
     }
   }
 
-  // Parse honored list
+  return { violations, filesReviewed };
+}
+
+function parseHonoredList(content: string): string[] {
   const honored: string[] = [];
   const honoredMatch = content.match(/#### Honored\s*\n(?:<!--.*?-->\s*\n)?((?:- \*\*.*\n)*)/);
-  if (honoredMatch) {
-    const lines = honoredMatch[1].trim().split("\n");
-    for (const line of lines) {
-      const idMatch = line.match(/- \*\*([^*]+)\*\*/);
-      if (idMatch) {
-        honored.push(idMatch[1]);
-      }
+  if (!honoredMatch) return honored;
+
+  const lines = honoredMatch[1].trim().split("\n");
+  for (const line of lines) {
+    const idMatch = line.match(/- \*\*([^*]+)\*\*/);
+    if (idMatch) {
+      honored.push(idMatch[1]);
     }
   }
+  return honored;
+}
 
-  // Parse score table
-  let score: ParsedReview["score"] = {
-    rules: { passed: 0, total: 0 },
-    opinions: { passed: 0, total: 0 },
-    conventions: { passed: 0, total: 0 },
-  };
-  const scoreTableMatch = content.match(
-    /#### Score\s*\n\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/,
-  );
-  if (scoreTableMatch) {
-    const rows = scoreTableMatch[1].trim().split("\n");
-    // Aggregate across all layer rows
-    let rulesP = 0, rulesT = 0, opinionsP = 0, opinionsT = 0, convsP = 0, convsT = 0;
-    for (const row of rows) {
-      const cells = row.split("|").map((c) => c.trim()).filter(Boolean);
-      if (cells.length >= 4) {
-        const parseScore = (s: string) => {
-          const m = s.match(/(\d+)\s*\/\s*(\d+)/);
-          return m ? { passed: parseInt(m[1]), total: parseInt(m[2]) } : { passed: 0, total: 0 };
-        };
-        const r = parseScore(cells[1]);
-        const o = parseScore(cells[2]);
-        const c = parseScore(cells[3]);
-        rulesP += r.passed; rulesT += r.total;
-        opinionsP += o.passed; opinionsT += o.total;
-        convsP += c.passed; convsT += c.total;
-      }
-    }
-    score = {
-      rules: { passed: rulesP, total: rulesT },
-      opinions: { passed: opinionsP, total: opinionsT },
-      conventions: { passed: convsP, total: convsT },
+function parseScoreField(s: string): { passed: number; total: number } {
+  const m = s.match(/(\d+)\s*\/\s*(\d+)/);
+  return m ? { passed: parseInt(m[1], 10), total: parseInt(m[2], 10) } : { passed: 0, total: 0 };
+}
+
+function parseScoreTable(content: string): ParsedReview["score"] {
+  const scoreTableMatch = content.match(/#### Score\s*\n\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/);
+  if (!scoreTableMatch) {
+    return {
+      rules: { passed: 0, total: 0 },
+      opinions: { passed: 0, total: 0 },
+      conventions: { passed: 0, total: 0 },
     };
   }
 
-  return { verdict, files: filesReviewed, violations, honored, score };
+  let rulesP = 0,
+    rulesT = 0,
+    opinionsP = 0,
+    opinionsT = 0,
+    convsP = 0,
+    convsT = 0;
+  const rows = scoreTableMatch[1].trim().split("\n");
+  for (const row of rows) {
+    const cells = row
+      .split("|")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (cells.length < 4) continue;
+
+    const r = parseScoreField(cells[1]);
+    const o = parseScoreField(cells[2]);
+    const c = parseScoreField(cells[3]);
+    rulesP += r.passed;
+    rulesT += r.total;
+    opinionsP += o.passed;
+    opinionsT += o.total;
+    convsP += c.passed;
+    convsT += c.total;
+  }
+
+  return {
+    rules: { passed: rulesP, total: rulesT },
+    opinions: { passed: opinionsP, total: opinionsT },
+    conventions: { passed: convsP, total: convsT },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -266,11 +293,7 @@ export function parseReviewArtifact(content: string): ParsedReview | null {
 // ---------------------------------------------------------------------------
 
 /** Resolve an artifact name to a file path and read its content. */
-async function resolveAndRead(
-  artifactName: string,
-  workspace: string,
-  artifacts: string[],
-): Promise<string | null> {
+async function resolveAndRead(artifactName: string, workspace: string, artifacts: string[]): Promise<string | null> {
   // First try matching against reported artifacts list
   const match = artifacts.find((a) => basename(a) === artifactName || a.endsWith(artifactName));
   if (match) {
@@ -283,14 +306,14 @@ async function resolveAndRead(
   }
 
   // Scan common artifact locations
-  const directPaths = [
-    join(workspace, "reviews", artifactName),
-  ];
+  const directPaths = [join(workspace, "reviews", artifactName)];
 
   for (const p of directPaths) {
     try {
       return await readFile(p, "utf-8");
-    } catch { /* continue */ }
+    } catch {
+      /* continue */
+    }
   }
 
   // Search in plans subdirectories

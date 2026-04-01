@@ -10,8 +10,8 @@
  */
 
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
-import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 
 export type { ConsultationPromptEntry };
 
@@ -34,9 +34,7 @@ export interface ResolveAfterConsultationsResult {
  * via `resolveConsultationPrompt`. Names that cannot be resolved produce
  * warnings rather than errors (handle-partial-failure).
  */
-export function resolveAfterConsultations(
-  input: ResolveAfterConsultationsInput,
-): ResolveAfterConsultationsResult {
+export function resolveAfterConsultations(input: ResolveAfterConsultationsInput): ResolveAfterConsultationsResult {
   const { state_id, flow, variables } = input;
 
   const consultation_prompts: ConsultationPromptEntry[] = [];
@@ -61,9 +59,7 @@ export function resolveAfterConsultations(
         ...(resolved.section ? { section: resolved.section } : {}),
       });
     } else {
-      warnings.push(
-        `After consultation "${name}" could not be resolved for state "${state_id}" — skipping.`,
-      );
+      warnings.push(`After consultation "${name}" could not be resolved for state "${state_id}" — skipping.`);
     }
   }
 

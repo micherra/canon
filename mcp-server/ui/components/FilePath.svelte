@@ -1,26 +1,26 @@
 <script lang="ts">
-  /**
-   * FilePath.svelte
-   *
-   * Renders a file path with the directory prefix muted and the filename
-   * portion highlighted in bold. Uses `splitFilePath` from utils so the
-   * splitting logic is centralised and consistent across the codebase.
-   *
-   * Canon principles:
-   *   - compose-from-small-to-large: atom component, replaces inline splits
-   *   - props-are-the-component-contract: no bridge access, no global state
-   *   - single-source-of-truth: delegates path splitting to utils.splitFilePath
-   */
+/**
+ * FilePath.svelte
+ *
+ * Renders a file path with the directory prefix muted and the filename
+ * portion highlighted in bold. Uses `splitFilePath` from utils so the
+ * splitting logic is centralised and consistent across the codebase.
+ *
+ * Canon principles:
+ *   - compose-from-small-to-large: atom component, replaces inline splits
+ *   - props-are-the-component-contract: no bridge access, no global state
+ *   - single-source-of-truth: delegates path splitting to utils.splitFilePath
+ */
 
-  import { splitFilePath } from "../lib/utils";
+import { splitFilePath } from "../lib/utils";
 
-  interface FilePathProps {
-    path: string;
-  }
+interface FilePathProps {
+  path: string;
+}
 
-  let { path }: FilePathProps = $props();
+let { path }: FilePathProps = $props();
 
-  let parts = $derived(splitFilePath(path));
+let _parts = $derived(splitFilePath(path));
 </script>
 
 <span class="file-path">

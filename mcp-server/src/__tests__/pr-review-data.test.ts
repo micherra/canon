@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriftStore } from "../drift/store.ts";
 
 // ── helpers ──
@@ -203,7 +203,7 @@ describe("getPrReviewData — layer inference", () => {
 
   it("infers layer from file path using config mappings", async () => {
     // Write a config with layer mappings
-    const { writeFile } = await import("fs/promises");
+    const { writeFile } = await import("node:fs/promises");
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
@@ -230,7 +230,7 @@ describe("getPrReviewData — layer inference", () => {
   });
 
   it("groups files by layer in layers array", async () => {
-    const { writeFile } = await import("fs/promises");
+    const { writeFile } = await import("node:fs/promises");
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
@@ -241,11 +241,7 @@ describe("getPrReviewData — layer inference", () => {
       }),
     );
 
-    const output = [
-      "M\tsrc/tools/a.ts",
-      "A\tsrc/tools/b.ts",
-      "M\tsrc/graph/c.ts",
-    ].join("\n");
+    const output = ["M\tsrc/tools/a.ts", "A\tsrc/tools/b.ts", "M\tsrc/graph/c.ts"].join("\n");
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(output),
@@ -290,7 +286,7 @@ describe("getPrReviewData — priority score merging", () => {
 
   it("merges priority_score and priority_factors into matching file entries", async () => {
     // Write mock graph data so computeFilePriorities can run
-    const { writeFile } = await import("fs/promises");
+    const { writeFile } = await import("node:fs/promises");
     const graphData = {
       nodes: [
         {
@@ -306,19 +302,11 @@ describe("getPrReviewData — priority score merging", () => {
           changed: false,
         },
       ],
-      edges: [
-        { source: "src/tools/pr-review-data.ts", target: "src/graph/scanner.ts" },
-      ],
+      edges: [{ source: "src/tools/pr-review-data.ts", target: "src/graph/scanner.ts" }],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
-    const output = [
-      "M\tsrc/tools/pr-review-data.ts",
-      "M\tsrc/graph/scanner.ts",
-    ].join("\n");
+    const output = ["M\tsrc/tools/pr-review-data.ts", "M\tsrc/graph/scanner.ts"].join("\n");
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(output),
@@ -465,9 +453,7 @@ describe("getPrReviewData — git ref sanitization", () => {
 
   it("throws on invalid git ref characters", async () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await expect(
-      fn({ branch: "feat/x; rm -rf /", diff_base: "main" }, tmpDir),
-    ).rejects.toThrow("Invalid git ref");
+    await expect(fn({ branch: "feat/x; rm -rf /", diff_base: "main" }, tmpDir)).rejects.toThrow("Invalid git ref");
   });
 
   it("throws on ref starting with dash", async () => {

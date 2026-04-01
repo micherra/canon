@@ -1,13 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, access } from "fs/promises";
-import path from "path";
-import os from "os";
-import {
-  sanitizeBranch,
-  generateSlug,
-  checkSlugCollision,
-  initWorkspace,
-} from "../orchestration/workspace.ts";
+import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkSlugCollision, generateSlug, initWorkspace, sanitizeBranch } from "../orchestration/workspace.ts";
 
 let tmpDir: string;
 
@@ -110,24 +105,17 @@ describe("initWorkspace", () => {
     const ws = await initWorkspace(tmpDir, "my-branch");
     const expected = ["research", "decisions", "plans", "reviews"];
     for (const dir of expected) {
-      await expect(
-        access(path.join(ws, dir)).then(() => true),
-      ).resolves.toBe(true);
+      await expect(access(path.join(ws, dir)).then(() => true)).resolves.toBe(true);
     }
   });
 
   it("does not create a notes/ directory", async () => {
     const ws = await initWorkspace(tmpDir, "my-branch-no-notes");
-    await expect(
-      access(path.join(ws, "notes")).then(() => true),
-    ).rejects.toThrow();
+    await expect(access(path.join(ws, "notes")).then(() => true)).rejects.toThrow();
   });
 
   it("returns the workspace path", async () => {
     const ws = await initWorkspace(tmpDir, "test-branch");
-    expect(ws).toBe(
-      path.join(tmpDir, ".canon", "workspaces", "test-branch"),
-    );
+    expect(ws).toBe(path.join(tmpDir, ".canon", "workspaces", "test-branch"));
   });
 });
-

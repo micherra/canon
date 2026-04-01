@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DriftStore } from "../drift/store.ts";
 import { reportInputSchema } from "../schema.ts";
 import { report } from "../tools/report.ts";
-import { DriftStore } from "../drift/store.ts";
 
 // --- Schema validation ---
 
@@ -29,15 +29,11 @@ describe("reportInputSchema", () => {
   });
 
   it("rejects input with invalid type discriminant", () => {
-    expect(() =>
-      reportInputSchema.parse({ type: "unknown", foo: "bar" })
-    ).toThrow();
+    expect(() => reportInputSchema.parse({ type: "unknown", foo: "bar" })).toThrow();
   });
 
   it("rejects input with missing required fields for review", () => {
-    expect(() =>
-      reportInputSchema.parse({ type: "review" })
-    ).toThrow();
+    expect(() => reportInputSchema.parse({ type: "review" })).toThrow();
   });
 });
 
@@ -68,7 +64,7 @@ describe("report()", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     expect(result.recorded).toBe(true);
@@ -93,7 +89,7 @@ describe("report()", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     const store = new DriftStore(tmpDir);
@@ -114,7 +110,7 @@ describe("report()", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     const store = new DriftStore(tmpDir);
@@ -136,7 +132,7 @@ describe("report()", () => {
         },
         verdict: "WARNING", // explicit override — would be BLOCKING if derived
       },
-      tmpDir
+      tmpDir,
     );
 
     const store = new DriftStore(tmpDir);

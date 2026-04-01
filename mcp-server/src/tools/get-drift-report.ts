@@ -1,6 +1,6 @@
-import { DriftStore } from "../drift/store.ts";
 import { analyzeDrift, type DriftReport } from "../drift/analyzer.ts";
 import { formatDriftReport } from "../drift/reporter.ts";
+import { DriftStore } from "../drift/store.ts";
 import { loadAllPrinciples } from "../matcher.ts";
 import type { ReviewEntry } from "../schema.ts";
 
@@ -19,14 +19,11 @@ export interface DriftReportOutput {
 export async function getDriftReport(
   input: DriftReportInput,
   projectDir: string,
-  pluginDir: string
+  pluginDir: string,
 ): Promise<DriftReportOutput> {
   const store = new DriftStore(projectDir);
 
-  const [reviews, principles] = await Promise.all([
-    store.getReviews(),
-    loadAllPrinciples(projectDir, pluginDir),
-  ]);
+  const [reviews, principles] = await Promise.all([store.getReviews(), loadAllPrinciples(projectDir, pluginDir)]);
 
   const allIds = principles.map((p) => p.id);
 
@@ -39,9 +36,7 @@ export async function getDriftReport(
   const formatted = formatDriftReport(report);
 
   // PR-specific reviews: those with pr_number or branch set
-  const prReviews = reviews.filter(
-    (r) => r.pr_number !== undefined || r.branch !== undefined
-  );
+  const prReviews = reviews.filter((r) => r.pr_number !== undefined || r.branch !== undefined);
 
   return { report, formatted, pr_reviews: prReviews };
 }

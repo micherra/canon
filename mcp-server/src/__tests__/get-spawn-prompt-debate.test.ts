@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../orchestration/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
@@ -13,9 +13,9 @@ vi.mock("../orchestration/diff-cluster.ts", () => ({
 }));
 
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { writeMessage } from "../orchestration/messages.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 let tmpDirs: string[] = [];
 
@@ -25,7 +25,7 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function makeBoard(overrides: Record<string, unknown> = {}): Board {
+function _makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
     flow: "debate-flow",
     task: "test task",

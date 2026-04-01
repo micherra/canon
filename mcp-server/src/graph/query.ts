@@ -3,12 +3,12 @@
  * Gracefully returns null when graph data doesn't exist.
  */
 
-import { readFile, stat } from "fs/promises";
-import { join } from "path";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { CANON_DIR, CANON_FILES, LAYER_CENTRALITY } from "../constants.ts";
 import { isNotFound } from "../utils/errors.ts";
-import { LAYER_CENTRALITY, CANON_DIR, CANON_FILES } from "../constants.ts";
-import type { CodebaseInsights } from "./insights.ts";
 import { buildDegreeMaps } from "./degree.ts";
+import type { CodebaseInsights } from "./insights.ts";
 
 // --- Types ---
 
@@ -105,63 +105,80 @@ export async function loadCachedGraph(projectDir: string): Promise<GraphHandle |
   }
 }
 
-function buildParsedGraph(raw: RawGraphData): ParsedGraph {
+/** Build node-level lookup maps from raw graph nodes. */
+function buildNodeMaps(nodes: GraphNode[]): {
+  nodeLayer: Map<string, string>;
+  nodeChanged: Map<string, boolean>;
+  nodeViolations: Map<string, number>;
+} {
   const nodeLayer = new Map<string, string>();
   const nodeChanged = new Map<string, boolean>();
   const nodeViolations = new Map<string, number>();
-  const reverseIndex = new Map<string, string[]>();
-
-  for (const node of raw.nodes) {
+  for (const node of nodes) {
     nodeLayer.set(node.id, node.layer || "unknown");
     nodeChanged.set(node.id, node.changed || false);
     nodeViolations.set(node.id, node.violation_count || 0);
   }
+  return { nodeLayer, nodeChanged, nodeViolations };
+}
 
+/** Build reverse index from edges (target -> sources). */
+function buildReverseIndex(edges: GraphEdge[]): Map<string, string[]> {
+  const reverseIndex = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!reverseIndex.has(edge.target)) reverseIndex.set(edge.target, []);
+    reverseIndex.get(edge.target)!.push(edge.source);
+  }
+  return reverseIndex;
+}
+
+/** Build hub set from most_connected insights. */
+function buildHubSet(insights: CodebaseInsights | undefined): Set<string> {
+  const hubSet = new Set<string>();
+  if (!insights?.most_connected) return hubSet;
+  for (const mc of insights.most_connected) hubSet.add(mc.path);
+  return hubSet;
+}
+
+/** Build cycle membership map from circular dependency insights. */
+function buildCycleMembers(insights: CodebaseInsights | undefined): Map<string, string[]> {
+  const cycleMembers = new Map<string, string[]>();
+  if (!insights?.circular_dependencies) return cycleMembers;
+  for (const cycle of insights.circular_dependencies) {
+    for (const node of cycle) {
+      const existing = cycleMembers.get(node) || [];
+      for (const p of cycle) {
+        if (p !== node && !existing.includes(p)) existing.push(p);
+      }
+      cycleMembers.set(node, existing);
+    }
+  }
+  return cycleMembers;
+}
+
+/** Build layer violations grouped by source file. */
+function buildLayerViolationsBySource(
+  insights: CodebaseInsights | undefined,
+): Map<string, Array<{ target: string; source_layer: string; target_layer: string }>> {
+  const map = new Map<string, Array<{ target: string; source_layer: string; target_layer: string }>>();
+  if (!insights?.layer_violations) return map;
+  for (const lv of insights.layer_violations) {
+    if (!map.has(lv.source)) map.set(lv.source, []);
+    map.get(lv.source)!.push({
+      target: lv.target,
+      source_layer: lv.source_layer,
+      target_layer: lv.target_layer,
+    });
+  }
+  return map;
+}
+
+function buildParsedGraph(raw: RawGraphData): ParsedGraph {
+  const { nodeLayer, nodeChanged, nodeViolations } = buildNodeMaps(raw.nodes);
   const { inDegree, outDegree } = buildDegreeMaps(
     raw.nodes.map((n) => n.id),
     raw.edges,
   );
-
-  for (const edge of raw.edges) {
-    if (!reverseIndex.has(edge.target)) reverseIndex.set(edge.target, []);
-    reverseIndex.get(edge.target)!.push(edge.source);
-  }
-
-  // Hub set (from most_connected)
-  const hubSet = new Set<string>();
-  if (raw.insights?.most_connected) {
-    for (const mc of raw.insights.most_connected) {
-      hubSet.add(mc.path);
-    }
-  }
-
-  // Cycle membership
-  const cycleMembers = new Map<string, string[]>();
-  if (raw.insights?.circular_dependencies) {
-    for (const cycle of raw.insights.circular_dependencies) {
-      for (const node of cycle) {
-        const existing = cycleMembers.get(node) || [];
-        const peers = cycle.filter((n) => n !== node);
-        for (const p of peers) {
-          if (!existing.includes(p)) existing.push(p);
-        }
-        cycleMembers.set(node, existing);
-      }
-    }
-  }
-
-  // Layer violations by source
-  const layerViolationsBySource = new Map<string, Array<{ target: string; source_layer: string; target_layer: string }>>();
-  if (raw.insights?.layer_violations) {
-    for (const lv of raw.insights.layer_violations) {
-      if (!layerViolationsBySource.has(lv.source)) layerViolationsBySource.set(lv.source, []);
-      layerViolationsBySource.get(lv.source)!.push({
-        target: lv.target,
-        source_layer: lv.source_layer,
-        target_layer: lv.target_layer,
-      });
-    }
-  }
 
   return {
     raw,
@@ -170,10 +187,10 @@ function buildParsedGraph(raw: RawGraphData): ParsedGraph {
     nodeLayer,
     nodeChanged,
     nodeViolations,
-    hubSet,
-    cycleMembers,
-    layerViolationsBySource,
-    reverseIndex,
+    hubSet: buildHubSet(raw.insights),
+    cycleMembers: buildCycleMembers(raw.insights),
+    layerViolationsBySource: buildLayerViolationsBySource(raw.insights),
+    reverseIndex: buildReverseIndex(raw.edges),
     generatedAt: raw.generated_at || "",
   };
 }

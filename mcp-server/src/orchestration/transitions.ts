@@ -3,14 +3,14 @@
  */
 
 import type {
-  StateDefinition,
-  StuckWhen,
-  HistoryEntry,
-  ViolationHistoryEntry,
   FileTestHistoryEntry,
-  StatusHistoryEntry,
-  ProgressHistoryEntry,
   GateProgressHistoryEntry,
+  HistoryEntry,
+  ProgressHistoryEntry,
+  StateDefinition,
+  StatusHistoryEntry,
+  StuckWhen,
+  ViolationHistoryEntry,
 } from "./flow-schema.ts";
 import { STATUS_ALIASES } from "./flow-schema.ts";
 
@@ -27,10 +27,7 @@ export function normalizeStatus(raw: string): string {
  * Look up a condition in a state's transitions map.
  * Returns the target state name, or null if no matching transition exists.
  */
-export function evaluateTransition(
-  state: StateDefinition,
-  condition: string,
-): string | null {
+export function evaluateTransition(state: StateDefinition, condition: string): string | null {
   if (!state.transitions) return null;
   return state.transitions[condition] ?? null;
 }
@@ -110,16 +107,16 @@ export function isStuck(history: HistoryEntry[], stuckWhen: StuckWhen): boolean 
     case "same_violations": {
       const p = prev as ViolationHistoryEntry;
       const c = curr as ViolationHistoryEntry;
-      return setsEqual(new Set(p.principle_ids), new Set(c.principle_ids))
-        && setsEqual(new Set(p.file_paths), new Set(c.file_paths));
+      return (
+        setsEqual(new Set(p.principle_ids), new Set(c.principle_ids)) &&
+        setsEqual(new Set(p.file_paths), new Set(c.file_paths))
+      );
     }
     case "same_file_test": {
       const p = prev as FileTestHistoryEntry;
       const c = curr as FileTestHistoryEntry;
       if (p.pairs.length !== c.pairs.length) return false;
-      return c.pairs.every((cp) =>
-        p.pairs.some((pp) => pp.file === cp.file && pp.test === cp.test),
-      );
+      return c.pairs.every((cp) => p.pairs.some((pp) => pp.file === cp.file && pp.test === cp.test));
     }
     case "same_status": {
       const p = prev as StatusHistoryEntry;
@@ -157,9 +154,7 @@ export interface ParallelPerResult {
 /**
  * Returns true if the RoleEntry has optional: true, false otherwise.
  */
-export function isRoleOptional(
-  entry: string | { name: string; optional?: boolean },
-): boolean {
+export function isRoleOptional(entry: string | { name: string; optional?: boolean }): boolean {
   return typeof entry !== "string" && entry.optional === true;
 }
 
@@ -174,9 +169,7 @@ const REVIEW_SEVERITY_ORDER: Record<string, number> = {
  * The most severe verdict across all cluster results becomes the aggregated condition.
  * Always returns an empty cannotFixItems list (not applicable for review verdicts).
  */
-export function aggregateReviewResults(
-  results: ParallelPerResult[],
-): { condition: string; cannotFixItems: string[] } {
+export function aggregateReviewResults(results: ParallelPerResult[]): { condition: string; cannotFixItems: string[] } {
   if (results.length === 0) return { condition: "clean", cannotFixItems: [] };
 
   let maxSeverity = 0;

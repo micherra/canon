@@ -1,15 +1,19 @@
-import { readFile } from "fs/promises";
-import { join } from "path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 // Simple per-event-loop-tick cache — avoids reading config.json 3x when
 // loadLayerMappings, deriveSourceDirsFromLayers, and loadConfigNumber are called in sequence.
-let configCache: { projectDir: string; result: Record<string, any> | null; tick: number } | null = null;
+let configCache: { projectDir: string; result: Record<string, unknown> | null; tick: number } | null = null;
 let currentTick = 0;
-const bumpTick = () => { queueMicrotask(() => { currentTick++; }); };
+const bumpTick = () => {
+  queueMicrotask(() => {
+    currentTick++;
+  });
+};
 
 /** Read and parse .canon/config.json, returning null if missing or unparseable. */
-async function loadCanonConfig(projectDir: string): Promise<Record<string, any> | null> {
+async function loadCanonConfig(projectDir: string): Promise<Record<string, unknown> | null> {
   if (configCache && configCache.projectDir === projectDir && configCache.tick === currentTick) {
     return configCache.result;
   }
@@ -18,8 +22,8 @@ async function loadCanonConfig(projectDir: string): Promise<Record<string, any> 
   let raw: string;
   try {
     raw = await readFile(join(projectDir, CANON_DIR, CANON_FILES.CONFIG), "utf-8");
-  } catch (err: any) {
-    if (err.code === "ENOENT") {
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       configCache = { projectDir, result: null, tick: currentTick };
       return null;
     }
@@ -192,10 +196,11 @@ const DEFAULT_COMPOSITION_CONFIG: GraphCompositionConfig = {
 /** Load graph composition config from .canon/config.json. */
 export async function loadGraphCompositionConfig(projectDir: string): Promise<GraphCompositionConfig> {
   const config = await loadCanonConfig(projectDir);
-  if (!config?.graph?.composition) return DEFAULT_COMPOSITION_CONFIG;
-  const c = config.graph.composition;
+  const graph = config?.graph as Record<string, unknown> | undefined;
+  if (!graph?.composition) return DEFAULT_COMPOSITION_CONFIG;
+  const c = graph.composition as Record<string, unknown>;
   return {
-    enabled: c.enabled ?? false,
+    enabled: (c.enabled as boolean) ?? false,
     markers: Array.isArray(c.markers) ? c.markers : DEFAULT_MARKERS,
     file_patterns: Array.isArray(c.file_patterns) ? c.file_patterns : [],
     min_confidence: typeof c.min_confidence === "number" ? c.min_confidence : 0.5,
@@ -204,15 +209,11 @@ export async function loadGraphCompositionConfig(projectDir: string): Promise<Gr
 }
 
 /** Read a numeric config value at a dotted path (e.g. "review.max_principles_per_review"). */
-export async function loadConfigNumber(
-  projectDir: string,
-  key: string,
-  defaultValue: number,
-): Promise<number> {
+export async function loadConfigNumber(projectDir: string, key: string, defaultValue: number): Promise<number> {
   const config = await loadCanonConfig(projectDir);
   if (!config) return defaultValue;
 
-  const value = Number(key.split(".").reduce((acc, part) => acc?.[part], config));
+  const value = Number(key.split(".").reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], config));
 
   return Number.isFinite(value) && value >= 1 ? Math.floor(value) : defaultValue;
 }

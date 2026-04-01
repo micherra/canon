@@ -1,45 +1,44 @@
 <script lang="ts">
-  /**
-   * BlastRadiusChart.svelte
-   *
-   * Horizontal bar chart showing files ranked by dependency count.
-   * Pure CSS bars — no charting library. Width proportional to max dep_count.
-   * Pure presentation — receives all data via props, no data fetching.
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders blast radius chart only
-   *   - compose-from-small-to-large: used as a leaf panel by PrReview.svelte
-   */
+/**
+ * BlastRadiusChart.svelte
+ *
+ * Horizontal bar chart showing files ranked by dependency count.
+ * Pure CSS bars — no charting library. Width proportional to max dep_count.
+ * Pure presentation — receives all data via props, no data fetching.
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders blast radius chart only
+ *   - compose-from-small-to-large: used as a leaf panel by PrReview.svelte
+ */
 
-  interface BlastRadiusEntry {
-    file: string;
-    dep_count: number;
-  }
+interface BlastRadiusEntry {
+  file: string;
+  dep_count: number;
+}
 
-  interface BlastRadiusChartProps {
-    entries: BlastRadiusEntry[];
-    onPrompt?: (text: string) => void;
-  }
+interface BlastRadiusChartProps {
+  entries: BlastRadiusEntry[];
+  onPrompt?: (text: string) => void;
+}
 
-  let { entries, onPrompt }: BlastRadiusChartProps = $props();
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { entries, onPrompt }: BlastRadiusChartProps = $props();
 
-  const maxDepCount = $derived(
-    entries.length > 0 ? Math.max(...entries.map((e) => e.dep_count)) : 0,
-  );
+const maxDepCount = $derived(entries.length > 0 ? Math.max(...entries.map((e) => e.dep_count)) : 0);
 
-  function barWidth(depCount: number): string {
-    if (maxDepCount === 0) return "0%";
-    return `${Math.round((depCount / maxDepCount) * 100)}%`;
-  }
+function _barWidth(depCount: number): string {
+  if (maxDepCount === 0) return "0%";
+  return `${Math.round((depCount / maxDepCount) * 100)}%`;
+}
 
-  function basename(file: string): string {
-    const parts = file.replace(/\\/g, "/").split("/");
-    return parts[parts.length - 1] ?? file;
-  }
+function _basename(file: string): string {
+  const parts = file.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] ?? file;
+}
 
-  function truncate(text: string, maxLen: number): string {
-    return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
-  }
+function _truncate(text: string, maxLen: number): string {
+  return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
+}
 </script>
 
 <div class="blast-radius-chart">

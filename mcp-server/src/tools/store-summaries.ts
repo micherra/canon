@@ -1,13 +1,13 @@
 /** Store file summaries to .canon/summaries.json — merges with existing */
 
-import { readFile, mkdir } from "fs/promises";
-import { existsSync } from "fs";
-import { join, dirname } from "path";
-import { atomicWriteFile } from "../utils/atomic-write.ts";
+import { existsSync } from "node:fs";
+import { mkdir, readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
-import { isNotFound } from "../utils/errors.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
+import { isNotFound } from "../utils/errors.ts";
 
 export interface SummaryEntry {
   summary: string;
@@ -25,9 +25,7 @@ export interface StoreSummariesOutput {
 }
 
 /** Read summaries from disk, supporting both old (string) and new (object) formats */
-export async function loadSummariesFile(
-  projectDir: string,
-): Promise<Record<string, SummaryEntry>> {
+export async function loadSummariesFile(projectDir: string): Promise<Record<string, SummaryEntry>> {
   const summariesPath = join(projectDir, CANON_DIR, CANON_FILES.SUMMARIES);
   try {
     const raw = await readFile(summariesPath, "utf-8");
@@ -49,9 +47,7 @@ export async function loadSummariesFile(
 }
 
 /** Extract just the summary text for consumers that don't need timestamps */
-export function flattenSummaries(
-  entries: Record<string, SummaryEntry>,
-): Record<string, string> {
+export function flattenSummaries(entries: Record<string, SummaryEntry>): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, entry] of Object.entries(entries)) {
     result[key] = entry.summary;
@@ -92,10 +88,7 @@ async function writeSummariesToDb(
   }
 }
 
-export async function storeSummaries(
-  input: StoreSummariesInput,
-  projectDir: string,
-): Promise<StoreSummariesOutput> {
+export async function storeSummaries(input: StoreSummariesInput, projectDir: string): Promise<StoreSummariesOutput> {
   const summariesPath = join(projectDir, CANON_DIR, CANON_FILES.SUMMARIES);
 
   // Load existing summaries

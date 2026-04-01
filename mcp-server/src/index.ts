@@ -1,42 +1,41 @@
 #!/usr/bin/env node
 
+import { readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { RESOURCE_MIME_TYPE, registerAppResource, registerAppTool } from "@modelcontextprotocol/ext-apps/server";
+import type { ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { ToolCallback } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
-import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
-import { readFile } from "fs/promises";
-import { getPrinciples } from "./tools/get-principles.ts";
-import { listPrinciples } from "./tools/list-principles.ts";
-import { reviewCode } from "./tools/review-code.ts";
-import { getCompliance } from "./tools/get-compliance.ts";
-import { report } from "./tools/report.ts";
+import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
+import { reportInputSchema } from "./schema.ts";
+import { checkConvergence } from "./tools/check-convergence.ts";
 import { codebaseGraph, compactGraph } from "./tools/codebase-graph.ts";
-import { getFileContext } from "./tools/get-file-context.ts";
-import { storeSummaries } from "./tools/store-summaries.ts";
+import { enterAndPrepareState } from "./tools/enter-and-prepare-state.ts";
+import { getCompliance } from "./tools/get-compliance.ts";
 
 import { getDriftReport } from "./tools/get-drift-report.ts";
-import { loadFlow } from "./tools/load-flow.ts";
-import { initWorkspaceFlow } from "./tools/init-workspace.ts";
-import { getSpawnPrompt } from "./tools/get-spawn-prompt.ts";
-import { reportResult } from "./tools/report-result.ts";
-import { checkConvergence } from "./tools/check-convergence.ts";
-import { updateBoard } from "./tools/update-board.ts";
-import { injectWaveEvent } from "./tools/inject-wave-event.ts";
-import { resolveWaveEvent } from "./tools/resolve-wave-event.ts";
-import { enterAndPrepareState } from "./tools/enter-and-prepare-state.ts";
-import { resolveAfterConsultations } from "./tools/resolve-after-consultations.ts";
-import { postMessage } from "./tools/post-message.ts";
+import { getFileContext } from "./tools/get-file-context.ts";
 import { getMessages } from "./tools/get-messages.ts";
-import { storePrReview } from "./tools/store-pr-review.ts";
+import { getPrinciples } from "./tools/get-principles.ts";
+import { getSpawnPrompt } from "./tools/get-spawn-prompt.ts";
 import { graphQuery } from "./tools/graph-query.ts";
+import { initWorkspaceFlow } from "./tools/init-workspace.ts";
+import { injectWaveEvent } from "./tools/inject-wave-event.ts";
+import { listPrinciples } from "./tools/list-principles.ts";
+import { loadFlow } from "./tools/load-flow.ts";
+import { postMessage } from "./tools/post-message.ts";
+import { report } from "./tools/report.ts";
+import { reportResult } from "./tools/report-result.ts";
+import { resolveAfterConsultations } from "./tools/resolve-after-consultations.ts";
+import { resolveWaveEvent } from "./tools/resolve-wave-event.ts";
+import { reviewCode } from "./tools/review-code.ts";
 import { showPrImpact } from "./tools/show-pr-impact.ts";
-import { reportInputSchema } from "./schema.ts";
-import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
-
-import { dirname, join, resolve } from "path";
-import { fileURLToPath } from "url";
+import { storePrReview } from "./tools/store-pr-review.ts";
+import { storeSummaries } from "./tools/store-summaries.ts";
+import { updateBoard } from "./tools/update-board.ts";
 import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
 import { wrapHandler } from "./utils/wrap-handler.ts";
 
@@ -69,12 +68,17 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
   htmlFile: string,
   handler: ToolCallback<Schema>,
 ) {
-  registerAppTool(server, toolName, {
-    title,
-    description,
-    inputSchema,
-    _meta: { ui: { resourceUri } },
-  }, handler);
+  registerAppTool(
+    server,
+    toolName,
+    {
+      title,
+      description,
+      inputSchema,
+      _meta: { ui: { resourceUri } },
+    },
+    handler,
+  );
 
   registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
     const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
@@ -114,12 +118,15 @@ server.registerTool(
       file_path: z.string().optional().describe("Path of the file being worked on"),
       layers: z.array(z.string()).optional().describe("Architectural layers (e.g., api, domain, data)"),
       task_description: z.string().optional().describe("Brief description of the task"),
-      summary_only: z.boolean().optional().describe("Return only the summary paragraph instead of full body — reduces context usage by ~60%"),
+      summary_only: z
+        .boolean()
+        .optional()
+        .describe("Return only the summary paragraph instead of full body — reduces context usage by ~60%"),
     },
   },
   wrapHandler(async (input) => {
     return getPrinciples(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -127,10 +134,7 @@ server.registerTool(
   {
     description: "Browse the full Canon principle index. Returns metadata only (no full body) for efficient browsing.",
     inputSchema: {
-      filter_severity: z
-        .enum(["rule", "strong-opinion", "convention"])
-        .optional()
-        .describe("Filter by severity level"),
+      filter_severity: z.enum(["rule", "strong-opinion", "convention"]).optional().describe("Filter by severity level"),
       filter_tags: z.array(z.string()).optional().describe("Filter by tags"),
       filter_layers: z.array(z.string()).optional().describe("Filter by architectural layers"),
       include_archived: z.boolean().optional().describe("Include archived principles in results (default: false)"),
@@ -138,13 +142,14 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return listPrinciples(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
   "review_code",
   {
-    description: "Returns Canon principles relevant to a file for review. The calling agent evaluates compliance — this tool provides the matched principles and code.",
+    description:
+      "Returns Canon principles relevant to a file for review. The calling agent evaluates compliance — this tool provides the matched principles and code.",
     inputSchema: {
       code: z.string().describe("The code to review"),
       file_path: z.string().describe("Path of the file being reviewed"),
@@ -153,20 +158,21 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return reviewCode(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
   "get_compliance",
   {
-    description: "Returns compliance stats for a specific Canon principle. Shows violation counts, compliance rate, trend, and weekly history.",
+    description:
+      "Returns compliance stats for a specific Canon principle. Shows violation counts, compliance rate, trend, and weekly history.",
     inputSchema: {
       principle_id: z.string().describe("ID of the principle to check compliance for"),
     },
   },
   wrapHandler(async (input) => {
     return getCompliance(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 // Tool: report (unified — decisions, patterns, and reviews)
@@ -179,9 +185,8 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return report(input, projectDir);
-  })
+  }),
 );
-
 
 registerToolWithUi(
   "codebase_graph",
@@ -189,10 +194,26 @@ registerToolWithUi(
   "Codebase Graph",
   "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, violations, insights).",
   {
-    root_dir: z.string().optional().describe("Fallback root directory to scan when no source directories are configured. Ignored if source_dirs are provided in input or derived from layers in .canon/config.json."),
-    source_dirs: z.array(z.string()).optional().describe("Directories to scan (e.g. ['src', 'lib']). Overrides directories derived from layers in .canon/config.json."),
-    include_extensions: z.array(z.string()).optional().describe("File extensions to include (default: ts, js, py, go, rs)"),
-    exclude_dirs: z.array(z.string()).optional().describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
+    root_dir: z
+      .string()
+      .optional()
+      .describe(
+        "Fallback root directory to scan when no source directories are configured. Ignored if source_dirs are provided in input or derived from layers in .canon/config.json.",
+      ),
+    source_dirs: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Directories to scan (e.g. ['src', 'lib']). Overrides directories derived from layers in .canon/config.json.",
+      ),
+    include_extensions: z
+      .array(z.string())
+      .optional()
+      .describe("File extensions to include (default: ts, js, py, go, rs)"),
+    exclude_dirs: z
+      .array(z.string())
+      .optional()
+      .describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
     diff_base: z.string().optional().describe("Git ref to diff against — marks changed files in the graph"),
     changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
   },
@@ -220,23 +241,29 @@ registerToolWithUi(
 server.registerTool(
   "store_summaries",
   {
-    description: "Store file summaries to .canon/summaries.json. Merges with existing summaries so you can generate them incrementally.",
+    description:
+      "Store file summaries to .canon/summaries.json. Merges with existing summaries so you can generate them incrementally.",
     inputSchema: {
-      summaries: z.array(z.object({
-        file_path: z.string().describe("Project-relative file path"),
-        summary: z.string().describe("Rich contextual summary of the file's role"),
-      })).describe("Array of file summaries to store"),
+      summaries: z
+        .array(
+          z.object({
+            file_path: z.string().describe("Project-relative file path"),
+            summary: z.string().describe("Rich contextual summary of the file's role"),
+          }),
+        )
+        .describe("Array of file summaries to store"),
     },
   },
   wrapHandler(async (input) => {
     return storeSummaries(input, projectDir);
-  })
+  }),
 );
 
 server.registerTool(
   "get_drift_report",
   {
-    description: "Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, and PR review history.",
+    description:
+      "Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, and PR review history.",
     inputSchema: {
       last_n: z.number().optional().describe("Only analyze the last N reviews"),
       principle_id: z.string().optional().describe("Filter to a specific principle"),
@@ -245,26 +272,28 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getDriftReport(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
   "load_flow",
   {
-    description: "Load and resolve a Canon flow definition. Returns the resolved flow with fragment resolution, spawn instructions, and a state adjacency graph.",
+    description:
+      "Load and resolve a Canon flow definition. Returns the resolved flow with fragment resolution, spawn instructions, and a state adjacency graph.",
     inputSchema: {
       flow_name: z.string().describe("Name of the flow file (without .md extension)"),
     },
   },
   wrapHandler(async (input) => {
     return loadFlow(input, pluginDir, projectDir);
-  })
+  }),
 );
 
 server.registerTool(
   "init_workspace",
   {
-    description: "Initialize a Canon workspace for flow execution. Creates workspace directory and initializes SQLite store. Resumes from existing store if present.",
+    description:
+      "Initialize a Canon workspace for flow execution. Creates workspace directory and initializes SQLite store. Resumes from existing store if present.",
     inputSchema: {
       flow_name: z.string(),
       task: z.string(),
@@ -273,18 +302,22 @@ server.registerTool(
       tier: z.enum(["small", "medium", "large"]),
       original_input: z.string().optional(),
       skip_flags: z.array(z.string()).optional(),
-      preflight: z.boolean().optional().describe("Run pre-flight checks (git status, lock, stale sessions) before creating workspace"),
+      preflight: z
+        .boolean()
+        .optional()
+        .describe("Run pre-flight checks (git status, lock, stale sessions) before creating workspace"),
     },
   },
   wrapHandler(async (input) => {
     return initWorkspaceFlow(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
   "get_spawn_prompt",
   {
-    description: "Resolve spawn prompts for a flow state. Substitutes variables, applies templates, and fans out by state type (single/parallel/wave/parallel-per).",
+    description:
+      "Resolve spawn prompts for a flow state. Substitutes variables, applies templates, and fans out by state type (single/parallel/wave/parallel-per).",
     inputSchema: {
       workspace: z.string(),
       state_id: z.string(),
@@ -298,13 +331,14 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getSpawnPrompt({ ...input, project_dir: projectDir });
-  })
+  }),
 );
 
 server.registerTool(
   "report_result",
   {
-    description: "Report an agent's result. Normalizes status, evaluates transitions, updates board state, checks stuck detection. Returns next state and whether HITL is required.",
+    description:
+      "Report an agent's result. Normalizes status, evaluates transitions, updates board state, checks stuck detection. Returns next state and whether HITL is required.",
     inputSchema: {
       workspace: z.string(),
       state_id: z.string(),
@@ -314,68 +348,117 @@ server.registerTool(
       concern_text: z.string().optional(),
       error: z.string().optional(),
       metrics: z.object({ duration_ms: z.number(), spawns: z.number(), model: z.string() }).optional(),
-      principle_ids: z.array(z.string()).optional().describe("Violation principle IDs for same_violations stuck detection"),
+      principle_ids: z
+        .array(z.string())
+        .optional()
+        .describe("Violation principle IDs for same_violations stuck detection"),
       file_paths: z.array(z.string()).optional().describe("Violating file paths for same_violations stuck detection"),
-      file_test_pairs: z.array(z.object({ file: z.string(), test: z.string() })).optional().describe("File/test pairs for same_file_test stuck detection"),
+      file_test_pairs: z
+        .array(z.object({ file: z.string(), test: z.string() }))
+        .optional()
+        .describe("File/test pairs for same_file_test stuck detection"),
       commit_sha: z.string().optional().describe("Current commit SHA for no_progress stuck detection"),
       artifact_count: z.number().optional().describe("Current artifact count for no_progress stuck detection"),
-      parallel_results: z.array(z.object({
-        item: z.string(),
-        status: z.string(),
-        artifacts: z.array(z.string()).optional(),
-      })).optional().describe("Results from parallel-per execution — triggers aggregation"),
-      gate_results: z.array(z.object({
-        passed: z.boolean(),
-        gate: z.string(),
-        command: z.string().optional(),
-        output: z.string().optional(),
-        exitCode: z.number().optional(),
-      })).optional().describe("Quality gate results reported by the agent"),
-      postcondition_results: z.array(z.object({
-        passed: z.boolean(),
-        name: z.string(),
-        type: z.string(),
-        output: z.string().optional(),
-      })).optional().describe("Postcondition check results reported by the agent"),
+      parallel_results: z
+        .array(
+          z.object({
+            item: z.string(),
+            status: z.string(),
+            artifacts: z.array(z.string()).optional(),
+          }),
+        )
+        .optional()
+        .describe("Results from parallel-per execution — triggers aggregation"),
+      gate_results: z
+        .array(
+          z.object({
+            passed: z.boolean(),
+            gate: z.string(),
+            command: z.string().optional(),
+            output: z.string().optional(),
+            exitCode: z.number().optional(),
+          }),
+        )
+        .optional()
+        .describe("Quality gate results reported by the agent"),
+      postcondition_results: z
+        .array(
+          z.object({
+            passed: z.boolean(),
+            name: z.string(),
+            type: z.string(),
+            output: z.string().optional(),
+          }),
+        )
+        .optional()
+        .describe("Postcondition check results reported by the agent"),
       violation_count: z.number().optional().describe("Total number of principle violations found"),
-      violation_severities: z.object({
-        blocking: z.number(),
-        warning: z.number(),
-      }).optional().describe("Violation counts broken down by severity"),
-      test_results: z.object({
-        passed: z.number(),
-        failed: z.number(),
-        skipped: z.number(),
-      }).optional().describe("Test suite results"),
+      violation_severities: z
+        .object({
+          blocking: z.number(),
+          warning: z.number(),
+        })
+        .optional()
+        .describe("Violation counts broken down by severity"),
+      test_results: z
+        .object({
+          passed: z.number(),
+          failed: z.number(),
+          skipped: z.number(),
+        })
+        .optional()
+        .describe("Test suite results"),
       files_changed: z.number().optional().describe("Number of files changed in this state's work"),
-      discovered_gates: z.array(z.object({
-        command: z.string(),
-        source: z.string(),
-      })).optional().describe("Gate commands discovered by the agent for future runs"),
-      discovered_postconditions: z.array(z.object({
-        type: z.enum(["file_exists", "file_changed", "pattern_match", "no_pattern", "bash_check"]),
-        target: z.string().optional(),
-        pattern: z.string().optional(),
-        command: z.string().optional(),
-      })).optional().describe("Postcondition assertions discovered by the agent for future runs"),
-      compete_results: z.array(z.object({
-        lens: z.string().optional(),
-        status: z.string(),
-        artifacts: z.array(z.string()).optional(),
-      })).optional().describe("Results from competitive execution — persisted to board state"),
-      synthesized: z.boolean().optional().describe("Whether the compete results have been synthesized into a single output"),
-      progress_line: z.string().optional().describe("One-line progress entry to append to progress.md (e.g. '- [state_id] done: summary')"),
+      discovered_gates: z
+        .array(
+          z.object({
+            command: z.string(),
+            source: z.string(),
+          }),
+        )
+        .optional()
+        .describe("Gate commands discovered by the agent for future runs"),
+      discovered_postconditions: z
+        .array(
+          z.object({
+            type: z.enum(["file_exists", "file_changed", "pattern_match", "no_pattern", "bash_check"]),
+            target: z.string().optional(),
+            pattern: z.string().optional(),
+            command: z.string().optional(),
+          }),
+        )
+        .optional()
+        .describe("Postcondition assertions discovered by the agent for future runs"),
+      compete_results: z
+        .array(
+          z.object({
+            lens: z.string().optional(),
+            status: z.string(),
+            artifacts: z.array(z.string()).optional(),
+          }),
+        )
+        .optional()
+        .describe("Results from competitive execution — persisted to board state"),
+      synthesized: z
+        .boolean()
+        .optional()
+        .describe("Whether the compete results have been synthesized into a single output"),
+      progress_line: z
+        .string()
+        .optional()
+        .describe("One-line progress entry to append to progress.md (e.g. '- [state_id] done: summary')"),
     },
   },
   wrapHandler(async (input) => {
     return reportResult({ ...input, project_dir: projectDir });
-  })
+  }),
 );
 
 server.registerTool(
   "check_convergence",
   {
-    description: "Check whether a state can be re-entered based on iteration limits. Returns iteration count, max, cannot-fix items, and history.",
+    description:
+      "Check whether a state can be re-entered based on iteration limits. Returns iteration count, max, cannot-fix items, and history.",
     inputSchema: {
       workspace: z.string(),
       state_id: z.string(),
@@ -383,34 +466,50 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return checkConvergence(input);
-  })
+  }),
 );
 
 server.registerTool(
   "update_board",
   {
-    description: "Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress.",
+    description:
+      "Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress.",
     inputSchema: {
       workspace: z.string(),
-      action: z.enum(["enter_state", "skip_state", "block", "unblock", "complete_flow", "set_wave_progress", "set_metadata"]),
-      state_id: z.string().optional().describe("Required for enter_state, skip_state, block, unblock, set_wave_progress"),
+      action: z.enum([
+        "enter_state",
+        "skip_state",
+        "block",
+        "unblock",
+        "complete_flow",
+        "set_wave_progress",
+        "set_metadata",
+      ]),
+      state_id: z
+        .string()
+        .optional()
+        .describe("Required for enter_state, skip_state, block, unblock, set_wave_progress"),
       next_state_id: z.string().optional().describe("Next state to advance to (used with skip_state)"),
       blocked_reason: z.string().optional(),
       wave_data: z.object({ wave: z.number(), wave_total: z.number(), tasks: z.array(z.string()) }).optional(),
       result: z.string().optional(),
       artifacts: z.array(z.string()).optional(),
-      metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional().describe("Key-value metadata to merge into board (used with set_metadata)"),
+      metadata: z
+        .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+        .optional()
+        .describe("Key-value metadata to merge into board (used with set_metadata)"),
     },
   },
   wrapHandler(async (input) => {
     return updateBoard(input);
-  })
+  }),
 );
 
 server.registerTool(
   "inject_wave_event",
   {
-    description: "Inject a user event into a running wave execution. Events are applied at wave boundaries (between waves). Use to add tasks, skip tasks, inject context, provide guidance, or pause execution.",
+    description:
+      "Inject a user event into a running wave execution. Events are applied at wave boundaries (between waves). Use to add tasks, skip tasks, inject context, provide guidance, or pause execution.",
     inputSchema: {
       workspace: z.string(),
       type: z.enum(["add_task", "skip_task", "reprioritize", "inject_context", "guidance", "pause"]),
@@ -424,13 +523,14 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return injectWaveEvent(input);
-  })
+  }),
 );
 
 server.registerTool(
   "resolve_wave_event",
   {
-    description: "Resolve a pending wave event by applying or rejecting it. Returns agent routing from resolveEventAgents so the orchestrator knows which agents to spawn. Use after processing events from get_messages.",
+    description:
+      "Resolve a pending wave event by applying or rejecting it. Returns agent routing from resolveEventAgents so the orchestrator knows which agents to spawn. Use after processing events from get_messages.",
     inputSchema: {
       workspace: z.string(),
       event_id: z.string().describe("ID of the pending event to resolve"),
@@ -441,13 +541,14 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return resolveWaveEvent(input);
-  })
+  }),
 );
 
 server.registerTool(
   "enter_and_prepare_state",
   {
-    description: "Combined tool: checks convergence, evaluates skip conditions, enters state, and resolves spawn prompts in a single call. Use this instead of separate check_convergence + update_board(enter_state) + get_spawn_prompt calls.",
+    description:
+      "Combined tool: checks convergence, evaluates skip conditions, enters state, and resolves spawn prompts in a single call. Use this instead of separate check_convergence + update_board(enter_state) + get_spawn_prompt calls.",
     inputSchema: {
       workspace: z.string(),
       state_id: z.string(),
@@ -461,13 +562,14 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return enterAndPrepareState({ ...input, project_dir: projectDir });
-  })
+  }),
 );
 
 server.registerTool(
   "resolve_after_consultations",
   {
-    description: "Resolve 'after' consultation prompts for a state. Call after the last wave completes and before report_result. Returns consultation prompt entries for the orchestrator to spawn.",
+    description:
+      "Resolve 'after' consultation prompts for a state. Call after the last wave completes and before report_result. Returns consultation prompt entries for the orchestrator to spawn.",
     inputSchema: {
       workspace: z.string(),
       state_id: z.string(),
@@ -477,13 +579,14 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return resolveAfterConsultations(input);
-  })
+  }),
 );
 
 server.registerTool(
   "post_message",
   {
-    description: "Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time.",
+    description:
+      "Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time.",
     inputSchema: {
       workspace: z.string(),
       channel: z.string().describe("Channel name (e.g. 'wave-000', 'debate-preflight', 'consultation')"),
@@ -493,13 +596,14 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return postMessage(input);
-  })
+  }),
 );
 
 server.registerTool(
   "get_messages",
   {
-    description: "Read messages from a workspace channel. Returns messages ordered by sequence number. Optionally includes pending wave events.",
+    description:
+      "Read messages from a workspace channel. Returns messages ordered by sequence number. Optionally includes pending wave events.",
     inputSchema: {
       workspace: z.string(),
       channel: z.string().describe("Channel name to read from"),
@@ -509,7 +613,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getMessages(input);
-  })
+  }),
 );
 
 server.registerTool(
@@ -522,66 +626,76 @@ server.registerTool(
       last_reviewed_sha: z.string().optional().describe("Last commit SHA that was reviewed"),
       verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).describe("Overall review verdict"),
       files: z.array(z.string()).describe("File paths that were reviewed"),
-      violations: z.array(
-        z.object({
-          principle_id: z.string(),
-          severity: z.string(),
-          file_path: z.string().optional().describe("Specific file where violation occurred"),
-          impact_score: z.number().optional().describe("Graph-derived impact score"),
-          message: z.string().optional().describe("Human-readable violation reason"),
-        })
-      ).describe("Principle violations found"),
+      violations: z
+        .array(
+          z.object({
+            principle_id: z.string(),
+            severity: z.string(),
+            file_path: z.string().optional().describe("Specific file where violation occurred"),
+            impact_score: z.number().optional().describe("Graph-derived impact score"),
+            message: z.string().optional().describe("Human-readable violation reason"),
+          }),
+        )
+        .describe("Principle violations found"),
       honored: z.array(z.string()).describe("IDs of principles honored"),
-      score: z.object({
-        rules: z.object({ passed: z.number(), total: z.number() }),
-        opinions: z.object({ passed: z.number(), total: z.number() }),
-        conventions: z.object({ passed: z.number(), total: z.number() }),
-      }).describe("Compliance score breakdown"),
-      file_priorities: z.array(
-        z.object({
-          path: z.string(),
-          priority_score: z.number(),
+      score: z
+        .object({
+          rules: z.object({ passed: z.number(), total: z.number() }),
+          opinions: z.object({ passed: z.number(), total: z.number() }),
+          conventions: z.object({ passed: z.number(), total: z.number() }),
         })
-      ).optional().describe("Graph-derived file review priorities"),
-      recommendations: z.array(
-        z.object({
-          file_path: z.string().optional().describe("File the recommendation applies to"),
-          title: z.string().describe("Short label for the recommendation (≤ 60 chars)"),
-          message: z.string().describe("Concrete explanation with suggested fix"),
-          source: z.enum(["principle", "holistic"]).describe("Whether derived from a principle violation or holistic observation"),
-        })
-      ).optional().describe("Top-5 prioritized recommendations mixing principle violations and holistic suggestions"),
+        .describe("Compliance score breakdown"),
+      file_priorities: z
+        .array(
+          z.object({
+            path: z.string(),
+            priority_score: z.number(),
+          }),
+        )
+        .optional()
+        .describe("Graph-derived file review priorities"),
+      recommendations: z
+        .array(
+          z.object({
+            file_path: z.string().optional().describe("File the recommendation applies to"),
+            title: z.string().describe("Short label for the recommendation (≤ 60 chars)"),
+            message: z.string().describe("Concrete explanation with suggested fix"),
+            source: z
+              .enum(["principle", "holistic"])
+              .describe("Whether derived from a principle violation or holistic observation"),
+          }),
+        )
+        .optional()
+        .describe("Top-5 prioritized recommendations mixing principle violations and holistic suggestions"),
     },
   },
   wrapHandler(async (input) => {
     return storePrReview(input, projectDir);
-  })
+  }),
 );
 
 server.registerTool(
   "graph_query",
   {
-    description: "Query the codebase knowledge graph for callers, callees, blast radius, dead code, search, and more. Requires the knowledge graph to be built first via codebase_graph.",
+    description:
+      "Query the codebase knowledge graph for callers, callees, blast radius, dead code, search, and more. Requires the knowledge graph to be built first via codebase_graph.",
     inputSchema: {
       query_type: z
-        .enum(['callers', 'callees', 'blast_radius', 'dead_code', 'search', 'ancestors'])
-        .describe('Type of query to perform'),
-      target: z
-        .string()
-        .optional()
-        .describe('Target entity name or file path (not needed for dead_code)'),
+        .enum(["callers", "callees", "blast_radius", "dead_code", "search", "ancestors"])
+        .describe("Type of query to perform"),
+      target: z.string().optional().describe("Target entity name or file path (not needed for dead_code)"),
       options: z
         .object({
-          max_depth: z.number().int().min(1).max(10).optional().describe('Max depth for blast_radius (default 3)'),
-          limit: z.number().int().min(1).max(500).optional().describe('Max results for search (default 50)'),
-          include_tests: z.boolean().optional().describe('Include test files in dead_code results'),
+          max_depth: z.number().int().min(1).max(10).optional().describe("Max depth for blast_radius (default 3)"),
+          limit: z.number().int().min(1).max(500).optional().describe("Max results for search (default 50)"),
+          include_tests: z.boolean().optional().describe("Include test files in dead_code results"),
         })
         .optional(),
     },
   },
   wrapHandler(async (input) => {
     return graphQuery(input, projectDir);
-  })
+  }),
 );
 
 // Start the server

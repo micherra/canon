@@ -1,143 +1,134 @@
 <script lang="ts">
-  import ImpactRow from "./ImpactRow.svelte";
-  import ViolationCard from "./ViolationCard.svelte";
-  import DepRow from "./DepRow.svelte";
+// ── Props ────────────────────────────────────────────────────────────────
 
-  // ── Props ────────────────────────────────────────────────────────────────
+interface PriorityFactors {
+  in_degree: number;
+  violation_count: number;
+  is_changed: boolean;
+  layer: string;
+  layer_centrality: number;
+}
 
-  interface PriorityFactors {
-    in_degree: number;
-    violation_count: number;
-    is_changed: boolean;
-    layer: string;
-    layer_centrality: number;
-  }
+interface Violation {
+  principle_id: string;
+  severity: "rule" | "strong-opinion" | "convention";
+  message?: string;
+}
 
-  interface Violation {
-    principle_id: string;
-    severity: "rule" | "strong-opinion" | "convention";
-    message?: string;
-  }
+interface ImpactFile {
+  path: string;
+  priority_score?: number;
+  priority_factors?: PriorityFactors;
+  bucket: string;
+  violations?: Violation[];
+}
 
-  interface ImpactFile {
-    path: string;
-    priority_score?: number;
-    priority_factors?: PriorityFactors;
-    bucket: string;
-    violations?: Violation[];
-  }
+interface BlastRadiusEntry {
+  file: string;
+  affected: Array<{ path: string; depth: number }>;
+}
 
-  interface BlastRadiusEntry {
-    file: string;
-    affected: Array<{ path: string; depth: number }>;
-  }
+interface ImpactTabsProps {
+  files: ImpactFile[];
+  blastRadius: BlastRadiusEntry[];
+  onPrompt: (text: string) => void;
+}
 
-  interface ImpactTabsProps {
-    files: ImpactFile[];
-    blastRadius: BlastRadiusEntry[];
-    onPrompt: (text: string) => void;
-  }
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { files, blastRadius, onPrompt }: ImpactTabsProps = $props();
 
-  let { files, blastRadius, onPrompt }: ImpactTabsProps = $props();
+// ── Tab state ─────────────────────────────────────────────────────────────
 
-  // ── Tab state ─────────────────────────────────────────────────────────────
+let _activeTab = $state<"high-impact" | "violations" | "critical-deps">("high-impact");
 
-  let activeTab = $state<"high-impact" | "violations" | "critical-deps">("high-impact");
+// ── Tab A: High Impact ────────────────────────────────────────────────────
 
-  // ── Tab A: High Impact ────────────────────────────────────────────────────
+let highImpactFiles = $derived(
+  files.filter((f) => (f.priority_score ?? 0) >= 15).sort((a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0)),
+);
 
-  let highImpactFiles = $derived(
-    files
-      .filter(f => (f.priority_score ?? 0) >= 15)
-      .sort((a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0))
-  );
+let _maxScore = $derived(
+  highImpactFiles.length > 0 ? Math.max(...highImpactFiles.map((f) => f.priority_score ?? 0)) : 1,
+);
 
-  let maxScore = $derived(
-    highImpactFiles.length > 0
-      ? Math.max(...highImpactFiles.map(f => f.priority_score ?? 0))
-      : 1
-  );
+// ── Tab B: Violations ─────────────────────────────────────────────────────
 
-  // ── Tab B: Violations ─────────────────────────────────────────────────────
+interface FlatViolation {
+  filePath: string;
+  inDegree: number;
+  violation: Violation;
+}
 
-  interface FlatViolation {
-    filePath: string;
-    inDegree: number;
-    violation: Violation;
-  }
+const SEVERITY_ORDER: Record<string, number> = {
+  rule: 0,
+  "strong-opinion": 1,
+  convention: 2,
+};
 
-  const SEVERITY_ORDER: Record<string, number> = {
-    "rule": 0,
-    "strong-opinion": 1,
-    "convention": 2,
-  };
-
-  let flatViolations = $derived(
-    files
-      .flatMap(f =>
-        (f.violations ?? []).map((v): FlatViolation => ({
+let _flatViolations = $derived(
+  files
+    .flatMap((f) =>
+      (f.violations ?? []).map(
+        (v): FlatViolation => ({
           filePath: f.path,
           inDegree: f.priority_factors?.in_degree ?? 0,
           violation: v,
-        }))
-      )
-      .sort((a, b) => {
-        const severityDiff =
-          (SEVERITY_ORDER[a.violation.severity] ?? 99) -
-          (SEVERITY_ORDER[b.violation.severity] ?? 99);
-        if (severityDiff !== 0) return severityDiff;
-        return b.inDegree - a.inDegree;
-      })
-  );
+        }),
+      ),
+    )
+    .sort((a, b) => {
+      const severityDiff = (SEVERITY_ORDER[a.violation.severity] ?? 99) - (SEVERITY_ORDER[b.violation.severity] ?? 99);
+      if (severityDiff !== 0) return severityDiff;
+      return b.inDegree - a.inDegree;
+    }),
+);
 
-  // ── Tab C: Critical Deps ──────────────────────────────────────────────────
+// ── Tab C: Critical Deps ──────────────────────────────────────────────────
 
-  interface CriticalDep {
-    path: string;
-    changedFileDependents: string[];
-  }
+interface CriticalDep {
+  path: string;
+  changedFileDependents: string[];
+}
 
-  let changedFilePaths = $derived(new Set(files.map(f => f.path)));
+let changedFilePaths = $derived(new Set(files.map((f) => f.path)));
 
-  let criticalDeps = $derived.by((): CriticalDep[] => {
-    // Collect all affected paths from blast radius that are NOT in the diff
-    const depMap = new Map<string, string[]>();
+let _criticalDeps = $derived.by((): CriticalDep[] => {
+  // Collect all affected paths from blast radius that are NOT in the diff
+  const depMap = new Map<string, string[]>();
 
-    for (const entry of blastRadius) {
-      for (const affected of entry.affected) {
-        if (!changedFilePaths.has(affected.path)) {
-          const existing = depMap.get(affected.path) ?? [];
-          if (!existing.includes(entry.file)) {
-            existing.push(entry.file);
-          }
-          depMap.set(affected.path, existing);
+  for (const entry of blastRadius) {
+    for (const affected of entry.affected) {
+      if (!changedFilePaths.has(affected.path)) {
+        const existing = depMap.get(affected.path) ?? [];
+        if (!existing.includes(entry.file)) {
+          existing.push(entry.file);
         }
+        depMap.set(affected.path, existing);
       }
     }
-
-    return [...depMap.entries()].map(([path, dependents]) => ({
-      path,
-      changedFileDependents: dependents,
-    }));
-  });
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  function depRelationship(dep: CriticalDep): string {
-    const count = dep.changedFileDependents.length;
-    if (count === 1) {
-      const dependent = dep.changedFileDependents[0];
-      const name = dependent.split("/").pop() ?? dependent;
-      return `used by ${name}`;
-    }
-    return `used by ${count} changed files`;
   }
 
-  function depRiskAnnotation(dep: CriticalDep): string | undefined {
-    return dep.changedFileDependents.length > 1
-      ? `affects ${dep.changedFileDependents.length} changed files`
-      : undefined;
+  return [...depMap.entries()].map(([path, dependents]) => ({
+    path,
+    changedFileDependents: dependents,
+  }));
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function _depRelationship(dep: CriticalDep): string {
+  const count = dep.changedFileDependents.length;
+  if (count === 1) {
+    const dependent = dep.changedFileDependents[0];
+    const name = dependent.split("/").pop() ?? dependent;
+    return `used by ${name}`;
   }
+  return `used by ${count} changed files`;
+}
+
+function _depRiskAnnotation(dep: CriticalDep): string | undefined {
+  return dep.changedFileDependents.length > 1 ? `affects ${dep.changedFileDependents.length} changed files` : undefined;
+}
 </script>
 
 <div class="impact-tabs">

@@ -46,27 +46,21 @@ export const STATUS_ALIASES: Record<string, string> = {
 // Flow definition schemas
 // ---------------------------------------------------------------------------
 
-export const StateTypeSchema = z.enum([
-  "single",
-  "parallel",
-  "wave",
-  "parallel-per",
-  "terminal",
-]);
+export const StateTypeSchema = z.enum(["single", "parallel", "wave", "parallel-per", "terminal"]);
 
 export const StuckWhenSchema = z.enum([
   "same_violations",
   "same_file_test",
   "same_status",
   "no_progress",
-  "no_gate_progress",  // NEW: detect stuck when gate output and pass state don't change
+  "no_gate_progress", // NEW: detect stuck when gate output and pass state don't change
 ]);
 
 export const SkipWhenSchema = z.enum([
   "no_contract_changes",
   "no_fix_requested",
   "auto_approved",
-  "no_open_questions",  // NEW: skip targeted-research when no open questions from pattern-check
+  "no_open_questions", // NEW: skip targeted-research when no open questions from pattern-check
 ]);
 
 export const ContextInjectionSchema = z.object({
@@ -90,10 +84,7 @@ export const RoleEntrySchema = z.union([
   }),
 ]);
 
-export const EffectTypeSchema = z.enum([
-  "persist_review",
-  "check_postconditions",
-]);
+export const EffectTypeSchema = z.enum(["persist_review", "check_postconditions"]);
 
 export const EffectSchema = z.object({
   type: EffectTypeSchema,
@@ -112,10 +103,7 @@ export const CompeteConfigObjectSchema = z.object({
 });
 
 /** Compete field: explicit config, "auto" (orchestrator decides), or absent. */
-export const CompeteConfigSchema = z.union([
-  z.literal("auto"),
-  CompeteConfigObjectSchema,
-]);
+export const CompeteConfigSchema = z.union([z.literal("auto"), CompeteConfigObjectSchema]);
 
 /** Configuration for pre-flight debate protocol. */
 export const DebateConfigSchema = z.object({
@@ -296,13 +284,7 @@ export const ResolvedFlowSchema = FlowDefinitionSchema.extend({
 // Board state schemas
 // ---------------------------------------------------------------------------
 
-export const BoardStateStatusSchema = z.enum([
-  "pending",
-  "in_progress",
-  "done",
-  "skipped",
-  "blocked",
-]);
+export const BoardStateStatusSchema = z.enum(["pending", "in_progress", "done", "skipped", "blocked"]);
 
 export const ConsultationResultSchema = z.object({
   status: z.string(),
@@ -310,22 +292,24 @@ export const ConsultationResultSchema = z.object({
   artifact: z.string().optional(),
 });
 
+export const WorktreeEntrySchema = z.object({
+  task_id: z.string(),
+  worktree_path: z.string(),
+  branch: z.string(),
+  status: z.enum(["active", "merged", "failed"]).default("active"),
+});
+
 export const WaveResultSchema = z.object({
   tasks: z.array(z.string()),
   status: z.string(),
   gate: z.string().optional(),
   gate_output: z.string().optional(),
+  worktree_entries: z.array(WorktreeEntrySchema).optional(),
   consultations: z
     .object({
-      before: z
-        .record(z.string(), ConsultationResultSchema)
-        .optional(),
-      between: z
-        .record(z.string(), ConsultationResultSchema)
-        .optional(),
-      after: z
-        .record(z.string(), ConsultationResultSchema)
-        .optional(),
+      before: z.record(z.string(), ConsultationResultSchema).optional(),
+      between: z.record(z.string(), ConsultationResultSchema).optional(),
+      after: z.record(z.string(), ConsultationResultSchema).optional(),
     })
     .optional(),
 });
@@ -365,16 +349,24 @@ export const BoardStateEntrySchema = z.object({
   postcondition_results: z.array(PostconditionResultSchema).optional(),
   discovered_gates: z.array(DiscoveredGateSchema).optional(),
   discovered_postconditions: z.array(PostconditionAssertionSchema).optional(),
-  parallel_results: z.array(z.object({
-    item: z.string(),
-    status: z.string(),
-    artifacts: z.array(z.string()).optional(),
-  })).optional(),
-  compete_results: z.array(z.object({
-    lens: z.string().optional(),
-    status: z.string(),
-    artifacts: z.array(z.string()).optional(),
-  })).optional(),
+  parallel_results: z
+    .array(
+      z.object({
+        item: z.string(),
+        status: z.string(),
+        artifacts: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
+  compete_results: z
+    .array(
+      z.object({
+        lens: z.string().optional(),
+        status: z.string(),
+        artifacts: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
   synthesized: z.boolean().optional(),
 });
 
@@ -470,6 +462,8 @@ export const SessionSchema = z.object({
   completed_at: z.string().optional(),
   rolled_back_at: z.string().optional(),
   rolled_back_to: z.string().optional(),
+  worktree_path: z.string().optional(),
+  worktree_branch: z.string().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -498,6 +492,7 @@ export type ConsultationFragment = z.infer<typeof ConsultationFragmentSchema>;
 export type ResolvedFlow = z.infer<typeof ResolvedFlowSchema>;
 export type BoardStateStatus = z.infer<typeof BoardStateStatusSchema>;
 export type ConsultationResult = z.infer<typeof ConsultationResultSchema>;
+export type WorktreeEntry = z.infer<typeof WorktreeEntrySchema>;
 export type WaveResult = z.infer<typeof WaveResultSchema>;
 export type StateMetrics = z.infer<typeof StateMetricsSchema>;
 export type BoardStateEntry = z.infer<typeof BoardStateEntrySchema>;
@@ -521,13 +516,7 @@ export type DebateConfig = z.infer<typeof DebateConfigSchema>;
 // Wave event types (used by wave-events.ts, inject-wave-event.ts, etc.)
 // ---------------------------------------------------------------------------
 
-export type WaveEventType =
-  | "add_task"
-  | "skip_task"
-  | "reprioritize"
-  | "inject_context"
-  | "guidance"
-  | "pause";
+export type WaveEventType = "add_task" | "skip_task" | "reprioritize" | "inject_context" | "guidance" | "pause";
 
 export type WaveEventResolution = Record<string, unknown>;
 

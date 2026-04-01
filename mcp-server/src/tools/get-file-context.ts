@@ -1,23 +1,23 @@
 /** Get rich context for a file — contents, graph relationships, exports.
  * Designed to give Claude everything needed to write a meaningful summary. */
 
-import { readFile } from "fs/promises";
-import { existsSync } from "fs";
-import { join, resolve, sep } from "path";
-import { extractImports, resolveImport } from "../graph/import-parser.ts";
-import { extractExports } from "../graph/export-parser.ts";
-import { scanSourceFiles } from "../graph/scanner.ts";
-import { DriftStore } from "../drift/store.ts";
-import { deriveSourceDirsFromLayers, loadLayerMappings, buildLayerInferrer } from "../utils/config.ts";
-import { isNotFound } from "../utils/errors.ts";
-import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
-import { loadCachedGraph, getNodeMetrics, computeImpactScore, type GraphMetrics } from "../graph/query.ts";
-import { toPosix, loadPathAliases } from "../utils/paths.ts";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.ts";
+import { DriftStore } from "../drift/store.ts";
+import { extractExports } from "../graph/export-parser.ts";
+import { extractImports, resolveImport } from "../graph/import-parser.ts";
+import { computeUnifiedBlastRadius, type UnifiedBlastRadiusReport } from "../graph/kg-blast-radius.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { computeUnifiedBlastRadius, type UnifiedBlastRadiusReport } from "../graph/kg-blast-radius.ts";
 import type { EntityKind } from "../graph/kg-types.ts";
+import { computeImpactScore, type GraphMetrics, getNodeMetrics, loadCachedGraph } from "../graph/query.ts";
+import { scanSourceFiles } from "../graph/scanner.ts";
+import { buildLayerInferrer, deriveSourceDirsFromLayers, loadLayerMappings } from "../utils/config.ts";
+import { isNotFound } from "../utils/errors.ts";
+import { loadPathAliases, toPosix } from "../utils/paths.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 import { loadSummariesFile } from "./store-summaries.ts";
 
 export interface FileContextInput {
@@ -75,7 +75,6 @@ export interface FileContextOutput {
   blast_radius?: UnifiedBlastRadiusReport;
 }
 
-
 /** Derive a human-readable shape characterization from graph metrics. */
 function deriveShape(metrics: FileGraphMetrics | undefined): { label: string; description: string } {
   if (!metrics) {
@@ -116,35 +115,209 @@ function deriveRole(metrics: FileGraphMetrics | undefined): string {
   return "internal";
 }
 
+/** Scan all project source files and return their POSIX-relative paths. */
+async function scanAllProjectFiles(projectDir: string): Promise<string[]> {
+  const sourceDirs = await deriveSourceDirsFromLayers(projectDir);
+  const allFiles: string[] = [];
+  if (sourceDirs && sourceDirs.length > 0) {
+    for (const dir of sourceDirs) {
+      const absDir = join(projectDir, dir);
+      const files = await scanSourceFiles(absDir, {});
+      for (const f of files) allFiles.push(toPosix(join(dir, f)));
+    }
+  }
+  return allFiles;
+}
+
+/** Find reverse dependencies: files that import the target file. */
+async function findReverseDeps(
+  filePath: string,
+  allFiles: string[],
+  fileSet: Set<string>,
+  aliases: ReturnType<typeof loadPathAliases> extends Promise<infer T> ? T : never,
+  projectDir: string,
+): Promise<string[]> {
+  try {
+    const raw = await readFile(join(projectDir, CANON_DIR, CANON_FILES.REVERSE_DEPS), "utf-8");
+    const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
+    return reverseIndex[filePath] || [];
+  } catch {
+    // No reverse index — fall back to scanning all files
+  }
+
+  const imported_by: string[] = [];
+  for (const otherFile of allFiles) {
+    if (otherFile === filePath) continue;
+    try {
+      const otherContent = await readFile(join(projectDir, otherFile), "utf-8");
+      const otherImports = extractImports(otherContent, otherFile);
+      for (const imp of otherImports) {
+        const resolved = resolveImport(imp, otherFile, fileSet, aliases);
+        if (resolved === filePath) {
+          imported_by.push(otherFile);
+          break;
+        }
+      }
+    } catch (err: unknown) {
+      if (isNotFound(err)) continue;
+      throw err;
+    }
+  }
+  return imported_by;
+}
+
+/** Load compliance data from the drift store for a specific file. */
+async function loadComplianceData(
+  filePath: string,
+  projectDir: string,
+): Promise<{ violation_count: number; last_verdict: string | null; violations: FileViolationDetail[] }> {
+  let violation_count = 0;
+  let last_verdict: string | null = null;
+  let violations: FileViolationDetail[] = [];
+  let lastReviewedAt: string | null = null;
+
+  try {
+    const store = new DriftStore(projectDir);
+    const reviews = await store.getReviews();
+    for (const review of reviews) {
+      if (!review.files.includes(filePath)) continue;
+
+      if (!lastReviewedAt || review.timestamp > lastReviewedAt) {
+        lastReviewedAt = review.timestamp;
+        last_verdict = review.verdict;
+        const hasPerFile = review.violations.some((v) => v.file_path);
+        const relevantViolations = hasPerFile
+          ? review.violations.filter((v) => v.file_path === filePath)
+          : review.violations;
+        violations = relevantViolations.map((v) => ({
+          principle_id: v.principle_id,
+          severity: v.severity,
+          ...(v.message !== undefined && { message: v.message }),
+        }));
+      }
+
+      const hasPerFile = review.violations.some((v) => v.file_path);
+      violation_count += hasPerFile
+        ? review.violations.filter((v) => v.file_path === filePath).length
+        : review.violations.length;
+    }
+  } catch {
+    // no compliance data
+  }
+
+  return { violation_count, last_verdict, violations };
+}
+
+/** Load graph metrics and compute the max impact score across all nodes. */
+async function loadGraphData(
+  filePath: string,
+  projectDir: string,
+): Promise<{ graph_metrics?: FileGraphMetrics; project_max_impact: number }> {
+  const graph = await loadCachedGraph(projectDir);
+  if (!graph) return { graph_metrics: undefined, project_max_impact: 0 };
+
+  let graph_metrics: FileGraphMetrics | undefined;
+  const metrics = getNodeMetrics(graph, filePath);
+  if (metrics) {
+    graph_metrics = {
+      in_degree: metrics.in_degree,
+      out_degree: metrics.out_degree,
+      is_hub: metrics.is_hub,
+      in_cycle: metrics.in_cycle,
+      cycle_peers: metrics.cycle_peers,
+      layer_violation_count: metrics.layer_violation_count,
+      impact_score: metrics.impact_score,
+    };
+  }
+
+  let project_max_impact = 0;
+  for (const [nodeId, inDeg] of graph.inDegree) {
+    const violations = graph.nodeViolations.get(nodeId) ?? 0;
+    const changed = graph.nodeChanged.get(nodeId) ?? false;
+    const layer = graph.nodeLayer.get(nodeId) ?? "unknown";
+    const score = computeImpactScore(inDeg, violations, changed, layer);
+    if (score > project_max_impact) project_max_impact = score;
+  }
+
+  return { graph_metrics, project_max_impact };
+}
+
+/** Load entity data and blast radius from the knowledge graph DB. */
+function loadKgData(
+  filePath: string,
+  projectDir: string,
+): { entities?: FileEntitySummary[]; blast_radius?: UnifiedBlastRadiusReport; dbSummary: string | null } {
+  let entities: FileEntitySummary[] | undefined;
+  let blast_radius: UnifiedBlastRadiusReport | undefined;
+  let dbSummary: string | null = null;
+
+  const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  if (!existsSync(dbPath)) return { entities, blast_radius, dbSummary };
+
+  let db: ReturnType<typeof initDatabase> | undefined;
+  try {
+    db = initDatabase(dbPath);
+    const store = new KgStore(db);
+
+    const fileRow = store.getFile(filePath);
+    if (fileRow?.file_id !== undefined) {
+      const entityRows = store.getEntitiesByFile(fileRow.file_id);
+      entities = entityRows.map((e) => ({
+        name: e.name,
+        kind: e.kind,
+        is_exported: e.is_exported,
+        line_start: e.line_start,
+        line_end: e.line_end,
+      }));
+
+      try {
+        const summaryRow = store.getSummaryByFile(fileRow.file_id);
+        if (summaryRow) dbSummary = summaryRow.summary;
+      } catch {
+        // ignore DB summary errors
+      }
+    }
+
+    blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2, projectDir });
+  } catch {
+    // KG unavailable — skip entity data gracefully
+  } finally {
+    db?.close();
+  }
+
+  return { entities, blast_radius, dbSummary };
+}
+
+/** Load file summary from DB or summaries.json fallback. */
+async function loadFileSummary(filePath: string, projectDir: string, dbSummary: string | null): Promise<string | null> {
+  if (dbSummary !== null) return dbSummary;
+  try {
+    const summaries = await loadSummariesFile(projectDir);
+    return summaries[filePath]?.summary ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Group paths by their inferred layer. */
+function groupByLayer(paths: string[], inferLayer: (path: string) => string): Record<string, string[]> {
+  const grouped: Record<string, string[]> = {};
+  for (const p of paths) {
+    const layer = inferLayer(p) || "unknown";
+    if (!grouped[layer]) grouped[layer] = [];
+    grouped[layer].push(p);
+  }
+  return grouped;
+}
+
 export async function getFileContext(
   input: FileContextInput,
   projectDir: string,
 ): Promise<ToolResult<FileContextOutput>> {
-  // Normalize to POSIX separators — graph IDs and layer patterns use '/' consistently
   const filePath = toPosix(input.file_path);
 
-  // Load user-configurable layer mappings
   const layerMappings = await loadLayerMappings(projectDir);
   const inferLayer = buildLayerInferrer(layerMappings);
-
-  const emptyResult = (layer: string): FileContextOutput => ({
-    file_path: filePath,
-    layer,
-    content: "",
-    imports: [],
-    imported_by: [],
-    exports: [],
-    violation_count: 0,
-    last_verdict: null,
-    summary: null,
-    violations: [],
-    imports_by_layer: {},
-    imported_by_layer: {},
-    layer_stack: [],
-    role: "internal",
-    shape: { label: "Internal", description: "Moderate connectivity, typical file." },
-    project_max_impact: 0,
-  });
 
   // Prevent path traversal outside the project directory
   const absPath = resolve(projectDir, filePath);
@@ -157,230 +330,38 @@ export async function getFileContext(
   try {
     const raw = await readFile(absPath, "utf-8");
     const lines = raw.split("\n");
-    content = lines.length > FILE_PREVIEW_MAX_LINES
-      ? lines.slice(0, FILE_PREVIEW_MAX_LINES).join("\n") + "\n... (truncated)"
-      : raw;
+    content =
+      lines.length > FILE_PREVIEW_MAX_LINES
+        ? `${lines.slice(0, FILE_PREVIEW_MAX_LINES).join("\n")}\n... (truncated)`
+        : raw;
   } catch (err: unknown) {
-    if (isNotFound(err)) {
-      return toolError("INVALID_INPUT", `File not found: ${filePath}`);
-    }
+    if (isNotFound(err)) return toolError("INVALID_INPUT", `File not found: ${filePath}`);
     throw err;
   }
 
-  // Infer layer
   const layer = inferLayer(filePath) || "unknown";
-
-  // Extract exports
   const exports = extractExports(content, filePath);
-
-  // Extract this file's imports
   const rawImports = extractImports(content, filePath);
-
-  // Load path aliases from tsconfig.json
   const aliases = await loadPathAliases(projectDir);
-
-  // Scan all project files to resolve this file's imports
-  const sourceDirs = await deriveSourceDirsFromLayers(projectDir);
-  let allFiles: string[] = [];
-
-  if (sourceDirs && sourceDirs.length > 0) {
-    for (const dir of sourceDirs) {
-      const absDir = join(projectDir, dir);
-      const files = await scanSourceFiles(absDir, {});
-      for (const f of files) {
-        allFiles.push(toPosix(join(dir, f)));
-      }
-    }
-  }
-
+  const allFiles = await scanAllProjectFiles(projectDir);
   const fileSet = new Set(allFiles);
 
-  // Resolve this file's imports to project-relative paths
   const imports: string[] = [];
   for (const imp of rawImports) {
     const resolved = resolveImport(imp, filePath, fileSet, aliases);
     if (resolved) imports.push(resolved);
   }
 
-  // Find files that import this file (reverse dependencies).
-  // Try the cached reverse index first (O(1)), fall back to O(n) scan.
-  let imported_by: string[] = [];
-  try {
-    const raw = await readFile(join(projectDir, CANON_DIR, CANON_FILES.REVERSE_DEPS), "utf-8");
-    const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
-    imported_by = reverseIndex[filePath] || [];
-  } catch {
-    // No reverse index — fall back to scanning all files
-    for (const otherFile of allFiles) {
-      if (otherFile === filePath) continue;
-      try {
-        const otherContent = await readFile(join(projectDir, otherFile), "utf-8");
-        const otherImports = extractImports(otherContent, otherFile);
-        for (const imp of otherImports) {
-          const resolved = resolveImport(imp, otherFile, fileSet, aliases);
-          if (resolved === filePath) {
-            imported_by.push(otherFile);
-            break;
-          }
-        }
-      } catch (err: unknown) {
-        if (isNotFound(err)) continue;
-        throw err;
-      }
-    }
-  }
+  const imported_by = await findReverseDeps(filePath, allFiles, fileSet, aliases, projectDir);
+  const { violation_count, last_verdict, violations } = await loadComplianceData(filePath, projectDir);
+  const { graph_metrics, project_max_impact } = await loadGraphData(filePath, projectDir);
+  const { entities, blast_radius, dbSummary } = loadKgData(filePath, projectDir);
+  const summary = await loadFileSummary(filePath, projectDir, dbSummary);
 
-  // Load compliance data
-  let violation_count = 0;
-  let last_verdict: string | null = null;
-  let violations: FileViolationDetail[] = [];
-  let lastReviewedAt: string | null = null;
-  try {
-    const store = new DriftStore(projectDir);
-    const reviews = await store.getReviews();
-    for (const review of reviews) {
-      if (review.files.includes(filePath)) {
-        if (!lastReviewedAt || review.timestamp > lastReviewedAt) {
-          lastReviewedAt = review.timestamp;
-          last_verdict = review.verdict;
-          // Extract violation details from this review for the file
-          const hasPerFile = review.violations.some((v) => v.file_path);
-          if (hasPerFile) {
-            violations = review.violations
-              .filter((v) => v.file_path === filePath)
-              .map((v) => ({
-                principle_id: v.principle_id,
-                severity: v.severity,
-                ...(v.message !== undefined && { message: v.message }),
-              }));
-          } else {
-            violations = review.violations.map((v) => ({
-              principle_id: v.principle_id,
-              severity: v.severity,
-              ...(v.message !== undefined && { message: v.message }),
-            }));
-          }
-        }
-        // Count only violations attributed to this specific file.
-        // Falls back to counting all violations if none have file_path (legacy data).
-        const hasPerFile = review.violations.some((v) => v.file_path);
-        if (hasPerFile) {
-          violation_count += review.violations.filter((v) => v.file_path === filePath).length;
-        } else {
-          violation_count += review.violations.length;
-        }
-      }
-    }
-  } catch {
-    // no compliance data
-  }
-
-  // Load graph metrics if graph data exists
-  let graph_metrics: FileGraphMetrics | undefined;
-  let project_max_impact = 0;
-  const graph = await loadCachedGraph(projectDir);
-  if (graph) {
-    const metrics = getNodeMetrics(graph, filePath);
-    if (metrics) {
-      graph_metrics = {
-        in_degree: metrics.in_degree,
-        out_degree: metrics.out_degree,
-        is_hub: metrics.is_hub,
-        in_cycle: metrics.in_cycle,
-        cycle_peers: metrics.cycle_peers,
-        layer_violation_count: metrics.layer_violation_count,
-        impact_score: metrics.impact_score,
-      };
-    }
-    // Compute the max impact score across all nodes for relative comparison
-    for (const [nodeId, inDeg] of graph.inDegree) {
-      const violations = graph.nodeViolations.get(nodeId) ?? 0;
-      const changed = graph.nodeChanged.get(nodeId) ?? false;
-      const layer = graph.nodeLayer.get(nodeId) ?? "unknown";
-      const score = computeImpactScore(inDeg, violations, changed, layer);
-      if (score > project_max_impact) project_max_impact = score;
-    }
-  }
-
-  // Load entity data from the knowledge graph DB if it exists
-  let entities: FileEntitySummary[] | undefined;
-  let blast_radius: UnifiedBlastRadiusReport | undefined;
-  let dbSummary: string | null = null;
-  const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  if (existsSync(dbPath)) {
-    let db: ReturnType<typeof initDatabase> | undefined;
-    try {
-      db = initDatabase(dbPath);
-      const store = new KgStore(db);
-
-      const fileRow = store.getFile(filePath);
-      if (fileRow?.file_id !== undefined) {
-        const entityRows = store.getEntitiesByFile(fileRow.file_id);
-
-        entities = entityRows.map((e) => ({
-          name: e.name,
-          kind: e.kind,
-          is_exported: e.is_exported,
-          line_start: e.line_start,
-          line_end: e.line_end,
-        }));
-
-        // DB-first summary lookup
-        try {
-          const summaryRow = store.getSummaryByFile(fileRow.file_id);
-          if (summaryRow) {
-            dbSummary = summaryRow.summary;
-          }
-        } catch {
-          // ignore DB summary errors
-        }
-      }
-
-      blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2, projectDir });
-    } catch {
-      // KG unavailable — skip entity data gracefully
-    } finally {
-      db?.close();
-    }
-  }
-
-  // Load summary — DB first, fall back to summaries.json
-  let summary: string | null = dbSummary;
-  if (summary === null) {
-    try {
-      const summaries = await loadSummariesFile(projectDir);
-      const entry = summaries[filePath];
-      if (entry) {
-        summary = entry.summary;
-      }
-    } catch {
-      // no summaries file
-    }
-  }
-
-  // Group imports by layer
-  const imports_by_layer: Record<string, string[]> = {};
-  for (const imp of imports) {
-    const impLayer = inferLayer(imp) || "unknown";
-    if (!imports_by_layer[impLayer]) imports_by_layer[impLayer] = [];
-    imports_by_layer[impLayer].push(imp);
-  }
-
-  // Group imported_by by layer
-  const imported_by_layer: Record<string, string[]> = {};
-  for (const dep of imported_by) {
-    const depLayer = inferLayer(dep) || "unknown";
-    if (!imported_by_layer[depLayer]) imported_by_layer[depLayer] = [];
-    imported_by_layer[depLayer].push(dep);
-  }
-
-  // Derive layer_stack from layer mappings config
-  const layer_stack: string[] = Object.keys(layerMappings).sort();
-
-  // Derive role from graph metrics
+  const imports_by_layer = groupByLayer(imports, inferLayer);
+  const imported_by_layer = groupByLayer(imported_by, inferLayer);
+  const layer_stack = Object.keys(layerMappings).sort();
   const role = deriveRole(graph_metrics);
-
-  // Derive shape characterization from graph metrics
   const shape = deriveShape(graph_metrics);
 
   return toolOk({

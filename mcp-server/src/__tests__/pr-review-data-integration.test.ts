@@ -15,10 +15,10 @@
  *      and output shape in a single assertion chain.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriftStore } from "../drift/store.ts";
 
 // ── helpers ──
@@ -220,10 +220,7 @@ describe("getPrReviewData — graph_data_age_ms and priority data passthrough", 
 
   it("populates graph_data_age_ms when graph file exists", async () => {
     const graphData = { nodes: [], edges: [] };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile(""),
@@ -255,10 +252,7 @@ describe("getPrReviewData — graph_data_age_ms and priority data passthrough", 
       ],
       edges: [{ source: "src/a.ts", target: "src/b.ts" }],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/a.ts\nM\tsrc/b.ts"),
@@ -268,7 +262,7 @@ describe("getPrReviewData — graph_data_age_ms and priority data passthrough", 
     const result = await fn({}, tmpDir);
 
     // File with violation_count > 0 should be in impact_files with priority data
-    const fileB = result.impact_files.find((f: any) => f.path === "src/b.ts");
+    const fileB = result.impact_files.find((f) => f.path === "src/b.ts");
     expect(fileB).toBeDefined();
     expect(fileB!.priority_score).toBeTypeOf("number");
     expect(fileB!.priority_factors).toBeDefined();
@@ -383,9 +377,7 @@ describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () =>
     });
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await expect(
-      fn({ pr_number: 42, incremental: true }, tmpDir),
-    ).rejects.toThrow("Invalid git ref");
+    await expect(fn({ pr_number: 42, incremental: true }, tmpDir)).rejects.toThrow("Invalid git ref");
   });
 
   it("valid hex SHA as last_reviewed_sha passes sanitizeGitRef", async () => {
@@ -459,10 +451,7 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
         { source: "src/graph/scanner.ts", target: "src/tools/pr-review-data.ts" },
       ],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     const diffOutput = [
       "M\tsrc/tools/pr-review-data.ts",
@@ -506,16 +495,9 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
   });
 
   it("multiple files in one layer: all grouped together", async () => {
-    await writeFile(
-      join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ layers: { tools: ["src/tools"] } }),
-    );
+    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { tools: ["src/tools"] } }));
 
-    const diffOutput = [
-      "M\tsrc/tools/a.ts",
-      "A\tsrc/tools/b.ts",
-      "D\tsrc/tools/c.ts",
-    ].join("\n");
+    const diffOutput = ["M\tsrc/tools/a.ts", "A\tsrc/tools/b.ts", "D\tsrc/tools/c.ts"].join("\n");
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile(diffOutput),

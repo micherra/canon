@@ -17,11 +17,7 @@ const CONTRACT_PATTERNS = [
   "**/migrations/**",
 ];
 
-export async function evaluateSkipWhen(
-  condition: string,
-  _workspace: string,
-  board: Board,
-): Promise<SkipResult> {
+export async function evaluateSkipWhen(condition: string, _workspace: string, board: Board): Promise<SkipResult> {
   switch (condition) {
     case "no_contract_changes":
       return evaluateNoContractChanges(board.base_commit);
@@ -32,9 +28,7 @@ export async function evaluateSkipWhen(
     case "no_open_questions":
       return evaluateNoOpenQuestions(board);
     default:
-      console.error(
-        `Warning: Unknown skip_when condition "${condition}" — not skipping`,
-      );
+      console.error(`Warning: Unknown skip_when condition "${condition}" — not skipping`);
       return { skip: false };
   }
 }
@@ -106,8 +100,5 @@ export function matchGlob(pattern: string, filePath: string): boolean {
     .replace(/\*\*/g, "<<<DSTAR>>>")
     .replace(/\*/g, "[^/]*")
     .replace(/<<<DSTAR>>>/g, ".*");
-  return (
-    new RegExp(`^${regex}$`).test(filePath) ||
-    new RegExp(`(^|/)${regex}$`).test(filePath)
-  );
+  return new RegExp(`^${regex}$`).test(filePath) || new RegExp(`(^|/)${regex}$`).test(filePath);
 }

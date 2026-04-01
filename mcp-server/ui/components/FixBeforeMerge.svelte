@@ -1,49 +1,51 @@
 <script lang="ts">
-  /**
-   * FixBeforeMerge.svelte
-   *
-   * Shows up to 5 prioritized suggestions. When recommendations are provided,
-   * displays them. Falls back to sorted violations (rule > strong-opinion >
-   * convention, limited to 5) when recommendations is empty or undefined.
-   * Pure presentation — no data fetching, no store access.
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders prioritized suggestion list only
-   *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
-   */
+/**
+ * FixBeforeMerge.svelte
+ *
+ * Shows up to 5 prioritized suggestions. When recommendations are provided,
+ * displays them. Falls back to sorted violations (rule > strong-opinion >
+ * convention, limited to 5) when recommendations is empty or undefined.
+ * Pure presentation — no data fetching, no store access.
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders prioritized suggestion list only
+ *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
+ */
 
-  import { getSeverityColor } from "../lib/utils";
+import { getSeverityColor } from "../lib/utils";
 
-  interface Violation {
-    file_path?: string;
-    principle_id: string;
-    severity: string;
-    message?: string;
-  }
+interface Violation {
+  file_path?: string;
+  principle_id: string;
+  severity: string;
+  message?: string;
+}
 
-  interface Recommendation {
-    file_path?: string;
-    title: string;
-    message: string;
-    source: "principle" | "holistic";
-  }
+interface Recommendation {
+  file_path?: string;
+  title: string;
+  message: string;
+  source: "principle" | "holistic";
+}
 
-  interface FixBeforeMergeProps {
-    violations: Violation[];
-    recommendations?: Recommendation[];
-    onPrompt?: (text: string) => void;
-  }
+interface FixBeforeMergeProps {
+  violations: Violation[];
+  recommendations?: Recommendation[];
+  onPrompt?: (text: string) => void;
+}
 
-  let { violations, recommendations, onPrompt }: FixBeforeMergeProps = $props();
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { violations, recommendations, onPrompt }: FixBeforeMergeProps = $props();
 
-  // Color for holistic recommendations
-  const HOLISTIC_COLOR = "#6c8cff";
+// Color for holistic recommendations
+const HOLISTIC_COLOR = "#6c8cff";
 
-  const SEVERITY_ORDER: Record<string, number> = { rule: 0, "strong-opinion": 1, convention: 2 };
+const SEVERITY_ORDER: Record<string, number> = { rule: 0, "strong-opinion": 1, convention: 2 };
 
-  // Normalize: if recommendations provided and non-empty, use them.
-  // Otherwise fall back to sorted violations.
-  const items = $derived.by((): Array<{ type: "recommendation"; rec: Recommendation } | { type: "violation"; v: Violation }> => {
+// Normalize: if recommendations provided and non-empty, use them.
+// Otherwise fall back to sorted violations.
+const _items = $derived.by(
+  (): Array<{ type: "recommendation"; rec: Recommendation } | { type: "violation"; v: Violation }> => {
     if (recommendations && recommendations.length > 0) {
       return recommendations.slice(0, 5).map((rec) => ({ type: "recommendation" as const, rec }));
     }
@@ -51,22 +53,25 @@
       .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3))
       .slice(0, 5);
     return sorted.map((v) => ({ type: "violation" as const, v }));
-  });
+  },
+);
 
-  const totalCount = $derived(
-    recommendations && recommendations.length > 0 ? recommendations.length : violations.length
-  );
+const _totalCount = $derived(
+  recommendations && recommendations.length > 0 ? recommendations.length : violations.length,
+);
 
-  function getRecommendationColor(source: "principle" | "holistic"): string {
-    return source === "principle" ? getSeverityColor("rule") : HOLISTIC_COLOR;
+function _getRecommendationColor(source: "principle" | "holistic"): string {
+  return source === "principle" ? getSeverityColor("rule") : HOLISTIC_COLOR;
+}
+
+function _getPromptText(
+  item: { type: "recommendation"; rec: Recommendation } | { type: "violation"; v: Violation },
+): string {
+  if (item.type === "recommendation") {
+    return `Explain this recommendation: ${item.rec.title}${item.rec.file_path ? ` in ${item.rec.file_path}` : ""} and how to address it`;
   }
-
-  function getPromptText(item: { type: "recommendation"; rec: Recommendation } | { type: "violation"; v: Violation }): string {
-    if (item.type === "recommendation") {
-      return `Explain this recommendation: ${item.rec.title}${item.rec.file_path ? ` in ${item.rec.file_path}` : ""} and how to address it`;
-    }
-    return `Explain the ${item.v.principle_id} violation in ${item.v.file_path ?? "this file"} and how to fix it`;
-  }
+  return `Explain the ${item.v.principle_id} violation in ${item.v.file_path ?? "this file"} and how to fix it`;
+}
 </script>
 
 <section class="fix-before-merge">

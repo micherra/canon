@@ -17,9 +17,19 @@ export const PY_EXTENSIONS = new Set(["py"]);
 
 /** All extensions to scan for (includes Go/Rust which are scanned but lack import parsers). */
 export const SCANNABLE_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".go", ".rs",
-  ".md", ".yaml", ".yml", ".json",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".go",
+  ".rs",
+  ".md",
+  ".yaml",
+  ".yml",
+  ".json",
   ".sh",
 ]);
 

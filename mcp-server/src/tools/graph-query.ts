@@ -1,22 +1,16 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { KgQuery } from '../graph/kg-query.ts';
-import { initDatabase } from '../graph/kg-schema.ts';
-import { CANON_DIR, CANON_FILES } from '../constants.ts';
-import type { SearchResult } from '../graph/kg-types.ts';
-import { toolError, toolOk, type ToolResult } from '../utils/tool-result.ts';
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { KgQuery } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import type { SearchResult } from "../graph/kg-types.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Input / Output types
 // ---------------------------------------------------------------------------
 
-export type GraphQueryType =
-  | 'callers'
-  | 'callees'
-  | 'blast_radius'
-  | 'dead_code'
-  | 'search'
-  | 'ancestors';
+export type GraphQueryType = "callers" | "callees" | "blast_radius" | "dead_code" | "search" | "ancestors";
 
 export interface GraphQueryOptions {
   max_depth?: number;
@@ -60,10 +54,7 @@ function findEntityId(kq: KgQuery, target: string): number | null {
  *
  * Returns a structured result with typed rows and a total count.
  */
-export function graphQuery(
-  input: GraphQueryInput,
-  projectDir: string
-): ToolResult<GraphQueryOutput> {
+export function graphQuery(input: GraphQueryInput, projectDir: string): ToolResult<GraphQueryOutput> {
   const { query_type, target, options = {} } = input;
 
   // ------------------------------------------------------------------
@@ -89,7 +80,7 @@ export function graphQuery(
     // 3. Dispatch by query_type
     // ----------------------------------------------------------------
     switch (query_type) {
-      case 'search': {
+      case "search": {
         if (!target) {
           return toolError("INVALID_INPUT", `query_type "search" requires a target string.`);
         }
@@ -98,14 +89,14 @@ export function graphQuery(
         return toolOk({ query_type, target, results, count: results.length });
       }
 
-      case 'dead_code': {
+      case "dead_code": {
         const results = kq.findDeadCode({
           includeTests: options.include_tests ?? false,
         });
         return toolOk({ query_type, target, results, count: results.length });
       }
 
-      case 'callers': {
+      case "callers": {
         if (!target) {
           return toolError("INVALID_INPUT", `query_type "callers" requires a target entity name.`);
         }
@@ -117,7 +108,7 @@ export function graphQuery(
         return toolOk({ query_type, target, results, count: results.length });
       }
 
-      case 'callees': {
+      case "callees": {
         if (!target) {
           return toolError("INVALID_INPUT", `query_type "callees" requires a target entity name.`);
         }
@@ -129,7 +120,7 @@ export function graphQuery(
         return toolOk({ query_type, target, results, count: results.length });
       }
 
-      case 'blast_radius': {
+      case "blast_radius": {
         if (!target) {
           return toolError("INVALID_INPUT", `query_type "blast_radius" requires a target entity name.`);
         }
@@ -142,7 +133,7 @@ export function graphQuery(
         return toolOk({ query_type, target, results, count: results.length });
       }
 
-      case 'ancestors': {
+      case "ancestors": {
         if (!target) {
           return toolError("INVALID_INPUT", `query_type "ancestors" requires a target entity name.`);
         }

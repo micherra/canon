@@ -5,17 +5,12 @@
  * loadAndResolveFlow and loadFragment correctly implement the two-tier lookup pattern.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
-import { mkdir, writeFile, rm } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import {
-  loadAndResolveFlow,
-  loadFragment,
-  resolveFragments,
-} from "../orchestration/flow-parser.ts";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { loadAndResolveFlow, loadFragment, resolveFragments } from "../orchestration/flow-parser.ts";
 import type { FragmentDefinition } from "../orchestration/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -223,9 +218,9 @@ describe("loadAndResolveFlow — project-level resolution", () => {
   });
 
   it("throws informative error when flow not found in either location", async () => {
-    await expect(
-      loadAndResolveFlow(pluginDir, "nonexistent-flow-xyz", projectDir),
-    ).rejects.toThrow(/nonexistent-flow-xyz/);
+    await expect(loadAndResolveFlow(pluginDir, "nonexistent-flow-xyz", projectDir)).rejects.toThrow(
+      /nonexistent-flow-xyz/,
+    );
   });
 });
 

@@ -7,15 +7,16 @@
  * They are distinct from the unit tests in resolve-wave-event.test.ts and
  * inject-wave-event.test.ts, which test each tool in isolation.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { injectWaveEvent } from "../tools/inject-wave-event.ts";
-import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
-import { getMessages } from "../tools/get-messages.ts";
+
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { WaveEvent } from "../orchestration/flow-schema.ts";
+import { getMessages } from "../tools/get-messages.ts";
+import { injectWaveEvent } from "../tools/inject-wave-event.ts";
+import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -216,9 +217,9 @@ describe("concurrent resolution: double-resolve on the same event", () => {
     await resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" });
 
     // Second resolve must throw, not silently succeed
-    await expect(
-      resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" }),
-    ).rejects.toThrow(`Event ${injected.event.id} is already applied`);
+    await expect(resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" })).rejects.toThrow(
+      `Event ${injected.event.id} is already applied`,
+    );
   });
 
   it("second resolve throws 'already rejected' when first rejected and second tries to apply", async () => {
@@ -235,9 +236,9 @@ describe("concurrent resolution: double-resolve on the same event", () => {
       reason: "Not applicable",
     });
 
-    await expect(
-      resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" }),
-    ).rejects.toThrow(`Event ${injected.event.id} is already rejected`);
+    await expect(resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" })).rejects.toThrow(
+      `Event ${injected.event.id} is already rejected`,
+    );
   });
 
   it("concurrent Promise.all calls — exactly one succeeds and one rejects", async () => {

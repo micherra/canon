@@ -1,29 +1,28 @@
 <script lang="ts">
-  /**
-   * StatsRow.svelte
-   *
-   * A horizontal row of 4 stat cards summarising key PR review metrics.
-   * Pure presentation — no data fetching, no store access.
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders stat summary row only
-   *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
-   */
+/**
+ * StatsRow.svelte
+ *
+ * A horizontal row of 4 stat cards summarising key PR review metrics.
+ * Pure presentation — no data fetching, no store access.
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders stat summary row only
+ *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
+ */
 
-  import { splitFilePath } from "../lib/utils";
+import { splitFilePath } from "../lib/utils";
 
-  interface StatsRowProps {
-    filesChanged: number;
-    violationCount: number;
-    ruleCount: number;
-    highestBlastRadius: { file: string; dep_count: number } | null;
-  }
+interface StatsRowProps {
+  filesChanged: number;
+  violationCount: number;
+  ruleCount: number;
+  highestBlastRadius: { file: string; dep_count: number } | null;
+}
 
-  let { filesChanged, violationCount, ruleCount, highestBlastRadius }: StatsRowProps = $props();
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { filesChanged, violationCount, ruleCount, highestBlastRadius }: StatsRowProps = $props();
 
-  const blastBasename = $derived(
-    highestBlastRadius ? splitFilePath(highestBlastRadius.file).name : null,
-  );
+const _blastBasename = $derived(highestBlastRadius ? splitFilePath(highestBlastRadius.file).name : null);
 </script>
 
 <div class="stats-row">

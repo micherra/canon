@@ -51,11 +51,7 @@ export function computeFilePriorities(
     .map((n) => {
       const deg = inDegree.get(n.id) || 0;
       const centrality = LAYER_CENTRALITY[n.layer] ?? 0;
-      const score =
-        deg * 3 +
-        n.violation_count * 2 +
-        (n.changed ? 1 : 0) +
-        centrality;
+      const score = deg * 3 + n.violation_count * 2 + (n.changed ? 1 : 0) + centrality;
 
       return {
         path: n.id,

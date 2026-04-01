@@ -5,8 +5,8 @@
  * (writeSession) have been removed — SQLite WAL handles write serialization.
  */
 
-import { access, mkdir } from "fs/promises";
-import path from "path";
+import { access, mkdir } from "node:fs/promises";
+import path from "node:path";
 
 /**
  * Sanitize a git branch name into a filesystem-safe string.
@@ -44,16 +44,13 @@ export function generateSlug(task: string): string {
  * Used to deduplicate both workspace directories (under branch dir) and
  * plan directories (under workspace/plans/).
  */
-export async function checkSlugCollision(
-  parentDir: string,
-  slug: string,
-): Promise<string> {
+export async function checkSlugCollision(parentDir: string, slug: string): Promise<string> {
   const exists = async (candidate: string): Promise<boolean> => {
     try {
       await access(path.join(parentDir, candidate));
       return true;
-    } catch (err: any) {
-      if (err.code === "ENOENT") return false;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw err;
     }
   };
@@ -75,15 +72,9 @@ export async function checkSlugCollision(
  * `projectDir/.canon/workspaces/<sanitized>/`.
  * Returns the workspace root path.
  */
-export async function initWorkspace(
-  projectDir: string,
-  sanitized: string,
-): Promise<string> {
+export async function initWorkspace(projectDir: string, sanitized: string): Promise<string> {
   const workspace = path.join(projectDir, ".canon", "workspaces", sanitized);
   const subdirs = ["research", "decisions", "plans", "reviews"];
-  await Promise.all(
-    subdirs.map((dir) => mkdir(path.join(workspace, dir), { recursive: true })),
-  );
+  await Promise.all(subdirs.map((dir) => mkdir(path.join(workspace, dir), { recursive: true })));
   return workspace;
 }
-

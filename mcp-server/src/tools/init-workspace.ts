@@ -3,21 +3,20 @@
  * Creates a new workspace directory structure or resumes an existing one.
  */
 
-import {
-  sanitizeBranch,
-  generateSlug,
-  checkSlugCollision,
-  initWorkspace as createWorkspace,
-} from "../orchestration/workspace.ts";
+import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
 import { initBoard } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { z } from "zod";
-import { existsSync } from "fs";
-import { mkdir } from "fs/promises";
-import { join } from "path";
-import { gitStatus } from "../adapters/git-adapter.ts";
+import {
+  checkSlugCollision,
+  initWorkspace as createWorkspace,
+  generateSlug,
+  sanitizeBranch,
+} from "../orchestration/workspace.ts";
 
 interface InitWorkspaceInput {
   flow_name: string;
@@ -38,6 +37,8 @@ interface InitWorkspaceResult {
   created: boolean;
   resume_state?: string;
   preflight_issues?: string[];
+  worktree_path?: string;
+  worktree_branch?: string;
 }
 
 /**
@@ -54,10 +55,10 @@ export async function listBranchWorkspaces(
 
   let entries: string[];
   try {
-    const { readdir } = await import("fs/promises");
+    const { readdir } = await import("node:fs/promises");
     entries = await readdir(branchDir);
-  } catch (err: any) {
-    if (err.code === "ENOENT") return results;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return results;
     throw err;
   }
 
@@ -88,11 +89,7 @@ const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
  * Run pre-flight checks: git status, lock, and stale sessions.
  * Returns an array of issue descriptions (empty if clean).
  */
-async function runPreflightChecks(
-  projectDir: string,
-  branch: string,
-  candidateWorkspace: string,
-): Promise<string[]> {
+async function runPreflightChecks(projectDir: string, branch: string, _candidateWorkspace: string): Promise<string[]> {
   const issues: string[] = [];
 
   // 1. Check for uncommitted changes
@@ -123,14 +120,66 @@ async function runPreflightChecks(
   return issues;
 }
 
+/** Build a resume result from an existing active session. */
+function buildResumeResult(workspace: string, session: Session, board: Board, projectDir: string): InitWorkspaceResult {
+  const worktreePath = join(projectDir, ".canon", "worktrees", session.slug);
+  const worktreeExists = existsSync(worktreePath);
+  return {
+    workspace,
+    slug: session.slug,
+    board,
+    session,
+    created: false,
+    resume_state: board.current_state,
+    worktree_path: worktreeExists ? worktreePath : undefined,
+    worktree_branch: worktreeExists ? `canon-build/${session.slug}` : undefined,
+  };
+}
+
+/** Check if an error is an expected "no DB" error (file not found, can't open). */
+function isExpectedNoDbError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    code === "SQLITE_CANTOPEN" ||
+    code === "ENOENT" ||
+    message.includes("SQLITE_CANTOPEN") ||
+    message.includes("no such file") ||
+    message.includes("directory does not exist") ||
+    message.includes("Cannot open database")
+  );
+}
+
+/** Check if an error is a SQLite UNIQUE constraint violation. */
+function isConstraintError(err: unknown): boolean {
+  return (
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT" ||
+    (err instanceof Error && err.message.includes("UNIQUE constraint"))
+  );
+}
+
+/** Try to resume an existing workspace for the given candidate path. Returns null if none found. */
+function tryResumeExisting(candidateWorkspace: string, projectDir: string): InitWorkspaceResult | null {
+  try {
+    const store = getExecutionStore(candidateWorkspace);
+    const session = store.getSession();
+    const board = store.getBoard();
+    if (session && session.status === "active" && board) {
+      return buildResumeResult(candidateWorkspace, session, board, projectDir);
+    }
+  } catch (err) {
+    if (!isExpectedNoDbError(err)) throw err;
+  }
+  return null;
+}
+
 export async function initWorkspaceFlow(
   input: InitWorkspaceInput,
   projectDir: string,
   pluginDir: string,
 ): Promise<InitWorkspaceResult> {
   const sanitized = sanitizeBranch(input.branch);
-
-  // Generate slug early — workspace path is scoped by branch + slug
   const baseSlug = generateSlug(input.task);
 
   // Pre-flight checks (advisory — run before any mutations)
@@ -139,7 +188,6 @@ export async function initWorkspaceFlow(
     const candidateWs = join(branchDirPf, baseSlug);
     const issues = await runPreflightChecks(projectDir, input.branch, candidateWs);
     if (issues.length > 0) {
-      // Return early with issues — no workspace created
       return {
         workspace: candidateWs,
         slug: baseSlug,
@@ -153,66 +201,26 @@ export async function initWorkspaceFlow(
 
   // Check for existing workspace with matching slug (resume case)
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
-  const candidateSlug = baseSlug;
-  const candidateWorkspace = join(branchDir, candidateSlug);
+  const candidateWorkspace = join(branchDir, baseSlug);
+  const resumed = tryResumeExisting(candidateWorkspace, projectDir);
+  if (resumed) return resumed;
 
-  try {
-    const store = getExecutionStore(candidateWorkspace);
-    const session = store.getSession();
-    const board = store.getBoard();
-
-    // Only resume if the session is active
-    if (session && session.status === "active" && board) {
-      return {
-        workspace: candidateWorkspace,
-        slug: session.slug,
-        board,
-        session,
-        created: false,
-        resume_state: board.current_state,
-      };
-    }
-  } catch (err) {
-    // Only swallow expected "no existing DB" errors (file not found / can't open).
-    // Rethrow unexpected errors such as permission denied or disk errors.
-    const code = (err as NodeJS.ErrnoException).code;
-    const message = (err instanceof Error) ? err.message : String(err);
-    const isExpectedNoDb =
-      code === "SQLITE_CANTOPEN" ||
-      code === "ENOENT" ||
-      message.includes("SQLITE_CANTOPEN") ||
-      message.includes("no such file") ||
-      message.includes("directory does not exist") ||
-      message.includes("Cannot open database");
-    if (!isExpectedNoDb) throw err;
-    // else: no existing workspace for this slug — proceed with creation
-  }
-
-  // Workspace path: .canon/workspaces/{branch}/{slug}/
+  // Create new workspace
   const slug = await checkSlugCollision(branchDir, baseSlug);
   const workspace = join(branchDir, slug);
-
-  // Create workspace directory structure
   await createWorkspace(projectDir, join(sanitized, slug));
 
-  // Re-check for existing execution inside (another process may have created it)
+  // Re-check for existing execution (another process may have created it)
   const store = getExecutionStore(workspace);
   const existingSession = store.getSession();
   if (existingSession && existingSession.status === "active") {
-    const existingBoard = store.getBoard()!;
-    return { workspace, slug: existingSession.slug, board: existingBoard, session: existingSession, created: false, resume_state: existingBoard.current_state };
+    return buildResumeResult(workspace, existingSession, store.getBoard()!, projectDir);
   }
 
-  // Load and resolve flow
   const { flow } = await loadAndResolveFlow(pluginDir, input.flow_name);
-
-  // Create plans/${slug}/ directory
   await mkdir(join(workspace, "plans", slug), { recursive: true });
 
-  // Init board from resolved flow
   const board = initBoard(flow, input.task, input.base_commit);
-
-  // Create session object
   const now = new Date().toISOString();
   const session: Session = {
     branch: input.branch,
@@ -226,12 +234,7 @@ export async function initWorkspaceFlow(
     status: "active",
   };
 
-  // Persist execution to SQLite.
-  // Two concurrent callers can both pass the re-check above (both see no session)
-  // and race to insert the singleton execution row. The loser gets a UNIQUE
-  // constraint error. We catch that here and fall back to reading the row the
-  // winner already inserted, returning a clean resume instead of propagating
-  // the constraint error.
+  // Persist execution — handle race condition with concurrent callers
   try {
     store.initExecution({
       flow: board.flow,
@@ -251,27 +254,12 @@ export async function initWorkspaceFlow(
       status: session.status,
     });
   } catch (err) {
-    // Another concurrent caller already inserted the execution row.
-    // Treat this as a resume: read what the winner wrote and return it.
-    const isConstraintError =
-      (err as { code?: string }).code === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
-      (err as { code?: string }).code === 'SQLITE_CONSTRAINT' ||
-      (err instanceof Error && err.message.includes('UNIQUE constraint'));
-    if (!isConstraintError) throw err;
+    if (!isConstraintError(err)) throw err;
 
     const winnerSession = store.getSession();
-    if (winnerSession && winnerSession.status === 'active') {
-      const winnerBoard = store.getBoard()!;
-      return {
-        workspace,
-        slug: winnerSession.slug,
-        board: winnerBoard,
-        session: winnerSession,
-        created: false,
-        resume_state: winnerBoard.current_state,
-      };
+    if (winnerSession && winnerSession.status === "active") {
+      return buildResumeResult(workspace, winnerSession, store.getBoard()!, projectDir);
     }
-    // Constraint error but still no session readable — re-throw.
     throw err;
   }
 
@@ -284,8 +272,28 @@ export async function initWorkspaceFlow(
     }
   }
 
-  // Seed progress
   store.appendProgress(`## Progress: ${input.task}`);
 
-  return { workspace, slug, board, session, created: true };
+  const worktreePath = join(projectDir, ".canon", "worktrees", slug);
+  const worktreeBranch = `canon-build/${slug}`;
+  let actualWorktreePath: string | undefined;
+  let actualWorktreeBranch: string | undefined;
+  const result = gitWorktreeAdd(worktreePath, worktreeBranch, input.base_commit, projectDir);
+  if (result.ok) {
+    actualWorktreePath = worktreePath;
+    actualWorktreeBranch = worktreeBranch;
+    store.updateExecution({ worktree_path: worktreePath, worktree_branch: worktreeBranch });
+    session.worktree_path = worktreePath;
+    session.worktree_branch = worktreeBranch;
+  }
+
+  return {
+    workspace,
+    slug,
+    board,
+    session,
+    created: true,
+    worktree_path: actualWorktreePath,
+    worktree_branch: actualWorktreeBranch,
+  };
 }

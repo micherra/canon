@@ -10,19 +10,19 @@
  * errors are treated as non-fatal: a bare file entity is created instead.
  */
 
-import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import type { Database } from 'better-sqlite3';
-import { initDatabase } from './kg-schema.ts';
-import { KgStore } from './kg-store.ts';
-import { getAdapter, getLanguage } from './kg-adapter-registry.ts';
-import { initParsers } from './kg-wasm-parser.ts';
-import { scanSourceFiles } from './scanner.ts';
-import { resolveImport } from './import-parser.ts';
-import { inferLayer } from '../matcher.ts';
-import { CANON_DIR, CANON_FILES } from '../constants.ts';
-import type { AdapterResult, EntityRow } from './kg-types.ts';
+import { createHash } from "node:crypto";
+import { readFileSync, statSync } from "node:fs";
+import path from "node:path";
+import type { Database } from "better-sqlite3";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { inferLayer } from "../matcher.ts";
+import { resolveImport } from "./import-parser.ts";
+import { getAdapter, getLanguage } from "./kg-adapter-registry.ts";
+import { initDatabase } from "./kg-schema.ts";
+import { KgStore } from "./kg-store.ts";
+import type { AdapterResult, EdgeType, EntityRow } from "./kg-types.ts";
+import { initParsers } from "./kg-wasm-parser.ts";
+import { scanSourceFiles } from "./scanner.ts";
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -62,17 +62,17 @@ export interface ReindexResult {
 // ---------------------------------------------------------------------------
 
 function contentHash(content: string): string {
-  return createHash('sha256').update(content).digest('hex');
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function fileLayer(relPath: string): string {
-  return inferLayer(relPath) ?? 'unknown';
+  return inferLayer(relPath) ?? "unknown";
 }
 
 /** Strip .js / .ts extension aliases used in ESM imports before resolution */
 function normaliseSpecifier(spec: string): string {
   // Strip trailing .js in ESM imports so resolveImport can find .ts sources
-  if (spec.endsWith('.js')) return spec.slice(0, -3);
+  if (spec.endsWith(".js")) return spec.slice(0, -3);
   return spec;
 }
 
@@ -112,7 +112,7 @@ function parseAndStoreFile(
     file_id: fileId,
     name: path.basename(relPath),
     qualified_name: qualifiedName,
-    kind: 'file',
+    kind: "file",
     line_start: 1,
     line_end: 1,
     is_exported: false,
@@ -132,7 +132,7 @@ function parseAndStoreFile(
       store.insertEntity({
         file_id: fileId,
         ...entityDef,
-      } as Omit<EntityRow, 'entity_id'>);
+      } as Omit<EntityRow, "entity_id">);
     }
     return { fileId, adapterResult };
   } catch (err) {
@@ -144,6 +144,30 @@ function parseAndStoreFile(
 // ---------------------------------------------------------------------------
 // Phase 3 — cross-file import resolution
 // ---------------------------------------------------------------------------
+
+/** Resolve a single named import to entity-level edges. */
+function resolveNamedImport(store: KgStore, name: string, sourceFileId: number, targetFileId: number): void {
+  if (!name || name === "*") return;
+
+  const candidates = store.findExportedByName(name);
+  const targetCandidates = candidates.filter((e) => e.file_id === targetFileId);
+  if (targetCandidates.length === 0) return;
+
+  const sourceFileEntities = store.getEntitiesByFile(sourceFileId);
+  const sourceFileEntity = sourceFileEntities.find((e) => e.kind === "file");
+  if (!sourceFileEntity?.entity_id) return;
+
+  for (const target of targetCandidates) {
+    if (!target.entity_id) continue;
+    store.insertEdge({
+      source_entity_id: sourceFileEntity.entity_id as number,
+      target_entity_id: target.entity_id as number,
+      edge_type: "type-references",
+      confidence: 0.9,
+      metadata: JSON.stringify({ import_name: name }),
+    });
+  }
+}
 
 function resolveImports(
   store: KgStore,
@@ -163,40 +187,17 @@ function resolveImports(
       const targetFileRow = store.getFile(resolved);
       if (!targetFileRow?.file_id) continue;
 
-      // File-level edge
       store.insertFileEdge({
         source_file_id: sourceFileRow.file_id as number,
         target_file_id: targetFileRow.file_id as number,
-        edge_type: 'imports',
+        edge_type: "imports",
         confidence: 1.0,
         evidence: specifier,
         relation: null,
       });
 
-      // Named import → entity-level edges
       for (const name of names) {
-        if (!name || name === '*') continue;
-        const candidates = store.findExportedByName(name);
-        const targetCandidates = candidates.filter(
-          (e) => e.file_id === (targetFileRow.file_id as number),
-        );
-        if (targetCandidates.length === 0) continue;
-
-        // Source file entity (the bare file entity as caller proxy)
-        const sourceFileEntities = store.getEntitiesByFile(sourceFileRow.file_id as number);
-        const sourceFileEntity = sourceFileEntities.find((e) => e.kind === 'file');
-        if (!sourceFileEntity?.entity_id) continue;
-
-        for (const target of targetCandidates) {
-          if (!target.entity_id) continue;
-          store.insertEdge({
-            source_entity_id: sourceFileEntity.entity_id as number,
-            target_entity_id: target.entity_id as number,
-            edge_type: 'type-references',
-            confidence: 0.9,
-            metadata: JSON.stringify({ import_name: name }),
-          });
-        }
+        resolveNamedImport(store, name, sourceFileRow.file_id as number, targetFileRow.file_id as number);
       }
     }
   }
@@ -206,17 +207,68 @@ function resolveImports(
 // Phase 4 — Canon entity linking (applies-to, spawns, includes)
 // ---------------------------------------------------------------------------
 
+/** Link applies-to edges from a source entity to target files. */
+function linkAppliesTo(store: KgStore, sourceEntityId: number, targets: string[]): void {
+  for (const target of targets) {
+    const targetFileRow = store.getFile(target);
+    if (!targetFileRow?.file_id) continue;
+    const targetEntities = store.getEntitiesByFile(targetFileRow.file_id as number);
+    const targetFileEntity = targetEntities.find((e) => e.kind === "file");
+    if (!targetFileEntity?.entity_id) continue;
+    store.insertEdge({
+      source_entity_id: sourceEntityId,
+      target_entity_id: targetFileEntity.entity_id as number,
+      edge_type: "applies-to",
+      confidence: 0.8,
+      metadata: null,
+    });
+  }
+}
+
+/** Link named-lookup edges (spawns, includes) from a source entity. */
+function linkNamedTarget(
+  store: KgStore,
+  sourceEntityId: number,
+  targetName: string,
+  edgeType: EdgeType,
+  confidence: number,
+): void {
+  for (const target of store.findExportedByName(targetName)) {
+    if (!target.entity_id) continue;
+    store.insertEdge({
+      source_entity_id: sourceEntityId,
+      target_entity_id: target.entity_id as number,
+      edge_type: edgeType,
+      confidence,
+      metadata: null,
+    });
+  }
+}
+
+/** Process Canon links for a single entity's metadata. */
+function processEntityCanonLinks(store: KgStore, entityId: number, metadata: string): void {
+  let meta: Record<string, unknown>;
+  try {
+    meta = JSON.parse(metadata);
+  } catch {
+    return;
+  }
+
+  const appliesTo = meta["applies_to"] as string[] | undefined;
+  if (Array.isArray(appliesTo)) linkAppliesTo(store, entityId, appliesTo);
+
+  const spawnsTarget = meta["spawns"] as string | undefined;
+  if (spawnsTarget) linkNamedTarget(store, entityId, spawnsTarget, "spawns", 0.7);
+
+  const includesTarget = meta["includes"] as string | undefined;
+  if (includesTarget) linkNamedTarget(store, entityId, includesTarget, "includes", 0.7);
+}
+
 function resolveCanonLinks(
   store: KgStore,
   fileImports: Map<string, { relPath: string; specifiers: Array<{ specifier: string; names: string[] }> }>,
 ): void {
-  // Canon links are stored in adapter-produced entity metadata.
-  // We iterate all entities looking for those with metadata containing
-  // applies_to / spawns / includes and create corresponding edges.
-  // This is a best-effort pass — errors are logged and skipped.
   try {
-    // Get all principle/flow/agent entities from the DB
-    // We look at files that were indexed in this run
     for (const [relPath] of fileImports) {
       const fileRow = store.getFile(relPath);
       if (!fileRow?.file_id) continue;
@@ -224,67 +276,7 @@ function resolveCanonLinks(
       const entities = store.getEntitiesByFile(fileRow.file_id as number);
       for (const entity of entities) {
         if (!entity.metadata || !entity.entity_id) continue;
-
-        let meta: Record<string, unknown>;
-        try {
-          meta = JSON.parse(entity.metadata);
-        } catch {
-          continue;
-        }
-
-        const sourceEntityId = entity.entity_id as number;
-
-        // applies-to: principle → files matching layers/patterns
-        const appliesTo = meta['applies_to'] as string[] | undefined;
-        if (Array.isArray(appliesTo)) {
-          for (const target of appliesTo) {
-            const targetFileRow = store.getFile(target);
-            if (!targetFileRow?.file_id) continue;
-            const targetEntities = store.getEntitiesByFile(targetFileRow.file_id as number);
-            const targetFileEntity = targetEntities.find((e) => e.kind === 'file');
-            if (targetFileEntity?.entity_id) {
-              store.insertEdge({
-                source_entity_id: sourceEntityId,
-                target_entity_id: targetFileEntity.entity_id as number,
-                edge_type: 'applies-to',
-                confidence: 0.8,
-                metadata: null,
-              });
-            }
-          }
-        }
-
-        // spawns: flow-state → agent
-        const spawnsTarget = meta['spawns'] as string | undefined;
-        if (spawnsTarget) {
-          for (const target of store.findExportedByName(spawnsTarget)) {
-            if (target.entity_id) {
-              store.insertEdge({
-                source_entity_id: sourceEntityId,
-                target_entity_id: target.entity_id as number,
-                edge_type: 'spawns',
-                confidence: 0.7,
-                metadata: null,
-              });
-            }
-          }
-        }
-
-        // includes: flow → fragment
-        const includesTarget = meta['includes'] as string | undefined;
-        if (includesTarget) {
-          for (const target of store.findExportedByName(includesTarget)) {
-            if (target.entity_id) {
-              store.insertEdge({
-                source_entity_id: sourceEntityId,
-                target_entity_id: target.entity_id as number,
-                edge_type: 'includes',
-                confidence: 0.7,
-                metadata: null,
-              });
-            }
-          }
-        }
+        processEntityCanonLinks(store, entity.entity_id as number, entity.metadata);
       }
     }
   } catch (err) {
@@ -296,108 +288,109 @@ function resolveCanonLinks(
 // runPipeline
 // ---------------------------------------------------------------------------
 
-export async function runPipeline(
+/** Scan source files, handling sourceDirs if provided. */
+async function scanPhase(projectDir: string, sourceDirs?: string[]): Promise<string[]> {
+  if (!sourceDirs || sourceDirs.length === 0) {
+    return scanSourceFiles(projectDir);
+  }
+
+  const allFiles: string[] = [];
+  for (const dir of sourceDirs) {
+    const absDir = path.resolve(projectDir, dir);
+    if (!absDir.startsWith(projectDir + path.sep) && absDir !== projectDir) continue;
+    try {
+      const files = await scanSourceFiles(absDir);
+      for (const f of files) {
+        allFiles.push(path.posix.join(dir.replace(/\\/g, "/"), f.replace(/\\/g, "/")));
+      }
+    } catch {
+      // Directory may not exist — skip silently
+    }
+  }
+  return allFiles;
+}
+
+/** Check if a file needs reindexing; returns true if it should be indexed. */
+function shouldReindex(
+  store: KgStore,
   projectDir: string,
-  options?: PipelineOptions,
-): Promise<PipelineResult> {
-  await initParsers(); // One-time WASM initialization — idempotent
+  relPath: string,
+  incremental: boolean,
+  fileHashCache: Map<string, string>,
+): boolean {
+  const absPath = path.join(projectDir, relPath);
+  let stat: ReturnType<typeof statSync> | null = null;
+  try {
+    stat = statSync(absPath);
+  } catch {
+    return false;
+  }
+  const mtimeMs = stat.mtimeMs;
+
+  if (!incremental) return true;
+
+  const existing = store.getFile(relPath);
+  if (existing && existing.mtime_ms === mtimeMs) return false;
+
+  let content: string;
+  try {
+    content = readFileSync(absPath, "utf8");
+  } catch {
+    return false;
+  }
+  const hash = contentHash(content);
+  if (existing && existing.content_hash === hash) {
+    store.upsertFile({
+      path: relPath,
+      mtime_ms: mtimeMs,
+      content_hash: hash,
+      language: existing.language,
+      layer: existing.layer,
+      last_indexed_at: Date.now(),
+    });
+    return false;
+  }
+  fileHashCache.set(relPath, hash);
+  return true;
+}
+
+export async function runPipeline(projectDir: string, options?: PipelineOptions): Promise<PipelineResult> {
+  await initParsers();
   const startMs = Date.now();
   const incremental = options?.incremental ?? true;
-  const dbPath =
-    options?.dbPath ?? path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  const progress = options?.onProgress ?? (() => {});
+  const dbPath = options?.dbPath ?? path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  const progress =
+    options?.onProgress ??
+    (() => {
+      /* noop */
+    });
   const sourceDirs = options?.sourceDirs;
 
-  // Open DB
   const db = initDatabase(dbPath);
   const store = new KgStore(db);
 
   try {
-    // -----------------------------------------------------------------------
     // Phase 1: File scan
-    // -----------------------------------------------------------------------
-    progress('scan', 0, 0);
-    // When sourceDirs is provided, scan each subdirectory and produce relative
-    // paths from projectDir so the rest of the pipeline is path-consistent.
-    let relPaths: string[];
-    if (sourceDirs && sourceDirs.length > 0) {
-      const allFiles: string[] = [];
-      for (const dir of sourceDirs) {
-        const absDir = path.resolve(projectDir, dir);
-        // Guard against path traversal: skip any entry that escapes the project root
-        if (!absDir.startsWith(projectDir + path.sep) && absDir !== projectDir) {
-          continue;
-        }
-        try {
-          const files = await scanSourceFiles(absDir);
-          for (const f of files) {
-            allFiles.push(path.posix.join(dir.replace(/\\/g, '/'), f.replace(/\\/g, '/')));
-          }
-        } catch {
-          // Directory may not exist — skip silently
-        }
-      }
-      relPaths = allFiles;
-    } else {
-      relPaths = await scanSourceFiles(projectDir);
-    }
+    progress("scan", 0, 0);
+    const relPaths = await scanPhase(projectDir, sourceDirs);
     const allRelPathsSet = new Set(relPaths);
     const filesScanned = relPaths.length;
-
-    progress('scan', filesScanned, filesScanned);
+    progress("scan", filesScanned, filesScanned);
 
     // Determine which files need (re)indexing
     const toIndex: string[] = [];
-    const fileHashCache = new Map<string, string>(); // relPath → hash (for changed files)
-
+    const fileHashCache = new Map<string, string>();
     for (const relPath of relPaths) {
-      const absPath = path.join(projectDir, relPath);
-      let stat: ReturnType<typeof statSync> | null = null;
-      try {
-        stat = statSync(absPath);
-      } catch {
-        continue; // File disappeared between scan and stat — skip
+      if (shouldReindex(store, projectDir, relPath, incremental, fileHashCache)) {
+        toIndex.push(relPath);
       }
-      const mtimeMs = stat.mtimeMs;
-
-      if (incremental) {
-        const existing = store.getFile(relPath);
-        if (existing && existing.mtime_ms === mtimeMs) {
-          // mtime matches — likely unchanged, skip (no hash needed)
-          continue;
-        }
-        // mtime changed — check hash
-        let content: string;
-        try {
-          content = readFileSync(absPath, 'utf8');
-        } catch {
-          continue;
-        }
-        const hash = contentHash(content);
-        if (existing && existing.content_hash === hash) {
-          // Content unchanged despite mtime change — skip but update mtime
-          store.upsertFile({
-            path: relPath,
-            mtime_ms: mtimeMs,
-            content_hash: hash,
-            language: existing.language,
-            layer: existing.layer,
-            last_indexed_at: Date.now(),
-          });
-          continue;
-        }
-        fileHashCache.set(relPath, hash);
-      }
-
-      toIndex.push(relPath);
     }
-
     const filesUpdated = toIndex.length;
 
     // -----------------------------------------------------------------------
     // Phase 2: Parse + extract
     // -----------------------------------------------------------------------
-    progress('parse', 0, filesUpdated);
+    progress("parse", 0, filesUpdated);
 
     // Map relPath → adapter result for Phase 3
     const fileImports = new Map<
@@ -412,7 +405,7 @@ export async function runPipeline(
 
         let content: string;
         try {
-          content = readFileSync(absPath, 'utf8');
+          content = readFileSync(absPath, "utf8");
         } catch {
           continue;
         }
@@ -426,14 +419,7 @@ export async function runPipeline(
         const mtimeMs = stat.mtimeMs;
         const hash = fileHashCache.get(relPath) ?? contentHash(content);
 
-        const { adapterResult } = parseAndStoreFile(
-          store,
-          projectDir,
-          relPath,
-          content,
-          hash,
-          mtimeMs,
-        );
+        const { adapterResult } = parseAndStoreFile(store, projectDir, relPath, content, hash, mtimeMs);
 
         if (adapterResult?.importSpecifiers) {
           fileImports.set(relPath, {
@@ -442,33 +428,33 @@ export async function runPipeline(
           });
         }
 
-        if (i % 50 === 0) progress('parse', i, filesUpdated);
+        if (i % 50 === 0) progress("parse", i, filesUpdated);
       }
     });
 
-    progress('parse', filesUpdated, filesUpdated);
+    progress("parse", filesUpdated, filesUpdated);
 
     // -----------------------------------------------------------------------
     // Phase 3: Cross-file import resolution
     // -----------------------------------------------------------------------
-    progress('resolve', 0, fileImports.size);
+    progress("resolve", 0, fileImports.size);
 
     store.transaction(() => {
       resolveImports(store, projectDir, allRelPathsSet, fileImports);
     });
 
-    progress('resolve', fileImports.size, fileImports.size);
+    progress("resolve", fileImports.size, fileImports.size);
 
     // -----------------------------------------------------------------------
     // Phase 4: Canon entity linking
     // -----------------------------------------------------------------------
-    progress('canon-link', 0, fileImports.size);
+    progress("canon-link", 0, fileImports.size);
 
     store.transaction(() => {
       resolveCanonLinks(store, fileImports);
     });
 
-    progress('canon-link', fileImports.size, fileImports.size);
+    progress("canon-link", fileImports.size, fileImports.size);
 
     // -----------------------------------------------------------------------
     // Phase 5: Stats
@@ -491,24 +477,16 @@ export async function runPipeline(
 // reindexFile — single-file incremental reindex
 // ---------------------------------------------------------------------------
 
-export async function reindexFile(
-  db: Database,
-  projectDir: string,
-  filePath: string,
-): Promise<ReindexResult> {
+export async function reindexFile(db: Database, projectDir: string, filePath: string): Promise<ReindexResult> {
   await initParsers(); // Idempotent — no-op if already initialized
   const store = new KgStore(db);
-  const absPath = path.isAbsolute(filePath)
-    ? filePath
-    : path.join(projectDir, filePath);
-  const relPath = path.isAbsolute(filePath)
-    ? path.relative(projectDir, filePath)
-    : filePath;
+  const absPath = path.isAbsolute(filePath) ? filePath : path.join(projectDir, filePath);
+  const relPath = path.isAbsolute(filePath) ? path.relative(projectDir, filePath) : filePath;
 
   // Read file
   let content: string;
   try {
-    content = readFileSync(absPath, 'utf8');
+    content = readFileSync(absPath, "utf8");
   } catch {
     return { changed: false, entitiesBefore: 0, entitiesAfter: 0 };
   }
@@ -526,27 +504,16 @@ export async function reindexFile(
   // Check if unchanged
   const existing = store.getFile(relPath);
   if (existing && existing.content_hash === hash) {
-    const entitiesCount = existing.file_id
-      ? store.getEntitiesByFile(existing.file_id as number).length
-      : 0;
+    const entitiesCount = existing.file_id ? store.getEntitiesByFile(existing.file_id as number).length : 0;
     return { changed: false, entitiesBefore: entitiesCount, entitiesAfter: entitiesCount };
   }
 
-  const entitiesBefore = existing?.file_id
-    ? store.getEntitiesByFile(existing.file_id as number).length
-    : 0;
+  const entitiesBefore = existing?.file_id ? store.getEntitiesByFile(existing.file_id as number).length : 0;
 
   // Re-index in a transaction
   let entitiesAfter = 0;
   store.transaction(() => {
-    const { fileId, adapterResult } = parseAndStoreFile(
-      store,
-      projectDir,
-      relPath,
-      content,
-      hash,
-      mtimeMs,
-    );
+    const { fileId, adapterResult } = parseAndStoreFile(store, projectDir, relPath, content, hash, mtimeMs);
 
     entitiesAfter = store.getEntitiesByFile(fileId).length;
 
@@ -567,10 +534,12 @@ export async function reindexFile(
 
       // Collect all known file paths from the store for resolution
       // We use a raw DB query to avoid a full scan API we don't have
-      const allKnownPaths = (db as unknown as {
-        prepare: (sql: string) => { all: () => Array<{ path: string }> };
-      })
-        .prepare('SELECT path FROM files')
+      const allKnownPaths = (
+        db as unknown as {
+          prepare: (sql: string) => { all: () => Array<{ path: string }> };
+        }
+      )
+        .prepare("SELECT path FROM files")
         .all()
         .map((r: { path: string }) => r.path);
 

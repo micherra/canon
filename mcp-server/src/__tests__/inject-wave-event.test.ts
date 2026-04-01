@@ -4,14 +4,15 @@
  * The tool now uses ExecutionStore (SQLite) instead of file-based JSONL.
  * Board state is read from store, not from board.json.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { injectWaveEvent } from "../tools/inject-wave-event.ts";
+
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { InitExecutionParams } from "../orchestration/execution-store.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { injectWaveEvent } from "../tools/inject-wave-event.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -43,7 +44,7 @@ function setupStoreWithWave(workspace: string, stateId = "implement"): void {
   });
 }
 
-function setupStoreWithNoWave(workspace: string): void {
+function _setupStoreWithNoWave(workspace: string): void {
   const store = getExecutionStore(workspace);
   store.initExecution(BASE_EXECUTION);
   store.upsertState("research", {
@@ -76,9 +77,9 @@ describe("active-wave guard", () => {
   it("throws when no execution exists in store", async () => {
     const emptyWorkspace = await mkdtemp(join(tmpdir(), "canon-empty-ws-"));
     try {
-      await expect(
-        injectWaveEvent({ workspace: emptyWorkspace, type: "guidance", payload: {} }),
-      ).rejects.toThrow("No active wave state found");
+      await expect(injectWaveEvent({ workspace: emptyWorkspace, type: "guidance", payload: {} })).rejects.toThrow(
+        "No active wave state found",
+      );
     } finally {
       await rm(emptyWorkspace, { recursive: true, force: true });
     }
@@ -92,9 +93,9 @@ describe("active-wave guard", () => {
       store.upsertState("research", { status: "done", entries: 1, wave: 1 });
       store.upsertState("implement", { status: "pending", entries: 0, wave: 2 });
 
-      await expect(
-        injectWaveEvent({ workspace: ws2, type: "guidance", payload: {} }),
-      ).rejects.toThrow("No active wave state found");
+      await expect(injectWaveEvent({ workspace: ws2, type: "guidance", payload: {} })).rejects.toThrow(
+        "No active wave state found",
+      );
     } finally {
       await rm(ws2, { recursive: true, force: true });
     }
@@ -117,9 +118,7 @@ describe("active-wave guard", () => {
 
   it("succeeds when exactly one state has both wave set and status in_progress", async () => {
     // Default workspace has this setup
-    await expect(
-      injectWaveEvent({ workspace, type: "guidance", payload: { context: "ok" } }),
-    ).resolves.toBeDefined();
+    await expect(injectWaveEvent({ workspace, type: "guidance", payload: { context: "ok" } })).resolves.toBeDefined();
   });
 
   it("succeeds when multiple states exist but only one satisfies the guard", async () => {
@@ -224,9 +223,7 @@ describe("event bus emission and listener cleanup", () => {
       payload: { description: "Bus test" },
     });
 
-    const emittedCall = emitSpy.mock.calls.find(
-      ([eventName]) => eventName === "wave_event_injected",
-    );
+    const emittedCall = emitSpy.mock.calls.find(([eventName]) => eventName === "wave_event_injected");
     expect(emittedCall).toBeDefined();
 
     const payload = emittedCall![1] as {
@@ -254,12 +251,9 @@ describe("event bus emission and listener cleanup", () => {
     const onceCall = onceSpy.mock.calls.find(([name]) => name === "wave_event_injected");
     expect(onceCall).toBeDefined();
 
-    const emitCallIndex = emitSpy.mock.calls.findIndex(
-      ([name]) => name === "wave_event_injected",
-    );
-    const onceCallIndex = onceSpy.mock.invocationCallOrder[
-      onceSpy.mock.calls.findIndex(([name]) => name === "wave_event_injected")
-    ];
+    const emitCallIndex = emitSpy.mock.calls.findIndex(([name]) => name === "wave_event_injected");
+    const onceCallIndex =
+      onceSpy.mock.invocationCallOrder[onceSpy.mock.calls.findIndex(([name]) => name === "wave_event_injected")];
     const emitCallOrder = emitSpy.mock.invocationCallOrder[emitCallIndex];
 
     expect(onceCallIndex).toBeLessThan(emitCallOrder);
@@ -274,9 +268,7 @@ describe("event bus emission and listener cleanup", () => {
       payload: { context: "cleanup check" },
     });
 
-    const removalCall = removeListenerSpy.mock.calls.find(
-      ([name]) => name === "wave_event_injected",
-    );
+    const removalCall = removeListenerSpy.mock.calls.find(([name]) => name === "wave_event_injected");
     expect(removalCall).toBeDefined();
   });
 
@@ -290,13 +282,9 @@ describe("event bus emission and listener cleanup", () => {
       return false;
     });
 
-    await expect(
-      injectWaveEvent({ workspace, type: "pause", payload: {} }),
-    ).rejects.toThrow("Simulated emit failure");
+    await expect(injectWaveEvent({ workspace, type: "pause", payload: {} })).rejects.toThrow("Simulated emit failure");
 
-    const removalCall = removeListenerSpy.mock.calls.find(
-      ([name]) => name === "wave_event_injected",
-    );
+    const removalCall = removeListenerSpy.mock.calls.find(([name]) => name === "wave_event_injected");
     expect(removalCall).toBeDefined();
   });
 });

@@ -1,9 +1,9 @@
-import { readFile } from "fs/promises";
-import { join, basename } from "path";
+import { readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { parseFrontmatter } from "../parser.ts";
+import type { GraphEdge } from "../tools/codebase-graph.ts";
 import { isNotFound } from "../utils/errors.ts";
 import { toPosix } from "../utils/paths.ts";
-import type { GraphEdge } from "../tools/codebase-graph.ts";
 
 // ── Types ──
 
@@ -45,10 +45,7 @@ const DEFAULT_KIND_RULES: MdKindRule[] = [
 
 // ── Node classification ──
 
-export function classifyMdNode(
-  filePath: string,
-  kindRules: MdKindRule[] = DEFAULT_KIND_RULES,
-): string | undefined {
+export function classifyMdNode(filePath: string, kindRules: MdKindRule[] = DEFAULT_KIND_RULES): string | undefined {
   if (!filePath.endsWith(".md")) return undefined;
   if (isExcludedDoc(filePath)) return undefined;
   const posix = toPosix(filePath);
@@ -65,10 +62,7 @@ export function classifyMdNode(
  * - `byId`: frontmatter `id:` or `name:` field → file path
  * - `byStem`: filename stem → file path (last-writer-wins for collisions)
  */
-export async function buildNameMaps(
-  filePaths: string[],
-  projectDir: string,
-): Promise<MdNameMaps> {
+export async function buildNameMaps(filePaths: string[], projectDir: string): Promise<MdNameMaps> {
   const byId = new Map<string, string>();
   const byStem = new Map<string, string>();
 
@@ -151,7 +145,7 @@ function extractFrontmatterEdges(
     const target = resolveName(value, maps);
     if (target && target !== filePath && !seen.has(`${field}:${target}`)) {
       seen.add(`${field}:${target}`);
-      edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.90, `${field}: ${value}`));
+      edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.9, `${field}: ${value}`));
     }
   }
 
@@ -159,7 +153,10 @@ function extractFrontmatterEdges(
   const listRe = /^[ \t]*(\w[\w-]*):\s*\[([^\]]+)\]/gm;
   while ((m = listRe.exec(frontmatterText)) !== null) {
     const [, field, rawList] = m;
-    const items = rawList.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    const items = rawList
+      .split(",")
+      .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+      .filter(Boolean);
     for (const item of items) {
       const target = resolveName(item, maps);
       if (target && target !== filePath && !seen.has(`${field}:${target}`)) {
@@ -176,7 +173,7 @@ function extractFrontmatterEdges(
     const target = resolveName(value, maps);
     if (target && target !== filePath && !seen.has(`${field}:${target}`)) {
       seen.add(`${field}:${target}`);
-      edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.90, `${field}: ${value}`));
+      edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.9, `${field}: ${value}`));
     }
   }
 
@@ -187,11 +184,7 @@ function extractFrontmatterEdges(
  * Extract edges from backtick-quoted identifiers in body text.
  * Resolves `identifier` via ID map then stem map.
  */
-function extractBacktickEdges(
-  filePath: string,
-  body: string,
-  maps: MdNameMaps,
-): GraphEdge[] {
+function extractBacktickEdges(filePath: string, body: string, maps: MdNameMaps): GraphEdge[] {
   const edges: GraphEdge[] = [];
   const seen = new Set<string>();
 
@@ -203,7 +196,7 @@ function extractBacktickEdges(
     seen.add(id);
     const target = resolveName(id, maps);
     if (target && target !== filePath) {
-      edges.push(compositionEdge(filePath, target, "ref:id", 0.80, `\`${id}\``));
+      edges.push(compositionEdge(filePath, target, "ref:id", 0.8, `\`${id}\``));
     }
   }
 
@@ -217,11 +210,7 @@ function extractBacktickEdges(
  * - Variable paths: `${VAR}/path/to/file.md`
  * - Markdown links: `[text](path/to/file.md)`
  */
-function extractPathEdges(
-  filePath: string,
-  content: string,
-  fileSet: Set<string>,
-): GraphEdge[] {
+function extractPathEdges(filePath: string, content: string, fileSet: Set<string>): GraphEdge[] {
   const edges: GraphEdge[] = [];
   const seen = new Set<string>();
 
@@ -235,7 +224,7 @@ function extractPathEdges(
 
     const posix = toPosix(refPath);
     if (fileSet.has(posix) && posix !== filePath) {
-      edges.push(compositionEdge(filePath, posix, "ref:path", 0.70, refPath));
+      edges.push(compositionEdge(filePath, posix, "ref:path", 0.7, refPath));
     }
   }
 
