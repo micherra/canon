@@ -499,8 +499,11 @@ async function runDiffCommand({ cmd, args }: DiffCommand, cwd: string): Promise<
     }
     return result.stdout;
   }
-  // Non-git commands (e.g. gh CLI) — use synchronous shell adapter
-  const result = runShell(`${cmd} ${args.join(" ")}`, cwd);
+  // Non-git commands (e.g. gh CLI) — use synchronous shell adapter.
+  // Shell-escape each arg by wrapping in single quotes and escaping internal
+  // single quotes (replace ' with '\'' ), to handle args with spaces/shell chars.
+  const escapeArg = (a: string): string => `'${a.replace(/'/g, "'\\''")}'`;
+  const result = runShell(`${cmd} ${args.map(escapeArg).join(" ")}`, cwd);
   if (!result.ok) {
     throw new Error(result.stderr || `${cmd} failed with exit code ${result.exitCode}`);
   }

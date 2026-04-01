@@ -15,12 +15,20 @@ export function gitExecAsync(args: string[], cwd: string, timeout = DEFAULT_TIME
   return new Promise((resolve) => {
     execFile("git", args, { cwd, timeout }, (err, stdout, stderr) => {
       if (err) {
+        const rawCode = (err as any).code;
+        // err.code can be a number (exit status) or a string (e.g. "ENOENT", "EACCES").
+        // exitCode must always be a number; fall back to 1 for string codes.
+        const exitCode = typeof rawCode === "number" ? rawCode : 1;
+        const isTimedOut = (err as any).killed === true || rawCode === "ETIMEDOUT";
+        // Include the string code in stderr when stderr is empty, for diagnostics.
+        const diagnosticStderr = (stderr ?? "")
+          || (typeof rawCode === "string" ? `${rawCode}: ${err.message}` : "");
         resolve({
           ok: false,
           stdout: stdout ?? "",
-          stderr: stderr ?? "",
-          exitCode: (err as any).code === "ETIMEDOUT" ? 1 : ((err as any).code ?? 1),
-          timedOut: (err as any).killed === true || (err as any).code === "ETIMEDOUT",
+          stderr: diagnosticStderr,
+          exitCode,
+          timedOut: isTimedOut,
         });
         return;
       }

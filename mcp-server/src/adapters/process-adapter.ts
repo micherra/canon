@@ -19,10 +19,15 @@ export function runShell(command: string, cwd: string, timeout = DEFAULT_TIMEOUT
     maxBuffer: MAX_OUTPUT_BYTES,
   });
 
+  // When stderr is empty but result.error exists (e.g., ENOENT spawn failure),
+  // incorporate result.error.message so callers get diagnostic information.
+  const rawStderr = result.stderr ?? "";
+  const stderr = rawStderr || (result.error ? result.error.message : "");
+
   return {
     ok: result.status === 0 && !result.error,
     stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
+    stderr,
     exitCode: result.status ?? 1,
     timedOut:
       result.error?.message?.includes("ETIMEDOUT") === true ||

@@ -166,7 +166,16 @@ async function detectChangedFiles(
         || (await gitRefExists(projectDir, "origin/main") ? "origin/main"
         : (await gitRefExists(projectDir, "origin/master") ? "origin/master" : null));
       if (rawBase) {
-        const base = sanitizeGitRef(rawBase);
+        let base: string;
+        try {
+          base = sanitizeGitRef(rawBase);
+        } catch {
+          // diff_base is user-supplied and may contain invalid characters.
+          // Treat as INVALID_INPUT — fall back to no changed files rather than
+          // bubbling as UNEXPECTED.
+          console.warn(`codebase-graph: invalid diff_base "${rawBase}" — skipping changed-file detection`);
+          return new Set<string>();
+        }
         changedFiles = await gitChangedFiles(projectDir, base);
       }
     }
