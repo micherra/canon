@@ -40,7 +40,7 @@ If you find yourself composing a substantive answer without having spawned an ag
 
 | Intent | Action |
 |--------|--------|
-| **build** | Auto-detect tier and flow (`hotfix`, `quick-fix`, `refactor`, `feature`, `migrate`, `epic`) → drive state machine |
+| **build** | Auto-detect tier and flow (`refactor`, `feature`, `migrate`, `epic`) → drive state machine |
 | **explore** | Load `explore` flow → drive state machine. Also use for: discussing ideas, brainstorming, "what if…", "I'm thinking about…" |
 | **test** | Load `test-gap` flow → drive state machine |
 | **review** | Load `review-only` flow → drive state machine |
