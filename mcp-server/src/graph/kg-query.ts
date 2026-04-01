@@ -7,15 +7,228 @@
  */
 
 import type Database from "better-sqlite3";
+import { computeImpactScore } from "./query.ts";
 import type {
   BlastRadiusResult,
   CallerResult,
   DeadCodeResult,
   EntityRow,
   FileBlastRadiusResult,
+  FileMetrics,
   FileRow,
+  LayerViolation,
   SearchResult,
 } from "./kg-types.ts";
+
+// ---------------------------------------------------------------------------
+// Layer rules — clean-architecture defaults (mirrors insights.ts)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_LAYER_RULES: Record<string, string[]> = {
+  api: ["domain", "shared", "data"],
+  ui: ["domain", "shared"],
+  domain: ["data", "shared"],
+  data: ["infra", "shared"],
+  infra: ["shared"],
+  shared: [],
+};
+
+// ---------------------------------------------------------------------------
+// computeFileInsightMaps — batch helper for hub/cycle/violation computation
+// ---------------------------------------------------------------------------
+
+export interface FileInsightMaps {
+  /** Set of file paths that qualify as hubs (top 10 by total degree). */
+  hubPaths: Set<string>;
+  /** Map from file path to the set of cycle-peer paths. */
+  cycleMemberPaths: Map<string, string[]>;
+  /** Map from file path to its outbound layer violations. */
+  layerViolationsByPath: Map<string, LayerViolation[]>;
+}
+
+/**
+ * Compute hub detection, cycle membership, and layer violations from the
+ * file_edges and files tables.  Pure SQL aggregates — no persisted columns.
+ *
+ * Intended to be called once per request and the result passed into
+ * getFileMetrics() for individual file lookups, avoiding N+1 query patterns.
+ */
+export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
+  // ---- 1. Load all file edges ------------------------------------------------
+  const edgeRows = db
+    .prepare(`SELECT fe.source_file_id, fe.target_file_id, fs.path AS source_path, ft.path AS target_path,
+                     fs.layer AS source_layer, ft.layer AS target_layer
+              FROM file_edges fe
+              JOIN files fs ON fs.file_id = fe.source_file_id
+              JOIN files ft ON ft.file_id = fe.target_file_id`)
+    .all() as Array<{
+    source_file_id: number;
+    target_file_id: number;
+    source_path: string;
+    target_path: string;
+    source_layer: string;
+    target_layer: string;
+  }>;
+
+  // ---- 2. Degree computation for hub detection --------------------------------
+  const inDegree = new Map<string, number>();
+  const outDegree = new Map<string, number>();
+
+  for (const row of edgeRows) {
+    outDegree.set(row.source_path, (outDegree.get(row.source_path) || 0) + 1);
+    inDegree.set(row.target_path, (inDegree.get(row.target_path) || 0) + 1);
+  }
+
+  // Top 10 by total degree → hub set
+  const allPaths = new Set([...inDegree.keys(), ...outDegree.keys()]);
+  const sorted = [...allPaths]
+    .map((p) => ({ path: p, total: (inDegree.get(p) || 0) + (outDegree.get(p) || 0) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+  const hubPaths = new Set(sorted.map((x) => x.path));
+
+  // ---- 3. Adjacency list for cycle detection ----------------------------------
+  const adj = new Map<string, string[]>();
+  for (const row of edgeRows) {
+    let neighbors = adj.get(row.source_path);
+    if (!neighbors) {
+      neighbors = [];
+      adj.set(row.source_path, neighbors);
+    }
+    neighbors.push(row.target_path);
+  }
+
+  // Collect all file nodes
+  const fileRows = db.prepare(`SELECT path FROM files`).all() as Array<{ path: string }>;
+  const nodes = fileRows.map((r) => r.path);
+
+  const cycleMemberPaths = detectFileCycles(nodes, adj);
+
+  // ---- 4. Layer violations ----------------------------------------------------
+  const layerViolationsByPath = new Map<string, LayerViolation[]>();
+  const rules = DEFAULT_LAYER_RULES;
+
+  for (const row of edgeRows) {
+    const sourceLayer = row.source_layer || "unknown";
+    const targetLayer = row.target_layer || "unknown";
+
+    if (sourceLayer === targetLayer || sourceLayer === "unknown" || targetLayer === "unknown") {
+      continue;
+    }
+
+    const allowed = rules[sourceLayer];
+    if (allowed && !allowed.includes(targetLayer)) {
+      let violations = layerViolationsByPath.get(row.source_path);
+      if (!violations) {
+        violations = [];
+        layerViolationsByPath.set(row.source_path, violations);
+      }
+      violations.push({
+        target: row.target_path,
+        source_layer: sourceLayer,
+        target_layer: targetLayer,
+      });
+    }
+  }
+
+  return { hubPaths, cycleMemberPaths, layerViolationsByPath };
+}
+
+// ---------------------------------------------------------------------------
+// Cycle detection helpers (file-level DFS — mirrors insights.ts pattern)
+// ---------------------------------------------------------------------------
+
+function detectFileCycles(nodes: string[], adj: Map<string, string[]>): Map<string, string[]> {
+  const cycleMembers = new Map<string, string[]>();
+  const MAX_CYCLE_LEN = 5;
+  const MAX_CYCLES = 20;
+  const cycleSet = new Set<string>();
+  const cycles: string[][] = [];
+  const visited = new Set<string>();
+
+  for (const startNode of nodes) {
+    if (visited.has(startNode) || cycles.length >= MAX_CYCLES) continue;
+    fileDfsComponent(startNode, adj, visited, MAX_CYCLE_LEN, cycleSet, cycles, MAX_CYCLES);
+  }
+
+  // Build membership map from detected cycles
+  for (const cycle of cycles) {
+    for (const node of cycle) {
+      const existing = cycleMembers.get(node) || [];
+      for (const peer of cycle) {
+        if (peer !== node && !existing.includes(peer)) existing.push(peer);
+      }
+      cycleMembers.set(node, existing);
+    }
+  }
+
+  return cycleMembers;
+}
+
+function fileDfsComponent(
+  startNode: string,
+  adj: Map<string, string[]>,
+  visited: Set<string>,
+  maxCycleLen: number,
+  cycleSet: Set<string>,
+  cycles: string[][],
+  maxCycles: number,
+): void {
+  type Frame = { node: string; neighborIdx: number };
+
+  const inStack = new Set<string>();
+  const path: string[] = [];
+  const callStack: Frame[] = [{ node: startNode, neighborIdx: 0 }];
+  visited.add(startNode);
+  inStack.add(startNode);
+  path.push(startNode);
+
+  while (callStack.length > 0 && cycles.length < maxCycles) {
+    const frame = callStack[callStack.length - 1];
+    const neighbors = adj.get(frame.node) || [];
+
+    if (frame.neighborIdx >= neighbors.length) {
+      callStack.pop();
+      path.pop();
+      inStack.delete(frame.node);
+      continue;
+    }
+
+    const neighbor = neighbors[frame.neighborIdx];
+    frame.neighborIdx++;
+
+    if (inStack.has(neighbor)) {
+      // Found a cycle — record it
+      const cycleStart = path.indexOf(neighbor);
+      if (cycleStart >= 0) {
+        const cycle = path.slice(cycleStart);
+        if (cycle.length <= maxCycleLen) {
+          const normalized = fileNormalizeCycle(cycle);
+          const key = normalized.join(" -> ");
+          if (!cycleSet.has(key)) {
+            cycleSet.add(key);
+            cycles.push(normalized);
+          }
+        }
+      }
+    } else if (!visited.has(neighbor)) {
+      visited.add(neighbor);
+      inStack.add(neighbor);
+      path.push(neighbor);
+      callStack.push({ node: neighbor, neighborIdx: 0 });
+    }
+  }
+
+  for (const node of path) inStack.delete(node);
+}
+
+function fileNormalizeCycle(cycle: string[]): string[] {
+  let minIdx = 0;
+  for (let i = 1; i < cycle.length; i++) {
+    if (cycle[i] < cycle[minIdx]) minIdx = i;
+  }
+  return [...cycle.slice(minIdx), ...cycle.slice(0, minIdx)];
+}
 
 // ---------------------------------------------------------------------------
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
@@ -62,6 +275,16 @@ export class KgQuery {
   private readonly stmtFileExportCount: Database.Statement;
   private readonly stmtFileDeadCodeCount: Database.Statement;
   private readonly stmtAllFilesWithStats: Database.Statement;
+
+  // ---- File metric statements ----
+  private readonly stmtGetFileInDegree: Database.Statement;
+  private readonly stmtGetFileOutDegree: Database.Statement;
+  private readonly stmtGetAllInDegrees: Database.Statement;
+  private readonly stmtGetAllOutDegrees: Database.Statement;
+  private readonly stmtGetFileAdjacencyList: Database.Statement;
+  private readonly stmtGetFileIdByPath: Database.Statement;
+  private readonly stmtGetFileById: Database.Statement;
+  private readonly stmtGetKgFreshness: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -194,6 +417,42 @@ export class KgQuery {
       FROM files f
       LEFT JOIN entities e ON e.file_id = f.file_id
       GROUP BY f.file_id
+    `);
+
+    // ------------------------------------------------------------------
+    // File metric statements
+    // ------------------------------------------------------------------
+    this.stmtGetFileInDegree = db.prepare(`
+      SELECT COUNT(*) AS n FROM file_edges WHERE target_file_id = ?
+    `);
+
+    this.stmtGetFileOutDegree = db.prepare(`
+      SELECT COUNT(*) AS n FROM file_edges WHERE source_file_id = ?
+    `);
+
+    // Aggregate all degrees in two GROUP BY queries (simpler and indexed)
+    this.stmtGetAllInDegrees = db.prepare(`
+      SELECT target_file_id AS file_id, COUNT(*) AS n FROM file_edges GROUP BY target_file_id
+    `);
+
+    this.stmtGetAllOutDegrees = db.prepare(`
+      SELECT source_file_id AS file_id, COUNT(*) AS n FROM file_edges GROUP BY source_file_id
+    `);
+
+    this.stmtGetFileAdjacencyList = db.prepare(`
+      SELECT source_file_id, target_file_id FROM file_edges
+    `);
+
+    this.stmtGetFileIdByPath = db.prepare(`
+      SELECT file_id, layer FROM files WHERE path = ?
+    `);
+
+    this.stmtGetFileById = db.prepare(`
+      SELECT file_id, path, layer FROM files WHERE file_id = ?
+    `);
+
+    this.stmtGetKgFreshness = db.prepare(`
+      SELECT MIN(last_indexed_at) AS min_ts FROM files
     `);
   }
 
@@ -401,5 +660,212 @@ export class KgQuery {
    */
   getAllFilesWithStats(): Array<FileRow & { entity_count: number; export_count: number }> {
     return this.stmtAllFilesWithStats.all() as Array<FileRow & { entity_count: number; export_count: number }>;
+  }
+
+  // --------------------------------------------------------------------------
+  // File Metric Methods
+  // --------------------------------------------------------------------------
+
+  /**
+   * Return in-degree and out-degree for a single file by file_id.
+   * Two indexed COUNT queries — efficient at all typical project sizes.
+   */
+  getFileDegrees(fileId: number): { in_degree: number; out_degree: number } {
+    const in_degree = (this.stmtGetFileInDegree.get(fileId) as { n: number }).n;
+    const out_degree = (this.stmtGetFileOutDegree.get(fileId) as { n: number }).n;
+    return { in_degree, out_degree };
+  }
+
+  /**
+   * Return a Map from file_id to { in_degree, out_degree } for all files
+   * that appear in file_edges.  Two GROUP BY queries merged into one Map —
+   * avoids N queries when iterating over all files.
+   */
+  getAllFileDegrees(): Map<number, { in_degree: number; out_degree: number }> {
+    const inRows = this.stmtGetAllInDegrees.all() as Array<{ file_id: number; n: number }>;
+    const outRows = this.stmtGetAllOutDegrees.all() as Array<{ file_id: number; n: number }>;
+
+    const map = new Map<number, { in_degree: number; out_degree: number }>();
+
+    for (const row of inRows) {
+      map.set(row.file_id, { in_degree: row.n, out_degree: 0 });
+    }
+    for (const row of outRows) {
+      const existing = map.get(row.file_id);
+      if (existing) {
+        existing.out_degree = row.n;
+      } else {
+        map.set(row.file_id, { in_degree: 0, out_degree: row.n });
+      }
+    }
+
+    return map;
+  }
+
+  /**
+   * Return the full file adjacency list as a Map from source_file_id to
+   * target_file_id[].  Mirrors getAdjacencyList() but operates on file_edges.
+   */
+  getFileAdjacencyList(): Map<number, number[]> {
+    const rows = this.stmtGetFileAdjacencyList.all() as Array<{
+      source_file_id: number;
+      target_file_id: number;
+    }>;
+    const map = new Map<number, number[]>();
+    for (const { source_file_id, target_file_id } of rows) {
+      let neighbors = map.get(source_file_id);
+      if (!neighbors) {
+        neighbors = [];
+        map.set(source_file_id, neighbors);
+      }
+      neighbors.push(target_file_id);
+    }
+    return map;
+  }
+
+  /**
+   * Return full FileMetrics for a file identified by its path.
+   * Returns null when the file does not exist in the DB.
+   *
+   * Hub/cycle/violation data must be precomputed and passed via options —
+   * call computeFileInsightMaps() once per request and reuse the result.
+   */
+  getFileMetrics(
+    filePath: string,
+    options?: {
+      changedFiles?: Set<string>;
+      hubPaths?: Set<string>;
+      cycleMemberPaths?: Map<string, string[]>;
+      layerViolationsByPath?: Map<string, LayerViolation[]>;
+    },
+  ): FileMetrics | null {
+    const fileRow = this.stmtGetFileIdByPath.get(filePath) as
+      | { file_id: number; layer: string }
+      | undefined;
+    if (!fileRow) return null;
+
+    const { in_degree, out_degree } = this.getFileDegrees(fileRow.file_id);
+
+    const isChanged = options?.changedFiles?.has(filePath) ?? false;
+    const is_hub = options?.hubPaths?.has(filePath) ?? false;
+    const in_cycle = options?.cycleMemberPaths?.has(filePath) ?? false;
+    const cycle_peers = options?.cycleMemberPaths?.get(filePath) ?? [];
+    const layer_violations = options?.layerViolationsByPath?.get(filePath) ?? [];
+    const layer = fileRow.layer || "unknown";
+
+    const impact_score = computeImpactScore(in_degree, layer_violations.length, isChanged, layer);
+
+    return {
+      in_degree,
+      out_degree,
+      is_hub,
+      in_cycle,
+      cycle_peers,
+      layer,
+      layer_violation_count: layer_violations.length,
+      layer_violations,
+      impact_score,
+    };
+  }
+
+  /**
+   * Return the age of the oldest indexed file in milliseconds, measured from
+   * now.  Returns null when the files table is empty (DB not indexed).
+   *
+   * Uses MIN(last_indexed_at) because the KG is only as fresh as its oldest
+   * entry — stale files drag down the entire graph's freshness guarantee.
+   */
+  getKgFreshnessMs(): number | null {
+    const row = this.stmtGetKgFreshness.get() as { min_ts: number | null } | undefined;
+    if (!row || row.min_ts === null) return null;
+    return Date.now() - row.min_ts;
+  }
+
+  /**
+   * Return a subgraph containing all files directly connected to the given
+   * seed paths, plus the file_edges between them.  Useful for rendering
+   * focused dependency views without loading the full graph.
+   *
+   * A file is included if at least one of its file_edges connects it to a
+   * seed file (either as source or target).
+   */
+  getSubgraph(filePaths: string[]): {
+    nodes: Array<{ path: string; layer: string; file_id: number }>;
+    edges: Array<{ source: string; target: string }>;
+  } {
+    if (filePaths.length === 0) return { nodes: [], edges: [] };
+
+    // Resolve seed paths to file_ids — keep path alongside each resolved row
+    const seedEntries: Array<{ path: string; file_id: number; layer: string }> = [];
+    for (const p of filePaths) {
+      const row = this.stmtGetFileIdByPath.get(p) as { file_id: number; layer: string } | undefined;
+      if (row) {
+        seedEntries.push({ path: p, file_id: row.file_id, layer: row.layer });
+      }
+    }
+
+    if (seedEntries.length === 0) return { nodes: [], edges: [] };
+
+    // Build a dynamic IN clause for the seed file_ids
+    const seedIds = seedEntries.map((e) => e.file_id);
+    const placeholders = seedIds.map(() => "?").join(", ");
+
+    // Load all edges where source or target is in the seed set
+    const edgeRows = this.db
+      .prepare(
+        `SELECT fe.source_file_id, fe.target_file_id,
+                fs.path AS source_path, ft.path AS target_path,
+                fs.layer AS source_layer, ft.layer AS target_layer,
+                fs.file_id AS source_fid, ft.file_id AS target_fid
+         FROM file_edges fe
+         JOIN files fs ON fs.file_id = fe.source_file_id
+         JOIN files ft ON ft.file_id = fe.target_file_id
+         WHERE fe.source_file_id IN (${placeholders})
+            OR fe.target_file_id IN (${placeholders})`,
+      )
+      .all([...seedIds, ...seedIds]) as Array<{
+      source_file_id: number;
+      target_file_id: number;
+      source_path: string;
+      target_path: string;
+      source_layer: string;
+      target_layer: string;
+      source_fid: number;
+      target_fid: number;
+    }>;
+
+    // Collect unique nodes and edges
+    const nodeMap = new Map<number, { path: string; layer: string; file_id: number }>();
+    const edges: Array<{ source: string; target: string }> = [];
+
+    for (const row of edgeRows) {
+      nodeMap.set(row.source_fid, {
+        path: row.source_path,
+        layer: row.source_layer,
+        file_id: row.source_fid,
+      });
+      nodeMap.set(row.target_fid, {
+        path: row.target_path,
+        layer: row.target_layer,
+        file_id: row.target_fid,
+      });
+      edges.push({ source: row.source_path, target: row.target_path });
+    }
+
+    // Also include seed files that have no edges (isolated in this subgraph)
+    for (const entry of seedEntries) {
+      if (!nodeMap.has(entry.file_id)) {
+        nodeMap.set(entry.file_id, {
+          path: entry.path,
+          layer: entry.layer,
+          file_id: entry.file_id,
+        });
+      }
+    }
+
+    return {
+      nodes: [...nodeMap.values()],
+      edges,
+    };
   }
 }
