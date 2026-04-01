@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { performance } from "node:perf_hooks";
 import type { ProcessResult } from "../utils/tool-result.ts";
 
 const DEFAULT_TIMEOUT = 30_000;
@@ -12,8 +13,10 @@ const DEFAULT_TIMEOUT = 30_000;
  * SECURITY: Uses array args like git-adapter.ts — no shell: true.
  */
 export function gitExecAsync(args: string[], cwd: string, timeout = DEFAULT_TIMEOUT): Promise<ProcessResult> {
+  const start = performance.now();
   return new Promise((resolve) => {
     execFile("git", args, { cwd, timeout }, (err, stdout, stderr) => {
+      const duration_ms = Math.round(performance.now() - start);
       if (err) {
         const rawCode = (err as any).code;
         // err.code can be a number (exit status) or a string (e.g. "ENOENT", "EACCES").
@@ -29,6 +32,7 @@ export function gitExecAsync(args: string[], cwd: string, timeout = DEFAULT_TIME
           stderr: diagnosticStderr,
           exitCode,
           timedOut: isTimedOut,
+          duration_ms,
         });
         return;
       }
@@ -38,6 +42,7 @@ export function gitExecAsync(args: string[], cwd: string, timeout = DEFAULT_TIME
         stderr: stderr ?? "",
         exitCode: 0,
         timedOut: false,
+        duration_ms,
       });
     });
   });
