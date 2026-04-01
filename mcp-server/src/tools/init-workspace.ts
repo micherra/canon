@@ -37,6 +37,8 @@ interface InitWorkspaceResult {
   created: boolean;
   resume_state?: string;
   preflight_issues?: string[];
+  worktree_path?: string;
+  worktree_branch?: string;
 }
 
 /**
@@ -53,15 +55,18 @@ export async function listBranchWorkspaces(
 
   let entries: string[];
   try {
-    const { readdir } = await import("fs/promises");
+    const { readdir } = await import("node:fs/promises");
     entries = await readdir(branchDir);
-  } catch (err: any) {
-    if (err.code === "ENOENT") return results;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return results;
     throw err;
   }
 
   for (const entry of entries) {
     const ws = join(branchDir, entry);
+    // Check DB existence before opening — better-sqlite3 creates the file on open,
+    // which would leave empty DBs as a side effect of scanning non-workspace directories.
+    if (!existsSync(join(ws, "orchestration.db"))) continue;
     try {
       const store = getExecutionStore(ws);
       const session = store.getSession();
@@ -84,11 +89,7 @@ const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
  * Run pre-flight checks: git status, lock, and stale sessions.
  * Returns an array of issue descriptions (empty if clean).
  */
-async function runPreflightChecks(
-  projectDir: string,
-  branch: string,
-  candidateWorkspace: string,
-): Promise<string[]> {
+async function runPreflightChecks(projectDir: string, branch: string, _candidateWorkspace: string): Promise<string[]> {
   const issues: string[] = [];
 
   // 1. Check for uncommitted changes
@@ -119,14 +120,66 @@ async function runPreflightChecks(
   return issues;
 }
 
+/** Build a resume result from an existing active session. */
+function buildResumeResult(workspace: string, session: Session, board: Board, projectDir: string): InitWorkspaceResult {
+  const worktreePath = join(projectDir, ".canon", "worktrees", session.slug);
+  const worktreeExists = existsSync(worktreePath);
+  return {
+    workspace,
+    slug: session.slug,
+    board,
+    session,
+    created: false,
+    resume_state: board.current_state,
+    worktree_path: worktreeExists ? worktreePath : undefined,
+    worktree_branch: worktreeExists ? `canon-build/${session.slug}` : undefined,
+  };
+}
+
+/** Check if an error is an expected "no DB" error (file not found, can't open). */
+function isExpectedNoDbError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    code === "SQLITE_CANTOPEN" ||
+    code === "ENOENT" ||
+    message.includes("SQLITE_CANTOPEN") ||
+    message.includes("no such file") ||
+    message.includes("directory does not exist") ||
+    message.includes("Cannot open database")
+  );
+}
+
+/** Check if an error is a SQLite UNIQUE constraint violation. */
+function isConstraintError(err: unknown): boolean {
+  return (
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT" ||
+    (err instanceof Error && err.message.includes("UNIQUE constraint"))
+  );
+}
+
+/** Try to resume an existing workspace for the given candidate path. Returns null if none found. */
+function tryResumeExisting(candidateWorkspace: string, projectDir: string): InitWorkspaceResult | null {
+  try {
+    const store = getExecutionStore(candidateWorkspace);
+    const session = store.getSession();
+    const board = store.getBoard();
+    if (session && session.status === "active" && board) {
+      return buildResumeResult(candidateWorkspace, session, board, projectDir);
+    }
+  } catch (err) {
+    if (!isExpectedNoDbError(err)) throw err;
+  }
+  return null;
+}
+
 export async function initWorkspaceFlow(
   input: InitWorkspaceInput,
   projectDir: string,
   pluginDir: string,
 ): Promise<InitWorkspaceResult> {
   const sanitized = sanitizeBranch(input.branch);
-
-  // Generate slug early — workspace path is scoped by branch + slug
   const baseSlug = generateSlug(input.task);
 
   // Pre-flight checks (advisory — run before any mutations)
@@ -135,7 +188,6 @@ export async function initWorkspaceFlow(
     const candidateWs = join(branchDirPf, baseSlug);
     const issues = await runPreflightChecks(projectDir, input.branch, candidateWs);
     if (issues.length > 0) {
-      // Return early with issues — no workspace created
       return {
         workspace: candidateWs,
         slug: baseSlug,
@@ -187,8 +239,6 @@ export async function initWorkspaceFlow(
   // Workspace path: .canon/workspaces/{branch}/{slug}/
   const slug = await checkSlugCollision(branchDir, baseSlug);
   const workspace = join(branchDir, slug);
-
-  // Create workspace directory structure
   await createWorkspace(projectDir, join(sanitized, slug));
 
   // Re-check for existing execution inside (another process may have created it)

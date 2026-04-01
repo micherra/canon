@@ -1,5 +1,4 @@
-import { readFile } from "fs/promises";
-// @ts-ignore esModuleInterop handles this at project level
+import { readFile } from "node:fs/promises";
 import matter from "gray-matter";
 
 export interface PrincipleScope {

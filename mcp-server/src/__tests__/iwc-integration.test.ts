@@ -14,13 +14,16 @@
  * 7. consultation-executor: breakpoint field routing (informational metadata flows through)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 // ---------------------------------------------------------------------------
 // Hoist spawnSync mock — gate-runner uses child_process
 // ---------------------------------------------------------------------------
 
 type SpawnSyncArgs = { shell?: boolean; cwd?: string; encoding?: string; timeout?: number };
-let spawnSyncImpl: ((cmd: string, opts: SpawnSyncArgs) => { stdout: string; stderr: string; status: number | null; error?: Error }) | null = null;
+let spawnSyncImpl:
+  | ((cmd: string, opts: SpawnSyncArgs) => { stdout: string; stderr: string; status: number | null; error?: Error })
+  | null = null;
 vi.mock("node:child_process", () => ({
   spawnSync: (cmd: string, opts: SpawnSyncArgs) => {
     if (spawnSyncImpl) return spawnSyncImpl(cmd, opts);
@@ -41,20 +44,16 @@ vi.mock("node:fs", () => ({
 // Imports after mocks
 // ---------------------------------------------------------------------------
 
-import { resolveGateCommand, runGate } from "../orchestration/gate-runner.ts";
+import { initBoard, recordConsultationResult, recordGateResult } from "../orchestration/board.ts";
 import {
-  initBoard,
-  recordConsultationResult,
-  recordGateResult,
-} from "../orchestration/board.ts";
-import {
+  type ConsultationInput,
   executeConsultations,
   resolveConsultationPrompt,
-  type ConsultationInput,
 } from "../orchestration/consultation-executor.ts";
+import type { Board, ConsultationResult, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { resolveGateCommand, runGate } from "../orchestration/gate-runner.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
-import type { ResolvedFlow, Board, ConsultationResult } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,6 +111,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // noop
 });
 
 // ---------------------------------------------------------------------------
@@ -231,8 +231,22 @@ describe("integration: executeConsultations result → recordConsultationResult 
     const afterOutput = await executeConsultations(afterInput);
 
     let board = makeBoard();
-    board = recordConsultationResult(board, "implement", "wave_1", "before", "security-check", beforeOutput.results["security-check"]);
-    board = recordConsultationResult(board, "implement", "wave_1", "after", "arch-review", afterOutput.results["arch-review"]);
+    board = recordConsultationResult(
+      board,
+      "implement",
+      "wave_1",
+      "before",
+      "security-check",
+      beforeOutput.results["security-check"],
+    );
+    board = recordConsultationResult(
+      board,
+      "implement",
+      "wave_1",
+      "after",
+      "arch-review",
+      afterOutput.results["arch-review"],
+    );
 
     const waveResult = board.states.implement.wave_results?.["wave_1"];
     expect(waveResult?.consultations?.before?.["security-check"]).toEqual({ status: "pending" });
@@ -267,11 +281,14 @@ describe("integration: executeConsultations result → recordConsultationResult 
     // Orchestrator routes it using the breakpoint:
     const board = makeBoard();
     const stored = recordConsultationResult(
-      board, "implement", "wave_1", "between", "security-check", betweenOutput.results["security-check"],
+      board,
+      "implement",
+      "wave_1",
+      "between",
+      "security-check",
+      betweenOutput.results["security-check"],
     );
-    expect(
-      stored.states.implement.wave_results?.["wave_1"]?.consultations?.between?.["security-check"],
-    ).toBeDefined();
+    expect(stored.states.implement.wave_results?.["wave_1"]?.consultations?.between?.["security-check"]).toBeDefined();
   });
 });
 
@@ -288,13 +305,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
     expect(gateResult.passed).toBe(true);
 
     const board = makeBoard();
-    const updatedBoard = recordGateResult(
-      board,
-      "implement",
-      "wave_1",
-      gateResult.gate,
-      gateResult.output ?? "",
-    );
+    const updatedBoard = recordGateResult(board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "");
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
     expect(waveResult?.gate).toBe("test-suite");
@@ -309,13 +320,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
     expect(gateResult.passed).toBe(false);
 
     const board = makeBoard();
-    const updatedBoard = recordGateResult(
-      board,
-      "implement",
-      "wave_1",
-      gateResult.gate,
-      gateResult.output ?? "",
-    );
+    const updatedBoard = recordGateResult(board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "");
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
     expect(waveResult?.gate).toBe("test-suite");
@@ -330,9 +335,7 @@ describe("integration: runGate result → recordGateResult on board", () => {
     expect(gateResult.output).toContain("fail-closed");
 
     const board = makeBoard();
-    const updatedBoard = recordGateResult(
-      board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "",
-    );
+    const updatedBoard = recordGateResult(board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "");
 
     const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
     expect(waveResult?.gate_output).toContain("fail-closed");
@@ -357,7 +360,7 @@ describe("gate-runner — spawnSync null status (timeout/kill)", () => {
 
   it("combines non-empty stdout and stderr into combined output", () => {
     spawnSyncImpl = () => ({ stdout: "Build output line", stderr: "Warning: deprecated API", status: 0 });
-    const flow = makeFlow({ "build": "npm run build" });
+    const flow = makeFlow({ build: "npm run build" });
     const result = runGate("build", flow, "/project");
 
     expect(result.output).toContain("Build output line");
@@ -404,14 +407,9 @@ describe("board — recordConsultationResult on a state not in board.states", ()
   it("creates a new state entry when the stateId does not exist in board.states", () => {
     const board = makeBoard();
     // "nonexistent-state" is NOT in makeBoard()'s flow states
-    const result = recordConsultationResult(
-      board,
-      "nonexistent-state",
-      "wave_1",
-      "after",
-      "my-consult",
-      { status: "pending" },
-    );
+    const result = recordConsultationResult(board, "nonexistent-state", "wave_1", "after", "my-consult", {
+      status: "pending",
+    });
 
     // A new state entry must be created from scratch
     expect(result.states["nonexistent-state"]).toBeDefined();
@@ -537,7 +535,7 @@ describe("consultation-executor — resolveConsultationPrompt edge cases", () =>
       description: "d",
       entry: "s",
       states: { s: { type: "terminal" } },
-      spawn_instructions: { "sec": "Run audit." },
+      spawn_instructions: { sec: "Run audit." },
       // consultations: undefined
     };
 

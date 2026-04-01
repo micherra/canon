@@ -216,9 +216,9 @@ describe("concurrent resolution: double-resolve on the same event", () => {
     await resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" });
 
     // Second resolve must throw, not silently succeed
-    await expect(
-      resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" }),
-    ).rejects.toThrow(`Event ${injected.event.id} is already applied`);
+    await expect(resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" })).rejects.toThrow(
+      `Event ${injected.event.id} is already applied`,
+    );
   });
 
   it("second resolve throws 'already rejected' when first rejected and second tries to apply", async () => {
@@ -235,9 +235,9 @@ describe("concurrent resolution: double-resolve on the same event", () => {
       reason: "Not applicable",
     });
 
-    await expect(
-      resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" }),
-    ).rejects.toThrow(`Event ${injected.event.id} is already rejected`);
+    await expect(resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" })).rejects.toThrow(
+      `Event ${injected.event.id} is already rejected`,
+    );
   });
 
   it("concurrent Promise.all calls — exactly one succeeds and one rejects", async () => {

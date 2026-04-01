@@ -12,10 +12,10 @@
  *   8. diff_base and incremental params forwarded to getPrReviewData
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Module-level mocks — set up before importing the module under test
@@ -44,13 +44,12 @@ vi.mock("../tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 
-import { existsSync } from "fs";
-import { initDatabase } from "../graph/kg-schema.ts";
-import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
-import { getPrReviewData } from "../tools/pr-review-data.ts";
-
-import { showPrImpact } from "../tools/show-pr-impact.ts";
+import { existsSync } from "node:fs";
 import { DriftStore } from "../drift/store.ts";
+import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { getPrReviewData } from "../tools/pr-review-data.ts";
+import { showPrImpact } from "../tools/show-pr-impact.ts";
 
 // ---------------------------------------------------------------------------
 // Shared test fixtures
@@ -237,11 +236,7 @@ describe("showPrImpact", () => {
     expect(mockDb.close).toHaveBeenCalledOnce();
 
     // analyzeBlastRadius called with the review's file list
-    expect(analyzeBlastRadius).toHaveBeenCalledWith(
-      mockDb,
-      SAMPLE_REVIEW.files,
-      { maxDepth: 3, includeTests: false },
-    );
+    expect(analyzeBlastRadius).toHaveBeenCalledWith(mockDb, SAMPLE_REVIEW.files, { maxDepth: 3, includeTests: false });
   });
 
   // -------------------------------------------------------------------------
@@ -254,9 +249,9 @@ describe("showPrImpact", () => {
       ...SAMPLE_REVIEW,
       files: ["src/a.ts", "src/b.ts", "src/c.ts"],
       violations: [
-        { principle_id: "p1", severity: "convention", file_path: "src/c.ts" },    // weight 1
+        { principle_id: "p1", severity: "convention", file_path: "src/c.ts" }, // weight 1
         { principle_id: "p2", severity: "strong-opinion", file_path: "src/b.ts" }, // weight 2
-        { principle_id: "p3", severity: "rule", file_path: "src/a.ts" },           // weight 3
+        { principle_id: "p3", severity: "rule", file_path: "src/a.ts" }, // weight 3
       ],
     };
     const store = new DriftStore(tmpDir);
@@ -281,9 +276,7 @@ describe("showPrImpact", () => {
     const review = {
       ...SAMPLE_REVIEW,
       files: ["src/a.ts", "src/b.ts"],
-      violations: [
-        { principle_id: "p1", severity: "rule", file_path: "src/a.ts" },
-      ],
+      violations: [{ principle_id: "p1", severity: "rule", file_path: "src/a.ts" }],
     };
     const store = new DriftStore(tmpDir);
     await store.appendReview(review);
@@ -327,19 +320,14 @@ describe("showPrImpact", () => {
     await store.appendReview(SAMPLE_REVIEW); // files: foo.ts, bar.ts
 
     // Write graph-data.json
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(SAMPLE_GRAPH_DATA),
-      "utf-8",
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(SAMPLE_GRAPH_DATA), "utf-8");
 
-    vi.mocked(existsSync)
-      .mockImplementation((p) => {
-        const pathStr = String(p);
-        // KG path exists for the DB check, false for other paths
-        if (pathStr.includes("knowledge-graph.db")) return true;
-        return true; // let the actual readFile for graph-data.json work
-      });
+    vi.mocked(existsSync).mockImplementation((p) => {
+      const pathStr = String(p);
+      // KG path exists for the DB check, false for other paths
+      if (pathStr.includes("knowledge-graph.db")) return true;
+      return true; // let the actual readFile for graph-data.json work
+    });
 
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
@@ -528,7 +516,10 @@ describe("show_pr_impact registration", () => {
   it("registers with correct name and _meta.ui.resourceUri", () => {
     const { registerAppTool } = require("@modelcontextprotocol/ext-apps/server");
 
-    interface RecordedTool { name: string; config: Record<string, unknown> }
+    interface RecordedTool {
+      name: string;
+      config: Record<string, unknown>;
+    }
     const tools: RecordedTool[] = [];
     const mockServer = {
       registerTool(name: string, config: Record<string, unknown>, _cb: unknown) {

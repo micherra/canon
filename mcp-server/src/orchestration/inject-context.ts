@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { Board, ContextInjection } from "./flow-schema.ts";
 
@@ -20,68 +20,93 @@ export async function resolveContextInjections(
 
   for (const injection of injections) {
     if (injection.from === "user") {
-      // User injection requires HITL pause
       hitl = { prompt: injection.prompt ?? "Please provide input", as: injection.as };
       continue;
     }
 
-    // State injection: read artifacts from the source state
-    const sourceState = board.states[injection.from];
-    if (!sourceState) {
-      warnings.push(`inject_context: source state "${injection.from}" not found in board`);
-      continue;
+    const resolved = await resolveStateInjection(injection, board, workspace);
+    warnings.push(...resolved.warnings);
+    if (resolved.value !== undefined) {
+      variables[injection.as] = resolved.value;
     }
-
-    const artifacts = sourceState.artifacts ?? [];
-    if (artifacts.length === 0) {
-      warnings.push(`inject_context: state "${injection.from}" has no artifacts`);
-      continue;
-    }
-
-    // Read all artifacts and concatenate
-    const contents: string[] = [];
-    let anyFound = false;
-    const workspaceRoot = path.resolve(workspace);
-    for (const artifactPath of artifacts) {
-      const fullPath = path.resolve(workspace, artifactPath);
-      if (!fullPath.startsWith(workspaceRoot + path.sep) && fullPath !== workspaceRoot) {
-        warnings.push(`inject_context: artifact path "${artifactPath}" escapes workspace — blocked`);
-        continue;
-      }
-      if (!existsSync(fullPath)) {
-        warnings.push(`inject_context: artifact "${artifactPath}" from state "${injection.from}" not found on disk`);
-        continue;
-      }
-      try {
-        const content = await readFile(fullPath, "utf-8");
-        contents.push(content);
-        anyFound = true;
-      } catch {
-        warnings.push(`inject_context: failed to read artifact "${artifactPath}"`);
-      }
-    }
-
-    if (!anyFound) {
-      warnings.push(`inject_context: all artifacts from state "${injection.from}" are missing`);
-      continue;
-    }
-
-    let result = contents.join("\n\n");
-
-    // Extract section if specified
-    if (injection.section) {
-      const extracted = extractSection(result, injection.section);
-      if (extracted !== null) {
-        result = extracted;
-      } else {
-        warnings.push(`inject_context: section "${injection.section}" not found in artifacts from "${injection.from}" — injecting full content`);
-      }
-    }
-
-    variables[injection.as] = result;
   }
 
   return { variables, hitl, warnings };
+}
+
+async function resolveStateInjection(
+  injection: ContextInjection,
+  board: Board,
+  workspace: string,
+): Promise<{ value?: string; warnings: string[] }> {
+  const warnings: string[] = [];
+  const sourceState = board.states[injection.from];
+
+  if (!sourceState) {
+    warnings.push(`inject_context: source state "${injection.from}" not found in board`);
+    return { warnings };
+  }
+
+  const artifacts = sourceState.artifacts ?? [];
+  if (artifacts.length === 0) {
+    warnings.push(`inject_context: state "${injection.from}" has no artifacts`);
+    return { warnings };
+  }
+
+  const { contents, anyFound, warnings: readWarnings } = await readArtifacts(artifacts, workspace, injection.from);
+  warnings.push(...readWarnings);
+
+  if (!anyFound) {
+    warnings.push(`inject_context: all artifacts from state "${injection.from}" are missing`);
+    return { warnings };
+  }
+
+  let result = contents.join("\n\n");
+
+  if (injection.section) {
+    const extracted = extractSection(result, injection.section);
+    if (extracted !== null) {
+      result = extracted;
+    } else {
+      warnings.push(
+        `inject_context: section "${injection.section}" not found in artifacts from "${injection.from}" — injecting full content`,
+      );
+    }
+  }
+
+  return { value: result, warnings };
+}
+
+async function readArtifacts(
+  artifacts: string[],
+  workspace: string,
+  stateName: string,
+): Promise<{ contents: string[]; anyFound: boolean; warnings: string[] }> {
+  const contents: string[] = [];
+  const warnings: string[] = [];
+  let anyFound = false;
+  const workspaceRoot = path.resolve(workspace);
+
+  for (const artifactPath of artifacts) {
+    const fullPath = path.resolve(workspace, artifactPath);
+    if (!fullPath.startsWith(workspaceRoot + path.sep) && fullPath !== workspaceRoot) {
+      warnings.push(`inject_context: artifact path "${artifactPath}" escapes workspace — blocked`);
+      continue;
+    }
+    if (!existsSync(fullPath)) {
+      warnings.push(`inject_context: artifact "${artifactPath}" from state "${stateName}" not found on disk`);
+      continue;
+    }
+    try {
+      const content = await readFile(fullPath, "utf-8");
+      contents.push(content);
+      anyFound = true;
+    } catch {
+      warnings.push(`inject_context: failed to read artifact "${artifactPath}"`);
+    }
+  }
+
+  return { contents, anyFound, warnings };
 }
 
 /**

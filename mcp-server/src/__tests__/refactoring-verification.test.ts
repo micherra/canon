@@ -10,10 +10,10 @@
  * to internal implementation details.
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist spawnSync mock so vitest can use it before module imports
@@ -39,7 +39,13 @@ import { reportResult } from "../tools/report-result.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { mkdir, writeFile } from "node:fs/promises";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { resolveWaveVariables } from "../orchestration/wave-variables.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
 
 const mockSpawnSync = vi.mocked(spawnSync);
 
@@ -110,44 +116,32 @@ function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
 
 describe("loadAndResolveFlow — flow name path traversal validation", () => {
   it("rejects flow names containing path separators (forward slash)", async () => {
-    await expect(
-      loadAndResolveFlow("/some/dir", "../../etc/passwd"),
-    ).rejects.toThrow(/invalid flow name/i);
+    await expect(loadAndResolveFlow("/some/dir", "../../etc/passwd")).rejects.toThrow(/invalid flow name/i);
   });
 
   it("rejects flow names containing path separators (back slash)", async () => {
-    await expect(
-      loadAndResolveFlow("/some/dir", "..\\..\\secret"),
-    ).rejects.toThrow(/invalid flow name/i);
+    await expect(loadAndResolveFlow("/some/dir", "..\\..\\secret")).rejects.toThrow(/invalid flow name/i);
   });
 
   it("rejects flow names with spaces", async () => {
-    await expect(
-      loadAndResolveFlow("/some/dir", "my flow"),
-    ).rejects.toThrow(/invalid flow name/i);
+    await expect(loadAndResolveFlow("/some/dir", "my flow")).rejects.toThrow(/invalid flow name/i);
   });
 
   it("rejects flow names with dot extensions that could traverse", async () => {
-    await expect(
-      loadAndResolveFlow("/some/dir", "flow.md"),
-    ).rejects.toThrow(/invalid flow name/i);
+    await expect(loadAndResolveFlow("/some/dir", "flow.md")).rejects.toThrow(/invalid flow name/i);
   });
 
   it("accepts valid alphanumeric flow names with hyphens and underscores", async () => {
     // Validation passes — the error will be a file-not-found, not a validation error.
     // We confirm the error is NOT "invalid flow name".
-    const err = await loadAndResolveFlow("/nonexistent/dir", "review-only").catch(
-      (e: Error) => e,
-    );
+    const err = await loadAndResolveFlow("/nonexistent/dir", "review-only").catch((e: Error) => e);
     expect(err).toBeInstanceOf(Error);
     // The error should be about file reading, not the name validation
     expect((err as Error).message).not.toMatch(/invalid flow name/i);
   });
 
   it("accepts flow names with underscores", async () => {
-    const err = await loadAndResolveFlow("/nonexistent/dir", "deep_build").catch(
-      (e: Error) => e,
-    );
+    const err = await loadAndResolveFlow("/nonexistent/dir", "deep_build").catch((e: Error) => e);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).not.toMatch(/invalid flow name/i);
   });

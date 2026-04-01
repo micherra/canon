@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  roundType,
-  roundFraming,
-  buildDebateSummary,
   buildDebatePrompt,
+  buildDebateSummary,
+  type DebateConfig,
   heuristicConvergence,
   inspectDebateProgress,
-  type DebateConfig,
+  roundFraming,
+  roundType,
 } from "../orchestration/debate.ts";
-import { writeMessage, type Message } from "../orchestration/messages.ts";
+import { type Message, writeMessage } from "../orchestration/messages.ts";
 
 describe("debate", () => {
   describe("roundType", () => {
@@ -82,9 +82,15 @@ describe("debate", () => {
 
     it("does not converge when no agreement signals", () => {
       const messages: Message[] = [
-        makeMessage("Our approach uses event sourcing with full replay capability. This gives us complete audit trails and the ability to reconstruct any past state of the system deterministically."),
-        makeMessage("We prefer CRUD with audit logging for simplicity. The overhead of event sourcing is not justified for this domain where temporal queries are rare and the schema is relatively stable."),
-        makeMessage("A hybrid approach with selective event capture is best. We should use CRUD for most entities but capture domain events for the order lifecycle where replay and audit are critical requirements."),
+        makeMessage(
+          "Our approach uses event sourcing with full replay capability. This gives us complete audit trails and the ability to reconstruct any past state of the system deterministically.",
+        ),
+        makeMessage(
+          "We prefer CRUD with audit logging for simplicity. The overhead of event sourcing is not justified for this domain where temporal queries are rare and the schema is relatively stable.",
+        ),
+        makeMessage(
+          "A hybrid approach with selective event capture is best. We should use CRUD for most entities but capture domain events for the order lifecycle where replay and audit are critical requirements.",
+        ),
       ];
 
       const result = heuristicConvergence(messages);
@@ -95,9 +101,15 @@ describe("debate", () => {
       // "don't agree", "doesn't agree", "not aligned", etc. should NOT trigger convergence
       // Messages are intentionally long to avoid the brevity heuristic (< 100 chars avg)
       const messages: Message[] = [
-        makeMessage("We don't agree with Team B's approach at all. Their assumptions about eventual consistency are fundamentally flawed and ignore the CAP theorem implications."),
-        makeMessage("We doesn't see consensus here. There is not aligned thinking between the teams on this critical architectural question regarding the data persistence layer."),
-        makeMessage("There is no consensus on the data model. We never agree on this point and stand firm in our position that a relational model is the wrong choice for this workload."),
+        makeMessage(
+          "We don't agree with Team B's approach at all. Their assumptions about eventual consistency are fundamentally flawed and ignore the CAP theorem implications.",
+        ),
+        makeMessage(
+          "We doesn't see consensus here. There is not aligned thinking between the teams on this critical architectural question regarding the data persistence layer.",
+        ),
+        makeMessage(
+          "There is no consensus on the data model. We never agree on this point and stand firm in our position that a relational model is the wrong choice for this workload.",
+        ),
       ];
 
       const result = heuristicConvergence(messages);
@@ -106,7 +118,9 @@ describe("debate", () => {
 
     it("detects convergence only when un-negated terms are present", () => {
       const messages: Message[] = [
-        makeMessage("We don't agree with the caching layer, but we do agree on the API design. We are aligned on the core contract."),
+        makeMessage(
+          "We don't agree with the caching layer, but we do agree on the API design. We are aligned on the core contract.",
+        ),
         makeMessage("We agree the API structure is solid. Aligned on contracts."),
         makeMessage("I agree the API approach is the right one."),
       ];
@@ -117,11 +131,7 @@ describe("debate", () => {
     });
 
     it("detects convergence when messages are very short", () => {
-      const messages: Message[] = [
-        makeMessage("Agreed."),
-        makeMessage("Same."),
-        makeMessage("OK."),
-      ];
+      const messages: Message[] = [makeMessage("Agreed."), makeMessage("Same."), makeMessage("OK.")];
 
       const result = heuristicConvergence(messages);
       expect(result.converged).toBe(true);
@@ -159,6 +169,25 @@ describe("debate", () => {
       expect(summary).toContain("Debate Summary");
       expect(summary).toContain("round-1-team-a");
       expect(summary).toContain("event sourcing");
+    });
+
+    it("infers round number from channel name (item #15)", async () => {
+      // Messages posted to debate-round-3 channel — round number from channel, not msg.from
+      await writeMessage(workspace, "debate-round-3", "some-agent-no-round", "Final response from Team A.");
+      await writeMessage(workspace, "debate-round-3", "another-agent", "Final response from Team B.");
+
+      const summary = await buildDebateSummary(workspace, "debate-round-3");
+      // Should show Round 3 (from channel), not Round 0 (from msg.from fallback)
+      expect(summary).toContain("Round 3");
+    });
+
+    it("falls back to msg.from round inference when channel has no round number", async () => {
+      // Channel without round number — must fall back to msg.from
+      await writeMessage(workspace, "debate-misc", "round-2-team-a-researcher", "Some message.");
+
+      const summary = await buildDebateSummary(workspace, "debate-misc");
+      // Should show Round 2 (from msg.from), not Round 0
+      expect(summary).toContain("Round 2");
     });
   });
 
@@ -268,15 +297,7 @@ describe("debate", () => {
     });
 
     it("includes post_message coordination instructions with correct channel", () => {
-      const result = buildDebatePrompt(
-        "Brief.",
-        "/workspace/test",
-        2,
-        5,
-        "Team B",
-        ["Team A"],
-        "canon-architect",
-      );
+      const result = buildDebatePrompt("Brief.", "/workspace/test", 2, 5, "Team B", ["Team A"], "canon-architect");
       expect(result).toContain('channel="debate-round-2"');
       expect(result).toContain('workspace="/workspace/test"');
     });
@@ -298,15 +319,7 @@ describe("debate", () => {
     });
 
     it("omits transcript section when not provided", () => {
-      const result = buildDebatePrompt(
-        "Brief.",
-        "/workspace",
-        1,
-        5,
-        "Team A",
-        ["Team B"],
-        "canon-researcher",
-      );
+      const result = buildDebatePrompt("Brief.", "/workspace", 1, 5, "Team A", ["Team B"], "canon-researcher");
       expect(result).not.toContain("Prior Debate Transcript");
     });
   });

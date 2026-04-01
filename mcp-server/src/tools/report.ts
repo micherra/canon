@@ -1,6 +1,6 @@
 import { DriftStore } from "../drift/store.ts";
-import { generateId } from "../utils/id.ts";
 import type { ReportInput, ReviewEntry } from "../schema.ts";
+import { generateId } from "../utils/id.ts";
 
 export interface ReportOutput {
   recorded: boolean;
@@ -8,10 +8,7 @@ export interface ReportOutput {
   note: string;
 }
 
-export async function report(
-  input: ReportInput,
-  projectDir: string
-): Promise<ReportOutput> {
+export async function report(input: ReportInput, projectDir: string): Promise<ReportOutput> {
   const store = new DriftStore(projectDir);
 
   switch (input.type) {
@@ -26,7 +23,7 @@ export async function report(
 
 async function recordReview(
   review: Extract<ReportInput, { type: "review" }>,
-  store: DriftStore
+  store: DriftStore,
 ): Promise<ReportOutput> {
   const violatedIds = new Set(review.violations.map((v) => v.principle_id));
   const cleanHonored = review.honored.filter((id) => !violatedIds.has(id));

@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { classifyFile } from "../tools/pr-review-data.ts";
+import { describe, expect, it } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
+import { classifyFile } from "../tools/pr-review-data.ts";
 
 // Helper to build a minimal PrFileInfo for classification tests
 function makeFile(overrides: Partial<PrFileInfo> = {}): PrFileInfo {

@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { randomBytes } from "node:crypto";
 
 /** Generate a prefixed ID with date stamp and random suffix. */
 export function generateId(prefix: string): string {

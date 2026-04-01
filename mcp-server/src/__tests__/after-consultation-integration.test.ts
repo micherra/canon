@@ -21,10 +21,10 @@
  *     with breakpoint "after" → enterAndPrepareState on next state injects into briefing
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -291,13 +291,13 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
           status: "in_progress",
           entries: 1,
           wave_results: {
-            "after": {
+            after: {
               tasks: [],
               status: "done",
               consultations: {
                 after: {
                   "post-impl-check": {
-                    status: "pending",  // Not "done" — must be skipped
+                    status: "pending", // Not "done" — must be skipped
                     summary: null,
                   },
                 },
@@ -339,7 +339,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
           status: "in_progress",
           entries: 1,
           wave_results: {
-            "after": {
+            after: {
               tasks: [],
               status: "done",
               consultations: {
@@ -386,14 +386,14 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
           status: "in_progress",
           entries: 1,
           wave_results: {
-            "after": {
+            after: {
               tasks: [],
               status: "done",
               consultations: {
                 after: {
                   "post-impl-check": {
                     status: "done",
-                    summary: null,  // done but no summary text
+                    summary: null, // done but no summary text
                   },
                 },
               },
@@ -442,7 +442,7 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
           status: "in_progress",
           entries: 1,
           wave_results: {
-            "after": {
+            after: {
               tasks: [],
               status: "done",
               consultations: {
@@ -501,7 +501,7 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
     const entry = result.consultation_prompts[0];
     expect(entry.name).toBe("quick-check");
     expect(entry.agent).toBe("canon:canon-researcher");
-    expect("section" in entry).toBe(false);  // No section key in entry
+    expect("section" in entry).toBe(false); // No section key in entry
   });
 });
 
@@ -543,7 +543,7 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
           status: "in_progress",
           entries: 1,
           wave_results: {
-            "after": {
+            after: {
               tasks: [],
               status: "done",
               consultations: {

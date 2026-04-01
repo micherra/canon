@@ -17,7 +17,7 @@
  *   - no-hidden-side-effects: tests verify handlePrompt is explicit
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 // ── Types (mirrored from PrReviewPrep for test fixtures) ────────────────────
 
@@ -51,8 +51,8 @@ function computeTotalViolations(files: PrFileInfo[]): number {
 }
 
 function computeNetNewFiles(files: PrFileInfo[]): number {
-  const added = files.filter(f => f.status === "added").length;
-  const deleted = files.filter(f => f.status === "deleted").length;
+  const added = files.filter((f) => f.status === "added").length;
+  const deleted = files.filter((f) => f.status === "deleted").length;
   return added - deleted;
 }
 
@@ -89,11 +89,7 @@ function depRowPrompt(filePath: string): string {
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function makeFile(
-  path: string,
-  status: PrFileInfo["status"],
-  overrides: Partial<PrFileInfo> = {}
-): PrFileInfo {
+function makeFile(path: string, status: PrFileInfo["status"], overrides: Partial<PrFileInfo> = {}): PrFileInfo {
   return {
     path,
     layer: "tools",
@@ -104,9 +100,7 @@ function makeFile(
   };
 }
 
-const SINGLE_FILE_NO_VIOLATIONS: PrFileInfo[] = [
-  makeFile("src/tools/pr-review-data.ts", "modified"),
-];
+const SINGLE_FILE_NO_VIOLATIONS: PrFileInfo[] = [makeFile("src/tools/pr-review-data.ts", "modified")];
 
 const MIXED_STATUS_FILES: PrFileInfo[] = [
   makeFile("src/tools/added-a.ts", "added"),
@@ -124,9 +118,7 @@ const FILES_WITH_VIOLATIONS: PrFileInfo[] = [
     ],
   }),
   makeFile("src/tools/beta.ts", "modified", {
-    violations: [
-      { principle_id: "no-hidden-side-effects", severity: "convention", message: "Implicit mutation" },
-    ],
+    violations: [{ principle_id: "no-hidden-side-effects", severity: "convention", message: "Implicit mutation" }],
   }),
   makeFile("src/tools/gamma.ts", "added"),
 ];
@@ -190,27 +182,17 @@ describe("netNewFiles computation", () => {
   });
 
   it("returns 0 when no files are added or deleted", () => {
-    const files = [
-      makeFile("src/a.ts", "modified"),
-      makeFile("src/b.ts", "renamed"),
-    ];
+    const files = [makeFile("src/a.ts", "modified"), makeFile("src/b.ts", "renamed")];
     expect(computeNetNewFiles(files)).toBe(0);
   });
 
   it("returns positive number when only added files", () => {
-    const files = [
-      makeFile("src/a.ts", "added"),
-      makeFile("src/b.ts", "added"),
-      makeFile("src/c.ts", "added"),
-    ];
+    const files = [makeFile("src/a.ts", "added"), makeFile("src/b.ts", "added"), makeFile("src/c.ts", "added")];
     expect(computeNetNewFiles(files)).toBe(3);
   });
 
   it("returns negative number when only deleted files", () => {
-    const files = [
-      makeFile("src/a.ts", "deleted"),
-      makeFile("src/b.ts", "deleted"),
-    ];
+    const files = [makeFile("src/a.ts", "deleted"), makeFile("src/b.ts", "deleted")];
     expect(computeNetNewFiles(files)).toBe(-2);
   });
 
@@ -220,19 +202,12 @@ describe("netNewFiles computation", () => {
   });
 
   it("returns 0 when added equals deleted", () => {
-    const files = [
-      makeFile("src/a.ts", "added"),
-      makeFile("src/b.ts", "deleted"),
-    ];
+    const files = [makeFile("src/a.ts", "added"), makeFile("src/b.ts", "deleted")];
     expect(computeNetNewFiles(files)).toBe(0);
   });
 
   it("ignores modified and renamed files", () => {
-    const files = [
-      makeFile("src/a.ts", "added"),
-      makeFile("src/b.ts", "modified"),
-      makeFile("src/c.ts", "renamed"),
-    ];
+    const files = [makeFile("src/a.ts", "added"), makeFile("src/b.ts", "modified"), makeFile("src/c.ts", "renamed")];
     expect(computeNetNewFiles(files)).toBe(1);
   });
 });
@@ -426,20 +401,35 @@ describe("Acceptance criteria: all sections render for valid responses", () => {
     // This logic lives in ImpactTabs — we verify the threshold is consistent
     const HIGH_IMPACT_THRESHOLD = 15;
     const files: PrFileInfo[] = [
-      makeFile("src/a.ts", "modified", { priority_score: 20, priority_factors: { in_degree: 10, violation_count: 0, is_changed: true, layer: "tools", layer_centrality: 0.5 } }),
-      makeFile("src/b.ts", "modified", { priority_score: 14, priority_factors: { in_degree: 5, violation_count: 0, is_changed: true, layer: "tools", layer_centrality: 0.3 } }),
-      makeFile("src/c.ts", "modified", { priority_score: 15, priority_factors: { in_degree: 7, violation_count: 0, is_changed: true, layer: "tools", layer_centrality: 0.4 } }),
+      makeFile("src/a.ts", "modified", {
+        priority_score: 20,
+        priority_factors: {
+          in_degree: 10,
+          violation_count: 0,
+          is_changed: true,
+          layer: "tools",
+          layer_centrality: 0.5,
+        },
+      }),
+      makeFile("src/b.ts", "modified", {
+        priority_score: 14,
+        priority_factors: { in_degree: 5, violation_count: 0, is_changed: true, layer: "tools", layer_centrality: 0.3 },
+      }),
+      makeFile("src/c.ts", "modified", {
+        priority_score: 15,
+        priority_factors: { in_degree: 7, violation_count: 0, is_changed: true, layer: "tools", layer_centrality: 0.4 },
+      }),
       makeFile("src/d.ts", "modified", { priority_score: 5 }),
     ];
-    const highImpact = files.filter(f => (f.priority_score ?? 0) >= HIGH_IMPACT_THRESHOLD);
+    const highImpact = files.filter((f) => (f.priority_score ?? 0) >= HIGH_IMPACT_THRESHOLD);
     expect(highImpact).toHaveLength(2); // score 20 and 15 qualify; 14 and 5 do not
   });
 
   it("Section 3 Tab B: violations sorted by severity then in_degree", () => {
     const SEVERITY_ORDER: Record<string, number> = {
-      "rule": 0,
+      rule: 0,
       "strong-opinion": 1,
-      "convention": 2,
+      convention: 2,
     };
 
     interface FlatViol {
@@ -456,8 +446,7 @@ describe("Acceptance criteria: all sections render for valid responses", () => {
     ];
 
     const sorted = [...violations].sort((a, b) => {
-      const severityDiff =
-        (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
+      const severityDiff = (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99);
       if (severityDiff !== 0) return severityDiff;
       return b.inDegree - a.inDegree;
     });

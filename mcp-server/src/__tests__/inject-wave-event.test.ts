@@ -224,9 +224,7 @@ describe("event bus emission and listener cleanup", () => {
       payload: { description: "Bus test" },
     });
 
-    const emittedCall = emitSpy.mock.calls.find(
-      ([eventName]) => eventName === "wave_event_injected",
-    );
+    const emittedCall = emitSpy.mock.calls.find(([eventName]) => eventName === "wave_event_injected");
     expect(emittedCall).toBeDefined();
 
     const payload = emittedCall![1] as {
@@ -274,9 +272,7 @@ describe("event bus emission and listener cleanup", () => {
       payload: { context: "cleanup check" },
     });
 
-    const removalCall = removeListenerSpy.mock.calls.find(
-      ([name]) => name === "wave_event_injected",
-    );
+    const removalCall = removeListenerSpy.mock.calls.find(([name]) => name === "wave_event_injected");
     expect(removalCall).toBeDefined();
   });
 
@@ -290,9 +286,7 @@ describe("event bus emission and listener cleanup", () => {
       return false;
     });
 
-    await expect(
-      injectWaveEvent({ workspace, type: "pause", payload: {} }),
-    ).rejects.toThrow("Simulated emit failure");
+    await expect(injectWaveEvent({ workspace, type: "pause", payload: {} })).rejects.toThrow("Simulated emit failure");
 
     const removalCall = removeListenerSpy.mock.calls.find(
       ([name]) => name === "wave_event_injected",

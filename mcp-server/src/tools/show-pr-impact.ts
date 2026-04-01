@@ -19,23 +19,23 @@
  *   - validate-at-trust-boundaries: structured errors/empty states, never throws to caller
  */
 
-import { existsSync } from "fs";
-import { readFile } from "fs/promises";
-import { join, resolve, isAbsolute } from "path";
-import { DriftStore } from "../drift/store.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
-import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { DriftStore } from "../drift/store.ts";
+import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 import type { ReviewEntry, ReviewViolation } from "../schema.ts";
-import { getPrReviewData } from "./pr-review-data.ts";
 import type { PrReviewDataOutput } from "./pr-review-data.ts";
+import { getPrReviewData } from "./pr-review-data.ts";
 
 /** Resolve a project-relative path safely. Returns null on traversal attempts. */
 function safeResolvePath(projectDir: string, filePath: string): string | null {
   if (isAbsolute(filePath)) return null;
   if (filePath.includes("..")) return null;
   const resolved = resolve(projectDir, filePath);
-  if (!resolved.startsWith(projectDir + "/") && resolved !== projectDir) return null;
+  if (!resolved.startsWith(`${projectDir}/`) && resolved !== projectDir) return null;
   return resolved;
 }
 
@@ -202,9 +202,7 @@ export function detectSubsystems(files: string[], statusMap: Map<string, string>
  * @param blastRadius - the blast radius analysis output (or undefined if unavailable)
  * @returns top-15 entries sorted by dep_count descending
  */
-export function buildBlastRadiusByFile(
-  blastRadius: PrImpactOutput["blastRadius"] | undefined,
-): BlastRadiusFileEntry[] {
+export function buildBlastRadiusByFile(blastRadius: PrImpactOutput["blastRadius"] | undefined): BlastRadiusFileEntry[] {
   if (!blastRadius) return [];
 
   const countByFile = new Map<string, number>();
@@ -214,9 +212,10 @@ export function buildBlastRadiusByFile(
     }
   }
 
-  const entries: BlastRadiusFileEntry[] = Array.from(countByFile.entries()).map(
-    ([file, dep_count]) => ({ file, dep_count }),
-  );
+  const entries: BlastRadiusFileEntry[] = Array.from(countByFile.entries()).map(([file, dep_count]) => ({
+    file,
+    dep_count,
+  }));
 
   entries.sort((a, b) => b.dep_count - a.dep_count);
   return entries.slice(0, 15);
@@ -247,10 +246,7 @@ function severityWeight(severity: string): number {
 // Sort descending by risk_score.
 // ---------------------------------------------------------------------------
 
-function buildHotspots(
-  review: ReviewEntry,
-  blastRadius: PrImpactOutput["blastRadius"] | undefined,
-): PrImpactHotspot[] {
+function buildHotspots(review: ReviewEntry, blastRadius: PrImpactOutput["blastRadius"] | undefined): PrImpactHotspot[] {
   // Index violations by file
   const violationsByFile = new Map<string, ReviewViolation[]>();
   for (const violation of review.violations) {
@@ -275,14 +271,14 @@ function buildHotspots(
     const blastCount = blastByFile.get(file) ?? 0;
 
     // risk_score = blast_radius_count * max_severity_weight across this file's violations
-    const maxSeverityWeight = fileViolations.length > 0
-      ? Math.max(...fileViolations.map((v) => severityWeight(v.severity)))
-      : 0;
+    const maxSeverityWeight =
+      fileViolations.length > 0 ? Math.max(...fileViolations.map((v) => severityWeight(v.severity))) : 0;
 
     // When no blast radius available, use violation count * max severity weight
-    const riskScore = blastCount > 0
-      ? blastCount * maxSeverityWeight
-      : fileViolations.reduce((sum, v) => sum + severityWeight(v.severity), 0);
+    const riskScore =
+      blastCount > 0
+        ? blastCount * maxSeverityWeight
+        : fileViolations.reduce((sum, v) => sum + severityWeight(v.severity), 0);
 
     return {
       file,
@@ -447,9 +443,7 @@ export async function showPrImpact(
     prNumber: options?.pr_number,
   });
   // When no explicit filter, only consider reviews with PR context
-  const prReviews = hasFilter
-    ? reviews
-    : reviews.filter((r) => r.pr_number !== undefined || r.branch !== undefined);
+  const prReviews = hasFilter ? reviews : reviews.filter((r) => r.pr_number !== undefined || r.branch !== undefined);
   const latestReview = prReviews.length > 0 ? prReviews[prReviews.length - 1] : null;
 
   // When no stored review, return prep data only
@@ -466,9 +460,7 @@ export async function showPrImpact(
   }
 
   // 2b. Validate file paths from stored review (trust boundary)
-  latestReview.files = latestReview.files.filter(
-    (f) => safeResolvePath(projectDir, f) !== null,
-  );
+  latestReview.files = latestReview.files.filter((f) => safeResolvePath(projectDir, f) !== null);
   latestReview.violations = latestReview.violations.filter(
     (v) => !v.file_path || safeResolvePath(projectDir, v.file_path) !== null,
   );
@@ -478,7 +470,7 @@ export async function showPrImpact(
   const hasKg = existsSync(dbPath);
 
   // 4. Compute blast radius (if KG available)
-  let blastRadius: PrImpactOutput["blastRadius"] = undefined;
+  let blastRadius: PrImpactOutput["blastRadius"];
   if (hasKg) {
     const db = initDatabase(dbPath);
     try {
@@ -535,8 +527,6 @@ export async function showPrImpact(
     subgraph,
     subsystems,
     blast_radius_by_file,
-    ...(latestReview.recommendations !== undefined
-      ? { recommendations: latestReview.recommendations }
-      : {}),
+    ...(latestReview.recommendations !== undefined ? { recommendations: latestReview.recommendations } : {}),
   };
 }

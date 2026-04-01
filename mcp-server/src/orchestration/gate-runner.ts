@@ -21,13 +21,9 @@ export type { GateResult };
  * 2. If gateName is "test-suite", auto-detect from package.json scripts.test.
  * 3. Otherwise return null (gate is not configured — caller should fail-closed).
  */
-export function resolveGateCommand(
-  gateName: string,
-  flow: ResolvedFlow,
-  cwd?: string,
-): string | null {
+export function resolveGateCommand(gateName: string, flow: ResolvedFlow, cwd?: string): string | null {
   // 1. Check flow.gates map first
-  if (flow.gates && Object.prototype.hasOwnProperty.call(flow.gates, gateName)) {
+  if (flow.gates && Object.hasOwn(flow.gates, gateName)) {
     return flow.gates[gateName];
   }
 
@@ -68,11 +64,7 @@ function resolveTestSuiteCommand(cwd: string): string {
  * Fail-closed: if the gate command cannot be resolved, the gate fails
  * (returned as passed: false). This prevents silent quality gate bypasses.
  */
-export function runGate(
-  gateName: string,
-  flow: ResolvedFlow,
-  cwd: string,
-): GateResult {
+export function runGate(gateName: string, flow: ResolvedFlow, cwd: string): GateResult {
   const command = resolveGateCommand(gateName, flow, cwd);
 
   // Gate not configured — fail-closed (never silently pass an unresolved gate)
@@ -115,7 +107,7 @@ export function normalizeGates(
   // Tier 1: Explicit gates array — direct shell commands
   if (stateDef.gates?.length) {
     return {
-      commands: stateDef.gates.map(cmd => ({ name: cmd, command: cmd })),
+      commands: stateDef.gates.map((cmd) => ({ name: cmd, command: cmd })),
       source: "gates",
     };
   }

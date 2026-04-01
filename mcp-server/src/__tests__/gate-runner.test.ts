@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ResolvedFlow, BoardStateEntry } from "../orchestration/flow-schema.ts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BoardStateEntry, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -32,7 +32,7 @@ vi.mock("node:fs", () => ({
 // Import after mocks are registered
 // ---------------------------------------------------------------------------
 
-import { resolveGateCommand, runGate, normalizeGates, runGates } from "../orchestration/gate-runner.ts";
+import { normalizeGates, resolveGateCommand, runGate, runGates } from "../orchestration/gate-runner.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,7 +49,9 @@ function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   };
 }
 
-function makeStateDef(overrides: Partial<{ gate: string; gates: string[] }> = {}): Parameters<typeof normalizeGates>[0] {
+function makeStateDef(
+  overrides: Partial<{ gate: string; gates: string[] }> = {},
+): Parameters<typeof normalizeGates>[0] {
   return {
     type: "single",
     ...overrides,
@@ -76,7 +78,7 @@ beforeEach(() => {
 
 describe("resolveGateCommand — flow.gates map lookup", () => {
   it("returns command from flow.gates map when gate name is found", () => {
-    const flow = makeFlow({ "lint": "npm run lint", "type-check": "tsc --noEmit" });
+    const flow = makeFlow({ lint: "npm run lint", "type-check": "tsc --noEmit" });
     expect(resolveGateCommand("lint", flow)).toBe("npm run lint");
     expect(resolveGateCommand("type-check", flow)).toBe("tsc --noEmit");
   });
@@ -94,7 +96,7 @@ describe("resolveGateCommand — unknown gate with no flow.gates", () => {
   });
 
   it("returns null for an unknown gate even when flow.gates exists but does not contain it", () => {
-    const flow = makeFlow({ "lint": "npm run lint" });
+    const flow = makeFlow({ lint: "npm run lint" });
     expect(resolveGateCommand("unknown-gate", flow)).toBeNull();
   });
 
@@ -311,7 +313,7 @@ describe("normalizeGates — tier 1: explicit gates array", () => {
   });
 
   it("prefers explicit gates array over legacy gate field (tier 1 wins even if gate is also set)", () => {
-    const flow = makeFlow({ "lint": "npm run lint" });
+    const flow = makeFlow({ lint: "npm run lint" });
     // Both gates array and gate field present — gates array wins (tier 1)
     const stateDef = { type: "single" as const, gates: ["npm test"], gate: "lint" };
     const result = normalizeGates(stateDef, flow, "/project");
@@ -323,7 +325,7 @@ describe("normalizeGates — tier 1: explicit gates array", () => {
 
 describe("normalizeGates — tier 2: legacy gate field", () => {
   it("wraps resolvable legacy gate name as resolved command", () => {
-    const flow = makeFlow({ "lint": "npm run lint" });
+    const flow = makeFlow({ lint: "npm run lint" });
     const stateDef = makeStateDef({ gate: "lint" });
     const result = normalizeGates(stateDef, flow, "/project");
 
@@ -343,7 +345,7 @@ describe("normalizeGates — tier 2: legacy gate field", () => {
   });
 
   it("prefers legacy gate over discovered_gates (tier 2 wins)", () => {
-    const flow = makeFlow({ "lint": "npm run lint" });
+    const flow = makeFlow({ lint: "npm run lint" });
     const stateDef = makeStateDef({ gate: "lint" });
     const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
     const result = normalizeGates(stateDef, flow, "/project", boardState);
@@ -399,7 +401,7 @@ describe("normalizeGates — tier 3: discovered gates are stored as metadata but
   });
 
   it("legacy gate still wins over discovered when both present (tier 2 check still works)", () => {
-    const flow = makeFlow({ "lint": "npm run lint" });
+    const flow = makeFlow({ lint: "npm run lint" });
     const stateDef = makeStateDef({ gate: "lint" });
     const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);
     const result = normalizeGates(stateDef, flow, "/project", boardState);

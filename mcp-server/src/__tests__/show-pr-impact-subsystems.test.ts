@@ -20,9 +20,9 @@
  *     4. Limits to top 15 entries
  */
 
-import { describe, it, expect } from "vitest";
-import { detectSubsystems, buildBlastRadiusByFile } from "../tools/show-pr-impact.ts";
-import type { Subsystem, BlastRadiusFileEntry } from "../tools/show-pr-impact.ts";
+import { describe, expect, it } from "vitest";
+import type { BlastRadiusFileEntry, Subsystem } from "../tools/show-pr-impact.ts";
+import { buildBlastRadiusByFile, detectSubsystems } from "../tools/show-pr-impact.ts";
 
 // ---------------------------------------------------------------------------
 // detectSubsystems
@@ -30,11 +30,7 @@ import type { Subsystem, BlastRadiusFileEntry } from "../tools/show-pr-impact.ts
 
 describe("detectSubsystems — new subsystem detection", () => {
   it("returns 'new' for a directory with 3+ added files", () => {
-    const files = [
-      "src/tools/alpha.ts",
-      "src/tools/beta.ts",
-      "src/tools/gamma.ts",
-    ];
+    const files = ["src/tools/alpha.ts", "src/tools/beta.ts", "src/tools/gamma.ts"];
     const statusMap = new Map<string, string>([
       ["src/tools/alpha.ts", "added"],
       ["src/tools/beta.ts", "added"],
@@ -50,12 +46,7 @@ describe("detectSubsystems — new subsystem detection", () => {
   });
 
   it("returns 'removed' for a directory with 3+ deleted files", () => {
-    const files = [
-      "src/old/a.ts",
-      "src/old/b.ts",
-      "src/old/c.ts",
-      "src/old/d.ts",
-    ];
+    const files = ["src/old/a.ts", "src/old/b.ts", "src/old/c.ts", "src/old/d.ts"];
     const statusMap = new Map<string, string>([
       ["src/old/a.ts", "deleted"],
       ["src/old/b.ts", "deleted"],
@@ -72,10 +63,7 @@ describe("detectSubsystems — new subsystem detection", () => {
   });
 
   it("returns empty for directories with fewer than 3 files of same status", () => {
-    const files = [
-      "src/tools/alpha.ts",
-      "src/tools/beta.ts",
-    ];
+    const files = ["src/tools/alpha.ts", "src/tools/beta.ts"];
     const statusMap = new Map<string, string>([
       ["src/tools/alpha.ts", "added"],
       ["src/tools/beta.ts", "added"],
@@ -128,11 +116,7 @@ describe("detectSubsystems — new subsystem detection", () => {
 
   it("groups by first two directory segments", () => {
     // src/tools/nested/deep.ts and src/tools/other.ts should both go to src/tools
-    const files = [
-      "src/tools/nested/deep.ts",
-      "src/tools/other.ts",
-      "src/tools/third.ts",
-    ];
+    const files = ["src/tools/nested/deep.ts", "src/tools/other.ts", "src/tools/third.ts"];
     const statusMap = new Map<string, string>([
       ["src/tools/nested/deep.ts", "added"],
       ["src/tools/other.ts", "added"],
@@ -247,9 +231,7 @@ describe("buildBlastRadiusByFile — grouping and counting", () => {
       total_affected: 1,
       affected_files: 1,
       by_depth: { 1: 1 },
-      affected: [
-        { entity_name: "fn", entity_kind: "function", file_path: "src/x.ts", depth: 1 },
-      ],
+      affected: [{ entity_name: "fn", entity_kind: "function", file_path: "src/x.ts", depth: 1 }],
     };
     const result = buildBlastRadiusByFile(blastRadius);
     expect(result).toHaveLength(1);

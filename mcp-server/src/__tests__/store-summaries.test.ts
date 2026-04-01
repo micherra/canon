@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { storeSummaries } from "../tools/store-summaries.ts";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
+import { storeSummaries } from "../tools/store-summaries.ts";
 
 describe("storeSummaries", () => {
   let tmpDir: string;
@@ -35,10 +35,7 @@ describe("storeSummaries", () => {
 
   it("does not throw when KG DB does not exist", async () => {
     await expect(
-      storeSummaries(
-        { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
-        tmpDir,
-      ),
+      storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] }, tmpDir),
     ).resolves.not.toThrow();
   });
 
@@ -112,10 +109,7 @@ describe("storeSummaries", () => {
 
     // Should not throw
     await expect(
-      storeSummaries(
-        { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
-        tmpDir,
-      ),
+      storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] }, tmpDir),
     ).resolves.not.toThrow();
 
     // JSON should still be written
@@ -131,10 +125,7 @@ describe("storeSummaries", () => {
       JSON.stringify({ "src/existing.ts": { summary: "Existing file", updated_at: "2025-01-01T00:00:00Z" } }),
     );
 
-    const result = await storeSummaries(
-      { summaries: [{ file_path: "src/new.ts", summary: "New file" }] },
-      tmpDir,
-    );
+    const result = await storeSummaries({ summaries: [{ file_path: "src/new.ts", summary: "New file" }] }, tmpDir);
 
     expect(result.stored).toBe(1);
     expect(result.total).toBe(2);

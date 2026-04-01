@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { assembleWaveBriefing, WaveBriefingInput } from "../orchestration/wave-briefing.ts";
+import { describe, expect, it } from "vitest";
+import { assembleWaveBriefing, type WaveBriefingInput } from "../orchestration/wave-briefing.ts";
 
 describe("assembleWaveBriefing", () => {
   it("assembles briefing with all sections populated", () => {
@@ -51,11 +51,11 @@ describe("assembleWaveBriefing", () => {
       wave: 3,
       summaries: [],
       consultationOutputs: {
-        "c1": {
+        c1: {
           section: "API decisions",
           summary: "Use REST not GraphQL for this service.",
         },
-        "c2": {
+        c2: {
           section: "Performance notes",
           summary: "Cache query results for 60 seconds.",
         },
@@ -119,7 +119,7 @@ describe("assembleWaveBriefing", () => {
       wave: 7,
       summaries: ["created src/template.ts — value is \\${foo} not expanded"],
       consultationOutputs: {
-        "c1": {
+        c1: {
           section: "Injection safety",
           summary: "Variable \\${user_input} is safely escaped.",
         },

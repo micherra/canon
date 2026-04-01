@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
+import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -205,9 +205,7 @@ describe("resolveAfterConsultations", () => {
     });
 
     expect(result.consultation_prompts).toHaveLength(1);
-    expect(result.consultation_prompts[0].prompt).toBe(
-      "Run post-review check for substituted-value.",
-    );
+    expect(result.consultation_prompts[0].prompt).toBe("Run post-review check for substituted-value.");
   });
 
   it("handles mixed valid and invalid consultation names (partial success)", () => {

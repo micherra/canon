@@ -6,7 +6,9 @@
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { canEnterState } from "../orchestration/convergence.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 interface CheckConvergenceInput {
   workspace: string;
@@ -37,12 +39,12 @@ export async function checkConvergence(
   const cannot_fix_items: CannotFixItem[] = iteration?.cannot_fix ?? [];
   const history: HistoryEntry[] = iteration?.history ?? [];
 
-  return {
+  return toolOk({
     can_enter: allowed,
     iteration_count,
     max_iterations,
     cannot_fix_items,
     history,
     reason,
-  };
+  });
 }

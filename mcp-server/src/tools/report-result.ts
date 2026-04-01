@@ -4,15 +4,32 @@
  * and board state updates.
  */
 
+import { completeState, setBlocked } from "../orchestration/board.ts";
+import { inspectDebateProgress } from "../orchestration/debate.ts";
+import { executeEffects } from "../orchestration/effects.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type {
+  Board,
+  CannotFixItem,
+  DiscoveredGate,
+  GateResult,
+  PostconditionAssertion,
+  PostconditionResult,
+  ResolvedFlow,
+  TestResults,
+  ViolationSeverities,
+} from "../orchestration/flow-schema.ts";
+import { STATUS_ALIASES, STATUS_KEYWORDS } from "../orchestration/flow-schema.ts";
 import {
-  normalizeStatus,
-  evaluateTransition,
-  applyReviewThresholdToCondition,
-  buildHistoryEntry,
-  isStuck,
   aggregateParallelPerResults,
   aggregateReviewResults,
+  applyReviewThresholdToCondition,
+  buildHistoryEntry,
+  evaluateTransition,
   isRoleOptional,
+  isStuck,
+  normalizeStatus,
 } from "../orchestration/transitions.ts";
 import {
   completeState,
@@ -133,7 +150,12 @@ export async function reportResult(
   return reportResultLocked(input);
 }
 
-async function reportResultLocked(
+export async function reportResult(input: ReportResultInput): Promise<ToolResult<ReportResultResult>> {
+  return reportResultLocked(input);
+}
+
+/** Aggregate parallel results and update condition and board state. */
+function aggregateParallelResults(
   input: ReportResultInput,
 ): Promise<ToolResult<ReportResultResult>> {
   const store = getExecutionStore(input.workspace);
@@ -581,7 +603,9 @@ async function reportResultLocked(
       ...(input.test_results ? { test_results: input.test_results } : {}),
       ...(input.files_changed != null ? { files_changed: input.files_changed } : {}),
       ...(input.discovered_gates?.length ? { discovered_gates_count: input.discovered_gates.length } : {}),
-      ...(input.discovered_postconditions?.length ? { discovered_postconditions_count: input.discovered_postconditions.length } : {}),
+      ...(input.discovered_postconditions?.length
+        ? { discovered_postconditions_count: input.discovered_postconditions.length }
+        : {}),
     });
     flowEventBus.emit("transition_evaluated", {
       stateId: input.state_id,
@@ -601,9 +625,19 @@ async function reportResultLocked(
     flowEventBus.removeListener("state_completed", onStateCompleted);
     flowEventBus.removeListener("transition_evaluated", onTransitionEvaluated);
   }
+}
 
-  // Build log entry
-  const log_entry: LogEntry = {
+/** Build the log entry for the report result. */
+function buildLogEntry(
+  input: ReportResultInput,
+  condition: string,
+  nextState: string | null,
+  stuck: boolean,
+  hitl_required: boolean,
+  stuck_reason: string | undefined,
+  hitl_reason: string | undefined,
+): LogEntry {
+  return {
     state_id: input.state_id,
     status_keyword: input.status_keyword,
     normalized_condition: condition,
@@ -623,8 +657,127 @@ async function reportResultLocked(
     ...(input.test_results ? { test_results: input.test_results } : {}),
     ...(input.files_changed != null ? { files_changed: input.files_changed } : {}),
     ...(input.discovered_gates?.length ? { discovered_gates_count: input.discovered_gates.length } : {}),
-    ...(input.discovered_postconditions?.length ? { discovered_postconditions_count: input.discovered_postconditions.length } : {}),
+    ...(input.discovered_postconditions?.length
+      ? { discovered_postconditions_count: input.discovered_postconditions.length }
+      : {}),
   };
+}
+
+async function reportResultLocked(input: ReportResultInput): Promise<ToolResult<ReportResultResult>> {
+  const store = getExecutionStore(input.workspace);
+
+  if (!store.getBoard()) {
+    return toolError("WORKSPACE_NOT_FOUND", `No execution found in workspace: ${input.workspace}`);
+  }
+
+  let debateResult: Awaited<ReturnType<typeof inspectDebateProgress>> | undefined;
+  const stateDef = input.flow.states[input.state_id];
+  if (input.state_id === input.flow.entry && input.flow.debate) {
+    debateResult = await inspectDebateProgress(input.workspace, input.flow.debate);
+  }
+
+  const { board, condition, nextState, stuck, stuck_reason, hitl_required, hitl_reason } = store.transaction(
+    (): {
+      board: Board;
+      condition: string;
+      nextState: string | null;
+      stuck: boolean;
+      stuck_reason: string | undefined;
+      hitl_required: boolean;
+      hitl_reason: string | undefined;
+    } => {
+      let board = store.getBoard();
+      if (!board) {
+        throw new Error(`No execution found in workspace: ${input.workspace}`);
+      }
+
+      // Normalize status and aggregate parallel results
+      let condition = normalizeStatus(input.status_keyword);
+      if (input.flow.review_threshold && stateDef?.transitions) {
+        condition = applyReviewThresholdToCondition(input.flow.review_threshold, condition, stateDef.transitions);
+      }
+
+      const parallel = aggregateParallelResults(input, board, condition, stateDef);
+      board = parallel.board;
+      condition = parallel.condition;
+
+      // Handle done_with_concerns
+      if (input.status_keyword.toLowerCase() === "done_with_concerns" && input.concern_text) {
+        const agent = stateDef?.agent ?? input.state_id;
+        board = {
+          ...board,
+          concerns: [
+            ...board.concerns,
+            { state_id: input.state_id, agent, message: input.concern_text, timestamp: new Date().toISOString() },
+          ],
+        };
+      }
+
+      board = completeState(board, input.state_id, condition, input.artifacts);
+      board = enrichBoardState(input, board);
+
+      let nextState = stateDef ? evaluateTransition(stateDef, condition) : null;
+
+      // Stuck detection
+      const stuckResult = detectStuck(input, board, condition, stateDef);
+      board = stuckResult.board;
+      if (stuckResult.stuck) nextState = null;
+
+      // Cannot-fix accumulation
+      board = accumulateCannotFix(input, board, condition);
+
+      // HITL resolution
+      const hitlResult = resolveHitl(
+        input,
+        board,
+        condition,
+        nextState,
+        stuckResult.stuck,
+        stuckResult.stuck_reason,
+        stateDef,
+        debateResult,
+      );
+      board = hitlResult.board;
+      nextState = hitlResult.nextState;
+
+      // Update current_state if we have a valid next state
+      if (nextState && nextState !== "hitl") {
+        board = { ...board, current_state: nextState };
+      }
+
+      syncBoardToStore(store, board);
+
+      return {
+        board,
+        condition,
+        nextState,
+        stuck: stuckResult.stuck,
+        stuck_reason: stuckResult.stuck_reason,
+        hitl_required: hitlResult.hitl_required,
+        hitl_reason: hitlResult.hitl_reason,
+      };
+    },
+  );
+
+  // Post-transaction side effects (best-effort)
+  if (input.progress_line) {
+    try {
+      store.appendProgress(input.progress_line);
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  if (stateDef?.effects?.length && input.artifacts?.length) {
+    const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
+    await executeEffects(stateDef, input.workspace, input.artifacts, projectDir).catch(() => {
+      /* noop */
+    });
+  }
+
+  emitReportEvents(store, input, condition, nextState, hitl_required, hitl_reason);
+
+  const log_entry = buildLogEntry(input, condition, nextState, stuck, hitl_required, stuck_reason, hitl_reason);
 
   return {
     ok: true as const,

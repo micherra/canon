@@ -1,6 +1,6 @@
 import { DriftStore } from "../drift/store.ts";
-import { generateId } from "../utils/id.ts";
 import type { ReviewViolation } from "../schema.ts";
+import { generateId } from "../utils/id.ts";
 
 export interface StorePrReviewInput {
   pr_number?: number;
@@ -35,10 +35,7 @@ export interface StorePrReviewOutput {
   review_id: string;
 }
 
-export async function storePrReview(
-  input: StorePrReviewInput,
-  projectDir: string
-): Promise<StorePrReviewOutput> {
+export async function storePrReview(input: StorePrReviewInput, projectDir: string): Promise<StorePrReviewOutput> {
   const store = new DriftStore(projectDir);
   const review_id = generateId("rev");
   const timestamp = new Date().toISOString();

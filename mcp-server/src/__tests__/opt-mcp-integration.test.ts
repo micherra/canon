@@ -16,11 +16,10 @@
  * 5. getSpawnPrompt degrades gracefully when progress.md is absent.
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -343,12 +342,12 @@ describe("truncateProgress — edge cases", () => {
     const header = "## Progress: My task";
     const entries = Array.from({ length: 10 }, (_, i) => `- [state-${i}] done: step ${i}`);
     // Add trailing blank lines after entries
-    const content = header + "\n" + entries.join("\n") + "\n\n";
+    const content = `${header}\n${entries.join("\n")}\n\n`;
 
     const result = truncateProgress(content, 8);
 
     // Should still have exactly 8 entry lines
-    const entryLines = result.split("\n").filter(l => l.startsWith("- ["));
+    const entryLines = result.split("\n").filter((l) => l.startsWith("- ["));
     expect(entryLines).toHaveLength(8);
 
     // Trailing blank lines must still be present (they don't start with "- [")
@@ -376,7 +375,7 @@ describe("truncateProgress — edge cases", () => {
 
     const result = truncateProgress(content, 3);
 
-    const entryLines = result.split("\n").filter(l => l.startsWith("- ["));
+    const entryLines = result.split("\n").filter((l) => l.startsWith("- ["));
     expect(entryLines).toHaveLength(3);
     // Must be the LAST 3, not the first 3
     expect(entryLines[0]).toContain("state-2");

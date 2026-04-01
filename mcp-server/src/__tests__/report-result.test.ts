@@ -8,7 +8,6 @@
  * All workspace setup uses ExecutionStore instead of readBoard/writeBoard.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +17,11 @@ import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { writeMessage } from "../orchestration/messages.ts";
 import type { FlowEventMap } from "../orchestration/events.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
+import { writeMessage } from "../orchestration/messages.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -168,10 +171,28 @@ describe("reportResult — basic functionality", () => {
     });
     assertOk(result);
 
-    expect(result.board.states["build"].artifacts).toEqual([
-      "summary.md",
-      "diff.patch",
-    ]);
+    expect(result.board.states["build"].artifacts).toEqual(["summary.md", "diff.patch"]);
+  });
+
+  it("persists board state to execution_states table (no board.json)", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    setupWorkspace(workspace, flow);
+
+    await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    const store = getExecutionStore(workspace);
+    const state = store.getState("build");
+    expect(state?.status).toBe("done");
+
+    // No board.json created
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(join(workspace, "board.json"))).toBe(false);
   });
 
   it("persists board state to execution_states table (no board.json)", async () => {

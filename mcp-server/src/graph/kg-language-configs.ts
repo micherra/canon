@@ -118,19 +118,38 @@ export interface LanguageConfig {
 // Derived from kg-adapter-typescript.ts (typescript grammar only)
 // ---------------------------------------------------------------------------
 
+/** Collect import names from a TS import_clause node. */
+function collectTsImportNames(clause: SyntaxNode, names: string[]): void {
+  for (const child of clause.namedChildren) {
+    if (child.type === "identifier") {
+      names.push(child.text);
+    } else if (child.type === "named_imports") {
+      for (const spec of child.namedChildren) {
+        const aliasNode = spec.childForFieldName("alias");
+        const nameNode = spec.childForFieldName("name") ?? spec.namedChildren[0];
+        const resolved = aliasNode ?? nameNode;
+        if (resolved) names.push(resolved.text);
+      }
+    } else if (child.type === "namespace_import") {
+      const nsName = child.namedChildren[0];
+      if (nsName) names.push(`* as ${nsName.text}`);
+    }
+  }
+}
+
 const typescriptConfig: LanguageConfig = {
-  id: 'typescript',
-  extensions: ['.ts'],
-  grammarFile: 'tree-sitter-typescript.wasm',
+  id: "typescript",
+  extensions: [".ts"],
+  grammarFile: "tree-sitter-typescript.wasm",
   nodeKinds: {
-    functionDef: ['function_declaration', 'generator_function_declaration'],
-    classDef: ['class_declaration', 'abstract_class_declaration'],
-    methodDef: ['method_definition'],
-    importStatement: ['import_statement'],
-    callExpression: ['call_expression'],
-    variableDecl: ['lexical_declaration', 'variable_declaration'],
-    exportStatement: ['export_statement'],
-    classBody: ['class_body'],
+    functionDef: ["function_declaration", "generator_function_declaration"],
+    classDef: ["class_declaration", "abstract_class_declaration"],
+    methodDef: ["method_definition"],
+    importStatement: ["import_statement"],
+    callExpression: ["call_expression"],
+    variableDecl: ["lexical_declaration", "variable_declaration"],
+    exportStatement: ["export_statement"],
+    classBody: ["class_body"],
   },
   hooks: {
     /**
@@ -138,28 +157,14 @@ const typescriptConfig: LanguageConfig = {
      * Handles: default imports, named imports, namespace imports.
      */
     extractImport(node: SyntaxNode, ctx: WalkerContext): void {
-      const sourceNode = node.childForFieldName('source');
+      const sourceNode = node.childForFieldName("source");
       if (!sourceNode) return;
-      const specifier = sourceNode.text.replace(/^['"]|['"]$/g, '');
+      const specifier = sourceNode.text.replace(/^['"]|['"]$/g, "");
       const names: string[] = [];
 
       for (const child of node.namedChildren) {
-        if (child.type === 'import_clause') {
-          for (const clause of child.namedChildren) {
-            if (clause.type === 'identifier') {
-              names.push(clause.text);
-            } else if (clause.type === 'named_imports') {
-              for (const spec of clause.namedChildren) {
-                const aliasNode = spec.childForFieldName('alias');
-                const nameNode = spec.childForFieldName('name') ?? spec.namedChildren[0];
-                const resolved = aliasNode ?? nameNode;
-                if (resolved) names.push(resolved.text);
-              }
-            } else if (clause.type === 'namespace_import') {
-              const nsName = clause.namedChildren[0];
-              if (nsName) names.push(`* as ${nsName.text}`);
-            }
-          }
+        if (child.type === "import_clause") {
+          collectTsImportNames(child, names);
         }
       }
 
@@ -173,12 +178,8 @@ const typescriptConfig: LanguageConfig = {
     isExported(node: SyntaxNode): boolean {
       let cur: SyntaxNode | null = node.parent;
       while (cur) {
-        if (cur.type === 'export_statement') return true;
-        if (
-          cur.type === 'program' ||
-          cur.type === 'statement_block' ||
-          cur.type === 'class_body'
-        ) {
+        if (cur.type === "export_statement") return true;
+        if (cur.type === "program" || cur.type === "statement_block" || cur.type === "class_body") {
           break;
         }
         cur = cur.parent;
@@ -192,15 +193,15 @@ const typescriptConfig: LanguageConfig = {
      */
     extractSpecial(node: SyntaxNode, ctx: WalkerContext): void {
       const specialKinds: Record<string, string> = {
-        interface_declaration: 'interface',
-        type_alias_declaration: 'type-alias',
-        enum_declaration: 'enum',
+        interface_declaration: "interface",
+        type_alias_declaration: "type-alias",
+        enum_declaration: "enum",
       };
 
       const kind = specialKinds[node.type];
       if (!kind) return;
 
-      const nameNode = node.childForFieldName('name');
+      const nameNode = node.childForFieldName("name");
       if (!nameNode) return;
       const name = nameNode.text;
       const qn = `${ctx.filePath}::${name}`;
@@ -209,8 +210,11 @@ const typescriptConfig: LanguageConfig = {
       let exported = false;
       let cur: SyntaxNode | null = node.parent;
       while (cur) {
-        if (cur.type === 'export_statement') { exported = true; break; }
-        if (cur.type === 'program' || cur.type === 'statement_block' || cur.type === 'class_body') break;
+        if (cur.type === "export_statement") {
+          exported = true;
+          break;
+        }
+        if (cur.type === "program" || cur.type === "statement_block" || cur.type === "class_body") break;
         cur = cur.parent;
       }
 
@@ -236,19 +240,19 @@ const typescriptConfig: LanguageConfig = {
 // ---------------------------------------------------------------------------
 
 const tsxConfig: LanguageConfig = {
-  id: 'tsx',
-  extensions: ['.tsx', '.js', '.jsx', '.mjs', '.cjs'],
-  grammarFile: 'tree-sitter-tsx.wasm',
+  id: "tsx",
+  extensions: [".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+  grammarFile: "tree-sitter-tsx.wasm",
   nodeKinds: {
     // Identical to TypeScript — TSX grammar uses the same node type names
-    functionDef: ['function_declaration', 'generator_function_declaration'],
-    classDef: ['class_declaration', 'abstract_class_declaration'],
-    methodDef: ['method_definition'],
-    importStatement: ['import_statement'],
-    callExpression: ['call_expression'],
-    variableDecl: ['lexical_declaration', 'variable_declaration'],
-    exportStatement: ['export_statement'],
-    classBody: ['class_body'],
+    functionDef: ["function_declaration", "generator_function_declaration"],
+    classDef: ["class_declaration", "abstract_class_declaration"],
+    methodDef: ["method_definition"],
+    importStatement: ["import_statement"],
+    callExpression: ["call_expression"],
+    variableDecl: ["lexical_declaration", "variable_declaration"],
+    exportStatement: ["export_statement"],
+    classBody: ["class_body"],
   },
   hooks: {
     // Reuse the same hook implementations as TypeScript
@@ -263,22 +267,55 @@ const tsxConfig: LanguageConfig = {
 // Derived from kg-adapter-python.ts
 // ---------------------------------------------------------------------------
 
+/** Collect specifiers from a Python `import foo` / `import foo.bar` statement. */
+function collectPyImportStatement(node: SyntaxNode, ctx: WalkerContext): void {
+  for (const child of node.namedChildren) {
+    if (child.type !== "dotted_name" && child.type !== "aliased_import") continue;
+    const nameNode = child.type === "aliased_import" ? child.childForFieldName("name") : child;
+    if (!nameNode) continue;
+    ctx.importSpecifiers.push({ specifier: nameNode.text, names: [nameNode.text] });
+  }
+}
+
+/** Collect specifiers from a Python `from foo import bar, baz` statement. */
+function collectPyImportFromStatement(node: SyntaxNode, ctx: WalkerContext): void {
+  const moduleNode = node.childForFieldName("module_name");
+  const specifier = moduleNode ? moduleNode.text : "";
+  const names: string[] = [];
+
+  for (const child of node.namedChildren) {
+    if (child === moduleNode) continue;
+    if (child.type === "wildcard_import") {
+      names.push("*");
+    } else if (child.type === "dotted_name") {
+      names.push(child.text);
+    } else if (child.type === "aliased_import") {
+      const nameNode = child.childForFieldName("name");
+      if (nameNode) names.push(nameNode.text);
+    }
+  }
+
+  if (specifier) {
+    ctx.importSpecifiers.push({ specifier, names: names.length ? names : ["*"] });
+  }
+}
+
 const pythonConfig: LanguageConfig = {
-  id: 'python',
-  extensions: ['.py'],
-  grammarFile: 'tree-sitter-python.wasm',
+  id: "python",
+  extensions: [".py"],
+  grammarFile: "tree-sitter-python.wasm",
   nodeKinds: {
-    functionDef: ['function_definition'],
-    classDef: ['class_definition'],
+    functionDef: ["function_definition"],
+    classDef: ["class_definition"],
     // Methods are function_definitions inside class bodies — same node type
-    methodDef: ['function_definition'],
-    importStatement: ['import_statement', 'import_from_statement'],
-    callExpression: ['call'],
+    methodDef: ["function_definition"],
+    importStatement: ["import_statement", "import_from_statement"],
+    callExpression: ["call"],
     // Constants detected via expression_statement with assignment child (ALL_CAPS)
-    variableDecl: ['expression_statement'],
+    variableDecl: ["expression_statement"],
     // Python has no export statements — all top-level names are implicitly exported
     exportStatement: [],
-    classBody: ['block'],
+    classBody: ["block"],
   },
   hooks: {
     /**
@@ -286,41 +323,12 @@ const pythonConfig: LanguageConfig = {
      * Handles: `import foo`, `import foo.bar`, `from foo import bar, baz`, `from foo import *`.
      */
     extractImport(node: SyntaxNode, ctx: WalkerContext): void {
-      if (node.type === 'import_statement') {
-        for (const child of node.namedChildren) {
-          if (child.type === 'dotted_name' || child.type === 'aliased_import') {
-            const nameNode =
-              child.type === 'aliased_import'
-                ? child.childForFieldName('name')
-                : child;
-            if (!nameNode) continue;
-            const specifier = nameNode.text;
-            ctx.importSpecifiers.push({ specifier, names: [specifier] });
-          }
-        }
+      if (node.type === "import_statement") {
+        collectPyImportStatement(node, ctx);
         return;
       }
-
-      if (node.type === 'import_from_statement') {
-        const moduleNode = node.childForFieldName('module_name');
-        const specifier = moduleNode ? moduleNode.text : '';
-        const names: string[] = [];
-
-        for (const child of node.namedChildren) {
-          if (child === moduleNode) continue;
-          if (child.type === 'wildcard_import') {
-            names.push('*');
-          } else if (child.type === 'dotted_name') {
-            names.push(child.text);
-          } else if (child.type === 'aliased_import') {
-            const nameNode = child.childForFieldName('name');
-            if (nameNode) names.push(nameNode.text);
-          }
-        }
-
-        if (specifier) {
-          ctx.importSpecifiers.push({ specifier, names: names.length ? names : ['*'] });
-        }
+      if (node.type === "import_from_statement") {
+        collectPyImportFromStatement(node, ctx);
       }
     },
 
@@ -329,7 +337,7 @@ const pythonConfig: LanguageConfig = {
      * A node is "exported" if its parent is the module root.
      */
     isExported(node: SyntaxNode): boolean {
-      return node.parent?.type === 'module';
+      return node.parent?.type === "module";
     },
 
     /**
@@ -339,16 +347,16 @@ const pythonConfig: LanguageConfig = {
      */
     extractSpecial(node: SyntaxNode, ctx: WalkerContext): void {
       // ALL_CAPS constant assignments at module level
-      if (node.type === 'expression_statement' && node.parent?.type === 'module') {
+      if (node.type === "expression_statement" && node.parent?.type === "module") {
         const assignment = node.namedChildren[0];
-        if (assignment?.type === 'assignment') {
-          const lhs = assignment.childForFieldName('left');
-          if (lhs?.type === 'identifier' && /^[A-Z][A-Z0-9_]*$/.test(lhs.text)) {
+        if (assignment?.type === "assignment") {
+          const lhs = assignment.childForFieldName("left");
+          if (lhs?.type === "identifier" && /^[A-Z][A-Z0-9_]*$/.test(lhs.text)) {
             const name = lhs.text;
             ctx.entities.push({
               name,
               qualified_name: `${ctx.filePath}::${name}`,
-              kind: 'variable',
+              kind: "variable",
               line_start: node.startPosition.row + 1,
               line_end: node.endPosition.row + 1,
               is_exported: true,
@@ -369,17 +377,17 @@ const pythonConfig: LanguageConfig = {
 // ---------------------------------------------------------------------------
 
 const bashConfig: LanguageConfig = {
-  id: 'bash',
-  extensions: ['.sh'],
-  grammarFile: 'tree-sitter-bash.wasm',
+  id: "bash",
+  extensions: [".sh"],
+  grammarFile: "tree-sitter-bash.wasm",
   nodeKinds: {
-    functionDef: ['function_definition'],
+    functionDef: ["function_definition"],
     // Bash has no classes, methods, imports, variables, or exports
     classDef: [],
     methodDef: [],
     // Imports handled via extractImport hook (source/. commands)
     importStatement: [],
-    callExpression: ['command'],
+    callExpression: ["command"],
     variableDecl: [],
     exportStatement: [],
     classBody: [],
@@ -389,17 +397,17 @@ const bashConfig: LanguageConfig = {
      * Extract Bash import specifiers from `source ./file.sh` or `. ./file.sh` commands.
      */
     extractImport(node: SyntaxNode, ctx: WalkerContext): void {
-      if (node.type !== 'command') return;
-      const nameNode = node.childForFieldName('name') ?? node.children[0];
+      if (node.type !== "command") return;
+      const nameNode = node.childForFieldName("name") ?? node.children[0];
       if (!nameNode) return;
       const cmdName = nameNode.text.trim();
 
-      if (cmdName === 'source' || cmdName === '.') {
-        const argNode = node.childForFieldName('argument') ?? node.children[1];
+      if (cmdName === "source" || cmdName === ".") {
+        const argNode = node.childForFieldName("argument") ?? node.children[1];
         if (argNode) {
-          const specifier = argNode.text.trim().replace(/^['"]|['"]$/g, '');
+          const specifier = argNode.text.trim().replace(/^['"]|['"]$/g, "");
           if (specifier) {
-            ctx.importSpecifiers.push({ specifier, names: ['*'] });
+            ctx.importSpecifiers.push({ specifier, names: ["*"] });
           }
         }
       }
@@ -410,8 +418,8 @@ const bashConfig: LanguageConfig = {
      * A command that matches a defined function name produces a calls edge.
      */
     extractSpecial(node: SyntaxNode, ctx: WalkerContext): void {
-      if (node.type !== 'command') return;
-      const nameNode = node.childForFieldName('name') ?? node.children[0];
+      if (node.type !== "command") return;
+      const nameNode = node.childForFieldName("name") ?? node.children[0];
       if (!nameNode) return;
       const cmdName = nameNode.text.trim();
 
@@ -419,24 +427,22 @@ const bashConfig: LanguageConfig = {
       let ancestor: SyntaxNode | null = node.parent;
       let enclosingFunc: string | null = null;
       while (ancestor) {
-        if (ancestor.type === 'function_definition') {
-          const fnNameNode = ancestor.childForFieldName('name') ?? ancestor.children[0];
+        if (ancestor.type === "function_definition") {
+          const fnNameNode = ancestor.childForFieldName("name") ?? ancestor.children[0];
           if (fnNameNode) enclosingFunc = fnNameNode.text.trim();
           break;
         }
         ancestor = ancestor.parent;
       }
 
-      const sourceQualified = enclosingFunc
-        ? `${ctx.filePath}::${enclosingFunc}`
-        : ctx.filePath;
+      const sourceQualified = enclosingFunc ? `${ctx.filePath}::${enclosingFunc}` : ctx.filePath;
       const targetQualified = `${ctx.filePath}::${cmdName}`;
 
       if (sourceQualified !== targetQualified) {
         ctx.intraEdges.push({
           source_qualified: sourceQualified,
           target_qualified: targetQualified,
-          edge_type: 'calls',
+          edge_type: "calls",
           confidence: 0.9,
         });
       }
@@ -449,20 +455,20 @@ const bashConfig: LanguageConfig = {
 // ---------------------------------------------------------------------------
 
 const javaConfig: LanguageConfig = {
-  id: 'java',
-  extensions: ['.java'],
-  grammarFile: 'tree-sitter-java.wasm',
+  id: "java",
+  extensions: [".java"],
+  grammarFile: "tree-sitter-java.wasm",
   nodeKinds: {
     // Java has no top-level functions; all methods belong to classes
     functionDef: [],
-    classDef: ['class_declaration', 'interface_declaration', 'enum_declaration'],
-    methodDef: ['method_declaration', 'constructor_declaration'],
-    importStatement: ['import_declaration'],
-    callExpression: ['method_invocation'],
-    variableDecl: ['field_declaration', 'local_variable_declaration'],
+    classDef: ["class_declaration", "interface_declaration", "enum_declaration"],
+    methodDef: ["method_declaration", "constructor_declaration"],
+    importStatement: ["import_declaration"],
+    callExpression: ["method_invocation"],
+    variableDecl: ["field_declaration", "local_variable_declaration"],
     // Java uses access modifiers (public/private/protected), not export statements
     exportStatement: [],
-    classBody: ['class_body', 'interface_body', 'enum_body'],
+    classBody: ["class_body", "interface_body", "enum_body"],
   },
   hooks: {
     /**
@@ -470,24 +476,27 @@ const javaConfig: LanguageConfig = {
      * Handles: `import com.example.Foo;` and `import com.example.*;`
      */
     extractImport(node: SyntaxNode, ctx: WalkerContext): void {
-      if (node.type !== 'import_declaration') return;
+      if (node.type !== "import_declaration") return;
 
       // The scoped_identifier or asterisk child holds the import target
       // tree-sitter-java: import_declaration children include the package path
       const parts: string[] = [];
       for (const child of node.namedChildren) {
-        if (child.type === 'scoped_identifier' || child.type === 'identifier') {
+        if (child.type === "scoped_identifier" || child.type === "identifier") {
           parts.push(child.text);
-        } else if (child.type === 'asterisk') {
-          parts.push('*');
+        } else if (child.type === "asterisk") {
+          parts.push("*");
         }
       }
 
       if (parts.length === 0) {
         // Fallback: strip semicolon from raw text
-        const raw = node.text.replace(/^import\s+/, '').replace(/;$/, '').trim();
+        const raw = node.text
+          .replace(/^import\s+/, "")
+          .replace(/;$/, "")
+          .trim();
         if (raw) {
-          const lastDot = raw.lastIndexOf('.');
+          const lastDot = raw.lastIndexOf(".");
           const specifier = lastDot >= 0 ? raw.slice(0, lastDot) : raw;
           const name = lastDot >= 0 ? raw.slice(lastDot + 1) : raw;
           ctx.importSpecifiers.push({ specifier, names: [name] });
@@ -495,8 +504,8 @@ const javaConfig: LanguageConfig = {
         return;
       }
 
-      const fullPath = parts.join('.');
-      const lastDot = fullPath.lastIndexOf('.');
+      const fullPath = parts.join(".");
+      const lastDot = fullPath.lastIndexOf(".");
       const specifier = lastDot >= 0 ? fullPath.slice(0, lastDot) : fullPath;
       const name = lastDot >= 0 ? fullPath.slice(lastDot + 1) : fullPath;
       ctx.importSpecifiers.push({ specifier, names: [name] });
@@ -508,13 +517,13 @@ const javaConfig: LanguageConfig = {
      */
     isExported(node: SyntaxNode): boolean {
       for (const child of node.children) {
-        if (child.type === 'modifiers') {
+        if (child.type === "modifiers") {
           for (const mod of child.children) {
-            if (mod.type === 'public') return true;
+            if (mod.type === "public") return true;
           }
         }
         // Some grammars put modifier keywords as direct children
-        if (child.type === 'public') return true;
+        if (child.type === "public") return true;
       }
       return false;
     },
@@ -525,14 +534,14 @@ const javaConfig: LanguageConfig = {
      * - Enum constants (inside enum bodies)
      */
     extractSpecial(node: SyntaxNode, ctx: WalkerContext): void {
-      if (node.type === 'annotation_type_declaration') {
-        const nameNode = node.childForFieldName('name');
+      if (node.type === "annotation_type_declaration") {
+        const nameNode = node.childForFieldName("name");
         if (!nameNode) return;
         const name = nameNode.text;
         ctx.entities.push({
           name,
           qualified_name: `${ctx.filePath}::@${name}`,
-          kind: 'interface',
+          kind: "interface",
           line_start: node.startPosition.row + 1,
           line_end: node.endPosition.row + 1,
           is_exported: false,
@@ -543,18 +552,16 @@ const javaConfig: LanguageConfig = {
         return;
       }
 
-      if (node.type === 'enum_constant') {
-        const nameNode = node.childForFieldName('name');
+      if (node.type === "enum_constant") {
+        const nameNode = node.childForFieldName("name");
         if (!nameNode) return;
         const name = nameNode.text;
         const enclosingClass = ctx.classStack[ctx.classStack.length - 1];
-        const qn = enclosingClass
-          ? `${ctx.filePath}::${enclosingClass}.${name}`
-          : `${ctx.filePath}::${name}`;
+        const qn = enclosingClass ? `${ctx.filePath}::${enclosingClass}.${name}` : `${ctx.filePath}::${name}`;
         ctx.entities.push({
           name,
           qualified_name: qn,
-          kind: 'variable',
+          kind: "variable",
           line_start: node.startPosition.row + 1,
           line_end: node.endPosition.row + 1,
           is_exported: true, // enum constants are always accessible
@@ -570,7 +577,7 @@ const javaConfig: LanguageConfig = {
      * Returns the text of the 'name' field child.
      */
     getEntityName(node: SyntaxNode): string | null {
-      const nameNode = node.childForFieldName('name');
+      const nameNode = node.childForFieldName("name");
       return nameNode ? nameNode.text : null;
     },
   },
@@ -585,11 +592,11 @@ const javaConfig: LanguageConfig = {
  * Used by the generic walker to look up configs by language.
  */
 export const LANGUAGE_CONFIGS: Map<string, LanguageConfig> = new Map([
-  ['typescript', typescriptConfig],
-  ['tsx', tsxConfig],
-  ['python', pythonConfig],
-  ['bash', bashConfig],
-  ['java', javaConfig],
+  ["typescript", typescriptConfig],
+  ["tsx", tsxConfig],
+  ["python", pythonConfig],
+  ["bash", bashConfig],
+  ["java", javaConfig],
 ]);
 
 /**

@@ -18,10 +18,10 @@
  *   Verify that wave guidance and overlay injection apply to all cluster prompts.
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks — must appear before module imports
@@ -322,9 +322,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
       state_id: "review",
       status_keyword: "DONE",
       flow,
-      parallel_results: [
-        { item: "src/api", status: "clean" },
-      ],
+      parallel_results: [{ item: "src/api", status: "clean" }],
     });
     assertOk(result);
 

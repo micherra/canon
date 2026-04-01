@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { buildHistoryEntry, isStuck } from "../orchestration/transitions.ts";
+import { describe, expect, it } from "vitest";
 import type { HistoryEntry } from "../orchestration/flow-schema.ts";
+import { buildHistoryEntry, isStuck } from "../orchestration/transitions.ts";
 
 // ---------------------------------------------------------------------------
 // buildHistoryEntry — no_gate_progress
@@ -44,9 +44,7 @@ describe("isStuck — no_gate_progress", () => {
   });
 
   it("returns false when fewer than 2 entries exist (one entry)", () => {
-    const history: HistoryEntry[] = [
-      { gate_output_hash: "abc", passed: false },
-    ];
+    const history: HistoryEntry[] = [{ gate_output_hash: "abc", passed: false }];
     expect(isStuck(history, "no_gate_progress")).toBe(false);
   });
 

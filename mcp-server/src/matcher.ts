@@ -1,8 +1,8 @@
-import { readdir, stat } from "fs/promises";
-import { join } from "path";
-import { type Principle, loadPrincipleFile } from "./parser.ts";
-import { DEFAULT_LAYER_MAPPINGS, buildLayerInferrer } from "./utils/config.ts";
+import { readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { CANON_DIR } from "./constants.ts";
+import { loadPrincipleFile, type Principle } from "./parser.ts";
+import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./utils/config.ts";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
 
@@ -45,19 +45,14 @@ function globToRegex(pattern: string): RegExp {
   return compiled;
 }
 
-function severityPassesFilter(
-  severity: string,
-  filter?: string
-): boolean {
+function severityPassesFilter(severity: string, filter?: string): boolean {
   if (!filter) return true;
   return (SEVERITY_RANK[severity] ?? 9) <= (SEVERITY_RANK[filter] ?? 9);
 }
 
-export function matchPrinciples(
-  principles: Principle[],
-  filters: MatchFilters
-): Principle[] {
-  const layers = filters.layers || (filters.file_path ? [inferLayer(filters.file_path)].filter(Boolean) as string[] : []);
+export function matchPrinciples(principles: Principle[], filters: MatchFilters): Principle[] {
+  const layers =
+    filters.layers || (filters.file_path ? ([inferLayer(filters.file_path)].filter(Boolean) as string[]) : []);
 
   return principles
     .filter((p) => {
@@ -100,9 +95,7 @@ async function loadMdFilesFromDir(dir: string): Promise<Principle[]> {
   try {
     const files = await readdir(dir);
     const mdFiles = files.filter((f) => f.endsWith(".md"));
-    const principles = await Promise.all(
-      mdFiles.map((f) => loadPrincipleFile(join(dir, f)))
-    );
+    const principles = await Promise.all(mdFiles.map((f) => loadPrincipleFile(join(dir, f))));
     return principles.filter((p) => p.id !== "");
   } catch {
     return [];
@@ -110,9 +103,7 @@ async function loadMdFilesFromDir(dir: string): Promise<Principle[]> {
 }
 
 export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
-  const results = await Promise.all(
-    SEVERITY_SUBDIRS.map((sub) => loadMdFilesFromDir(join(dir, sub)))
-  );
+  const results = await Promise.all(SEVERITY_SUBDIRS.map((sub) => loadMdFilesFromDir(join(dir, sub))));
   return results.flat();
 }
 
@@ -138,7 +129,7 @@ async function getFileMtimes(dir: string): Promise<string[]> {
         } catch {
           return `${f}:0`;
         }
-      })
+      }),
     );
     return stats;
   } catch {
@@ -155,29 +146,19 @@ async function computeMtimeKey(projectDir: string, pluginDir: string): Promise<s
   return allMtimes.flat().join(",");
 }
 
-export async function loadAllPrinciples(
-  projectDir: string,
-  pluginDir: string
-): Promise<Principle[]> {
+export async function loadAllPrinciples(projectDir: string, pluginDir: string): Promise<Principle[]> {
   const mtimeKey = await computeMtimeKey(projectDir, pluginDir);
 
   if (principleCache && principleCache.mtimeKey === mtimeKey) {
     return principleCache.principles;
   }
 
-  const projectPrinciples = await loadPrinciplesFromDir(
-    join(projectDir, CANON_DIR, "principles")
-  );
-  const pluginPrinciples = await loadPrinciplesFromDir(
-    join(pluginDir, "principles")
-  );
+  const projectPrinciples = await loadPrinciplesFromDir(join(projectDir, CANON_DIR, "principles"));
+  const pluginPrinciples = await loadPrinciplesFromDir(join(pluginDir, "principles"));
 
   // Project-local takes precedence on ID conflict
   const seenIds = new Set(projectPrinciples.map((p) => p.id));
-  const merged = [
-    ...projectPrinciples,
-    ...pluginPrinciples.filter((p) => !seenIds.has(p.id)),
-  ];
+  const merged = [...projectPrinciples, ...pluginPrinciples.filter((p) => !seenIds.has(p.id))];
 
   // Pre-compile all glob regexes while we're loading
   for (const p of merged) {

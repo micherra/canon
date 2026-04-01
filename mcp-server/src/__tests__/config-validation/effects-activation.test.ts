@@ -4,9 +4,9 @@
  * resolved flow. These tests exercise real flow files on disk.
  */
 
-import { describe, it, expect } from "vitest";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 import { loadAndResolveFlow } from "../../orchestration/flow-parser.ts";
 
 const __filename = fileURLToPath(import.meta.url);

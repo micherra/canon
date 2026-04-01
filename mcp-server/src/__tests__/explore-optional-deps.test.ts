@@ -7,12 +7,12 @@
  * 3. isRoleOptional returns true for the dependencies role entry and false for codebase
  */
 
-import { describe, it, expect } from "vitest";
-import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import { isRoleOptional } from "../orchestration/transitions.ts";
 import type { RoleEntry } from "../orchestration/flow-schema.ts";
+import { isRoleOptional } from "../orchestration/transitions.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,9 +47,7 @@ describe("explore.md role structure", () => {
 
     const researchState = result.flow.states["research"];
     const roles = researchState.roles as RoleEntry[];
-    const codebaseRole = roles.find((r) =>
-      typeof r === "string" ? r === "codebase" : r.name === "codebase",
-    );
+    const codebaseRole = roles.find((r) => (typeof r === "string" ? r === "codebase" : r.name === "codebase"));
 
     expect(codebaseRole).toBeDefined();
     // codebase should remain as a plain string (required)

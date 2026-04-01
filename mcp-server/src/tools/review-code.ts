@@ -1,6 +1,6 @@
-import { matchPrinciples, loadAllPrinciples } from "../matcher.ts";
+import { type GraphMetrics, getNodeMetrics, loadCachedGraph } from "../graph/query.ts";
+import { loadAllPrinciples, matchPrinciples } from "../matcher.ts";
 import { loadConfigNumber } from "../utils/config.ts";
-import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.ts";
 
 export interface ReviewCodeInput {
   code: string;
@@ -35,10 +35,7 @@ export interface ReviewCodeOutput {
  * This reduces false positives by giving the reviewer a signal before evaluation.
  * The reviewer can override these hints — they're suggestions, not verdicts.
  */
-function computeReviewHint(
-  principleId: string,
-  code: string
-): PrincipleForReview["review_hint"] {
+function computeReviewHint(principleId: string, code: string): PrincipleForReview["review_hint"] {
   switch (principleId) {
     case "secrets-never-in-code": {
       // Look for common secret patterns
@@ -79,55 +76,87 @@ function loadMaxReviewPrinciples(projectDir: string): Promise<number> {
   return loadConfigNumber(projectDir, "review.max_review_principles", DEFAULT_MAX_REVIEW_PRINCIPLES);
 }
 
+type PrincipleEntry = Awaited<ReturnType<typeof loadAllPrinciples>>[number];
+
+/** Cap matched principles: rules always included, non-rules fill remaining budget. */
+function capPrinciples(matched: PrincipleEntry[], maxReviewPrinciples: number): PrincipleEntry[] {
+  const rules = matched.filter((p) => p.severity === "rule");
+  const nonRules = matched.filter((p) => p.severity !== "rule");
+  const budgetForNonRules = Math.max(0, maxReviewPrinciples - rules.length);
+  return [...rules, ...nonRules.slice(0, budgetForNonRules)];
+}
+
+/** Load graph context and inject graph-derived principles. */
+async function loadGraphContext(
+  projectDir: string,
+  filePath: string,
+  allPrinciples: PrincipleEntry[],
+  capped: PrincipleEntry[],
+): Promise<{ graphContext?: ReviewGraphContext; metrics: GraphMetrics | null; injected: PrincipleEntry[] }> {
+  const injected: PrincipleEntry[] = [];
+  const graph = await loadCachedGraph(projectDir);
+  if (!graph) return { graphContext: undefined, metrics: null, injected };
+
+  const metrics = getNodeMetrics(graph, filePath);
+  if (!metrics) return { graphContext: undefined, metrics: null, injected };
+
+  const graphContext: ReviewGraphContext = {
+    in_degree: metrics.in_degree,
+    out_degree: metrics.out_degree,
+    is_hub: metrics.is_hub,
+    in_cycle: metrics.in_cycle,
+    layer: metrics.layer,
+    impact_score: metrics.impact_score,
+    layer_violations: metrics.layer_violations,
+  };
+
+  if (metrics.layer_violation_count > 0 && !capped.some((c) => c.id === "bounded-context-boundaries")) {
+    const found = allPrinciples.find((a) => a.id === "bounded-context-boundaries");
+    if (found) injected.push(found);
+  }
+  if (metrics.in_cycle && !capped.some((c) => c.id === "architectural-fitness-functions")) {
+    const found = allPrinciples.find((a) => a.id === "architectural-fitness-functions");
+    if (found) injected.push(found);
+  }
+
+  return { graphContext, metrics, injected };
+}
+
+/** Build a human-readable graph hint string from metrics. */
+function buildGraphHint(metrics: GraphMetrics | null): string {
+  if (!metrics) return "";
+  const hints: string[] = [];
+  if (metrics.is_hub) hints.push(`hub file (${metrics.in_degree} dependents)`);
+  if (metrics.in_cycle) hints.push(`in circular dependency with ${metrics.cycle_peers.length} file(s)`);
+  if (metrics.layer_violation_count > 0) hints.push(`${metrics.layer_violation_count} layer boundary violation(s)`);
+  return hints.length > 0 ? ` Graph context: ${hints.join("; ")}.` : "";
+}
+
+/** Build a hint note about heuristic review hints. */
+function buildHintNote(principlesToEvaluate: PrincipleForReview[]): string {
+  const likelyHonored = principlesToEvaluate.filter((p) => p.review_hint === "likely-honored").length;
+  if (likelyHonored === 0) return "";
+  const checkCarefully = principlesToEvaluate.filter((p) => p.review_hint === "check-carefully").length;
+  return ` Heuristic hints: ${likelyHonored} likely-honored, ${checkCarefully} check-carefully. Principles marked "likely-honored" appear to be satisfied by the code — verify but do not flag as violated unless you find a concrete bad pattern. Focus review effort on "check-carefully" and "neutral" principles.`;
+}
+
 export async function reviewCode(
   input: ReviewCodeInput,
   projectDir: string,
-  pluginDir: string
+  pluginDir: string,
 ): Promise<ReviewCodeOutput> {
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
   const maxReviewPrinciples = await loadMaxReviewPrinciples(projectDir);
 
-  const matched = matchPrinciples(allPrinciples, {
-    file_path: input.file_path,
-  });
+  const matched = matchPrinciples(allPrinciples, { file_path: input.file_path });
+  const capped = capPrinciples(matched, maxReviewPrinciples);
 
-  // Cap matched principles to prevent unbounded context consumption.
-  // Rules are always included (safety-critical — they block commits),
-  // then fill remaining budget with strong-opinions and conventions.
-  const rules = matched.filter((p) => p.severity === "rule");
-  const nonRules = matched.filter((p) => p.severity !== "rule");
-  const budgetForNonRules = Math.max(0, maxReviewPrinciples - rules.length);
-  const capped = [...rules, ...nonRules.slice(0, budgetForNonRules)];
-
-  // Load graph data to enrich review context
-  let graphContext: ReviewGraphContext | undefined;
-  let metrics: GraphMetrics | null = null;
-  const injected: typeof capped = [];
-  const graph = await loadCachedGraph(projectDir);
-  if (graph) {
-    metrics = getNodeMetrics(graph, input.file_path);
-    if (metrics) {
-      graphContext = {
-        in_degree: metrics.in_degree,
-        out_degree: metrics.out_degree,
-        is_hub: metrics.is_hub,
-        in_cycle: metrics.in_cycle,
-        layer: metrics.layer,
-        impact_score: metrics.impact_score,
-        layer_violations: metrics.layer_violations,
-      };
-
-      // Inject graph-derived principles without mutating capped
-      if (metrics.layer_violation_count > 0 && !capped.some((c) => c.id === "bounded-context-boundaries")) {
-        const found = allPrinciples.find((a) => a.id === "bounded-context-boundaries");
-        if (found) injected.push(found);
-      }
-      if (metrics.in_cycle && !capped.some((c) => c.id === "architectural-fitness-functions")) {
-        const found = allPrinciples.find((a) => a.id === "architectural-fitness-functions");
-        if (found) injected.push(found);
-      }
-    }
-  }
+  const { graphContext, metrics, injected } = await loadGraphContext(
+    projectDir,
+    input.file_path,
+    allPrinciples,
+    capped,
+  );
 
   const allForReview = [...capped, ...injected];
   const principlesToEvaluate: PrincipleForReview[] = allForReview.map((p) => ({
@@ -143,25 +172,9 @@ export async function reviewCode(
   const conventionCount = allForReview.filter((p) => p.severity === "convention").length;
 
   const omitted = matched.length - capped.length;
-  const truncated = omitted > 0
-    ? ` (${omitted} lower-priority principles omitted)`
-    : "";
-
-  // Build summary with graph context hints
-  let graphHint = "";
-  if (metrics) {
-    const hints: string[] = [];
-    if (metrics.is_hub) hints.push(`hub file (${metrics.in_degree} dependents)`);
-    if (metrics.in_cycle) hints.push(`in circular dependency with ${metrics.cycle_peers.length} file(s)`);
-    if (metrics.layer_violation_count > 0) hints.push(`${metrics.layer_violation_count} layer boundary violation(s)`);
-    if (hints.length > 0) graphHint = ` Graph context: ${hints.join("; ")}.`;
-  }
-
-  const likelyHonored = principlesToEvaluate.filter((p) => p.review_hint === "likely-honored").length;
-  const checkCarefully = principlesToEvaluate.filter((p) => p.review_hint === "check-carefully").length;
-  const hintNote = likelyHonored > 0
-    ? ` Heuristic hints: ${likelyHonored} likely-honored, ${checkCarefully} check-carefully. Principles marked "likely-honored" appear to be satisfied by the code — verify but do not flag as violated unless you find a concrete bad pattern. Focus review effort on "check-carefully" and "neutral" principles.`
-    : "";
+  const truncated = omitted > 0 ? ` (${omitted} lower-priority principles omitted)` : "";
+  const graphHint = buildGraphHint(metrics);
+  const hintNote = buildHintNote(principlesToEvaluate);
 
   const summary = `${allForReview.length} principle(s) matched for review (${ruleCount} rules, ${opinionCount} strong-opinions, ${conventionCount} conventions)${truncated}.${graphHint}${hintNote} Evaluate each against the code below.`;
 

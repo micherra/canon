@@ -1,5 +1,4 @@
-import { App, applyDocumentTheme, applyHostStyleVariables, applyHostFonts } from "@modelcontextprotocol/ext-apps";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
 
 let app: App | null = null;
 
@@ -8,24 +7,20 @@ function extractToolText(result: { content?: Array<{ type: string; text?: string
   return c ? (c as { type: "text"; text: string }).text : "";
 }
 
-function extractToolJson(result: { content?: Array<{ type: string; text?: string }> }): any {
+function extractToolJson(result: { content?: Array<{ type: string; text?: string }> }): unknown {
   const text = extractToolText(result);
   return text ? JSON.parse(text) : null;
 }
 
 /** Buffered early result (if ontoolresult fires before waitForToolResult is called). */
-let earlyResult: { data: any } | { error: Error } | null = null;
+let earlyResult: { data: unknown } | { error: Error } | null = null;
 /** Pending tool-result promise resolved by ontoolresult notification. */
-let toolResultResolve: ((data: any) => void) | null = null;
+let toolResultResolve: ((data: unknown) => void) | null = null;
 let toolResultReject: ((err: Error) => void) | null = null;
 
 export const bridge = {
   async init() {
-    const instance = new App(
-      { name: "Canon", version: "0.1.0" },
-      {},
-      { autoResize: true },
-    );
+    const instance = new App({ name: "Canon", version: "0.1.0" }, {}, { autoResize: true });
 
     instance.onhostcontextchanged = (ctx) => {
       if (ctx.theme) applyDocumentTheme(ctx.theme);
@@ -34,10 +29,12 @@ export const bridge = {
     };
 
     instance.ontoolresult = (params) => {
-      let parsed: any;
+      let parsed: unknown;
       let parseError: Error | null = null;
       try {
-        parsed = params.isError ? null : extractToolJson(params as any);
+        parsed = params.isError
+          ? null
+          : extractToolJson(params as unknown as { content?: Array<{ type: string; text?: string }> });
       } catch (e) {
         parseError = e instanceof Error ? e : new Error(String(e));
       }
@@ -65,7 +62,7 @@ export const bridge = {
   },
 
   /** Wait for the host to deliver the tool result via ontoolresult notification. */
-  waitForToolResult(): Promise<any> {
+  waitForToolResult(): Promise<unknown> {
     // If result arrived before this call, return it immediately
     if (earlyResult) {
       const buffered = earlyResult;
@@ -79,7 +76,7 @@ export const bridge = {
     });
   },
 
-  async callTool(name: string, args: Record<string, unknown> = {}): Promise<any> {
+  async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
     if (!app) throw new Error("Bridge not initialized");
     const result = await app.callServerTool({ name, arguments: args });
     return extractToolJson(result);

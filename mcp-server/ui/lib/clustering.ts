@@ -145,11 +145,16 @@ export function synthesizeDescription(files: ClusterInput[]): string {
  */
 export function clusterIcon(type: Cluster["type"]): string {
   switch (type) {
-    case "new-feature":  return "✓";
-    case "removal":      return "✗";
-    case "prefix-group": return "⏱";
-    case "layer-group":  return "⚠";
-    case "other":        return "⚠";
+    case "new-feature":
+      return "✓";
+    case "removal":
+      return "✗";
+    case "prefix-group":
+      return "⏱";
+    case "layer-group":
+      return "⚠";
+    case "other":
+      return "⚠";
   }
 }
 
@@ -162,9 +167,7 @@ export function clusterIcon(type: Cluster["type"]): string {
  * Groups files by directory. If ALL files in that directory have status "added",
  * creates a "new-feature" cluster.
  */
-function clusterNewFeatures(
-  files: ClusterInput[],
-): { clusters: Cluster[]; remaining: ClusterInput[] } {
+function clusterNewFeatures(files: ClusterInput[]): { clusters: Cluster[]; remaining: ClusterInput[] } {
   const byDir = groupByDirectory(files);
   const clusters: Cluster[] = [];
   const clustered = new Set<string>();
@@ -192,9 +195,7 @@ function clusterNewFeatures(
  * Groups files by directory. If ALL files in that directory have status "deleted",
  * creates a "removal" cluster.
  */
-function clusterRemovals(
-  files: ClusterInput[],
-): { clusters: Cluster[]; remaining: ClusterInput[] } {
+function clusterRemovals(files: ClusterInput[]): { clusters: Cluster[]; remaining: ClusterInput[] } {
   const byDir = groupByDirectory(files);
   const clusters: Cluster[] = [];
   const clustered = new Set<string>();
@@ -228,9 +229,38 @@ function clusterRemovals(
  * 3. Pick the prefix that covers the most files; emit as a cluster.
  * 4. Repeat for remaining files until no prefix group of >= 2 exists.
  */
-function clusterByPrefix(
-  files: ClusterInput[],
-): { clusters: Cluster[]; remaining: ClusterInput[] } {
+/** Build a map of candidate prefixes to files that share each prefix. */
+function buildPrefixMap(unclustered: ClusterInput[]): Map<string, ClusterInput[]> {
+  const prefixMap = new Map<string, ClusterInput[]>();
+  for (let i = 0; i < unclustered.length; i++) {
+    for (let j = i + 1; j < unclustered.length; j++) {
+      const nameI = basename(unclustered[i].path);
+      const nameJ = basename(unclustered[j].path);
+      const prefix = findCommonPrefix([nameI, nameJ]);
+      if (!prefix) continue;
+      if (!prefixMap.has(prefix)) {
+        const group = unclustered.filter((f) => basename(f.path).startsWith(prefix));
+        prefixMap.set(prefix, group);
+      }
+    }
+  }
+  return prefixMap;
+}
+
+/** Find the prefix covering the most files in the map. Returns empty string if none found. */
+function findBestPrefix(prefixMap: Map<string, ClusterInput[]>): { prefix: string; group: ClusterInput[] } {
+  let bestPrefix = "";
+  let bestGroup: ClusterInput[] = [];
+  for (const [prefix, group] of prefixMap) {
+    if (group.length > bestGroup.length) {
+      bestPrefix = prefix;
+      bestGroup = group;
+    }
+  }
+  return { prefix: bestPrefix, group: bestGroup };
+}
+
+function clusterByPrefix(files: ClusterInput[]): { clusters: Cluster[]; remaining: ClusterInput[] } {
   const byDir = groupByDirectory(files);
   const clusters: Cluster[] = [];
   const clustered = new Set<string>();
@@ -238,54 +268,23 @@ function clusterByPrefix(
   for (const [dir, dirFiles] of byDir) {
     let unclustered = [...dirFiles];
 
-    // Iteratively find the best prefix group until none remain
-    let found = true;
-    while (found && unclustered.length >= 2) {
-      found = false;
-
-      // Build candidate prefix → files map
-      const prefixMap = new Map<string, ClusterInput[]>();
-
-      for (let i = 0; i < unclustered.length; i++) {
-        for (let j = i + 1; j < unclustered.length; j++) {
-          const nameI = basename(unclustered[i].path);
-          const nameJ = basename(unclustered[j].path);
-          const prefix = findCommonPrefix([nameI, nameJ]);
-          if (!prefix) continue;
-
-          // Collect ALL files starting with this prefix
-          if (!prefixMap.has(prefix)) {
-            const group = unclustered.filter((f) => basename(f.path).startsWith(prefix));
-            prefixMap.set(prefix, group);
-          }
-        }
-      }
-
+    while (unclustered.length >= 2) {
+      const prefixMap = buildPrefixMap(unclustered);
       if (prefixMap.size === 0) break;
 
-      // Pick the prefix with the most files (greedy)
-      let bestPrefix = "";
-      let bestGroup: ClusterInput[] = [];
-      for (const [prefix, group] of prefixMap) {
-        if (group.length > bestGroup.length) {
-          bestPrefix = prefix;
-          bestGroup = group;
-        }
-      }
+      const { prefix: bestPrefix, group: bestGroup } = findBestPrefix(prefixMap);
+      if (bestGroup.length < 2) break;
 
-      if (bestGroup.length >= 2) {
-        const label = bestPrefix.replace(/[-_.]$/, "");
-        clusters.push({
-          id: slugify(`prefix-${dir}-${label}`),
-          title: `${label} files`,
-          type: "prefix-group",
-          description: synthesizeDescription(bestGroup),
-          files: bestGroup,
-        });
-        for (const f of bestGroup) clustered.add(f.path);
-        unclustered = unclustered.filter((f) => !clustered.has(f.path));
-        found = true;
-      }
+      const label = bestPrefix.replace(/[-_.]$/, "");
+      clusters.push({
+        id: slugify(`prefix-${dir}-${label}`),
+        title: `${label} files`,
+        type: "prefix-group",
+        description: synthesizeDescription(bestGroup),
+        files: bestGroup,
+      });
+      for (const f of bestGroup) clustered.add(f.path);
+      unclustered = unclustered.filter((f) => !clustered.has(f.path));
     }
   }
 
@@ -298,9 +297,7 @@ function clusterByPrefix(
  * Remaining files grouped by layer. Creates one cluster per layer
  * if the layer has >= 2 files.
  */
-function clusterByLayer(
-  files: ClusterInput[],
-): { clusters: Cluster[]; remaining: ClusterInput[] } {
+function clusterByLayer(files: ClusterInput[]): { clusters: Cluster[]; remaining: ClusterInput[] } {
   const byLayer = new Map<string, ClusterInput[]>();
   for (const file of files) {
     const existing = byLayer.get(file.layer) ?? [];
@@ -335,10 +332,7 @@ function mergeSmallClusters(clusters: Cluster[], orphans: ClusterInput[]): Clust
   const small = clusters.filter((c) => c.files.length < 2);
   const large = clusters.filter((c) => c.files.length >= 2);
 
-  const allSmallFiles = [
-    ...small.flatMap((c) => c.files),
-    ...orphans,
-  ];
+  const allSmallFiles = [...small.flatMap((c) => c.files), ...orphans];
 
   if (allSmallFiles.length === 0) return large;
 

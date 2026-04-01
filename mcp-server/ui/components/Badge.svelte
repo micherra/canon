@@ -1,25 +1,26 @@
 <script lang="ts">
-  /**
-   * Badge.svelte
-   *
-   * A flexible inline badge/pill. Colour is driven by CSS custom properties
-   * so callers can inject any palette without class proliferation.
-   * The `rounded` prop switches between a pill shape (border-radius: 10px)
-   * and the default small-radius rectangle (border-radius: 3px).
-   *
-   * Canon principles:
-   *   - compose-from-small-to-large: atom component, replaces inline badge spans
-   *   - props-are-the-component-contract: no bridge access, no global state
-   */
+/**
+ * Badge.svelte
+ *
+ * A flexible inline badge/pill. Colour is driven by CSS custom properties
+ * so callers can inject any palette without class proliferation.
+ * The `rounded` prop switches between a pill shape (border-radius: 10px)
+ * and the default small-radius rectangle (border-radius: 3px).
+ *
+ * Canon principles:
+ *   - compose-from-small-to-large: atom component, replaces inline badge spans
+ *   - props-are-the-component-contract: no bridge access, no global state
+ */
 
-  interface BadgeProps {
-    text: string;
-    color?: string;
-    bg?: string;
-    rounded?: boolean;
-  }
+interface BadgeProps {
+  text: string;
+  color?: string;
+  bg?: string;
+  rounded?: boolean;
+}
 
-  let { text, color, bg, rounded = false }: BadgeProps = $props();
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { text, color, bg, rounded = false }: BadgeProps = $props();
 </script>
 
 <span

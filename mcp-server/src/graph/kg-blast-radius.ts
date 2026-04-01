@@ -6,14 +6,14 @@
  * then performs a recursive CTE traversal to find all transitively affected entities.
  */
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import type Database from 'better-sqlite3';
-import { KgQuery } from './kg-query.ts';
-import { KgStore } from './kg-store.ts';
-import type { BlastRadiusResult } from './kg-types.ts';
-import { CANON_DIR, CANON_FILES } from '../constants.ts';
-import { inferLayer } from '../matcher.ts';
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type Database from "better-sqlite3";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { inferLayer } from "../matcher.ts";
+import { KgQuery } from "./kg-query.ts";
+import { KgStore } from "./kg-store.ts";
+import type { BlastRadiusResult } from "./kg-types.ts";
 
 // ---------------------------------------------------------------------------
 // Exported Interfaces
@@ -63,7 +63,7 @@ export interface BlastRadiusFile {
   affected_entities?: string[];
 }
 
-export type BlastSeverity = 'contained' | 'low' | 'moderate' | 'high' | 'critical';
+export type BlastSeverity = "contained" | "low" | "moderate" | "high" | "critical";
 
 export interface BlastRadiusSummary {
   severity: BlastSeverity;
@@ -92,9 +92,7 @@ export interface UnifiedBlastRadiusReport {
  * Matches __tests__/, test/, tests/ directories and .test.* / .spec.* extensions.
  */
 function isTestFile(path: string): boolean {
-  return /(?:^|\/)__tests__\/|(?:^|\/)test\/|(?:^|\/)tests\/|(?:^|\/)[^.]+\.(?:test|spec)\.[^.]+$/i.test(
-    path,
-  );
+  return /(?:^|\/)__tests__\/|(?:^|\/)test\/|(?:^|\/)tests\/|(?:^|\/)[^.]+\.(?:test|spec)\.[^.]+$/i.test(path);
 }
 
 /**
@@ -109,10 +107,7 @@ function isTestFile(path: string): boolean {
  *
  * Test files are excluded from severity computation but counted in total_files.
  */
-export function classifyBlastSeverity(
-  affected: BlastRadiusFile[],
-  seedLayer: string,
-): BlastRadiusSummary {
+export function classifyBlastSeverity(affected: BlastRadiusFile[], seedLayer: string): BlastRadiusSummary {
   const total_files = affected.length;
   const prodFiles = affected.filter((f) => !f.is_test);
   const total_production_files = prodFiles.length;
@@ -120,8 +115,7 @@ export function classifyBlastSeverity(
   const crossLayerFiles = prodFiles.filter((f) => f.layer !== seedLayer);
   const cross_layer_count = crossLayerFiles.length;
 
-  const maxDepthReached =
-    affected.length > 0 ? Math.max(...affected.map((f) => f.depth)) : 0;
+  const maxDepthReached = affected.length > 0 ? Math.max(...affected.map((f) => f.depth)) : 0;
   const max_depth_reached = maxDepthReached;
 
   const hubFiles = prodFiles.filter((f) => f.in_degree > 10);
@@ -131,20 +125,17 @@ export function classifyBlastSeverity(
   let description: string;
 
   if (total_production_files === 0) {
-    severity = 'contained';
-    description = 'Changes are fully contained. No production files depend on this.';
-  } else if (
-    amplification_risk &&
-    cross_layer_count > 0
-  ) {
+    severity = "contained";
+    description = "Changes are fully contained. No production files depend on this.";
+  } else if (amplification_risk && cross_layer_count > 0) {
     // critical: hub file affected AND crosses layer boundaries
-    severity = 'critical';
+    severity = "critical";
     const hubFile = hubFiles[0];
     const uniqueLayers = new Set(prodFiles.map((f) => f.layer));
     description = `Critical blast radius — hub file ${hubFile.path} in ${hubFile.layer} layer is affected, amplifying impact across ${uniqueLayers.size} layers.`;
   } else if (total_production_files >= 9 || amplification_risk) {
     // high: 9+ prod files OR any file with in_degree > 10
-    severity = 'high';
+    severity = "high";
     const hubFile = hubFiles[0];
     if (hubFile) {
       description = `High blast radius — ${total_production_files} files affected. ${hubFile.path} is a hub with ${hubFile.in_degree} dependents of its own.`;
@@ -153,17 +144,17 @@ export function classifyBlastSeverity(
     }
   } else if (total_production_files >= 4 || cross_layer_count > 0) {
     // moderate: 4–8 prod files OR any cross-layer dependency
-    severity = 'moderate';
+    severity = "moderate";
     description = `Moderate blast radius — ${total_production_files} files affected, ${cross_layer_count} across layer boundaries.`;
   } else {
     // low: 1–3 prod files, all same layer, no high in_degree
     const highDegreeFiles = prodFiles.filter((f) => f.in_degree > 5);
     if (highDegreeFiles.length > 0) {
       // If some have in_degree > 5 but count is still 1–3 and same layer, bump to moderate
-      severity = 'moderate';
+      severity = "moderate";
       description = `Moderate blast radius — ${total_production_files} files affected, ${cross_layer_count} across layer boundaries.`;
     } else {
-      severity = 'low';
+      severity = "low";
       description = `Low blast radius — ${total_production_files} direct dependents, all within the ${seedLayer} layer.`;
     }
   }
@@ -194,6 +185,99 @@ export interface UnifiedBlastRadiusOptions {
    * to reading `.canon/reverse-deps.json` to populate direct dependents (depth=1).
    */
   projectDir?: string;
+}
+
+/** Merge entity-level blast radius results into the file map. */
+function mergeEntityBlastRadius(
+  store: KgStore,
+  query: KgQuery,
+  seedFileId: number,
+  maxDepth: number,
+  fileMap: Map<number, BlastRadiusFile>,
+): void {
+  const exportedEntities = store.getEntitiesByFile(seedFileId).filter((e) => e.is_exported);
+  const exportedEntityIds = exportedEntities.map((e) => e.entity_id).filter((id): id is number => id != null);
+  if (exportedEntityIds.length === 0) return;
+
+  const entityResults = query.getBlastRadius(exportedEntityIds, maxDepth);
+
+  for (const er of entityResults) {
+    if (er.depth === 0) continue;
+
+    const existingEntry = fileMap.get(er.file_id);
+    if (existingEntry) {
+      if (!existingEntry.affected_entities) existingEntry.affected_entities = [];
+      existingEntry.affected_entities.push(er.name);
+      if (er.depth < existingEntry.depth) existingEntry.depth = er.depth;
+      continue;
+    }
+
+    const fileRow = store.getFileById(er.file_id);
+    if (!fileRow) continue;
+
+    fileMap.set(er.file_id, {
+      path: fileRow.path,
+      depth: er.depth,
+      relationship: "entity-dependency",
+      layer: fileRow.layer ?? "",
+      is_test: isTestFile(fileRow.path),
+      in_degree: 0,
+      affected_entities: [er.name],
+    });
+  }
+}
+
+/** Merge reverse-deps.json fallback dependents into the file map. */
+function mergeReverseDeps(
+  store: KgStore,
+  filePath: string,
+  projectDir: string,
+  fileMap: Map<number, BlastRadiusFile>,
+): void {
+  try {
+    const reverseDepsPath = join(projectDir, CANON_DIR, CANON_FILES.REVERSE_DEPS);
+    const raw = readFileSync(reverseDepsPath, "utf-8");
+    const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
+    const directDependents = reverseIndex[filePath] ?? [];
+
+    for (const depPath of directDependents) {
+      addReverseDep(store, depPath, fileMap);
+    }
+  } catch {
+    // reverse-deps.json absent or malformed — skip fallback silently
+  }
+}
+
+/** Add a single reverse-dep entry to the file map. */
+function addReverseDep(store: KgStore, depPath: string, fileMap: Map<number, BlastRadiusFile>): void {
+  const depFileRow = store.getFile(depPath);
+  if (depFileRow?.file_id != null) {
+    if (fileMap.has(depFileRow.file_id)) return;
+    const depLayer = depFileRow.layer ?? inferLayer(depPath) ?? "";
+    fileMap.set(depFileRow.file_id, {
+      path: depPath,
+      depth: 1,
+      relationship: "reverse-dep",
+      layer: depLayer,
+      is_test: isTestFile(depPath),
+      in_degree: 0,
+      affected_entities: [],
+    });
+    return;
+  }
+
+  // File not in KG — synthesize with a negative sentinel id
+  const syntheticKey = -(fileMap.size + 1);
+  const depLayer = inferLayer(depPath) ?? "";
+  fileMap.set(syntheticKey, {
+    path: depPath,
+    depth: 1,
+    relationship: "reverse-dep",
+    layer: depLayer,
+    is_test: isTestFile(depPath),
+    in_degree: 0,
+    affected_entities: [],
+  });
 }
 
 /**
@@ -227,11 +311,11 @@ export function computeUnifiedBlastRadius(
   // Step 1: Resolve the seed file
   const seedFile = store.getFile(filePath);
   if (!seedFile || seedFile.file_id == null) {
-    return buildContainedReport(filePath, '');
+    return buildContainedReport(filePath, "");
   }
 
   const seedFileId = seedFile.file_id;
-  const seedLayer = seedFile.layer ?? '';
+  const seedLayer = seedFile.layer ?? "";
 
   // Step 2: File-level blast radius
   const fileResults = query.getFileBlastRadius(seedFileId, maxDepth);
@@ -244,8 +328,8 @@ export function computeUnifiedBlastRadius(
     fileMap.set(fr.file_id, {
       path: fr.path,
       depth: fr.depth,
-      relationship: 'file-import',
-      layer: fr.layer ?? '',
+      relationship: "file-import",
+      layer: fr.layer ?? "",
       is_test: isTestFile(fr.path),
       in_degree: 0, // populated below
       affected_entities: [],
@@ -253,93 +337,11 @@ export function computeUnifiedBlastRadius(
   }
 
   // Step 3: Entity-level blast radius (exported entities only)
-  const exportedEntities = store.getEntitiesByFile(seedFileId).filter((e) => e.is_exported);
-  const exportedEntityIds = exportedEntities
-    .map((e) => e.entity_id)
-    .filter((id): id is number => id != null);
+  mergeEntityBlastRadius(store, query, seedFileId, maxDepth, fileMap);
 
-  if (exportedEntityIds.length > 0) {
-    const entityResults = query.getBlastRadius(exportedEntityIds, maxDepth);
-
-    // Step 6 (merged): for each entity result, find or create the BlastRadiusFile entry
-    for (const er of entityResults) {
-      // Skip depth 0 (seed entities themselves — they're in the seed file, not affected files)
-      if (er.depth === 0) continue;
-
-      const existingEntry = fileMap.get(er.file_id);
-      if (existingEntry) {
-        // Add entity detail to existing file entry
-        if (!existingEntry.affected_entities) existingEntry.affected_entities = [];
-        existingEntry.affected_entities.push(er.name);
-        // Use the shallower of the two depths (entity path may be shorter)
-        if (er.depth < existingEntry.depth) {
-          existingEntry.depth = er.depth;
-        }
-      } else {
-        // New file reachable via entity edges but not file_edges
-        const fileRow = store.getFileById(er.file_id);
-        if (fileRow) {
-          fileMap.set(er.file_id, {
-            path: fileRow.path,
-            depth: er.depth,
-            relationship: 'entity-dependency',
-            layer: fileRow.layer ?? '',
-            is_test: isTestFile(fileRow.path),
-            in_degree: 0, // populated below
-            affected_entities: [er.name],
-          });
-        }
-      }
-    }
-  }
-
-  // Step 4 (fallback): When the KG has no edges for this file (common for markdown/doc
-  // files whose cross-file references aren't captured by the KG pipeline), fall back to
-  // reading `.canon/reverse-deps.json` for direct dependents (depth=1).
-  // This ensures blast radius correctly reflects relationships detected by the codebase
-  // graph scanner (inferMdRelations) even when the KG hasn't indexed those edges.
+  // Step 4 (fallback): reverse-deps.json for files with no KG edges
   if (fileMap.size === 0 && options?.projectDir) {
-    try {
-      const reverseDepsPath = join(options.projectDir, CANON_DIR, CANON_FILES.REVERSE_DEPS);
-      const raw = readFileSync(reverseDepsPath, 'utf-8');
-      const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
-      const directDependents = reverseIndex[filePath] ?? [];
-
-      for (const depPath of directDependents) {
-        // Try to find the file in the KG store to get its file_id
-        const depFileRow = store.getFile(depPath);
-        if (depFileRow?.file_id != null) {
-          if (!fileMap.has(depFileRow.file_id)) {
-            const depLayer = depFileRow.layer ?? inferLayer(depPath) ?? '';
-            fileMap.set(depFileRow.file_id, {
-              path: depPath,
-              depth: 1,
-              relationship: 'reverse-dep',
-              layer: depLayer,
-              is_test: isTestFile(depPath),
-              in_degree: 0, // populated below
-              affected_entities: [],
-            });
-          }
-        } else {
-          // File not in KG — synthesize a BlastRadiusFile with a sentinel id
-          // We use a negative key to avoid collisions with real file_ids
-          const syntheticKey = -(fileMap.size + 1);
-          const depLayer = inferLayer(depPath) ?? '';
-          fileMap.set(syntheticKey, {
-            path: depPath,
-            depth: 1,
-            relationship: 'reverse-dep',
-            layer: depLayer,
-            is_test: isTestFile(depPath),
-            in_degree: 0,
-            affected_entities: [],
-          });
-        }
-      }
-    } catch {
-      // reverse-deps.json absent or malformed — skip fallback silently
-    }
+    mergeReverseDeps(store, filePath, options.projectDir, fileMap);
   }
 
   // Step 7: Populate in_degree for each affected file from file_edges
@@ -391,7 +393,7 @@ function buildContainedReport(filePath: string, seedLayer: string): UnifiedBlast
  * separator or file extension) vs. a plain entity name.
  */
 function looksLikeFilePath(target: string): boolean {
-  return target.includes('/') || target.includes('\\') || /\.\w{1,6}$/.test(target);
+  return target.includes("/") || target.includes("\\") || /\.\w{1,6}$/.test(target);
 }
 
 /**
@@ -403,11 +405,7 @@ function looksLikeFilePath(target: string): boolean {
  *      return all entities belonging to that file.
  *   2. Otherwise — run an FTS5 search for the name and take all matching entity IDs.
  */
-function resolveTargets(
-  targets: string[],
-  store: KgStore,
-  query: KgQuery,
-): Array<{ id: number; name: string }> {
+function resolveTargets(targets: string[], store: KgStore, query: KgQuery): Array<{ id: number; name: string }> {
   const seen = new Set<number>();
   const resolved: Array<{ id: number; name: string }> = [];
 
@@ -443,7 +441,7 @@ function resolveTargets(
  */
 function getFilePath(store: KgStore, fileId: number): string {
   const file = store.getFileById(fileId);
-  return file?.path ?? '';
+  return file?.path ?? "";
 }
 
 // ---------------------------------------------------------------------------
@@ -488,7 +486,7 @@ export function analyzeBlastRadius(
     const filePath = getFilePath(store, row.file_id);
 
     // Optionally exclude test files
-    if (!includeTests && (filePath.includes('test') || filePath.includes('spec'))) {
+    if (!includeTests && (filePath.includes("test") || filePath.includes("spec"))) {
       continue;
     }
 
@@ -497,7 +495,7 @@ export function analyzeBlastRadius(
     // BlastRadiusResult does not include an edge_type from the traversal
     // (the CTE follows all edge types). We label the edge_type based on depth:
     // depth 0 = seed (the entity itself), depth > 0 = "dependency".
-    const edgeType = row.depth === 0 ? 'seed' : 'dependency';
+    const edgeType = row.depth === 0 ? "seed" : "dependency";
 
     entries.push({
       entity_name: row.name,

@@ -1,17 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
-import {
-  parseFlowContent,
-  resolveFragments,
-  validateFlow,
-  loadAndResolveFlow,
-} from "../orchestration/flow-parser.ts";
-import type {
-  FlowDefinition,
-  FragmentDefinition,
-  ResolvedFlow,
-} from "../orchestration/flow-schema.ts";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { loadAndResolveFlow, parseFlowContent, resolveFragments, validateFlow } from "../orchestration/flow-parser.ts";
+import type { FlowDefinition, FragmentDefinition, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -60,9 +51,7 @@ Review the code changes.
     expect(frontmatter.states).toBeDefined();
 
     expect(Object.keys(spawnInstructions)).toEqual(["build", "review"]);
-    expect(spawnInstructions["build"]).toBe(
-      "Build the project. Save output to workspace.",
-    );
+    expect(spawnInstructions["build"]).toBe("Build the project. Save output to workspace.");
     expect(spawnInstructions["review"]).toBe("Review the code changes.");
   });
 

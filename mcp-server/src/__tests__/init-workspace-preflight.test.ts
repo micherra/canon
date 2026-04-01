@@ -8,10 +8,10 @@
  * write serialization; file-based locking is no longer used.
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
@@ -55,11 +55,7 @@ const baseInput = {
 describe("init_workspace — preflight checks", () => {
   it("skips preflight when preflight option is omitted", async () => {
     const projectDir = makeTmpProjectDir();
-    const result = await initWorkspaceFlow(
-      { ...baseInput },
-      projectDir,
-      "/fake/plugin",
-    );
+    const result = await initWorkspaceFlow({ ...baseInput }, projectDir, "/fake/plugin");
 
     // Should proceed to create workspace normally
     expect(result.created).toBe(true);
@@ -79,11 +75,7 @@ describe("init_workspace — preflight checks", () => {
     spawnSync("git", ["add", "."], { cwd: projectDir });
     spawnSync("git", ["commit", "-m", "init"], { cwd: projectDir });
 
-    const result = await initWorkspaceFlow(
-      { ...baseInput, preflight: true },
-      projectDir,
-      "/fake/plugin",
-    );
+    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
 
     // Clean state — should proceed to create workspace
     expect(result.created).toBe(true);
@@ -104,15 +96,11 @@ describe("init_workspace — preflight checks", () => {
     // Create dirty state
     writeFileSync(join(projectDir, "dirty.txt"), "uncommitted");
 
-    const result = await initWorkspaceFlow(
-      { ...baseInput, preflight: true },
-      projectDir,
-      "/fake/plugin",
-    );
+    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
 
     expect(result.created).toBe(false);
     expect(result.preflight_issues).toBeDefined();
-    expect(result.preflight_issues!.some(i => i.includes("Uncommitted changes"))).toBe(true);
+    expect(result.preflight_issues!.some((i) => i.includes("Uncommitted changes"))).toBe(true);
   });
 
   it("does not report a lock issue even when .lock file exists (SQLite handles concurrency)", async () => {
@@ -133,11 +121,7 @@ describe("init_workspace — preflight checks", () => {
     spawnSync("git", ["add", "."], { cwd: projectDir });
     spawnSync("git", ["commit", "-m", "init"], { cwd: projectDir });
 
-    const result = await initWorkspaceFlow(
-      { ...baseInput, preflight: true },
-      projectDir,
-      "/fake/plugin",
-    );
+    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
 
     // .lock file is ignored — SQLite WAL handles concurrency
     // The workspace may be created (no lock issues reported)

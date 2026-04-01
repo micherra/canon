@@ -15,10 +15,10 @@
  * restructure, or accidental edit, the domain priming pipeline will silently fail.
  */
 
-import { describe, it, expect } from "vitest";
-import { existsSync, readFileSync } from "fs";
-import { join, dirname, resolve } from "path";
-import { fileURLToPath } from "url";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 
 // Canon repo root — two levels up from mcp-server/src/__tests__/
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,13 +37,7 @@ function readFile(path: string): string {
 
 // ── Domain file existence and structure (domain-03) ──────────────────────────
 
-const BUILT_IN_DOMAINS = [
-  "frontend",
-  "backend-api",
-  "backend-data",
-  "infrastructure",
-  "testing",
-] as const;
+const BUILT_IN_DOMAINS = ["frontend", "backend-api", "backend-data", "infrastructure", "testing"] as const;
 
 describe("domain files — existence", () => {
   for (const domain of BUILT_IN_DOMAINS) {
@@ -55,10 +49,8 @@ describe("domain files — existence", () => {
   it("no unexpected extra files in domains/", () => {
     // The five canonical names are the only ones that should exist.
     // If someone adds a file without updating the architect guidance, flag it.
-    const { readdirSync } = require("fs");
-    const files: string[] = readdirSync(DOMAINS_DIR).filter((f: string) =>
-      f.endsWith(".md")
-    );
+    const { readdirSync } = require("node:fs");
+    const files: string[] = readdirSync(DOMAINS_DIR).filter((f: string) => f.endsWith(".md"));
     const knownNames = BUILT_IN_DOMAINS.map((d) => `${d}.md`);
     const unknown = files.filter((f: string) => !knownNames.includes(f));
     expect(unknown).toEqual([]);

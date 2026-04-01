@@ -1,34 +1,34 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { StateDefinition } from "../orchestration/flow-schema.ts";
 import {
-  normalizeStatus,
-  evaluateTransition,
+  aggregateParallelPerResults,
   applyReviewThresholdToCondition,
   buildHistoryEntry,
+  evaluateTransition,
   isStuck,
-  aggregateParallelPerResults,
+  normalizeStatus,
 } from "../orchestration/transitions.ts";
-import type { StateDefinition } from "../orchestration/flow-schema.ts";
 
 describe("normalizeStatus", () => {
   it.each([
-    ["DONE",                  "done"],
-    ["FIXED",                 "done"],
-    ["fixed",                 "done"],
-    ["PARTIAL_FIX",           "done"],
-    ["FINDINGS",              "done"],
-    ["DONE_WITH_CONCERNS",    "done"],
-    ["NEEDS_CONTEXT",         "hitl"],
-    ["HAS_QUESTIONS",         "has_questions"],
-    ["CLEAN",                 "clean"],
-    ["WARNING",               "warning"],
-    ["BLOCKING",              "blocking"],
-    ["ALL_PASSING",           "all_passing"],
-    ["IMPLEMENTATION_ISSUE",  "implementation_issue"],
-    ["CANNOT_FIX",            "cannot_fix"],
-    ["CRITICAL",              "critical"],
-    ["UPDATED",               "updated"],
-    ["NO_UPDATES",            "no_updates"],
-    ["SomethingNew",          "somethingnew"],  // default: toLowerCase
+    ["DONE", "done"],
+    ["FIXED", "done"],
+    ["fixed", "done"],
+    ["PARTIAL_FIX", "done"],
+    ["FINDINGS", "done"],
+    ["DONE_WITH_CONCERNS", "done"],
+    ["NEEDS_CONTEXT", "hitl"],
+    ["HAS_QUESTIONS", "has_questions"],
+    ["CLEAN", "clean"],
+    ["WARNING", "warning"],
+    ["BLOCKING", "blocking"],
+    ["ALL_PASSING", "all_passing"],
+    ["IMPLEMENTATION_ISSUE", "implementation_issue"],
+    ["CANNOT_FIX", "cannot_fix"],
+    ["CRITICAL", "critical"],
+    ["UPDATED", "updated"],
+    ["NO_UPDATES", "no_updates"],
+    ["SomethingNew", "somethingnew"], // default: toLowerCase
   ])('normalizeStatus("%s") === "%s"', (input, expected) => {
     expect(normalizeStatus(input)).toBe(expected);
   });
@@ -149,15 +149,30 @@ describe("isStuck", () => {
   describe("same_file_test", () => {
     it("returns true when pairs are identical sets", () => {
       const history = [
-        { pairs: [{ file: "a.ts", test: "a.test.ts" }, { file: "b.ts", test: "b.test.ts" }] },
-        { pairs: [{ file: "b.ts", test: "b.test.ts" }, { file: "a.ts", test: "a.test.ts" }] },
+        {
+          pairs: [
+            { file: "a.ts", test: "a.test.ts" },
+            { file: "b.ts", test: "b.test.ts" },
+          ],
+        },
+        {
+          pairs: [
+            { file: "b.ts", test: "b.test.ts" },
+            { file: "a.ts", test: "a.test.ts" },
+          ],
+        },
       ];
       expect(isStuck(history, "same_file_test")).toBe(true);
     });
 
     it("returns false when current is a subset of previous (different lengths)", () => {
       const history = [
-        { pairs: [{ file: "a.ts", test: "a.test.ts" }, { file: "b.ts", test: "b.test.ts" }] },
+        {
+          pairs: [
+            { file: "a.ts", test: "a.test.ts" },
+            { file: "b.ts", test: "b.test.ts" },
+          ],
+        },
         { pairs: [{ file: "a.ts", test: "a.test.ts" }] },
       ];
       expect(isStuck(history, "same_file_test")).toBe(false);

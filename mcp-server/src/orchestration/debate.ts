@@ -61,8 +61,14 @@ export function debateTeamLabel(index: number): string {
 }
 
 function debateSender(roundNumber: number, teamLabel: string, agent: string): string {
-  const teamSlug = teamLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const agentSlug = agent.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const teamSlug = teamLabel
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  const agentSlug = agent
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   return `round-${roundNumber}-${teamSlug}-${agentSlug}`;
 }
 
@@ -111,9 +117,8 @@ export async function inspectDebateProgress(
   }
 
   const completed = Boolean(convergence?.converged) || lastCompletedRound >= config.max_rounds;
-  const summary = transcriptSections.length > 0
-    ? `## Debate Transcript Summary\n\n${transcriptSections.join("\n\n")}`
-    : undefined;
+  const summary =
+    transcriptSections.length > 0 ? `## Debate Transcript Summary\n\n${transcriptSections.join("\n\n")}` : undefined;
 
   return {
     completed,
@@ -136,10 +141,14 @@ export async function inspectDebateProgress(
  */
 export function roundType(roundNumber: number): RoundType {
   switch (roundNumber) {
-    case 1: return "position";
-    case 2: return "challenge";
-    case 3: return "response";
-    default: return "narrow";
+    case 1:
+      return "position";
+    case 2:
+      return "challenge";
+    case 3:
+      return "response";
+    default:
+      return "narrow";
   }
 }
 
@@ -205,14 +214,17 @@ If you believe the debate has converged and there's nothing meaningful left to d
  * The summary is structured for HITL review: it shows the trajectory of
  * the debate, what converged, and what remains unresolved.
  */
-export async function buildDebateSummary(
-  workspace: string,
-  channel: string,
-): Promise<string> {
+export async function buildDebateSummary(workspace: string, channel: string): Promise<string> {
   const messages = await readMessages(workspace, channel);
   if (messages.length === 0) return "No debate messages found.";
 
-  // Group messages by round (parsed from filename prefix pattern: round-N-)
+  // Infer round number from the channel parameter (primary source) since
+  // the channel is the authoritative identifier for a round. Fall back to
+  // msg.from regex only when the channel doesn't carry round info.
+  const channelRoundMatch = channel.match(/debate-round-(\d+)/i);
+  const channelRoundNum = channelRoundMatch ? parseInt(channelRoundMatch[1], 10) : null;
+
+  // Group messages by round
   const rounds = new Map<number, Message[]>();
   for (const msg of messages) {
     const roundMatch = msg.from.match(/round-(\d+)/i);
@@ -230,9 +242,7 @@ export async function buildDebateSummary(
     sections.push(`### Round ${roundNum} (${type})\n`);
     for (const msg of roundMessages) {
       // Truncate each message to first ~200 chars for the summary
-      const preview = msg.content.length > 200
-        ? msg.content.slice(0, 200).trimEnd() + "..."
-        : msg.content;
+      const preview = msg.content.length > 200 ? `${msg.content.slice(0, 200).trimEnd()}...` : msg.content;
       sections.push(`**${msg.from}:** ${preview}\n`);
     }
   }
@@ -274,9 +284,14 @@ function isNegated(text: string, termIndex: number): boolean {
 
 export function heuristicConvergence(roundMessages: Message[]): ConvergenceResult {
   const convergenceTerms = [
-    "agree", "converged", "consensus", "same conclusion",
-    "nothing left to discuss", "no remaining disagreement",
-    "aligned", "on the same page",
+    "agree",
+    "converged",
+    "consensus",
+    "same conclusion",
+    "nothing left to discuss",
+    "no remaining disagreement",
+    "aligned",
+    "on the same page",
   ];
 
   let convergenceSignals = 0;
@@ -321,9 +336,7 @@ export function buildDebatePrompt(
 ): string {
   const channel = debateChannel(roundNumber);
   const sender = debateSender(roundNumber, teamLabel, agent);
-  const transcriptSection = transcript
-    ? `\n\n## Prior Debate Transcript\n\n${transcript}`
-    : "";
+  const transcriptSection = transcript ? `\n\n## Prior Debate Transcript\n\n${transcript}` : "";
 
   return `${basePrompt}${transcriptSection}\n\n${roundFraming(roundNumber, maxRounds, teamLabel, otherTeamLabels)}\n\n## Debate Coordination\nUse the debate transcript above as your current context.\n\nWhen you finish your contribution, post it with:\npost_message(workspace="${workspace}", channel="${channel}", from="${sender}", content="...")`;
 }

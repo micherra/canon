@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // We mock ../adapters/git-adapter.ts before importing the module under test
 // so that wave_diff tests can control gitExec behavior.
@@ -10,11 +10,12 @@ vi.mock("../adapters/git-adapter.ts", () => ({
   gitExec: vi.fn(),
 }));
 
+import { gitExec } from "../adapters/git-adapter.ts";
 import {
   escapeDollarBrace,
-  resolveWaveVariables,
-  parseTaskIdsForWave,
   extractFilePaths,
+  parseTaskIdsForWave,
+  resolveWaveVariables,
 } from "../orchestration/wave-variables.ts";
 import { gitExec } from "../adapters/git-adapter.ts";
 
@@ -34,9 +35,7 @@ describe("escapeDollarBrace", () => {
   });
 
   it("leaves regular text unchanged", () => {
-    expect(escapeDollarBrace("no dollar brace here")).toBe(
-      "no dollar brace here",
-    );
+    expect(escapeDollarBrace("no dollar brace here")).toBe("no dollar brace here");
   });
 
   it("handles empty string", () => {
@@ -152,10 +151,8 @@ describe("resolveWaveVariables", () => {
   // Helper: create INDEX.md with one wave-1 task
   async function writeIndex(rows: Array<{ id: string; wave: number }>) {
     const header = `## Plan Index\n\n| Task | Wave | Depends on | Files | Principles |\n|------|------|------------|-------|------------|\n`;
-    const body = rows
-      .map((r) => `| ${r.id} | ${r.wave} | -- | file.ts | some-principle |`)
-      .join("\n");
-    await writeFile(join(plansDir, "INDEX.md"), header + body + "\n");
+    const body = rows.map((r) => `| ${r.id} | ${r.wave} | -- | file.ts | some-principle |`).join("\n");
+    await writeFile(join(plansDir, "INDEX.md"), `${header + body}\n`);
   }
 
   // ------------------------------------------------------------------
@@ -381,8 +378,7 @@ describe("resolveWaveVariables", () => {
       { id: "iwc-01", wave: 1 },
       { id: "iwc-02", wave: 2 },
     ]);
-    const maliciousSummary =
-      "Summary with ${dangerous_var} injection attempt and ${another_var}";
+    const maliciousSummary = "Summary with ${dangerous_var} injection attempt and ${another_var}";
     await writeFile(join(plansDir, "iwc-01-SUMMARY.md"), maliciousSummary);
     await writeFile(join(plansDir, "iwc-02-PLAN.md"), "# Plan");
 
@@ -398,10 +394,7 @@ describe("resolveWaveVariables", () => {
 
   it("escapes ${...} patterns in plan content", async () => {
     await writeIndex([{ id: "iwc-01", wave: 1 }]);
-    await writeFile(
-      join(plansDir, "iwc-01-PLAN.md"),
-      "Run: echo ${PATH} and ${HOME}",
-    );
+    await writeFile(join(plansDir, "iwc-01-PLAN.md"), "Run: echo ${PATH} and ${HOME}");
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);
 

@@ -6,8 +6,7 @@ import { runShell } from "../adapters/process-adapter.ts";
 import { DriftStore } from "../drift/store.ts";
 import { computeFilePriorities, type FilePriorityScore } from "../graph/priority.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
-import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
-import type { ReviewEntry } from "../schema.ts";
+import { DriftStore } from "../drift/store.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { sanitizeGitRef } from "../utils/git-ref.ts";
@@ -77,9 +76,10 @@ export interface PrReviewDataOutput {
  *   worth-a-look:    priority_score >= 5 (but not needs-attention)
  *   low-risk:        everything else
  */
-export function classifyFile(
-  file: Omit<PrFileInfo, "bucket" | "reason">,
-): { bucket: PrFileInfo["bucket"]; reason: string } {
+export function classifyFile(file: Omit<PrFileInfo, "bucket" | "reason">): {
+  bucket: PrFileInfo["bucket"];
+  reason: string;
+} {
   const factors = file.priority_factors;
 
   // needs-attention: violations
@@ -130,16 +130,11 @@ export function generateNarrative(
   }
 
   // Determine top layer (most files)
-  const topLayer = layers.length > 0
-    ? layers.reduce((a, b) => (b.file_count > a.file_count ? b : a)).name
-    : "unknown";
+  const topLayer = layers.length > 0 ? layers.reduce((a, b) => (b.file_count > a.file_count ? b : a)).name : "unknown";
 
   // Sentence 1: top layer + description
   const topLayerCount = layers.find((l) => l.name === topLayer)?.file_count ?? 0;
-  const layerDesc =
-    topLayerCount === 1
-      ? `with ${topLayerCount} file changed`
-      : `with ${topLayerCount} files changed`;
+  const layerDesc = topLayerCount === 1 ? `with ${topLayerCount} file changed` : `with ${topLayerCount} files changed`;
   const sentence1 = `This PR primarily touches the ${topLayer} layer — ${layerDesc}.`;
 
   // Sentence 2: totals
@@ -177,9 +172,7 @@ export function generateNarrative(
     sentence4 = `There ${totalViolations === 1 ? "is" : "are"} ${totalViolations} principle ${vWord} to address.`;
   }
 
-  return [sentence1, sentence2, sentence3, sentence4]
-    .filter(Boolean)
-    .join(" ");
+  return [sentence1, sentence2, sentence3, sentence4].filter(Boolean).join(" ");
 }
 
 /**
@@ -192,9 +185,7 @@ export function generateNarrative(
  *
  * Violations accumulate across reviews — later reviews do not overwrite earlier ones.
  */
-export function buildFileViolationMap(
-  reviews: ReviewEntry[],
-): Map<string, PrViolation[]> {
+export function buildFileViolationMap(reviews: ReviewEntry[]): Map<string, PrViolation[]> {
   const map = new Map<string, PrViolation[]>();
 
   for (const review of reviews) {
@@ -227,30 +218,78 @@ export function buildFileViolationMap(
  * and merges priority scores from graph data. The caller (UI) gets everything
  * in one call.
  */
-export async function getPrReviewData(
-  input: PrReviewDataInput,
-  projectDir: string
-): Promise<PrReviewDataOutput> {
-  const driftStore = new DriftStore(projectDir);
-
-  // Determine whether this is a gh pr diff (name-only) or git diff (name-status)
-  const isPrNumberMode = input.pr_number !== undefined;
-
-  // Build structured command — never string-split later
-  let diffCmd: DiffCommand;
-  if (isPrNumberMode) {
-    if (!Number.isInteger(input.pr_number) || input.pr_number! <= 0) {
+/** Build the diff command based on input mode (PR number, branch, or HEAD). */
+function buildDiffCommand(input: PrReviewDataInput): DiffCommand {
+  if (input.pr_number !== undefined) {
+    if (!Number.isInteger(input.pr_number) || input.pr_number <= 0) {
       throw new Error("pr_number must be a positive integer");
     }
-    diffCmd = { cmd: "gh", args: ["pr", "diff", String(input.pr_number), "--name-only"] };
-  } else if (input.branch) {
+    return { cmd: "gh", args: ["pr", "diff", String(input.pr_number), "--name-only"] };
+  }
+  if (input.branch) {
     const base = sanitizeGitRef(input.diff_base || "main");
     const branch = sanitizeGitRef(input.branch);
-    diffCmd = { cmd: "git", args: ["diff", `${base}..${branch}`, "--name-status"] };
-  } else {
-    const base = sanitizeGitRef(input.diff_base || "main");
-    diffCmd = { cmd: "git", args: ["diff", `${base}..HEAD`, "--name-status"] };
+    return { cmd: "git", args: ["diff", `${base}..${branch}`, "--name-status"] };
   }
+  const base = sanitizeGitRef(input.diff_base || "main");
+  return { cmd: "git", args: ["diff", `${base}..HEAD`, "--name-status"] };
+}
+
+/** Load cached graph data and build a priority map. */
+async function loadGraphAndPriorities(projectDir: string): Promise<{
+  graphDataAgeMs?: number;
+  loadedGraph?: {
+    nodes: Array<{ id: string; layer: string; violation_count: number; changed: boolean }>;
+    edges: Array<{ source: string; target: string }>;
+  };
+  priorityMap: Map<string, FilePriorityScore>;
+}> {
+  const priorityMap = new Map<string, FilePriorityScore>();
+  let graphDataAgeMs: number | undefined;
+  try {
+    const graphPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
+    const [raw, graphStat] = await Promise.all([readFile(graphPath, "utf-8"), stat(graphPath)]);
+    graphDataAgeMs = Date.now() - graphStat.mtimeMs;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+      const prioritizedFiles = computeFilePriorities(parsed.nodes, parsed.edges);
+      for (const pf of prioritizedFiles) priorityMap.set(pf.path, pf);
+      return { graphDataAgeMs, loadedGraph: parsed, priorityMap };
+    }
+  } catch {
+    // No graph data available — graphDataAgeMs may still be set if stat succeeded
+  }
+  return { graphDataAgeMs, priorityMap };
+}
+
+/** Compute blast radius from KG database or fall back to graph edges. */
+function computeBlastRadiusForPr(
+  files: PrFileInfo[],
+  projectDir: string,
+  loadedGraph?: { edges: Array<{ source: string; target: string }> },
+): BlastRadiusEntry[] {
+  const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  if (existsSync(kgDbPath)) {
+    let db: ReturnType<typeof initDatabase> | undefined;
+    try {
+      db = initDatabase(kgDbPath);
+      return computeBlastRadiusFromKg(files, db);
+    } catch {
+      if (loadedGraph) return computeBlastRadius(files, loadedGraph.edges);
+    } finally {
+      db?.close();
+    }
+  } else if (loadedGraph) {
+    return computeBlastRadius(files, loadedGraph.edges);
+  }
+  return [];
+}
+
+export async function getPrReviewData(input: PrReviewDataInput, projectDir: string): Promise<PrReviewDataOutput> {
+  const driftStore = new DriftStore(projectDir);
+  const isPrNumberMode = input.pr_number !== undefined;
+
+  let diffCmd = buildDiffCommand(input);
 
   // Check for incremental review
   let lastReviewedSha: string | undefined;
@@ -262,50 +301,14 @@ export async function getPrReviewData(
     }
   }
 
-  // Human-readable command string for display
   const diffCommand = `${diffCmd.cmd} ${diffCmd.args.join(" ")}`;
+  const { graphDataAgeMs, loadedGraph, priorityMap } = await loadGraphAndPriorities(projectDir);
 
-  // Load graph data once — used for both priority enrichment and blast radius
-  let graphDataAgeMs: number | undefined;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let loadedGraph: { nodes: any[]; edges: Array<{ source: string; target: string }> } | undefined;
-  try {
-    const graphPath = join(projectDir, CANON_DIR, CANON_FILES.GRAPH_DATA);
-    const [raw, graphStat] = await Promise.all([
-      readFile(graphPath, "utf-8"),
-      stat(graphPath),
-    ]);
-    graphDataAgeMs = Date.now() - graphStat.mtimeMs;
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
-      loadedGraph = parsed;
-    }
-  } catch {
-    // No graph data available — priority enrichment and blast radius skipped
-  }
-
-  // Enrich with graph-aware priority scores if graph data exists
-  let prioritizedFiles: FilePriorityScore[] | undefined;
-  if (loadedGraph) {
-    prioritizedFiles = computeFilePriorities(loadedGraph.nodes, loadedGraph.edges);
-  }
-
-  // Build a map from path -> priority score for fast merge
-  const priorityMap = new Map<string, FilePriorityScore>();
-  if (prioritizedFiles) {
-    for (const pf of prioritizedFiles) {
-      priorityMap.set(pf.path, pf);
-    }
-  }
-
-  // Load layer inferrer
   const layerMappings = await loadLayerMappings(projectDir);
   const inferLayer = buildLayerInferrer(layerMappings);
 
-  // Run the diff command and parse the output
   let files: PrFileInfo[] = [];
   let execError: string | undefined;
-
   try {
     const stdout = await runDiffCommand(diffCmd, projectDir);
     files = parseDiffOutput(stdout, isPrNumberMode, inferLayer, priorityMap);
@@ -315,77 +318,35 @@ export async function getPrReviewData(
 
   // Build layer grouping
   const layerCounts = new Map<string, number>();
-  for (const f of files) {
-    layerCounts.set(f.layer, (layerCounts.get(f.layer) || 0) + 1);
-  }
-  const layers = Array.from(layerCounts.entries()).map(([name, file_count]) => ({
-    name,
-    file_count,
-  }));
+  for (const f of files) layerCounts.set(f.layer, (layerCounts.get(f.layer) || 0) + 1);
+  const layers = Array.from(layerCounts.entries()).map(([name, file_count]) => ({ name, file_count }));
 
-  // Classify each file into a bucket with a human-readable reason
+  // Classify and attach violations
   for (const file of files) {
     const { bucket, reason } = classifyFile(file);
     file.bucket = bucket;
     file.reason = reason;
   }
 
-  // Attach per-file violations from DriftStore general reviews
   try {
     const reviews = await driftStore.getReviews();
     const fileViolationMap = buildFileViolationMap(reviews);
-    for (const file of files) {
-      file.violations = fileViolationMap.get(file.path) ?? [];
-    }
+    for (const file of files) file.violations = fileViolationMap.get(file.path) ?? [];
   } catch {
-    // DriftStore unavailable — violations skipped, each file gets empty array
-    for (const file of files) {
-      file.violations = [];
-    }
+    for (const file of files) file.violations = [];
   }
 
-  // Generate plain-English narrative
   const narrative = generateNarrative(files, layers);
+  const blastRadius = computeBlastRadiusForPr(files, projectDir, loadedGraph);
 
-  // Compute blast radius — prefer KG-backed unified blast radius, fall back to graph-data.json
-  let blastRadius: BlastRadiusEntry[] = [];
-  const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  if (existsSync(kgDbPath)) {
-    let db: ReturnType<typeof initDatabase> | undefined;
-    try {
-      db = initDatabase(kgDbPath);
-      blastRadius = computeBlastRadiusFromKg(files, db);
-    } catch {
-      // KG unavailable — fall back to graph-data.json approach
-      if (loadedGraph) {
-        blastRadius = computeBlastRadius(files, loadedGraph.edges);
-      }
-    } finally {
-      db?.close();
-    }
-  } else if (loadedGraph) {
-    blastRadius = computeBlastRadius(files, loadedGraph.edges);
-  }
-
-  // Split files: lightweight summaries for clustering, full entries only for impactful files
-  const fileSummaries: PrFileSummary[] = files.map(f => ({
-    path: f.path,
-    layer: f.layer,
-    status: f.status,
-  }));
-
-  const impactFiles = files.filter(f =>
-    f.bucket === "needs-attention" ||
-    (f.priority_score ?? 0) >= 15 ||
-    (f.violations && f.violations.length > 0),
+  const fileSummaries: PrFileSummary[] = files.map((f) => ({ path: f.path, layer: f.layer, status: f.status }));
+  const impactFiles = files.filter(
+    (f) => f.bucket === "needs-attention" || (f.priority_score ?? 0) >= 15 || (f.violations && f.violations.length > 0),
   );
 
-  // Pre-compute aggregates so the UI doesn't need the full list
-  const totalViolations = files.reduce(
-    (sum, f) => sum + (f.violations?.length ?? 0), 0,
-  );
-  const added = files.filter(f => f.status === "added").length;
-  const deleted = files.filter(f => f.status === "deleted").length;
+  const totalViolations = files.reduce((sum, f) => sum + (f.violations?.length ?? 0), 0);
+  const added = files.filter((f) => f.status === "added").length;
+  const deleted = files.filter((f) => f.status === "deleted").length;
 
   return {
     files: fileSummaries,
@@ -410,20 +371,13 @@ export async function getPrReviewData(
  * for backward compatibility with the PR output shape.
  * Takes top 2-3 files by in_degree (minimum threshold: 3).
  */
-function computeBlastRadiusFromKg(
-  files: PrFileInfo[],
-  db: ReturnType<typeof initDatabase>,
-): BlastRadiusEntry[] {
+function computeBlastRadiusFromKg(files: PrFileInfo[], db: ReturnType<typeof initDatabase>): BlastRadiusEntry[] {
   const IN_DEGREE_THRESHOLD = 3;
   const MAX_SEEDS = 3;
   const MAX_AFFECTED_PER_SEED = 10;
 
   const candidates = files
-    .filter(
-      (f) =>
-        f.priority_factors?.is_changed &&
-        (f.priority_factors?.in_degree ?? 0) >= IN_DEGREE_THRESHOLD,
-    )
+    .filter((f) => f.priority_factors?.is_changed && (f.priority_factors?.in_degree ?? 0) >= IN_DEGREE_THRESHOLD)
     .sort((a, b) => (b.priority_factors?.in_degree ?? 0) - (a.priority_factors?.in_degree ?? 0))
     .slice(0, MAX_SEEDS);
 
@@ -431,9 +385,7 @@ function computeBlastRadiusFromKg(
 
   return candidates.map((seed) => {
     const report = computeUnifiedBlastRadius(db, seed.path, { maxDepth: 1 });
-    const affected = report.affected
-      .slice(0, MAX_AFFECTED_PER_SEED)
-      .map((f) => ({ path: f.path, depth: f.depth }));
+    const affected = report.affected.slice(0, MAX_AFFECTED_PER_SEED).map((f) => ({ path: f.path, depth: f.depth }));
     return { file: seed.path, affected };
   });
 }
@@ -445,21 +397,14 @@ function computeBlastRadiusFromKg(
  * Caps at 10 affected files per seed.
  * @deprecated Prefer computeBlastRadiusFromKg() when KG database is available.
  */
-function computeBlastRadius(
-  files: PrFileInfo[],
-  edges: Array<{ source: string; target: string }>,
-): BlastRadiusEntry[] {
+function computeBlastRadius(files: PrFileInfo[], edges: Array<{ source: string; target: string }>): BlastRadiusEntry[] {
   const IN_DEGREE_THRESHOLD = 3;
   const MAX_SEEDS = 3;
   const MAX_AFFECTED_PER_SEED = 10;
 
   // Find changed files with in_degree >= threshold, sorted descending
   const candidates = files
-    .filter(
-      (f) =>
-        f.priority_factors?.is_changed &&
-        (f.priority_factors?.in_degree ?? 0) >= IN_DEGREE_THRESHOLD,
-    )
+    .filter((f) => f.priority_factors?.is_changed && (f.priority_factors?.in_degree ?? 0) >= IN_DEGREE_THRESHOLD)
     .sort((a, b) => (b.priority_factors?.in_degree ?? 0) - (a.priority_factors?.in_degree ?? 0))
     .slice(0, MAX_SEEDS);
 
@@ -514,9 +459,12 @@ type StatusLetter = "A" | "M" | "D" | "R" | string;
 function mapStatus(letter: StatusLetter): PrFileInfo["status"] {
   if (letter.startsWith("R")) return "renamed";
   switch (letter) {
-    case "A": return "added";
-    case "D": return "deleted";
-    default: return "modified";
+    case "A":
+      return "added";
+    case "D":
+      return "deleted";
+    default:
+      return "modified";
   }
 }
 
@@ -535,7 +483,10 @@ function parseDiffOutput(
   inferLayer: (path: string) => string,
   priorityMap: Map<string, FilePriorityScore>,
 ): PrFileInfo[] {
-  const lines = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
   const results: PrFileInfo[] = [];
 
   for (const line of lines) {

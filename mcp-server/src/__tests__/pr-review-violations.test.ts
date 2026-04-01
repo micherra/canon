@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { buildFileViolationMap } from "../tools/pr-review-data.ts";
 import { DriftStore } from "../drift/store.ts";
 import type { ReviewEntry } from "../schema.ts";
+import { buildFileViolationMap } from "../tools/pr-review-data.ts";
 
 // ── buildFileViolationMap unit tests ──
 

@@ -23,10 +23,10 @@
  *  13. Cross-subsystem: showPrImpact prep + review data live together in result.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Module-level mocks — must be declared before any imports of the mocked modules
@@ -52,10 +52,10 @@ vi.mock("../tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 
-import { existsSync } from "fs";
+import { existsSync } from "node:fs";
+import { DriftStore } from "../drift/store.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
-import { DriftStore } from "../drift/store.ts";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -294,11 +294,8 @@ describe("index.ts tool registrations", () => {
   it("get_pr_review_data is not registered as an MCP tool in index.ts", async () => {
     // Read the index source and check that get_pr_review_data does not appear
     // as a registerTool() or registerAppTool() call.
-    const { readFile } = await import("fs/promises");
-    const indexSrc = await readFile(
-      new URL("../../src/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const { readFile } = await import("node:fs/promises");
+    const indexSrc = await readFile(new URL("../../src/index.ts", import.meta.url), "utf-8");
 
     // The tool name must not appear as a registration argument
     expect(indexSrc).not.toMatch(/registerTool\s*\([^)]*['"`]get_pr_review_data['"`]/);
@@ -306,11 +303,8 @@ describe("index.ts tool registrations", () => {
   });
 
   it("show_pr_impact is registered with resource URI ui://canon/pr-review", async () => {
-    const { readFile } = await import("fs/promises");
-    const indexSrc = await readFile(
-      new URL("../../src/index.ts", import.meta.url),
-      "utf-8",
-    );
+    const { readFile } = await import("node:fs/promises");
+    const indexSrc = await readFile(new URL("../../src/index.ts", import.meta.url), "utf-8");
 
     // Must contain the new URI
     expect(indexSrc).toContain("ui://canon/pr-review");
@@ -363,9 +357,9 @@ describe("showPrImpact — path traversal protection", () => {
       verdict: "WARNING",
       pr_number: 1,
       files: [
-        "src/safe.ts",             // safe — should stay
-        "../../../etc/passwd",      // traversal — should be stripped
-        "src/../etc/passwd",        // traversal — should be stripped
+        "src/safe.ts", // safe — should stay
+        "../../../etc/passwd", // traversal — should be stripped
+        "src/../etc/passwd", // traversal — should be stripped
       ],
       violations: [
         { principle_id: "p1", severity: "rule", file_path: "src/safe.ts" },
@@ -399,7 +393,7 @@ describe("showPrImpact — path traversal protection", () => {
       pr_number: 1,
       files: [
         "src/safe.ts",
-        "/etc/passwd",            // absolute — should be stripped
+        "/etc/passwd", // absolute — should be stripped
       ],
       violations: [],
       honored: [],
@@ -452,9 +446,7 @@ describe("showPrImpact — violations without file_path", () => {
       makeReview({
         pr_number: 1,
         files: ["src/a.ts"],
-        violations: [
-          { principle_id: "p1", severity: "rule" as const, file_path: "src/a.ts" },
-        ],
+        violations: [{ principle_id: "p1", severity: "rule" as const, file_path: "src/a.ts" }],
       }),
     );
 
@@ -592,11 +584,11 @@ describe("UI store type contract — field names match server UnifiedPrOutput", 
 
     // All top-level fields declared in ui/stores/pr-review.ts UnifiedPrOutput
     // must be present (except optional ones may be undefined)
-    expect(result).toHaveProperty("status");         // "ok" | "no_diff_error"
-    expect(result).toHaveProperty("prep");            // PrepData — always present
-    expect(result).toHaveProperty("hotspots");        // PrImpactHotspot[]
-    expect(result).toHaveProperty("subgraph");        // PrImpactSubgraph
-    expect(result).not.toHaveProperty("decisions");  // decisions removed from output
+    expect(result).toHaveProperty("status"); // "ok" | "no_diff_error"
+    expect(result).toHaveProperty("prep"); // PrepData — always present
+    expect(result).toHaveProperty("hotspots"); // PrImpactHotspot[]
+    expect(result).toHaveProperty("subgraph"); // PrImpactSubgraph
+    expect(result).not.toHaveProperty("decisions"); // decisions removed from output
     // review and blastRadius are optional
     expect(result.review).toBeDefined();
 

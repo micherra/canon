@@ -6,7 +6,7 @@
  * SDK errors.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock the ext-apps module before importing bridge
@@ -27,9 +27,15 @@ class MockApp {
   getHostContext = mockGetHostContext;
   callServerTool = mockCallServerTool;
   sendMessage = mockSendMessage;
-  set onhostcontextchanged(_cb: unknown) { /* no-op */ }
-  set ontoolresult(_cb: unknown) { /* no-op */ }
-  set onerror(_cb: unknown) { /* no-op */ }
+  set onhostcontextchanged(_cb: unknown) {
+    /* no-op */
+  }
+  set ontoolresult(_cb: unknown) {
+    /* no-op */
+  }
+  set onerror(_cb: unknown) {
+    /* no-op */
+  }
 }
 
 vi.mock("@modelcontextprotocol/ext-apps", () => ({
@@ -93,4 +99,3 @@ describe("bridge.sendMessage()", () => {
     await expect(bridge.sendMessage("hello")).rejects.toThrow("SDK transport error");
   });
 });
-

@@ -78,7 +78,5 @@ export function clusterDiff(
   const files = getChangedFiles(baseCommit);
   if (files.length <= threshold) return null;
 
-  return strategy === "layer"
-    ? clusterByLayer(files)
-    : clusterByDirectory(files);
+  return strategy === "layer" ? clusterByLayer(files) : clusterByDirectory(files);
 }

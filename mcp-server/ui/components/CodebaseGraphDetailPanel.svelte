@@ -1,31 +1,30 @@
 <script lang="ts">
-  /**
-   * CodebaseGraphDetailPanel.svelte
-   *
-   * Right-side detail panel shown when a node is selected in CodebaseGraph.
-   * Displays node metadata, dependencies (in/out edges), entities, exports,
-   * and violations.
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders node detail panel only
-   *   - compose-from-small-to-large: standalone leaf; composed by CodebaseGraph.svelte
-   */
+/**
+ * CodebaseGraphDetailPanel.svelte
+ *
+ * Right-side detail panel shown when a node is selected in CodebaseGraph.
+ * Displays node metadata, dependencies (in/out edges), entities, exports,
+ * and violations.
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders node detail panel only
+ *   - compose-from-small-to-large: standalone leaf; composed by CodebaseGraph.svelte
+ */
 
-  import Badge from "./Badge.svelte";
-  import type { GraphNode } from "../lib/types";
+import type { GraphNode } from "../lib/types";
 
-  // ── Props ─────────────────────────────────────────────────────────────────
+// ── Props ─────────────────────────────────────────────────────────────────
 
-  interface CodebaseGraphDetailPanelProps {
-    selectedNode: GraphNode;
-    layerColors: Record<string, string>;
-    edgesIn: Map<string, string[]>;
-    edgesOut: Map<string, string[]>;
-    onClose: () => void;
-  }
+interface CodebaseGraphDetailPanelProps {
+  selectedNode: GraphNode;
+  layerColors: Record<string, string>;
+  edgesIn: Map<string, string[]>;
+  edgesOut: Map<string, string[]>;
+  onClose: () => void;
+}
 
-  let { selectedNode, layerColors, edgesIn, edgesOut, onClose }: CodebaseGraphDetailPanelProps =
-    $props();
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { selectedNode, layerColors, edgesIn, edgesOut, onClose }: CodebaseGraphDetailPanelProps = $props();
 </script>
 
 <div class="detail-panel">

@@ -48,6 +48,8 @@ vi.mock("../orchestration/wave-variables.ts", () => ({
 
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
@@ -661,9 +663,7 @@ describe("enterAndPrepareState", () => {
       store.upsertState("done", { status: "pending", entries: 0 });
 
       // escapeDollarBrace should escape the injection string
-      vi.mocked(escapeDollarBrace).mockImplementation((s: string) =>
-        s.replace(/\$\{/g, "\\${")
-      );
+      vi.mocked(escapeDollarBrace).mockImplementation((s: string) => s.replace(/\$\{/g, "\\${"));
 
       const flow = makeFlowWithConsultations("between");
       vi.mocked(resolveConsultationPrompt).mockReturnValue(null);

@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { storePrReview } from "../tools/store-pr-review.ts";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DriftStore } from "../drift/store.ts";
+import { storePrReview } from "../tools/store-pr-review.ts";
 
 describe("storePrReview", () => {
   let tmpDir: string;
@@ -32,7 +32,7 @@ describe("storePrReview", () => {
           conventions: { passed: 1, total: 1 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     const after = Date.now();
@@ -68,7 +68,7 @@ describe("storePrReview", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     // Format: rev_YYYYMMDD_<16 hex chars>
@@ -88,7 +88,7 @@ describe("storePrReview", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     expect(result.recorded).toBe(true);
@@ -130,7 +130,7 @@ describe("storePrReview", () => {
           { path: "src/b.ts", priority_score: 0.4 },
         ],
       },
-      tmpDir
+      tmpDir,
     );
 
     expect(result.recorded).toBe(true);
@@ -183,7 +183,7 @@ describe("storePrReview", () => {
         },
         recommendations,
       },
-      tmpDir
+      tmpDir,
     );
 
     expect(result.recorded).toBe(true);
@@ -209,7 +209,7 @@ describe("storePrReview", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     const store = new DriftStore(tmpDir);

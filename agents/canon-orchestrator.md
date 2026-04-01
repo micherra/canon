@@ -167,8 +167,8 @@ ws = init_workspace({
 ```
 
 - **`ws.preflight_issues`** (array): If non-empty, pre-flight failed. Present issues to user and wait. Do not proceed until resolved.
-- **`ws.created == true`** (new): Proceed to state machine.
-- **`ws.created == false`** (resume): `ws.resume_state` tells you where to continue. This happens when the same task is re-initiated on the same branch.
+- **`ws.created == true`** (new): Proceed to state machine. `init_workspace` also creates a git worktree at `.canon/worktrees/{slug}` on branch `canon-build/{slug}` and returns `ws.worktree_path` and `ws.worktree_branch`. If worktree creation fails (e.g., not in a git repo), these fields are `undefined` and the build continues normally.
+- **`ws.created == false`** (resume): `ws.resume_state` tells you where to continue. This happens when the same task is re-initiated on the same branch. `ws.worktree_path` is returned if the worktree still exists on disk, or `undefined` if it has been cleaned up.
 - **`ws.briefs`** (optional): Array of briefs from prior chat discussions. If present, copy relevant briefs into `${WORKSPACE}/research/` as pre-research context. When the flow enters a research state, the researcher will find these and can build on them instead of starting from scratch. After copying, update the brief's status to `consumed` in the source file.
 
 If `session.json` has `status: "aborted"`, ask: "Found an aborted build. Resume or start fresh?"
@@ -222,6 +222,7 @@ Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells yo
 
 **`wave`**: Read `${WORKSPACE}/plans/${slug}/INDEX.md` for task grouping. For each wave:
 1. Create worktrees: `git worktree add .canon/worktrees/{task_id} -b canon-wave/{task_id} HEAD`
+1b. Persist worktree tracking: `update_board(set_wave_progress)` with `worktree_entries` containing `{task_id, worktree_path, branch, status: "active"}` for each task. This enables resume after interruption.
 2. Build wave briefing (waves 2+) from previous wave's `*-SUMMARY.md` files
 3. Handle before/between consultations per the flow definition (returned by enter_and_prepare_state)
 4. Spawn one sub-agent per task concurrently with `isolation: "worktree"`
@@ -379,3 +380,15 @@ Your state is fully externalized to `board.json`. If your context resets:
 4. Continue from `current_state`
 
 You hold no state in your context window between transitions. Every transition is: read board → decide → act → write board.
+
+### Worktree Resume Protocol
+
+When resuming a wave state that was interrupted (e.g., by rate limit):
+
+1. `enter_and_prepare_state` returns `worktree_entries` — an array of `{task_id, worktree_path, branch, status}` for tasks that were already spawned
+2. For each task with `status: "active"`:
+   - Verify the worktree exists on disk: `test -d {worktree_path}`
+   - If it exists, spawn the agent with `isolation: "worktree"` pointing to that path
+   - If it does not exist (cleaned up), recreate: `git worktree add {worktree_path} -b {branch} HEAD`
+3. For tasks with `status: "merged"` or `status: "failed"`, skip — they are already resolved
+4. The `worktree_path` field on each `SpawnPromptEntry` is pre-populated when worktree data exists on the board

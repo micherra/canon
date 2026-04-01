@@ -1,5 +1,5 @@
-import { DriftStore, type WeeklyTrendPoint } from "../drift/store.ts";
 import { analyzeDrift } from "../drift/analyzer.ts";
+import { DriftStore, type WeeklyTrendPoint } from "../drift/store.ts";
 import { loadAllPrinciples } from "../matcher.ts";
 
 export interface ComplianceInput {
@@ -21,7 +21,7 @@ export interface ComplianceOutput {
 export async function getCompliance(
   input: ComplianceInput,
   projectDir: string,
-  pluginDir: string
+  pluginDir: string,
 ): Promise<ComplianceOutput> {
   const store = new DriftStore(projectDir);
 
@@ -53,16 +53,12 @@ export async function getCompliance(
     principleId: input.principle_id,
   });
 
-  const stats = report.most_violated.find(
-    (s) => s.principle_id === input.principle_id
-  );
+  const stats = report.most_violated.find((s) => s.principle_id === input.principle_id);
 
   // If principle wasn't in most_violated, check if it was honored
   if (!stats) {
     // Count times honored — already filtered to this principle
-    const honored = reviews.filter((r) =>
-      r.honored.includes(input.principle_id)
-    ).length;
+    const honored = reviews.filter((r) => r.honored.includes(input.principle_id)).length;
 
     return {
       principle_id: input.principle_id,

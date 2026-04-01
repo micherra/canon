@@ -11,13 +11,13 @@
  * (better-sqlite3 is sync), so the module exports synchronous functions.
  */
 
-import Database from 'better-sqlite3';
-import { writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
-import path from 'node:path';
-import { randomBytes } from 'node:crypto';
-import { KgQuery } from './kg-query.ts';
-import { CANON_DIR, CANON_FILES } from '../constants.ts';
-import type { GraphNode, GraphEdge, CodebaseGraphOutput } from '../tools/codebase-graph.ts';
+import { randomBytes } from "node:crypto";
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import type Database from "better-sqlite3";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import type { CodebaseGraphOutput, GraphEdge, GraphNode } from "../tools/codebase-graph.ts";
+import { KgQuery } from "./kg-query.ts";
 
 // ---------------------------------------------------------------------------
 // GraphData — the shape written to graph-data.json
@@ -37,7 +37,7 @@ export interface KgGraphNode extends GraphNode {
  * Minimal output shape written by the materializer.
  * Reuses CodebaseGraphOutput but nodes carry KgGraphNode.
  */
-export type GraphData = Omit<CodebaseGraphOutput, 'nodes'> & {
+export type GraphData = Omit<CodebaseGraphOutput, "nodes"> & {
   nodes: KgGraphNode[];
 };
 
@@ -46,12 +46,12 @@ export type GraphData = Omit<CodebaseGraphOutput, 'nodes'> & {
 // ---------------------------------------------------------------------------
 
 /** Map a DB edge_type string to the GraphEdge union type. */
-function mapEdgeType(edgeType: string): GraphEdge['type'] {
-  if (edgeType === 'imports') return 'import';
-  if (edgeType === 're-exports') return 're-export';
-  if (edgeType === 'composition') return 'composition';
+function mapEdgeType(edgeType: string): GraphEdge["type"] {
+  if (edgeType === "imports") return "import";
+  if (edgeType === "re-exports") return "re-export";
+  if (edgeType === "composition") return "composition";
   // All other entity-level edge types fall back to import for compatibility
-  return 'import';
+  return "import";
 }
 
 /**
@@ -60,34 +60,37 @@ function mapEdgeType(edgeType: string): GraphEdge['type'] {
  */
 function inferKind(filePath: string): string {
   const lower = filePath.toLowerCase();
-  if (lower.includes('__tests__') || lower.includes('.test.') || lower.includes('.spec.')) {
-    return 'test';
+  if (lower.includes("__tests__") || lower.includes(".test.") || lower.includes(".spec.")) {
+    return "test";
   }
-  if (lower.endsWith('.json') || lower.endsWith('.yaml') || lower.endsWith('.yml') || lower.endsWith('.toml')) {
-    return 'config';
+  if (lower.endsWith(".json") || lower.endsWith(".yaml") || lower.endsWith(".yml") || lower.endsWith(".toml")) {
+    return "config";
   }
-  if (lower.endsWith('.md')) {
-    return 'doc';
+  if (lower.endsWith(".md")) {
+    return "doc";
   }
-  if (lower.endsWith('.sh') || lower.endsWith('.bash')) {
-    return 'script';
+  if (lower.endsWith(".sh") || lower.endsWith(".bash")) {
+    return "script";
   }
-  return 'source';
+  return "source";
 }
 
 /** Synchronous atomic write — writes to a tmp file then renames. */
 function atomicWriteFileSync(filePath: string, data: string): void {
-  const suffix = `${process.pid}.${randomBytes(4).toString('hex')}`;
+  const suffix = `${process.pid}.${randomBytes(4).toString("hex")}`;
   const tmpPath = `${filePath}.tmp.${suffix}`;
   try {
-    writeFileSync(tmpPath, data, 'utf-8');
+    writeFileSync(tmpPath, data, "utf-8");
     try {
       renameSync(tmpPath, filePath);
-    } catch (renameErr: any) {
+    } catch (renameErr: unknown) {
       // On Windows, rename can fail when dest exists — remove and retry
-      if (renameErr.code === 'EPERM' || renameErr.code === 'EEXIST' || renameErr.code === 'EACCES') {
-        try { unlinkSync(filePath); } catch (e: any) {
-          if (e.code !== 'ENOENT') throw e;
+      const renameCode = (renameErr as NodeJS.ErrnoException).code;
+      if (renameCode === "EPERM" || renameCode === "EEXIST" || renameCode === "EACCES") {
+        try {
+          unlinkSync(filePath);
+        } catch (e: unknown) {
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
         }
         renameSync(tmpPath, filePath);
       } else {
@@ -96,7 +99,11 @@ function atomicWriteFileSync(filePath: string, data: string): void {
     }
   } catch (err) {
     // Clean up temp file on failure
-    try { unlinkSync(tmpPath); } catch { /* ignore cleanup failure */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* ignore cleanup failure */
+    }
     throw err;
   }
 }
@@ -147,10 +154,10 @@ export function materialize(db: Database.Database, _projectDir: string): GraphDa
 
     const node: KgGraphNode = {
       id: file.path,
-      layer: file.layer || 'unknown',
+      layer: file.layer || "unknown",
       // color is populated by the layer-color overlay; default to neutral
-      color: '#BDC3C7',
-      extension: path.extname(file.path).replace('.', '') || '',
+      color: "#BDC3C7",
+      extension: path.extname(file.path).replace(".", "") || "",
       violation_count: 0,
       top_violations: [],
       last_verdict: null,
@@ -172,13 +179,15 @@ export function materialize(db: Database.Database, _projectDir: string): GraphDa
   const edges: GraphEdge[] = [];
 
   // Query all file_edges joined with source/target paths
-  const fileEdgeRows = (db as Database.Database).prepare(`
+  const fileEdgeRows = (db as Database.Database)
+    .prepare(`
     SELECT fe.edge_type, fe.confidence, fe.evidence, fe.relation,
            src.path AS source_path, tgt.path AS target_path
     FROM file_edges fe
     JOIN files src ON src.file_id = fe.source_file_id
     JOIN files tgt ON tgt.file_id = fe.target_file_id
-  `).all() as Array<{
+  `)
+    .all() as Array<{
     edge_type: string;
     confidence: number;
     evidence: string | null;

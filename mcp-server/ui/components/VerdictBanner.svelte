@@ -1,52 +1,51 @@
 <script lang="ts">
-  /**
-   * VerdictBanner.svelte
-   *
-   * Full-width colored banner with verdict badge and a descriptive headline
-   * summarizing the PR review outcome. Replaces VerdictStrip (dd-01).
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders verdict banner only
-   *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
-   */
+/**
+ * VerdictBanner.svelte
+ *
+ * Full-width colored banner with verdict badge and a descriptive headline
+ * summarizing the PR review outcome. Replaces VerdictStrip (dd-01).
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders verdict banner only
+ *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
+ */
 
-  import { VERDICT_COLORS } from "../lib/constants";
-  import { pluralize } from "../lib/utils";
+import { VERDICT_COLORS } from "../lib/constants";
+import { pluralize } from "../lib/utils";
 
-  interface VerdictBannerProps {
-    verdict: "BLOCKING" | "WARNING" | "CLEAN";
-    fileCount: number;
-    layerCount: number;
-    violationCount: number;
-    ruleViolationCount: number;
+interface VerdictBannerProps {
+  verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  fileCount: number;
+  layerCount: number;
+  violationCount: number;
+  ruleViolationCount: number;
+}
+
+let { verdict, fileCount, layerCount, violationCount, ruleViolationCount }: VerdictBannerProps = $props();
+
+const _accentColor = $derived(VERDICT_COLORS[verdict] ?? "#888888");
+
+const _headline = $derived.by(() => {
+  const filePart =
+    fileCount === 0
+      ? "No files changed"
+      : `${fileCount} ${pluralize(fileCount, "file")} across ${layerCount} ${pluralize(layerCount, "layer")}`;
+
+  if (ruleViolationCount === 0 && violationCount === 0) {
+    return `${filePart} — no violations. Ready to merge.`;
   }
 
-  let { verdict, fileCount, layerCount, violationCount, ruleViolationCount }: VerdictBannerProps =
-    $props();
+  const fixPart =
+    ruleViolationCount === 0
+      ? "No blocking issues"
+      : `${ruleViolationCount} ${pluralize(ruleViolationCount, "violation")} to fix before merge`;
 
-  const accentColor = $derived(VERDICT_COLORS[verdict] ?? "#888888");
+  if (ruleViolationCount === 0 && violationCount > 0) {
+    return `${filePart} — ${violationCount} ${pluralize(violationCount, "violation")}. No blocking issues, but ${violationCount} ${pluralize(violationCount, "violation")} need${violationCount === 1 ? "s" : ""} addressing.`;
+  }
 
-  const headline = $derived.by(() => {
-    const filePart =
-      fileCount === 0
-        ? "No files changed"
-        : `${fileCount} ${pluralize(fileCount, "file")} across ${layerCount} ${pluralize(layerCount, "layer")}`;
-
-    if (ruleViolationCount === 0 && violationCount === 0) {
-      return `${filePart} — no violations. Ready to merge.`;
-    }
-
-    const fixPart =
-      ruleViolationCount === 0
-        ? "No blocking issues"
-        : `${ruleViolationCount} ${pluralize(ruleViolationCount, "violation")} to fix before merge`;
-
-    if (ruleViolationCount === 0 && violationCount > 0) {
-      return `${filePart} — ${violationCount} ${pluralize(violationCount, "violation")}. No blocking issues, but ${violationCount} ${pluralize(violationCount, "violation")} need${violationCount === 1 ? "s" : ""} addressing.`;
-    }
-
-    return `${filePart} — ${fixPart}.`;
-  });
+  return `${filePart} — ${fixPart}.`;
+});
 </script>
 
 <div

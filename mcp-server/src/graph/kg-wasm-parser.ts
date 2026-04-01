@@ -14,21 +14,15 @@
  * All .wasm files are bundled in mcp-server/grammars/ and committed to the repo.
  */
 
-import { Parser, Language } from "web-tree-sitter";
-import { fileURLToPath } from "url";
-import { join, dirname } from "path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Language, Parser } from "web-tree-sitter";
 
 // ---------------------------------------------------------------------------
 // Supported languages
 // ---------------------------------------------------------------------------
 
-const SUPPORTED_LANGUAGES = [
-  "typescript",
-  "tsx",
-  "python",
-  "bash",
-  "java",
-] as const;
+const SUPPORTED_LANGUAGES = ["typescript", "tsx", "python", "bash", "java"] as const;
 
 type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
@@ -78,13 +72,7 @@ export async function initParsers(): Promise<void> {
       // scriptName is 'web-tree-sitter.wasm' — resolve it from node_modules
       if (scriptName.endsWith(".wasm")) {
         const thisFile = fileURLToPath(import.meta.url);
-        const nodeModulesDir = join(
-          dirname(thisFile),
-          "..",
-          "..",
-          "node_modules",
-          "web-tree-sitter",
-        );
+        const nodeModulesDir = join(dirname(thisFile), "..", "..", "node_modules", "web-tree-sitter");
         return join(nodeModulesDir, scriptName);
       }
       return scriptName;
@@ -99,11 +87,8 @@ export async function initParsers(): Promise<void> {
     try {
       language = await Language.load(wasmPath);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `kg-wasm-parser: failed to load grammar for '${lang}' from '${wasmPath}': ${message}`,
-      );
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`kg-wasm-parser: failed to load grammar for '${lang}' from '${wasmPath}': ${message}`);
     }
 
     const parser = new Parser();
@@ -122,16 +107,12 @@ export async function initParsers(): Promise<void> {
  */
 export function getParser(language: string): Parser {
   if (!initialized) {
-    throw new Error(
-      "kg-wasm-parser: initParsers() must be called and awaited before getParser()",
-    );
+    throw new Error("kg-wasm-parser: initParsers() must be called and awaited before getParser()");
   }
   const parser = parsers.get(language);
   if (!parser) {
     const supported = SUPPORTED_LANGUAGES.join(", ");
-    throw new Error(
-      `kg-wasm-parser: unknown language '${language}'. Supported languages: ${supported}`,
-    );
+    throw new Error(`kg-wasm-parser: unknown language '${language}'. Supported languages: ${supported}`);
   }
   return parser;
 }

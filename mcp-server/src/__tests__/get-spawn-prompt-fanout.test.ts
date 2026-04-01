@@ -11,10 +11,10 @@
  * - Role substitution still works on fanned-out single prompts
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module import
@@ -33,6 +33,9 @@ import { clusterDiff } from "../orchestration/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
+import { clusterDiff } from "../orchestration/diff-cluster.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -227,7 +230,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       expect(entry.role).toBe("security-reviewer");
     }
   });
-
 });
 
 // ---------------------------------------------------------------------------

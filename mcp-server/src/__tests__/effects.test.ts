@@ -143,12 +143,7 @@ describe("executeEffects", () => {
       effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(
-      stateDef,
-      workspace,
-      ["plans/test-task/REVIEW.md"],
-      tmpDir,
-    );
+    const results = await executeEffects(stateDef, workspace, ["plans/test-task/REVIEW.md"], tmpDir);
 
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe("persist_review");

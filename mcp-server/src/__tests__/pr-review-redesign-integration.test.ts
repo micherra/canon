@@ -24,12 +24,12 @@
  *  10. Svelte component contract: No `truncate` import gap (uses lib/constants)
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
+import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 
 // ── helper ──
 
@@ -42,11 +42,7 @@ function makeMockExecFile(stdout: string, err: Error | null = null) {
   ) => cb(err, err ? "" : stdout, "");
 }
 
-function makeFile(
-  path: string,
-  layer: string,
-  overrides: Partial<PrFileInfo> = {},
-): PrFileInfo {
+function makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {
   return {
     path,
     layer,
@@ -83,10 +79,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
       ],
       edges: [{ source: "src/tools/a.ts", target: "src/graph/b.ts" }],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/tools/a.ts\nM\tsrc/graph/b.ts"),
@@ -118,15 +111,10 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
     // This is the key cross-task contract: classifyFile() is wired inside getPrReviewData()
     // and uses priority_factors populated from graph data.
     const graphData = {
-      nodes: [
-        { id: "src/tools/bad.ts", layer: "tools", violation_count: 3, changed: true },
-      ],
+      nodes: [{ id: "src/tools/bad.ts", layer: "tools", violation_count: 3, changed: true }],
       edges: [],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/tools/bad.ts"),
@@ -188,10 +176,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
   });
 
   it("narrative mentions total file count and layer when files are present", async () => {
-    await writeFile(
-      join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ layers: { tools: ["src/tools"] } }),
-    );
+    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { tools: ["src/tools"] } }));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/tools/a.ts\nA\tsrc/tools/b.ts"),
@@ -227,10 +212,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
       ],
       edges: [],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/tools/bad.ts\nM\tsrc/tools/ok.ts"),
@@ -286,10 +268,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
         { source: "src/c.ts", target: "src/a.ts" },
       ],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/a.ts"),
@@ -320,10 +299,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
         { source: "src/consumer4.ts", target: "src/hub.ts" },
       ],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/hub.ts"),
@@ -357,16 +333,10 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     }));
 
     const graphData = {
-      nodes: [
-        { id: "src/hub.ts", layer: "tools", violation_count: 0, changed: true },
-        ...consumers,
-      ],
+      nodes: [{ id: "src/hub.ts", layer: "tools", violation_count: 0, changed: true }, ...consumers],
       edges,
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     vi.doMock("child_process", () => ({
       execFile: makeMockExecFile("M\tsrc/hub.ts"),
@@ -402,10 +372,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     }
 
     const graphData = { nodes, edges };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     const diffOutput = hubs.map((h) => `M\t${h.id}`).join("\n");
     vi.doMock("child_process", () => ({
@@ -446,10 +413,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
         { source: "src/c5.ts", target: "src/hub.ts" },
       ],
     };
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify(graphData),
-    );
+    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(graphData));
 
     // Only actual-change.ts is in the diff (hub.ts is not changed)
     vi.doMock("child_process", () => ({
@@ -565,10 +529,7 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
   });
 
   it("uses 'layer' (singular) when there is exactly one layer", () => {
-    const files = [
-      makeFile("src/tools/a.ts", "tools"),
-      makeFile("src/tools/b.ts", "tools"),
-    ];
+    const files = [makeFile("src/tools/a.ts", "tools"), makeFile("src/tools/b.ts", "tools")];
     const layers = [{ name: "tools", file_count: 2 }];
 
     const narrative = generateNarrative(files, layers);
@@ -719,26 +680,34 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
 
 function statusIcon(fileStatus: "added" | "modified" | "deleted" | "renamed"): string {
   switch (fileStatus) {
-    case "added":    return "+";
-    case "deleted":  return "−";
-    case "renamed":  return "→";
-    default:         return "~";
+    case "added":
+      return "+";
+    case "deleted":
+      return "−";
+    case "renamed":
+      return "→";
+    default:
+      return "~";
   }
 }
 
 function statusClass(fileStatus: "added" | "modified" | "deleted" | "renamed"): string {
   switch (fileStatus) {
-    case "added":    return "status-added";
-    case "deleted":  return "status-deleted";
-    case "renamed":  return "status-renamed";
-    default:         return "status-modified";
+    case "added":
+      return "status-added";
+    case "deleted":
+      return "status-deleted";
+    case "renamed":
+      return "status-renamed";
+    default:
+      return "status-modified";
   }
 }
 
 function shortPath(path: string): string {
   const parts = path.split("/");
   if (parts.length <= 2) return path;
-  return "…/" + parts.slice(-2).join("/");
+  return `…/${parts.slice(-2).join("/")}`;
 }
 
 function formatAge(ms: number): string {
@@ -749,9 +718,7 @@ function formatAge(ms: number): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function groupByDepth(
-  affected: Array<{ path: string; depth: number }>,
-): Map<number, string[]> {
+function groupByDepth(affected: Array<{ path: string; depth: number }>): Map<number, string[]> {
   const map = new Map<number, string[]>();
   for (const { path, depth } of affected) {
     if (!map.has(depth)) map.set(depth, []);
@@ -859,10 +826,7 @@ describe("PrReview helper: groupByDepth()", () => {
 // This behavior is declared untested in Task 02 Coverage Notes.
 // Testing the pure logic of the toggler extracted from the component.
 
-function setActiveLayer(
-  activeLayer: string | null,
-  layer: string | null,
-): string | null {
+function setActiveLayer(activeLayer: string | null, layer: string | null): string | null {
   return activeLayer === layer ? null : layer;
 }
 
@@ -900,10 +864,7 @@ describe("PrReview setActiveLayer() toggle logic (declared gap)", () => {
 // This is the "No test verifying that activeLayer actually filters file display" gap.
 // Testing the pure filtering logic.
 
-function filteredFiles(
-  allFiles: PrFileInfo[],
-  activeLayer: string | null,
-): PrFileInfo[] {
+function filteredFiles(allFiles: PrFileInfo[], activeLayer: string | null): PrFileInfo[] {
   return activeLayer ? allFiles.filter((f) => f.layer === activeLayer) : allFiles;
 }
 
@@ -962,9 +923,9 @@ describe("filteredFiles derived state logic (declared gap)", () => {
 // 9. Svelte component structural contract: truncate used from lib/constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { readFileSync } from "fs";
-import { join as pathJoin, dirname } from "path";
-import { fileURLToPath } from "url";
+import { readFileSync } from "node:fs";
+import { dirname, join as pathJoin } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiDir = pathJoin(__dirname, "../../ui");

@@ -1,4 +1,4 @@
-import { matchPrinciples, loadAllPrinciples } from "../matcher.ts";
+import { loadAllPrinciples, matchPrinciples } from "../matcher.ts";
 
 export interface ListPrinciplesInput {
   filter_severity?: "rule" | "strong-opinion" | "convention";
@@ -25,7 +25,7 @@ export interface ListPrinciplesOutput {
 export async function listPrinciples(
   input: ListPrinciplesInput,
   projectDir: string,
-  pluginDir: string
+  pluginDir: string,
 ): Promise<ListPrinciplesOutput> {
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
 

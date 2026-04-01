@@ -5,7 +5,7 @@
  * and violations with message are accepted and typed correctly.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { reportInputSchema } from "../schema.ts";
 
 // ---------------------------------------------------------------------------

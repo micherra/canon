@@ -1,4 +1,4 @@
-import { loadAndResolveFlow, buildStateGraph } from "../orchestration/flow-parser.ts";
+import { buildStateGraph, loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
 

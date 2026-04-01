@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { classifyMdNode, buildNameMaps, inferMdRelations } from "../graph/md-relations.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildNameMaps, classifyMdNode, inferMdRelations } from "../graph/md-relations.ts";
 import { codebaseGraph } from "../tools/codebase-graph.ts";
 
 // ── classifyMdNode ──
@@ -56,10 +56,7 @@ describe("buildNameMaps", () => {
   });
 
   it("builds stem map from file paths", async () => {
-    const maps = await buildNameMaps(
-      ["agents/canon-architect.md", "flows/feature.md"],
-      tmpDir,
-    );
+    const maps = await buildNameMaps(["agents/canon-architect.md", "flows/feature.md"], tmpDir);
     expect(maps.byStem.get("canon-architect")).toBe("agents/canon-architect.md");
     expect(maps.byStem.get("feature")).toBe("flows/feature.md");
   });
@@ -119,9 +116,7 @@ describe("inferMdRelations", () => {
     const maps = await buildNameMaps(filePaths, tmpDir);
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
 
-    const agentEdge = edges.find(
-      (e) => e.source === "flows/feature.md" && e.target === "agents/canon-architect.md",
-    );
+    const agentEdge = edges.find((e) => e.source === "flows/feature.md" && e.target === "agents/canon-architect.md");
     expect(agentEdge).toBeDefined();
     expect(agentEdge?.relation).toBe("fm:agent");
     expect(agentEdge?.type).toBe("composition");
@@ -135,11 +130,7 @@ describe("inferMdRelations", () => {
     await writeFile(join(tmpDir, "agents", "canon-implementor.md"), "---\nname: canon-implementor\n---\n");
     await writeFile(join(tmpDir, "agents", "canon-fixer.md"), "---\nname: canon-fixer\n---\n");
 
-    const filePaths = [
-      "templates/implementation-log.md",
-      "agents/canon-implementor.md",
-      "agents/canon-fixer.md",
-    ];
+    const filePaths = ["templates/implementation-log.md", "agents/canon-implementor.md", "agents/canon-fixer.md"];
     const fileSet = new Set(filePaths);
     const maps = await buildNameMaps(filePaths, tmpDir);
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
@@ -158,18 +149,12 @@ describe("inferMdRelations", () => {
     await writeFile(join(tmpDir, "flows", "fragments", "test-fix-loop.md"), "---\nname: test-fix-loop\n---\n");
     await writeFile(join(tmpDir, "flows", "fragments", "ship-done.md"), "---\nname: ship-done\n---\n");
 
-    const filePaths = [
-      "flows/feature.md",
-      "flows/fragments/test-fix-loop.md",
-      "flows/fragments/ship-done.md",
-    ];
+    const filePaths = ["flows/feature.md", "flows/fragments/test-fix-loop.md", "flows/fragments/ship-done.md"];
     const fileSet = new Set(filePaths);
     const maps = await buildNameMaps(filePaths, tmpDir);
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
 
-    const fragmentEdges = edges.filter(
-      (e) => e.source === "flows/feature.md" && e.relation === "fm:fragment",
-    );
+    const fragmentEdges = edges.filter((e) => e.source === "flows/feature.md" && e.relation === "fm:fragment");
     expect(fragmentEdges).toHaveLength(2);
     expect(fragmentEdges.find((e) => e.target === "flows/fragments/test-fix-loop.md")).toBeDefined();
     expect(fragmentEdges.find((e) => e.target === "flows/fragments/ship-done.md")).toBeDefined();
@@ -184,10 +169,7 @@ describe("inferMdRelations", () => {
       join(tmpDir, "principles", "rules", "handle-partial.md"),
       "---\nid: handle-partial-failure\n---\nBody.",
     );
-    await writeFile(
-      join(tmpDir, "principles", "rules", "secrets.md"),
-      "---\nid: secrets-never-in-code\n---\nBody.",
-    );
+    await writeFile(join(tmpDir, "principles", "rules", "secrets.md"), "---\nid: secrets-never-in-code\n---\nBody.");
 
     const filePaths = [
       "principles/rules/fail-closed.md",
@@ -198,9 +180,7 @@ describe("inferMdRelations", () => {
     const maps = await buildNameMaps(filePaths, tmpDir);
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
 
-    const refEdges = edges.filter(
-      (e) => e.source === "principles/rules/fail-closed.md" && e.relation === "ref:id",
-    );
+    const refEdges = edges.filter((e) => e.source === "principles/rules/fail-closed.md" && e.relation === "ref:id");
     expect(refEdges).toHaveLength(2);
     expect(refEdges.find((e) => e.target === "principles/rules/handle-partial.md")).toBeDefined();
     expect(refEdges.find((e) => e.target === "principles/rules/secrets.md")).toBeDefined();
@@ -212,18 +192,12 @@ describe("inferMdRelations", () => {
       "---\nname: canon-reviewer\n---\n\nLoad per `${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md`. Also see agents/canon-guide.md.",
     );
 
-    const filePaths = [
-      "agents/canon-reviewer.md",
-      "templates/review-checklist.md",
-      "agents/canon-guide.md",
-    ];
+    const filePaths = ["agents/canon-reviewer.md", "templates/review-checklist.md", "agents/canon-guide.md"];
     const fileSet = new Set(filePaths);
     const maps = await buildNameMaps(filePaths, tmpDir);
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
 
-    const pathEdges = edges.filter(
-      (e) => e.source === "agents/canon-reviewer.md" && e.relation === "ref:path",
-    );
+    const pathEdges = edges.filter((e) => e.source === "agents/canon-reviewer.md" && e.relation === "ref:path");
     expect(pathEdges).toHaveLength(2);
   });
 
@@ -235,19 +209,13 @@ describe("inferMdRelations", () => {
     await writeFile(join(tmpDir, "flows", "review-only.md"), "---\nname: review-only\n---\n");
     await writeFile(join(tmpDir, "commands", "edit-principle.md"), "---\ndescription: Edit principle\n---\n");
 
-    const filePaths = [
-      "commands/pr-review.md",
-      "flows/review-only.md",
-      "commands/edit-principle.md",
-    ];
+    const filePaths = ["commands/pr-review.md", "flows/review-only.md", "commands/edit-principle.md"];
     const fileSet = new Set(filePaths);
     const maps = await buildNameMaps(filePaths, tmpDir);
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
 
     // "review-only" resolves via stem/id to the flow file
-    const flowEdge = edges.find(
-      (e) => e.source === "commands/pr-review.md" && e.target === "flows/review-only.md",
-    );
+    const flowEdge = edges.find((e) => e.source === "commands/pr-review.md" && e.target === "flows/review-only.md");
     expect(flowEdge).toBeDefined();
   });
 
@@ -264,10 +232,7 @@ describe("inferMdRelations", () => {
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
 
     const agentEdges = edges.filter(
-      (e) =>
-        e.source === "flows/feature.md" &&
-        e.target === "agents/canon-implementor.md" &&
-        e.relation === "fm:agent",
+      (e) => e.source === "flows/feature.md" && e.target === "agents/canon-implementor.md" && e.relation === "fm:agent",
     );
     expect(agentEdges).toHaveLength(1);
   });
@@ -330,9 +295,7 @@ describe("codebaseGraph with md-relations", () => {
     expect(fragmentEdge).toBeDefined();
 
     // Should have agent edges
-    const agentEdges = result.edges.filter(
-      (e) => e.relation === "fm:agent",
-    );
+    const agentEdges = result.edges.filter((e) => e.relation === "fm:agent");
     expect(agentEdges.length).toBeGreaterThanOrEqual(1);
   });
 });

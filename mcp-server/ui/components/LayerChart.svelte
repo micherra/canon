@@ -1,38 +1,34 @@
 <script lang="ts">
-  /**
-   * LayerChart.svelte
-   *
-   * Horizontal bar chart showing file counts per architectural layer.
-   * Pure CSS bars — no charting library. Bar color derived from layer name via
-   * getLayerColor() from constants.ts (hash-based HSL, consistent with graph views).
-   * Pure presentation — receives all data via props, no data fetching.
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders layer distribution chart only
-   *   - compose-from-small-to-large: used as a leaf panel by PrReview.svelte
-   */
+/**
+ * LayerChart.svelte
+ *
+ * Horizontal bar chart showing file counts per architectural layer.
+ * Pure CSS bars — no charting library. Bar color derived from layer name via
+ * getLayerColor() from constants.ts (hash-based HSL, consistent with graph views).
+ * Pure presentation — receives all data via props, no data fetching.
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders layer distribution chart only
+ *   - compose-from-small-to-large: used as a leaf panel by PrReview.svelte
+ */
 
-  import { getLayerColor } from "../lib/constants";
+interface LayerEntry {
+  name: string;
+  file_count: number;
+}
 
-  interface LayerEntry {
-    name: string;
-    file_count: number;
-  }
+interface LayerChartProps {
+  layers: LayerEntry[];
+}
 
-  interface LayerChartProps {
-    layers: LayerEntry[];
-  }
+let { layers }: LayerChartProps = $props();
 
-  let { layers }: LayerChartProps = $props();
+const maxCount = $derived(layers.length > 0 ? Math.max(...layers.map((l) => l.file_count)) : 0);
 
-  const maxCount = $derived(
-    layers.length > 0 ? Math.max(...layers.map((l) => l.file_count)) : 0,
-  );
-
-  function barWidth(fileCount: number): string {
-    if (maxCount === 0) return "0%";
-    return `${Math.round((fileCount / maxCount) * 100)}%`;
-  }
+function _barWidth(fileCount: number): string {
+  if (maxCount === 0) return "0%";
+  return `${Math.round((fileCount / maxCount) * 100)}%`;
+}
 </script>
 
 <div class="layer-chart">

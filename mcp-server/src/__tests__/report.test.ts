@@ -32,15 +32,11 @@ describe("reportInputSchema", () => {
   });
 
   it("rejects input with invalid type discriminant", () => {
-    expect(() =>
-      reportInputSchema.parse({ type: "unknown", foo: "bar" })
-    ).toThrow();
+    expect(() => reportInputSchema.parse({ type: "unknown", foo: "bar" })).toThrow();
   });
 
   it("rejects input with missing required fields for review", () => {
-    expect(() =>
-      reportInputSchema.parse({ type: "review" })
-    ).toThrow();
+    expect(() => reportInputSchema.parse({ type: "review" })).toThrow();
   });
 });
 
@@ -76,7 +72,7 @@ describe("report()", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     expect(result.recorded).toBe(true);
@@ -101,7 +97,7 @@ describe("report()", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     const store = new DriftStore(tmpDir);
@@ -122,7 +118,7 @@ describe("report()", () => {
           conventions: { passed: 0, total: 0 },
         },
       },
-      tmpDir
+      tmpDir,
     );
 
     const store = new DriftStore(tmpDir);
@@ -144,7 +140,7 @@ describe("report()", () => {
         },
         verdict: "WARNING", // explicit override — would be BLOCKING if derived
       },
-      tmpDir
+      tmpDir,
     );
 
     const store = new DriftStore(tmpDir);

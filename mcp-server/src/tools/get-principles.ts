@@ -1,7 +1,7 @@
-import { loadConfigNumber } from "../utils/config.ts";
-import { matchPrinciples, loadAllPrinciples } from "../matcher.ts";
-import { loadCachedGraph, getNodeMetrics, type GraphMetrics } from "../graph/query.ts";
 import { extractSummary } from "../constants.ts";
+import { type GraphMetrics, getNodeMetrics, loadCachedGraph } from "../graph/query.ts";
+import { loadAllPrinciples, matchPrinciples } from "../matcher.ts";
+import { loadConfigNumber } from "../utils/config.ts";
 
 export interface GetPrinciplesInput {
   file_path?: string;
@@ -10,10 +10,7 @@ export interface GetPrinciplesInput {
   summary_only?: boolean;
 }
 
-type PrinciplesGraphContext = Pick<
-  GraphMetrics,
-  "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "impact_score"
->;
+type PrinciplesGraphContext = Pick<GraphMetrics, "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "impact_score">;
 
 export interface GetPrinciplesOutput {
   principles: Array<{
@@ -36,7 +33,7 @@ function loadMaxPrinciples(projectDir: string): Promise<number> {
 export async function getPrinciples(
   input: GetPrinciplesInput,
   projectDir: string,
-  pluginDir: string
+  pluginDir: string,
 ): Promise<GetPrinciplesOutput> {
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
   const maxPrinciples = await loadMaxPrinciples(projectDir);

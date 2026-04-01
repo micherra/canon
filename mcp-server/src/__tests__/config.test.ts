@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { loadConfigNumber, buildLayerInferrer, deriveSourceDirsFromLayers } from "../utils/config.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildLayerInferrer, deriveSourceDirsFromLayers, loadConfigNumber } from "../utils/config.ts";
 
 let tmpDir: string;
 

@@ -1,87 +1,83 @@
 <script lang="ts">
-  /**
-   * ViolationsByPrinciple.svelte
-   *
-   * Groups violations by principle_id and displays each group with a severity
-   * badge and file count. Expanding shows individual file paths within the group.
-   * Pure presentation — no data fetching, no store access.
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders violations-by-principle panel only
-   *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
-   */
+/**
+ * ViolationsByPrinciple.svelte
+ *
+ * Groups violations by principle_id and displays each group with a severity
+ * badge and file count. Expanding shows individual file paths within the group.
+ * Pure presentation — no data fetching, no store access.
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders violations-by-principle panel only
+ *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
+ */
 
-  import { getSeverityColor } from "../lib/utils";
+interface Violation {
+  principle_id: string;
+  severity: string;
+  file_path?: string;
+  message?: string;
+}
 
-  interface Violation {
-    principle_id: string;
-    severity: string;
-    file_path?: string;
-    message?: string;
-  }
+interface PrincipleGroup {
+  principleId: string;
+  severity: string;
+  files: string[];
+}
 
-  interface PrincipleGroup {
-    principleId: string;
-    severity: string;
-    files: string[];
-  }
+interface ViolationsByPrincipleProps {
+  violations: Violation[];
+  onPrompt?: (text: string) => void;
+}
 
-  interface ViolationsByPrincipleProps {
-    violations: Violation[];
-    onPrompt?: (text: string) => void;
-  }
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { violations, onPrompt }: ViolationsByPrincipleProps = $props();
 
-  let { violations, onPrompt }: ViolationsByPrincipleProps = $props();
+/** Group violations by principle_id; keep worst severity per principle */
+const _groups = $derived.by(() => {
+  const map = new Map<string, PrincipleGroup>();
 
-  /** Group violations by principle_id; keep worst severity per principle */
-  const groups = $derived.by(() => {
-    const map = new Map<string, PrincipleGroup>();
-
-    for (const v of violations) {
-      const existing = map.get(v.principle_id);
-      if (!existing) {
-        map.set(v.principle_id, {
-          principleId: v.principle_id,
-          severity: v.severity,
-          files: v.file_path ? [v.file_path] : [],
-        });
-      } else {
-        // Keep the highest-severity label: rule > strong-opinion > convention
-        if (v.severity === "rule" && existing.severity !== "rule") {
-          existing.severity = "rule";
-        } else if (
-          v.severity === "strong-opinion" &&
-          existing.severity === "convention"
-        ) {
-          existing.severity = "strong-opinion";
-        }
-        if (v.file_path && !existing.files.includes(v.file_path)) {
-          existing.files.push(v.file_path);
-        }
+  for (const v of violations) {
+    const existing = map.get(v.principle_id);
+    if (!existing) {
+      map.set(v.principle_id, {
+        principleId: v.principle_id,
+        severity: v.severity,
+        files: v.file_path ? [v.file_path] : [],
+      });
+    } else {
+      // Keep the highest-severity label: rule > strong-opinion > convention
+      if (v.severity === "rule" && existing.severity !== "rule") {
+        existing.severity = "rule";
+      } else if (v.severity === "strong-opinion" && existing.severity === "convention") {
+        existing.severity = "strong-opinion";
+      }
+      if (v.file_path && !existing.files.includes(v.file_path)) {
+        existing.files.push(v.file_path);
       }
     }
-
-    return Array.from(map.values());
-  });
-
-  /** Track which groups are expanded (by principle_id) */
-  let expanded = $state<Set<string>>(new Set());
-
-  function toggle(principleId: string): void {
-    if (expanded.has(principleId)) {
-      expanded.delete(principleId);
-    } else {
-      expanded.add(principleId);
-    }
-    // Reassign to trigger reactivity
-    expanded = new Set(expanded);
   }
 
-  function severityLabel(severity: string): string {
-    if (severity === "rule") return "rule";
-    if (severity === "strong-opinion") return "opinion";
-    return "convention";
+  return Array.from(map.values());
+});
+
+/** Track which groups are expanded (by principle_id) */
+let expanded = $state<Set<string>>(new Set());
+
+function _toggle(principleId: string): void {
+  if (expanded.has(principleId)) {
+    expanded.delete(principleId);
+  } else {
+    expanded.add(principleId);
   }
+  // Reassign to trigger reactivity
+  expanded = new Set(expanded);
+}
+
+function _severityLabel(severity: string): string {
+  if (severity === "rule") return "rule";
+  if (severity === "strong-opinion") return "opinion";
+  return "convention";
+}
 </script>
 
 <section class="violations-by-principle">

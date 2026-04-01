@@ -25,6 +25,15 @@ import type { ToolResult } from "../utils/tool-result.ts";
 import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
 import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Board, CannotFixItem, HistoryEntry, ResolvedFlow, WorktreeEntry } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
+import { toolError } from "../utils/tool-result.ts";
+import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
+import { getSpawnPrompt } from "./get-spawn-prompt.ts";
 
 export interface ConsultationPromptEntry {
   name: string;
@@ -68,14 +77,223 @@ export interface EnterAndPrepareStateResult {
   // Consultation prompts to spawn (only when state has consultations at the current breakpoint)
   consultation_prompts?: ConsultationPromptEntry[];
 
+  worktree_entries?: WorktreeEntry[];
+
   // Updated board (only when state was entered)
   board?: Board;
+}
+
+/** Persist state entry into the SQLite store via a transaction. */
+function persistStateEntry(store: ReturnType<typeof getExecutionStore>, board: Board, state_id: string): Board {
+  let enteredBoard: Board = board;
+  store.transaction(() => {
+    enteredBoard = enterState(board, state_id);
+
+    store.updateExecution({
+      current_state: state_id,
+      last_updated: enteredBoard.last_updated,
+    });
+
+    const enteredStateEntry = enteredBoard.states[state_id];
+    if (enteredStateEntry) {
+      store.upsertState(state_id, {
+        ...enteredStateEntry,
+        status: enteredStateEntry.status,
+        entries: enteredStateEntry.entries,
+        entered_at: enteredStateEntry.entered_at,
+      });
+    }
+
+    if (enteredBoard.iterations[state_id]) {
+      const iter = enteredBoard.iterations[state_id];
+      store.upsertIteration(state_id, {
+        count: iter.count,
+        max: iter.max,
+        history: iter.history,
+        cannot_fix: iter.cannot_fix,
+      });
+    }
+  });
+  return enteredBoard;
+}
+
+/** Emit board_updated and state_entered events (best-effort). */
+function emitStateEntryEvents(
+  store: ReturnType<typeof getExecutionStore>,
+  state_id: string,
+  stateType: string,
+  enteredAt: string,
+  iterationCount: number,
+): void {
+  const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
+    try {
+      store.appendEvent("board_updated", event as Record<string, unknown>);
+    } catch {
+      /* best-effort */
+    }
+  };
+  flowEventBus.once("board_updated", onBoardUpdated);
+  try {
+    flowEventBus.emit("board_updated", {
+      action: "enter_state",
+      stateId: state_id,
+      timestamp: enteredAt,
+    });
+    const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
+      try {
+        store.appendEvent("state_entered", event as Record<string, unknown>);
+      } catch {
+        /* best-effort */
+      }
+    };
+    flowEventBus.once("state_entered", onStateEntered);
+    try {
+      flowEventBus.emit("state_entered", {
+        stateId: state_id,
+        stateType,
+        timestamp: enteredAt,
+        iterationCount,
+      });
+    } finally {
+      flowEventBus.removeListener("state_entered", onStateEntered);
+    }
+  } finally {
+    flowEventBus.removeListener("board_updated", onBoardUpdated);
+  }
+}
+
+/** Resolve consultation prompts for the current breakpoint. */
+function resolveConsultationPrompts(input: EnterAndPrepareStateInput, enteredBoard: Board): ConsultationPromptEntry[] {
+  const { state_id, flow } = input;
+  const stateDef = flow.states[state_id];
+  if (!stateDef?.consultations) return [];
+
+  const breakpoint: "before" | "between" = input.wave == null || input.wave === 0 ? "before" : "between";
+  const names = stateDef.consultations[breakpoint] ?? [];
+  const prompts: ConsultationPromptEntry[] = [];
+
+  for (const name of names) {
+    const fragment = flow.consultations?.[name];
+    if (fragment?.min_waves != null) {
+      const waveTotal = enteredBoard.states[state_id]?.wave_total;
+      if (waveTotal != null && waveTotal < fragment.min_waves) continue;
+    }
+
+    const resolved = resolveConsultationPrompt(name, flow, input.variables);
+    if (!resolved) continue;
+    prompts.push({
+      name,
+      agent: resolved.agent,
+      prompt: resolved.prompt,
+      role: resolved.role,
+      ...(resolved.timeout ? { timeout: resolved.timeout } : {}),
+      ...(resolved.section ? { section: resolved.section } : {}),
+    });
+  }
+  return prompts;
+}
+
+/** Collect completed consultation summaries from prior wave results. */
+function collectConsultationOutputs(
+  enteredBoard: Board,
+  state_id: string,
+  flow: EnterAndPrepareStateInput["flow"],
+): Record<string, { section?: string; summary: string }> {
+  const outputs: Record<string, { section?: string; summary: string }> = {};
+  const stateEntry = enteredBoard.states[state_id];
+  if (!stateEntry?.wave_results) return outputs;
+
+  for (const [_waveKey, waveResult] of Object.entries(stateEntry.wave_results)) {
+    const consultations = waveResult.consultations;
+    if (!consultations) continue;
+    for (const bp of ["before", "between", "after"] as const) {
+      const bpMap = consultations[bp];
+      if (!bpMap) continue;
+      for (const [cName, cResult] of Object.entries(bpMap)) {
+        if (cResult.status !== "done" || !cResult.summary) continue;
+        const frag = flow.consultations?.[cName];
+        outputs[cName] = {
+          section: frag?.section,
+          summary: escapeDollarBrace(cResult.summary),
+        };
+      }
+    }
+  }
+  return outputs;
+}
+
+/** Resolve review_scope variable for re-entered review states. */
+function resolveReviewScope(enteredBoard: Board, state_id: string): Record<string, string> {
+  if (!(enteredBoard.states[state_id]?.entries > 1)) return {};
+
+  const baseRef = enteredBoard.base_commit;
+  if (!baseRef || !/^[a-f0-9]{7,40}$/.test(baseRef)) return {};
+
+  try {
+    const result = gitExec(["diff", "--name-only", `${baseRef}..HEAD`], process.cwd(), 5000);
+    if (result.ok && result.stdout) {
+      const files = result.stdout.trim().split("\n").filter(Boolean);
+      return {
+        review_scope: files.length > 0 ? `Scoped re-review. Files changed since last review:\n${files.join("\n")}` : "",
+      };
+    }
+  } catch {
+    // fall through
+  }
+  return { review_scope: "" };
+}
+
+/** Extract worktree entries for the current wave from the board. */
+function extractWorktreeEntries(
+  enteredBoard: Board,
+  state_id: string,
+  stateType: string | undefined,
+  wave: number | undefined,
+): WorktreeEntry[] | undefined {
+  if (stateType !== "wave" || wave == null) return undefined;
+  const stateEntry = enteredBoard.states[state_id];
+  const waveKey = `wave_${wave}`;
+  return stateEntry?.wave_results?.[waveKey]?.worktree_entries;
+}
+
+/** Extract iteration info from board for a given state. */
+function getIterationInfo(
+  board: Board,
+  state_id: string,
+): {
+  iteration_count: number;
+  max_iterations: number;
+  cannot_fix_items: CannotFixItem[];
+  history: HistoryEntry[];
+} {
+  const iteration = board.iterations[state_id];
+  return {
+    iteration_count: iteration?.count ?? 0,
+    max_iterations: iteration?.max ?? 0,
+    cannot_fix_items: iteration?.cannot_fix ?? [],
+    history: iteration?.history ?? [],
+  };
+}
+
+/** Attach worktree paths to spawn prompts based on worktree entries. */
+function attachWorktreePaths(prompts: SpawnPromptEntry[], worktreeEntries: WorktreeEntry[] | undefined): void {
+  if (!worktreeEntries || prompts.length === 0) return;
+  const entryMap = new Map(worktreeEntries.map((e) => [e.task_id, e]));
+  for (const prompt of prompts) {
+    const taskId = typeof prompt.item === "string" ? prompt.item : undefined;
+    if (!taskId) continue;
+    const entry = entryMap.get(taskId);
+    if (entry?.status === "active") {
+      prompt.worktree_path = entry.worktree_path;
+    }
+  }
 }
 
 export async function enterAndPrepareState(
   input: EnterAndPrepareStateInput,
 ): Promise<ToolResult<EnterAndPrepareStateResult>> {
   const { workspace, state_id, flow } = input;
+  const store = getExecutionStore(workspace);
 
   const store = getExecutionStore(workspace);
 
@@ -86,22 +304,14 @@ export async function enterAndPrepareState(
     return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${workspace}`);
   }
 
-  // Step 2: Check convergence — bail early if max iterations reached.
   const { allowed, reason } = canEnterState(board, state_id);
-  const iteration = board.iterations[state_id];
-  const iteration_count = iteration?.count ?? 0;
-  const max_iterations = iteration?.max ?? 0;
-  const cannot_fix_items: CannotFixItem[] = iteration?.cannot_fix ?? [];
-  const history: HistoryEntry[] = iteration?.history ?? [];
+  const iterInfo = getIterationInfo(board, state_id);
 
   if (!allowed) {
     return {
       ok: true as const,
       can_enter: false,
-      iteration_count,
-      max_iterations,
-      cannot_fix_items,
-      history,
+      ...iterInfo,
       convergence_reason: reason,
       prompts: [],
       state_type: flow.states[state_id]?.type ?? "unknown",
@@ -113,17 +323,13 @@ export async function enterAndPrepareState(
   if (stateDef?.skip_when) {
     const skipResult = await evaluateSkipWhen(stateDef.skip_when, workspace, board);
     if (skipResult.skip) {
-      const skipReason = `Skipping ${state_id}: ${stateDef.skip_when} condition met — ${skipResult.reason ?? "condition satisfied"}`;
       return {
         ok: true as const,
         can_enter: true,
-        iteration_count,
-        max_iterations,
-        cannot_fix_items,
-        history,
+        ...iterInfo,
         prompts: [],
         state_type: stateDef.type,
-        skip_reason: skipReason,
+        skip_reason: `Skipping ${state_id}: ${stateDef.skip_when} condition met — ${skipResult.reason ?? "condition satisfied"}`,
       };
     }
   }
@@ -286,13 +492,12 @@ export async function enterAndPrepareState(
     _board: enteredBoard,
   });
 
+  attachWorktreePaths(spawnResult.prompts, worktreeEntries);
+
   return {
     ok: true as const,
     can_enter: true,
-    iteration_count,
-    max_iterations,
-    cannot_fix_items,
-    history,
+    ...iterInfo,
     prompts: spawnResult.prompts,
     state_type: spawnResult.state_type,
     ...(spawnResult.skip_reason ? { skip_reason: spawnResult.skip_reason } : {}),
@@ -301,6 +506,7 @@ export async function enterAndPrepareState(
     ...(spawnResult.timeout_ms != null ? { timeout_ms: spawnResult.timeout_ms } : {}),
     ...(spawnResult.fanned_out ? { fanned_out: true } : {}),
     ...(consultationPrompts.length > 0 ? { consultation_prompts: consultationPrompts } : {}),
+    ...(worktreeEntries ? { worktree_entries: worktreeEntries } : {}),
     board: enteredBoard,
   };
 }
