@@ -14,7 +14,7 @@
  */
 
 // Re-export types consumed by callers that import from this module.
-export type { WaveEvent, WaveEventResolution, WaveEventType } from "./flow-schema.ts";
+export type { WaveEvent, WaveEventType, WaveEventResolution } from "./flow-schema.ts";
 
 /**
  * Pure lookup: returns which agents (if any) need to be spawned to handle

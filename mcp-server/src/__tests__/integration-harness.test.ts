@@ -10,11 +10,11 @@
  * - Backward compatibility: board.json without new fields still parses
  */
 
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist spawnSync mock to file level so vitest can hoist it before module imports.
 // Controls git diff output for skip_when integration tests.
@@ -29,16 +29,16 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { filterCannotFix } from "../orchestration/convergence.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import type { FlowEventMap } from "../orchestration/events.ts";
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { BoardSchema } from "../orchestration/flow-schema.ts";
-import { checkConvergence } from "../tools/check-convergence.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { checkConvergence } from "../tools/check-convergence.ts";
+import { filterCannotFix } from "../orchestration/convergence.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
+import { BoardSchema } from "../orchestration/flow-schema.ts";
+import type { FlowEventMap } from "../orchestration/events.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -252,8 +252,9 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     expect(board?.states["implement"].parallel_results).toEqual(parallelResults);
 
     // checkConvergence should still work (doesn't break on new field)
-    const convergence = await checkConvergence({ workspace, state_id: "implement" });
-    assertOk(convergence);
+    const convergenceResult = await checkConvergence({ workspace, state_id: "implement" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
     expect(convergence.can_enter).toBe(true); // iteration count=0, max=3
     expect(convergence.iteration_count).toBe(0);
   });
@@ -290,8 +291,9 @@ describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergen
       file_paths: ["a.ts"],
     });
 
-    const convergence = await checkConvergence({ workspace, state_id: "implement" });
-    assertOk(convergence);
+    const convergenceResult = await checkConvergence({ workspace, state_id: "implement" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
     expect(convergence.cannot_fix_items).toHaveLength(3);
 
     // Orchestrator excludes known cannot_fix from next iteration's principle set
@@ -367,6 +369,7 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
     expect(stateEnteredEvents).toHaveLength(0);
   });
 
+
   it("emits board_updated on complete_flow action", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
@@ -408,7 +411,9 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
         implement: {
           type: "single",
           agent: "canon-implementor",
-          inject_context: [{ from: "research", as: "RESEARCH" }],
+          inject_context: [
+            { from: "research", as: "RESEARCH" },
+          ],
           transitions: { done: "ship" },
         },
         ship: { type: "terminal" },
@@ -447,7 +452,9 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
         implement: {
           type: "single",
           agent: "canon-implementor",
-          inject_context: [{ from: "user", as: "USER_INPUT", prompt: "Please describe the scope" }],
+          inject_context: [
+            { from: "user", as: "USER_INPUT", prompt: "Please describe the scope" },
+          ],
           transitions: { done: "ship" },
         },
         ship: { type: "terminal" },
@@ -484,7 +491,9 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
         implement: {
           type: "single",
           agent: "canon-implementor",
-          inject_context: [{ from: "research", as: "CONTEXT" }],
+          inject_context: [
+            { from: "research", as: "CONTEXT" },
+          ],
           transitions: { done: "ship" },
         },
         ship: { type: "terminal" },
@@ -540,7 +549,9 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
           type: "single",
           agent: "canon-reviewer",
           skip_when: "no_contract_changes",
-          inject_context: [{ from: "prior", as: "PRIOR" }],
+          inject_context: [
+            { from: "prior", as: "PRIOR" },
+          ],
           transitions: { done: "ship" },
         },
         ship: { type: "terminal" },
@@ -582,7 +593,9 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
           type: "single",
           agent: "canon-reviewer",
           skip_when: "no_contract_changes",
-          inject_context: [{ from: "prior", as: "CONTEXT" }],
+          inject_context: [
+            { from: "prior", as: "CONTEXT" },
+          ],
           transitions: { done: "ship" },
         },
         ship: { type: "terminal" },
@@ -878,13 +891,9 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
         files: ["a.ts"],
         violations: [],
         honored: [],
-        score: {
-          rules: { passed: 1, total: 1 },
-          opinions: { passed: 1, total: 1 },
-          conventions: { passed: 1, total: 1 },
-        },
+        score: { rules: { passed: 1, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 1, total: 1 } },
       },
-      workspace,
+      workspace
     );
     await storePrReview(
       {
@@ -893,13 +902,9 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
         files: ["a.ts"],
         violations: [],
         honored: [],
-        score: {
-          rules: { passed: 1, total: 1 },
-          opinions: { passed: 1, total: 1 },
-          conventions: { passed: 1, total: 1 },
-        },
+        score: { rules: { passed: 1, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 1, total: 1 } },
       },
-      workspace,
+      workspace
     );
     await storePrReview(
       {
@@ -908,13 +913,9 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
         files: ["b.ts"],
         violations: [{ principle_id: "p1", severity: "rule" }],
         honored: [],
-        score: {
-          rules: { passed: 0, total: 1 },
-          opinions: { passed: 0, total: 0 },
-          conventions: { passed: 0, total: 0 },
-        },
+        score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } },
       },
-      workspace,
+      workspace
     );
 
     const store = new DriftStore(workspace);

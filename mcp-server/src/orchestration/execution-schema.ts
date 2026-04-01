@@ -8,13 +8,13 @@
  * Schema version is stored in the meta table for future migrations.
  */
 
-import Database from "better-sqlite3";
+import Database from 'better-sqlite3';
 
 // ---------------------------------------------------------------------------
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = "1";
+export const SCHEMA_VERSION = '1';
 
 // ---------------------------------------------------------------------------
 // DDL statements
@@ -27,7 +27,7 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  `INSERT INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}') ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`,
 
   // Execution — singleton row (replaces board.json top-level fields + session.json)
   `CREATE TABLE IF NOT EXISTS execution (
@@ -53,9 +53,7 @@ const DDL_STATEMENTS = [
     status          TEXT NOT NULL DEFAULT 'active',
     completed_at    TEXT,
     rolled_back_at  TEXT,
-    rolled_back_to  TEXT,
-    worktree_path   TEXT,
-    worktree_branch TEXT
+    rolled_back_to  TEXT
   )`,
 
   // Execution states (replaces board.states)
@@ -150,11 +148,11 @@ export function initExecutionDb(dbPath: string): Database.Database {
   const db = new Database(dbPath);
 
   // WAL mode for concurrent read/write; must be set before table creation
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma("synchronous = NORMAL");
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  db.pragma('synchronous = NORMAL');
   // Busy timeout: wait up to 5s on write contention instead of failing
-  db.pragma("busy_timeout = 5000");
+  db.pragma('busy_timeout = 5000');
 
   // Apply all DDL inside a single transaction for atomicity and speed
   const applySchema = db.transaction(() => {

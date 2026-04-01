@@ -73,13 +73,13 @@ vi.mock("../orchestration/convergence.ts", () => ({
 // Module imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import type { FileCluster } from "../orchestration/diff-cluster.ts";
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
+import { readWaveGuidance, assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { assembleWaveBriefing, readWaveGuidance } from "../orchestration/wave-briefing.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { reportResult } from "../tools/report-result.ts";
+import type { FileCluster } from "../orchestration/diff-cluster.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -183,16 +183,13 @@ afterEach(() => {
 
 describe("reportResult — isReviewAggregation auto-detection (gap fill)", () => {
   function setupReviewBoard(workspace: string) {
-    seedBoard(
-      workspace,
-      makeBoard({
-        states: {
-          review: { status: "in_progress", entries: 1 },
-          done: { status: "pending", entries: 0 },
-          hitl: { status: "pending", entries: 0 },
-        },
-      }),
-    );
+    seedBoard(workspace, makeBoard({
+      states: {
+        review: { status: "in_progress", entries: 1 },
+        done: { status: "pending", entries: 0 },
+        hitl: { status: "pending", entries: 0 },
+      },
+    }));
   }
 
   it("all-clean parallel_results routes to 'clean' transition", async () => {
@@ -544,16 +541,13 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
   it("all clusters clean produces clean verdict routing to done", async () => {
     const workspace = makeTmpDir();
     const flow = makeReviewFlow();
-    seedBoard(
-      workspace,
-      makeBoard({
-        states: {
-          review: { status: "in_progress", entries: 1 },
-          done: { status: "pending", entries: 0 },
-          hitl: { status: "pending", entries: 0 },
-        },
-      }),
-    );
+    seedBoard(workspace, makeBoard({
+      states: {
+        review: { status: "in_progress", entries: 1 },
+        done: { status: "pending", entries: 0 },
+        hitl: { status: "pending", entries: 0 },
+      },
+    }));
 
     const reportResultImport = await import("../tools/report-result.ts");
     const result = await reportResultImport.reportResult({
@@ -576,16 +570,13 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
   it("one blocking cluster among clean clusters triggers blocking verdict", async () => {
     const workspace = makeTmpDir();
     const flow = makeReviewFlow();
-    seedBoard(
-      workspace,
-      makeBoard({
-        states: {
-          review: { status: "in_progress", entries: 1 },
-          done: { status: "pending", entries: 0 },
-          hitl: { status: "pending", entries: 0 },
-        },
-      }),
-    );
+    seedBoard(workspace, makeBoard({
+      states: {
+        review: { status: "in_progress", entries: 1 },
+        done: { status: "pending", entries: 0 },
+        hitl: { status: "pending", entries: 0 },
+      },
+    }));
 
     const reportResultImport = await import("../tools/report-result.ts");
     const result = await reportResultImport.reportResult({

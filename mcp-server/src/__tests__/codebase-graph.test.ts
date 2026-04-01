@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 import { codebaseGraph } from "../tools/codebase-graph.ts";
 
 describe("codebaseGraph", () => {
@@ -264,7 +264,10 @@ describe("codebaseGraph — git adapter integration", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-graph-git-test-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
     await mkdir(join(tmpDir, "src", "api"), { recursive: true });
-    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { api: ["src/api"] } }));
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ layers: { api: ["src/api"] } }),
+    );
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handler() {}`);
   });
 
@@ -316,3 +319,4 @@ describe("codebaseGraph — git adapter integration", () => {
     expect(firstArgs).toEqual(["rev-parse", "--abbrev-ref", "HEAD"]);
   });
 });
+

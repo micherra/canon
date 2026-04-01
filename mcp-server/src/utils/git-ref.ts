@@ -1,6 +1,6 @@
 /** Shared git ref validation utilities. */
 
-const GIT_REF_PATTERN = /^[a-zA-Z0-9_./-]+$/;
+const GIT_REF_PATTERN = /^[a-zA-Z0-9_.\/\-]+$/;
 
 /**
  * Validates and returns a git ref string.

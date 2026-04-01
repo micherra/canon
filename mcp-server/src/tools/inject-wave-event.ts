@@ -1,7 +1,7 @@
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { WaveEvent, WaveEventType } from "../orchestration/flow-schema.ts";
 import { generateId } from "../utils/id.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import type { WaveEvent, WaveEventType } from "../orchestration/flow-schema.ts";
 
 export interface InjectWaveEventInput {
   workspace: string;
@@ -24,11 +24,14 @@ export async function injectWaveEvent(input: InjectWaveEventInput): Promise<Inje
 
   // Check for an active wave state in the store
   const board = store.getBoard();
-  const hasActiveWave =
-    board !== null && Object.values(board.states).some((s) => s.wave !== undefined && s.status === "in_progress");
+  const hasActiveWave = board !== null && Object.values(board.states).some(
+    (s) => s.wave !== undefined && s.status === "in_progress",
+  );
 
   if (!hasActiveWave) {
-    throw new Error("No active wave state found — events can only be injected during wave execution");
+    throw new Error(
+      "No active wave state found — events can only be injected during wave execution",
+    );
   }
 
   // Create the event
@@ -53,12 +56,10 @@ export async function injectWaveEvent(input: InjectWaveEventInput): Promise<Inje
   const pending = store.getWaveEvents({ status: "pending" });
 
   // Emit wave_event_injected (best-effort — same pattern as update-board.ts)
-  const onWaveEventInjected = (e: import("../orchestration/events.js").FlowEventMap["wave_event_injected"]) => {
-    try {
-      store.appendEvent("wave_event_injected", e as Record<string, unknown>);
-    } catch {
-      /* best-effort */
-    }
+  const onWaveEventInjected = (
+    e: import("../orchestration/events.js").FlowEventMap["wave_event_injected"],
+  ) => {
+    try { store.appendEvent("wave_event_injected", e as Record<string, unknown>); } catch { /* best-effort */ }
   };
   flowEventBus.once("wave_event_injected", onWaveEventInjected);
   try {

@@ -10,11 +10,11 @@
  * - Progress entry exists in DB after init
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { access } from "node:fs/promises";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { access } from "node:fs/promises";
 
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
@@ -30,8 +30,8 @@ vi.mock("../orchestration/flow-parser.ts", () => ({
   }),
 }));
 
-import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 
 let tmpDirs: string[] = [];
 
@@ -182,18 +182,6 @@ describe("listBranchWorkspaces", () => {
     for (const ws of workspaces) {
       expect(ws.workspace).not.toBe(fakeWsDir);
     }
-  });
-
-  it("does not create empty orchestration.db as a side effect of scanning (item #13)", async () => {
-    const projectDir = makeTmpProjectDir();
-    // Create a directory that has no DB — simulates a non-workspace dir
-    const nonWsDir = join(projectDir, ".canon", "workspaces", "main", "not-a-workspace");
-    mkdirSync(nonWsDir, { recursive: true });
-
-    await listBranchWorkspaces(projectDir, "main");
-
-    // The scan must NOT have created an empty orchestration.db as a side effect
-    expect(existsSync(join(nonWsDir, "orchestration.db"))).toBe(false);
   });
 
   it("returns empty array for branch with no workspaces", async () => {

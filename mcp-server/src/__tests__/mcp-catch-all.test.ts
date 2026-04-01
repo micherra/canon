@@ -8,7 +8,7 @@
  * 4. Handle non-Error throws (strings, objects) gracefully
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import { wrapHandler } from "../utils/wrap-handler.ts";
 
 describe("wrapHandler — happy path (ok:true)", () => {
@@ -151,6 +151,30 @@ describe("wrapHandler — catch-all: non-Error throws", () => {
     expect(parsed.error_code).toBe("UNEXPECTED");
     // String(object) produces "[object Object]"
     expect(typeof parsed.message).toBe("string");
+  });
+});
+
+describe("wrapHandler — workspace not found classification", () => {
+  it("converts 'directory does not exist' throw to WORKSPACE_NOT_FOUND", async () => {
+    const handler = wrapHandler(async (_input: unknown) => {
+      throw new Error("Workspace directory does not exist: /some/path");
+    });
+
+    const response = await handler({});
+    const parsed = JSON.parse(response.content[0].text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error_code).toBe("WORKSPACE_NOT_FOUND");
+  });
+
+  it("other errors still return UNEXPECTED", async () => {
+    const handler = wrapHandler(async (_input: unknown) => {
+      throw new Error("some unrelated failure");
+    });
+
+    const response = await handler({});
+    const parsed = JSON.parse(response.content[0].text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error_code).toBe("UNEXPECTED");
   });
 });
 

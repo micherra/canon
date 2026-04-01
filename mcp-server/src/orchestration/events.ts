@@ -1,12 +1,5 @@
 import { EventEmitter } from "node:events";
-import type {
-  ConcernEntry,
-  GateResult,
-  HistoryEntry,
-  PostconditionResult,
-  TestResults,
-  ViolationSeverities,
-} from "./flow-schema.ts";
+import type { HistoryEntry, ConcernEntry, GateResult, PostconditionResult, ViolationSeverities, TestResults } from "./flow-schema.ts";
 
 export type FlowEventType =
   | "state_entered"

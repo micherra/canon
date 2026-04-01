@@ -10,12 +10,12 @@
  * 6. Empty DB returns {total_runs: 0, avg_duration_ms: 0}
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CANON_DIR } from "../constants.ts";
+import { tmpdir } from "node:os";
 import { appendFlowRun, computeAnalytics, type FlowRunEntry } from "../drift/analytics.ts";
+import { CANON_DIR } from "../constants.ts";
 
 function makeTmpDir(): string {
   return mkdtempSync(join(tmpdir(), "canon-analytics-test-"));

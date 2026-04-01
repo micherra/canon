@@ -1,6 +1,6 @@
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { resolveEventAgents } from "../orchestration/wave-events.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 
 export interface ResolveWaveEventInput {
   workspace: string;
@@ -18,7 +18,9 @@ export interface ResolveWaveEventResult {
   pending_count: number;
 }
 
-export async function resolveWaveEvent(input: ResolveWaveEventInput): Promise<ResolveWaveEventResult> {
+export async function resolveWaveEvent(
+  input: ResolveWaveEventInput,
+): Promise<ResolveWaveEventResult> {
   // Validate: reject requires reason
   if (input.action === "reject" && !input.reason) {
     throw new Error("reason is required when action is reject");
@@ -34,10 +36,10 @@ export async function resolveWaveEvent(input: ResolveWaveEventInput): Promise<Re
     throw new Error(`Event not found: ${input.event_id}`);
   }
 
-  // Note: the status pre-check is intentionally omitted here. The store's
-  // updateWaveEvent uses a WHERE status='pending' CAS guard and throws when
-  // the event is already resolved. This avoids a TOCTOU race between the
-  // read above and the update below.
+  // Validate event is pending
+  if (event.status !== "pending") {
+    throw new Error(`Event ${input.event_id} is already ${event.status}`);
+  }
 
   // Apply or reject the event via store — SQLite UPDATE is naturally atomic
   if (input.action === "apply") {
@@ -60,12 +62,10 @@ export async function resolveWaveEvent(input: ResolveWaveEventInput): Promise<Re
   const pending = store.getWaveEvents({ status: "pending" });
 
   // Emit wave_event_resolved (best-effort — same pattern as inject-wave-event.ts)
-  const onWaveEventResolved = (e: import("../orchestration/events.js").FlowEventMap["wave_event_resolved"]) => {
-    try {
-      store.appendEvent("wave_event_resolved", e as Record<string, unknown>);
-    } catch {
-      /* best-effort */
-    }
+  const onWaveEventResolved = (
+    e: import("../orchestration/events.js").FlowEventMap["wave_event_resolved"],
+  ) => {
+    try { store.appendEvent("wave_event_resolved", e as Record<string, unknown>); } catch { /* best-effort */ }
   };
   flowEventBus.once("wave_event_resolved", onWaveEventResolved);
   try {

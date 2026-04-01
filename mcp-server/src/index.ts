@@ -126,7 +126,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getPrinciples(input, projectDir, pluginDir);
-  }),
+  })
 );
 
 server.registerTool(
@@ -142,7 +142,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return listPrinciples(input, projectDir, pluginDir);
-  }),
+  })
 );
 
 server.registerTool(
@@ -158,7 +158,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return reviewCode(input, projectDir, pluginDir);
-  }),
+  })
 );
 
 server.registerTool(
@@ -172,7 +172,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getCompliance(input, projectDir, pluginDir);
-  }),
+  })
 );
 
 // Tool: report (unified — decisions, patterns, and reviews)
@@ -185,7 +185,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return report(input, projectDir);
-  }),
+  })
 );
 
 registerToolWithUi(
@@ -256,7 +256,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return storeSummaries(input, projectDir);
-  }),
+  })
 );
 
 server.registerTool(
@@ -272,7 +272,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getDriftReport(input, projectDir, pluginDir);
-  }),
+  })
 );
 
 server.registerTool(
@@ -286,14 +286,13 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return loadFlow(input, pluginDir, projectDir);
-  }),
+  })
 );
 
 server.registerTool(
   "init_workspace",
   {
-    description:
-      "Initialize a Canon workspace for flow execution. Creates workspace directory and initializes SQLite store. Resumes from existing store if present.",
+    description: "Initialize a Canon workspace for flow execution. Creates workspace directory and initializes SQLite store. Resumes from existing store if present.",
     inputSchema: {
       flow_name: z.string(),
       task: z.string(),
@@ -310,7 +309,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return initWorkspaceFlow(input, projectDir, pluginDir);
-  }),
+  })
 );
 
 server.registerTool(
@@ -331,7 +330,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getSpawnPrompt({ ...input, project_dir: projectDir });
-  }),
+  })
 );
 
 server.registerTool(
@@ -451,7 +450,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return reportResult({ ...input, project_dir: projectDir });
-  }),
+  })
 );
 
 server.registerTool(
@@ -466,7 +465,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return checkConvergence(input);
-  }),
+  })
 );
 
 server.registerTool(
@@ -502,7 +501,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return updateBoard(input);
-  }),
+  })
 );
 
 server.registerTool(
@@ -523,7 +522,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return injectWaveEvent(input);
-  }),
+  })
 );
 
 server.registerTool(
@@ -541,7 +540,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return resolveWaveEvent(input);
-  }),
+  })
 );
 
 server.registerTool(
@@ -562,7 +561,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return enterAndPrepareState({ ...input, project_dir: projectDir });
-  }),
+  })
 );
 
 server.registerTool(
@@ -579,7 +578,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return resolveAfterConsultations(input);
-  }),
+  })
 );
 
 server.registerTool(
@@ -596,7 +595,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return postMessage(input);
-  }),
+  })
 );
 
 server.registerTool(
@@ -613,7 +612,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getMessages(input);
-  }),
+  })
 );
 
 server.registerTool(
@@ -671,7 +670,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return storePrReview(input, projectDir);
-  }),
+  })
 );
 
 server.registerTool(
@@ -695,7 +694,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return graphQuery(input, projectDir);
-  }),
+  })
 );
 
 // Start the server

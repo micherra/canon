@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtemp, rm, mkdir } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+import { buildFileViolationMap } from "../tools/pr-review-data.ts";
 import { DriftStore } from "../drift/store.ts";
 import type { ReviewEntry } from "../schema.ts";
-import { buildFileViolationMap } from "../tools/pr-review-data.ts";
 
 // ── buildFileViolationMap unit tests ──
 

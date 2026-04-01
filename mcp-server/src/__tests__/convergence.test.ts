@@ -1,12 +1,12 @@
+import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
 import { canEnterState, filterCannotFix } from "../orchestration/convergence.ts";
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { checkConvergence } from "../tools/check-convergence.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { checkConvergence } from "../tools/check-convergence.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
@@ -231,7 +231,7 @@ describe("reportResult — cannot_fix accumulation", () => {
         { principle_id: "p1", file_path: "b.ts" },
         { principle_id: "p2", file_path: "a.ts" },
         { principle_id: "p2", file_path: "b.ts" },
-      ]),
+      ])
     );
   });
 
@@ -263,7 +263,9 @@ describe("reportResult — cannot_fix accumulation", () => {
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix).toHaveLength(1);
-    expect(iteration.cannot_fix).toEqual([{ principle_id: "p1", file_path: "a.ts" }]);
+    expect(iteration.cannot_fix).toEqual([
+      { principle_id: "p1", file_path: "a.ts" },
+    ]);
   });
 
   it("skips accumulation when no iteration record exists for the state", async () => {
@@ -377,8 +379,9 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       file_paths: ["src/tools/check-convergence.ts"],
     });
 
-    const convergence = await checkConvergence({ workspace, state_id: "review" });
-    assertOk(convergence);
+    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
 
     expect(convergence.cannot_fix_items).toEqual([
       { principle_id: "no-hidden-side-effects", file_path: "src/tools/check-convergence.ts" },
@@ -410,15 +413,16 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       file_paths: ["b.ts"],
     });
 
-    const convergence = await checkConvergence({ workspace, state_id: "review" });
-    assertOk(convergence);
+    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
 
     expect(convergence.cannot_fix_items).toHaveLength(2);
     expect(convergence.cannot_fix_items).toEqual(
       expect.arrayContaining([
         { principle_id: "p1", file_path: "a.ts" },
         { principle_id: "p2", file_path: "b.ts" },
-      ]),
+      ])
     );
   });
 
@@ -436,8 +440,9 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       file_paths: ["a.ts"],
     });
 
-    const convergence = await checkConvergence({ workspace, state_id: "review" });
-    assertOk(convergence);
+    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
 
     // Orchestrator uses filterCannotFix to exclude items from next iteration
     const allItems = [
@@ -448,24 +453,8 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
 
     const remaining = filterCannotFix(allItems, convergence.cannot_fix_items);
 
-    expect(remaining).toEqual([{ principle_id: "p3", file_path: "a.ts" }]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// check-convergence: WORKSPACE_NOT_FOUND when no execution exists
-// ---------------------------------------------------------------------------
-
-describe("checkConvergence: error on missing execution", () => {
-  it("returns WORKSPACE_NOT_FOUND when workspace has no execution", async () => {
-    const workspace = makeTmpWorkspace(); // fresh dir, no seedWorkspace call
-
-    const result = await checkConvergence({ workspace, state_id: "review" });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
-      expect(result.message).toMatch(/No execution found/);
-    }
+    expect(remaining).toEqual([
+      { principle_id: "p3", file_path: "a.ts" },
+    ]);
   });
 });

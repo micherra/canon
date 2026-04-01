@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -16,7 +16,12 @@ let execFileImpl: ((cb: ExecFileCallback) => void) | null = null;
 let execFileCalls: ExecFileCallRecord[] = [];
 
 vi.mock("node:child_process", () => ({
-  execFile: (cmd: string, args: string[], opts: Record<string, unknown>, cb: ExecFileCallback) => {
+  execFile: (
+    cmd: string,
+    args: string[],
+    opts: Record<string, unknown>,
+    cb: ExecFileCallback,
+  ) => {
     execFileCalls.push({ cmd, args, opts });
     if (execFileImpl) {
       execFileImpl(cb);

@@ -1,8 +1,13 @@
-import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { checkSlugCollision, generateSlug, initWorkspace, sanitizeBranch } from "../orchestration/workspace.ts";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm, mkdir, access } from "fs/promises";
+import path from "path";
+import os from "os";
+import {
+  sanitizeBranch,
+  generateSlug,
+  checkSlugCollision,
+  initWorkspace,
+} from "../orchestration/workspace.ts";
 
 let tmpDir: string;
 
@@ -116,6 +121,9 @@ describe("initWorkspace", () => {
 
   it("returns the workspace path", async () => {
     const ws = await initWorkspace(tmpDir, "test-branch");
-    expect(ws).toBe(path.join(tmpDir, ".canon", "workspaces", "test-branch"));
+    expect(ws).toBe(
+      path.join(tmpDir, ".canon", "workspaces", "test-branch"),
+    );
   });
 });
+

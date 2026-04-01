@@ -31,9 +31,9 @@ vi.mock("../orchestration/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
+import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------

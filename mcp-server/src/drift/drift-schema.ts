@@ -8,13 +8,13 @@
  * Pattern follows kg-schema.ts.
  */
 
-import Database from "better-sqlite3";
+import Database from 'better-sqlite3';
 
 // ---------------------------------------------------------------------------
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const DRIFT_SCHEMA_VERSION = "1";
+export const DRIFT_SCHEMA_VERSION = '1';
 
 // ---------------------------------------------------------------------------
 // DDL statements
@@ -27,7 +27,7 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  `INSERT INTO meta (key, value) VALUES ('schema_version', '${DRIFT_SCHEMA_VERSION}') ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${DRIFT_SCHEMA_VERSION}')`,
 
   // Reviews (replaces reviews.jsonl)
   `CREATE TABLE IF NOT EXISTS reviews (
@@ -104,10 +104,10 @@ export function initDriftDb(dbPath: string): Database.Database {
   const db = new Database(dbPath);
 
   // WAL mode must be set before table creation for consistent behaviour
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma("synchronous = NORMAL");
-  db.pragma("busy_timeout = 5000");
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('busy_timeout = 5000');
 
   // Execute all DDL inside a single transaction for atomicity and speed
   const applySchema = db.transaction(() => {

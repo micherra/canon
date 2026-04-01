@@ -17,10 +17,10 @@
  *    - wcpl-03: consultation_outputs passed to getSpawnPrompt affects prompt
  */
 
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -48,13 +48,13 @@ vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
   };
 });
 
-import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
+import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -250,7 +250,7 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
 
     expect(result.consultation_prompts).toBeDefined();
     // perf-review has no timeout or section
-    const perfEntry = result.consultation_prompts!.find((e) => e.name === "perf-review");
+    const perfEntry = result.consultation_prompts!.find(e => e.name === "perf-review");
     expect(perfEntry).toBeDefined();
     expect("timeout" in perfEntry!).toBe(false);
     expect("section" in perfEntry!).toBe(false);
@@ -315,7 +315,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
     expect(result.consultation_prompts).toBeDefined();
     expect(result.consultation_prompts).toHaveLength(2);
 
-    const names = result.consultation_prompts!.map((e) => e.name);
+    const names = result.consultation_prompts!.map(e => e.name);
     expect(names).toContain("security-review");
     expect(names).toContain("perf-review");
   });
@@ -396,7 +396,7 @@ describe("getSpawnPrompt — wave=null with consultation_outputs does not inject
       flow,
       variables: { CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
-      wave: undefined, // wave is null/undefined — guard must block injection
+      wave: undefined,  // wave is null/undefined — guard must block injection
       consultation_outputs: {
         security: { section: "Security", summary: "All clear." },
       },
@@ -456,7 +456,7 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
       flow,
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a", "task-b"],
-      wave: 1, // Wave 1 → between breakpoint
+      wave: 1,  // Wave 1 → between breakpoint
     });
     assertOk(result);
 
@@ -639,7 +639,7 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
           status: "in_progress",
           entries: 1,
           wave_results: {
-            after: {
+            "after": {
               tasks: [],
               status: "done",
               consultations: {

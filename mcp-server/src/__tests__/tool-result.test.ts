@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { type CanonErrorCode, isToolError, type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { describe, it, expect } from "vitest";
+import {
+  toolError,
+  toolOk,
+  isToolError,
+  type CanonErrorCode,
+  type CanonToolError,
+  type ToolResult,
+} from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // toolError()
@@ -77,7 +84,7 @@ describe("toolOk — shape", () => {
   });
 
   it("does NOT wrap data in a nested data field", () => {
-    const result = toolOk({ workspace: "ws-1" }) as { ok: true; workspace: string; data?: unknown };
+    const result = toolOk({ workspace: "ws-1" }) as any;
     expect(result.data).toBeUndefined();
   });
 

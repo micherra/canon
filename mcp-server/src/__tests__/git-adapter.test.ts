@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -43,7 +43,7 @@ vi.mock("node:child_process", () => ({
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-import { gitDiff, gitExec, gitStatus } from "../adapters/git-adapter.ts";
+import { gitExec, gitDiff, gitStatus } from "../adapters/git-adapter.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;

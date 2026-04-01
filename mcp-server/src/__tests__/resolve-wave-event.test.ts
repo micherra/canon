@@ -4,15 +4,14 @@
  * Tests now go against ExecutionStore (SQLite) instead of file-based JSONL.
  * withBoardLock removed — SQLite transaction handles atomicity.
  */
-
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import type { InitExecutionParams } from "../orchestration/execution-store.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtemp, rm } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { InitExecutionParams } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -186,9 +185,9 @@ describe("reject action", () => {
   it("throws if reason is missing when action is reject", async () => {
     const event = postEvent(workspace, "add_task");
 
-    await expect(resolveWaveEvent({ workspace, event_id: event.id, action: "reject" })).rejects.toThrow(
-      "reason is required when action is reject",
-    );
+    await expect(
+      resolveWaveEvent({ workspace, event_id: event.id, action: "reject" }),
+    ).rejects.toThrow("reason is required when action is reject");
   });
 
   it("returns agents from resolveEventAgents even for reject", async () => {
@@ -225,9 +224,9 @@ describe("reject action", () => {
 
 describe("validation", () => {
   it("throws on unknown event_id", async () => {
-    await expect(resolveWaveEvent({ workspace, event_id: "evt_does_not_exist", action: "apply" })).rejects.toThrow(
-      "Event not found: evt_does_not_exist",
-    );
+    await expect(
+      resolveWaveEvent({ workspace, event_id: "evt_does_not_exist", action: "apply" }),
+    ).rejects.toThrow("Event not found: evt_does_not_exist");
   });
 
   it("throws on already-applied event", async () => {
@@ -235,9 +234,9 @@ describe("validation", () => {
 
     await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
 
-    await expect(resolveWaveEvent({ workspace, event_id: event.id, action: "apply" })).rejects.toThrow(
-      `Event ${event.id} is already applied`,
-    );
+    await expect(
+      resolveWaveEvent({ workspace, event_id: event.id, action: "apply" }),
+    ).rejects.toThrow(`Event ${event.id} is already applied`);
   });
 
   it("throws on already-rejected event", async () => {
@@ -245,9 +244,9 @@ describe("validation", () => {
 
     await resolveWaveEvent({ workspace, event_id: event.id, action: "reject", reason: "nope" });
 
-    await expect(resolveWaveEvent({ workspace, event_id: event.id, action: "apply" })).rejects.toThrow(
-      `Event ${event.id} is already rejected`,
-    );
+    await expect(
+      resolveWaveEvent({ workspace, event_id: event.id, action: "apply" }),
+    ).rejects.toThrow(`Event ${event.id} is already rejected`);
   });
 });
 
@@ -325,7 +324,9 @@ describe("event bus emission and listener cleanup", () => {
 
     await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
 
-    const emittedCall = emitSpy.mock.calls.find(([eventName]) => eventName === "wave_event_resolved");
+    const emittedCall = emitSpy.mock.calls.find(
+      ([eventName]) => eventName === "wave_event_resolved",
+    );
     expect(emittedCall).toBeDefined();
 
     const payload = emittedCall![1] as {
@@ -349,7 +350,9 @@ describe("event bus emission and listener cleanup", () => {
 
     await resolveWaveEvent({ workspace, event_id: event.id, action: "reject", reason: "not needed" });
 
-    const emittedCall = emitSpy.mock.calls.find(([eventName]) => eventName === "wave_event_resolved");
+    const emittedCall = emitSpy.mock.calls.find(
+      ([eventName]) => eventName === "wave_event_resolved",
+    );
     expect(emittedCall).toBeDefined();
     const payload = emittedCall![1] as { action: string };
     expect(payload.action).toBe("reject");
@@ -361,7 +364,9 @@ describe("event bus emission and listener cleanup", () => {
 
     await resolveWaveEvent({ workspace, event_id: event.id, action: "apply" });
 
-    const removalCall = removeListenerSpy.mock.calls.find(([name]) => name === "wave_event_resolved");
+    const removalCall = removeListenerSpy.mock.calls.find(
+      ([name]) => name === "wave_event_resolved",
+    );
     expect(removalCall).toBeDefined();
   });
 
@@ -376,11 +381,13 @@ describe("event bus emission and listener cleanup", () => {
       return false;
     });
 
-    await expect(resolveWaveEvent({ workspace, event_id: event.id, action: "apply" })).rejects.toThrow(
-      "Simulated emit failure",
-    );
+    await expect(
+      resolveWaveEvent({ workspace, event_id: event.id, action: "apply" }),
+    ).rejects.toThrow("Simulated emit failure");
 
-    const removalCall = removeListenerSpy.mock.calls.find(([name]) => name === "wave_event_resolved");
+    const removalCall = removeListenerSpy.mock.calls.find(
+      ([name]) => name === "wave_event_resolved",
+    );
     expect(removalCall).toBeDefined();
   });
 });

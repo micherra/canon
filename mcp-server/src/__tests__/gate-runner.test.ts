@@ -232,7 +232,7 @@ describe("runGate — runShell timeout and cwd configuration", () => {
 
   it("passes cwd to runShell", () => {
     runShellImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
-    const flow = makeFlow({ check: "tsc" });
+    const flow = makeFlow({ "check": "tsc" });
     runGate("check", flow, "/my/project");
 
     expect(lastRunShellArgs!.cwd).toBe("/my/project");
@@ -245,7 +245,7 @@ describe("runGate — runShell timeout and cwd configuration", () => {
       adapterCalled = true;
       return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
     };
-    const flow = makeFlow({ lint: "eslint ." });
+    const flow = makeFlow({ "lint": "eslint ." });
     runGate("lint", flow, "/project");
 
     expect(adapterCalled).toBe(true);

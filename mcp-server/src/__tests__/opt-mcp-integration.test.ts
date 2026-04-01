@@ -41,12 +41,12 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { resolveContextInjections } from "../orchestration/inject-context.ts";
+import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { resolveContextInjections } from "../orchestration/inject-context.ts";
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { getSpawnPrompt, truncateProgress } from "../tools/get-spawn-prompt.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -264,15 +264,12 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
   it("passes the entered board (post-enterState) to getSpawnPrompt, not the original board", async () => {
     const workspace = makeTmpDir();
     // Seed with pre-enter state (entries: 0)
-    seedBoard(
-      workspace,
-      makeBoard({
-        states: {
-          implement: { status: "pending", entries: 0 },
-          done: { status: "pending", entries: 0 },
-        },
-      }),
-    );
+    seedBoard(workspace, makeBoard({
+      states: {
+        implement: { status: "pending", entries: 0 },
+        done: { status: "pending", entries: 0 },
+      },
+    }));
 
     // skip_when=present but not met, so we proceed normally
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
@@ -523,7 +520,7 @@ describe("getSpawnPrompt — progress.md absent", () => {
     store.appendProgress("[implement] done: wrote code");
 
     const flow = makeFlow({
-      progress: "${WORKSPACE}/progress.md", // presence of this field triggers progress injection
+      progress: "${WORKSPACE}/progress.md",  // presence of this field triggers progress injection
       spawn_instructions: { implement: "${progress}" },
     });
 

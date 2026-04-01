@@ -666,9 +666,11 @@ describe("getPrReviewData — adapter routing", () => {
     await fn({ pr_number: 1 }, tmpDir);
 
     expect(runShell).toHaveBeenCalled();
-    // Command string should contain gh pr diff
+    // Command string should start with "gh" and contain "pr" and "diff" (now shell-quoted)
     const [cmd] = runShell.mock.calls[0];
-    expect(cmd).toContain("gh pr diff");
+    expect(cmd).toMatch(/^gh /);
+    expect(cmd).toContain("pr");
+    expect(cmd).toContain("diff");
   });
 
   it("gitExecAsync export exists and never rejects (returns ProcessResult)", async () => {

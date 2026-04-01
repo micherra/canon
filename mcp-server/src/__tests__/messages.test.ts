@@ -4,17 +4,17 @@
  * Tests the post-message and get-messages tools via ExecutionStore (SQLite).
  * Also tests readChannelAsContext and buildMessageInstructions (pure/utility functions).
  */
-
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+import Database from "better-sqlite3";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
+import { ExecutionStore } from "../orchestration/execution-store.ts";
 import { buildMessageInstructions, readChannelAsContext } from "../orchestration/messages.ts";
-import { getMessages } from "../tools/get-messages.ts";
 import { postMessage } from "../tools/post-message.ts";
+import { getMessages } from "../tools/get-messages.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Store-level message operations (unit)
@@ -63,18 +63,8 @@ describe("ExecutionStore messages", () => {
     const ts2 = "2026-01-01T00:01:00.000Z";
 
     // Insert via direct db for precise timestamp control
-    db.prepare("INSERT INTO messages (channel, sender, content, timestamp) VALUES (?, ?, ?, ?)").run(
-      "ch",
-      "old-agent",
-      "Old message",
-      ts1,
-    );
-    db.prepare("INSERT INTO messages (channel, sender, content, timestamp) VALUES (?, ?, ?, ?)").run(
-      "ch",
-      "new-agent",
-      "New message",
-      ts2,
-    );
+    db.prepare("INSERT INTO messages (channel, sender, content, timestamp) VALUES (?, ?, ?, ?)").run("ch", "old-agent", "Old message", ts1);
+    db.prepare("INSERT INTO messages (channel, sender, content, timestamp) VALUES (?, ?, ?, ?)").run("ch", "new-agent", "New message", ts2);
 
     const msgs = store.getMessages("ch", { since: "2026-01-01T00:00:30.000Z" });
     expect(msgs).toHaveLength(1);
@@ -106,7 +96,7 @@ describe("ExecutionStore messages", () => {
     try {
       store.appendMessage("wave-000", "agent", "Hello");
       // No files should be created in workspace since store is in-memory
-      const { readdir } = await import("node:fs/promises");
+      const { readdir } = await import("fs/promises");
       const files = await readdir(workspace).catch(() => []);
       // workspace should be empty — no .sequence or .sequence.lock
       const sequenceFiles = files.filter((f) => f.includes("sequence"));
@@ -131,7 +121,7 @@ describe("postMessage tool (store-backed)", () => {
   afterEach(async () => {
     await rm(workspace, { recursive: true, force: true });
     // Clear store cache between tests
-    const _storeCache = (await import("../orchestration/execution-store.ts")) as { default?: unknown };
+    const storeCache = (await import("../orchestration/execution-store.ts")) as { default?: unknown };
     // Re-import to clear singleton — use a fresh workspace per test so no conflict
   });
 
@@ -195,20 +185,10 @@ describe("getMessages tool (store-backed)", () => {
 
   it("filters by since timestamp", async () => {
     const store = getExecutionStore(workspace);
-    const db = (store as unknown as { db: Database.Database }).db;
+    const db = (store as any).db as Database.Database;
 
-    db.prepare("INSERT INTO messages (channel, sender, content, timestamp) VALUES (?, ?, ?, ?)").run(
-      "ch",
-      "old-agent",
-      "Old",
-      "2026-01-01T00:00:00.000Z",
-    );
-    db.prepare("INSERT INTO messages (channel, sender, content, timestamp) VALUES (?, ?, ?, ?)").run(
-      "ch",
-      "new-agent",
-      "New",
-      "2026-01-01T00:01:00.000Z",
-    );
+    db.prepare("INSERT INTO messages (channel, sender, content, timestamp) VALUES (?, ?, ?, ?)").run("ch", "old-agent", "Old", "2026-01-01T00:00:00.000Z");
+    db.prepare("INSERT INTO messages (channel, sender, content, timestamp) VALUES (?, ?, ?, ?)").run("ch", "new-agent", "New", "2026-01-01T00:01:00.000Z");
 
     const result = await getMessages({ workspace, channel: "ch", since: "2026-01-01T00:00:30.000Z" });
     expect(result.messages).toHaveLength(1);
@@ -219,13 +199,7 @@ describe("getMessages tool (store-backed)", () => {
 
   it("include_events returns pending wave events from store", async () => {
     const store = getExecutionStore(workspace);
-    store.postWaveEvent({
-      id: "evt-1",
-      type: "guidance",
-      payload: { context: "some guidance" },
-      timestamp: new Date().toISOString(),
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-1", type: "guidance", payload: { context: "some guidance" }, timestamp: new Date().toISOString(), status: "pending" });
 
     const result = await getMessages({ workspace, channel: "wave-000", include_events: true });
     expect(result.events).toBeDefined();

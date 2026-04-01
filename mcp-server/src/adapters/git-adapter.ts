@@ -38,14 +38,7 @@ export function gitStatus(cwd: string, timeout?: number): ProcessResult {
   return gitExec(["status", "--porcelain"], cwd, timeout);
 }
 
-/**
- * Create a git worktree at `worktreePath` on a new branch `branchName`
- * starting from `baseCommit`.
- *
- * Equivalent to: `git worktree add "{worktreePath}" -b "{branchName}" "{baseCommit}"`
- *
- * SECURITY: Uses array args — no shell injection possible.
- */
+/** Convenience wrapper: runs `git worktree add`. */
 export function gitWorktreeAdd(
   worktreePath: string,
   branchName: string,

@@ -8,11 +8,11 @@
  * 4. getSpawnPrompt leaves ${progress} as literal when flow has no progress field
  */
 
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { writeFile } from "node:fs/promises";
 
 // ---------------------------------------------------------------------------
 // Hoist mock for loadAndResolveFlow used by initWorkspaceFlow
@@ -22,11 +22,11 @@ vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn(),
 }));
 
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,9 +118,9 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     // Progress is stored in SQLite store — only the header line should be present
     const store = getExecutionStore(result.workspace);
     const progressContent = store.getProgress(100);
-    const lines = progressContent.split("\n").filter((l) => l.trim() !== "");
+    const lines = progressContent.split("\n").filter(l => l.trim() !== "");
     expect(lines).toHaveLength(1);
-    // getProgress() returns stored lines verbatim with no prefix
+    // getProgress() prepends "- " to each stored line
     expect(lines[0]).toContain("## Progress: My task");
   });
 
@@ -181,19 +181,10 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     const now = new Date().toISOString();
     const store = getExecutionStore(workspace);
     store.initExecution({
-      flow: "test-flow",
-      task: "my task",
-      entry: "implement",
-      current_state: "implement",
-      base_commit: "abc123",
-      started: now,
-      last_updated: now,
-      branch: "main",
-      sanitized: "main",
-      created: now,
-      tier: "small",
-      flow_name: "test-flow",
-      slug: "test-slug",
+      flow: "test-flow", task: "my task", entry: "implement", current_state: "implement",
+      base_commit: "abc123", started: now, last_updated: now,
+      branch: "main", sanitized: "main", created: now, tier: "small",
+      flow_name: "test-flow", slug: "test-slug",
     });
     store.appendProgress("## Progress: My task");
     store.appendProgress("- [research] done: found the solution");
@@ -221,19 +212,10 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     const now = new Date().toISOString();
     const store = getExecutionStore(workspace);
     store.initExecution({
-      flow: "test-flow",
-      task: "test",
-      entry: "implement",
-      current_state: "implement",
-      base_commit: "abc123",
-      started: now,
-      last_updated: now,
-      branch: "main",
-      sanitized: "main",
-      created: now,
-      tier: "small",
-      flow_name: "test-flow",
-      slug: "test-slug",
+      flow: "test-flow", task: "test", entry: "implement", current_state: "implement",
+      base_commit: "abc123", started: now, last_updated: now,
+      branch: "main", sanitized: "main", created: now, tier: "small",
+      flow_name: "test-flow", slug: "test-slug",
     });
     store.appendProgress("## Progress: Path substitution test");
 

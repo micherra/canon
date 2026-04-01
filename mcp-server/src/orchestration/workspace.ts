@@ -5,8 +5,8 @@
  * (writeSession) have been removed — SQLite WAL handles write serialization.
  */
 
-import { access, mkdir } from "node:fs/promises";
-import path from "node:path";
+import { access, mkdir } from "fs/promises";
+import path from "path";
 
 /**
  * Sanitize a git branch name into a filesystem-safe string.
@@ -78,3 +78,4 @@ export async function initWorkspace(projectDir: string, sanitized: string): Prom
   await Promise.all(subdirs.map((dir) => mkdir(path.join(workspace, dir), { recursive: true })));
   return workspace;
 }
+

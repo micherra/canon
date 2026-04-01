@@ -13,18 +13,28 @@
  * 9. jsonl-store.ts has zero production importers
  */
 
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  mkdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { DriftStore } from "../drift/store.ts";
-import { assertWorkspacePath, clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import type { ReviewEntry } from "../schema.ts";
-import { getMessages } from "../tools/get-messages.ts";
-import { postMessage } from "../tools/post-message.ts";
+
+import {
+  getExecutionStore,
+  clearStoreCache,
+  assertWorkspacePath,
+} from "../orchestration/execution-store.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
+import { postMessage } from "../tools/post-message.ts";
+import { getMessages } from "../tools/get-messages.ts";
+import { DriftStore } from "../drift/store.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { ReviewEntry } from "../schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -197,7 +207,7 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
 
     // Read events from SQLite directly
     const store = getExecutionStore(workspace);
-    const db = (store as unknown as { db: import("better-sqlite3").Database }).db;
+    const db = (store as any).db;
     const events = db.prepare("SELECT * FROM events ORDER BY id ASC").all() as Array<{
       id: number;
       type: string;
@@ -232,7 +242,9 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
 
     const board = getExecutionStore(workspace).getBoard()!;
     expect(board.concerns).toHaveLength(1);
-    expect(board.concerns[0].message).toBe("TypeScript strict mode violations remain in legacy files");
+    expect(board.concerns[0].message).toBe(
+      "TypeScript strict mode violations remain in legacy files",
+    );
     expect(board.concerns[0].state_id).toBe("build");
   });
 
@@ -241,7 +253,9 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     const flow = makeThreeStateFlow();
     seedWorkspace(workspace, flow);
 
-    const gateResults = [{ passed: true, gate: "npm-test", command: "npm test", output: "All passed", exitCode: 0 }];
+    const gateResults = [
+      { passed: true, gate: "npm-test", command: "npm test", output: "All passed", exitCode: 0 },
+    ];
     const testResults = { passed: 42, failed: 0, skipped: 2 };
 
     await reportResult({
@@ -457,11 +471,10 @@ describe("wave events lifecycle through SQLite store", () => {
     expect(existsSync(logPath)).toBe(false);
 
     // wave_event_resolved should be in the SQLite events table
-    const db = (store as unknown as { db: import("better-sqlite3").Database }).db;
-    const events = db.prepare("SELECT * FROM events WHERE type = 'wave_event_resolved'").all() as Array<{
-      type: string;
-      payload: string;
-    }>;
+    const db = (store as any).db;
+    const events = db
+      .prepare("SELECT * FROM events WHERE type = 'wave_event_resolved'")
+      .all() as Array<{ type: string; payload: string }>;
     expect(events).toHaveLength(1);
     const payload = JSON.parse(events[0].payload);
     expect(payload.eventId).toBe(injected.event.id);
@@ -482,11 +495,7 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
       timestamp: new Date().toISOString(),
       files: ["src/tools/report-result.ts"],
       honored: [],
-      score: {
-        rules: { passed: 0, total: 1 },
-        opinions: { passed: 0, total: 0 },
-        conventions: { passed: 0, total: 0 },
-      },
+      score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } },
       verdict: "BLOCKING",
       violations: [
         {
@@ -522,11 +531,7 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
       timestamp: now,
       files: ["a.ts"],
       honored: [],
-      score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 1 },
-        conventions: { passed: 0, total: 0 },
-      },
+      score: { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 0 } },
       verdict: "WARNING",
       violations: [{ principle_id: "fail-fast", severity: "strong-opinion" }],
     });
@@ -536,11 +541,7 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
       timestamp: now,
       files: ["b.ts"],
       honored: [],
-      score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
-        conventions: { passed: 0, total: 1 },
-      },
+      score: { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 1 } },
       verdict: "WARNING",
       violations: [{ principle_id: "deep-modules", severity: "convention" }],
     });
@@ -560,11 +561,7 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
     const store = new DriftStore(projectDir);
     const now = new Date().toISOString();
 
-    const emptyScore = {
-      rules: { passed: 0, total: 0 },
-      opinions: { passed: 0, total: 0 },
-      conventions: { passed: 0, total: 0 },
-    };
+    const emptyScore = { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } };
 
     await store.appendReview({
       review_id: "rev_main",
@@ -600,11 +597,7 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
     const earlier = new Date(Date.now() - 1000).toISOString();
     const later = new Date().toISOString();
 
-    const emptyScore = {
-      rules: { passed: 0, total: 0 },
-      opinions: { passed: 0, total: 0 },
-      conventions: { passed: 0, total: 0 },
-    };
+    const emptyScore = { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } };
 
     await store.appendReview({
       review_id: "rev_pr_old",
@@ -718,11 +711,15 @@ describe("jsonl-store.ts migration completeness", () => {
 
 describe("assertWorkspacePath validation", () => {
   it("does NOT throw for paths containing .canon/workspaces/", () => {
-    expect(() => assertWorkspacePath("/home/user/project/.canon/workspaces/feat/task-slug")).not.toThrow();
+    expect(() =>
+      assertWorkspacePath("/home/user/project/.canon/workspaces/feat/task-slug"),
+    ).not.toThrow();
   });
 
   it("does NOT throw for Windows-style paths containing .canon\\workspaces\\", () => {
-    expect(() => assertWorkspacePath("C:\\project\\.canon\\workspaces\\main\\task")).not.toThrow();
+    expect(() =>
+      assertWorkspacePath("C:\\project\\.canon\\workspaces\\main\\task"),
+    ).not.toThrow();
   });
 
   it("throws for a project root path without .canon/workspaces/", () => {
@@ -730,7 +727,9 @@ describe("assertWorkspacePath validation", () => {
     const orig = process.env.VITEST;
     delete process.env.VITEST;
     try {
-      expect(() => assertWorkspacePath("/home/user/project")).toThrow(/Invalid workspace path.*\.canon\/workspaces\//);
+      expect(() => assertWorkspacePath("/home/user/project")).toThrow(
+        /Invalid workspace path.*\.canon\/workspaces\//,
+      );
     } finally {
       if (orig !== undefined) process.env.VITEST = orig;
     }
@@ -740,7 +739,9 @@ describe("assertWorkspacePath validation", () => {
     const orig = process.env.VITEST;
     delete process.env.VITEST;
     try {
-      expect(() => assertWorkspacePath("/tmp/some-temp-dir")).toThrow(/Invalid workspace path/);
+      expect(() => assertWorkspacePath("/tmp/some-temp-dir")).toThrow(
+        /Invalid workspace path/,
+      );
     } finally {
       if (orig !== undefined) process.env.VITEST = orig;
     }

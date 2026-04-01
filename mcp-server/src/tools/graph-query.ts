@@ -1,10 +1,10 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
-import { KgQuery } from "../graph/kg-query.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
-import type { SearchResult } from "../graph/kg-types.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { KgQuery } from '../graph/kg-query.ts';
+import { initDatabase } from '../graph/kg-schema.ts';
+import { CANON_DIR, CANON_FILES } from '../constants.ts';
+import type { SearchResult } from '../graph/kg-types.ts';
+import { toolError, toolOk, type ToolResult } from '../utils/tool-result.ts';
 
 // ---------------------------------------------------------------------------
 // Input / Output types
@@ -54,7 +54,10 @@ function findEntityId(kq: KgQuery, target: string): number | null {
  *
  * Returns a structured result with typed rows and a total count.
  */
-export function graphQuery(input: GraphQueryInput, projectDir: string): ToolResult<GraphQueryOutput> {
+export function graphQuery(
+  input: GraphQueryInput,
+  projectDir: string
+): ToolResult<GraphQueryOutput> {
   const { query_type, target, options = {} } = input;
 
   // ------------------------------------------------------------------

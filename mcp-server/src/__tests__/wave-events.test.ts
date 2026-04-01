@@ -4,9 +4,8 @@
  * Tests now go against ExecutionStore (SQLite), not the file-based JSONL ops.
  * The resolveEventAgents pure function is tested here too.
  */
-
-import type Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import Database from "better-sqlite3";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import { ExecutionStore } from "../orchestration/execution-store.ts";
 import { resolveEventAgents } from "../orchestration/wave-events.ts";
@@ -50,27 +49,9 @@ describe("postWaveEvent (store)", () => {
   });
 
   it("inserts multiple events that can all be read back", () => {
-    store.postWaveEvent({
-      id: "evt-1",
-      type: "add_task",
-      payload: { description: "First" },
-      timestamp: "2026-01-01T00:00:00.000Z",
-      status: "pending",
-    });
-    store.postWaveEvent({
-      id: "evt-2",
-      type: "skip_task",
-      payload: { task_id: "task-01" },
-      timestamp: "2026-01-01T00:01:00.000Z",
-      status: "pending",
-    });
-    store.postWaveEvent({
-      id: "evt-3",
-      type: "pause",
-      payload: {},
-      timestamp: "2026-01-01T00:02:00.000Z",
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-1", type: "add_task", payload: { description: "First" }, timestamp: "2026-01-01T00:00:00.000Z", status: "pending" });
+    store.postWaveEvent({ id: "evt-2", type: "skip_task", payload: { task_id: "task-01" }, timestamp: "2026-01-01T00:01:00.000Z", status: "pending" });
+    store.postWaveEvent({ id: "evt-3", type: "pause", payload: {}, timestamp: "2026-01-01T00:02:00.000Z", status: "pending" });
 
     const events = store.getWaveEvents();
     expect(events).toHaveLength(3);
@@ -100,20 +81,8 @@ describe("getWaveEvents (store)", () => {
   });
 
   it("returns all events regardless of status", () => {
-    store.postWaveEvent({
-      id: "evt-1",
-      type: "add_task",
-      payload: {},
-      timestamp: "2026-01-01T00:00:00.000Z",
-      status: "pending",
-    });
-    store.postWaveEvent({
-      id: "evt-2",
-      type: "guidance",
-      payload: {},
-      timestamp: "2026-01-01T00:01:00.000Z",
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-1", type: "add_task", payload: {}, timestamp: "2026-01-01T00:00:00.000Z", status: "pending" });
+    store.postWaveEvent({ id: "evt-2", type: "guidance", payload: {}, timestamp: "2026-01-01T00:01:00.000Z", status: "pending" });
     store.updateWaveEvent("evt-1", { status: "applied", applied_at: new Date().toISOString() });
 
     const all = store.getWaveEvents();
@@ -124,27 +93,9 @@ describe("getWaveEvents (store)", () => {
   });
 
   it("filters by status=pending", () => {
-    store.postWaveEvent({
-      id: "evt-1",
-      type: "add_task",
-      payload: {},
-      timestamp: "2026-01-01T00:00:00.000Z",
-      status: "pending",
-    });
-    store.postWaveEvent({
-      id: "evt-2",
-      type: "guidance",
-      payload: {},
-      timestamp: "2026-01-01T00:01:00.000Z",
-      status: "pending",
-    });
-    store.postWaveEvent({
-      id: "evt-3",
-      type: "pause",
-      payload: {},
-      timestamp: "2026-01-01T00:02:00.000Z",
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-1", type: "add_task", payload: {}, timestamp: "2026-01-01T00:00:00.000Z", status: "pending" });
+    store.postWaveEvent({ id: "evt-2", type: "guidance", payload: {}, timestamp: "2026-01-01T00:01:00.000Z", status: "pending" });
+    store.postWaveEvent({ id: "evt-3", type: "pause", payload: {}, timestamp: "2026-01-01T00:02:00.000Z", status: "pending" });
     store.updateWaveEvent("evt-1", { status: "applied", applied_at: new Date().toISOString() });
     store.updateWaveEvent("evt-2", { status: "rejected", rejection_reason: "Not relevant" });
 
@@ -158,13 +109,7 @@ describe("getWaveEvents (store)", () => {
 describe("updateWaveEvent (store)", () => {
   it("transitions pending to applied, sets applied_at", () => {
     const before = new Date().toISOString();
-    store.postWaveEvent({
-      id: "evt-apply",
-      type: "add_task",
-      payload: { description: "Apply me" },
-      timestamp: new Date().toISOString(),
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-apply", type: "add_task", payload: { description: "Apply me" }, timestamp: new Date().toISOString(), status: "pending" });
 
     store.updateWaveEvent("evt-apply", { status: "applied", applied_at: new Date().toISOString() });
 
@@ -177,13 +122,7 @@ describe("updateWaveEvent (store)", () => {
   });
 
   it("transitions pending to rejected, sets rejection_reason", () => {
-    store.postWaveEvent({
-      id: "evt-reject",
-      type: "add_task",
-      payload: {},
-      timestamp: new Date().toISOString(),
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-reject", type: "add_task", payload: {}, timestamp: new Date().toISOString(), status: "pending" });
 
     store.updateWaveEvent("evt-reject", { status: "rejected", rejection_reason: "Out of scope for this wave" });
 
@@ -194,13 +133,7 @@ describe("updateWaveEvent (store)", () => {
   });
 
   it("attaches resolution when provided", () => {
-    store.postWaveEvent({
-      id: "evt-res",
-      type: "add_task",
-      payload: {},
-      timestamp: new Date().toISOString(),
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-res", type: "add_task", payload: {}, timestamp: new Date().toISOString(), status: "pending" });
 
     const resolution = {
       agents_spawned: ["canon-architect"],
@@ -217,20 +150,8 @@ describe("updateWaveEvent (store)", () => {
   });
 
   it("does not modify other events", () => {
-    store.postWaveEvent({
-      id: "evt-target",
-      type: "add_task",
-      payload: {},
-      timestamp: "2026-01-01T00:00:00.000Z",
-      status: "pending",
-    });
-    store.postWaveEvent({
-      id: "evt-other",
-      type: "pause",
-      payload: {},
-      timestamp: "2026-01-01T00:01:00.000Z",
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-target", type: "add_task", payload: {}, timestamp: "2026-01-01T00:00:00.000Z", status: "pending" });
+    store.postWaveEvent({ id: "evt-other", type: "pause", payload: {}, timestamp: "2026-01-01T00:01:00.000Z", status: "pending" });
 
     store.updateWaveEvent("evt-target", { status: "applied", applied_at: new Date().toISOString() });
 
@@ -240,13 +161,7 @@ describe("updateWaveEvent (store)", () => {
   });
 
   it("resolution is absent when not provided on apply", () => {
-    store.postWaveEvent({
-      id: "evt-no-res",
-      type: "skip_task",
-      payload: {},
-      timestamp: new Date().toISOString(),
-      status: "pending",
-    });
+    store.postWaveEvent({ id: "evt-no-res", type: "skip_task", payload: {}, timestamp: new Date().toISOString(), status: "pending" });
     store.updateWaveEvent("evt-no-res", { status: "applied", applied_at: new Date().toISOString() });
 
     const events = store.getWaveEvents();

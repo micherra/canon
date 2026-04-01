@@ -9,13 +9,13 @@
  * - getComplianceTrend produces correct weekly buckets
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CANON_DIR } from "../constants.ts";
+import { tmpdir } from "node:os";
 import { DriftStore } from "../drift/store.ts";
 import type { ReviewEntry } from "../schema.ts";
+import { CANON_DIR } from "../constants.ts";
 
 function makeTmpDir(): string {
   return mkdtempSync(join(tmpdir(), "canon-store-test-"));
@@ -114,14 +114,18 @@ describe("DriftStore (SQLite-backed)", () => {
     const entry = makeReview({
       review_id: "rev_optional_01",
       file_priorities: [{ path: "src/a.ts", priority_score: 10 }],
-      recommendations: [{ title: "Fix it", message: "Fix this now", source: "principle" }],
+      recommendations: [
+        { title: "Fix it", message: "Fix this now", source: "principle" },
+      ],
     });
 
     await store.appendReview(entry);
     const reviews = await store.getReviews();
 
     expect(reviews[0].file_priorities).toEqual([{ path: "src/a.ts", priority_score: 10 }]);
-    expect(reviews[0].recommendations).toEqual([{ title: "Fix it", message: "Fix this now", source: "principle" }]);
+    expect(reviews[0].recommendations).toEqual([
+      { title: "Fix it", message: "Fix this now", source: "principle" },
+    ]);
   });
 
   // --------------------------------------------------------------------------
@@ -306,22 +310,18 @@ describe("DriftStore (SQLite-backed)", () => {
 
   it("getComplianceTrend buckets reviews by ISO week and computes pass rate", async () => {
     // Two reviews in the same week — one violation, one honored
-    await store.appendReview(
-      makeReview({
-        review_id: "rev_w1_violation",
-        violations: [{ principle_id: "thin-handlers", severity: "rule" }],
-        honored: [],
-        timestamp: "2026-03-16T00:00:00Z", // W12 (Monday)
-      }),
-    );
-    await store.appendReview(
-      makeReview({
-        review_id: "rev_w1_honored",
-        violations: [],
-        honored: ["thin-handlers"],
-        timestamp: "2026-03-17T00:00:00Z", // W12 (Tuesday)
-      }),
-    );
+    await store.appendReview(makeReview({
+      review_id: "rev_w1_violation",
+      violations: [{ principle_id: "thin-handlers", severity: "rule" }],
+      honored: [],
+      timestamp: "2026-03-16T00:00:00Z", // W12 (Monday)
+    }));
+    await store.appendReview(makeReview({
+      review_id: "rev_w1_honored",
+      violations: [],
+      honored: ["thin-handlers"],
+      timestamp: "2026-03-17T00:00:00Z", // W12 (Tuesday)
+    }));
 
     const trend = await store.getComplianceTrend("thin-handlers");
     expect(trend).toHaveLength(1);
@@ -332,27 +332,21 @@ describe("DriftStore (SQLite-backed)", () => {
 
   it("getComplianceTrend limits to most recent N weeks when weeks param provided", async () => {
     // 3 reviews in 3 different weeks
-    await store.appendReview(
-      makeReview({
-        violations: [{ principle_id: "p1", severity: "rule" }],
-        honored: [],
-        timestamp: "2026-03-02T00:00:00Z", // W10
-      }),
-    );
-    await store.appendReview(
-      makeReview({
-        violations: [{ principle_id: "p1", severity: "rule" }],
-        honored: [],
-        timestamp: "2026-03-09T00:00:00Z", // W11
-      }),
-    );
-    await store.appendReview(
-      makeReview({
-        violations: [],
-        honored: ["p1"],
-        timestamp: "2026-03-16T00:00:00Z", // W12
-      }),
-    );
+    await store.appendReview(makeReview({
+      violations: [{ principle_id: "p1", severity: "rule" }],
+      honored: [],
+      timestamp: "2026-03-02T00:00:00Z", // W10
+    }));
+    await store.appendReview(makeReview({
+      violations: [{ principle_id: "p1", severity: "rule" }],
+      honored: [],
+      timestamp: "2026-03-09T00:00:00Z", // W11
+    }));
+    await store.appendReview(makeReview({
+      violations: [],
+      honored: ["p1"],
+      timestamp: "2026-03-16T00:00:00Z", // W12
+    }));
 
     const trend2 = await store.getComplianceTrend("p1", 2);
     expect(trend2).toHaveLength(2);

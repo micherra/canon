@@ -31,7 +31,7 @@ export function resolvePostconditions(
   if (discovered?.length) {
     // Security: strip bash_check entries from agent-discovered postconditions.
     // Only YAML-committed (explicit) postconditions may execute arbitrary commands.
-    const safe = discovered.filter((a) => a.type !== "bash_check");
+    const safe = discovered.filter(a => a.type !== "bash_check");
     if (safe.length > 0) return safe;
   }
   return [];
@@ -79,7 +79,11 @@ function evaluateOne(
   }
 }
 
-function evaluateFileExists(assertion: PostconditionAssertion, name: string, cwd: string): PostconditionResult {
+function evaluateFileExists(
+  assertion: PostconditionAssertion,
+  name: string,
+  cwd: string,
+): PostconditionResult {
   const target = assertion.target ?? "";
   const fullPath = resolve(cwd, target);
   const passed = existsSync(fullPath);
@@ -110,19 +114,12 @@ function evaluateFileChanged(
   const result = gitExec(["diff", "--name-only", baseCommit, "HEAD", "--", target], cwd);
 
   if (!result.ok) {
-    const stderrMsg = result.stderr.trim();
-    const details = [
-      `exitCode=${result.exitCode}`,
-      result.timedOut ? "timedOut=true" : "",
-      stderrMsg ? `stderr=${stderrMsg.slice(0, 500)}` : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    const errMsg = result.stderr.trim() || "git command failed";
     return {
       passed: false,
       name,
       type: assertion.type,
-      output: `git diff failed: ${details || "git command failed"}`,
+      output: `git diff failed: ${errMsg}`,
     };
   }
 
@@ -132,7 +129,9 @@ function evaluateFileChanged(
     passed,
     name,
     type: assertion.type,
-    output: passed ? `File changed: ${target}` : `File not changed since ${baseCommit}: ${target}`,
+    output: passed
+      ? `File changed: ${target}`
+      : `File not changed since ${baseCommit}: ${target}`,
   };
 }
 
@@ -172,7 +171,11 @@ function evaluatePatternMatch(
   };
 }
 
-function evaluateBashCheck(assertion: PostconditionAssertion, name: string, cwd: string): PostconditionResult {
+function evaluateBashCheck(
+  assertion: PostconditionAssertion,
+  name: string,
+  cwd: string,
+): PostconditionResult {
   const command = assertion.command ?? "";
 
   // Extract the first token (command name) for denylist check
@@ -201,7 +204,12 @@ function evaluateBashCheck(assertion: PostconditionAssertion, name: string, cwd:
 }
 
 /** Helper to create a failure result with consistent error message formatting. */
-function failResult(name: string, type: string, message: string, err: unknown): PostconditionResult {
+function failResult(
+  name: string,
+  type: string,
+  message: string,
+  err: unknown,
+): PostconditionResult {
   const errMsg = err instanceof Error ? err.message : String(err);
   return {
     passed: false,

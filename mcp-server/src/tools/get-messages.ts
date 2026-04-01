@@ -1,6 +1,6 @@
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { WaveEvent } from "../orchestration/flow-schema.ts";
 import type { Message } from "../orchestration/messages.ts";
+import type { WaveEvent } from "../orchestration/flow-schema.ts";
 
 export interface GetMessagesInput {
   workspace: string;

@@ -12,10 +12,10 @@
  * 7. complete_flow with mixed states (one with gate data, one without) aggregates correctly
  */
 
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { tmpdir } from "node:os";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -37,12 +37,12 @@ vi.mock("../orchestration/effects.ts", () => ({
 // Imports after mocks
 // ---------------------------------------------------------------------------
 
-import { CANON_DIR } from "../constants.ts";
-import { appendFlowRun, computeAnalytics } from "../drift/analytics.ts";
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
-import { BoardSchema, type BoardStateEntry, type ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { updateBoard } from "../tools/update-board.ts";
+import { BoardSchema } from "../orchestration/flow-schema.ts";
+import { computeAnalytics, appendFlowRun } from "../drift/analytics.ts";
+import { CANON_DIR } from "../constants.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,10 +52,7 @@ function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "qg-integ-"));
 }
 
-function seedBoard(
-  workspace: string,
-  board: ReturnType<typeof makeMinimalBoard> | ReturnType<typeof makeMultiStateBoard>,
-): void {
+function seedBoard(workspace: string, board: ReturnType<typeof makeMinimalBoard> | ReturnType<typeof makeMultiStateBoard>): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
@@ -74,10 +71,10 @@ function seedBoard(
     slug: "test-slug",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, stateEntry as BoardStateEntry);
+    store.upsertState(stateId, stateEntry as any);
   }
   for (const [stateId, iterEntry] of Object.entries(board.iterations)) {
-    store.upsertIteration(stateId, iterEntry as { count: number; max: number; history: unknown[] });
+    store.upsertIteration(stateId, iterEntry as any);
   }
 }
 
@@ -161,7 +158,9 @@ function makeMultiStateBoard() {
           duration_ms: 15_000,
           spawns: 1,
           model: "claude-sonnet",
-          gate_results: [{ passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 }],
+          gate_results: [
+            { passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 },
+          ],
           postcondition_results: [
             { passed: false, name: "postcondition-0-no_pattern", type: "no_pattern", output: "found console.log" },
           ],
@@ -229,7 +228,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
       workspace,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as unknown as ResolvedFlow,
+      flow: makeMinimalFlow() as any,
       discovered_gates: [
         { command: "npx vitest run", source: "tester" },
         { command: "npx tsc --noEmit", source: "tester" },
@@ -248,7 +247,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
     const flow = { name: "feature", description: "test", entry: "impl", states: {}, spawn_instructions: {} };
     const stateDef = { type: "single" as const }; // no explicit gates
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
-    const normalized = normalizeGates(stateDef, flow as unknown as ResolvedFlow, workspace, implState);
+    const normalized = normalizeGates(stateDef, flow as any, workspace, implState);
 
     expect(normalized.source).toBe("none");
     expect(normalized.commands).toEqual([]);
@@ -260,7 +259,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
       workspace,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as unknown as ResolvedFlow,
+      flow: makeMinimalFlow() as any,
       discovered_gates: [{ command: "npx vitest run", source: "tester" }],
     });
 
@@ -274,7 +273,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
       workspace,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as unknown as ResolvedFlow,
+      flow: makeMinimalFlow() as any,
       discovered_gates: [{ command: "npx eslint . --ext .ts", source: "reviewer" }],
     });
 
@@ -283,14 +282,14 @@ describe("Integration: report_result discovered_gates → board stores → runGa
 
     // Both gates accumulated — append not replace
     expect(discovered).toHaveLength(2);
-    expect(discovered.map((d) => d.command)).toContain("npx vitest run");
-    expect(discovered.map((d) => d.command)).toContain("npx eslint . --ext .ts");
+    expect(discovered.map(d => d.command)).toContain("npx vitest run");
+    expect(discovered.map(d => d.command)).toContain("npx eslint . --ext .ts");
 
     // Verify normalizeGates returns "none" — discovered gates are stored but NOT executed
     const stateDef = { type: "single" as const };
     const flow = { name: "feature", description: "test", entry: "impl", states: {}, spawn_instructions: {} };
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
-    const normalized = normalizeGates(stateDef, flow as unknown as ResolvedFlow, workspace, finalBoard.states["impl"]);
+    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states["impl"]);
 
     expect(normalized.source).toBe("none");
     expect(normalized.commands).toEqual([]);
@@ -315,14 +314,14 @@ describe("Integration: explicit gates override discovered gates (tier 1 wins)", 
     const stateDef = { type: "single" as const, gates: ["npm test", "npx tsc --noEmit"] };
     const flow = { name: "test", description: "test", entry: "s", states: {}, spawn_instructions: {} };
 
-    const result = normalizeGates(stateDef, flow as unknown as ResolvedFlow, "/project", boardState);
+    const result = normalizeGates(stateDef, flow as any, "/project", boardState);
 
     // Tier 1 wins — only explicit gates, discovered ignored
     expect(result.source).toBe("gates");
     expect(result.commands).toHaveLength(2);
-    expect(result.commands.map((c) => c.command)).toEqual(["npm test", "npx tsc --noEmit"]);
+    expect(result.commands.map(c => c.command)).toEqual(["npm test", "npx tsc --noEmit"]);
     // No discovered gate commands in output
-    expect(result.commands.map((c) => c.command)).not.toContain("pytest --tb=short");
+    expect(result.commands.map(c => c.command)).not.toContain("pytest --tb=short");
   });
 });
 
@@ -516,7 +515,7 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
       workspace,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as unknown as ResolvedFlow,
+      flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 1000, spawns: 1, model: "claude-sonnet" },
       violation_count: 0, // explicitly clean
     });
@@ -534,7 +533,7 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
       workspace,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as unknown as ResolvedFlow,
+      flow: makeMinimalFlow() as any,
       // No metrics, no quality signals
     });
 
@@ -568,7 +567,7 @@ describe("Integration: gate_results from report_result flow through to complete_
       workspace,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as unknown as ResolvedFlow,
+      flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 5000, spawns: 1, model: "claude-sonnet" },
       gate_results: [
         { passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 },
@@ -638,12 +637,7 @@ describe("Integration: computeAnalytics aggregates across flow run history", () 
     };
 
     // Run with full gate data (gate_pass_rate = 1.0)
-    await appendFlowRun(projectDir, {
-      ...baseEntry,
-      run_id: "run_001",
-      gate_pass_rate: 1.0,
-      postcondition_pass_rate: 0.8,
-    });
+    await appendFlowRun(projectDir, { ...baseEntry, run_id: "run_001", gate_pass_rate: 1.0, postcondition_pass_rate: 0.8 });
     // Run without gate data (old entry)
     await appendFlowRun(projectDir, { ...baseEntry, run_id: "run_002" });
     // Run with partial gate data (gate_pass_rate = 0.5)
@@ -691,7 +685,7 @@ describe("Integration: discovered_gates deduplicated when same command reported 
       workspace,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as unknown as ResolvedFlow,
+      flow: makeMinimalFlow() as any,
       discovered_gates: [{ command: "npm test", source: "tester" }],
     });
 
@@ -703,7 +697,7 @@ describe("Integration: discovered_gates deduplicated when same command reported 
       workspace,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as unknown as ResolvedFlow,
+      flow: makeMinimalFlow() as any,
       discovered_gates: [{ command: "npm test", source: "reviewer" }], // same command, different source
     });
 
@@ -718,7 +712,7 @@ describe("Integration: discovered_gates deduplicated when same command reported 
     const stateDef = { type: "single" as const };
     const flow = { name: "f", description: "f", entry: "impl", states: {}, spawn_instructions: {} };
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
-    const normalized = normalizeGates(stateDef, flow as unknown as ResolvedFlow, workspace, finalBoard.states["impl"]);
+    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states["impl"]);
 
     expect(normalized.source).toBe("none");
     expect(normalized.commands).toEqual([]);

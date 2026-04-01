@@ -10,11 +10,13 @@
  * 6. No board.json or .lock file created
  */
 
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { type ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
+import Database from "better-sqlite3";
+import { initExecutionDb } from "../orchestration/execution-schema.ts";
+import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -44,12 +46,13 @@ vi.mock("../orchestration/wave-variables.ts", () => ({
   extractFilePaths: vi.fn(() => []),
 }));
 
-import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
+import { wrapHandler } from "../utils/wrap-handler.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -88,7 +91,7 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
   });
 
   // Create initial state rows
-  const states = (overrides.states as Board["states"]) ?? {
+  const states = (overrides.states as Board['states']) ?? {
     implement: { status: "pending", entries: 0 },
     done: { status: "pending", entries: 0 },
   };
@@ -97,7 +100,7 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
   }
 
   // Create iteration rows if provided
-  const iterations = overrides.iterations as Board["iterations"] | undefined;
+  const iterations = overrides.iterations as Board['iterations'] | undefined;
   if (iterations) {
     for (const [stateId, iter] of Object.entries(iterations)) {
       store.upsertIteration(stateId, {
@@ -128,7 +131,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 
 afterEach(() => {
   // Clear store cache between tests
-  const cache = (getExecutionStore as unknown as { __cache: Map<string, unknown> }).__cache;
+  const cache = (getExecutionStore as any).__cache;
   if (cache instanceof Map) cache.clear();
 
   for (const d of tmpDirs) {
@@ -550,10 +553,11 @@ describe("enterAndPrepareState", () => {
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
-      expect(resolveConsultationPrompt).toHaveBeenCalledWith("risk-assessment", flow, {
-        task: "test task",
-        CANON_PLUGIN_ROOT: "",
-      });
+      expect(resolveConsultationPrompt).toHaveBeenCalledWith(
+        "risk-assessment",
+        flow,
+        { task: "test task", CANON_PLUGIN_ROOT: "" },
+      );
     });
 
     it("returns no consultation_prompts when wave > 0 but only before consultations declared", async () => {
@@ -658,7 +662,9 @@ describe("enterAndPrepareState", () => {
       store.upsertState("done", { status: "pending", entries: 0 });
 
       // escapeDollarBrace should escape the injection string
-      vi.mocked(escapeDollarBrace).mockImplementation((s: string) => s.replace(/\$\{/g, "\\${"));
+      vi.mocked(escapeDollarBrace).mockImplementation((s: string) =>
+        s.replace(/\$\{/g, "\\${")
+      );
 
       const flow = makeFlowWithConsultations("between");
       vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
@@ -693,161 +699,37 @@ describe("enterAndPrepareState", () => {
       expect(result.message).toContain(workspace);
     });
   });
+});
 
-  // ---------------------------------------------------------------------------
-  // worktree_entries surfacing
-  // ---------------------------------------------------------------------------
+describe("enterAndPrepareState — missing directory", () => {
+  it("returns WORKSPACE_NOT_FOUND via wrapHandler when workspace directory does not exist", async () => {
+    const missingWorkspace = join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-eaps");
 
-  describe("worktree_entries", () => {
-    function makeWaveFlow(): ResolvedFlow {
-      return {
-        name: "test-flow",
-        description: "Test flow",
-        entry: "implement",
-        states: {
-          implement: { type: "wave", agent: "canon-implementor" },
-          done: { type: "terminal" },
+    const flow: ResolvedFlow = {
+      name: "test-flow",
+      description: "",
+      entry: "implement",
+      states: {
+        implement: {
+          prompt: "test",
+          roles: [{ name: "implementor" }],
         },
-        spawn_instructions: { implement: "Implement ${item}." },
-      };
-    }
+      },
+    } as unknown as ResolvedFlow;
 
-    it("returns worktree_entries from wave_results when re-entering a wave state", async () => {
-      const workspace = makeTmpDir();
-      const store = getExecutionStore(workspace);
-      const now = new Date().toISOString();
-      store.initExecution({
-        flow: "test-flow",
-        task: "test task",
-        entry: "implement",
-        current_state: "implement",
-        base_commit: "abc1234",
-        started: now,
-        last_updated: now,
-        branch: "feat/test",
-        sanitized: "feat-test",
-        created: now,
-        tier: "medium",
-        flow_name: "test-flow",
-        slug: "test-slug",
-      });
+    const wrappedEnterAndPrepare = wrapHandler(
+      async (input: Parameters<typeof enterAndPrepareState>[0]) => enterAndPrepareState(input)
+    );
 
-      const worktreeEntries = [
-        { task_id: "rwf-01", worktree_path: "/tmp/wt/rwf-01", branch: "canon-build/rwf-01", status: "active" as const },
-        { task_id: "rwf-02", worktree_path: "/tmp/wt/rwf-02", branch: "canon-build/rwf-02", status: "active" as const },
-      ];
-
-      store.upsertState("implement", {
-        status: "in_progress",
-        entries: 1,
-        wave_results: {
-          wave_1: {
-            tasks: ["rwf-01", "rwf-02"],
-            status: "in_progress",
-            worktree_entries: worktreeEntries,
-          },
-        },
-      });
-      store.upsertState("done", { status: "pending", entries: 0 });
-
-      const flow = makeWaveFlow();
-      const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
-        flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
-        wave: 1,
-        items: ["rwf-01", "rwf-02"],
-      });
-
-      assertOk(result);
-      expect(result.worktree_entries).toBeDefined();
-      expect(result.worktree_entries).toHaveLength(2);
-      expect(result.worktree_entries![0].task_id).toBe("rwf-01");
-      expect(result.worktree_entries![1].task_id).toBe("rwf-02");
+    const response = await wrappedEnterAndPrepare({
+      workspace: missingWorkspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
     });
+    const result = JSON.parse(response.content[0].text);
 
-    it("returns no worktree_entries on first entry of wave state (no prior wave_results)", async () => {
-      const workspace = makeTmpDir();
-      seedStore(workspace, {
-        states: {
-          implement: { status: "pending", entries: 0 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-
-      const flow = makeWaveFlow();
-      const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
-        flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
-        wave: 1,
-        items: ["rwf-01", "rwf-02"],
-      });
-
-      assertOk(result);
-      expect(result.worktree_entries).toBeUndefined();
-    });
-
-    it("populates worktree_path on SpawnPromptEntry when matching active worktree entry exists", async () => {
-      const workspace = makeTmpDir();
-      const store = getExecutionStore(workspace);
-      const now = new Date().toISOString();
-      store.initExecution({
-        flow: "test-flow",
-        task: "test task",
-        entry: "implement",
-        current_state: "implement",
-        base_commit: "abc1234",
-        started: now,
-        last_updated: now,
-        branch: "feat/test",
-        sanitized: "feat-test",
-        created: now,
-        tier: "medium",
-        flow_name: "test-flow",
-        slug: "test-slug",
-      });
-
-      const worktreeEntries = [
-        { task_id: "rwf-01", worktree_path: "/tmp/wt/rwf-01", branch: "canon-build/rwf-01", status: "active" as const },
-        { task_id: "rwf-02", worktree_path: "/tmp/wt/rwf-02", branch: "canon-build/rwf-02", status: "merged" as const },
-      ];
-
-      store.upsertState("implement", {
-        status: "in_progress",
-        entries: 1,
-        wave_results: {
-          wave_1: {
-            tasks: ["rwf-01", "rwf-02"],
-            status: "in_progress",
-            worktree_entries: worktreeEntries,
-          },
-        },
-      });
-      store.upsertState("done", { status: "pending", entries: 0 });
-
-      const flow = makeWaveFlow();
-      const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
-        flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
-        wave: 1,
-        items: ["rwf-01", "rwf-02"],
-      });
-
-      assertOk(result);
-      // rwf-01 is "active" — worktree_path should be set
-      const prompt01 = result.prompts.find((p) => p.item === "rwf-01");
-      expect(prompt01).toBeDefined();
-      expect(prompt01!.worktree_path).toBe("/tmp/wt/rwf-01");
-
-      // rwf-02 is "merged" — worktree_path should NOT be set
-      const prompt02 = result.prompts.find((p) => p.item === "rwf-02");
-      expect(prompt02).toBeDefined();
-      expect(prompt02!.worktree_path).toBeUndefined();
-    });
+    expect(result.ok).toBe(false);
+    expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
   });
 });

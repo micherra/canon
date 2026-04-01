@@ -13,7 +13,7 @@
  * 7. ToolResult ok:true/ok:false discrimination end-to-end through wrapHandler JSON serialization
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Section 1: ProcessResult shape contract
@@ -42,14 +42,21 @@ let lastSpawnSyncOpts: Record<string, unknown> = {};
 let execFileImpl: ((cb: ExecFileCallback) => void) | null = null;
 
 vi.mock("node:child_process", () => ({
-  spawnSync: (_cmd: string, argsOrOpts: unknown, optsArg?: unknown) => {
+  spawnSync: (cmd: string, argsOrOpts: unknown, optsArg?: unknown) => {
     // Handle both spawnSync(cmd, opts) and spawnSync(cmd, args, opts) overloads
-    const opts = Array.isArray(argsOrOpts) ? (optsArg ?? {}) : (argsOrOpts ?? {});
+    const opts = Array.isArray(argsOrOpts)
+      ? (optsArg ?? {})
+      : (argsOrOpts ?? {});
     lastSpawnSyncOpts = opts as Record<string, unknown>;
     if (spawnSyncImpl) return spawnSyncImpl();
     return { stdout: "", stderr: "", status: 0, signal: null };
   },
-  execFile: (_cmd: string, _args: string[], _opts: Record<string, unknown>, cb: ExecFileCallback) => {
+  execFile: (
+    _cmd: string,
+    _args: string[],
+    _opts: Record<string, unknown>,
+    cb: ExecFileCallback,
+  ) => {
     if (execFileImpl) {
       execFileImpl(cb);
     } else {
@@ -59,10 +66,17 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { gitDiff, gitExec, gitStatus } from "../adapters/git-adapter.ts";
-import { gitExecAsync } from "../adapters/git-adapter-async.ts";
+import { gitExec, gitDiff, gitStatus } from "../adapters/git-adapter.ts";
 import { runShell } from "../adapters/process-adapter.ts";
-import { assertOk, isToolError, type ProcessResult, type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { gitExecAsync } from "../adapters/git-adapter-async.ts";
+import {
+  toolOk,
+  toolError,
+  isToolError,
+  assertOk,
+  type ToolResult,
+  type ProcessResult,
+} from "../utils/tool-result.ts";
 import { wrapHandler } from "../utils/wrap-handler.ts";
 
 beforeEach(() => {
@@ -100,12 +114,7 @@ describe("ProcessResult shape contract — gitExec", () => {
 
   it("stdout and stderr never return undefined (empty string fallback)", () => {
     // Simulate spawnSync returning null for stdout/stderr (can happen on some platforms)
-    spawnSyncImpl = () => ({
-      stdout: null as unknown as string,
-      stderr: null as unknown as string,
-      status: 0,
-      signal: null,
-    });
+    spawnSyncImpl = () => ({ stdout: null as unknown as string, stderr: null as unknown as string, status: 0, signal: null });
     const result = gitExec(["status"], "/project");
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("");
@@ -245,7 +254,11 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     vi.resetModules();
     const { evaluatePostconditions } = await import("../orchestration/contract-checker.ts");
 
-    const results = evaluatePostconditions([{ type: "file_changed", target: "initial.ts" }], "/project", "abc1234");
+    const results = evaluatePostconditions(
+      [{ type: "file_changed", target: "initial.ts" }],
+      "/project",
+      "abc1234",
+    );
 
     expect(results).toHaveLength(1);
     expect(results[0].passed).toBe(true);
@@ -284,7 +297,10 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     vi.resetModules();
     const { evaluatePostconditions } = await import("../orchestration/contract-checker.ts");
 
-    const results = evaluatePostconditions([{ type: "bash_check", command: "echo ok" }], "/project");
+    const results = evaluatePostconditions(
+      [{ type: "bash_check", command: "echo ok" }],
+      "/project",
+    );
 
     expect(results).toHaveLength(1);
     expect(results[0].passed).toBe(true);
@@ -339,7 +355,9 @@ describe("assertOk — failure path (declared Known Gap adr002-06)", () => {
 
 describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
   it("ok:true result serializes with all data fields at top level (no nesting)", async () => {
-    const handler = wrapHandler(async (_input: unknown) => toolOk({ workspace: "ws-abc", state: "build", count: 3 }));
+    const handler = wrapHandler(async (_input: unknown) =>
+      toolOk({ workspace: "ws-abc", state: "build", count: 3 }),
+    );
     const response = await handler({});
     const parsed = JSON.parse(response.content[0].text);
     expect(parsed.ok).toBe(true);
@@ -364,7 +382,9 @@ describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
   });
 
   it("isToolError correctly identifies error result deserialized from JSON", async () => {
-    const handler = wrapHandler(async (_input: unknown) => toolError("FLOW_NOT_FOUND", "flow not found"));
+    const handler = wrapHandler(async (_input: unknown) =>
+      toolError("FLOW_NOT_FOUND", "flow not found"),
+    );
     const response = await handler({});
     const parsed = JSON.parse(response.content[0].text);
     // After round-tripping through JSON, isToolError must still identify this correctly
@@ -372,7 +392,9 @@ describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
   });
 
   it("isToolError returns false for ok:true result deserialized from JSON", async () => {
-    const handler = wrapHandler(async (_input: unknown) => toolOk({ board: { status: "done" } }));
+    const handler = wrapHandler(async (_input: unknown) =>
+      toolOk({ board: { status: "done" } }),
+    );
     const response = await handler({});
     const parsed = JSON.parse(response.content[0].text);
     expect(isToolError(parsed)).toBe(false);
@@ -398,7 +420,9 @@ describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
   });
 
   it("recoverable:true is preserved through wrapHandler JSON round-trip", async () => {
-    const handler = wrapHandler(async (_input: unknown) => toolError("KG_NOT_INDEXED", "graph not indexed", true));
+    const handler = wrapHandler(async (_input: unknown) =>
+      toolError("KG_NOT_INDEXED", "graph not indexed", true),
+    );
     const response = await handler({});
     const parsed = JSON.parse(response.content[0].text);
     expect(parsed.recoverable).toBe(true);
@@ -432,7 +456,9 @@ describe("loadFlow ToolResult — ok:false error paths", () => {
 
   it("loadFlow error result passes through wrapHandler as valid JSON with ok:false", async () => {
     const { loadFlow } = await import("../tools/load-flow.ts");
-    const handler = wrapHandler(async (input: { flow_name: string }) => loadFlow(input, "/nonexistent"));
+    const handler = wrapHandler(async (input: { flow_name: string }) =>
+      loadFlow(input, "/nonexistent"),
+    );
     const response = await handler({ flow_name: "no-such-flow" });
     const parsed = JSON.parse(response.content[0].text);
     expect(parsed.ok).toBe(false);

@@ -14,14 +14,14 @@
  *   since callers like report_result already send prefixed lines.
  */
 
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import Database from "better-sqlite3";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import type { InitExecutionParams } from "../orchestration/execution-store.ts";
 import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
+import type { InitExecutionParams } from "../orchestration/execution-store.ts";
 
 // Top-level mock for flow-parser — used by Comment 5 tests
 vi.mock("../orchestration/flow-parser.ts", () => ({
@@ -89,12 +89,8 @@ afterEach(() => {
 
 describe("Comment 6: getProgress — no double bullet prefix", () => {
   let store: ExecutionStore;
-  beforeEach(() => {
-    store = makeStore();
-  });
-  afterEach(() => {
-    store.close();
-  });
+  beforeEach(() => { store = makeStore(); });
+  afterEach(() => { store.close(); });
 
   it("returns stored lines verbatim (no '- ' prefix added)", () => {
     store.appendProgress("- [build] done: compiled successfully");
@@ -153,9 +149,7 @@ describe("Comment 3 & 4: updateWaveEvent CAS", () => {
     store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
   });
-  afterEach(() => {
-    store.close();
-  });
+  afterEach(() => { store.close(); });
 
   function postTestEvent(s: ExecutionStore): string {
     const id = `evt_cas_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -172,7 +166,9 @@ describe("Comment 3 & 4: updateWaveEvent CAS", () => {
   it("succeeds when event is pending — applies to applied", () => {
     const id = postTestEvent(store);
     // Should not throw
-    expect(() => store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() })).not.toThrow();
+    expect(() =>
+      store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() }),
+    ).not.toThrow();
     const events = store.getWaveEvents();
     const updated = events.find((e) => e.id === id)!;
     expect(updated.status).toBe("applied");
@@ -183,17 +179,17 @@ describe("Comment 3 & 4: updateWaveEvent CAS", () => {
     // First update succeeds
     store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() });
     // Second update must throw — status is no longer 'pending'
-    expect(() => store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() })).toThrow(
-      /already|not pending|no rows|CAS/i,
-    );
+    expect(() =>
+      store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() }),
+    ).toThrow(/already|not pending|no rows|CAS/i);
   });
 
   it("throws when event is already rejected (CAS rejects update)", () => {
     const id = postTestEvent(store);
     store.updateWaveEvent(id, { status: "rejected", rejection_reason: "nope" });
-    expect(() => store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() })).toThrow(
-      /already|not pending|no rows|CAS/i,
-    );
+    expect(() =>
+      store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() }),
+    ).toThrow(/already|not pending|no rows|CAS/i);
   });
 
   it("does not mutate an already-applied event", () => {

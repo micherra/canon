@@ -8,11 +8,18 @@
  * Replaces: board.json, session.json, progress.md, messages, wave events, log.jsonl
  */
 
-import { join, resolve } from "node:path";
-import type Database from "better-sqlite3";
-import { CANON_FILES } from "../constants.ts";
-import { initExecutionDb } from "./execution-schema.ts";
-import type { Board, BoardStateEntry, IterationEntry, Session, WaveEvent } from "./flow-schema.ts";
+import { existsSync } from 'node:fs';
+import Database from 'better-sqlite3';
+import { join, resolve } from 'node:path';
+import type {
+  Board,
+  Session,
+  BoardStateEntry,
+  IterationEntry,
+  WaveEvent,
+} from './flow-schema.ts';
+import { initExecutionDb } from './execution-schema.ts';
+import { CANON_FILES } from '../constants.ts';
 
 // ---------------------------------------------------------------------------
 // Row types (internal — not exported; callers receive typed objects)
@@ -27,10 +34,10 @@ interface ExecutionRow {
   base_commit: string;
   started: string;
   last_updated: string;
-  blocked: string | null; // JSON: BlockedInfo | null
-  concerns: string; // JSON array
-  skipped: string; // JSON array
-  metadata: string | null; // JSON object | null
+  blocked: string | null;       // JSON: BlockedInfo | null
+  concerns: string;             // JSON array
+  skipped: string;              // JSON array
+  metadata: string | null;      // JSON object | null
   branch: string;
   sanitized: string;
   created: string;
@@ -42,8 +49,6 @@ interface ExecutionRow {
   completed_at: string | null;
   rolled_back_at: string | null;
   rolled_back_to: string | null;
-  worktree_path: string | null;
-  worktree_branch: string | null;
 }
 
 interface ExecutionStateRow {
@@ -53,27 +58,27 @@ interface ExecutionStateRow {
   entered_at: string | null;
   completed_at: string | null;
   result: string | null;
-  artifacts: string | null; // JSON array | null
-  artifact_history: string | null; // JSON array | null
+  artifacts: string | null;             // JSON array | null
+  artifact_history: string | null;      // JSON array | null
   error: string | null;
   wave: number | null;
   wave_total: number | null;
-  wave_results: string | null; // JSON object | null
-  metrics: string | null; // JSON object | null
-  gate_results: string | null; // JSON array | null
+  wave_results: string | null;          // JSON object | null
+  metrics: string | null;               // JSON object | null
+  gate_results: string | null;          // JSON array | null
   postcondition_results: string | null; // JSON array | null
-  discovered_gates: string | null; // JSON array | null
+  discovered_gates: string | null;      // JSON array | null
   discovered_postconditions: string | null; // JSON array | null
-  parallel_results: string | null; // JSON array | null
-  compete_results: string | null; // JSON array | null
-  synthesized: number | null; // 0/1 | null
+  parallel_results: string | null;      // JSON array | null
+  compete_results: string | null;       // JSON array | null
+  synthesized: number | null;           // 0/1 | null
 }
 
 interface IterationRow {
   state_id: string;
   count: number;
   max: number;
-  history: string; // JSON array
+  history: string;    // JSON array
   cannot_fix: string; // JSON array
 }
 
@@ -94,11 +99,11 @@ interface MessageRow {
 interface WaveEventRow {
   id: string;
   type: string;
-  payload: string; // JSON
+  payload: string;      // JSON
   timestamp: string;
   status: string;
   applied_at: string | null;
-  resolution: string | null; // JSON | null
+  resolution: string | null;       // JSON | null
   rejection_reason: string | null;
 }
 
@@ -118,30 +123,26 @@ export interface InitExecutionParams {
   sanitized: string;
   created: string;
   original_task?: string;
-  tier: "small" | "medium" | "large";
+  tier: 'small' | 'medium' | 'large';
   flow_name: string;
   slug: string;
   status?: string;
   completed_at?: string;
   rolled_back_at?: string;
   rolled_back_to?: string;
-  worktree_path?: string;
-  worktree_branch?: string;
 }
 
 export interface UpdateExecutionFields {
   current_state?: string;
-  blocked?: Board["blocked"];
-  concerns?: Board["concerns"];
+  blocked?: Board['blocked'];
+  concerns?: Board['concerns'];
   skipped?: string[];
-  metadata?: Board["metadata"];
+  metadata?: Board['metadata'];
   last_updated?: string;
   status?: string;
   completed_at?: string;
   rolled_back_at?: string;
   rolled_back_to?: string;
-  worktree_path?: string | null;
-  worktree_branch?: string | null;
 }
 
 export interface MessageOutput {
@@ -176,7 +177,7 @@ function parseJson<T>(value: string | null | undefined): T | undefined {
   return JSON.parse(value) as T;
 }
 
-function _parseJsonOrDefault<T>(value: string | null | undefined, fallback: T): T {
+function parseJsonOrDefault<T>(value: string | null | undefined, fallback: T): T {
   if (value === null || value === undefined) return fallback;
   return JSON.parse(value) as T;
 }
@@ -192,6 +193,7 @@ export class ExecutionStore {
   // ---- Execution statements ----
   private readonly stmtInitExecution: Database.Statement;
   private readonly stmtGetExecution: Database.Statement;
+  private readonly stmtUpdateExecution: Database.Statement;
 
   // ---- State statements ----
   private readonly stmtUpsertState: Database.Statement;
@@ -211,6 +213,7 @@ export class ExecutionStore {
   private readonly stmtAppendMessage: Database.Statement;
   private readonly stmtGetMessages: Database.Statement;
   private readonly stmtGetMessagesSince: Database.Statement;
+  private readonly stmtHasMessages: Database.Statement;
 
   // ---- Wave event statements ----
   private readonly stmtPostWaveEvent: Database.Statement;
@@ -231,20 +234,24 @@ export class ExecutionStore {
         started, last_updated, blocked, concerns, skipped, metadata,
         branch, sanitized, created, original_task,
         tier, flow_name, slug, status, completed_at,
-        rolled_back_at, rolled_back_to,
-        worktree_path, worktree_branch
+        rolled_back_at, rolled_back_to
       ) VALUES (
         1, @flow, @task, @entry, @current_state, @base_commit,
         @started, @last_updated, @blocked, @concerns, @skipped, @metadata,
         @branch, @sanitized, @created, @original_task,
         @tier, @flow_name, @slug, @status, @completed_at,
-        @rolled_back_at, @rolled_back_to,
-        @worktree_path, @worktree_branch
+        @rolled_back_at, @rolled_back_to
       )
     `);
 
     this.stmtGetExecution = db.prepare(`
       SELECT * FROM execution WHERE id = 1
+    `);
+
+    // Dynamic update — we build SET clauses at runtime for the fields provided
+    // This single-column statement is unused; updateExecution builds statements dynamically
+    this.stmtUpdateExecution = db.prepare(`
+      UPDATE execution SET last_updated = @last_updated WHERE id = 1
     `);
 
     // States
@@ -337,6 +344,10 @@ export class ExecutionStore {
       SELECT * FROM messages WHERE channel = ? AND timestamp > ? ORDER BY id ASC
     `);
 
+    this.stmtHasMessages = db.prepare(`
+      SELECT 1 FROM messages WHERE channel = ? LIMIT 1
+    `);
+
     // Wave events
     this.stmtPostWaveEvent = db.prepare(`
       INSERT INTO wave_events (id, type, payload, timestamp, status)
@@ -380,8 +391,8 @@ export class ExecutionStore {
       started: params.started,
       last_updated: params.last_updated,
       blocked: null,
-      concerns: "[]",
-      skipped: "[]",
+      concerns: '[]',
+      skipped: '[]',
       metadata: null,
       branch: params.branch,
       sanitized: params.sanitized,
@@ -390,23 +401,14 @@ export class ExecutionStore {
       tier: params.tier,
       flow_name: params.flow_name,
       slug: params.slug,
-      status: params.status ?? "active",
+      status: params.status ?? 'active',
       completed_at: params.completed_at ?? null,
       rolled_back_at: params.rolled_back_at ?? null,
       rolled_back_to: params.rolled_back_to ?? null,
-      worktree_path: params.worktree_path ?? null,
-      worktree_branch: params.worktree_branch ?? null,
     });
   }
 
-  getExecution():
-    | (ExecutionRow & {
-        blocked: Board["blocked"];
-        concerns: Board["concerns"];
-        skipped: string[];
-        metadata: Board["metadata"];
-      })
-    | null {
+  getExecution(): (ExecutionRow & { blocked: Board['blocked']; concerns: Board['concerns']; skipped: string[]; metadata: Board['metadata'] }) | null {
     const row = this.stmtGetExecution.get() as ExecutionRow | undefined;
     if (!row) return null;
     return this.deserializeExecutionRow(row);
@@ -425,15 +427,13 @@ export class ExecutionStore {
       created: row.created,
       task: row.task,
       original_task: row.original_task ?? undefined,
-      tier: row.tier as "small" | "medium" | "large",
+      tier: row.tier as 'small' | 'medium' | 'large',
       flow: row.flow_name,
       slug: row.slug,
-      status: row.status as Session["status"],
+      status: row.status as Session['status'],
       completed_at: row.completed_at ?? undefined,
       rolled_back_at: row.rolled_back_at ?? undefined,
       rolled_back_to: row.rolled_back_to ?? undefined,
-      worktree_path: row.worktree_path ?? undefined,
-      worktree_branch: row.worktree_branch ?? undefined,
     };
   }
 
@@ -446,59 +446,52 @@ export class ExecutionStore {
     const params: Record<string, unknown> = {};
 
     if (fields.current_state !== undefined) {
-      parts.push("current_state = @current_state");
-      params["current_state"] = fields.current_state;
+      parts.push('current_state = @current_state');
+      params['current_state'] = fields.current_state;
     }
-    if ("blocked" in fields) {
-      parts.push("blocked = @blocked");
-      params["blocked"] =
-        fields.blocked !== null && fields.blocked !== undefined ? JSON.stringify(fields.blocked) : null;
+    if ('blocked' in fields) {
+      parts.push('blocked = @blocked');
+      params['blocked'] = fields.blocked !== null && fields.blocked !== undefined
+        ? JSON.stringify(fields.blocked)
+        : null;
     }
     if (fields.concerns !== undefined) {
-      parts.push("concerns = @concerns");
-      params["concerns"] = JSON.stringify(fields.concerns);
+      parts.push('concerns = @concerns');
+      params['concerns'] = JSON.stringify(fields.concerns);
     }
     if (fields.skipped !== undefined) {
-      parts.push("skipped = @skipped");
-      params["skipped"] = JSON.stringify(fields.skipped);
+      parts.push('skipped = @skipped');
+      params['skipped'] = JSON.stringify(fields.skipped);
     }
     if (fields.metadata !== undefined) {
-      parts.push("metadata = @metadata");
-      params["metadata"] = fields.metadata !== null ? JSON.stringify(fields.metadata) : null;
+      parts.push('metadata = @metadata');
+      params['metadata'] = fields.metadata !== null ? JSON.stringify(fields.metadata) : null;
     }
     if (fields.status !== undefined) {
-      parts.push("status = @status");
-      params["status"] = fields.status;
+      parts.push('status = @status');
+      params['status'] = fields.status;
     }
     if (fields.completed_at !== undefined) {
-      parts.push("completed_at = @completed_at");
-      params["completed_at"] = fields.completed_at;
+      parts.push('completed_at = @completed_at');
+      params['completed_at'] = fields.completed_at;
     }
     if (fields.rolled_back_at !== undefined) {
-      parts.push("rolled_back_at = @rolled_back_at");
-      params["rolled_back_at"] = fields.rolled_back_at;
+      parts.push('rolled_back_at = @rolled_back_at');
+      params['rolled_back_at'] = fields.rolled_back_at;
     }
     if (fields.rolled_back_to !== undefined) {
-      parts.push("rolled_back_to = @rolled_back_to");
-      params["rolled_back_to"] = fields.rolled_back_to;
-    }
-    if ("worktree_path" in fields) {
-      parts.push("worktree_path = @worktree_path");
-      params["worktree_path"] = fields.worktree_path ?? null;
-    }
-    if ("worktree_branch" in fields) {
-      parts.push("worktree_branch = @worktree_branch");
-      params["worktree_branch"] = fields.worktree_branch ?? null;
+      parts.push('rolled_back_to = @rolled_back_to');
+      params['rolled_back_to'] = fields.rolled_back_to;
     }
 
     // Always update last_updated
     const now = fields.last_updated ?? new Date().toISOString();
-    parts.push("last_updated = @last_updated");
-    params["last_updated"] = now;
+    parts.push('last_updated = @last_updated');
+    params['last_updated'] = now;
 
     if (parts.length === 0) return;
 
-    const sql = `UPDATE execution SET ${parts.join(", ")} WHERE id = 1`;
+    const sql = `UPDATE execution SET ${parts.join(', ')} WHERE id = 1`;
     this.db.prepare(sql).run(params);
   }
 
@@ -515,14 +508,14 @@ export class ExecutionStore {
     if (!exRow) return null;
 
     const stateRows = this.stmtGetAllStates.all() as ExecutionStateRow[];
-    const iterRows = this.db.prepare("SELECT * FROM iterations").all() as IterationRow[];
+    const iterRows = this.db.prepare('SELECT * FROM iterations').all() as IterationRow[];
 
-    const states: Board["states"] = {};
+    const states: Board['states'] = {};
     for (const row of stateRows) {
       states[row.state_id] = this.deserializeStateRow(row);
     }
 
-    const iterations: Board["iterations"] = {};
+    const iterations: Board['iterations'] = {};
     for (const row of iterRows) {
       iterations[row.state_id] = {
         count: row.count,
@@ -553,10 +546,7 @@ export class ExecutionStore {
   // States
   // --------------------------------------------------------------------------
 
-  upsertState(
-    stateId: string,
-    fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
-  ): void {
+  upsertState(stateId: string, fields: Partial<BoardStateEntry> & { status: BoardStateEntry['status']; entries: number }): void {
     this.stmtUpsertState.run({
       state_id: stateId,
       status: fields.status,
@@ -572,11 +562,9 @@ export class ExecutionStore {
       wave_results: fields.wave_results !== undefined ? JSON.stringify(fields.wave_results) : null,
       metrics: fields.metrics !== undefined ? JSON.stringify(fields.metrics) : null,
       gate_results: fields.gate_results !== undefined ? JSON.stringify(fields.gate_results) : null,
-      postcondition_results:
-        fields.postcondition_results !== undefined ? JSON.stringify(fields.postcondition_results) : null,
+      postcondition_results: fields.postcondition_results !== undefined ? JSON.stringify(fields.postcondition_results) : null,
       discovered_gates: fields.discovered_gates !== undefined ? JSON.stringify(fields.discovered_gates) : null,
-      discovered_postconditions:
-        fields.discovered_postconditions !== undefined ? JSON.stringify(fields.discovered_postconditions) : null,
+      discovered_postconditions: fields.discovered_postconditions !== undefined ? JSON.stringify(fields.discovered_postconditions) : null,
       parallel_results: fields.parallel_results !== undefined ? JSON.stringify(fields.parallel_results) : null,
       compete_results: fields.compete_results !== undefined ? JSON.stringify(fields.compete_results) : null,
       synthesized: fields.synthesized !== undefined ? (fields.synthesized ? 1 : 0) : null,
@@ -591,7 +579,7 @@ export class ExecutionStore {
 
   getAllStates(): Array<BoardStateEntry & { state_id: string }> {
     const rows = this.stmtGetAllStates.all() as ExecutionStateRow[];
-    return rows.map((row) => ({
+    return rows.map(row => ({
       state_id: row.state_id,
       ...this.deserializeStateRow(row),
     }));
@@ -601,10 +589,7 @@ export class ExecutionStore {
   // Iterations
   // --------------------------------------------------------------------------
 
-  upsertIteration(
-    stateId: string,
-    fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] },
-  ): void {
+  upsertIteration(stateId: string, fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] }): void {
     this.stmtUpsertIteration.run({
       state_id: stateId,
       count: fields.count,
@@ -648,8 +633,8 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetProgressAll.all() as ProgressRow[];
     }
-    if (rows.length === 0) return "";
-    return rows.map((r) => r.line).join("\n");
+    if (rows.length === 0) return '';
+    return rows.map(r => r.line).join('\n');
   }
 
   // --------------------------------------------------------------------------
@@ -675,7 +660,7 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetMessages.all(channel) as MessageRow[];
     }
-    return rows.map((r) => ({
+    return rows.map(r => ({
       id: r.id,
       channel: r.channel,
       sender: r.sender,
@@ -684,27 +669,16 @@ export class ExecutionStore {
     }));
   }
 
-  /**
-   * Returns true if any messages exist for the given channel.
-   * Uses a LIMIT 1 query — much cheaper than loading all messages when
-   * you only need to know whether a channel is populated.
-   */
+  /** Returns true when at least one message exists in the channel, without loading all messages. */
   hasMessages(channel: string): boolean {
-    const row = this.db.prepare("SELECT 1 FROM messages WHERE channel = ? LIMIT 1").get(channel);
-    return row !== undefined;
+    return this.stmtHasMessages.get(channel) !== undefined;
   }
 
   // --------------------------------------------------------------------------
   // Wave events
   // --------------------------------------------------------------------------
 
-  postWaveEvent(event: {
-    id: string;
-    type: string;
-    payload: Record<string, unknown>;
-    timestamp: string;
-    status: string;
-  }): void {
+  postWaveEvent(event: { id: string; type: string; payload: Record<string, unknown>; timestamp: string; status: string }): void {
     this.stmtPostWaveEvent.run({
       id: event.id,
       type: event.type,
@@ -721,7 +695,7 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetWaveEvents.all() as WaveEventRow[];
     }
-    return rows.map((r) => this.deserializeWaveEventRow(r));
+    return rows.map(r => this.deserializeWaveEventRow(r));
   }
 
   updateWaveEvent(id: string, fields: UpdateWaveEventFields): void {
@@ -733,11 +707,7 @@ export class ExecutionStore {
       rejection_reason: fields.rejection_reason ?? null,
     });
     if (result.changes === 0) {
-      // The event was already resolved (applied or rejected) by the time this update ran.
-      // Fetch the current status for a user-friendly error message.
-      const current = this.getWaveEvents().find((e) => e.id === id);
-      const status = current ? current.status : "unknown";
-      throw new Error(`Event ${id} is already ${status}`);
+      throw new Error(`Event ${id} is already not pending — CAS update rejected (no rows changed)`);
     }
   }
 
@@ -789,7 +759,7 @@ export class ExecutionStore {
 
   private deserializeStateRow(row: ExecutionStateRow): BoardStateEntry {
     return {
-      status: row.status as BoardStateEntry["status"],
+      status: row.status as BoardStateEntry['status'],
       entries: row.entries,
       entered_at: row.entered_at ?? undefined,
       completed_at: row.completed_at ?? undefined,
@@ -814,10 +784,10 @@ export class ExecutionStore {
   private deserializeWaveEventRow(row: WaveEventRow): WaveEvent {
     return {
       id: row.id,
-      type: row.type as WaveEvent["type"],
+      type: row.type as WaveEvent['type'],
       payload: JSON.parse(row.payload),
       timestamp: row.timestamp,
-      status: row.status as WaveEvent["status"],
+      status: row.status as WaveEvent['status'],
       applied_at: row.applied_at ?? undefined,
       resolution: row.resolution !== null ? JSON.parse(row.resolution) : undefined,
       rejection_reason: row.rejection_reason ?? undefined,
@@ -846,12 +816,19 @@ const storeCache = new Map<string, ExecutionStore>();
  * the `.canon/workspaces/` segment in their paths.
  */
 export function assertWorkspacePath(workspace: string): void {
-  if (process.env.CANON_SKIP_WORKSPACE_VALIDATION !== "true" && !process.env.VITEST) {
+  if (
+    process.env.CANON_SKIP_WORKSPACE_VALIDATION !== 'true' &&
+    !process.env.VITEST
+  ) {
     // Use the raw string for the segment check so Windows-style paths work
     // cross-platform (resolve() would rewrite them on macOS).
-    const hasValidSegment = workspace.includes(".canon/workspaces/") || workspace.includes(".canon\\workspaces\\");
+    const hasValidSegment =
+      workspace.includes('.canon/workspaces/') ||
+      workspace.includes('.canon\\workspaces\\');
     if (!hasValidSegment) {
-      throw new Error(`Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`);
+      throw new Error(
+        `Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`,
+      );
     }
   }
 }
@@ -862,6 +839,10 @@ export function getExecutionStore(workspace: string): ExecutionStore {
   const key = resolve(workspace);
   const existing = storeCache.get(key);
   if (existing) return existing;
+
+  if (!existsSync(key)) {
+    throw new Error(`Workspace directory does not exist: ${key}`);
+  }
 
   const dbPath = join(key, CANON_FILES.ORCHESTRATION_DB);
   const db = initExecutionDb(dbPath);
@@ -877,11 +858,7 @@ export function getExecutionStore(workspace: string): ExecutionStore {
  */
 export function clearStoreCache(): void {
   for (const store of storeCache.values()) {
-    try {
-      store.close();
-    } catch {
-      /* ignore close errors */
-    }
+    try { store.close(); } catch { /* ignore close errors */ }
   }
   storeCache.clear();
 }
