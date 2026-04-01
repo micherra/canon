@@ -17,6 +17,7 @@ import {
   type ResolvedFlow,
   type StateDefinition,
   StateDefinitionSchema,
+  type TypedParam,
 } from "./flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -218,6 +219,14 @@ export function resolveFragments(
   };
 }
 
+/**
+ * Type guard: returns true if value is a typed param object ({ type, default? }).
+ * Distinguishes new-format typed params from old-format scalar/null values.
+ */
+function isTypedParam(v: unknown): v is TypedParam {
+  return v !== null && typeof v === "object" && "type" in v;
+}
+
 /** Validate required params and build the effective params map (defaults + overrides). */
 function buildEffectiveParams(
   definition: FragmentDefinition,
@@ -225,15 +234,37 @@ function buildEffectiveParams(
 ): Record<string, string | number> {
   const withParams = include.with ?? {};
   if (definition.params) {
-    for (const [paramName, defaultVal] of Object.entries(definition.params)) {
-      if ((defaultVal === null || defaultVal === undefined) && !(paramName in withParams)) {
-        throw new Error(`Fragment "${include.fragment}" requires param "${paramName}" but it was not provided`);
+    for (const [paramName, paramDef] of Object.entries(definition.params)) {
+      if (isTypedParam(paramDef)) {
+        // New typed format: required if no default and not provided in with
+        if (paramDef.default === undefined && !(paramName in withParams)) {
+          throw new Error(`Fragment "${include.fragment}" requires param "${paramName}" but it was not provided`);
+        }
+      } else {
+        // Old format: null means required
+        if ((paramDef === null || paramDef === undefined) && !(paramName in withParams)) {
+          throw new Error(`Fragment "${include.fragment}" requires param "${paramName}" but it was not provided`);
+        }
       }
     }
   }
 
+  // Build effective params: typed param defaults, then old-format scalar defaults, then with overrides
+  const defaults: Record<string, string | number> = {};
+  for (const [paramName, paramDef] of Object.entries(definition.params ?? {})) {
+    if (isTypedParam(paramDef)) {
+      // Use typed default if defined; skip if no default (caller must supply via with)
+      if (paramDef.default !== undefined) {
+        defaults[paramName] = paramDef.default as string | number;
+      }
+    } else if (paramDef !== null && paramDef !== undefined && paramDef !== false) {
+      // Old format: non-null scalar is a default value
+      defaults[paramName] = paramDef as string | number;
+    }
+  }
+
   return {
-    ...Object.fromEntries(Object.entries(definition.params ?? {}).filter(([, v]) => v !== null)),
+    ...defaults,
     ...(include.with ?? {}),
   } as Record<string, string | number>;
 }
@@ -322,6 +353,41 @@ function mergeSpawnInstructions(
     const spawnKey = include.as ? sId.replace(definition.fragment, include.as) : sId;
     mergedSpawnInstructions[spawnKey] = sText;
   }
+}
+
+// ---------------------------------------------------------------------------
+// validateStateIdParams
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate that fragment params declared as `type: "state_id"` have values
+ * that exist in the resolved state map. "hitl" is a virtual target and is
+ * always valid.
+ *
+ * Returns an array of error messages (empty if valid).
+ */
+export function validateStateIdParams(
+  fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }>,
+  includes: FragmentInclude[],
+  resolvedStateIds: Set<string>,
+): string[] {
+  const errors: string[] = [];
+  for (const include of includes) {
+    const frag = fragments.find((f) => f.definition.fragment === include.fragment);
+    if (!frag?.definition.params) continue;
+    const withParams = include.with ?? {};
+    for (const [paramName, paramDef] of Object.entries(frag.definition.params)) {
+      if (isTypedParam(paramDef) && paramDef.type === "state_id") {
+        const value = paramName in withParams ? withParams[paramName] : paramDef.default;
+        if (typeof value === "string" && value !== "hitl" && !resolvedStateIds.has(value)) {
+          errors.push(
+            `Fragment "${include.fragment}" param "${paramName}" is state_id but "${value}" is not a valid state`,
+          );
+        }
+      }
+    }
+  }
+  return errors;
 }
 
 // ---------------------------------------------------------------------------
@@ -496,12 +562,13 @@ export async function loadAndResolveFlow(
   let resolvedConsultations: Record<string, ConsultationFragment> = {};
   let resolvedSpawnInstructions = { ...spawnInstructions };
   let fragmentEntry: string | undefined;
+  let loadedFragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [];
 
   // If includes exist, load all fragments and resolve
   if (flowDef.includes && flowDef.includes.length > 0) {
     // Load all unique fragments — project dir first, then plugin dir
     const fragmentNames = [...new Set(flowDef.includes.map((i) => i.fragment))];
-    const loadedFragments = await Promise.all(fragmentNames.map((name) => loadFragment(pluginDir, name, projectDir)));
+    loadedFragments = await Promise.all(fragmentNames.map((name) => loadFragment(pluginDir, name, projectDir)));
 
     const resolved = resolveFragments(flowDef, loadedFragments, flowDef.includes);
 
@@ -526,6 +593,13 @@ export async function loadAndResolveFlow(
     }
   }
 
+  // Validate state_id params against resolved state map
+  const resolvedStateIds = new Set(Object.keys(resolvedStates));
+  const stateIdParamErrors =
+    loadedFragments.length > 0 && flowDef.includes
+      ? validateStateIdParams(loadedFragments, flowDef.includes, resolvedStateIds)
+      : [];
+
   // Determine entry: explicit flow entry, first inline state, or first fragment's entry
   const entry = flowDef.entry ?? Object.keys(inlineStates)[0] ?? fragmentEntry;
   if (!entry) {
@@ -542,7 +616,7 @@ export async function loadAndResolveFlow(
     ...(Object.keys(resolvedConsultations).length > 0 ? { consultations: resolvedConsultations } : {}),
   };
 
-  const errors = [...schemaErrors, ...validateFlow(resolvedFlow)];
+  const errors = [...schemaErrors, ...stateIdParamErrors, ...validateFlow(resolvedFlow)];
 
   return { flow: resolvedFlow, errors };
 }
