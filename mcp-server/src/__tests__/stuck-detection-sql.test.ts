@@ -60,6 +60,13 @@ function makeV1Db(): Database.Database {
     rolled_back_at TEXT,
     rolled_back_to TEXT
   )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS events (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    type      TEXT NOT NULL,
+    payload   TEXT NOT NULL,
+    timestamp TEXT NOT NULL
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`);
 
   return db;
 }
