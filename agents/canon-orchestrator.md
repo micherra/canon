@@ -166,7 +166,7 @@ ws = init_workspace({
 })
 ```
 
-- **`ws.preflight_issues`** (array): If non-empty, pre-flight failed. Present issues to user and wait. Do not proceed until resolved.
+- **`ws.preflight_issues`** (array): If non-empty, pre-flight failed. **Stop here.** Present issues to user and wait. Do not pass `ws` to `enter_and_prepare_state` — when preflight fails, `ws.workspace` is `""` (empty string) intentionally, so any attempt to use it as a workspace path will produce a clear `WORKSPACE_NOT_FOUND` error rather than a confusing race condition. The candidate path (for display only) is in `ws.candidate_workspace`. Do not proceed until issues are resolved.
 - **`ws.created == true`** (new): Proceed to state machine. `init_workspace` also creates a git worktree at `.canon/worktrees/{slug}` on branch `canon-build/{slug}` and returns `ws.worktree_path` and `ws.worktree_branch`. If worktree creation fails (e.g., not in a git repo), these fields are `undefined` and the build continues normally.
 - **`ws.created == false`** (resume): `ws.resume_state` tells you where to continue. This happens when the same task is re-initiated on the same branch. `ws.worktree_path` is returned if the worktree still exists on disk, or `undefined` if it has been cleaned up.
 - **`ws.briefs`** (optional): Array of briefs from prior chat discussions. If present, copy relevant briefs into `${WORKSPACE}/research/` as pre-research context. When the flow enters a research state, the researcher will find these and can build on them instead of starting from scratch. After copying, update the brief's status to `consumed` in the source file.
@@ -236,6 +236,25 @@ Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells yo
 **Competitive states**: When `enter_and_prepare_state` returns a `compete` config on the result, expand the single prompt into N competing prompts using the compete module. Spawn all competitors concurrently, collect outputs, then spawn a synthesizer. Store competitor outputs and synthesized result on the board.
 
 **Debate protocol**: When the flow defines a `debate` config, drive multi-round structured debates before or during implementation. Use the debate module for round framing, convergence detection, and summary building. Present the debate summary at HITL checkpoints for user review.
+
+### Agent Spawn Error Handling
+
+When an agent spawn fails or returns an error result, detect the error type and retry if transient.
+
+**Retryable error patterns** (match against the agent result text or error message):
+
+| Pattern | Cause |
+|---------|-------|
+| Rate limit (429, "rate limit") | API throttling |
+| Auth failure ("Not logged in", "Please run /login", 401) | Parallel agents corrupting session credentials — Claude Code bug |
+| TTL ordering ("cache_control.ttl", "must not come after") | Long conversation + MCP cache block ordering — Claude Code bug |
+
+**Retry protocol:**
+
+1. On detecting a retryable error, wait with exponential backoff: 4s → 8s → 16s (max 3 retries).
+2. For parallel/wave spawns: keep successful agent results, only retry the failed ones.
+3. If all 3 retries fail, enter HITL — inform the user which agent failed and why, and suggest starting a fresh conversation (the TTL and auth bugs are conversation-length dependent).
+4. Log each retry attempt to `progress.md` with the error pattern matched.
 
 ### Wave Event Resolution
 
