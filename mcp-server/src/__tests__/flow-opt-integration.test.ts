@@ -144,13 +144,12 @@ afterEach(() => {
 // 0. loadFlow REGRESSION GUARD — errors: string[] retained on success path
 // ===========================================================================
 
-describe("loadFlow — errors:string[] retained on success path (dec-01 regression guard)", () => {
-  it("loadFlow returns ok: true with errors: string[] on success", async () => {
+describe("loadFlow — success path returns flow and state_graph (no errors field)", () => {
+  it("loadFlow returns ok: true with flow and state_graph on success", async () => {
     const result = await loadFlow({ flow_name: "feature" }, pluginDir);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(Array.isArray(result.errors)).toBe(true);
     expect(result.flow).toBeDefined();
     expect(result.state_graph).toBeDefined();
   });
@@ -171,28 +170,23 @@ describe("loadFlow — errors:string[] retained on success path (dec-01 regressi
 
 describe("affected flows load without errors after all optimizations", () => {
   it("feature.md loads cleanly", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "feature");
-    expect(result.errors).toHaveLength(0);
+    await expect(loadAndResolveFlow(pluginDir, "feature")).resolves.toBeDefined();
   });
 
   it("epic.md loads cleanly", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "epic");
-    expect(result.errors).toHaveLength(0);
+    await expect(loadAndResolveFlow(pluginDir, "epic")).resolves.toBeDefined();
   });
 
   it("explore.md loads cleanly", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "explore");
-    expect(result.errors).toHaveLength(0);
+    await expect(loadAndResolveFlow(pluginDir, "explore")).resolves.toBeDefined();
   });
 
   it("refactor.md loads cleanly", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "refactor");
-    expect(result.errors).toHaveLength(0);
+    await expect(loadAndResolveFlow(pluginDir, "refactor")).resolves.toBeDefined();
   });
 
   it("migrate.md loads cleanly", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "migrate");
-    expect(result.errors).toHaveLength(0);
+    await expect(loadAndResolveFlow(pluginDir, "migrate")).resolves.toBeDefined();
   });
 });
 
@@ -202,28 +196,25 @@ describe("affected flows load without errors after all optimizations", () => {
 
 describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved", () => {
   it("feature.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "feature");
-    expect(result.errors).toHaveLength(0);
+    const flow = await loadAndResolveFlow(pluginDir, "feature");
 
-    const checkpointState = result.flow.states["checkpoint"];
+    const checkpointState = flow.states["checkpoint"];
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
 
   it("epic.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "epic");
-    expect(result.errors).toHaveLength(0);
+    const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const checkpointState = result.flow.states["checkpoint"];
+    const checkpointState = flow.states["checkpoint"];
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
 
   it("refactor.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "refactor");
-    expect(result.errors).toHaveLength(0);
+    const flow = await loadAndResolveFlow(pluginDir, "refactor");
 
-    const checkpointState = result.flow.states["checkpoint"];
+    const checkpointState = flow.states["checkpoint"];
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
@@ -239,10 +230,9 @@ describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved"
 
 describe("disk-load: epic flow consultation fragments from disk", () => {
   it("epic flow consultations map contains pattern-check after disk load", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "epic");
-    expect(result.errors).toHaveLength(0);
+    const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const consultations = result.flow.consultations;
+    const consultations = flow.consultations;
     expect(consultations).toBeDefined();
     expect(consultations!["pattern-check"]).toBeDefined();
     // Verify agent and role are correctly resolved from fragment YAML
@@ -251,20 +241,18 @@ describe("disk-load: epic flow consultation fragments from disk", () => {
   });
 
   it("epic flow consultations map contains early-scan after disk load", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "epic");
-    expect(result.errors).toHaveLength(0);
+    const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const consultations = result.flow.consultations;
+    const consultations = flow.consultations;
     expect(consultations!["early-scan"]).toBeDefined();
     expect(consultations!["early-scan"].agent).toBe("canon-security");
     expect(consultations!["early-scan"].role).toBe("early-scan");
   });
 
   it("epic implement state references pattern-check and early-scan in between breakpoint", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "epic");
-    expect(result.errors).toHaveLength(0);
+    const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const implementState = result.flow.states["implement"];
+    const implementState = flow.states["implement"];
     expect(implementState).toBeDefined();
     const between = implementState.consultations?.between;
     expect(between).toContain("pattern-check");

@@ -206,7 +206,7 @@ export async function initWorkspaceFlow(
   }
 
   // Load and resolve flow
-  const { flow } = await loadAndResolveFlow(pluginDir, input.flow_name);
+  const flow = await loadAndResolveFlow(pluginDir, input.flow_name);
 
   // Create plans/${slug}/ directory
   await mkdir(join(workspace, "plans", slug), { recursive: true });

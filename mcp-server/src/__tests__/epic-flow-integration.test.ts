@@ -242,21 +242,19 @@ describe("FragmentDefinitionSchema — skip_when field", () => {
 // ---------------------------------------------------------------------------
 
 describe("epic.md end-to-end loading through two-tier resolver", () => {
-  it("loads epic.md from plugin flows/ directory", async () => {
+  it("loads epic.md from plugin flows/ directory without throwing", async () => {
     // epic.md is a source-controlled flow in flows/epic.md (plugin dir)
-    const { flow, errors } = await loadAndResolveFlow(pluginCacheDir, "epic");
-
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
     expect(flow.name).toBe("epic");
-    expect(errors).toEqual([]);
   });
 
   it("epic flow has the correct entry state: research", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
     expect(flow.entry).toBe("research");
   });
 
   it("epic flow has all three inline states: research, design, implement", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["research"]).toBeDefined();
     expect(flow.states["design"]).toBeDefined();
@@ -264,38 +262,38 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   });
 
   it("epic implement state has stuck_when: no_gate_progress", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["implement"].stuck_when).toBe("no_gate_progress");
   });
 
   it("epic implement state has max_iterations: 10", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["implement"].max_iterations).toBe(10);
   });
 
   it("epic implement state does NOT have max_waves (architecture constraint)", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     // max_waves must not be present — architecture decision epic-06
     expect((flow.states["implement"] as Record<string, unknown>)["max_waves"]).toBeUndefined();
   });
 
   it("epic implement state has epic_complete transition to ship", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["implement"].transitions?.["epic_complete"]).toBe("ship");
   });
 
   it("epic flow has tier: large", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.tier).toBe("large");
   });
 
   it("epic flow has consultations resolved from fragment includes", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     // targeted-research is in the between consultations of implement
     expect(flow.consultations).toBeDefined();
@@ -303,7 +301,7 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   });
 
   it("targeted-research consultation in epic flow has skip_when: no_open_questions", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     const consultation = flow.consultations?.["targeted-research"];
     expect(consultation).toBeDefined();
@@ -311,19 +309,19 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   });
 
   it("epic flow ship state is present (from ship-done fragment)", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["ship"]).toBeDefined();
   });
 
   it("epic flow research state has type: parallel", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["research"].type).toBe("parallel");
   });
 
   it("epic flow design state has done transition to checkpoint", async () => {
-    const { flow } = await loadAndResolveFlow(pluginCacheDir, "epic");
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     expect(flow.states["design"].transitions?.["done"]).toBe("checkpoint");
   });
@@ -339,7 +337,6 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
     if (!result.ok) throw new Error(result.message);
 
     expect(result.flow.name).toBe("epic");
-    expect(result.errors).toEqual([]);
     expect(result.state_graph).toBeDefined();
     expect(typeof result.state_graph).toBe("object");
   });

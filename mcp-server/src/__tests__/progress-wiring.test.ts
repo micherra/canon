@@ -74,7 +74,7 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
 
     // Provide a minimal resolved flow to the mock
     const flow = makeFlow();
-    vi.mocked(loadAndResolveFlow).mockResolvedValue({ flow, errors: [] });
+    vi.mocked(loadAndResolveFlow).mockResolvedValue(flow);
 
     const result = await initWorkspaceFlow(
       {
@@ -101,7 +101,7 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     const pluginDir = makeTmpDir();
 
     const flow = makeFlow();
-    vi.mocked(loadAndResolveFlow).mockResolvedValue({ flow, errors: [] });
+    vi.mocked(loadAndResolveFlow).mockResolvedValue(flow);
 
     const result = await initWorkspaceFlow(
       {
@@ -130,7 +130,7 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     const flow = makeFlow();
 
     // First creation
-    vi.mocked(loadAndResolveFlow).mockResolvedValue({ flow, errors: [] });
+    vi.mocked(loadAndResolveFlow).mockResolvedValue(flow);
     const first = await initWorkspaceFlow(
       {
         flow_name: "test-flow",

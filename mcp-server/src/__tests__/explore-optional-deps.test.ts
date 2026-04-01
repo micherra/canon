@@ -24,10 +24,9 @@ const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ â†
 
 describe("explore.md role structure", () => {
   it("parses explore.md and finds the dependencies role marked as optional", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "explore");
-    expect(result.errors).toHaveLength(0);
+    const flow = await loadAndResolveFlow(pluginDir, "explore");
 
-    const researchState = result.flow.states["research"];
+    const researchState = flow.states["research"];
     expect(researchState).toBeDefined();
     expect(researchState.roles).toBeDefined();
 
@@ -42,10 +41,9 @@ describe("explore.md role structure", () => {
   });
 
   it("parses explore.md and finds codebase role is required (not optional)", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "explore");
-    expect(result.errors).toHaveLength(0);
+    const flow = await loadAndResolveFlow(pluginDir, "explore");
 
-    const researchState = result.flow.states["research"];
+    const researchState = flow.states["research"];
     const roles = researchState.roles as RoleEntry[];
     const codebaseRole = roles.find((r) => (typeof r === "string" ? r === "codebase" : r.name === "codebase"));
 
@@ -61,25 +59,24 @@ describe("explore.md role structure", () => {
 // ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow explore", () => {
-  it("loads explore flow without errors", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "explore");
-    expect(result.errors).toHaveLength(0);
-    expect(result.flow.name).toBe("explore");
+  it("loads explore flow without throwing", async () => {
+    const flow = await loadAndResolveFlow(pluginDir, "explore");
+    expect(flow.name).toBe("explore");
   });
 
   it("resolves research state as parallel type with two roles", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "explore");
-    const researchState = result.flow.states["research"];
+    const flow = await loadAndResolveFlow(pluginDir, "explore");
+    const researchState = flow.states["research"];
 
     expect(researchState.type).toBe("parallel");
     expect(researchState.roles).toHaveLength(2);
   });
 
   it("has synthesize and done states", async () => {
-    const result = await loadAndResolveFlow(pluginDir, "explore");
-    expect(result.flow.states["synthesize"]).toBeDefined();
-    expect(result.flow.states["done"]).toBeDefined();
-    expect(result.flow.states["done"].type).toBe("terminal");
+    const flow = await loadAndResolveFlow(pluginDir, "explore");
+    expect(flow.states["synthesize"]).toBeDefined();
+    expect(flow.states["done"]).toBeDefined();
+    expect(flow.states["done"].type).toBe("terminal");
   });
 });
 

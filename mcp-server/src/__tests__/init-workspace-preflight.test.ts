@@ -16,14 +16,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    flow: {
-      name: "quick-fix",
-      description: "test",
-      entry: "build",
-      states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
-      spawn_instructions: {},
-    },
-    errors: [],
+    name: "quick-fix",
+    description: "test",
+    entry: "build",
+    states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
+    spawn_instructions: {},
   }),
 }));
 

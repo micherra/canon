@@ -19,8 +19,7 @@ const pluginDir = resolve(__dirname, "../../../.."); // mcp-server/src/__tests__
 
 describe("review-fix-loop fragment effects", () => {
   it("epic: review state has persist_review effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "epic");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "epic");
     const review = flow.states["review"];
     expect(review).toBeDefined();
     expect(review.effects).toBeDefined();
@@ -31,8 +30,7 @@ describe("review-fix-loop fragment effects", () => {
   });
 
   it("feature: review state has persist_review effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "feature");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "feature");
     const review = flow.states["review"];
     expect(review).toBeDefined();
     expect(review.effects).toBeDefined();
@@ -43,8 +41,7 @@ describe("review-fix-loop fragment effects", () => {
   });
 
   it("quick-fix: review state has persist_review effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "quick-fix");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "quick-fix");
     const review = flow.states["review"];
     expect(review).toBeDefined();
     expect(review.effects).toBeDefined();
@@ -61,8 +58,7 @@ describe("review-fix-loop fragment effects", () => {
 
 describe("ship-done fragment effects", () => {
   it("epic: ship state does not have persist_decisions or persist_patterns effects", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "epic");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "epic");
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
     const types = ship.effects?.map((e) => e.type) ?? [];
@@ -71,8 +67,7 @@ describe("ship-done fragment effects", () => {
   });
 
   it("feature: ship state does not have persist_decisions or persist_patterns effects", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "feature");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "feature");
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
     const types = ship.effects?.map((e) => e.type) ?? [];
@@ -81,8 +76,7 @@ describe("ship-done fragment effects", () => {
   });
 
   it("quick-fix: ship state does not have persist_decisions or persist_patterns effects", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "quick-fix");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "quick-fix");
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
     const types = ship.effects?.map((e) => e.type) ?? [];
@@ -91,8 +85,7 @@ describe("ship-done fragment effects", () => {
   });
 
   it("hotfix: ship state does not have persist_decisions or persist_patterns effects", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "hotfix");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "hotfix");
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
     const types = ship.effects?.map((e) => e.type) ?? [];
@@ -107,8 +100,7 @@ describe("ship-done fragment effects", () => {
 
 describe("implement-verify fragment effects (single-type implement)", () => {
   it("quick-fix: implement state does not have persist_decisions effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "quick-fix");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "quick-fix");
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();
     const types = implement.effects?.map((e) => e.type) ?? [];
@@ -116,8 +108,7 @@ describe("implement-verify fragment effects (single-type implement)", () => {
   });
 
   it("hotfix: implement state does not have persist_decisions effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "hotfix");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "hotfix");
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();
     const types = implement.effects?.map((e) => e.type) ?? [];
@@ -131,8 +122,7 @@ describe("implement-verify fragment effects (single-type implement)", () => {
 
 describe("wave implement state effects", () => {
   it("epic: implement state (wave) does not have persist_decisions effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "epic");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "epic");
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();
     expect(implement.type).toBe("wave");
@@ -141,8 +131,7 @@ describe("wave implement state effects", () => {
   });
 
   it("feature: implement state (wave) does not have persist_decisions effect", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "feature");
-    expect(errors).toEqual([]);
+    const flow = await loadAndResolveFlow(pluginDir, "feature");
     const implement = flow.states["implement"];
     expect(implement).toBeDefined();
     expect(implement.type).toBe("wave");
