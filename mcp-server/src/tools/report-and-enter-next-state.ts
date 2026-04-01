@@ -104,34 +104,9 @@ export async function reportAndEnterNextState(
   input: ReportAndEnterNextStateInput,
 ): Promise<ToolResult<ReportAndEnterNextStateResult>> {
   // Step 1: Report result for current state
-  const reportOutput = await reportResult({
-    workspace: input.workspace,
-    state_id: input.state_id,
-    status_keyword: input.status_keyword,
-    flow: input.flow,
-    artifacts: input.artifacts,
-    concern_text: input.concern_text,
-    error: input.error,
-    metrics: input.metrics,
-    parallel_results: input.parallel_results,
-    principle_ids: input.principle_ids,
-    file_paths: input.file_paths,
-    file_test_pairs: input.file_test_pairs,
-    commit_sha: input.commit_sha,
-    artifact_count: input.artifact_count,
-    gate_results: input.gate_results,
-    postcondition_results: input.postcondition_results,
-    violation_count: input.violation_count,
-    violation_severities: input.violation_severities,
-    test_results: input.test_results,
-    files_changed: input.files_changed,
-    discovered_gates: input.discovered_gates,
-    discovered_postconditions: input.discovered_postconditions,
-    compete_results: input.compete_results,
-    synthesized: input.synthesized,
-    progress_line: input.progress_line,
-    project_dir: input.project_dir,
-  });
+  // Destructure enter-specific fields; the rest maps 1:1 to reportResult input.
+  const { variables, items, role, wave, peer_count, ...reportInput } = input;
+  const reportOutput = await reportResult(reportInput);
 
   if (!reportOutput.ok) return reportOutput;
 
@@ -152,9 +127,9 @@ export async function reportAndEnterNextState(
     return { ok: true as const, ...result };
   }
 
-  // Step 3: Check if next state is a terminal state type
+  // Step 3: Check if next state is terminal or a virtual sink (e.g. "no_items", "hitl")
   const nextStateDef = input.flow.states[reportOutput.next_state];
-  if (nextStateDef?.type === "terminal") {
+  if (!nextStateDef || nextStateDef.type === "terminal") {
     return { ok: true as const, ...result };
   }
 

@@ -10,6 +10,6 @@
 - **Schema validation**: Zod schemas at API/tool boundaries
 - **Testing**: Vitest with co-located `__tests__/` directories
 - **Error handling**: Tool functions return `ToolResult<T>` (from `utils/tool-result.ts`) for expected errors — no throwing; unexpected errors caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; `utils/errors.ts` for internal path/file utilities
-- **Data persistence**: JSONL files in `.canon/` with atomic writes
+- **Data persistence**: JSONL files in `.canon/` with atomic writes for reviews/drift; SQLite KG (`knowledge-graph.db`) via `KgQuery`/`KgStore` is the sole store for graph and summary data — `graph-data.json`, `reverse-deps.json`, `summaries.json` no longer written (ADR-005 2026-04-01)
 - **Imports**: Explicit `.ts` extensions for TypeScript ES module imports (matching Vitest/tsx execution)
 - **Frontend**: Svelte (mcp-server/ui), served as MCP App via ext-apps SDK; Sigma.js + Graphology for graph rendering (WebGL, ForceAtlas2 layout, Louvain community detection); D3 removed

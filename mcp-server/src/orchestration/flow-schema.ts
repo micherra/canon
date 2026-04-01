@@ -206,6 +206,13 @@ export const SingleStateSchema = z.object({
   role: z.string().optional(),
 });
 
+/**
+ * Wave execution policy. When `wave_policy` is omitted from a wave state
+ * definition, it is `undefined` — no defaults are applied. When an empty
+ * object `{}` is provided, Zod applies field-level defaults (isolation:
+ * "worktree", merge_strategy: "sequential", on_conflict: "hitl").
+ * Consumers should treat `undefined` the same as the default values.
+ */
 export const WavePolicySchema = z
   .object({
     isolation: z.enum(["worktree", "branch", "none"]).default("worktree"),

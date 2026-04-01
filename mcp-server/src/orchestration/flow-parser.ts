@@ -120,7 +120,7 @@ export async function loadFragment(
  * Uses recursive traversal instead of JSON round-trip to avoid breaking on
  * param values that contain JSON-special characters (quotes, backslashes).
  */
-function substituteParams<T>(obj: T, params: Record<string, string | number>): T {
+function substituteParams<T>(obj: T, params: Record<string, string | number | boolean>): T {
   if (typeof obj === "string") {
     let result: string = obj;
     for (const [key, value] of Object.entries(params)) {
@@ -146,7 +146,7 @@ function substituteParams<T>(obj: T, params: Record<string, string | number>): T
  */
 function substituteSpawnInstructions(
   instructions: Record<string, string>,
-  params: Record<string, string | number>,
+  params: Record<string, string | number | boolean>,
 ): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, text] of Object.entries(instructions)) {
@@ -231,7 +231,7 @@ function isTypedParam(v: unknown): v is TypedParam {
 function buildEffectiveParams(
   definition: FragmentDefinition,
   include: FragmentInclude,
-): Record<string, string | number> {
+): Record<string, string | number | boolean> {
   const withParams = include.with ?? {};
   if (definition.params) {
     for (const [paramName, paramDef] of Object.entries(definition.params)) {
@@ -250,30 +250,30 @@ function buildEffectiveParams(
   }
 
   // Build effective params: typed param defaults, then old-format scalar defaults, then with overrides
-  const defaults: Record<string, string | number> = {};
+  const defaults: Record<string, string | number | boolean> = {};
   for (const [paramName, paramDef] of Object.entries(definition.params ?? {})) {
     if (isTypedParam(paramDef)) {
       // Use typed default if defined; skip if no default (caller must supply via with)
       if (paramDef.default !== undefined) {
-        defaults[paramName] = paramDef.default as string | number;
+        defaults[paramName] = paramDef.default as string | number | boolean;
       }
-    } else if (paramDef !== null && paramDef !== undefined && paramDef !== false) {
-      // Old format: non-null scalar is a default value
-      defaults[paramName] = paramDef as string | number;
+    } else if (paramDef !== null && paramDef !== undefined) {
+      // Old format: non-null scalar is a default value (includes false)
+      defaults[paramName] = paramDef as string | number | boolean;
     }
   }
 
   return {
     ...defaults,
     ...(include.with ?? {}),
-  } as Record<string, string | number>;
+  } as Record<string, string | number | boolean>;
 }
 
 /** Resolve a consultation-type fragment into the consultations and spawn instructions maps. */
 function resolveConsultationFragment(
   definition: FragmentDefinition,
   include: FragmentInclude,
-  effectiveParams: Record<string, string | number>,
+  effectiveParams: Record<string, string | number | boolean>,
   spawnInstructions: Record<string, string>,
   consultations: Record<string, ConsultationFragment>,
   mergedSpawnInstructions: Record<string, string>,
@@ -302,7 +302,7 @@ function resolveConsultationFragment(
 function resolveRegularFragment(
   definition: FragmentDefinition,
   include: FragmentInclude,
-  effectiveParams: Record<string, string | number>,
+  effectiveParams: Record<string, string | number | boolean>,
   mergedStates: Record<string, StateDefinition>,
 ): void {
   if (!definition.states) return;
@@ -340,7 +340,7 @@ function resolveRegularFragment(
 function mergeSpawnInstructions(
   definition: FragmentDefinition,
   include: FragmentInclude,
-  effectiveParams: Record<string, string | number>,
+  effectiveParams: Record<string, string | number | boolean>,
   spawnInstructions: Record<string, string>,
   mergedSpawnInstructions: Record<string, string>,
 ): void {

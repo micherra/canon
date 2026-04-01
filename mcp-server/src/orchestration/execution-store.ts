@@ -690,6 +690,8 @@ export class ExecutionStore {
           currData.gate_output_hash === prevData.gate_output_hash &&
           !currData.passed
         );
+      default:
+        return false;
     }
   }
 
