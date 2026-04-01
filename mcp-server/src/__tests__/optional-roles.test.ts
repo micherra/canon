@@ -34,6 +34,7 @@ vi.mock("../orchestration/effects.ts", () => ({
 import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -229,6 +230,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "optional-reviewer", status: "blocked" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("ship");
@@ -249,6 +251,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "optional-reviewer", status: "done" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocked");
     expect(result.next_state).toBe("hitl");
@@ -268,6 +271,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "optional-reviewer", status: "needs_context" },
       ],
     });
+    assertOk(result);
 
     // needs_context normalizes to hitl, but since it's from an optional role it should not block
     // The parallel_results status "needs_context" is treated as blocked for aggregation purposes

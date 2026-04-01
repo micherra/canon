@@ -55,6 +55,7 @@ import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -220,6 +221,7 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     expect(result.consultation_prompts).toBeDefined();
     expect(result.consultation_prompts).toHaveLength(1);
@@ -244,6 +246,7 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     expect(result.consultation_prompts).toBeDefined();
     // perf-review has no timeout or section
@@ -307,6 +310,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     expect(result.consultation_prompts).toBeDefined();
     expect(result.consultation_prompts).toHaveLength(2);
@@ -356,6 +360,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     // Only security-review resolves; missing-consult returns null and is skipped
     expect(result.consultation_prompts).toBeDefined();
@@ -453,6 +458,7 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
       items: ["task-a", "task-b"],
       wave: 1,  // Wave 1 → between breakpoint
     });
+    assertOk(result);
 
     // No new consultation_prompts (between is empty in this flow)
     expect(result.consultation_prompts).toBeUndefined();
@@ -509,6 +515,7 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     const prompt = result.prompts[0].prompt;
@@ -664,6 +671,7 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
 
@@ -690,6 +698,7 @@ describe("enterAndPrepareState — consultation_outputs absent when no completed
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     // No briefing — no completed summaries means consultation_outputs was not passed

@@ -73,6 +73,7 @@ import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import { loadFlow } from "../tools/load-flow.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 import { spawnSync } from "node:child_process";
 
 // ---------------------------------------------------------------------------
@@ -323,6 +324,7 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
       flow,
       variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.can_enter).toBe(true);
     expect(result.skip_reason).toBeDefined();
@@ -353,6 +355,7 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
       flow,
       variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.can_enter).toBe(true);
     expect(result.skip_reason).toBeUndefined();
@@ -470,6 +473,7 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
       variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
       wave: 1, // between breakpoint
     });
+    assertOk(result);
 
     expect(result.can_enter).toBe(true);
 
@@ -518,6 +522,7 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
       variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
       wave: 1, // between breakpoint
     });
+    assertOk(result);
 
     expect(result.can_enter).toBe(true);
 
@@ -568,6 +573,7 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
       variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
       wave: 1,
     });
+    assertOk(result);
 
     // Should still succeed overall
     expect(result.can_enter).toBe(true);

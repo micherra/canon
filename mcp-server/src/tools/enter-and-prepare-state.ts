@@ -19,6 +19,9 @@ import { getSpawnPrompt } from "./get-spawn-prompt.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { gitExec } from "../adapters/git-adapter.ts";
+import { toolError } from "../utils/tool-result.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
 import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
 import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
@@ -71,7 +74,7 @@ export interface EnterAndPrepareStateResult {
 
 export async function enterAndPrepareState(
   input: EnterAndPrepareStateInput,
-): Promise<EnterAndPrepareStateResult> {
+): Promise<ToolResult<EnterAndPrepareStateResult>> {
   const { workspace, state_id, flow } = input;
 
   const store = getExecutionStore(workspace);
@@ -80,7 +83,7 @@ export async function enterAndPrepareState(
   // SQLite init is atomic — the execution row is always present after initWorkspaceFlow.
   const board = store.getBoard();
   if (!board) {
-    throw new Error(`No execution found for workspace: ${workspace}`);
+    return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${workspace}`);
   }
 
   // Step 2: Check convergence — bail early if max iterations reached.
@@ -93,6 +96,7 @@ export async function enterAndPrepareState(
 
   if (!allowed) {
     return {
+      ok: true as const,
       can_enter: false,
       iteration_count,
       max_iterations,
@@ -111,6 +115,7 @@ export async function enterAndPrepareState(
     if (skipResult.skip) {
       const skipReason = `Skipping ${state_id}: ${stateDef.skip_when} condition met — ${skipResult.reason ?? "condition satisfied"}`;
       return {
+        ok: true as const,
         can_enter: true,
         iteration_count,
         max_iterations,
@@ -251,7 +256,6 @@ export async function enterAndPrepareState(
     const baseRef = enteredBoard.base_commit;
     if (baseRef && /^[a-f0-9]{7,40}$/.test(baseRef)) {
       try {
-        const { gitExec } = await import("../adapters/git-adapter.ts");
         const result = gitExec(["diff", "--name-only", `${baseRef}..HEAD`], process.cwd(), 5000);
         if (result.ok && result.stdout) {
           const files = result.stdout.trim().split("\n").filter(Boolean);
@@ -283,6 +287,7 @@ export async function enterAndPrepareState(
   });
 
   return {
+    ok: true as const,
     can_enter: true,
     iteration_count,
     max_iterations,

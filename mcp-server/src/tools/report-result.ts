@@ -19,6 +19,8 @@ import {
   setBlocked,
 } from "../orchestration/board.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { toolError } from "../utils/tool-result.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
 import type { Board, ResolvedFlow, CannotFixItem, GateResult, PostconditionResult, DiscoveredGate, PostconditionAssertion, ViolationSeverities, TestResults } from "../orchestration/flow-schema.ts";
 import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
@@ -127,14 +129,20 @@ function syncBoardToStore(store: ReturnType<typeof getExecutionStore>, board: Bo
 
 export async function reportResult(
   input: ReportResultInput,
-): Promise<ReportResultResult> {
+): Promise<ToolResult<ReportResultResult>> {
   return reportResultLocked(input);
 }
 
 async function reportResultLocked(
   input: ReportResultInput,
-): Promise<ReportResultResult> {
+): Promise<ToolResult<ReportResultResult>> {
   const store = getExecutionStore(input.workspace);
+
+  // Guard: check board existence before entering the SQLite transaction so we
+  // can return a typed WORKSPACE_NOT_FOUND error instead of throwing UNEXPECTED.
+  if (!store.getBoard()) {
+    return toolError("WORKSPACE_NOT_FOUND", `No execution found in workspace: ${input.workspace}`);
+  }
 
   // Pre-fetch debate progress asynchronously before entering the synchronous
   // transaction. inspectDebateProgress reads separate message/event tables
@@ -166,6 +174,9 @@ async function reportResultLocked(
     } => {
       let board = store.getBoard();
       if (!board) {
+        // Safety net: should not reach here since we checked above, but
+        // the transaction is atomic so a concurrent caller could delete the
+        // workspace between our check and the transaction start.
         throw new Error(`No execution found in workspace: ${input.workspace}`);
       }
 
@@ -616,6 +627,7 @@ async function reportResultLocked(
   };
 
   return {
+    ok: true as const,
     transition_condition: condition,
     next_state: nextState,
     board,

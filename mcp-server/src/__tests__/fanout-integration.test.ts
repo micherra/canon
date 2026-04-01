@@ -80,6 +80,7 @@ import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -206,6 +207,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/ui", status: "clean" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("clean");
     expect(result.next_state).toBe("done");
@@ -226,6 +228,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/ui", status: "blocking" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocking");
     expect(result.next_state).toBe("hitl");
@@ -246,6 +249,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/ui", status: "warning" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("warning");
     expect(result.next_state).toBe("hitl");
@@ -281,6 +285,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "file-b.ts", status: "cannot_fix" },
       ],
     });
+    assertOk(result);
 
     // Mixed done/cannot_fix: aggregateParallelPerResults returns "done" (partial fix)
     expect(result.transition_condition).toBe("done");
@@ -301,6 +306,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/ui", status: "BLOCKING" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocking");
     expect(result.next_state).toBe("hitl");
@@ -320,6 +326,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/api", status: "clean" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("clean");
   });
@@ -342,6 +349,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       flow,
       variables: { task: "review the PR", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.can_enter).toBe(true);
     expect(result.fanned_out).toBe(true);
@@ -360,6 +368,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       flow,
       variables: { task: "review the PR", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.can_enter).toBe(true);
     expect(result.fanned_out).toBeUndefined();
@@ -393,6 +402,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       flow,
       variables: { task: "review", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.fanned_out).toBeUndefined();
     expect(clusterDiff).not.toHaveBeenCalled();
@@ -410,6 +420,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       flow,
       variables: { task: "review the PR", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     // One prompt per cluster; each has the cluster key in the prompt text
     expect(result.prompts).toHaveLength(2);
@@ -522,6 +533,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
       flow,
       parallel_results: clusterResults,
     });
+    assertOk(result);
 
     // Most severe result is "warning" — routing to hitl
     expect(result.transition_condition).toBe("warning");
@@ -551,6 +563,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
         { item: "src/db", status: "clean" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("clean");
     expect(result.next_state).toBe("done");
@@ -579,6 +592,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
         { item: "src/auth", status: "blocking" }, // one blocker
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocking");
     expect(result.next_state).toBe("hitl");

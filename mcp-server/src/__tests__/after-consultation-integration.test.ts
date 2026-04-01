@@ -55,6 +55,7 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -321,6 +322,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     // Status "pending" → summary not collected → no briefing injection
@@ -368,6 +370,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     // Status "error" → not injected even though summary text exists
     expect(result.prompts[0].prompt).not.toContain("Agent crashed unexpectedly.");
@@ -414,6 +417,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     // null summary → guard `cResult.summary` is falsy → not collected
     expect(result.prompts[0].prompt).not.toContain("Wave Briefing");
@@ -468,6 +472,7 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     // Summary collected from "after" breakpoint even without a section
@@ -571,6 +576,7 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
       wave: 1,
     });
 
+    assertOk(wave1Result);
     expect(wave1Result.can_enter).toBe(true);
     expect(wave1Result.prompts).toHaveLength(1);
 
@@ -807,6 +813,7 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     const prompt = result.prompts[0].prompt;

@@ -13,6 +13,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reportResult } from "../tools/report-result.ts";
+import { assertOk } from "../utils/tool-result.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { writeMessage } from "../orchestration/messages.ts";
@@ -113,6 +114,7 @@ describe("reportResult — basic functionality", () => {
       status_keyword: "DONE",
       flow,
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("review");
@@ -130,6 +132,7 @@ describe("reportResult — basic functionality", () => {
       status_keyword: "DONE",
       flow,
     });
+    assertOk(result);
 
     expect(result.board.current_state).toBe("review");
   });
@@ -145,6 +148,7 @@ describe("reportResult — basic functionality", () => {
       status_keyword: "SOMETHING_WEIRD",
       flow,
     });
+    assertOk(result);
 
     expect(result.hitl_required).toBe(true);
     expect(result.hitl_reason).toContain("SOMETHING_WEIRD");
@@ -162,6 +166,7 @@ describe("reportResult — basic functionality", () => {
       flow,
       artifacts: ["summary.md", "diff.patch"],
     });
+    assertOk(result);
 
     expect(result.board.states["build"].artifacts).toEqual([
       "summary.md",
@@ -216,6 +221,7 @@ describe("reportResult — debate flow", () => {
       status_keyword: "DONE",
       flow,
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("build");
@@ -249,6 +255,7 @@ describe("reportResult — debate flow", () => {
       status_keyword: "DONE",
       flow,
     });
+    assertOk(result);
 
     expect(result.next_state).toBeNull();
     expect(result.hitl_required).toBe(true);
@@ -338,6 +345,7 @@ describe("reportResult — event emissions", () => {
       status_keyword: "BLOCKED",
       flow,
     });
+    assertOk(result);
 
     expect(result.next_state).toBeNull();
     expect(result.hitl_required).toBe(true);
@@ -401,6 +409,7 @@ describe("reportResult — event emissions", () => {
       status_keyword: "DONE",
       flow,
     });
+    assertOk(result);
 
     expect(boardStatusAtEmit).toBe("done");
     expect(result.board.states["build"].status).toBe("done");
@@ -447,6 +456,7 @@ describe("reportResult — HITL scenarios", () => {
       status_keyword: "MYSTERY_WORD",
       flow,
     });
+    assertOk(result);
 
     expect(result.hitl_required).toBe(true);
     expect(result.hitl_reason).toContain("build");
@@ -464,6 +474,7 @@ describe("reportResult — HITL scenarios", () => {
       status_keyword: "DONE",
       flow,
     });
+    assertOk(result);
 
     expect(result.hitl_required).toBe(false);
   });
@@ -508,6 +519,7 @@ describe("reportResult — parallel_results aggregation", () => {
         { item: "file-b.ts", status: "done" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("review");
@@ -528,6 +540,7 @@ describe("reportResult — parallel_results aggregation", () => {
         { item: "file-b.ts", status: "cannot_fix" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("cannot_fix");
     expect(result.next_state).toBe("hitl");
@@ -548,6 +561,7 @@ describe("reportResult — parallel_results aggregation", () => {
         { item: "file-b.ts", status: "cannot_fix" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("review");
@@ -568,6 +582,7 @@ describe("reportResult — parallel_results aggregation", () => {
         { item: "file-b.ts", status: "blocked" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocked");
     expect(result.hitl_required).toBe(true);
@@ -590,6 +605,7 @@ describe("reportResult — parallel_results aggregation", () => {
       flow,
       parallel_results: parallelResults,
     });
+    assertOk(result);
 
     expect(result.board.states["build"].parallel_results).toEqual(parallelResults);
   });
@@ -605,6 +621,7 @@ describe("reportResult — parallel_results aggregation", () => {
       status_keyword: "DONE",
       flow,
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("review");
@@ -623,6 +640,7 @@ describe("reportResult — parallel_results aggregation", () => {
       flow,
       parallel_results: [],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("review");
@@ -692,6 +710,7 @@ describe("reportResult — quality signals", () => {
       gate_results: gateResults,
       metrics: { duration_ms: 1000, spawns: 1, model: "sonnet" },
     });
+    assertOk(result);
 
     expect(result.board.states["build"].gate_results).toEqual(gateResults);
     expect(result.board.states["build"].metrics?.gate_results).toEqual(gateResults);
@@ -719,6 +738,7 @@ describe("reportResult — quality signals", () => {
       postcondition_results: postconditionResults,
       metrics: { duration_ms: 1000, spawns: 1, model: "sonnet" },
     });
+    assertOk(result);
 
     expect(result.board.states["build"].postcondition_results).toEqual(postconditionResults);
   });
@@ -737,6 +757,7 @@ describe("reportResult — quality signals", () => {
       violation_severities: { blocking: 1, warning: 2 },
       metrics: { duration_ms: 1000, spawns: 1, model: "sonnet" },
     });
+    assertOk(result);
 
     expect(result.board.states["build"].metrics?.violation_count).toBe(3);
     expect(result.board.states["build"].metrics?.violation_severities).toEqual({ blocking: 1, warning: 2 });
@@ -755,6 +776,7 @@ describe("reportResult — quality signals", () => {
       test_results: { passed: 50, failed: 2, skipped: 1 },
       metrics: { duration_ms: 1000, spawns: 1, model: "sonnet" },
     });
+    assertOk(result);
 
     expect(result.board.states["build"].metrics?.test_results).toEqual({ passed: 50, failed: 2, skipped: 1 });
   });
@@ -771,6 +793,7 @@ describe("reportResult — quality signals", () => {
       flow,
       // No metrics or signal fields
     });
+    assertOk(result);
 
     expect(result.board.states["build"].metrics).toBeUndefined();
   });
@@ -870,6 +893,7 @@ describe("reportResult — compete_results persistence", () => {
       flow,
       compete_results: competeResults,
     });
+    assertOk(result);
 
     expect(result.board.states["build"].compete_results).toEqual(competeResults);
   });
@@ -887,6 +911,7 @@ describe("reportResult — compete_results persistence", () => {
       compete_results: [{ status: "done" }],
       synthesized: true,
     });
+    assertOk(result);
 
     expect(result.board.states["build"].synthesized).toBe(true);
   });
@@ -903,6 +928,7 @@ describe("reportResult — compete_results persistence", () => {
       flow,
       synthesized: true,
     });
+    assertOk(result);
 
     expect(result.board.states["build"].synthesized).toBe(true);
     expect(result.board.states["build"].compete_results).toBeUndefined();
@@ -919,6 +945,7 @@ describe("reportResult — compete_results persistence", () => {
       status_keyword: "DONE",
       flow,
     });
+    assertOk(result);
 
     expect(result.board.states["build"].compete_results).toBeUndefined();
     expect(result.board.states["build"].synthesized).toBeUndefined();
@@ -951,6 +978,7 @@ describe("reportResult — concurrent calls", () => {
     // All should resolve without error
     const results = await Promise.all(promises);
     for (const result of results) {
+      assertOk(result);
       expect(result.transition_condition).toBe("done");
       expect(result.next_state).toBe("review");
     }
@@ -1002,6 +1030,7 @@ describe("reportResult — store persistence", () => {
       gate_results: [{ gate: "npm test", command: "npm test", passed: true, output: "", exitCode: 0 }],
       violation_count: 0,
     });
+    assertOk(result);
 
     // All mutation steps persisted
     const store = getExecutionStore(workspace);
@@ -1052,6 +1081,7 @@ describe("reportResult — store persistence", () => {
       status_keyword: "FAILED",
       flow,
     });
+    assertOk(result);
 
     // History updated in store
     const iter = store.getIteration("build");
@@ -1109,6 +1139,8 @@ describe("reportResult — concurrent RMW serialization (P1)", () => {
     ]);
 
     // Both calls should succeed
+    assertOk(r1);
+    assertOk(r2);
     expect(r1.transition_condition).toBe("done");
     expect(r2.transition_condition).toBe("done");
 
@@ -1123,5 +1155,28 @@ describe("reportResult — concurrent RMW serialization (P1)", () => {
     const commands = gates.map((g: { command: string }) => g.command);
     expect(commands).toContain("npm test");
     expect(commands).toContain("npm run lint");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Workspace not found — typed WORKSPACE_NOT_FOUND error
+// ---------------------------------------------------------------------------
+
+describe("reportResult — workspace not found", () => {
+  it("returns WORKSPACE_NOT_FOUND ToolResult when workspace has no execution", async () => {
+    const workspace = makeTmpWorkspace(); // not seeded — no execution row
+
+    const flow = makeMinimalFlow();
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "DONE",
+      flow,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+    expect(result.message).toContain(workspace);
   });
 });

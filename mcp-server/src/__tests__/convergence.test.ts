@@ -7,6 +7,7 @@ import { reportResult } from "../tools/report-result.ts";
 import { checkConvergence } from "../tools/check-convergence.ts";
 import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {
@@ -198,6 +199,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["no-hidden-side-effects"],
       file_paths: ["src/tools/report-result.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration).toBeDefined();
@@ -219,6 +221,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1", "p2"],
       file_paths: ["a.ts", "b.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix).toHaveLength(4);
@@ -256,6 +259,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1"],
       file_paths: ["a.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix).toHaveLength(1);
@@ -292,6 +296,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1"],
       file_paths: ["a.ts"],
     });
+    assertOk(result);
 
     // No iteration record — nothing to accumulate
     expect(result.board.iterations["build"]).toBeUndefined();
@@ -310,6 +315,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       // no principle_ids
       file_paths: ["a.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
@@ -328,6 +334,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1"],
       // no file_paths
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
@@ -346,6 +353,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1"],
       file_paths: ["a.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
