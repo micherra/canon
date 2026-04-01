@@ -20,11 +20,6 @@ import { join } from "node:path";
 // Hoist mocks before module import
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-}));
-
 vi.mock("../orchestration/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
@@ -34,10 +29,9 @@ vi.mock("../orchestration/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
-import { readBoard } from "../orchestration/board.ts";
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
 
 // ---------------------------------------------------------------------------
@@ -50,24 +44,6 @@ function makeTmpDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "gsp-fanout-test-"));
   tmpDirs.push(dir);
   return dir;
-}
-
-function makeBoard(overrides: Record<string, unknown> = {}): Board {
-  return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "review",
-    current_state: "review",
-    base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
-    blocked: null,
-    concerns: [],
-    skipped: [],
-    ...overrides,
-  } as Board;
 }
 
 function makeSingleReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
@@ -110,7 +86,6 @@ afterEach(() => {
 describe("getSpawnPrompt — single state fan-out with clusters", () => {
   it("produces one prompt per cluster when clusters are present", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeSingleReviewFlow();
@@ -126,7 +101,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
   it("sets fanned_out to true when clusters expand a single state", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeSingleReviewFlow();
@@ -142,7 +116,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
   it("each prompt is scoped to its cluster with correct item substitution", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeSingleReviewFlow();
@@ -166,7 +139,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
   it("cluster item shape matches { cluster_key, files, file_count }", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeSingleReviewFlow();
@@ -187,7 +159,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
   it("uses the same agent for all cluster prompts", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeSingleReviewFlow();
@@ -205,7 +176,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
   it("applies template_paths to every cluster prompt", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeSingleReviewFlow({
@@ -235,7 +205,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
   it("role substitution applies to all fanned-out single prompts", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeSingleReviewFlow({
@@ -268,7 +237,6 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 describe("getSpawnPrompt — single state without clusters (no fan-out)", () => {
   it("produces exactly one prompt when clusters are null (below threshold)", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeSingleReviewFlow({
@@ -287,7 +255,6 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
 
   it("fanned_out is absent when no fan-out happens (null clusters)", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeSingleReviewFlow();
@@ -303,7 +270,6 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
 
   it("fanned_out is absent for single state with no large_diff_threshold", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     // clusterDiff should not be called since no large_diff_threshold set
     vi.mocked(clusterDiff).mockReturnValue(null);
 
@@ -331,7 +297,6 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
 
   it("produces exactly one prompt when clusters is empty array (edge case)", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     // clusterDiff returns empty array (unusual but possible)
     vi.mocked(clusterDiff).mockReturnValue([]);
 
@@ -352,7 +317,6 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
 describe("getSpawnPrompt — compete expansion", () => {
   it("expands a single state into multiple prompts when compete is configured", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeSingleReviewFlow({
@@ -386,7 +350,6 @@ describe("getSpawnPrompt — compete expansion", () => {
 
   it("uses default auto compete expansion", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow = makeSingleReviewFlow({

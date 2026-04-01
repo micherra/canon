@@ -3,23 +3,25 @@
  * in a single round-trip. Reduces the orchestrator's per-state loop from 4 MCP calls to 2.
  *
  * Key behavior:
- * 1. Read board once.
+ * 1. Read board from ExecutionStore (synchronous — no 500ms retry needed; SQLite init is atomic).
  * 2. Check convergence (iteration limits) — if can't enter, return early with can_enter:false.
- * 3. Evaluate skip_when BEFORE entering state — if skip, return skip_reason without mutating board.
- * 4. Enter state via enterState + writeBoard (inside withBoardLock).
- * 5. Resolve spawn prompts (reusing getSpawnPrompt logic, passing already-read board).
+ * 3. Evaluate skip_when BEFORE entering state — if skip, return skip_reason without mutating store.
+ * 4. Enter state via store.transaction() (no file locking).
+ * 5. Resolve spawn prompts.
  * 6. Return combined result.
  */
 
-import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
+import { enterState } from "../orchestration/board.ts";
 import { canEnterState } from "../orchestration/convergence.ts";
-import { withBoardLock } from "../orchestration/workspace.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { getSpawnPrompt } from "./get-spawn-prompt.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { createJsonlLogger } from "../orchestration/events.ts";
+import { gitExec } from "../adapters/git-adapter.ts";
+import { toolError } from "../utils/tool-result.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
 import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
 import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
@@ -72,19 +74,16 @@ export interface EnterAndPrepareStateResult {
 
 export async function enterAndPrepareState(
   input: EnterAndPrepareStateInput,
-): Promise<EnterAndPrepareStateResult> {
+): Promise<ToolResult<EnterAndPrepareStateResult>> {
   const { workspace, state_id, flow } = input;
 
-  // Step 1: Read board once for all subsequent operations.
-  // Retry once after a short delay — under concurrent MCP server activity the
-  // board file can briefly be absent between workspace creation and the first
-  // writeBoard inside init_workspace's lock.
-  let board: Board;
-  try {
-    board = await readBoard(workspace);
-  } catch (firstErr) {
-    await new Promise((r) => setTimeout(r, 500));
-    board = await readBoard(workspace);
+  const store = getExecutionStore(workspace);
+
+  // Step 1: Read board once from ExecutionStore (synchronous — no retry needed).
+  // SQLite init is atomic — the execution row is always present after initWorkspaceFlow.
+  const board = store.getBoard();
+  if (!board) {
+    return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${workspace}`);
   }
 
   // Step 2: Check convergence — bail early if max iterations reached.
@@ -97,6 +96,7 @@ export async function enterAndPrepareState(
 
   if (!allowed) {
     return {
+      ok: true as const,
       can_enter: false,
       iteration_count,
       max_iterations,
@@ -109,14 +109,13 @@ export async function enterAndPrepareState(
   }
 
   // Step 3: Evaluate skip_when BEFORE entering state.
-  // This is the key optimization: we skip evaluation here so the orchestrator
-  // never needs to enter a state only to immediately skip it.
   const stateDef = flow.states[state_id];
   if (stateDef?.skip_when) {
     const skipResult = await evaluateSkipWhen(stateDef.skip_when, workspace, board);
     if (skipResult.skip) {
       const skipReason = `Skipping ${state_id}: ${stateDef.skip_when} condition met — ${skipResult.reason ?? "condition satisfied"}`;
       return {
+        ok: true as const,
         can_enter: true,
         iteration_count,
         max_iterations,
@@ -129,46 +128,71 @@ export async function enterAndPrepareState(
     }
   }
 
-  // Step 4: Enter the state inside a board lock.
-  // We use withBoardLock to guard the enter+write sequence.
-  // We use the board already read above rather than re-reading inside the lock.
-  // The orchestrator is a single-process state machine so concurrent board mutations
-  // for the same state are not expected; the lock prevents file-level corruption.
+  // Step 4: Enter the state inside a SQLite transaction (replaces withBoardLock).
+  // Pure mutation on in-memory board, then persist only changed fields.
   let enteredBoard: Board = board;
-  await withBoardLock(workspace, async () => {
-    enteredBoard = enterState(board, state_id);
-    await writeBoard(workspace, enteredBoard);
 
-    // Emit events (best-effort)
-    const log = createJsonlLogger(workspace);
-    const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
-      log("board_updated", event).catch(() => {});
-    };
-    flowEventBus.once("board_updated", onBoardUpdated);
-    try {
-      flowEventBus.emit("board_updated", {
-        action: "enter_state",
-        stateId: state_id,
-        timestamp: new Date().toISOString(),
+  store.transaction(() => {
+    enteredBoard = enterState(board, state_id);
+
+    // Persist execution-level changes using the timestamp set by enterState on the board
+    store.updateExecution({
+      current_state: state_id,
+      last_updated: enteredBoard.last_updated,
+    });
+
+    // Persist the entered state
+    const enteredStateEntry = enteredBoard.states[state_id];
+    if (enteredStateEntry) {
+      store.upsertState(state_id, {
+        ...enteredStateEntry,
+        status: enteredStateEntry.status,
+        entries: enteredStateEntry.entries,
+        entered_at: enteredStateEntry.entered_at,
       });
-      const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
-        log("state_entered", event).catch(() => {});
-      };
-      flowEventBus.once("state_entered", onStateEntered);
-      try {
-        flowEventBus.emit("state_entered", {
-          stateId: state_id,
-          stateType: stateDef?.type ?? "unknown",
-          timestamp: new Date().toISOString(),
-          iterationCount: enteredBoard.iterations[state_id]?.count ?? 0,
-        });
-      } finally {
-        flowEventBus.removeListener("state_entered", onStateEntered);
-      }
-    } finally {
-      flowEventBus.removeListener("board_updated", onBoardUpdated);
+    }
+
+    // Persist iteration count if the state has iteration limits
+    if (enteredBoard.iterations[state_id]) {
+      const iter = enteredBoard.iterations[state_id];
+      store.upsertIteration(state_id, {
+        count: iter.count,
+        max: iter.max,
+        history: iter.history,
+        cannot_fix: iter.cannot_fix,
+      });
     }
   });
+
+  // Emit events (best-effort) — use the timestamp from the board to ensure consistency
+  const enteredAt = enteredBoard.last_updated;
+  const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
+    try { store.appendEvent("board_updated", event as Record<string, unknown>); } catch { /* best-effort */ }
+  };
+  flowEventBus.once("board_updated", onBoardUpdated);
+  try {
+    flowEventBus.emit("board_updated", {
+      action: "enter_state",
+      stateId: state_id,
+      timestamp: enteredAt,
+    });
+    const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
+      try { store.appendEvent("state_entered", event as Record<string, unknown>); } catch { /* best-effort */ }
+    };
+    flowEventBus.once("state_entered", onStateEntered);
+    try {
+      flowEventBus.emit("state_entered", {
+        stateId: state_id,
+        stateType: stateDef?.type ?? "unknown",
+        timestamp: enteredAt,
+        iterationCount: enteredBoard.iterations[state_id]?.count ?? 0,
+      });
+    } finally {
+      flowEventBus.removeListener("state_entered", onStateEntered);
+    }
+  } finally {
+    flowEventBus.removeListener("board_updated", onBoardUpdated);
+  }
 
   // Step 4.5: Resolve consultation prompts for the current breakpoint.
   const consultationPrompts: ConsultationPromptEntry[] = [];
@@ -180,19 +204,12 @@ export async function enterAndPrepareState(
     const names = stateDef.consultations[breakpoint] ?? [];
 
     for (const name of names) {
-      // Check min_waves threshold before resolving -- skip consultation if
+      // Check min_waves threshold before resolving — skip consultation if
       // wave_total is known and below the fragment's minimum.
-      // Fail-open: if wave_total is not yet set, do NOT skip. Running an extra
-      // consultation is low-risk and harmless; skipping it prematurely would
-      // miss needed input that the consultation is designed to gather. The
-      // exception to fail-closed applies here because the downside of acting
-      // (running an unneeded consultation) is far lower than the downside of
-      // not acting (silently omitting a required consultation prompt).
       const fragment = flow.consultations?.[name];
       if (fragment?.min_waves != null) {
         const waveTotal = enteredBoard.states[state_id]?.wave_total;
         if (waveTotal != null && waveTotal < fragment.min_waves) {
-          // Skip this consultation -- wave count below threshold
           continue;
         }
       }
@@ -211,8 +228,6 @@ export async function enterAndPrepareState(
     }
 
     // Collect completed consultation summaries from prior waves for briefing injection.
-    // All summaries pass through escapeDollarBrace before entering the prompt pipeline
-    // (trust boundary: agent output → prompt assembly).
     const stateEntry = enteredBoard.states[state_id];
     if (stateEntry?.wave_results) {
       for (const [_waveKey, waveResult] of Object.entries(stateEntry.wave_results)) {
@@ -236,20 +251,13 @@ export async function enterAndPrepareState(
   }
 
   // Step 4.6: Resolve review_scope for re-entered review states.
-  // When entries > 1 (re-entry after fix-violations), compute the file list
-  // changed since base_commit via git diff and inject as review_scope variable.
-  // On any failure (git not available, invalid commit ref), degrade to empty string.
   let reviewScopeVars: Record<string, string> = {};
   if (enteredBoard.states[state_id]?.entries > 1) {
     const baseRef = enteredBoard.base_commit;
     if (baseRef && /^[a-f0-9]{7,40}$/.test(baseRef)) {
       try {
-        const { spawnSync } = await import("node:child_process");
-        const result = spawnSync("git", ["diff", "--name-only", `${baseRef}..HEAD`], {
-          encoding: "utf-8",
-          timeout: 5000,
-        });
-        if (result.status === 0 && result.stdout) {
+        const result = gitExec(["diff", "--name-only", `${baseRef}..HEAD`], process.cwd(), 5000);
+        if (result.ok && result.stdout) {
           const files = result.stdout.trim().split("\n").filter(Boolean);
           reviewScopeVars.review_scope = files.length > 0
             ? `Scoped re-review. Files changed since last review:\n${files.join("\n")}`
@@ -258,14 +266,12 @@ export async function enterAndPrepareState(
           reviewScopeVars.review_scope = "";
         }
       } catch {
-        // Git diff failed -- degrade to full review
         reviewScopeVars.review_scope = "";
       }
     }
   }
 
-  // Step 5: Resolve spawn prompts. Pass the entered board so getSpawnPrompt
-  // reuses the already-read board instead of calling readBoard again.
+  // Step 5: Resolve spawn prompts.
   const spawnResult = await getSpawnPrompt({
     workspace,
     state_id,
@@ -281,6 +287,7 @@ export async function enterAndPrepareState(
   });
 
   return {
+    ok: true as const,
     can_enter: true,
     iteration_count,
     max_iterations,

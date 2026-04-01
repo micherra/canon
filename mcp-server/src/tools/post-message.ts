@@ -1,4 +1,5 @@
-import { writeMessage, type Message } from "../orchestration/messages.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Message } from "../orchestration/messages.ts";
 
 export interface PostMessageInput {
   workspace: string;
@@ -12,11 +13,12 @@ export interface PostMessageResult {
 }
 
 export async function postMessage(input: PostMessageInput): Promise<PostMessageResult> {
-  const message = await writeMessage(
-    input.workspace,
-    input.channel,
-    input.from,
-    input.content,
-  );
+  const store = getExecutionStore(input.workspace);
+  const row = store.appendMessage(input.channel, input.from, input.content);
+  const message: Message = {
+    from: row.sender,
+    timestamp: row.timestamp,
+    content: row.content,
+  };
   return { message };
 }

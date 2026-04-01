@@ -2,24 +2,29 @@
  * Tests for get-spawn-prompt.ts
  *
  * Covers:
- * 1. truncateProgress — pure function, all branches
- * 2. getSpawnPrompt calls readBoard exactly once (consolidation)
- * 3. getSpawnPrompt wave briefing injection via consultation_outputs
+ * 1. getSpawnPrompt — board state comes from ExecutionStore (not readBoard)
+ * 2. getSpawnPrompt — progress content comes from store.getProgress() (not readFile)
+ * 3. getSpawnPrompt — wave briefing injection via consultation_outputs
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFile } from "node:fs/promises";
 
 // ---------------------------------------------------------------------------
-// Hoist mock for readBoard before module import
+// Mock execution-store so tests don't need a real SQLite DB
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
+const mockStore = {
+  getBoard: vi.fn(),
+  getProgress: vi.fn(),
+  appendProgress: vi.fn(),
+  getExecution: vi.fn(),
+};
+
+vi.mock("../orchestration/execution-store.ts", () => ({
+  getExecutionStore: vi.fn(() => mockStore),
 }));
 
 // ---------------------------------------------------------------------------
@@ -31,9 +36,9 @@ vi.mock("../orchestration/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn(),
 }));
 
-import { readBoard } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
-import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -100,98 +105,72 @@ afterEach(() => {
   }
   tmpDirs = [];
   vi.clearAllMocks();
+  // Reset mock store
+  mockStore.getBoard.mockReset();
+  mockStore.getProgress.mockReset();
+  mockStore.appendProgress.mockReset();
+  mockStore.getExecution.mockReset();
 });
 
 // ---------------------------------------------------------------------------
-// truncateProgress — pure function tests
+// getSpawnPrompt — board state comes from store
 // ---------------------------------------------------------------------------
 
-describe("truncateProgress", () => {
-  it("returns unchanged content when there are 0 entries (header only)", () => {
-    const content = "## Progress: My task\n";
-    expect(truncateProgress(content, 8)).toBe(content);
-  });
-
-  it("returns unchanged content when entry count is under the cap", () => {
-    const header = "## Progress: My task\n";
-    const entries = [
-      "- [research] done: found solution",
-      "- [design] done: made plan",
-      "- [implement] done: wrote code",
-    ].join("\n");
-    const content = header + "\n" + entries + "\n";
-    expect(truncateProgress(content, 8)).toBe(content);
-  });
-
-  it("returns unchanged content when entry count equals the cap exactly", () => {
-    const header = "## Progress: My task\n";
-    const entries = Array.from({ length: 8 }, (_, i) => `- [state-${i}] done: step ${i}`).join("\n");
-    const content = header + "\n" + entries + "\n";
-    expect(truncateProgress(content, 8)).toBe(content);
-  });
-
-  it("truncates to last maxEntries when entry count exceeds cap", () => {
-    const header = "## Progress: My task";
-    const entries = Array.from({ length: 12 }, (_, i) => `- [state-${i}] done: step ${i}`);
-    const content = header + "\n" + entries.join("\n");
-
-    const result = truncateProgress(content, 8);
-
-    // Must contain header
-    expect(result).toContain(header);
-
-    // Must contain the last 8 entries
-    for (let i = 4; i < 12; i++) {
-      expect(result).toContain(`- [state-${i}] done: step ${i}`);
-    }
-
-    // Must NOT contain the first 4 entries
-    for (let i = 0; i < 4; i++) {
-      expect(result).not.toContain(`- [state-${i}] done: step ${i}`);
-    }
-  });
-
-  it("preserves header lines that appear before the first entry line", () => {
-    const header = "## Progress: My task\n\nSome metadata line\n";
-    const entries = Array.from({ length: 10 }, (_, i) => `- [state-${i}] done: step ${i}`);
-    const content = header + entries.join("\n");
-
-    const result = truncateProgress(content, 8);
-
-    // Header and metadata must be preserved
-    expect(result).toContain("## Progress: My task");
-    expect(result).toContain("Some metadata line");
-
-    // Only last 8 entries
-    const entryLines = result.split("\n").filter(l => l.startsWith("- ["));
-    expect(entryLines).toHaveLength(8);
-  });
-
-  it("handles content with no header (all lines are entries)", () => {
-    const entries = Array.from({ length: 10 }, (_, i) => `- [state-${i}] done: step ${i}`);
-    const content = entries.join("\n");
-
-    const result = truncateProgress(content, 8);
-
-    const entryLines = result.split("\n").filter(l => l.startsWith("- ["));
-    expect(entryLines).toHaveLength(8);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// getSpawnPrompt — progress truncation integration
-// ---------------------------------------------------------------------------
-
-describe("getSpawnPrompt — progress truncation", () => {
-  it("truncates progress to last 8 entries before injecting into prompt", async () => {
+describe("getSpawnPrompt — board state from ExecutionStore", () => {
+  it("reads board from store when _board is not provided and board is needed", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    const board = makeBoard();
+    mockStore.getBoard.mockReturnValue(board);
+    mockStore.getProgress.mockReturnValue("");
 
-    // Write a progress.md with 12 entries
-    const header = "## Progress: My task";
-    const entries = Array.from({ length: 12 }, (_, i) => `- [state-${i}] done: step ${i}`);
-    const progressContent = header + "\n" + entries.join("\n") + "\n";
-    await writeFile(join(workspace, "progress.md"), progressContent, "utf-8");
+    const flow = makeFlow({
+      states: {
+        implement: { type: "single", agent: "canon-implementor", skip_when: "auto_approved" },
+        done: { type: "terminal" },
+      },
+    });
+
+    await getSpawnPrompt({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+    });
+
+    // Store should have been queried for board (skip_when requires board)
+    expect(vi.mocked(getExecutionStore)).toHaveBeenCalledWith(workspace);
+    expect(mockStore.getBoard).toHaveBeenCalled();
+  });
+
+  it("uses _board directly when provided (no store call for board)", async () => {
+    const workspace = makeTmpDir();
+    const board = makeBoard();
+    mockStore.getProgress.mockReturnValue("");
+
+    const flow = makeFlow();
+
+    await getSpawnPrompt({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      _board: board,
+    });
+
+    // Store should NOT have been called for board since _board was provided
+    expect(mockStore.getBoard).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getSpawnPrompt — progress from store
+// ---------------------------------------------------------------------------
+
+describe("getSpawnPrompt — progress from store", () => {
+  it("reads progress from store when flow.progress is configured", async () => {
+    const workspace = makeTmpDir();
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("- Progress entry 1\n- Progress entry 2");
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
@@ -206,25 +185,41 @@ describe("getSpawnPrompt — progress truncation", () => {
     });
 
     const prompt = result.prompts[0].prompt;
+    expect(prompt).toContain("Progress entry 1");
+    expect(prompt).toContain("Progress entry 2");
 
-    // Last 8 entries should appear
-    for (let i = 4; i < 12; i++) {
-      expect(prompt).toContain(`- [state-${i}] done: step ${i}`);
-    }
-    // First 4 entries should NOT appear
-    for (let i = 0; i < 4; i++) {
-      expect(prompt).not.toContain(`- [state-${i}] done: step ${i}`);
-    }
+    // Store.getProgress should have been called with 8 (the max entries cap)
+    expect(mockStore.getProgress).toHaveBeenCalledWith(8);
   });
 
-  it("passes through all entries unchanged when count is within cap", async () => {
+  it("injects empty progress string when store returns empty", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
 
-    const header = "## Progress: My task";
-    const entries = Array.from({ length: 5 }, (_, i) => `- [state-${i}] done: step ${i}`);
-    const progressContent = header + "\n" + entries.join("\n") + "\n";
-    await writeFile(join(workspace, "progress.md"), progressContent, "utf-8");
+    const flow = makeFlow({
+      progress: "${WORKSPACE}/progress.md",
+      spawn_instructions: { implement: "Task: ${task}\n\nProgress:\n${progress}" },
+    });
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+    });
+
+    expect(result.prompts).toHaveLength(1);
+    // Should not throw; progress is just empty
+    expect(result.prompts[0].prompt).toBeDefined();
+  });
+
+  it("reads progress from store.getProgress() (not from file system)", async () => {
+    // Verifies that progress content comes from store.getProgress(), not fs.readFile()
+    // by confirming: (1) mockStore.getProgress was called, (2) the content appears in prompt
+    const workspace = makeTmpDir();
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("- step done");
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
@@ -238,21 +233,22 @@ describe("getSpawnPrompt — progress truncation", () => {
       variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
     });
 
-    const prompt = result.prompts[0].prompt;
-    for (let i = 0; i < 5; i++) {
-      expect(prompt).toContain(`- [state-${i}] done: step ${i}`);
-    }
+    // Store.getProgress must have been called (store-based, not file-based)
+    expect(mockStore.getProgress).toHaveBeenCalledWith(8);
+    // Content from store must appear in the prompt
+    expect(result.prompts[0].prompt).toContain("- step done");
   });
 });
 
 // ---------------------------------------------------------------------------
-// getSpawnPrompt — wave briefing injection via consultation_outputs
+// getSpawnPrompt — wave briefing injection
 // ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — wave briefing injection", () => {
   it("injects assembleWaveBriefing output into wave-type prompts when consultation_outputs is provided", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
     vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\n### Security\nUse parameterized queries.");
 
     const flow = makeWaveFlow();
@@ -277,7 +273,6 @@ describe("getSpawnPrompt — wave briefing injection", () => {
       },
     });
 
-    // Both items get the briefing
     expect(result.prompts).toHaveLength(2);
     for (const entry of result.prompts) {
       expect(entry.prompt).toContain("## Wave Briefing (from wave 1)");
@@ -287,7 +282,8 @@ describe("getSpawnPrompt — wave briefing injection", () => {
 
   it("does not inject briefing when consultation_outputs is undefined", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
     vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n");
 
     const flow = makeWaveFlow();
@@ -299,19 +295,19 @@ describe("getSpawnPrompt — wave briefing injection", () => {
       variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
       wave: 1,
-      // consultation_outputs intentionally omitted
     });
 
     expect(vi.mocked(assembleWaveBriefing)).not.toHaveBeenCalled();
     expect(result.prompts[0].prompt).not.toContain("Wave Briefing");
   });
 
-  it("does not inject briefing for single-type states even when consultation_outputs is provided", async () => {
+  it("does not inject briefing for single-type states", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
     vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n");
 
-    const flow = makeFlow(); // single-type state
+    const flow = makeFlow();
 
     const result = await getSpawnPrompt({
       workspace,
@@ -328,12 +324,11 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     expect(result.prompts[0].prompt).not.toContain("Wave Briefing");
   });
 
-  it("pre-escaped \\${ patterns in consultation summaries survive unchanged in assembled prompt", async () => {
+  it("pre-escaped \\${ patterns survive unchanged in assembled prompt", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
 
-    // Simulate caller pre-escaping ${VAR} → \${VAR} and assembleWaveBriefing
-    // returning it as-is (as it should — no double-escaping)
     const escapedSummary = "Use \\${PARAM} in queries.";
     vi.mocked(assembleWaveBriefing).mockReturnValue(`## Wave Briefing (from wave 1)\n\n### Security\n${escapedSummary}`);
 
@@ -351,14 +346,13 @@ describe("getSpawnPrompt — wave briefing injection", () => {
       },
     });
 
-    // The escaped pattern must appear in the final prompt unchanged
     expect(result.prompts[0].prompt).toContain("\\${PARAM}");
   });
 
-  it("does not inject briefing when assembleWaveBriefing returns an empty string", async () => {
+  it("does not inject briefing when assembleWaveBriefing returns empty string", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
-    // assembleWaveBriefing returns header-only or empty string
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
     vi.mocked(assembleWaveBriefing).mockReturnValue("");
 
     const flow = makeWaveFlow();
@@ -372,13 +366,13 @@ describe("getSpawnPrompt — wave briefing injection", () => {
       consultation_outputs: {},
     });
 
-    // Prompt should not get extra newlines or blank content from empty briefing
     expect(result.prompts[0].prompt).not.toContain("\n\n\n\n");
   });
 
-  it("injects briefing into parallel-per state prompts when consultation_outputs is provided", async () => {
+  it("injects briefing into parallel-per state prompts", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
     vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\n### Arch\nUse services.");
 
     const flow: ResolvedFlow = {

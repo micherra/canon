@@ -7,9 +7,10 @@
  * Security: bash_check commands are validated against a denylist before any shell execution.
  */
 
-import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { gitExec } from "../adapters/git-adapter.ts";
+import { runShell } from "../adapters/process-adapter.ts";
 import type { PostconditionAssertion, PostconditionResult } from "./flow-schema.ts";
 
 const BASH_DENYLIST = ["rm", "sudo", "curl", "wget", "chmod", "chown", "mkfs", "dd"];
@@ -110,14 +111,10 @@ function evaluateFileChanged(
   }
 
   const target = assertion.target ?? "";
-  const result = spawnSync(
-    "git",
-    ["diff", "--name-only", baseCommit, "HEAD", "--", target],
-    { cwd, encoding: "utf-8", timeout: 30_000 },
-  );
+  const result = gitExec(["diff", "--name-only", baseCommit, "HEAD", "--", target], cwd);
 
-  if (result.error || result.status !== 0) {
-    const errMsg = result.error?.message ?? (result.stderr ?? "").trim() ?? "git command failed";
+  if (!result.ok) {
+    const errMsg = result.stderr.trim() || "git command failed";
     return {
       passed: false,
       name,
@@ -126,7 +123,7 @@ function evaluateFileChanged(
     };
   }
 
-  const output = (result.stdout ?? "").trim();
+  const output = result.stdout.trim();
   const passed = output.length > 0;
   return {
     passed,
@@ -195,20 +192,11 @@ function evaluateBashCheck(
     };
   }
 
-  const result = spawnSync(command, {
-    shell: true,
-    cwd,
-    encoding: "utf-8",
-    timeout: 30_000,
-  });
-
-  const stdout: string = result.stdout ?? "";
-  const stderr: string = result.stderr ?? "";
-  const output = (stdout + stderr).trim();
-  const exitCode: number = result.status ?? 1;
+  const result = runShell(command, cwd);
+  const output = (result.stdout + result.stderr).trim();
 
   return {
-    passed: exitCode === 0,
+    passed: result.exitCode === 0,
     name,
     type: assertion.type,
     output,

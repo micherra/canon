@@ -1,7 +1,7 @@
 import { readFile, mkdir } from "fs/promises";
 import { atomicWriteFile } from "../utils/atomic-write.ts";
 import { join, isAbsolute } from "path";
-import { execFile } from "child_process";
+import { gitExecAsync } from "../adapters/git-adapter-async.ts";
 import { scanSourceFiles } from "../graph/scanner.ts";
 import { extractImports, resolveImport, type PathAlias } from "../graph/import-parser.ts";
 import { loadAllPrinciples } from "../matcher.ts";
@@ -17,6 +17,7 @@ import {
 import { isNotFound } from "../utils/errors.ts";
 import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.ts";
 import { toPosix, loadPathAliases } from "../utils/paths.ts";
+import { sanitizeGitRef } from "../utils/git-ref.ts";
 import { classifyMdNode, buildNameMaps, inferMdRelations } from "../graph/md-relations.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
 import { materialize } from "../graph/view-materializer.ts";
@@ -80,30 +81,21 @@ export interface CodebaseGraphOutput {
 
 // ── Git helpers ──
 
-function gitCurrentBranch(cwd: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd }, (err, stdout) => {
-      if (err) { resolve(null); return; }
-      resolve(stdout.trim() || null);
-    });
-  });
+async function gitCurrentBranch(cwd: string): Promise<string | null> {
+  const result = await gitExecAsync(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
+  if (!result.ok) return null;
+  return result.stdout.trim() || null;
 }
 
-function gitChangedFiles(cwd: string, base: string): Promise<string[]> {
-  return new Promise((resolve) => {
-    execFile("git", ["diff", "--name-only", `${base}...HEAD`], { cwd }, (err, stdout) => {
-      if (err) { resolve([]); return; }
-      resolve(stdout.trim().split("\n").filter(Boolean));
-    });
-  });
+async function gitChangedFiles(cwd: string, base: string): Promise<string[]> {
+  const result = await gitExecAsync(["diff", "--name-only", `${base}...HEAD`], cwd);
+  if (!result.ok) return [];
+  return result.stdout.trim().split("\n").filter(Boolean);
 }
 
-function gitRefExists(cwd: string, ref: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    execFile("git", ["rev-parse", "--verify", ref], { cwd }, (err) => {
-      resolve(!err);
-    });
-  });
+async function gitRefExists(cwd: string, ref: string): Promise<boolean> {
+  const result = await gitExecAsync(["rev-parse", "--verify", ref], cwd);
+  return result.ok;
 }
 
 // ── Graph building steps ──
@@ -170,10 +162,11 @@ async function detectChangedFiles(
   if (changedFiles.length === 0) {
     const branch = await gitCurrentBranch(projectDir);
     if (branch && branch !== "main" && branch !== "master") {
-      const base = input.diff_base
+      const rawBase = input.diff_base
         || (await gitRefExists(projectDir, "origin/main") ? "origin/main"
         : (await gitRefExists(projectDir, "origin/master") ? "origin/master" : null));
-      if (base) {
+      if (rawBase) {
+        const base = sanitizeGitRef(rawBase);
         changedFiles = await gitChangedFiles(projectDir, base);
       }
     }

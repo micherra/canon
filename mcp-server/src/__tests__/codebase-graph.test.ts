@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -279,6 +279,72 @@ describe("codebaseGraph", () => {
     const result = await codebaseGraph({}, tmpDir, "/nonexistent");
     const compositionEdge = result.edges.find((e) => e.type === "composition");
     expect(compositionEdge).toBeUndefined();
+  });
+});
+
+// ── git-adapter-async integration (adr002-05) ──
+
+describe("codebaseGraph — git adapter integration", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-graph-git-test-"));
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+    await mkdir(join(tmpDir, "src", "api"), { recursive: true });
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ layers: { api: ["src/api"] } }),
+    );
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handler() {}`);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("gitCurrentBranch returns null when gitExecAsync returns ok:false — no changed files from git", async () => {
+    // Mock gitExecAsync to always return ok:false (simulates no git repo)
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+      gitExecAsync: vi.fn().mockResolvedValue({
+        ok: false,
+        stdout: "",
+        stderr: "fatal: not a git repository",
+        exitCode: 128,
+        timedOut: false,
+      }),
+    }));
+
+    // Re-import to pick up the mock
+    const { codebaseGraph: cg } = await import("../tools/codebase-graph.ts");
+    const result = await cg({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
+
+    // When gitCurrentBranch returns null, no git-based changed file detection occurs.
+    // The file should still be in nodes but not marked changed (no explicit changed_files input).
+    expect(result.nodes).toHaveLength(1);
+    const node = result.nodes[0];
+    expect(node.changed).toBe(false);
+  });
+
+  it("uses gitExecAsync (not child_process) for git helpers", async () => {
+    const gitExecAsync = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: "feat/my-branch",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+    vi.doMock("../adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
+
+    const { codebaseGraph: cg } = await import("../tools/codebase-graph.ts");
+    await cg({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
+
+    // gitExecAsync should have been called (for gitCurrentBranch at minimum)
+    expect(gitExecAsync).toHaveBeenCalled();
+    // First call should be rev-parse --abbrev-ref HEAD (gitCurrentBranch)
+    const [firstArgs] = gitExecAsync.mock.calls[0];
+    expect(firstArgs).toEqual(["rev-parse", "--abbrev-ref", "HEAD"]);
   });
 });
 

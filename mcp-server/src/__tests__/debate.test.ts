@@ -65,7 +65,6 @@ describe("debate", () => {
         from: "team",
         timestamp: new Date().toISOString(),
         content,
-        path: "/fake/path.md",
       };
     }
 
@@ -160,6 +159,25 @@ describe("debate", () => {
       expect(summary).toContain("Debate Summary");
       expect(summary).toContain("round-1-team-a");
       expect(summary).toContain("event sourcing");
+    });
+
+    it("infers round number from channel name (item #15)", async () => {
+      // Messages posted to debate-round-3 channel — round number from channel, not msg.from
+      await writeMessage(workspace, "debate-round-3", "some-agent-no-round", "Final response from Team A.");
+      await writeMessage(workspace, "debate-round-3", "another-agent", "Final response from Team B.");
+
+      const summary = await buildDebateSummary(workspace, "debate-round-3");
+      // Should show Round 3 (from channel), not Round 0 (from msg.from fallback)
+      expect(summary).toContain("Round 3");
+    });
+
+    it("falls back to msg.from round inference when channel has no round number", async () => {
+      // Channel without round number — must fall back to msg.from
+      await writeMessage(workspace, "debate-misc", "round-2-team-a-researcher", "Some message.");
+
+      const summary = await buildDebateSummary(workspace, "debate-misc");
+      // Should show Round 2 (from msg.from), not Round 0
+      expect(summary).toContain("Round 2");
     });
   });
 

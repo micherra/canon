@@ -10,7 +10,7 @@ import { DriftStore } from "../drift/store.ts";
 import { generateId } from "../utils/id.ts";
 import type { StateDefinition, Effect } from "./flow-schema.ts";
 import type { ReviewEntry } from "../schema.ts";
-import { readBoard } from "./board.ts";
+import { getExecutionStore } from "./execution-store.ts";
 import { resolvePostconditions, evaluatePostconditions } from "./contract-checker.ts";
 
 export interface EffectResult {
@@ -86,11 +86,13 @@ async function checkPostconditions(
   let discoveredPostconditions: import("./flow-schema.ts").PostconditionAssertion[] | undefined;
 
   try {
-    const board = await readBoard(workspace);
-    baseCommit = board.base_commit;
-    if (stateName) {
-      const stateEntry = board.states[stateName];
-      discoveredPostconditions = stateEntry?.discovered_postconditions;
+    const board = getExecutionStore(workspace).getBoard();
+    if (board) {
+      baseCommit = board.base_commit;
+      if (stateName) {
+        const stateEntry = board.states[stateName];
+        discoveredPostconditions = stateEntry?.discovered_postconditions;
+      }
     }
   } catch {
     // Board not readable — continue with no discovered postconditions
@@ -109,7 +111,7 @@ async function checkPostconditions(
 }
 
 // ---------------------------------------------------------------------------
-// persist_review — parse REVIEW.md → reviews.jsonl
+// persist_review — parse REVIEW.md → DriftStore (SQLite)
 // ---------------------------------------------------------------------------
 
 async function persistReview(

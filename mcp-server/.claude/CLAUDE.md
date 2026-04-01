@@ -6,22 +6,23 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-03-22 -->
+<!-- last-updated: 2026-03-31 -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
 ```
 src/
-├── index.ts              # Entry point — registers all MCP tools
+├── index.ts              # Entry point — registers all MCP tools (all handlers wrapped via wrapHandler)
 ├── parser.ts             # Frontmatter parsing for principle markdown files
 ├── matcher.ts            # Principle matching (layer/file_pattern/tags filtering)
 ├── schema.ts             # Zod schemas for report input
 ├── constants.ts          # Shared constants (layers, extensions, CANON_DIR)
 ├── tools/                # Tool implementations (one file per tool)
+├── adapters/             # Privileged subprocess adapters (ADR-002): git-adapter.ts, git-adapter-async.ts, process-adapter.ts
 ├── drift/                # Drift tracking — reviews (JSONL persistence)
 ├── graph/                # Dependency graph — scanner, import/export parsing, priority scoring
 ├── orchestration/        # Flow execution — board, messaging, variables, gates, consultations, compete, debate
-├── utils/                # Config loading, path handling, atomic writes, ID generation
+├── utils/                # Config loading, path handling, atomic writes, ID generation, tool-result.ts, wrap-handler.ts
 └── __tests__/            # Vitest unit tests
 ```
 
@@ -32,7 +33,33 @@ src/
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-03-26 (optional-roles parallel failure handling) -->
+<!-- last-updated: 2026-03-31 (ADR-002: ToolResult migration, adapter modules) -->
+
+**Tool error types** (`src/utils/tool-result.ts`) — added 2026-03-31 (ADR-002):
+- `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
+- `CanonToolError` — `{ ok: false; error_code: CanonErrorCode; message: string; recoverable: boolean; context?: Record<string, unknown> }`
+- `ToolResult<T>` — discriminated union `({ ok: true } & T) | CanonToolError`; all tool functions now return this type instead of throwing for expected errors
+- `ProcessResult` — shared subprocess result: `{ ok: boolean; stdout: string; stderr: string; exitCode: number; timedOut: boolean }`
+- `toolError(code, message, recoverable?, context?)` — constructs `CanonToolError`
+- `toolOk<T>(data)` — constructs `{ ok: true } & T`; fields spread flat (no nested `data` wrapper)
+- `isToolError(result)` — type guard; returns `true` when `ok === false` and `error_code` present
+- `assertOk<T>(result)` — asserts `result is { ok: true } & T`; throws if error; intended for tests and callers that know the call must succeed
+
+**Top-level MCP catch-all** (`src/utils/wrap-handler.ts`) — added 2026-03-31 (ADR-002):
+- `wrapHandler<T>(handler)` — wraps any tool handler; catches unexpected throws and returns them as typed `UNEXPECTED` `CanonToolError`; all tool registrations in `index.ts` use this wrapper
+
+**Subprocess adapters** (`src/adapters/`) — added 2026-03-31 (ADR-002); only files in this directory may import `node:child_process`:
+- `git-adapter.ts`: `gitExec(args, cwd, timeout?)` → `ProcessResult` (sync, `shell` never `true`); `gitDiff(args, cwd, timeout?)` → `ProcessResult`; `gitStatus(cwd, timeout?)` → `ProcessResult`; default 30s timeout
+- `git-adapter-async.ts`: `gitExecAsync(args, cwd, timeout?)` → `Promise<ProcessResult>`; never rejects; default 30s timeout
+- `process-adapter.ts`: `runShell(command, cwd, timeout?)` → `ProcessResult` (sync, `shell: true`); 512KB maxBuffer; default 30s timeout
+
+**Tool return types updated to `ToolResult<T>`** (ADR-002, 2026-03-31):
+- `loadFlow(input, pluginDir, projectDir?)` → `Promise<ToolResult<LoadFlowResult>>` (was `Promise<LoadFlowResult>`)
+- `updateBoard(input)` → `Promise<ToolResult<UpdateBoardResult>>` (was `Promise<UpdateBoardResult>`)
+- `graphQuery(input)` → `ToolResult<GraphQueryOutput>` (was `GraphQueryOutput`; `KG_NOT_INDEXED` is `recoverable: true`)
+- `getFileContext(input)` → `Promise<ToolResult<FileContextOutput>>` (was `Promise<FileContextOutput>`)
+- `enterAndPrepareState(input)` → `Promise<ToolResult<EnterAndPrepareStateResult>>` (was `Promise<EnterAndPrepareStateResult>`)
+- `reportResult(input)` / `reportResultLocked(input)` → `Promise<ToolResult<ReportResultResult>>` (was `Promise<ReportResultResult>`)
 
 **Drift Store** (`src/drift/store.ts`):
 - `ReviewEntry` — unified type for all reviews (principle and PR); optional PR fields: `pr_number?: number`, `branch?: string`, `last_reviewed_sha?: string`, `file_priorities?: Array<{ path: string; priority_score: number }>`
@@ -150,7 +177,7 @@ src/
 
 **Gate runner** (`src/orchestration/gate-runner.ts`):
 - `normalizeGates(stateDef, flow, cwd, boardState?)` — resolves gate commands via 3-tier priority: `stateDef.gates[]` (direct shell commands) > `stateDef.gate` (named reference via `resolveGateCommand()`) > `boardState.discovered_gates[]` (agent-reported); returns `{ commands, source }` where source ∈ `"gates"|"gate"|"discovered"|"none"`
-- `runGates(stateDef, flow, cwd, boardState?)` — executes all normalized gates via `spawnSync`; returns `GateResult[]`; empty array when no gates declared
+- `runGates(stateDef, flow, cwd, boardState?)` — executes all normalized gates via `runShell` (process-adapter); returns `GateResult[]`; empty array when no gates declared
 - `runGate(gateName, flow, cwd)` — run a single named gate; **fail-closed**: unresolved gate name returns `{ passed: false, exitCode: 1 }` (changed from `passed: true` 2026-03-26)
 - `GateResult` type — re-exported from `flow-schema.ts`; `{ passed, gate, command, output, exitCode }`
 
@@ -218,8 +245,12 @@ src/
 | `vitest` | Unit testing (dev) |
 
 ## Invariants
-<!-- last-updated: 2026-03-26 -->
+<!-- last-updated: 2026-03-31 (ADR-002: subprocess isolation, ToolResult) -->
 
+- **ADR-002 subprocess isolation**: Only files in `src/adapters/` may import `node:child_process`; all `tools/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
+- **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
+- **ADR-002 security boundary**: `git-adapter.ts` never sets `shell: true`; `process-adapter.ts` sets `shell: true` for arbitrary shell commands; the two adapters must not be interchanged for git operations — added 2026-03-31
+- All subprocess adapters enforce a default 30s timeout; callers may pass an explicit timeout override — added 2026-03-31
 - All data persists to `.canon/` directory (reviews.jsonl, graph-data.json, summaries.json)
 - JSONL files auto-rotate when exceeding size limits
 - Atomic file writes prevent corruption on concurrent access

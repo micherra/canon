@@ -18,16 +18,6 @@ import { join } from "node:path";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-  enterState: vi.fn(),
-}));
-
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
@@ -38,10 +28,6 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
     once: vi.fn(),
     removeListener: vi.fn(),
   },
-}));
-
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
 vi.mock("../orchestration/consultation-executor.ts", () => ({
@@ -61,9 +47,10 @@ vi.mock("node:child_process", () => ({
   spawnSync: vi.fn(),
 }));
 
-import { readBoard, enterState } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 import { spawnSync } from "node:child_process";
 
 // ---------------------------------------------------------------------------
@@ -115,6 +102,29 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   };
 }
 
+function seedBoard(workspace: string, board: Board): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: board.flow,
+    task: board.task,
+    entry: board.entry,
+    current_state: board.current_state,
+    base_commit: board.base_commit,
+    started: board.started ?? now,
+    last_updated: board.last_updated ?? now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: board.flow,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+  }
+}
+
 afterEach(() => {
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });
@@ -131,20 +141,13 @@ describe("scoped re-review (review_scope injection)", () => {
   describe("first review (entries <= 1)", () => {
     it("does not inject review_scope when entries is 0", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      // Pre-enter: entries=0 → after enterState: entries=1 (not > 1, no git diff)
+      seedBoard(workspace, makeBoard({
         states: {
           review: { status: "pending", entries: 0 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      const enteredBoard = makeBoard({
-        states: {
-          review: { status: "in_progress", entries: 1 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
@@ -153,6 +156,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       // git diff should NOT have been called for entries <= 1
@@ -161,23 +165,14 @@ describe("scoped re-review (review_scope injection)", () => {
 
     it("does not inject review_scope when entries is 1", async () => {
       const workspace = makeTmpDir();
-      // After the first review runs, entries becomes 1 -- next entry will be 1 already completed
       // The check is: if enteredBoard.states[state_id]?.entries > 1
-      // So entries=1 means this is the first time being entered (not a re-entry)
-      const board = makeBoard({
+      // Pre-enter: entries=0 → after enterState: entries=1 (not > 1, no git diff)
+      seedBoard(workspace, makeBoard({
         states: {
-          review: { status: "done", entries: 1 },
+          review: { status: "done", entries: 0 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      const enteredBoard = makeBoard({
-        states: {
-          review: { status: "in_progress", entries: 1 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       const flow = makeFlow();
       await enterAndPrepareState({
@@ -195,23 +190,14 @@ describe("scoped re-review (review_scope injection)", () => {
   describe("re-entry (entries > 1)", () => {
     it("injects review_scope with file list when git diff succeeds", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      // Pre-enter: entries=1 → after enterState: entries=2 (re-entry, git diff called)
+      seedBoard(workspace, makeBoard({
         base_commit: "abc1234",
         states: {
           review: { status: "done", entries: 1 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      // After enterState, entries becomes 2 (re-entry)
-      const enteredBoard = makeBoard({
-        base_commit: "abc1234",
-        states: {
-          review: { status: "in_progress", entries: 2 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       // Mock git diff to return changed files
       vi.mocked(spawnSync).mockReturnValue({
@@ -230,6 +216,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(spawnSync).toHaveBeenCalledWith(
@@ -247,22 +234,14 @@ describe("scoped re-review (review_scope injection)", () => {
 
     it("uses empty review_scope when git diff fails (graceful degradation)", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      // Pre-enter: entries=1 → after enterState: entries=2 (re-entry, git diff called)
+      seedBoard(workspace, makeBoard({
         base_commit: "abc1234",
         states: {
           review: { status: "done", entries: 1 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      const enteredBoard = makeBoard({
-        base_commit: "abc1234",
-        states: {
-          review: { status: "in_progress", entries: 2 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       // Mock git diff failure (non-zero exit code)
       vi.mocked(spawnSync).mockReturnValue({
@@ -281,6 +260,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       // Should still succeed -- full review, no scope restriction
       expect(result.can_enter).toBe(true);
@@ -291,22 +271,14 @@ describe("scoped re-review (review_scope injection)", () => {
 
     it("uses empty review_scope when git diff throws an exception", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      // Pre-enter: entries=1 → after enterState: entries=2 (re-entry)
+      seedBoard(workspace, makeBoard({
         base_commit: "abc1234",
         states: {
           review: { status: "done", entries: 1 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      const enteredBoard = makeBoard({
-        base_commit: "abc1234",
-        states: {
-          review: { status: "in_progress", entries: 2 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       // Mock spawnSync to throw
       vi.mocked(spawnSync).mockImplementation(() => {
@@ -320,6 +292,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       // Should degrade gracefully
       expect(result.can_enter).toBe(true);
@@ -328,22 +301,14 @@ describe("scoped re-review (review_scope injection)", () => {
 
     it("uses empty review_scope when base_commit is missing", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      // Pre-enter: entries=1 → after enterState: entries=2 (re-entry, but no git diff due to empty base_commit)
+      seedBoard(workspace, makeBoard({
         base_commit: "",
         states: {
           review: { status: "done", entries: 1 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      const enteredBoard = makeBoard({
-        base_commit: "",
-        states: {
-          review: { status: "in_progress", entries: 2 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       const flow = makeFlow();
       await enterAndPrepareState({
@@ -359,23 +324,15 @@ describe("scoped re-review (review_scope injection)", () => {
 
     it("uses empty review_scope when base_commit fails the safety regex", async () => {
       const workspace = makeTmpDir();
-      // An invalid/suspicious commit ref
-      const board = makeBoard({
+      // Pre-enter: entries=1 → after enterState: entries=2 (re-entry)
+      // Invalid base_commit fails the safety regex, so no git diff
+      seedBoard(workspace, makeBoard({
         base_commit: "not-a-valid-sha; rm -rf /",
         states: {
           review: { status: "done", entries: 1 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      const enteredBoard = makeBoard({
-        base_commit: "not-a-valid-sha; rm -rf /",
-        states: {
-          review: { status: "in_progress", entries: 2 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       const flow = makeFlow();
       await enterAndPrepareState({
@@ -391,22 +348,14 @@ describe("scoped re-review (review_scope injection)", () => {
 
     it("uses empty review_scope when git diff returns empty file list", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      // Pre-enter: entries=1 → after enterState: entries=2 (re-entry, git diff called but empty)
+      seedBoard(workspace, makeBoard({
         base_commit: "abc1234",
         states: {
           review: { status: "done", entries: 1 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      const enteredBoard = makeBoard({
-        base_commit: "abc1234",
-        states: {
-          review: { status: "in_progress", entries: 2 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       // Git diff returns empty output (no files changed)
       vi.mocked(spawnSync).mockReturnValue({
@@ -425,6 +374,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       // Empty file list means review_scope remains empty
@@ -436,22 +386,14 @@ describe("scoped re-review (review_scope injection)", () => {
   describe("review_scope in spawn prompt", () => {
     it("review_scope variable is substituted in the spawn prompt", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      // Pre-enter: entries=1 → after enterState: entries=2 (re-entry)
+      seedBoard(workspace, makeBoard({
         base_commit: "deadbeef",
         states: {
           review: { status: "done", entries: 1 },
           done: { status: "pending", entries: 0 },
         },
-      });
-      const enteredBoard = makeBoard({
-        base_commit: "deadbeef",
-        states: {
-          review: { status: "in_progress", entries: 2 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      }));
 
       vi.mocked(spawnSync).mockReturnValue({
         status: 0,
@@ -474,6 +416,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "deadbeef", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.prompts).toHaveLength(1);
       const prompt = result.prompts[0].prompt;

@@ -293,6 +293,17 @@ After-consultation summaries are automatically picked up by the next state's `en
 
 **`parallel-per`**: Parse `iterate_on` data from previous state's artifact. Spawn one sub-agent per item concurrently. Filter out `cannot_fix` items. If empty after filtering → transition with `no_items`.
 
+### Fan-Out Fixers for Large Failure Sets
+
+When a wave produces many test failures (>10 files), do NOT spawn a single sequential fixer. Instead:
+
+1. **Categorize failures** by root cause (e.g., "tests calling deleted functions", "tests setting up file-based state", "incompletely migrated source code", "indirect dependency failures")
+2. **Spawn parallel fixers** — one per category with non-overlapping file lists
+3. **Use worktree isolation** if fixers touch source files (not just tests)
+4. **Merge and verify** after all fixers complete
+
+This applies to `fix-impl` states, post-wave cleanup, and any ad-hoc fix spawning. A single fixer for 26 files across 4 categories takes ~4x longer than 4 parallel fixers with 6-7 files each.
+
 ### Variables for spawn prompts
 
 | Variable | Source |

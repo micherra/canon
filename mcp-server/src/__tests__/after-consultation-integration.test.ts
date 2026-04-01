@@ -30,16 +30,6 @@ import { join } from "node:path";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-  enterState: vi.fn(),
-}));
-
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
@@ -52,10 +42,6 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn()),
-}));
-
 // Leave assembleWaveBriefing real — we test actual briefing output.
 vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
   const real = await importOriginal<typeof import("../orchestration/wave-briefing.ts")>();
@@ -65,10 +51,11 @@ vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
   };
 });
 
-import { readBoard, enterState } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -110,6 +97,41 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     skipped: [],
     ...overrides,
   } as Board;
+}
+
+/**
+ * Seeds the ExecutionStore with the given board data so that
+ * enterAndPrepareState (which reads from the store) can find it.
+ */
+function seedBoard(workspace: string, board: Board): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: board.flow,
+    task: board.task,
+    entry: board.entry,
+    current_state: board.current_state,
+    base_commit: board.base_commit,
+    started: board.started ?? now,
+    last_updated: board.last_updated ?? now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: board.flow,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+  }
+  for (const [stateId, iterEntry] of Object.entries(board.iterations ?? {})) {
+    store.upsertIteration(stateId, {
+      count: iterEntry.count,
+      max: iterEntry.max,
+      history: iterEntry.history ?? [],
+      cannot_fix: iterEntry.cannot_fix ?? [],
+    });
+  }
 }
 
 /**
@@ -288,20 +310,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       },
     });
 
-    const enteredBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 2,
-          wave_results: boardWithPendingAfter.states["implement"].wave_results,
-        },
-        review: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithPendingAfter);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, boardWithPendingAfter);
 
     const flow = makeFlowWithAfterAndNextState();
 
@@ -313,6 +322,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     // Status "pending" → summary not collected → no briefing injection
@@ -348,20 +358,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       },
     });
 
-    const enteredBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 2,
-          wave_results: boardWithErrorAfter.states["implement"].wave_results,
-        },
-        review: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithErrorAfter);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, boardWithErrorAfter);
 
     const flow = makeFlowWithAfterAndNextState();
 
@@ -373,6 +370,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     // Status "error" → not injected even though summary text exists
     expect(result.prompts[0].prompt).not.toContain("Agent crashed unexpectedly.");
@@ -407,20 +405,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       },
     });
 
-    const enteredBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 2,
-          wave_results: boardWithNullSummary.states["implement"].wave_results,
-        },
-        review: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithNullSummary);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, boardWithNullSummary);
 
     const flow = makeFlowWithAfterAndNextState();
 
@@ -432,6 +417,7 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     // null summary → guard `cResult.summary` is falsy → not collected
     expect(result.prompts[0].prompt).not.toContain("Wave Briefing");
@@ -474,19 +460,7 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
       },
     });
 
-    const enteredBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 2,
-          wave_results: boardWithAfterNoSection.states["implement"].wave_results,
-        },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithAfterNoSection);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, boardWithAfterNoSection);
 
     const flow = makeFlowWithAfterNoSection();
 
@@ -498,6 +472,7 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     // Summary collected from "after" breakpoint even without a section
@@ -587,20 +562,7 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
       },
     });
 
-    const enteredImplementBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 2,
-          wave_results: boardWithAfterSummary.states["implement"].wave_results,
-        },
-        review: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithAfterSummary);
-    vi.mocked(enterState).mockReturnValue(enteredImplementBoard);
+    seedBoard(workspace, boardWithAfterSummary);
 
     // Step 3: enterAndPrepareState for WAVE 1 of the SAME "implement" state reads
     // board.states["implement"].wave_results and picks up the after-consultation summary
@@ -614,6 +576,7 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
       wave: 1,
     });
 
+    assertOk(wave1Result);
     expect(wave1Result.can_enter).toBe(true);
     expect(wave1Result.prompts).toHaveLength(1);
 
@@ -796,19 +759,7 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
       },
     });
 
-    const enteredBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 3,
-          wave_results: boardWithAllBreakpoints.states["implement"].wave_results,
-        },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithAllBreakpoints);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, boardWithAllBreakpoints);
 
     // IMPORTANT: The state definition MUST have a consultations key for the
     // collection block in enterAndPrepareState to be entered (line 171:
@@ -862,6 +813,7 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     const prompt = result.prompts[0].prompt;

@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, readFile, rm } from "fs/promises";
+import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { reportInputSchema } from "../schema.ts";
 import { report } from "../tools/report.ts";
+import { DriftStore } from "../drift/store.ts";
 
 // --- Schema validation ---
 
@@ -50,16 +51,9 @@ describe("report()", () => {
   });
 
   afterEach(async () => {
+    // Each test uses a unique tmpDir so no explicit cache clearing is needed.
     await rm(tmpDir, { recursive: true, force: true });
   });
-
-  async function readJsonl<T>(filePath: string): Promise<T[]> {
-    const content = await readFile(filePath, "utf-8");
-    return content
-      .split("\n")
-      .filter((l) => l.trim() !== "")
-      .map((l) => JSON.parse(l) as T);
-  }
 
   it("records a review with derived BLOCKING verdict (rule violation)", async () => {
     const result = await report(
@@ -80,7 +74,8 @@ describe("report()", () => {
     expect(result.recorded).toBe(true);
     expect(result.id).toMatch(/^rev_/);
 
-    const entries = await readJsonl<any>(join(tmpDir, ".canon", "reviews.jsonl"));
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
     expect(entries).toHaveLength(1);
     expect(entries[0].verdict).toBe("BLOCKING");
   });
@@ -101,7 +96,8 @@ describe("report()", () => {
       tmpDir
     );
 
-    const entries = await readJsonl<any>(join(tmpDir, ".canon", "reviews.jsonl"));
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
     expect(entries[0].verdict).toBe("WARNING");
   });
 
@@ -121,7 +117,8 @@ describe("report()", () => {
       tmpDir
     );
 
-    const entries = await readJsonl<any>(join(tmpDir, ".canon", "reviews.jsonl"));
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
     expect(entries[0].verdict).toBe("CLEAN");
   });
 
@@ -142,7 +139,8 @@ describe("report()", () => {
       tmpDir
     );
 
-    const entries = await readJsonl<any>(join(tmpDir, ".canon", "reviews.jsonl"));
+    const store = new DriftStore(tmpDir);
+    const entries = await store.getReviews();
     expect(entries[0].verdict).toBe("WARNING");
   });
 });

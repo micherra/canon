@@ -27,19 +27,6 @@ import { join } from "node:path";
 // Hoist mocks — must appear before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-  enterState: vi.fn(),
-  initBoard: vi.fn(),
-  completeState: vi.fn((board: unknown) => board),
-  setBlocked: vi.fn(),
-}));
-
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
@@ -60,10 +47,6 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
     removeListener: vi.fn(),
     removeAllListeners: vi.fn(),
   },
-}));
-
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
 vi.mock("../orchestration/consultation-executor.ts", () => ({
@@ -90,13 +73,14 @@ vi.mock("../orchestration/convergence.ts", () => ({
 // Module imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { readBoard, writeBoard, enterState, completeState } from "../orchestration/board.ts";
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
 import { readWaveGuidance, assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -157,6 +141,29 @@ function makeReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   };
 }
 
+function seedBoard(workspace: string, board: Board): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: board.flow,
+    task: board.task,
+    entry: board.entry,
+    current_state: board.current_state,
+    base_commit: board.base_commit,
+    started: board.started ?? now,
+    last_updated: board.last_updated ?? now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: board.flow,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+  }
+}
+
 const sampleClusters: FileCluster[] = [
   { key: "src/api", files: ["src/api/orders.ts", "src/api/users.ts"] },
   { key: "src/ui", files: ["src/ui/Dashboard.svelte", "src/ui/Sidebar.svelte"] },
@@ -175,21 +182,19 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("reportResult — isReviewAggregation auto-detection (gap fill)", () => {
-  beforeEach(() => {
-    const board = makeBoard({
+  function setupReviewBoard(workspace: string) {
+    seedBoard(workspace, makeBoard({
       states: {
         review: { status: "in_progress", entries: 1 },
         done: { status: "pending", entries: 0 },
         hitl: { status: "pending", entries: 0 },
       },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(completeState).mockImplementation((b: Board) => b);
-    vi.mocked(writeBoard).mockResolvedValue(undefined);
-  });
+    }));
+  }
 
   it("all-clean parallel_results routes to 'clean' transition", async () => {
     const workspace = makeTmpDir();
+    setupReviewBoard(workspace);
     const flow = makeReviewFlow();
 
     const result = await reportResult({
@@ -202,6 +207,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/ui", status: "clean" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("clean");
     expect(result.next_state).toBe("done");
@@ -209,6 +215,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
 
   it("any-blocking parallel_results routes to 'blocking' transition", async () => {
     const workspace = makeTmpDir();
+    setupReviewBoard(workspace);
     const flow = makeReviewFlow();
 
     const result = await reportResult({
@@ -221,6 +228,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/ui", status: "blocking" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocking");
     expect(result.next_state).toBe("hitl");
@@ -228,6 +236,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
 
   it("mixed clean+warning parallel_results routes to 'warning' transition", async () => {
     const workspace = makeTmpDir();
+    setupReviewBoard(workspace);
     const flow = makeReviewFlow();
 
     const result = await reportResult({
@@ -240,6 +249,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/ui", status: "warning" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("warning");
     expect(result.next_state).toBe("hitl");
@@ -247,6 +257,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
 
   it("does NOT use review aggregation when results include non-review statuses", async () => {
     const workspace = makeTmpDir();
+    setupReviewBoard(workspace);
     // Flow with done/cannot_fix transitions (not a review flow)
     const flow = makeReviewFlow({
       states: {
@@ -274,6 +285,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "file-b.ts", status: "cannot_fix" },
       ],
     });
+    assertOk(result);
 
     // Mixed done/cannot_fix: aggregateParallelPerResults returns "done" (partial fix)
     expect(result.transition_condition).toBe("done");
@@ -281,6 +293,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
 
   it("review aggregation is case-insensitive — BLOCKING uppercase routes to blocking", async () => {
     const workspace = makeTmpDir();
+    setupReviewBoard(workspace);
     const flow = makeReviewFlow();
 
     const result = await reportResult({
@@ -293,6 +306,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/ui", status: "BLOCKING" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocking");
     expect(result.next_state).toBe("hitl");
@@ -300,6 +314,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
 
   it("single-cluster all-clean produces 'clean' (degenerate fan-out)", async () => {
     const workspace = makeTmpDir();
+    setupReviewBoard(workspace);
     const flow = makeReviewFlow();
 
     const result = await reportResult({
@@ -311,6 +326,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
         { item: "src/api", status: "clean" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("clean");
   });
@@ -323,15 +339,7 @@ describe("reportResult — isReviewAggregation auto-detection (gap fill)", () =>
 describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
   it("surfaces fanned_out:true when getSpawnPrompt fans out for a single state", async () => {
     const workspace = makeTmpDir();
-    const board = makeBoard();
-    const enteredBoard = makeBoard({
-      states: {
-        review: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeReviewFlow();
@@ -341,6 +349,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       flow,
       variables: { task: "review the PR", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.can_enter).toBe(true);
     expect(result.fanned_out).toBe(true);
@@ -349,15 +358,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
 
   it("fanned_out is absent on enterAndPrepareState result when no clusters are returned", async () => {
     const workspace = makeTmpDir();
-    const board = makeBoard();
-    const enteredBoard = makeBoard({
-      states: {
-        review: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(null); // below threshold
 
     const flow = makeReviewFlow();
@@ -367,6 +368,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       flow,
       variables: { task: "review the PR", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.can_enter).toBe(true);
     expect(result.fanned_out).toBeUndefined();
@@ -375,15 +377,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
 
   it("fanned_out is absent on enterAndPrepareState result when state has no large_diff_threshold", async () => {
     const workspace = makeTmpDir();
-    const board = makeBoard();
-    const enteredBoard = makeBoard({
-      states: {
-        review: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, makeBoard());
 
     // No large_diff_threshold — clusterDiff should never be called
     const flow: ResolvedFlow = {
@@ -408,6 +402,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       flow,
       variables: { task: "review", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.fanned_out).toBeUndefined();
     expect(clusterDiff).not.toHaveBeenCalled();
@@ -415,15 +410,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
 
   it("prompts array has one entry per cluster when fanned_out is true", async () => {
     const workspace = makeTmpDir();
-    const board = makeBoard();
-    const enteredBoard = makeBoard({
-      states: {
-        review: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const flow = makeReviewFlow();
@@ -433,6 +420,7 @@ describe("enterAndPrepareState — fanned_out pass-through (gap fill)", () => {
       flow,
       variables: { task: "review the PR", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     // One prompt per cluster; each has the cluster key in the prompt text
     expect(result.prompts).toHaveLength(2);
@@ -452,7 +440,7 @@ describe("getSpawnPrompt — wave guidance and messaging injection for fanned-ou
     // The loop is gated on state.type === "wave" || "parallel-per", so
     // wave guidance is NOT injected for single states — verify it stays absent.
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    seedBoard(workspace, makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
     vi.mocked(readWaveGuidance).mockResolvedValue("Focus on security vulnerabilities.");
     vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing\nSome briefing.");
@@ -480,7 +468,7 @@ describe("getSpawnPrompt — wave guidance and messaging injection for fanned-ou
     // Messaging injection is gated on state.type === "wave" || "parallel-per"
     // Verify that fanned-out "single" state prompts do NOT get messaging injected
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    seedBoard(workspace, makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const { getSpawnPrompt } = await import("../tools/get-spawn-prompt.ts");
@@ -511,7 +499,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
   it("cluster prompts from getSpawnPrompt feed into review aggregation in reportResult", async () => {
     // Step 1: Verify getSpawnPrompt produces one prompt per cluster with correct shape
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    seedBoard(workspace, makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
     const { getSpawnPrompt } = await import("../tools/get-spawn-prompt.ts");
@@ -533,16 +521,9 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
     }));
 
     // Step 3: reportResult receives the parallel_results and applies review aggregation
-    const board = makeBoard({
-      states: {
-        review: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-        hitl: { status: "pending", entries: 0 },
-      },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(completeState).mockImplementation((b: Board) => b);
-    vi.mocked(writeBoard).mockResolvedValue(undefined);
+    // The board was already seeded above; update review state to in_progress for reportResult
+    getExecutionStore(workspace).upsertState("review", { status: "in_progress", entries: 1 });
+    getExecutionStore(workspace).upsertState("hitl", { status: "pending", entries: 0 });
 
     const reportResultImport = await import("../tools/report-result.ts");
     const result = await reportResultImport.reportResult({
@@ -552,6 +533,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
       flow,
       parallel_results: clusterResults,
     });
+    assertOk(result);
 
     // Most severe result is "warning" — routing to hitl
     expect(result.transition_condition).toBe("warning");
@@ -561,17 +543,13 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
   it("all clusters clean produces clean verdict routing to done", async () => {
     const workspace = makeTmpDir();
     const flow = makeReviewFlow();
-
-    const board = makeBoard({
+    seedBoard(workspace, makeBoard({
       states: {
         review: { status: "in_progress", entries: 1 },
         done: { status: "pending", entries: 0 },
         hitl: { status: "pending", entries: 0 },
       },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(completeState).mockImplementation((b: Board) => b);
-    vi.mocked(writeBoard).mockResolvedValue(undefined);
+    }));
 
     const reportResultImport = await import("../tools/report-result.ts");
     const result = await reportResultImport.reportResult({
@@ -585,6 +563,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
         { item: "src/db", status: "clean" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("clean");
     expect(result.next_state).toBe("done");
@@ -593,17 +572,13 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
   it("one blocking cluster among clean clusters triggers blocking verdict", async () => {
     const workspace = makeTmpDir();
     const flow = makeReviewFlow();
-
-    const board = makeBoard({
+    seedBoard(workspace, makeBoard({
       states: {
         review: { status: "in_progress", entries: 1 },
         done: { status: "pending", entries: 0 },
         hitl: { status: "pending", entries: 0 },
       },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(completeState).mockImplementation((b: Board) => b);
-    vi.mocked(writeBoard).mockResolvedValue(undefined);
+    }));
 
     const reportResultImport = await import("../tools/report-result.ts");
     const result = await reportResultImport.reportResult({
@@ -617,6 +592,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
         { item: "src/auth", status: "blocking" }, // one blocker
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocking");
     expect(result.next_state).toBe("hitl");

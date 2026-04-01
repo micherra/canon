@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import {
   executeEffects,
   parseReviewArtifact,
 } from "../orchestration/effects.ts";
-import type { StateDefinition, Board } from "../orchestration/flow-schema.ts";
+import type { StateDefinition } from "../orchestration/flow-schema.ts";
+import { DriftStore } from "../drift/store.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 
 const SAMPLE_REVIEW = `---
 verdict: "WARNING"
@@ -153,9 +155,8 @@ describe("executeEffects", () => {
     expect(results[0].recorded).toBe(1);
     expect(results[0].errors).toHaveLength(0);
 
-    // Verify JSONL was written
-    const jsonl = await readFile(join(tmpDir, ".canon", "reviews.jsonl"), "utf-8");
-    const entries = jsonl.trim().split("\n").map((l) => JSON.parse(l));
+    // Verify entry was written to drift store
+    const entries = await new DriftStore(tmpDir).getReviews();
     expect(entries).toHaveLength(1);
     expect(entries[0].verdict).toBe("WARNING");
     expect(entries[0].violations).toHaveLength(2);
@@ -185,26 +186,6 @@ describe("executeEffects", () => {
 // check_postconditions effect integration
 // ---------------------------------------------------------------------------
 
-/** Minimal valid board.json fixture */
-function makeBoard(overrides: Partial<Board> = {}): Board {
-  const now = new Date().toISOString();
-  return {
-    flow: "test-flow",
-    task: "test-task",
-    entry: "review",
-    current_state: "review",
-    base_commit: "abc123",
-    started: now,
-    last_updated: now,
-    states: { review: { status: "in_progress", entries: 1 } },
-    iterations: {},
-    blocked: null,
-    concerns: [],
-    skipped: [],
-    ...overrides,
-  };
-}
-
 describe("executeEffects — check_postconditions", () => {
   let tmpDir: string;
   let workspace: string;
@@ -226,10 +207,6 @@ describe("executeEffects — check_postconditions", () => {
     // Create the file the postcondition checks
     await writeFile(join(projectDir, "output.ts"), "export const x = 1;");
 
-    // Write a minimal board.json
-    const board = makeBoard();
-    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
-
     const stateDef: StateDefinition = {
       type: "single",
       effects: [{ type: "check_postconditions" }],
@@ -246,8 +223,6 @@ describe("executeEffects — check_postconditions", () => {
 
   it("records failure with explicit YAML file_exists postcondition that fails", async () => {
     // Do NOT create the file — postcondition should fail
-    const board = makeBoard();
-    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
 
     const stateDef: StateDefinition = {
       type: "single",
@@ -268,19 +243,31 @@ describe("executeEffects — check_postconditions", () => {
     // Create the file the discovered postcondition checks
     await writeFile(join(projectDir, "discovered.ts"), "export const x = 1;");
 
-    // Board with discovered_postconditions on state "review"
-    const board = makeBoard({
-      states: {
-        review: {
-          status: "in_progress",
-          entries: 1,
-          discovered_postconditions: [
-            { type: "file_exists", target: "discovered.ts" },
-          ],
-        },
-      },
+    // Seed ExecutionStore with discovered_postconditions on state "review"
+    const store = getExecutionStore(workspace);
+    const now = new Date().toISOString();
+    store.initExecution({
+      flow: "test-flow",
+      task: "test-task",
+      entry: "review",
+      current_state: "review",
+      base_commit: "abc123",
+      started: now,
+      last_updated: now,
+      branch: "main",
+      sanitized: "main",
+      created: now,
+      tier: "medium",
+      flow_name: "test-flow",
+      slug: "test-slug",
     });
-    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
+    store.upsertState("review", {
+      status: "in_progress",
+      entries: 1,
+      discovered_postconditions: [
+        { type: "file_exists", target: "discovered.ts" },
+      ],
+    });
 
     // stateDef has NO explicit postconditions — only discovered
     const stateDef: StateDefinition = {
@@ -300,18 +287,31 @@ describe("executeEffects — check_postconditions", () => {
     await writeFile(join(projectDir, "explicit.ts"), "export const x = 1;");
     // discovered.ts does NOT exist
 
-    const board = makeBoard({
-      states: {
-        review: {
-          status: "in_progress",
-          entries: 1,
-          discovered_postconditions: [
-            { type: "file_exists", target: "discovered.ts" },
-          ],
-        },
-      },
+    // Seed ExecutionStore with discovered_postconditions on state "review"
+    const store = getExecutionStore(workspace);
+    const now = new Date().toISOString();
+    store.initExecution({
+      flow: "test-flow",
+      task: "test-task",
+      entry: "review",
+      current_state: "review",
+      base_commit: "abc123",
+      started: now,
+      last_updated: now,
+      branch: "main",
+      sanitized: "main",
+      created: now,
+      tier: "medium",
+      flow_name: "test-flow",
+      slug: "test-slug",
     });
-    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
+    store.upsertState("review", {
+      status: "in_progress",
+      entries: 1,
+      discovered_postconditions: [
+        { type: "file_exists", target: "discovered.ts" },
+      ],
+    });
 
     const stateDef: StateDefinition = {
       type: "single",
@@ -327,9 +327,6 @@ describe("executeEffects — check_postconditions", () => {
   });
 
   it("returns recorded: 0 when no postconditions declared anywhere", async () => {
-    const board = makeBoard();
-    await writeFile(join(workspace, "board.json"), JSON.stringify(board));
-
     const stateDef: StateDefinition = {
       type: "single",
       effects: [{ type: "check_postconditions" }],
@@ -342,8 +339,8 @@ describe("executeEffects — check_postconditions", () => {
     expect(results[0].errors).toHaveLength(0);
   });
 
-  it("returns recorded: 0 when board is not readable (no crash)", async () => {
-    // No board.json written — workspace doesn't have one
+  it("returns recorded: 0 when store has no board data (no crash)", async () => {
+    // Empty workspace — ExecutionStore returns null for board
     const stateDef: StateDefinition = {
       type: "single",
       effects: [{ type: "check_postconditions" }],

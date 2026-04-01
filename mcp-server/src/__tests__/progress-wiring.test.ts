@@ -12,7 +12,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 
 // ---------------------------------------------------------------------------
 // Hoist mock for loadAndResolveFlow used by initWorkspaceFlow
@@ -25,6 +25,7 @@ vi.mock("../orchestration/flow-parser.ts", () => ({
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 }
 
 afterEach(() => {
+  clearStoreCache();
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });
   }
@@ -88,9 +90,10 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
 
     expect(result.created).toBe(true);
 
-    const progressPath = join(result.workspace, "progress.md");
-    const contents = await readFile(progressPath, "utf-8");
-    expect(contents).toContain("## Progress: Wire progress.md end-to-end");
+    // Progress is stored in SQLite store, not on disk as progress.md
+    const store = getExecutionStore(result.workspace);
+    const progressContent = store.getProgress(100);
+    expect(progressContent).toContain("## Progress: Wire progress.md end-to-end");
   });
 
   it("progress.md starts with just the header line (no prior entries)", async () => {
@@ -112,12 +115,13 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
       pluginDir,
     );
 
-    const progressPath = join(result.workspace, "progress.md");
-    const contents = await readFile(progressPath, "utf-8");
-    // Only one non-blank line — the header — no state entries yet
-    const lines = contents.split("\n").filter(l => l.trim() !== "");
+    // Progress is stored in SQLite store — only the header line should be present
+    const store = getExecutionStore(result.workspace);
+    const progressContent = store.getProgress(100);
+    const lines = progressContent.split("\n").filter(l => l.trim() !== "");
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toBe("## Progress: My task");
+    // getProgress() returns stored lines verbatim with no prefix
+    expect(lines[0]).toContain("## Progress: My task");
   });
 
   it("does not create a second progress.md when workspace is resumed (created: false)", async () => {
@@ -140,9 +144,9 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     );
     expect(first.created).toBe(true);
 
-    // Append a state line to simulate orchestrator progress
-    const progressPath = join(first.workspace, "progress.md");
-    await writeFile(progressPath, "## Progress: Resumed task\n\n- [implement] done: wired the thing\n", "utf-8");
+    // Append a state line to simulate orchestrator progress (via store, not file)
+    const storeForWorkspace = getExecutionStore(first.workspace);
+    storeForWorkspace.appendProgress("- [implement] done: wired the thing");
 
     // Second call — same branch + task → resume
     const second = await initWorkspaceFlow(
@@ -158,8 +162,8 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     );
     expect(second.created).toBe(false);
 
-    // progress.md must still contain the state line — not overwritten
-    const contents = await readFile(progressPath, "utf-8");
+    // Progress entry must still be in the store — not overwritten
+    const contents = getExecutionStore(second.workspace).getProgress(100);
     expect(contents).toContain("- [implement] done: wired the thing");
   });
 });
@@ -172,8 +176,18 @@ describe("getSpawnPrompt — progress variable resolution", () => {
   it("injects progress.md contents as ${progress} when flow.progress path resolves to an existing file", async () => {
     const workspace = makeTmpDir();
 
-    const progressContent = "## Progress: My task\n\n- [research] done: found the solution\n";
-    await writeFile(join(workspace, "progress.md"), progressContent, "utf-8");
+    // Seed progress via store (getSpawnPrompt reads from store, not from file)
+    // We need a valid store — seed with initExecution first
+    const now = new Date().toISOString();
+    const store = getExecutionStore(workspace);
+    store.initExecution({
+      flow: "test-flow", task: "my task", entry: "implement", current_state: "implement",
+      base_commit: "abc123", started: now, last_updated: now,
+      branch: "main", sanitized: "main", created: now, tier: "small",
+      flow_name: "test-flow", slug: "test-slug",
+    });
+    store.appendProgress("## Progress: My task");
+    store.appendProgress("- [research] done: found the solution");
 
     const flow = makeFlow({
       progress: "${WORKSPACE}/progress.md",
@@ -188,14 +202,22 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     });
 
     expect(result.prompts).toHaveLength(1);
-    expect(result.prompts[0].prompt).toContain(progressContent.trim());
+    expect(result.prompts[0].prompt).toContain("- [research] done: found the solution");
   });
 
   it("substitutes ${WORKSPACE} in the progress path before reading", async () => {
     const workspace = makeTmpDir();
 
-    // Write progress.md at the workspace root
-    await writeFile(join(workspace, "progress.md"), "## Progress: Path substitution test\n", "utf-8");
+    // Seed progress via store (getSpawnPrompt reads from store, not from file)
+    const now = new Date().toISOString();
+    const store = getExecutionStore(workspace);
+    store.initExecution({
+      flow: "test-flow", task: "test", entry: "implement", current_state: "implement",
+      base_commit: "abc123", started: now, last_updated: now,
+      branch: "main", sanitized: "main", created: now, tier: "small",
+      flow_name: "test-flow", slug: "test-slug",
+    });
+    store.appendProgress("## Progress: Path substitution test");
 
     const flow = makeFlow({
       // Path uses ${WORKSPACE} placeholder — must be resolved before readFile

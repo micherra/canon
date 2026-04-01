@@ -37,7 +37,7 @@ import { resolveWaveVariables } from "../orchestration/wave-variables.ts";
 import { updateBoard } from "../tools/update-board.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { writeBoard, initBoard } from "../orchestration/board.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
@@ -56,6 +56,7 @@ function makeTmpDir(): string {
 }
 
 afterEach(() => {
+  clearStoreCache();
   for (const dir of tmpDirs) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -63,6 +64,28 @@ afterEach(() => {
   flowEventBus.removeAllListeners();
   vi.clearAllMocks();
 });
+
+function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
+  const now = new Date().toISOString();
+  const store = getExecutionStore(workspace);
+  store.initExecution({
+    flow: flow.name,
+    task: "test task",
+    entry: flow.entry,
+    current_state: flow.entry,
+    base_commit: "abc123",
+    started: now,
+    last_updated: now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: flow.name,
+    slug: "test-slug",
+  });
+  store.upsertState(flow.entry, { status: "pending", entries: 0 });
+  store.upsertIteration(flow.entry, { count: 0, max: 3, history: [], cannot_fix: [] });
+}
 
 function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
@@ -218,7 +241,7 @@ describe("FlowEventBus — no listener leaks across repeated operations", () => 
   it("listener counts are stable after 10 full reportResult + updateBoard cycles", async () => {
     const workspace = makeTmpDir();
     const flow = makeMinimalFlow();
-    await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
+    seedWorkspace(workspace, flow);
 
     // Capture baseline counts before any cycles
     const eventNames = [
@@ -237,8 +260,10 @@ describe("FlowEventBus — no listener leaks across repeated operations", () => 
     // Run N cycles
     const CYCLES = 10;
     for (let i = 0; i < CYCLES; i++) {
-      // Reset board for each cycle
-      await writeBoard(workspace, initBoard(flow, "test task", "abc123"));
+      // Reset board state for each cycle
+      const store = getExecutionStore(workspace);
+      store.upsertState("build", { status: "pending", entries: 0 });
+      store.upsertIteration("build", { count: 0, max: 3, history: [], cannot_fix: [] });
       await updateBoard({ workspace, action: "enter_state", state_id: "build" });
       await reportResult({
         workspace,

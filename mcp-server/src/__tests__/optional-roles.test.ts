@@ -19,10 +19,6 @@ import { aggregateParallelPerResults, isRoleOptional } from "../orchestration/tr
 // Hoist mocks before module imports for reportResult integration tests
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
@@ -31,18 +27,14 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
-}));
-
 vi.mock("../orchestration/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { withBoardLock } from "../orchestration/workspace.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { writeBoard, initBoard } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,6 +42,29 @@ import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "optional-roles-test-"));
+}
+
+function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: flow.name,
+    task: "test task",
+    entry: flow.entry,
+    current_state: flow.entry,
+    base_commit: "abc1234",
+    started: now,
+    last_updated: now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: flow.name,
+    slug: "test-slug",
+  });
+  for (const stateId of Object.keys(flow.states)) {
+    store.upsertState(stateId, { status: "pending", entries: 0 });
+  }
 }
 
 function makeFlowWithOptionalRoles(): ResolvedFlow {
@@ -195,7 +210,6 @@ describe("reportResult — optional roles in parallel state", () => {
   beforeEach(async () => {
     workspace = makeTmpWorkspace();
     vi.clearAllMocks();
-    vi.mocked(withBoardLock).mockImplementation(async (_ws, fn) => fn());
   });
 
   afterEach(() => {
@@ -204,8 +218,7 @@ describe("reportResult — optional roles in parallel state", () => {
 
   it("does not block when only optional roles report blocked status", async () => {
     const flow = makeFlowWithOptionalRoles();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -217,6 +230,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "optional-reviewer", status: "blocked" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("ship");
@@ -225,8 +239,7 @@ describe("reportResult — optional roles in parallel state", () => {
 
   it("blocks when a required role reports blocked status", async () => {
     const flow = makeFlowWithOptionalRoles();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -238,6 +251,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "optional-reviewer", status: "done" },
       ],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("blocked");
     expect(result.next_state).toBe("hitl");
@@ -245,8 +259,7 @@ describe("reportResult — optional roles in parallel state", () => {
 
   it("transitions to done when all required roles done and optional role needs_context", async () => {
     const flow = makeFlowWithOptionalRoles();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -258,6 +271,7 @@ describe("reportResult — optional roles in parallel state", () => {
         { item: "optional-reviewer", status: "needs_context" },
       ],
     });
+    assertOk(result);
 
     // needs_context normalizes to hitl, but since it's from an optional role it should not block
     // The parallel_results status "needs_context" is treated as blocked for aggregation purposes

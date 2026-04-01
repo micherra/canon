@@ -26,16 +26,6 @@ import { join } from "node:path";
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-  enterState: vi.fn(),
-}));
-
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
-
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
@@ -48,10 +38,6 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn()),
-}));
-
 // wave-briefing: mock readWaveGuidance to return empty (no wave guidance file)
 // but leave assembleWaveBriefing REAL so we test the actual briefing output.
 vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
@@ -62,13 +48,14 @@ vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
   };
 });
 
-import { readBoard, enterState } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -101,6 +88,29 @@ function makeBoard(overrides: Record<string, unknown> = {}): Board {
     skipped: [],
     ...overrides,
   } as Board;
+}
+
+function seedBoard(workspace: string, board: Board): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: board.flow,
+    task: board.task,
+    entry: board.entry,
+    current_state: board.current_state,
+    base_commit: board.base_commit,
+    started: board.started ?? now,
+    last_updated: board.last_updated ?? now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: board.flow,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+  }
 }
 
 /**
@@ -193,20 +203,9 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("resolveConsultationPrompt → enterAndPrepareState: output shape contract", () => {
-  beforeEach(() => {
-    const board = makeBoard();
-    const enteredBoard = makeBoard({
-      states: {
-        implement: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
-  });
-
   it("passes timeout and section from resolveConsultationPrompt into consultation_prompts entry", async () => {
     const workspace = makeTmpDir();
+    seedBoard(workspace, makeBoard());
     const flow = makeFlowWithBeforeConsultation();
 
     // Use real resolveConsultationPrompt — this tests wcpl-01 output feeding wcpl-03
@@ -222,6 +221,7 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     expect(result.consultation_prompts).toBeDefined();
     expect(result.consultation_prompts).toHaveLength(1);
@@ -236,6 +236,7 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
 
   it("omits timeout and section keys entirely from consultation_prompts when fragment lacks them", async () => {
     const workspace = makeTmpDir();
+    seedBoard(workspace, makeBoard());
     const flow = makeFlowWithMultipleConsultations();
 
     const result = await enterAndPrepareState({
@@ -245,6 +246,7 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     expect(result.consultation_prompts).toBeDefined();
     // perf-review has no timeout or section
@@ -296,20 +298,9 @@ describe("resolveConsultationPrompt — both timeout and section present", () =>
 // ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — multiple consultations in same breakpoint", () => {
-  beforeEach(() => {
-    const board = makeBoard();
-    const enteredBoard = makeBoard({
-      states: {
-        implement: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
-  });
-
   it("resolves all consultations in the breakpoint and returns them all in consultation_prompts", async () => {
     const workspace = makeTmpDir();
+    seedBoard(workspace, makeBoard());
     const flow = makeFlowWithMultipleConsultations();
 
     const result = await enterAndPrepareState({
@@ -319,6 +310,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     expect(result.consultation_prompts).toBeDefined();
     expect(result.consultation_prompts).toHaveLength(2);
@@ -330,6 +322,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
 
   it("resolves each consultation independently — one missing does not block others", async () => {
     const workspace = makeTmpDir();
+    seedBoard(workspace, makeBoard());
     // Flow where second consultation has no spawn instruction
     const flow: ResolvedFlow = {
       name: "test-flow",
@@ -367,6 +360,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     // Only security-review resolves; missing-consult returns null and is skipped
     expect(result.consultation_prompts).toBeDefined();
@@ -383,7 +377,7 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
 describe("getSpawnPrompt — wave=null with consultation_outputs does not inject briefing", () => {
   it("does not call assembleWaveBriefing when wave is null even if consultation_outputs provided", async () => {
     const workspace = makeTmpDir();
-    vi.mocked(readBoard).mockResolvedValue(makeBoard());
+    seedBoard(workspace, makeBoard());
 
     const flow: ResolvedFlow = {
       name: "test-flow",
@@ -450,19 +444,7 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
       },
     });
 
-    const enteredBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 2,
-          wave_results: boardWithResults.states["implement"].wave_results,
-        },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithResults);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, boardWithResults);
 
     const flow = makeFlowWithBeforeConsultation();
 
@@ -476,6 +458,7 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
       items: ["task-a", "task-b"],
       wave: 1,  // Wave 1 → between breakpoint
     });
+    assertOk(result);
 
     // No new consultation_prompts (between is empty in this flow)
     expect(result.consultation_prompts).toBeUndefined();
@@ -520,19 +503,7 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
       },
     });
 
-    const enteredBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 2,
-          wave_results: boardWithResults.states["implement"].wave_results,
-        },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithResults);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, boardWithResults);
 
     const flow = makeFlowWithBeforeConsultation();
 
@@ -544,6 +515,7 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     const prompt = result.prompts[0].prompt;
@@ -685,19 +657,7 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
       },
     });
 
-    const enteredBoard = makeBoard({
-      states: {
-        implement: {
-          status: "in_progress",
-          entries: 2,
-          wave_results: boardWithAfterResults.states["implement"].wave_results,
-        },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-
-    vi.mocked(readBoard).mockResolvedValue(boardWithAfterResults);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
+    seedBoard(workspace, boardWithAfterResults);
 
     // Flow declares security-review as a consultation with a section
     const flow = makeFlowWithBeforeConsultation();
@@ -711,6 +671,7 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
 
@@ -722,21 +683,10 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
 });
 
 describe("enterAndPrepareState — consultation_outputs absent when no completed summaries", () => {
-  beforeEach(() => {
-    // Board with NO wave_results (fresh start, wave 1)
-    const board = makeBoard();
-    const enteredBoard = makeBoard({
-      states: {
-        implement: { status: "in_progress", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    });
-    vi.mocked(readBoard).mockResolvedValue(board);
-    vi.mocked(enterState).mockReturnValue(enteredBoard);
-  });
-
   it("wave prompt has no briefing injection when board has no completed consultation summaries", async () => {
     const workspace = makeTmpDir();
+    // Board with NO wave_results (fresh start, wave 1)
+    seedBoard(workspace, makeBoard());
     const flow = makeFlowWithBeforeConsultation();
 
     // Wave 1 with before consultation declared but no completed summaries on board
@@ -748,6 +698,7 @@ describe("enterAndPrepareState — consultation_outputs absent when no completed
       items: ["task-a"],
       wave: 1,
     });
+    assertOk(result);
 
     expect(result.prompts).toHaveLength(1);
     // No briefing — no completed summaries means consultation_outputs was not passed

@@ -1,12 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ResolvedFlow, Board } from "../orchestration/flow-schema.ts";
 import {
   initBoard,
-  readBoard,
-  writeBoard,
   enterState,
   completeState,
   setBlocked,
@@ -92,82 +90,6 @@ describe("initBoard", () => {
     // "start" and "done" do not have max_iterations
     expect(board.iterations.start).toBeUndefined();
     expect(board.iterations.done).toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// readBoard
-// ---------------------------------------------------------------------------
-
-describe("readBoard", () => {
-  it("reads a valid board.json", async () => {
-    const dir = makeTmpDir();
-    const board = makeBoard();
-    writeFileSync(join(dir, "board.json"), JSON.stringify(board, null, 2));
-
-    const result = await readBoard(dir);
-    expect(result.flow).toBe("test-flow");
-    expect(result.task).toBe("build feature X");
-  });
-
-  it("recovers from backup when primary is corrupt", async () => {
-    const dir = makeTmpDir();
-    const board = makeBoard();
-    writeFileSync(join(dir, "board.json"), "NOT VALID JSON{{{");
-    writeFileSync(join(dir, "board.json.bak"), JSON.stringify(board, null, 2));
-
-    const result = await readBoard(dir);
-    expect(result.flow).toBe("test-flow");
-  });
-
-  it("throws when both primary and backup are missing", async () => {
-    const dir = makeTmpDir();
-    await expect(readBoard(dir)).rejects.toThrow(/Failed to read board/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// writeBoard
-// ---------------------------------------------------------------------------
-
-describe("writeBoard", () => {
-  it("creates backup and writes valid JSON", async () => {
-    const dir = makeTmpDir();
-    const board = makeBoard();
-
-    // Write initial board (no backup needed for first write)
-    writeFileSync(join(dir, "board.json"), JSON.stringify(board, null, 2));
-
-    // Now write again — should create backup
-    await writeBoard(dir, board);
-
-    const backup = JSON.parse(readFileSync(join(dir, "board.json.bak"), "utf-8"));
-    expect(backup.flow).toBe("test-flow");
-
-    const written = JSON.parse(readFileSync(join(dir, "board.json"), "utf-8"));
-    expect(written.flow).toBe("test-flow");
-  });
-
-  it("refreshes last_updated", async () => {
-    const dir = makeTmpDir();
-    const board = makeBoard();
-    const originalUpdated = board.last_updated;
-
-    // Small delay to ensure timestamp differs
-    await new Promise((r) => setTimeout(r, 10));
-    await writeBoard(dir, board);
-
-    const written = JSON.parse(readFileSync(join(dir, "board.json"), "utf-8"));
-    expect(written.last_updated).not.toBe(originalUpdated);
-  });
-
-  it("works when no previous board.json exists (first write)", async () => {
-    const dir = makeTmpDir();
-    const board = makeBoard();
-    await writeBoard(dir, board);
-
-    const written = JSON.parse(readFileSync(join(dir, "board.json"), "utf-8"));
-    expect(written.flow).toBe("test-flow");
   });
 });
 

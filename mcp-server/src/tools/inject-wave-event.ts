@@ -1,8 +1,6 @@
-import { postWaveEvent, readPendingEvents } from "../orchestration/wave-events.ts";
-import { readBoard } from "../orchestration/board.ts";
-import { withBoardLock } from "../orchestration/workspace.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { generateId } from "../utils/id.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { createJsonlLogger } from "../orchestration/events.ts";
 import type { WaveEvent, WaveEventType } from "../orchestration/flow-schema.ts";
 
 export interface InjectWaveEventInput {
@@ -22,45 +20,58 @@ export interface InjectWaveEventResult {
 }
 
 export async function injectWaveEvent(input: InjectWaveEventInput): Promise<InjectWaveEventResult> {
-  return withBoardLock(input.workspace, async () => {
-    const board = await readBoard(input.workspace);
+  const store = getExecutionStore(input.workspace);
 
-    const hasActiveWave = Object.values(board.states).some(
-      (s) => s.wave !== undefined && s.status === "in_progress",
+  // Check for an active wave state in the store
+  const board = store.getBoard();
+  const hasActiveWave = board !== null && Object.values(board.states).some(
+    (s) => s.wave !== undefined && s.status === "in_progress",
+  );
+
+  if (!hasActiveWave) {
+    throw new Error(
+      "No active wave state found — events can only be injected during wave execution",
     );
+  }
 
-    if (!hasActiveWave) {
-      throw new Error(
-        "No active wave state found — events can only be injected during wave execution",
-      );
-    }
+  // Create the event
+  const event: WaveEvent = {
+    id: generateId("evt"),
+    type: input.type,
+    payload: input.payload,
+    timestamp: new Date().toISOString(),
+    status: "pending",
+  };
 
-    const event = await postWaveEvent(input.workspace, {
-      type: input.type,
-      payload: input.payload,
-    });
-
-    const pending = await readPendingEvents(input.workspace);
-
-    // Emit wave_event_injected (best-effort — same pattern as update-board.ts)
-    const log = createJsonlLogger(input.workspace);
-    const onWaveEventInjected = (
-      e: import("../orchestration/events.js").FlowEventMap["wave_event_injected"],
-    ) => {
-      log("wave_event_injected", e).catch(() => {});
-    };
-    flowEventBus.once("wave_event_injected", onWaveEventInjected);
-    try {
-      flowEventBus.emit("wave_event_injected", {
-        eventId: event.id,
-        eventType: event.type,
-        workspace: input.workspace,
-        timestamp: event.timestamp,
-      });
-    } finally {
-      flowEventBus.removeListener("wave_event_injected", onWaveEventInjected);
-    }
-
-    return { event, pending_count: pending.length };
+  // Persist to store
+  store.postWaveEvent({
+    id: event.id,
+    type: event.type,
+    payload: event.payload,
+    timestamp: event.timestamp,
+    status: event.status,
   });
+
+  // Count pending events
+  const pending = store.getWaveEvents({ status: "pending" });
+
+  // Emit wave_event_injected (best-effort — same pattern as update-board.ts)
+  const onWaveEventInjected = (
+    e: import("../orchestration/events.js").FlowEventMap["wave_event_injected"],
+  ) => {
+    try { store.appendEvent("wave_event_injected", e as Record<string, unknown>); } catch { /* best-effort */ }
+  };
+  flowEventBus.once("wave_event_injected", onWaveEventInjected);
+  try {
+    flowEventBus.emit("wave_event_injected", {
+      eventId: event.id,
+      eventType: event.type,
+      workspace: input.workspace,
+      timestamp: event.timestamp,
+    });
+  } finally {
+    flowEventBus.removeListener("wave_event_injected", onWaveEventInjected);
+  }
+
+  return { event, pending_count: pending.length };
 }

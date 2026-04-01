@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -35,10 +35,11 @@ import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { checkConvergence } from "../tools/check-convergence.ts";
 import { filterCannotFix } from "../orchestration/convergence.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { writeBoard, initBoard, readBoard } from "../orchestration/board.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
 import type { FlowEventMap } from "../orchestration/events.ts";
-import type { ResolvedFlow, Board } from "../orchestration/flow-schema.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -53,6 +54,7 @@ function makeTmpWorkspace(): string {
 }
 
 afterEach(() => {
+  clearStoreCache();
   for (const dir of tmpDirs) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -106,6 +108,32 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   };
 }
 
+function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: flow.name,
+    task: "task",
+    entry: flow.entry,
+    current_state: flow.entry,
+    base_commit: "abc1234",
+    started: now,
+    last_updated: now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: flow.name,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateDef] of Object.entries(flow.states)) {
+    store.upsertState(stateId, { status: "pending", entries: 0 });
+    if (stateDef.max_iterations !== undefined) {
+      store.upsertIteration(stateId, { count: 0, max: stateDef.max_iterations, history: [], cannot_fix: [] });
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Cross-feature: report-result with parallel_results + cannot_fix + events
 // (harness-02 + harness-03 + harness-05 together)
@@ -115,7 +143,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
   it("parallel_results aggregation emits state_completed with aggregated condition", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const completedEvents: FlowEventMap["state_completed"][] = [];
     const transitionEvents: FlowEventMap["transition_evaluated"][] = [];
@@ -132,6 +160,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
         { item: "file-b.ts", status: "cannot_fix" },
       ],
     });
+    assertOk(result);
 
     // Aggregated result: mixed done/cannot_fix → "done"
     expect(result.transition_condition).toBe("done");
@@ -146,7 +175,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
   it("all-cannot_fix parallel_results: hitl_triggered event emitted", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const hitlEvents: FlowEventMap["hitl_triggered"][] = [];
     flowEventBus.on("hitl_triggered", (e) => hitlEvents.push(e));
@@ -161,6 +190,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
         { item: "file-b.ts", status: "cannot_fix" },
       ],
     });
+    assertOk(result);
 
     // Aggregated to cannot_fix → hitl
     expect(result.transition_condition).toBe("cannot_fix");
@@ -172,7 +202,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
   it("cannot_fix individual report: items accumulated AND events emitted in same call", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const completedEvents: FlowEventMap["state_completed"][] = [];
     flowEventBus.on("state_completed", (e) => completedEvents.push(e));
@@ -185,6 +215,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
       principle_ids: ["no-hidden-side-effects"],
       file_paths: ["src/tools/report-result.ts"],
     });
+    assertOk(result);
 
     // Cannot_fix items accumulated
     expect(result.board.iterations["implement"]?.cannot_fix).toHaveLength(1);
@@ -201,7 +232,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
   it("full round-trip: parallel_results stored on board AND readable by checkConvergence", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const parallelResults = [
       { item: "task-a", status: "done", artifacts: ["summary-a.md"] },
@@ -217,11 +248,12 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     });
 
     // Read board directly to verify parallel_results persisted
-    const board = await readBoard(workspace);
-    expect(board.states["implement"].parallel_results).toEqual(parallelResults);
+    const board = getExecutionStore(workspace).getBoard();
+    expect(board?.states["implement"].parallel_results).toEqual(parallelResults);
 
     // checkConvergence should still work (doesn't break on new field)
     const convergence = await checkConvergence({ workspace, state_id: "implement" });
+    assertOk(convergence);
     expect(convergence.can_enter).toBe(true); // iteration count=0, max=3
     expect(convergence.iteration_count).toBe(0);
   });
@@ -236,7 +268,7 @@ describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergen
   it("two agents report cannot_fix, check-convergence returns all, filter excludes them from next run", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     // Agent 1: cannot_fix p1 in a.ts and b.ts
     await reportResult({
@@ -259,6 +291,7 @@ describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergen
     });
 
     const convergence = await checkConvergence({ workspace, state_id: "implement" });
+    assertOk(convergence);
     expect(convergence.cannot_fix_items).toHaveLength(3);
 
     // Orchestrator excludes known cannot_fix from next iteration's principle set
@@ -283,7 +316,7 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
   it("emits board_updated event on enter_state", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const boardEvents: FlowEventMap["board_updated"][] = [];
     flowEventBus.on("board_updated", (e) => boardEvents.push(e));
@@ -299,7 +332,7 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
   it("emits state_entered event on enter_state", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const stateEnteredEvents: FlowEventMap["state_entered"][] = [];
     flowEventBus.on("state_entered", (e) => stateEnteredEvents.push(e));
@@ -314,7 +347,7 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
   it("emits board_updated but NOT state_entered on block action", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
     // Enter state first so block has something to work with
     await updateBoard({ workspace, action: "enter_state", state_id: "implement" });
 
@@ -338,7 +371,7 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
   it("emits board_updated on complete_flow action", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
     await updateBoard({ workspace, action: "enter_state", state_id: "ship" });
 
     flowEventBus.removeAllListeners();
@@ -385,20 +418,10 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
       },
     };
 
-    const board = initBoard(flow, "task", "abc123");
-    // Simulate research state having completed with an artifact
-    const boardWithArtifact: Board = {
-      ...board,
-      states: {
-        ...board.states,
-        research: {
-          ...board.states["research"],
-          status: "done",
-          artifacts: [artifactPath],
-        },
-      },
-    };
-    await writeBoard(workspace, boardWithArtifact);
+    // Seed workspace and set research state as done with artifact
+    setupWorkspace(workspace, flow);
+    const store = getExecutionStore(workspace);
+    store.upsertState("research", { status: "done", entries: 1, artifacts: [artifactPath] });
 
     const result = await getSpawnPrompt({
       workspace,
@@ -436,8 +459,7 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
       },
     };
 
-    const board = initBoard(flow, "task", "abc123");
-    await writeBoard(workspace, board);
+    setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -476,20 +498,10 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
       },
     };
 
-    const board = initBoard(flow, "task", "abc123");
-    // Set research as done with a missing artifact file
-    const boardWithMissingArtifact: Board = {
-      ...board,
-      states: {
-        ...board.states,
-        research: {
-          ...board.states["research"],
-          status: "done",
-          artifacts: ["does-not-exist.md"],
-        },
-      },
-    };
-    await writeBoard(workspace, boardWithMissingArtifact);
+    // Seed workspace and set research state as done with a missing artifact file
+    setupWorkspace(workspace, flow);
+    const store = getExecutionStore(workspace);
+    store.upsertState("research", { status: "done", entries: 1, artifacts: ["does-not-exist.md"] });
 
     const result = await getSpawnPrompt({
       workspace,
@@ -544,8 +556,7 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
       },
     };
 
-    const board = initBoard(flow, "task", "abc1234");
-    await writeBoard(workspace, board);
+    setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -589,19 +600,9 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
       },
     };
 
-    const board = initBoard(flow, "task", "abc1234");
-    const boardWithArtifact: Board = {
-      ...board,
-      states: {
-        ...board.states,
-        prior: {
-          ...board.states["prior"],
-          status: "done",
-          artifacts: [artifactPath],
-        },
-      },
-    };
-    await writeBoard(workspace, boardWithArtifact);
+    setupWorkspace(workspace, flow);
+    const store = getExecutionStore(workspace);
+    store.upsertState("prior", { status: "done", entries: 1, artifacts: [artifactPath] });
 
     const result = await getSpawnPrompt({
       workspace,
@@ -641,7 +642,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       },
     };
 
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -677,7 +678,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       },
     };
 
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -712,7 +713,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       },
     };
 
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -748,7 +749,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
       },
     };
 
-    await writeBoard(workspace, initBoard(flow, "task", "abc123"));
+    setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
       workspace,
@@ -770,9 +771,7 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
 // ---------------------------------------------------------------------------
 
 describe("backward compatibility: board.json without new fields", () => {
-  it("board without parallel_results in state entries still parses and reads correctly", async () => {
-    const workspace = makeTmpWorkspace();
-
+  it("board without parallel_results in state entries still parses and reads correctly", () => {
     // Write a board JSON that lacks the parallel_results field (old format)
     const legacyBoard = {
       flow: "test-flow",
@@ -800,18 +799,14 @@ describe("backward compatibility: board.json without new fields", () => {
       skipped: [],
     };
 
-    writeFileSync(join(workspace, "board.json"), JSON.stringify(legacyBoard));
-
-    // Should parse without error
-    const board = await readBoard(workspace);
+    // Should parse without error via BoardSchema
+    const board = BoardSchema.parse(legacyBoard);
     expect(board.states["build"].status).toBe("done");
     expect(board.states["build"].parallel_results).toBeUndefined();
     expect(board.current_state).toBe("build");
   });
 
-  it("board without concerns and skipped arrays is rejected by schema (they are required)", async () => {
-    const workspace = makeTmpWorkspace();
-
+  it("board without concerns and skipped arrays is rejected by schema (they are required)", () => {
     // Board missing required fields
     const malformedBoard = {
       flow: "test-flow",
@@ -827,10 +822,9 @@ describe("backward compatibility: board.json without new fields", () => {
       // Missing concerns and skipped
     };
 
-    writeFileSync(join(workspace, "board.json"), JSON.stringify(malformedBoard));
-
-    // readBoard should throw (Zod validation error) since these fields are required
-    await expect(readBoard(workspace)).rejects.toThrow();
+    // BoardSchema.safeParse should fail since these fields are required
+    const result = BoardSchema.safeParse(malformedBoard);
+    expect(result.success).toBe(false);
   });
 
   it("BoardSchema validates a board with new optional fields alongside existing fields", () => {

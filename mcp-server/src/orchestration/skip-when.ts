@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { gitExec } from "../adapters/git-adapter.ts";
 import type { Board } from "./flow-schema.ts";
 
 interface SkipResult {
@@ -48,15 +48,9 @@ function evaluateNoContractChanges(baseCommit: string): SkipResult {
   }
 
   try {
-    const result = spawnSync("git", ["diff", "--diff-filter=d", "--name-only", `${baseCommit}..HEAD`], {
-      encoding: "utf-8",
-    });
-
-    if (result.error || result.status !== 0) {
-      return { skip: false };
-    }
-
-    const output: string = result.stdout ?? "";
+    const result = gitExec(["diff", "--diff-filter=d", "--name-only", `${baseCommit}..HEAD`], process.cwd());
+    if (!result.ok) return { skip: false };
+    const output = result.stdout;
     const changedFiles = output.trim().split("\n").filter(Boolean);
 
     const hasContractChange = changedFiles.some((file) =>

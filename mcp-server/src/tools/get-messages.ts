@@ -1,5 +1,5 @@
-import { readMessages, type Message } from "../orchestration/messages.ts";
-import { readPendingEvents } from "../orchestration/wave-events.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Message } from "../orchestration/messages.ts";
 import type { WaveEvent } from "../orchestration/flow-schema.ts";
 
 export interface GetMessagesInput {
@@ -17,14 +17,18 @@ export interface GetMessagesResult {
 }
 
 export async function getMessages(input: GetMessagesInput): Promise<GetMessagesResult> {
-  const messages = await readMessages(input.workspace, input.channel, {
-    since: input.since,
-  });
+  const store = getExecutionStore(input.workspace);
+  const rows = store.getMessages(input.channel, { since: input.since });
+  const messages: Message[] = rows.map((r) => ({
+    from: r.sender,
+    timestamp: r.timestamp,
+    content: r.content,
+  }));
 
   const result: GetMessagesResult = { messages, count: messages.length };
 
   if (input.include_events) {
-    const events = await readPendingEvents(input.workspace);
+    const events = store.getWaveEvents({ status: "pending" });
     result.events = events;
     result.events_count = events.length;
   }

@@ -6,27 +6,21 @@
  * 2. Skip evaluation before enter — skip_when met returns skip_reason, state stays "pending"
  * 3. Happy path — enters state, resolves prompts, returns combined result
  * 4. Terminal state — empty prompts, state_type "terminal"
- * 5. Board read count — readBoard called exactly once per invocation
+ * 5. Store-based state entry — execution_states and execution tables updated
+ * 6. No board.json or .lock file created
  */
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
+import { initExecutionDb } from "../orchestration/execution-schema.ts";
+import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
 // ---------------------------------------------------------------------------
-
-vi.mock("../orchestration/board.ts", () => ({
-  readBoard: vi.fn(),
-  writeBoard: vi.fn(),
-  enterState: vi.fn(),
-}));
-
-vi.mock("../orchestration/workspace.ts", () => ({
-  withBoardLock: vi.fn(async (_workspace: string, fn: () => Promise<unknown>) => fn()),
-}));
 
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
@@ -38,10 +32,6 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
     once: vi.fn(),
     removeListener: vi.fn(),
   },
-}));
-
-vi.mock("../orchestration/events.ts", () => ({
-  createJsonlLogger: vi.fn(() => vi.fn()),
 }));
 
 vi.mock("../orchestration/consultation-executor.ts", () => ({
@@ -56,12 +46,12 @@ vi.mock("../orchestration/wave-variables.ts", () => ({
   extractFilePaths: vi.fn(() => []),
 }));
 
-import { readBoard, writeBoard, enterState } from "../orchestration/board.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,25 +65,53 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function makeBoard(overrides: Record<string, unknown> = {}): Board {
-  return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "implement",
-    current_state: "implement",
-    base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {
-      implement: { status: "pending", entries: 0 },
-      done: { status: "pending", entries: 0 },
-    },
-    iterations: {},
-    blocked: null,
-    concerns: [],
-    skipped: [],
-    ...overrides,
-  } as Board;
+/**
+ * Seed the store with a minimal execution row so getBoard() returns a Board.
+ */
+function seedStore(workspace: string, overrides: Partial<Board> = {}): ExecutionStore {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+
+  // Initialize execution row (board top-level fields + session)
+  store.initExecution({
+    flow: overrides.flow ?? "test-flow",
+    task: overrides.task ?? "test task",
+    entry: overrides.entry ?? "implement",
+    current_state: overrides.current_state ?? "implement",
+    base_commit: overrides.base_commit ?? "abc1234",
+    started: overrides.started ?? now,
+    last_updated: overrides.last_updated ?? now,
+    branch: "feat/test",
+    sanitized: "feat-test",
+    created: now,
+    tier: "medium",
+    flow_name: "test-flow",
+    slug: "test-slug",
+  });
+
+  // Create initial state rows
+  const states = (overrides.states as Board['states']) ?? {
+    implement: { status: "pending", entries: 0 },
+    done: { status: "pending", entries: 0 },
+  };
+  for (const [stateId, state] of Object.entries(states)) {
+    store.upsertState(stateId, { status: state.status, entries: state.entries ?? 0 });
+  }
+
+  // Create iteration rows if provided
+  const iterations = overrides.iterations as Board['iterations'] | undefined;
+  if (iterations) {
+    for (const [stateId, iter] of Object.entries(iterations)) {
+      store.upsertIteration(stateId, {
+        count: iter.count,
+        max: iter.max,
+        history: iter.history ?? [],
+        cannot_fix: iter.cannot_fix ?? [],
+      });
+    }
+  }
+
+  return store;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
@@ -111,6 +129,10 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 }
 
 afterEach(() => {
+  // Clear store cache between tests
+  const cache = (getExecutionStore as any).__cache;
+  if (cache instanceof Map) cache.clear();
+
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });
   }
@@ -126,12 +148,11 @@ describe("enterAndPrepareState", () => {
   describe("convergence blocked", () => {
     it("returns can_enter:false when max iterations reached, without entering state", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      seedStore(workspace, {
         iterations: {
           implement: { count: 3, max: 3, history: [], cannot_fix: [] },
         },
       });
-      vi.mocked(readBoard).mockResolvedValue(board);
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
@@ -140,27 +161,28 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(false);
       expect(result.iteration_count).toBe(3);
       expect(result.max_iterations).toBe(3);
       expect(result.prompts).toHaveLength(0);
 
-      // State must NOT have been entered
-      expect(enterState).not.toHaveBeenCalled();
-      expect(writeBoard).not.toHaveBeenCalled();
+      // State must NOT have been entered — still pending
+      const store = getExecutionStore(workspace);
+      const stateEntry = store.getState("implement");
+      expect(stateEntry?.status).toBe("pending");
     });
 
     it("includes cannot_fix_items and history in the convergence-blocked result", async () => {
       const workspace = makeTmpDir();
       const cannotFixItems = [{ principle_id: "thin-handlers", file_path: "src/api/handler.ts" }];
       const history = [{ principle_ids: ["thin-handlers"], file_paths: ["src/api/handler.ts"] }];
-      const board = makeBoard({
+      seedStore(workspace, {
         iterations: {
           implement: { count: 2, max: 2, history, cannot_fix: cannotFixItems },
         },
       });
-      vi.mocked(readBoard).mockResolvedValue(board);
 
       const result = await enterAndPrepareState({
         workspace,
@@ -168,6 +190,7 @@ describe("enterAndPrepareState", () => {
         flow: makeFlow(),
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(false);
       expect(result.cannot_fix_items).toEqual(cannotFixItems);
@@ -176,10 +199,9 @@ describe("enterAndPrepareState", () => {
   });
 
   describe("skip evaluation before enter", () => {
-    it("returns skipped:true when skip_when condition is met, without entering state", async () => {
+    it("returns skipped when skip_when condition is met, without entering state", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard();
-      vi.mocked(readBoard).mockResolvedValue(board);
+      seedStore(workspace);
       vi.mocked(evaluateSkipWhen).mockResolvedValue({
         skip: true,
         reason: "No contract changes detected — all changes are internal",
@@ -202,26 +224,22 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(result.skip_reason).toBeDefined();
       expect(result.skip_reason).toContain("no_contract_changes");
       expect(result.prompts).toHaveLength(0);
 
-      // State must NOT have been entered — board stays "pending"
-      expect(enterState).not.toHaveBeenCalled();
-      expect(writeBoard).not.toHaveBeenCalled();
+      // State must NOT have been entered — still pending
+      const store = getExecutionStore(workspace);
+      expect(store.getState("implement")?.status).toBe("pending");
     });
 
     it("does not skip when skip_when condition is not met", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard();
-      const enteredBoard = makeBoard({
-        states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
+      seedStore(workspace);
       vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
 
       const flow = makeFlow({
         states: {
@@ -240,34 +258,31 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(result.skip_reason).toBeUndefined();
       expect(result.prompts).toHaveLength(1);
-      expect(enterState).toHaveBeenCalledTimes(1);
+
+      // State must have been entered — now in_progress
+      const store = getExecutionStore(workspace);
+      expect(store.getState("implement")?.status).toBe("in_progress");
     });
   });
 
   describe("happy path", () => {
-    beforeEach(() => {
-      const board = makeBoard();
-      const enteredBoard = makeBoard({
-        states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
-    });
-
     it("returns can_enter:true and resolved prompts for a single-agent state", async () => {
       const workspace = makeTmpDir();
-      const flow = makeFlow();
+      seedStore(workspace);
 
+      const flow = makeFlow();
       const result = await enterAndPrepareState({
         workspace,
         state_id: "implement",
         flow,
         variables: { task: "build the widget", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(result.state_type).toBe("single");
@@ -276,32 +291,87 @@ describe("enterAndPrepareState", () => {
       expect(result.prompts[0].prompt).toContain("build the widget");
     });
 
-    it("returns the updated board in the result", async () => {
+    it("returns the updated board in the result with in_progress status", async () => {
       const workspace = makeTmpDir();
-      const flow = makeFlow();
+      seedStore(workspace);
 
+      const flow = makeFlow();
       const result = await enterAndPrepareState({
         workspace,
         state_id: "implement",
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
-      // Board should reflect in_progress status after entering
       expect(result.board).toBeDefined();
       expect(result.board!.states["implement"].status).toBe("in_progress");
+      expect(result.board!.states["implement"].entries).toBe(1);
+    });
+
+    it("persists state entry to execution_states table — not board.json", async () => {
+      const workspace = makeTmpDir();
+      seedStore(workspace);
+
+      const flow = makeFlow();
+      await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      });
+
+      // Board.json must NOT exist
+      expect(existsSync(join(workspace, "board.json"))).toBe(false);
+      // .lock must NOT exist
+      expect(existsSync(join(workspace, ".lock"))).toBe(false);
+
+      // State must be persisted in SQLite
+      const store = getExecutionStore(workspace);
+      const stateEntry = store.getState("implement");
+      expect(stateEntry?.status).toBe("in_progress");
+      expect(stateEntry?.entries).toBe(1);
+    });
+
+    it("increments iteration count when state has iteration limits", async () => {
+      const workspace = makeTmpDir();
+      seedStore(workspace, {
+        iterations: {
+          implement: { count: 1, max: 5, history: [], cannot_fix: [] },
+        },
+      });
+
+      const flow = makeFlow({
+        states: {
+          implement: { type: "single", agent: "canon-implementor", max_iterations: 5 },
+          done: { type: "terminal" },
+        },
+      });
+
+      await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      });
+
+      const store = getExecutionStore(workspace);
+      const iter = store.getIteration("implement");
+      expect(iter?.count).toBe(2);
     });
 
     it("returns iteration_count from board for a state without iteration limits", async () => {
       const workspace = makeTmpDir();
-      const flow = makeFlow();
+      seedStore(workspace);
 
+      const flow = makeFlow();
       const result = await enterAndPrepareState({
         workspace,
         state_id: "implement",
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.iteration_count).toBe(0);
       expect(result.max_iterations).toBe(0);
@@ -313,21 +383,21 @@ describe("enterAndPrepareState", () => {
   describe("terminal state", () => {
     it("returns can_enter:true with empty prompts and state_type 'terminal'", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard();
-      const enteredBoard = makeBoard({
-        states: { implement: { status: "pending", entries: 0 }, done: { status: "in_progress", entries: 1 } },
+      seedStore(workspace, {
+        states: {
+          implement: { status: "pending", entries: 0 },
+          done: { status: "pending", entries: 0 },
+        },
       });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
 
       const flow = makeFlow();
-
       const result = await enterAndPrepareState({
         workspace,
         state_id: "done",
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(result.state_type).toBe("terminal");
@@ -338,20 +408,12 @@ describe("enterAndPrepareState", () => {
   describe("parallel state", () => {
     it("returns one prompt per agent for parallel states", async () => {
       const workspace = makeTmpDir();
-      const board = makeBoard({
+      seedStore(workspace, {
         states: {
           review: { status: "pending", entries: 0 },
           done: { status: "pending", entries: 0 },
         },
       });
-      const enteredBoard = makeBoard({
-        states: {
-          review: { status: "in_progress", entries: 1 },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
 
       const flow: ResolvedFlow = {
         name: "test-flow",
@@ -370,6 +432,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "security", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.state_type).toBe("parallel");
       expect(result.prompts).toHaveLength(2);
@@ -408,19 +471,11 @@ describe("enterAndPrepareState", () => {
       } as unknown as ResolvedFlow;
     }
 
-    beforeEach(() => {
-      const board = makeBoard();
-      const enteredBoard = makeBoard({
-        states: { implement: { status: "in_progress", entries: 1 }, done: { status: "pending", entries: 0 } },
-      });
-      vi.mocked(readBoard).mockResolvedValue(board);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
-    });
-
     it("returns consultation_prompts for before breakpoint when wave is 0", async () => {
       const workspace = makeTmpDir();
-      const flow = makeFlowWithConsultations("before");
+      seedStore(workspace);
 
+      const flow = makeFlowWithConsultations("before");
       vi.mocked(resolveConsultationPrompt).mockReturnValue({
         agent: "canon-security",
         prompt: "Assess risks for test task.",
@@ -436,6 +491,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 0,
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
@@ -451,8 +507,9 @@ describe("enterAndPrepareState", () => {
 
     it("returns consultation_prompts for before breakpoint when wave is null/undefined", async () => {
       const workspace = makeTmpDir();
-      const flow = makeFlowWithConsultations("before");
+      seedStore(workspace);
 
+      const flow = makeFlowWithConsultations("before");
       vi.mocked(resolveConsultationPrompt).mockReturnValue({
         agent: "canon-security",
         prompt: "Assess risks for test task.",
@@ -466,6 +523,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         // wave is undefined
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
@@ -474,8 +532,9 @@ describe("enterAndPrepareState", () => {
 
     it("uses between breakpoint when wave > 0", async () => {
       const workspace = makeTmpDir();
-      const flow = makeFlowWithConsultations("between");
+      seedStore(workspace);
 
+      const flow = makeFlowWithConsultations("between");
       vi.mocked(resolveConsultationPrompt).mockReturnValue({
         agent: "canon-security",
         prompt: "Assess risks between waves.",
@@ -489,11 +548,10 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 1,
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
-
-      // Verify resolveConsultationPrompt was called (between breakpoint names were resolved)
       expect(resolveConsultationPrompt).toHaveBeenCalledWith(
         "risk-assessment",
         flow,
@@ -503,23 +561,27 @@ describe("enterAndPrepareState", () => {
 
     it("returns no consultation_prompts when wave > 0 but only before consultations declared", async () => {
       const workspace = makeTmpDir();
-      const flow = makeFlowWithConsultations("before"); // only has "before", not "between"
+      seedStore(workspace);
+
+      const flow = makeFlowWithConsultations("before");
 
       const result = await enterAndPrepareState({
         workspace,
         state_id: "implement",
         flow,
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
-        wave: 1, // wave > 0 → uses "between" breakpoint
+        wave: 1, // uses "between" breakpoint — but only "before" declared
       });
+      assertOk(result);
 
-      // between is empty/absent, so no consultation_prompts
       expect(result.consultation_prompts).toBeUndefined();
       expect(resolveConsultationPrompt).not.toHaveBeenCalled();
     });
 
     it("returns no consultation_prompts when stateDef has no consultations", async () => {
       const workspace = makeTmpDir();
+      seedStore(workspace);
+
       const flow = makeFlow(); // no consultations declared
 
       const result = await enterAndPrepareState({
@@ -529,6 +591,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 0,
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeUndefined();
       expect(resolveConsultationPrompt).not.toHaveBeenCalled();
@@ -536,9 +599,9 @@ describe("enterAndPrepareState", () => {
 
     it("gracefully skips unknown consultation names (resolveConsultationPrompt returns null)", async () => {
       const workspace = makeTmpDir();
-      const flow = makeFlowWithConsultations("before");
+      seedStore(workspace);
 
-      // Simulate unknown name — resolveConsultationPrompt returns null
+      const flow = makeFlowWithConsultations("before");
       vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
 
       const result = await enterAndPrepareState({
@@ -548,50 +611,54 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 0,
       });
+      assertOk(result);
 
-      // No crash — just empty result
       expect(result.consultation_prompts).toBeUndefined();
     });
 
     it("escapes ${evil} in completed consultation summaries before passing as consultation_outputs", async () => {
       const workspace = makeTmpDir();
 
-      // Board with a completed consultation summary containing injection attempt
-      const boardWithResults = makeBoard({
-        states: {
-          implement: {
-            status: "in_progress",
-            entries: 1,
-            wave_results: {
-              "wave-0": {
-                tasks: [],
+      // Seed store with a state that has a completed consultation in wave_results
+      const store = getExecutionStore(workspace);
+      const now = new Date().toISOString();
+      store.initExecution({
+        flow: "test-flow",
+        task: "test task",
+        entry: "implement",
+        current_state: "implement",
+        base_commit: "abc1234",
+        started: now,
+        last_updated: now,
+        branch: "feat/test",
+        sanitized: "feat-test",
+        created: now,
+        tier: "medium",
+        flow_name: "test-flow",
+        slug: "test-slug",
+      });
+
+      const waveResults = {
+        "wave-0": {
+          tasks: [],
+          status: "done",
+          consultations: {
+            before: {
+              "risk-assessment": {
                 status: "done",
-                consultations: {
-                  before: {
-                    "risk-assessment": {
-                      status: "done",
-                      summary: "Risk: ${evil} injection attempt",
-                    },
-                  },
-                },
+                summary: "Risk: ${evil} injection attempt",
               },
             },
           },
-          done: { status: "pending", entries: 0 },
         },
+      };
+
+      store.upsertState("implement", {
+        status: "in_progress",
+        entries: 1,
+        wave_results: waveResults,
       });
-      const enteredBoard = makeBoard({
-        states: {
-          implement: {
-            status: "in_progress",
-            entries: 2,
-            wave_results: boardWithResults.states["implement"].wave_results,
-          },
-          done: { status: "pending", entries: 0 },
-        },
-      });
-      vi.mocked(readBoard).mockResolvedValue(boardWithResults);
-      vi.mocked(enterState).mockReturnValue(enteredBoard);
+      store.upsertState("done", { status: "pending", entries: 0 });
 
       // escapeDollarBrace should escape the injection string
       vi.mocked(escapeDollarBrace).mockImplementation((s: string) =>
@@ -599,7 +666,6 @@ describe("enterAndPrepareState", () => {
       );
 
       const flow = makeFlowWithConsultations("between");
-      // No new consultation for between — we're testing that outputs are escaped
       vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
 
       await enterAndPrepareState({
@@ -610,8 +676,26 @@ describe("enterAndPrepareState", () => {
         wave: 1,
       });
 
-      // escapeDollarBrace must have been called with the raw summary
       expect(escapeDollarBrace).toHaveBeenCalledWith("Risk: ${evil} injection attempt");
+    });
+  });
+
+  describe("workspace not found", () => {
+    it("returns WORKSPACE_NOT_FOUND ToolResult when workspace has no execution", async () => {
+      const workspace = makeTmpDir(); // not seeded — no execution row
+
+      const flow = makeFlow();
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toContain(workspace);
     });
   });
 });

@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { canEnterState, filterCannotFix } from "../orchestration/convergence.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { checkConvergence } from "../tools/check-convergence.ts";
-import { writeBoard, initBoard } from "../orchestration/board.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {
@@ -38,6 +39,7 @@ function makeTmpWorkspace(): string {
 }
 
 afterEach(() => {
+  clearStoreCache();
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });
   }
@@ -64,6 +66,36 @@ function makeFlowWithCannotFix(): ResolvedFlow {
       hitl: { type: "terminal" },
     },
   };
+}
+
+/**
+ * Seed a workspace's ExecutionStore with the given flow's initial state.
+ * Replaces the old `initBoard(flow) + writeBoard(workspace, board)` pattern.
+ */
+function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
+  const store = getExecutionStore(workspace);
+  const now = new Date().toISOString();
+  store.initExecution({
+    flow: flow.name,
+    task: "test task",
+    entry: flow.entry,
+    current_state: flow.entry,
+    base_commit: "abc123",
+    started: now,
+    last_updated: now,
+    branch: "main",
+    sanitized: "main",
+    created: now,
+    tier: "medium",
+    flow_name: flow.name,
+    slug: "test-slug",
+  });
+  for (const [stateId, stateDef] of Object.entries(flow.states)) {
+    store.upsertState(stateId, { status: "pending", entries: 0 });
+    if (stateDef.max_iterations !== undefined) {
+      store.upsertIteration(stateId, { count: 0, max: stateDef.max_iterations, history: [], cannot_fix: [] });
+    }
+  }
 }
 
 describe("canEnterState", () => {
@@ -157,8 +189,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("accumulates CannotFixItem entries when condition is cannot_fix with principle_ids and file_paths", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -168,6 +199,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["no-hidden-side-effects"],
       file_paths: ["src/tools/report-result.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration).toBeDefined();
@@ -179,8 +211,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("builds cartesian product of principle_ids x file_paths", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -190,6 +221,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1", "p2"],
       file_paths: ["a.ts", "b.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix).toHaveLength(4);
@@ -206,8 +238,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("does not add duplicate items on repeated cannot_fix reports", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     // First report
     await reportResult({
@@ -228,6 +259,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1"],
       file_paths: ["a.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix).toHaveLength(1);
@@ -254,8 +286,7 @@ describe("reportResult — cannot_fix accumulation", () => {
         hitl: { type: "terminal" },
       },
     };
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -265,6 +296,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1"],
       file_paths: ["a.ts"],
     });
+    assertOk(result);
 
     // No iteration record — nothing to accumulate
     expect(result.board.iterations["build"]).toBeUndefined();
@@ -273,8 +305,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("skips accumulation when principle_ids is missing", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -284,6 +315,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       // no principle_ids
       file_paths: ["a.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
@@ -292,8 +324,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("skips accumulation when file_paths is missing", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -303,6 +334,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1"],
       // no file_paths
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
@@ -311,8 +343,7 @@ describe("reportResult — cannot_fix accumulation", () => {
   it("does not accumulate when condition is not cannot_fix", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     const result = await reportResult({
       workspace,
@@ -322,6 +353,7 @@ describe("reportResult — cannot_fix accumulation", () => {
       principle_ids: ["p1"],
       file_paths: ["a.ts"],
     });
+    assertOk(result);
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
@@ -336,8 +368,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
   it("check-convergence returns accumulated cannot_fix_items after report-result", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     await reportResult({
       workspace,
@@ -349,6 +380,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     });
 
     const convergence = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergence);
 
     expect(convergence.cannot_fix_items).toEqual([
       { principle_id: "no-hidden-side-effects", file_path: "src/tools/check-convergence.ts" },
@@ -358,8 +390,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
   it("round-trip: multiple reports accumulate items, check-convergence returns all", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     // First agent report
     await reportResult({
@@ -382,6 +413,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     });
 
     const convergence = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergence);
 
     expect(convergence.cannot_fix_items).toHaveLength(2);
     expect(convergence.cannot_fix_items).toEqual(
@@ -395,8 +427,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
   it("filterCannotFix can filter items returned by check-convergence", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
-    const board = initBoard(flow, "test task", "abc123");
-    await writeBoard(workspace, board);
+    seedWorkspace(workspace, flow);
 
     await reportResult({
       workspace,
@@ -408,6 +439,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     });
 
     const convergence = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergence);
 
     // Orchestrator uses filterCannotFix to exclude items from next iteration
     const allItems = [
@@ -421,5 +453,23 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     expect(remaining).toEqual([
       { principle_id: "p3", file_path: "a.ts" },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// check-convergence: WORKSPACE_NOT_FOUND when no execution exists
+// ---------------------------------------------------------------------------
+
+describe("checkConvergence: error on missing execution", () => {
+  it("returns WORKSPACE_NOT_FOUND when workspace has no execution", async () => {
+    const workspace = makeTmpWorkspace(); // fresh dir, no seedWorkspace call
+
+    const result = await checkConvergence({ workspace, state_id: "review" });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toMatch(/No execution found/);
+    }
   });
 });

@@ -8,17 +8,16 @@ import {
   generateSlug,
   checkSlugCollision,
   initWorkspace as createWorkspace,
-  writeSession,
-  withBoardLock,
 } from "../orchestration/workspace.ts";
-import { initBoard, writeBoard } from "../orchestration/board.ts";
+import { initBoard } from "../orchestration/board.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
-import { BoardSchema, SessionSchema } from "../orchestration/flow-schema.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { z } from "zod";
-import { readFile, mkdir, writeFile, access } from "fs/promises";
+import { existsSync } from "fs";
+import { mkdir } from "fs/promises";
 import { join } from "path";
-import { spawnSync } from "child_process";
+import { gitStatus } from "../adapters/git-adapter.ts";
 
 interface InitWorkspaceInput {
   flow_name: string;
@@ -64,12 +63,16 @@ export async function listBranchWorkspaces(
 
   for (const entry of entries) {
     const ws = join(branchDir, entry);
+    // Check DB existence before opening — better-sqlite3 creates the file on open,
+    // which would leave empty DBs as a side effect of scanning non-workspace directories.
+    if (!existsSync(join(ws, "orchestration.db"))) continue;
     try {
-      const sessionData = await readFile(join(ws, "session.json"), "utf-8");
-      const session = SessionSchema.parse(JSON.parse(sessionData));
+      const store = getExecutionStore(ws);
+      const session = store.getSession();
+      if (!session) continue;
       if (session.status !== "active") continue;
-      const boardData = await readFile(join(ws, "board.json"), "utf-8");
-      const board = BoardSchema.parse(JSON.parse(boardData));
+      const board = store.getBoard();
+      if (!board) continue;
       results.push({ workspace: ws, session, board, resume_state: board.current_state });
     } catch {
       // Not a valid workspace subdirectory — skip
@@ -94,12 +97,8 @@ async function runPreflightChecks(
 
   // 1. Check for uncommitted changes
   try {
-    const result = spawnSync("git", ["status", "--porcelain"], {
-      cwd: projectDir,
-      encoding: "utf-8",
-      timeout: 10_000,
-    });
-    const output = (result.stdout ?? "").trim();
+    const result = gitStatus(projectDir, 10_000);
+    const output = result.stdout.trim();
     if (output) {
       const lineCount = output.split("\n").length;
       issues.push(`Uncommitted changes: ${lineCount} file(s) modified`);
@@ -108,28 +107,13 @@ async function runPreflightChecks(
     // git not available — skip this check
   }
 
-  // 2. Check for existing lock on candidate workspace
-  try {
-    const lockPath = join(candidateWorkspace, ".lock");
-    await access(lockPath);
-    const raw = await readFile(lockPath, "utf-8");
-    const lock = JSON.parse(raw) as { pid: number; started: string };
-    const age = Date.now() - new Date(lock.started).getTime();
-    if (age < FOUR_HOURS_MS) {
-      issues.push(`Active lock on workspace (pid ${lock.pid}, started ${lock.started})`);
-    }
-  } catch {
-    // No lock file or unreadable — clean
-  }
-
-  // 3. Check for stale sessions on the same branch
+  // 2. Check for stale sessions on the same branch
   try {
     const active = await listBranchWorkspaces(projectDir, branch);
     for (const ws of active) {
-      const lockExists = await access(join(ws.workspace, ".lock")).then(() => true, () => false);
       const sessionAge = Date.now() - new Date(ws.session.created).getTime();
-      if (!lockExists && sessionAge > FOUR_HOURS_MS) {
-        issues.push(`Stale session: "${ws.session.task}" (created ${ws.session.created}, no lock)`);
+      if (sessionAge > FOUR_HOURS_MS) {
+        issues.push(`Stale session: "${ws.session.task}" (created ${ws.session.created})`);
       }
     }
   } catch {
@@ -171,17 +155,14 @@ export async function initWorkspaceFlow(
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
   const candidateSlug = baseSlug;
   const candidateWorkspace = join(branchDir, candidateSlug);
-  const boardPath = join(candidateWorkspace, "board.json");
 
   try {
-    const boardData = await readFile(boardPath, "utf-8");
-    const board = BoardSchema.parse(JSON.parse(boardData));
+    const store = getExecutionStore(candidateWorkspace);
+    const session = store.getSession();
+    const board = store.getBoard();
 
-    const sessionData = await readFile(join(candidateWorkspace, "session.json"), "utf-8");
-    const session = SessionSchema.parse(JSON.parse(sessionData));
-
-    // Only resume if the session is active and uses the same flow
-    if (session.status === "active") {
+    // Only resume if the session is active
+    if (session && session.status === "active" && board) {
       return {
         workspace: candidateWorkspace,
         slug: session.slug,
@@ -191,11 +172,20 @@ export async function initWorkspaceFlow(
         resume_state: board.current_state,
       };
     }
-  } catch (err: any) {
-    if (err.code !== "ENOENT" && !(err instanceof SyntaxError) && !(err instanceof z.ZodError)) {
-      throw err;
-    }
-    // No existing workspace for this slug — proceed with creation
+  } catch (err) {
+    // Only swallow expected "no existing DB" errors (file not found / can't open).
+    // Rethrow unexpected errors such as permission denied or disk errors.
+    const code = (err as NodeJS.ErrnoException).code;
+    const message = (err instanceof Error) ? err.message : String(err);
+    const isExpectedNoDb =
+      code === "SQLITE_CANTOPEN" ||
+      code === "ENOENT" ||
+      message.includes("SQLITE_CANTOPEN") ||
+      message.includes("no such file") ||
+      message.includes("directory does not exist") ||
+      message.includes("Cannot open database");
+    if (!isExpectedNoDb) throw err;
+    // else: no existing workspace for this slug — proceed with creation
   }
 
   // Workspace path: .canon/workspaces/{branch}/{slug}/
@@ -205,53 +195,97 @@ export async function initWorkspaceFlow(
   // Create workspace directory structure
   await createWorkspace(projectDir, join(sanitized, slug));
 
-  // Lock the workspace for the duration of init
-  return withBoardLock(workspace, async () => {
-    // Re-check for board.json inside lock (another process may have created it)
-    const wsBoard = join(workspace, "board.json");
-    try {
-      const boardData = await readFile(wsBoard, "utf-8");
-      const board = BoardSchema.parse(JSON.parse(boardData));
-      const sessionData = await readFile(join(workspace, "session.json"), "utf-8");
-      const session = SessionSchema.parse(JSON.parse(sessionData));
-      return { workspace, slug: session.slug, board, session, created: false, resume_state: board.current_state };
-    } catch (err: any) {
-      if (err.code !== "ENOENT" && !(err instanceof SyntaxError) && !(err instanceof z.ZodError)) {
-        throw err;
-      }
+  // Re-check for existing execution inside (another process may have created it)
+  const store = getExecutionStore(workspace);
+  const existingSession = store.getSession();
+  if (existingSession && existingSession.status === "active") {
+    const existingBoard = store.getBoard()!;
+    return { workspace, slug: existingSession.slug, board: existingBoard, session: existingSession, created: false, resume_state: existingBoard.current_state };
+  }
+
+  // Load and resolve flow
+  const { flow } = await loadAndResolveFlow(pluginDir, input.flow_name);
+
+  // Create plans/${slug}/ directory
+  await mkdir(join(workspace, "plans", slug), { recursive: true });
+
+  // Init board from resolved flow
+  const board = initBoard(flow, input.task, input.base_commit);
+
+  // Create session object
+  const now = new Date().toISOString();
+  const session: Session = {
+    branch: input.branch,
+    sanitized,
+    created: now,
+    task: input.task,
+    original_task: input.original_input,
+    tier: input.tier,
+    flow: input.flow_name,
+    slug,
+    status: "active",
+  };
+
+  // Persist execution to SQLite.
+  // Two concurrent callers can both pass the re-check above (both see no session)
+  // and race to insert the singleton execution row. The loser gets a UNIQUE
+  // constraint error. We catch that here and fall back to reading the row the
+  // winner already inserted, returning a clean resume instead of propagating
+  // the constraint error.
+  try {
+    store.initExecution({
+      flow: board.flow,
+      task: board.task,
+      entry: board.entry,
+      current_state: board.current_state,
+      base_commit: board.base_commit,
+      started: board.started,
+      last_updated: board.last_updated,
+      branch: session.branch,
+      sanitized: session.sanitized,
+      created: session.created,
+      original_task: session.original_task,
+      tier: session.tier,
+      flow_name: session.flow,
+      slug: session.slug,
+      status: session.status,
+    });
+  } catch (err) {
+    // Another concurrent caller already inserted the execution row.
+    // Treat this as a resume: read what the winner wrote and return it.
+    const isConstraintError =
+      (err as { code?: string }).code === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
+      (err as { code?: string }).code === 'SQLITE_CONSTRAINT' ||
+      (err instanceof Error && err.message.includes('UNIQUE constraint'));
+    if (!isConstraintError) throw err;
+
+    const winnerSession = store.getSession();
+    if (winnerSession && winnerSession.status === 'active') {
+      const winnerBoard = store.getBoard()!;
+      return {
+        workspace,
+        slug: winnerSession.slug,
+        board: winnerBoard,
+        session: winnerSession,
+        created: false,
+        resume_state: winnerBoard.current_state,
+      };
     }
+    // Constraint error but still no session readable — re-throw.
+    throw err;
+  }
 
-    // Load and resolve flow
-    const { flow } = await loadAndResolveFlow(pluginDir, input.flow_name);
+  // Persist initial state records
+  for (const [stateId] of Object.entries(flow.states)) {
+    store.upsertState(stateId, { status: "pending", entries: 0 });
+    const stateDef = flow.states[stateId];
+    if (stateDef.max_iterations !== undefined) {
+      store.upsertIteration(stateId, { count: 0, max: stateDef.max_iterations, history: [], cannot_fix: [] });
+    }
+  }
 
-    // Create plans/${slug}/ directory
-    await mkdir(join(workspace, "plans", slug), { recursive: true });
+  // Seed progress
+  store.appendProgress(`## Progress: ${input.task}`);
 
-    // Seed progress.md
-    const progressContent = `## Progress: ${input.task}\n\n`;
-    await writeFile(join(workspace, "progress.md"), progressContent, "utf-8");
-
-    // Init board from resolved flow
-    const board = initBoard(flow, input.task, input.base_commit);
-
-    // Create session object
-    const now = new Date().toISOString();
-    const session: Session = {
-      branch: input.branch,
-      sanitized,
-      created: now,
-      task: input.task,
-      original_task: input.original_input,
-      tier: input.tier,
-      flow: input.flow_name,
-      slug,
-      status: "active",
-    };
-
-    // Write session.json and board.json
-    await writeSession(workspace, session);
-    await writeBoard(workspace, board);
-
-    return { workspace, slug, board, session, created: true };
-  });
+  return { workspace, slug, board, session, created: true };
 }

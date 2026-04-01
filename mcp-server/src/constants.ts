@@ -34,6 +34,8 @@ export const CANON_FILES = {
   SUMMARIES: "summaries.json",
   CONFIG: "config.json",
   KNOWLEDGE_DB: "knowledge-graph.db",
+  ORCHESTRATION_DB: "orchestration.db",
+  DRIFT_DB: "drift.db",
 } as const;
 
 /** Maximum lines of file content returned by get_file_context. */

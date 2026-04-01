@@ -8,21 +8,23 @@
  * inject-wave-event.test.ts, which test each tool in isolation.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, writeFile } from "fs/promises";
+import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { injectWaveEvent } from "../tools/inject-wave-event.ts";
 import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
 import { getMessages } from "../tools/get-messages.ts";
-import { readPendingEvents, readAllEvents } from "../orchestration/wave-events.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { WaveEvent } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeBoard(overrides: Record<string, unknown> = {}): unknown {
+function seedStore(workspace: string): void {
+  const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
-  return {
+  store.initExecution({
     flow: "test-flow",
     task: "Integration test task",
     entry: "implement",
@@ -30,27 +32,27 @@ function makeBoard(overrides: Record<string, unknown> = {}): unknown {
     base_commit: "abc1234",
     started: now,
     last_updated: now,
-    states: {
-      implement: {
-        status: "in_progress",
-        entries: 1,
-        wave: 1,
-      },
-    },
-    iterations: {},
-    blocked: null,
-    concerns: [],
-    skipped: [],
-    ...overrides,
-  };
+    branch: "main",
+    sanitized: "integration-test-task",
+    created: now,
+    tier: "small",
+    flow_name: "test-flow",
+    slug: "integration-test-task",
+    status: "active",
+  });
+  store.upsertState("implement", {
+    status: "in_progress",
+    entries: 1,
+    wave: 1,
+  });
 }
 
-async function writeBoard(workspace: string, board: unknown): Promise<void> {
-  await writeFile(
-    join(workspace, "board.json"),
-    JSON.stringify(board, null, 2) + "\n",
-    "utf-8",
-  );
+function readPendingEvents(workspace: string): WaveEvent[] {
+  return getExecutionStore(workspace).getWaveEvents({ status: "pending" });
+}
+
+function readAllEvents(workspace: string): WaveEvent[] {
+  return getExecutionStore(workspace).getWaveEvents();
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +63,7 @@ let workspace: string;
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), "canon-wave-lifecycle-"));
-  await writeBoard(workspace, makeBoard());
+  seedStore(workspace);
 });
 
 afterEach(async () => {
@@ -81,7 +83,7 @@ describe("end-to-end lifecycle: inject → resolve → pending drops to zero", (
     });
 
     // Event must be in pending list after inject
-    const pendingBefore = await readPendingEvents(workspace);
+    const pendingBefore = readPendingEvents(workspace);
     expect(pendingBefore).toHaveLength(1);
     expect(pendingBefore[0].id).toBe(injected.event.id);
     expect(pendingBefore[0].status).toBe("pending");
@@ -93,7 +95,7 @@ describe("end-to-end lifecycle: inject → resolve → pending drops to zero", (
     });
 
     // Event must no longer appear in pending list after resolve
-    const pendingAfter = await readPendingEvents(workspace);
+    const pendingAfter = readPendingEvents(workspace);
     expect(pendingAfter).toHaveLength(0);
   });
 
@@ -104,7 +106,7 @@ describe("end-to-end lifecycle: inject → resolve → pending drops to zero", (
       payload: { context: "Please reconsider the approach" },
     });
 
-    const pendingBefore = await readPendingEvents(workspace);
+    const pendingBefore = readPendingEvents(workspace);
     expect(pendingBefore).toHaveLength(1);
 
     await resolveWaveEvent({
@@ -114,7 +116,7 @@ describe("end-to-end lifecycle: inject → resolve → pending drops to zero", (
       reason: "Out of scope",
     });
 
-    const pendingAfter = await readPendingEvents(workspace);
+    const pendingAfter = readPendingEvents(workspace);
     expect(pendingAfter).toHaveLength(0);
   });
 
@@ -129,7 +131,7 @@ describe("end-to-end lifecycle: inject → resolve → pending drops to zero", (
     expect(result1.pending_count).toBe(2);
 
     // Verify matches actual pending state
-    const actualPending2 = await readPendingEvents(workspace);
+    const actualPending2 = readPendingEvents(workspace);
     expect(actualPending2).toHaveLength(2);
 
     // Reject second event
@@ -141,7 +143,7 @@ describe("end-to-end lifecycle: inject → resolve → pending drops to zero", (
     });
     expect(result2.pending_count).toBe(1);
 
-    const actualPending1 = await readPendingEvents(workspace);
+    const actualPending1 = readPendingEvents(workspace);
     expect(actualPending1).toHaveLength(1);
     expect(actualPending1[0].id).toBe(e3.event.id);
   });
@@ -258,7 +260,7 @@ describe("concurrent resolution: double-resolve on the same event", () => {
     expect(rejected).toHaveLength(1);
 
     // After the race, only one final state in the events file
-    const all = await readAllEvents(workspace);
+    const all = readAllEvents(workspace);
     expect(all).toHaveLength(1);
     expect(all[0].status).toBe("applied");
   });
@@ -279,7 +281,7 @@ describe("resolution data persisted to events file after apply", () => {
     const before = new Date().toISOString();
     await resolveWaveEvent({ workspace, event_id: injected.event.id, action: "apply" });
 
-    const all = await readAllEvents(workspace);
+    const all = readAllEvents(workspace);
     const resolved = all.find((e) => e.id === injected.event.id)!;
     expect(resolved.status).toBe("applied");
     expect(resolved.applied_at).toBeDefined();
@@ -303,7 +305,7 @@ describe("resolution data persisted to events file after apply", () => {
       resolution,
     });
 
-    const all = await readAllEvents(workspace);
+    const all = readAllEvents(workspace);
     const resolved = all.find((e) => e.id === injected.event.id)!;
     expect(resolved.resolution).toEqual(resolution);
   });
@@ -322,7 +324,7 @@ describe("resolution data persisted to events file after apply", () => {
       reason: "Does not apply to this wave",
     });
 
-    const all = await readAllEvents(workspace);
+    const all = readAllEvents(workspace);
     const resolved = all.find((e) => e.id === injected.event.id)!;
     expect(resolved.status).toBe("rejected");
     expect(resolved.rejection_reason).toBe("Does not apply to this wave");
@@ -335,7 +337,7 @@ describe("resolution data persisted to events file after apply", () => {
 
     await resolveWaveEvent({ workspace, event_id: e2.event.id, action: "apply" });
 
-    const all = await readAllEvents(workspace);
+    const all = readAllEvents(workspace);
     const ev1 = all.find((e) => e.id === e1.event.id)!;
     const ev3 = all.find((e) => e.id === e3.event.id)!;
 
