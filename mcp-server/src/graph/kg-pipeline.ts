@@ -18,8 +18,10 @@ import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { inferLayer } from "../matcher.ts";
 import { resolveImport } from "./import-parser.ts";
 import { getAdapter, getLanguage } from "./kg-adapter-registry.ts";
+import { EmbeddingService } from "./kg-embedding.ts";
 import { initDatabase } from "./kg-schema.ts";
 import { KgStore } from "./kg-store.ts";
+import { KgVectorStore } from "./kg-vector-store.ts";
 import type { AdapterResult, EdgeType, EntityRow } from "./kg-types.ts";
 import { initParsers } from "./kg-wasm-parser.ts";
 import { scanSourceFiles } from "./scanner.ts";
@@ -49,6 +51,7 @@ export interface PipelineResult {
   entitiesTotal: number;
   edgesTotal: number;
   durationMs: number;
+  embeddingsGenerated?: number;
 }
 
 export interface ReindexResult {
@@ -354,6 +357,90 @@ function shouldReindex(
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 5 — Embed (async, best-effort)
+// ---------------------------------------------------------------------------
+
+/**
+ * Embed all stale entity and summary vectors.
+ *
+ * Design:
+ * - Strict phase separation: collect IDs (sync DB read) → generate embeddings
+ *   (async) → write back (sync transaction). Never call async embedding inside
+ *   db.transaction().
+ * - Non-fatal: any error is caught and logged; the pipeline always succeeds.
+ * - Orphan cleanup runs before embedding to avoid wasted work.
+ */
+async function runEmbedPhase(
+  db: Database,
+  onProgress?: (phase: string, current: number, total: number) => void,
+): Promise<{ entitiesEmbedded: number; summariesEmbedded: number }> {
+  const vectorStore = new KgVectorStore(db);
+  const embeddingService = new EmbeddingService();
+
+  try {
+    onProgress?.("embed", 0, 0);
+
+    // 1. Clean orphan vectors
+    vectorStore.cleanOrphanEntityVectors();
+    vectorStore.cleanOrphanSummaryVectors();
+
+    // 2. Get stale entities and summaries (sync DB reads)
+    const staleEntities = vectorStore.getStaleEntityVectors();
+    const staleSummaries = vectorStore.getStaleSummaryVectors();
+    const total = staleEntities.length + staleSummaries.length;
+
+    if (total === 0) {
+      onProgress?.("embed", 0, 0);
+      return { entitiesEmbedded: 0, summariesEmbedded: 0 };
+    }
+
+    // 3. Embed entities (async — NEVER inside a db.transaction())
+    if (staleEntities.length > 0) {
+      const texts = staleEntities.map((e) => KgVectorStore.compositeEntityText(e));
+      const embeddings = await embeddingService.embed(texts);
+
+      // 4. Write back in transaction (sync)
+      const store = new KgStore(db);
+      store.transaction(() => {
+        for (let i = 0; i < staleEntities.length; i++) {
+          vectorStore.upsertEntityVector(
+            staleEntities[i].entity_id,
+            embeddings[i],
+            staleEntities[i].current_hash,
+          );
+        }
+      });
+    }
+
+    // 5. Embed summaries (async)
+    if (staleSummaries.length > 0) {
+      const texts = staleSummaries.map((s) => s.summary);
+      const embeddings = await embeddingService.embed(texts);
+
+      const store = new KgStore(db);
+      store.transaction(() => {
+        for (let i = 0; i < staleSummaries.length; i++) {
+          vectorStore.upsertSummaryVector(
+            staleSummaries[i].summary_id,
+            embeddings[i],
+            staleSummaries[i].current_hash,
+          );
+        }
+      });
+    }
+
+    onProgress?.("embed", total, total);
+    return { entitiesEmbedded: staleEntities.length, summariesEmbedded: staleSummaries.length };
+  } catch (err) {
+    // Embedding failures are non-fatal
+    console.warn(`[kg-pipeline] embed phase error (non-fatal): ${(err as Error).message}`);
+    return { entitiesEmbedded: 0, summariesEmbedded: 0 };
+  } finally {
+    embeddingService.dispose();
+  }
+}
+
 export async function runPipeline(projectDir: string, options?: PipelineOptions): Promise<PipelineResult> {
   await initParsers();
   const startMs = Date.now();
@@ -457,7 +544,12 @@ export async function runPipeline(projectDir: string, options?: PipelineOptions)
     progress("canon-link", fileImports.size, fileImports.size);
 
     // -----------------------------------------------------------------------
-    // Phase 5: Stats
+    // Phase 5: Embed (async, best-effort)
+    // -----------------------------------------------------------------------
+    const embedResult = await runEmbedPhase(db, progress);
+
+    // -----------------------------------------------------------------------
+    // Stats
     // -----------------------------------------------------------------------
     const stats = store.getStats();
 
@@ -467,6 +559,7 @@ export async function runPipeline(projectDir: string, options?: PipelineOptions)
       entitiesTotal: stats.entities,
       edgesTotal: stats.edges + stats.fileEdges,
       durationMs: Date.now() - startMs,
+      embeddingsGenerated: embedResult.entitiesEmbedded + embedResult.summariesEmbedded,
     };
   } finally {
     store.close();

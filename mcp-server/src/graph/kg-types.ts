@@ -206,3 +206,25 @@ export interface SummaryRow {
   content_hash: string | null;
   updated_at: string;
 }
+
+/** Matches the entity_vector_meta / summary_vector_meta tables */
+export interface VectorMetaRow {
+  entity_id?: number;    // or summary_id for summary vectors
+  summary_id?: number;
+  text_hash: string;
+  model_id: string;
+  updated_at: string;
+}
+
+/** Result from semantic search across vector tables */
+export interface SemanticSearchResult {
+  entity_id: number;
+  file_id: number;
+  name: string;
+  qualified_name: string;
+  kind: EntityKind;
+  distance: number;
+  source: "entity" | "summary";
+  summary?: string;
+  file_path?: string;
+}

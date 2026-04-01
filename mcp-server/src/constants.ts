@@ -51,6 +51,12 @@ export const CANON_FILES = {
 /** Maximum lines of file content returned by get_file_context. */
 export const FILE_PREVIEW_MAX_LINES = 200;
 
+/** Embedding model configuration */
+export const EMBEDDING_MODEL = "Xenova/all-MiniLM-L6-v2";
+export const EMBEDDING_DIM = 384;
+export const EMBEDDING_BATCH_SIZE = 64;
+export const EMBEDDING_MODEL_ID = "all-MiniLM-L6-v2"; // short ID for meta tables
+
 /** Extract the first paragraph from a principle body as its summary. */
 export function extractSummary(body: string): string {
   return body.split(/\n\n/)[0]?.trim() || body;

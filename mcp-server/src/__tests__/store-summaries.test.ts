@@ -1,11 +1,51 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
+import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
 import { storeSummaries } from "../tools/store-summaries.ts";
+
+// ---------------------------------------------------------------------------
+// Mock EmbeddingService — fast random vectors, no model download
+// This is applied to all tests in this file so that storeSummaries never
+// tries to download a real embedding model during the DB write path.
+// ---------------------------------------------------------------------------
+
+function randomEmbedding384(seed = 0): Float32Array {
+  const vec = new Float32Array(384);
+  let s = seed + 1;
+  for (let i = 0; i < 384; i++) {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    vec[i] = (s / 0xffffffff) * 2 - 1;
+  }
+  let norm = 0;
+  for (const v of vec) norm += v * v;
+  norm = Math.sqrt(norm);
+  for (let i = 0; i < 384; i++) vec[i] /= norm;
+  return vec;
+}
+
+let _mockSeed = 0;
+
+vi.mock("../graph/kg-embedding.ts", () => ({
+  EmbeddingService: class MockEmbeddingService {
+    async embed(texts: string[]): Promise<Float32Array[]> {
+      return texts.map((_, i) => randomEmbedding384(_mockSeed + i));
+    }
+    async embedOne(text: string): Promise<Float32Array> {
+      return randomEmbedding384(_mockSeed++);
+    }
+    dispose(): void {
+      // no-op
+    }
+    get isLoaded(): boolean {
+      return false;
+    }
+  },
+}));
 
 describe("storeSummaries", () => {
   let tmpDir: string;
@@ -13,6 +53,7 @@ describe("storeSummaries", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-store-summaries-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
+    _mockSeed = 0;
   });
 
   afterEach(async () => {
@@ -134,5 +175,112 @@ describe("storeSummaries", () => {
     const parsed = JSON.parse(raw);
     expect(parsed["src/existing.ts"].summary).toBe("Existing file");
     expect(parsed["src/new.ts"].summary).toBe("New file");
+  });
+
+  // -------------------------------------------------------------------------
+  // Embedding trigger tests
+  // -------------------------------------------------------------------------
+
+  describe("embedding trigger (best-effort)", () => {
+    it("writes a summary_vectors row after storeSummaries when file is in KG", async () => {
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+
+      store.upsertFile({
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      });
+      db.close();
+
+      await storeSummaries(
+        { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
+        tmpDir,
+      );
+
+      // Verify that a summary vector was created
+      const db2 = initDatabase(dbPath);
+      const store2 = new KgStore(db2);
+      const fileRow = store2.getFile("src/api/handler.ts");
+      expect(fileRow?.file_id).toBeDefined();
+      const summaryRow = store2.getSummaryByFile(fileRow!.file_id!);
+      expect(summaryRow?.summary_id).toBeDefined();
+
+      // Check summary_vector_meta has a row for this summary
+      const metaRow = db2
+        .prepare("SELECT * FROM summary_vector_meta WHERE summary_id = ?")
+        .get(summaryRow!.summary_id!) as { summary_id: number; text_hash: string; model_id: string } | undefined;
+
+      expect(metaRow).toBeDefined();
+      expect(metaRow?.text_hash).toBe(KgVectorStore.textHash("Handles HTTP requests"));
+      db2.close();
+    });
+
+    it("summaries are still written to DB even when embedding throws (best-effort)", async () => {
+      // Make the mock's embed method throw for this test
+      const { EmbeddingService } = await import("../graph/kg-embedding.ts");
+      const embedSpy = vi.spyOn(EmbeddingService.prototype, "embed").mockRejectedValue(
+        new Error("simulated embedding failure"),
+      );
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      store.upsertFile({
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      });
+      db.close();
+
+      // Should NOT throw even though embedding fails
+      await expect(
+        storeSummaries(
+          { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
+          tmpDir,
+        ),
+      ).resolves.not.toThrow();
+
+      // Summary should still be in DB
+      const db2 = initDatabase(dbPath);
+      const store2 = new KgStore(db2);
+      const fileRow = store2.getFile("src/api/handler.ts");
+      const summaryRow = store2.getSummaryByFile(fileRow!.file_id!);
+      expect(summaryRow?.summary).toBe("Handles HTTP requests");
+      db2.close();
+
+      embedSpy.mockRestore();
+    });
+
+    it("JSON is still written even when embedding fails (best-effort)", async () => {
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      store.upsertFile({
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      });
+      db.close();
+
+      await storeSummaries(
+        { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
+        tmpDir,
+      );
+
+      const raw = await readFile(join(tmpDir, ".canon", "summaries.json"), "utf-8");
+      const parsed = JSON.parse(raw);
+      expect(parsed["src/api/handler.ts"].summary).toBe("Handles HTTP requests");
+    });
   });
 });
