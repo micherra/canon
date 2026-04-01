@@ -8,6 +8,7 @@
 
 import type Database from "better-sqlite3";
 import { computeImpactScore } from "./query.ts";
+export { computeImpactScore };
 import type {
   BlastRadiusResult,
   CallerResult,
