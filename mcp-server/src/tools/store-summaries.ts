@@ -1,7 +1,7 @@
-/** Store file summaries to .canon/summaries.json — merges with existing */
+/** Store file summaries to .canon/summaries.json and knowledge-graph.db */
 
-import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
+import { extname } from "node:path";
 import { dirname, join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
@@ -24,7 +24,32 @@ export interface StoreSummariesOutput {
   path: string;
 }
 
-/** Read summaries from disk, supporting both old (string) and new (object) formats */
+/**
+ * Infer language string from a file path's extension.
+ * Used when auto-creating stub file rows for files not yet in the KG.
+ */
+export function inferLanguageFromExtension(filePath: string): string {
+  const ext = extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".ts":
+    case ".tsx":
+      return "typescript";
+    case ".js":
+    case ".jsx":
+      return "javascript";
+    case ".py":
+      return "python";
+    case ".md":
+      return "markdown";
+    default:
+      return "unknown";
+  }
+}
+
+/**
+ * Read summaries from disk, supporting both old (string) and new (object) formats.
+ * @deprecated Will be removed in Wave 3 when summaries.json is retired.
+ */
 export async function loadSummariesFile(projectDir: string): Promise<Record<string, SummaryEntry>> {
   const summariesPath = join(projectDir, CANON_DIR, CANON_FILES.SUMMARIES);
   try {
@@ -55,26 +80,38 @@ export function flattenSummaries(entries: Record<string, SummaryEntry>): Record<
   return result;
 }
 
-/** Write summaries to the KG database if it exists. Best-effort — never throws. */
+/**
+ * Write summaries to the KG database.
+ * Creates the DB if it does not exist (init-if-absent).
+ * Auto-creates stub file rows for files not yet in the KG so no summary is silently dropped.
+ * Never throws — DB failures are logged and the caller falls back to JSON.
+ */
 async function writeSummariesToDb(
   summaries: Array<{ file_path: string; summary: string }>,
   projectDir: string,
   now: string,
 ): Promise<void> {
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  if (!existsSync(dbPath)) return;
 
+  // Init DB if absent — ensures store_summaries works even without a prior codebase_graph run
   const db = initDatabase(dbPath);
   try {
     const store = new KgStore(db);
     for (const { file_path, summary } of summaries) {
-      const fileRow = store.getFile(file_path);
+      let fileRow = store.getFile(file_path);
       if (fileRow?.file_id === undefined) {
-        // File not in KG yet — JSON is the fallback
-        continue;
+        // File not in KG yet — auto-create a stub row so the summary is never silently dropped
+        fileRow = store.upsertFile({
+          path: file_path,
+          mtime_ms: Date.now(),
+          content_hash: "stub",
+          language: inferLanguageFromExtension(file_path),
+          layer: "unknown",
+          last_indexed_at: Date.now(),
+        });
       }
       store.upsertSummary({
-        file_id: fileRow.file_id,
+        file_id: fileRow.file_id!,
         entity_id: null,
         scope: "file",
         summary,
@@ -91,26 +128,23 @@ async function writeSummariesToDb(
 export async function storeSummaries(input: StoreSummariesInput, projectDir: string): Promise<StoreSummariesOutput> {
   const summariesPath = join(projectDir, CANON_DIR, CANON_FILES.SUMMARIES);
 
-  // Load existing summaries
-  const existing = await loadSummariesFile(projectDir);
-
-  // Merge new summaries with current timestamp
   const now = new Date().toISOString();
-  for (const { file_path, summary } of input.summaries) {
-    existing[file_path] = { summary, updated_at: now };
-  }
 
-  // Write back
-  await mkdir(dirname(summariesPath), { recursive: true });
-  await atomicWriteFile(summariesPath, JSON.stringify(existing, null, 2));
-
-  // Also write to DB (best-effort — JSON write always wins)
+  // Primary: write to DB first
   try {
     await writeSummariesToDb(input.summaries, projectDir, now);
   } catch (err) {
-    // DB write failed — JSON file already written, so just log and continue
+    // DB write failed — JSON write below is the fallback during transition
     console.error("[store-summaries] DB write failed (non-fatal):", err);
   }
+
+  // Secondary: write to summaries.json (backward-compat, to be removed in Wave 3)
+  const existing = await loadSummariesFile(projectDir);
+  for (const { file_path, summary } of input.summaries) {
+    existing[file_path] = { summary, updated_at: now };
+  }
+  await mkdir(dirname(summariesPath), { recursive: true });
+  await atomicWriteFile(summariesPath, JSON.stringify(existing, null, 2));
 
   return {
     stored: input.summaries.length,
