@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '2';
+export const SCHEMA_VERSION = '3';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -199,23 +199,9 @@ interface Migration {
  */
 const MIGRATIONS: Migration[] = [
   {
+    // correlation_id columns — shipped on main
     version: '2',
     up: (db) => {
-      // iteration_results table (ADR-004)
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS iteration_results (
-          id        INTEGER PRIMARY KEY AUTOINCREMENT,
-          state_id  TEXT NOT NULL,
-          iteration INTEGER NOT NULL,
-          status    TEXT NOT NULL,
-          data      TEXT NOT NULL DEFAULT '{}',
-          timestamp TEXT NOT NULL,
-          UNIQUE(state_id, iteration)
-        )
-      `);
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_iteration_results_state ON iteration_results(state_id)`);
-
-      // correlation_id columns (ADR-005)
       if (!columnExists(db, 'execution', 'correlation_id')) {
         db.exec(`ALTER TABLE execution ADD COLUMN correlation_id TEXT`);
       }
@@ -231,6 +217,25 @@ const MIGRATIONS: Migration[] = [
       ).run(randomUUID());
 
       db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // iteration_results table (ADR-004)
+    version: '3',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS iteration_results (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          state_id  TEXT NOT NULL,
+          iteration INTEGER NOT NULL,
+          status    TEXT NOT NULL,
+          data      TEXT NOT NULL DEFAULT '{}',
+          timestamp TEXT NOT NULL,
+          UNIQUE(state_id, iteration)
+        )
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_iteration_results_state ON iteration_results(state_id)`);
+      db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
     },
   },
 ];
