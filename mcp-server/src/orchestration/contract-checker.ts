@@ -114,12 +114,17 @@ function evaluateFileChanged(
   const result = gitExec(["diff", "--name-only", baseCommit, "HEAD", "--", target], cwd);
 
   if (!result.ok) {
-    const errMsg = result.stderr.trim() || "git command failed";
+    const stderrMsg = result.stderr.trim();
+    const details = [
+      `exitCode=${result.exitCode}`,
+      result.timedOut ? "timedOut=true" : "",
+      stderrMsg ? `stderr=${stderrMsg.slice(0, 500)}` : "",
+    ].filter(Boolean).join(" ");
     return {
       passed: false,
       name,
       type: assertion.type,
-      output: `git diff failed: ${errMsg}`,
+      output: `git diff failed: ${details || "git command failed"}`,
     };
   }
 

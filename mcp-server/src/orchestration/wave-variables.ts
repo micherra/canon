@@ -163,7 +163,14 @@ async function readWaveFiles(plansDir: string, wave: number): Promise<string> {
 function readWaveDiff(cwd: string): string {
   const result = gitExec(["diff", "HEAD~1"], cwd);
   if (!result.ok) {
-    console.error(`wave_diff: git diff failed — exitCode=${result.exitCode}`);
+    const timedOutInfo = result.timedOut ? " timedOut=true" : "";
+    const stderrSnippet =
+      result.stderr.length > 0
+        ? ` stderr=${result.stderr.slice(0, 2000).trimEnd()}`
+        : "";
+    console.error(
+      `wave_diff: git diff failed — exitCode=${result.exitCode}${timedOutInfo}${stderrSnippet}`,
+    );
     return "";
   }
   return escapeDollarBrace(result.stdout);

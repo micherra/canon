@@ -18,7 +18,6 @@ import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import { join } from "path";
 import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
-import { existsSync } from "fs";
 
 interface InitWorkspaceInput {
   flow_name: string;

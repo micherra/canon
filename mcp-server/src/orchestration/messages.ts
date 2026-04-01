@@ -11,7 +11,6 @@
  * sender identity and `timestamp` for ordering.
  */
 
-import { resolve, relative } from "path";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 
 export interface Message {
@@ -49,7 +48,7 @@ You are working in parallel with ${peerCount} other agent${peerCount === 1 ? "" 
 
 Before creating a new shared utility, helper, or type:
 1. Call get_messages(workspace="${workspace}", channel="${channel}") to check if another agent already created it
-2. If it exists, import from their path instead of creating your own
+2. If it exists, import the shared utility they described (using the module path or location documented in their message) instead of creating your own
 
 After creating a shared utility, type, or establishing a pattern:
 1. Call post_message(workspace="${workspace}", channel="${channel}", from=YOUR_TASK_ID, content="...")

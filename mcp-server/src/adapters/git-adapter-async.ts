@@ -15,12 +15,32 @@ export function gitExecAsync(args: string[], cwd: string, timeout = DEFAULT_TIME
   return new Promise((resolve) => {
     execFile("git", args, { cwd, timeout }, (err, stdout, stderr) => {
       if (err) {
+        const anyErr = err as any;
+        const rawCode = anyErr.code;
+
+        let exitCode: number;
+        if (rawCode === "ETIMEDOUT") {
+          exitCode = 1;
+        } else if (typeof rawCode === "number") {
+          exitCode = rawCode;
+        } else if (typeof rawCode === "string") {
+          const parsed = Number(rawCode);
+          exitCode = Number.isFinite(parsed) && Number.isInteger(parsed) ? parsed : 1;
+        } else {
+          exitCode = 1;
+        }
+
+        const timedOut =
+          anyErr.killed === true ||
+          anyErr.signal === "SIGTERM" ||
+          rawCode === "ETIMEDOUT";
+
         resolve({
           ok: false,
           stdout: stdout ?? "",
           stderr: stderr ?? "",
-          exitCode: (err as any).code === "ETIMEDOUT" ? 1 : ((err as any).code ?? 1),
-          timedOut: (err as any).killed === true || (err as any).code === "ETIMEDOUT",
+          exitCode,
+          timedOut,
         });
         return;
       }

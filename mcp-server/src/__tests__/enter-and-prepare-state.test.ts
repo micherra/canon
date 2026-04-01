@@ -765,6 +765,7 @@ describe("enterAndPrepareState", () => {
         items: ["rwf-01", "rwf-02"],
       });
 
+      assertOk(result);
       expect(result.worktree_entries).toBeDefined();
       expect(result.worktree_entries).toHaveLength(2);
       expect(result.worktree_entries![0].task_id).toBe("rwf-01");
@@ -790,6 +791,7 @@ describe("enterAndPrepareState", () => {
         items: ["rwf-01", "rwf-02"],
       });
 
+      assertOk(result);
       expect(result.worktree_entries).toBeUndefined();
     });
 
@@ -841,13 +843,14 @@ describe("enterAndPrepareState", () => {
         items: ["rwf-01", "rwf-02"],
       });
 
+      assertOk(result);
       // rwf-01 is "active" — worktree_path should be set
-      const prompt01 = result.prompts.find(p => p.item === "rwf-01");
+      const prompt01 = result.prompts.find((p: any) => p.item === "rwf-01");
       expect(prompt01).toBeDefined();
       expect(prompt01!.worktree_path).toBe("/tmp/wt/rwf-01");
 
       // rwf-02 is "merged" — worktree_path should NOT be set
-      const prompt02 = result.prompts.find(p => p.item === "rwf-02");
+      const prompt02 = result.prompts.find((p: any) => p.item === "rwf-02");
       expect(prompt02).toBeDefined();
       expect(prompt02!.worktree_path).toBeUndefined();
     });
