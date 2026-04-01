@@ -60,4 +60,6 @@ export interface ProcessResult {
   stderr: string;
   exitCode: number;
   timedOut: boolean;
+  /** Wall-clock time of subprocess execution in milliseconds (Math.round precision). */
+  duration_ms: number;
 }
