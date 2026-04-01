@@ -1,8 +1,14 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { loadAndResolveFlow, parseFlowContent, resolveFragments, validateFlow } from "../orchestration/flow-parser.ts";
-import type { FlowDefinition, FragmentDefinition, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import {
+  loadAndResolveFlow,
+  parseFlowContent,
+  resolveFragments,
+  validateFlow,
+  validateStateIdParams,
+} from "../orchestration/flow-parser.ts";
+import type { FlowDefinition, FragmentDefinition, FragmentInclude, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -361,6 +367,227 @@ describe("validateFlow", () => {
 
     const errors = validateFlow(flow);
     expect(errors.some((e) => e.includes("terminal"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateStateIdParams
+// ---------------------------------------------------------------------------
+
+describe("validateStateIdParams", () => {
+  const resolvedStateIds = new Set(["build", "review", "done"]);
+
+  it("returns no errors when state_id param value exists in resolved states", () => {
+    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+      {
+        definition: {
+          fragment: "my-frag",
+          params: { next_state: { type: "state_id" } },
+          states: {
+            "frag-state": { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+          },
+        },
+        spawnInstructions: {},
+      },
+    ];
+    const includes: FragmentInclude[] = [{ fragment: "my-frag", with: { next_state: "build" } }];
+    const errors = validateStateIdParams(fragments, includes, resolvedStateIds);
+    expect(errors).toEqual([]);
+  });
+
+  it("returns error when state_id param value does not exist in resolved states", () => {
+    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+      {
+        definition: {
+          fragment: "my-frag",
+          params: { next_state: { type: "state_id" } },
+          states: {
+            "frag-state": { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+          },
+        },
+        spawnInstructions: {},
+      },
+    ];
+    const includes: FragmentInclude[] = [{ fragment: "my-frag", with: { next_state: "nonexistent-state" } }];
+    const errors = validateStateIdParams(fragments, includes, resolvedStateIds);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toMatch(/my-frag/);
+    expect(errors[0]).toMatch(/next_state/);
+    expect(errors[0]).toMatch(/nonexistent-state/);
+  });
+
+  it("returns no errors when state_id param value is 'hitl'", () => {
+    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+      {
+        definition: {
+          fragment: "my-frag",
+          params: { fallback_state: { type: "state_id" } },
+          states: {
+            "frag-state": { type: "single", agent: "a", transitions: { blocked: "${fallback_state}" } },
+          },
+        },
+        spawnInstructions: {},
+      },
+    ];
+    const includes: FragmentInclude[] = [{ fragment: "my-frag", with: { fallback_state: "hitl" } }];
+    const errors = validateStateIdParams(fragments, includes, resolvedStateIds);
+    expect(errors).toEqual([]);
+  });
+
+  it("skips validation for params that are not type state_id", () => {
+    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+      {
+        definition: {
+          fragment: "my-frag",
+          params: { label: { type: "string", default: "foo" } },
+          states: {
+            "frag-state": { type: "single", agent: "a" },
+          },
+        },
+        spawnInstructions: {},
+      },
+    ];
+    const includes: FragmentInclude[] = [{ fragment: "my-frag", with: { label: "whatever" } }];
+    const errors = validateStateIdParams(fragments, includes, resolvedStateIds);
+    expect(errors).toEqual([]);
+  });
+
+  it("uses default value for state_id param when not in with", () => {
+    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+      {
+        definition: {
+          fragment: "my-frag",
+          params: { next_state: { type: "state_id", default: "build" } },
+          states: {
+            "frag-state": { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+          },
+        },
+        spawnInstructions: {},
+      },
+    ];
+    const includes: FragmentInclude[] = [{ fragment: "my-frag" }]; // no with — default used
+    const errors = validateStateIdParams(fragments, includes, resolvedStateIds);
+    expect(errors).toEqual([]);
+  });
+
+  it("returns error when state_id param default refers to nonexistent state", () => {
+    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+      {
+        definition: {
+          fragment: "my-frag",
+          params: { next_state: { type: "state_id", default: "bad-state" } },
+          states: {
+            "frag-state": { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+          },
+        },
+        spawnInstructions: {},
+      },
+    ];
+    const includes: FragmentInclude[] = [{ fragment: "my-frag" }];
+    const errors = validateStateIdParams(fragments, includes, resolvedStateIds);
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toMatch(/bad-state/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveFragments — typed param support
+// ---------------------------------------------------------------------------
+
+describe("resolveFragments — typed params", () => {
+  const baseFlow: FlowDefinition = {
+    name: "test",
+    description: "test flow",
+  };
+
+  it("accepts old null-marker format (backward compat)", () => {
+    const fragment: FragmentDefinition = {
+      fragment: "old-frag",
+      params: { required_val: null },
+      states: {
+        s: { type: "single", agent: "a", transitions: { done: "${required_val}" } },
+      },
+    };
+
+    const result = resolveFragments(
+      baseFlow,
+      [{ definition: fragment, spawnInstructions: {} }],
+      [{ fragment: "old-frag", with: { required_val: "end" } }],
+    );
+
+    expect(result.states["s"].transitions!["done"]).toBe("end");
+  });
+
+  it("uses default from typed param { type: 'string', default: 'foo' } when not in with", () => {
+    const fragment: FragmentDefinition = {
+      fragment: "typed-frag",
+      params: { label: { type: "string", default: "foo" } },
+      states: {
+        s: { type: "single", agent: "a", template: "${label}" },
+      },
+    };
+
+    const result = resolveFragments(
+      baseFlow,
+      [{ definition: fragment, spawnInstructions: {} }],
+      [{ fragment: "typed-frag" }], // no with, uses default
+    );
+
+    expect(result.states["s"].template).toBe("foo");
+  });
+
+  it("allows typed param with default to be overridden via with", () => {
+    const fragment: FragmentDefinition = {
+      fragment: "typed-frag",
+      params: { label: { type: "string", default: "foo" } },
+      states: {
+        s: { type: "single", agent: "a", template: "${label}" },
+      },
+    };
+
+    const result = resolveFragments(
+      baseFlow,
+      [{ definition: fragment, spawnInstructions: {} }],
+      [{ fragment: "typed-frag", with: { label: "bar" } }],
+    );
+
+    expect(result.states["s"].template).toBe("bar");
+  });
+
+  it("throws when typed param { type: 'number' } with no default is missing from with", () => {
+    const fragment: FragmentDefinition = {
+      fragment: "typed-frag",
+      params: { count: { type: "number" } },
+      states: {
+        s: { type: "single", agent: "a" },
+      },
+    };
+
+    expect(() =>
+      resolveFragments(
+        baseFlow,
+        [{ definition: fragment, spawnInstructions: {} }],
+        [{ fragment: "typed-frag" }], // missing required count
+      ),
+    ).toThrow(/requires param.*count/i);
+  });
+
+  it("accepts typed param { type: 'state_id' } when value provided in with", () => {
+    const fragment: FragmentDefinition = {
+      fragment: "typed-frag",
+      params: { next_state: { type: "state_id" } },
+      states: {
+        s: { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+      },
+    };
+
+    const result = resolveFragments(
+      baseFlow,
+      [{ definition: fragment, spawnInstructions: {} }],
+      [{ fragment: "typed-frag", with: { next_state: "my-state" } }],
+    );
+
+    expect(result.states["s"].transitions!["done"]).toBe("my-state");
   });
 });
 

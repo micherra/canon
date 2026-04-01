@@ -211,6 +211,31 @@ export const FlowDefinitionSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Fragment param schemas
+// ---------------------------------------------------------------------------
+
+/** Typed param declaration for fragment params (ADR-004). */
+export const TypedParamSchema = z.object({
+  type: z.enum(["state_id", "string", "number", "boolean"]),
+  default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+});
+
+/**
+ * Fragment param value: accepts both old (value | null) and new (typed) formats.
+ * Backward compat: null means required param (old marker syntax).
+ */
+export const FragmentParamValueSchema = z.union([
+  TypedParamSchema,
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
+
+export type TypedParam = z.infer<typeof TypedParamSchema>;
+export type FragmentParamValue = z.infer<typeof FragmentParamValueSchema>;
+
+// ---------------------------------------------------------------------------
 // Fragment definition schemas
 // ---------------------------------------------------------------------------
 
@@ -244,7 +269,7 @@ export const FragmentDefinitionSchema = z.object({
   description: z.string().optional(),
   type: z.literal("consultation").optional(),
   entry: z.string().optional(),
-  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+  params: z.record(z.string(), FragmentParamValueSchema).optional(),
   states: z.record(z.string(), FragmentStateDefinitionSchema).optional(),
   // Consultation-specific fields
   agent: z.string().optional(),
