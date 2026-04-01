@@ -7,8 +7,7 @@
  */
 
 import type Database from "better-sqlite3";
-import { computeImpactScore } from "./query.ts";
-export { computeImpactScore };
+import { LAYER_CENTRALITY } from "../constants.ts";
 import type {
   BlastRadiusResult,
   CallerResult,
@@ -33,6 +32,22 @@ const DEFAULT_LAYER_RULES: Record<string, string[]> = {
   infra: ["shared"],
   shared: [],
 };
+
+// ---------------------------------------------------------------------------
+// computeImpactScore — exported for consumers that migrated from query.ts
+// ---------------------------------------------------------------------------
+
+/** Compute impact score for a file based on graph position. Higher = more impactful. */
+export function computeImpactScore(
+  inDegree: number,
+  violationCount: number,
+  isChanged: boolean,
+  layer: string,
+): number {
+  const centrality = LAYER_CENTRALITY[layer] ?? 0;
+  const score = inDegree * 3 + violationCount * 2 + (isChanged ? 1 : 0) + centrality;
+  return Math.round(score * 100) / 100;
+}
 
 // ---------------------------------------------------------------------------
 // computeFileInsightMaps — batch helper for hub/cycle/violation computation

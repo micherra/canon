@@ -1,5 +1,4 @@
-import { readFile, mkdir } from "fs/promises";
-import { atomicWriteFile } from "../utils/atomic-write.ts";
+import { readFile } from "fs/promises";
 import { join, isAbsolute } from "path";
 import { gitExecAsync } from "../adapters/git-adapter-async.ts";
 import { scanSourceFiles } from "../graph/scanner.ts";
@@ -20,8 +19,9 @@ import { toPosix, loadPathAliases } from "../utils/paths.ts";
 import { sanitizeGitRef } from "../utils/git-ref.ts";
 import { classifyMdNode, buildNameMaps, inferMdRelations } from "../graph/md-relations.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
-import { materialize } from "../graph/view-materializer.ts";
+import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
+import path from "path";
 
 const FALLBACK_LAYER_COLOR = "#BDC3C7";
 
@@ -495,21 +495,61 @@ export async function codebaseGraph(
     await runPipeline(projectDir, { dbPath, sourceDirs: pipelineSourceDirs });
 
     const db = initDatabase(dbPath);
-    let graphData: ReturnType<typeof materialize>;
+    let rawNodes: Array<{ id: string; layer: string; extension: string }>;
+    let rawEdges: Array<{ source: string; target: string; type: GraphEdge["type"]; confidence: number; relation?: string }>;
     try {
-      graphData = materialize(db, projectDir);
+      const kgQuery = new KgQuery(db);
+      const filesWithStats = kgQuery.getAllFilesWithStats();
+      rawNodes = filesWithStats
+        .filter((f) => f.file_id !== undefined)
+        .map((f) => ({
+          id: f.path,
+          layer: f.layer || "unknown",
+          extension: path.extname(f.path).replace(".", "") || "",
+        }));
+
+      const fileEdgeRows = (db as import("better-sqlite3").Database)
+        .prepare(`
+          SELECT fe.edge_type, fe.confidence, fe.relation,
+                 src.path AS source_path, tgt.path AS target_path
+          FROM file_edges fe
+          JOIN files src ON src.file_id = fe.source_file_id
+          JOIN files tgt ON tgt.file_id = fe.target_file_id
+        `)
+        .all() as Array<{
+          edge_type: string;
+          confidence: number;
+          relation: string | null;
+          source_path: string;
+          target_path: string;
+        }>;
+
+      function mapEdgeType(edgeType: string): GraphEdge["type"] {
+        if (edgeType === "imports") return "import";
+        if (edgeType === "re-exports") return "re-export";
+        if (edgeType === "composition") return "composition";
+        return "import";
+      }
+
+      rawEdges = fileEdgeRows.map((row) => ({
+        source: row.source_path,
+        target: row.target_path,
+        type: mapEdgeType(row.edge_type),
+        confidence: row.confidence,
+        relation: row.relation ?? undefined,
+      }));
     } finally {
       db.close();
     }
 
     // Filter materialized nodes to only those within the requested scope
-    const filteredNodes = graphData.nodes.filter((n) =>
+    const filteredNodes = rawNodes.filter((n) =>
       requestedFileSet.size === 0 || requestedFileSet.has(n.id),
     );
     const filteredNodeSet = new Set(filteredNodes.map((n) => n.id));
 
     // Filter edges to only those where both endpoints are in scope
-    const filteredEdges = graphData.edges.filter(
+    const filteredEdges = rawEdges.filter(
       (e) => filteredNodeSet.has(e.source) && filteredNodeSet.has(e.target),
     );
 
@@ -641,20 +681,6 @@ export async function codebaseGraph(
     generated_at: new Date().toISOString(),
   };
 
-  // Step 6: Persist graph + reverse index
-  const reverseIndex: Record<string, string[]> = {};
-  for (const edge of edges) {
-    if (!reverseIndex[edge.target]) reverseIndex[edge.target] = [];
-    reverseIndex[edge.target].push(edge.source);
-  }
-
-  const canonDir = join(projectDir, CANON_DIR);
-  await mkdir(canonDir, { recursive: true });
-  await Promise.all([
-    atomicWriteFile(join(canonDir, CANON_FILES.GRAPH_DATA), JSON.stringify(fullGraph, null, 2)),
-    atomicWriteFile(join(canonDir, CANON_FILES.REVERSE_DEPS), JSON.stringify(reverseIndex)),
-  ]);
-
   return fullGraph;
 }
 
@@ -673,14 +699,12 @@ export function summarizeGraph(graph: CodebaseGraphOutput) {
     violations: violationFiles,
     insights: graph.insights,
     generated_at: graph.generated_at,
-    graph_path: `${CANON_DIR}/${CANON_FILES.GRAPH_DATA}`,
   };
 }
 
 /** Index-encoded compact graph for the UI.
  *  Node IDs are replaced with numeric indices to avoid repeating long file paths
- *  in the edge list. Scales to large codebases — ~37K for 316 nodes vs 237K raw.
- *  The full graph is always available at .canon/graph-data.json. */
+ *  in the edge list. Scales to large codebases — ~37K for 316 nodes vs 237K raw. */
 export interface CompactGraphOutput {
   /** Ordered node IDs — index in this array is the numeric key used in edges/nodes. */
   node_ids: string[];

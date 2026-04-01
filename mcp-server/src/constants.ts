@@ -39,9 +39,6 @@ export const RESOLVE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
 /** Canon data directory and file names. */
 export const CANON_DIR = ".canon";
 export const CANON_FILES = {
-  GRAPH_DATA: "graph-data.json",
-  REVERSE_DEPS: "reverse-deps.json",
-  SUMMARIES: "summaries.json",
   CONFIG: "config.json",
   KNOWLEDGE_DB: "knowledge-graph.db",
   ORCHESTRATION_DB: "orchestration.db",
