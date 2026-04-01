@@ -249,11 +249,13 @@ const MIGRATIONS: Migration[] = [
  */
 export function runMigrations(db: Database.Database): void {
   const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-  const version = currentRow?.value ?? '1';
+  let version = currentRow?.value ?? '1';
 
   for (const migration of MIGRATIONS) {
     if (migration.version > version) {
-      migration.up(db);
+      const run = db.transaction(() => migration.up(db));
+      run();
+      version = migration.version;
     }
   }
 }

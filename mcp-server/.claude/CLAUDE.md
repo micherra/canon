@@ -76,9 +76,9 @@ src/
 - Pure `isStuck` functions in `transitions.ts` are deprecated; prefer `ExecutionStore.isStuck`
 
 **Execution schema** (`src/orchestration/execution-schema.ts`) — updated 2026-04-01 (ADR-004):
-- `SCHEMA_VERSION = '2'` — new export; current DB schema version
-- `runMigrations(db)` — new export; runs pending migrations against the given database; version-gated; safe to call repeatedly
-- Migration v2 adds `iteration_results` table: `(id, state_id, iteration, status, data TEXT DEFAULT '{}', timestamp)` with `UNIQUE(state_id, iteration)` constraint and index on `state_id`
+- `SCHEMA_VERSION = '3'` — new export; current DB schema version
+- `runMigrations(db)` — new export; runs pending migrations against the given database; version-gated; each migration wrapped in a transaction for atomicity; safe to call repeatedly
+- Migration v3 adds `iteration_results` table: `(id, state_id, iteration, status, data TEXT DEFAULT '{}', timestamp)` with `UNIQUE(state_id, iteration)` constraint and index on `state_id`
 
 **Fragment param syntax** (`flows/fragments/*.md`) — updated 2026-04-01 (ADR-004):
 - Typed param declarations replace null-marker `~` syntax in all 7 fragments with params; format: `param_name: { type: state_id|string|number|boolean, default?: value }`

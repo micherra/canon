@@ -7,7 +7,7 @@ Harden Canon flow loading with strict schema validation, hard-blocking error thr
 - `StateDefinitionSchema` is a `z.discriminatedUnion("type", [...])` — five per-type schemas; per-type TS types exported
 - `loadAndResolveFlow` now throws on hard errors (spawn coverage, unresolved refs); no `errors` field on return
 - `LoadFlowResult.errors` removed; `load-flow.ts` catches thrown errors and returns `FLOW_PARSE_ERROR`/`FLOW_NOT_FOUND`
-- SQL-based stuck detection: `ExecutionStore.recordIterationResult` + `ExecutionStore.isStuck` backed by new `iteration_results` table (schema v2, auto-migrated)
+- SQL-based stuck detection: `ExecutionStore.recordIterationResult` + `ExecutionStore.isStuck` backed by new `iteration_results` table (schema v3, auto-migrated)
 - `write_plan_index` MCP tool writes normalized `INDEX.md` for wave execution; round-trips through `parseTaskIdsForWave`
 - Fragment params migrated from null-marker `~` to typed declarations (`type: state_id|string|number|boolean, default?`)
 - `parseTaskIdsForWave` now accepts backtick-wrapped task IDs in addition to plain IDs

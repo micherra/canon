@@ -711,8 +711,11 @@ export class ExecutionStore {
           setsEqual(currData.principle_ids as string[] ?? [], prevData.principle_ids as string[] ?? []) &&
           setsEqual(currData.file_paths as string[] ?? [], prevData.file_paths as string[] ?? [])
         );
-      case 'same_file_test':
-        return JSON.stringify(currData.pairs ?? []) === JSON.stringify(prevData.pairs ?? []);
+      case 'same_file_test': {
+        const currPairs = (currData.pairs ?? []) as unknown[];
+        const prevPairs = (prevData.pairs ?? []) as unknown[];
+        return unorderedEqual(currPairs, prevPairs);
+      }
       case 'same_status':
         return curr.status === prev.status;
       case 'no_progress':
@@ -1030,9 +1033,22 @@ export class ExecutionStore {
 // ---------------------------------------------------------------------------
 
 function setsEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
   const setA = new Set(a);
-  return b.every(item => setA.has(item));
+  const setB = new Set(b);
+  if (setA.size !== setB.size) return false;
+  for (const item of setA) {
+    if (!setB.has(item)) return false;
+  }
+  return true;
+}
+
+/** Order-insensitive comparison for arrays of objects (e.g. file+test pairs). */
+function unorderedEqual(a: unknown[], b: unknown[]): boolean {
+  if (a.length !== b.length) return false;
+  const serialize = (item: unknown) => JSON.stringify(item, Object.keys(item as Record<string, unknown>).sort());
+  const sortedA = a.map(serialize).sort();
+  const sortedB = b.map(serialize).sort();
+  return sortedA.every((val, i) => val === sortedB[i]);
 }
 
 // ---------------------------------------------------------------------------

@@ -257,7 +257,7 @@ export const StateDefinitionSchema = z.discriminatedUnion("type", [
 
 export const FragmentIncludeSchema = z.object({
   fragment: z.string(),
-  with: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  with: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   as: z.string().optional(),
   overrides: z
     .record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])))
