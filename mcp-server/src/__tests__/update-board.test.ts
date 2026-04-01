@@ -16,9 +16,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { getDriftDb } from "../drift/drift-db.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 
 // Mock analytics so appendFlowRun doesn't need drift.db during most tests
 vi.mock("../drift/analytics.ts", () => ({
@@ -93,8 +91,7 @@ function seedWorkspace(workspace: string, overrides: {
 
 afterEach(() => {
   // Clear store cache between tests
-  const execCache = (getExecutionStore as any).__cache;
-  if (execCache instanceof Map) execCache.clear();
+  clearStoreCache();
 
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });

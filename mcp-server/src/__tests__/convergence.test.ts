@@ -379,7 +379,9 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       file_paths: ["src/tools/check-convergence.ts"],
     });
 
-    const convergence = await checkConvergence({ workspace, state_id: "review" });
+    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
 
     expect(convergence.cannot_fix_items).toEqual([
       { principle_id: "no-hidden-side-effects", file_path: "src/tools/check-convergence.ts" },
@@ -411,7 +413,9 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       file_paths: ["b.ts"],
     });
 
-    const convergence = await checkConvergence({ workspace, state_id: "review" });
+    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
 
     expect(convergence.cannot_fix_items).toHaveLength(2);
     expect(convergence.cannot_fix_items).toEqual(
@@ -436,7 +440,9 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       file_paths: ["a.ts"],
     });
 
-    const convergence = await checkConvergence({ workspace, state_id: "review" });
+    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
 
     // Orchestrator uses filterCannotFix to exclude items from next iteration
     const allItems = [

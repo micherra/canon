@@ -213,6 +213,7 @@ export class ExecutionStore {
   private readonly stmtAppendMessage: Database.Statement;
   private readonly stmtGetMessages: Database.Statement;
   private readonly stmtGetMessagesSince: Database.Statement;
+  private readonly stmtHasMessages: Database.Statement;
 
   // ---- Wave event statements ----
   private readonly stmtPostWaveEvent: Database.Statement;
@@ -341,6 +342,10 @@ export class ExecutionStore {
 
     this.stmtGetMessagesSince = db.prepare(`
       SELECT * FROM messages WHERE channel = ? AND timestamp > ? ORDER BY id ASC
+    `);
+
+    this.stmtHasMessages = db.prepare(`
+      SELECT 1 FROM messages WHERE channel = ? LIMIT 1
     `);
 
     // Wave events
@@ -662,6 +667,11 @@ export class ExecutionStore {
       content: r.content,
       timestamp: r.timestamp,
     }));
+  }
+
+  /** Returns true when at least one message exists in the channel, without loading all messages. */
+  hasMessages(channel: string): boolean {
+    return this.stmtHasMessages.get(channel) !== undefined;
   }
 
   // --------------------------------------------------------------------------

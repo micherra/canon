@@ -11,7 +11,6 @@
  * sender identity and `timestamp` for ordering.
  */
 
-import { resolve, relative } from "path";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 
 export interface Message {

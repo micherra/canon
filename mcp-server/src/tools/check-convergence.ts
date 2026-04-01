@@ -7,6 +7,7 @@
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { canEnterState } from "../orchestration/convergence.ts";
 import type { CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
+import { toolError, type ToolResult } from "../utils/tool-result.ts";
 
 interface CheckConvergenceInput {
   workspace: string;
@@ -24,8 +25,11 @@ interface CheckConvergenceResult {
 
 export async function checkConvergence(
   input: CheckConvergenceInput,
-): Promise<CheckConvergenceResult> {
-  const board = getExecutionStore(input.workspace).getBoard() ?? { iterations: {}, states: {} } as any;
+): Promise<ToolResult<CheckConvergenceResult>> {
+  const board = getExecutionStore(input.workspace).getBoard();
+  if (board === null) {
+    return toolError("WORKSPACE_NOT_FOUND", `No board found for workspace: ${input.workspace}`, false);
+  }
 
   const { allowed, reason } = canEnterState(board, input.state_id);
 
@@ -38,6 +42,7 @@ export async function checkConvergence(
   const history: HistoryEntry[] = iteration?.history ?? [];
 
   return {
+    ok: true,
     can_enter: allowed,
     iteration_count,
     max_iterations,

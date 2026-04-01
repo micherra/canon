@@ -88,22 +88,24 @@ interface FlowRunRow {
 export function toISOWeek(timestamp: string): string {
   const date = new Date(timestamp);
   // ISO week: Thursday determines the year.
-  // Algorithm: shift to Thursday of the current week, then find which week of that year.
+  // Algorithm: shift to Thursday of the current week using UTC dates to avoid
+  // timezone-induced day-of-week drift for UTC midnight timestamps.
   const thursday = new Date(date);
-  // Day of week: 0=Sun, 1=Mon, ..., 4=Thu, ..., 6=Sat
-  const dayOfWeek = date.getDay();
-  // Shift to Thursday: Mon(1)->+3, Tue(2)->+2, Wed(3)->+1, Thu(4)->0, Fri(5)->-1, Sat(6)->-2, Sun(0)->+3
-  const daysToThursday = dayOfWeek === 0 ? 3 : 4 - dayOfWeek;
-  thursday.setDate(date.getDate() + daysToThursday);
+  // Day of week (UTC): 0=Sun, 1=Mon, ..., 4=Thu, ..., 6=Sat
+  const dayOfWeek = date.getUTCDay();
+  // Shift to Thursday: Mon(1)->+3, Tue(2)->+2, Wed(3)->+1, Thu(4)->0, Fri(5)->-1, Sat(6)->-2, Sun(0)->-3
+  // Sunday belongs to the previous ISO week, so shift back 3 days to the preceding Thursday.
+  const daysToThursday = dayOfWeek === 0 ? -3 : 4 - dayOfWeek;
+  thursday.setUTCDate(date.getUTCDate() + daysToThursday);
 
-  const year = thursday.getFullYear();
+  const year = thursday.getUTCFullYear();
 
   // Jan 4 is always in W01 (ISO rule: W01 contains the year's first Thursday)
-  const jan4 = new Date(year, 0, 4);
-  const jan4DayOfWeek = jan4.getDay() === 0 ? 7 : jan4.getDay();
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const jan4DayOfWeek = jan4.getUTCDay() === 0 ? 7 : jan4.getUTCDay();
   // Monday of W01
   const w1Monday = new Date(jan4);
-  w1Monday.setDate(jan4.getDate() - (jan4DayOfWeek - 1));
+  w1Monday.setUTCDate(jan4.getUTCDate() - (jan4DayOfWeek - 1));
 
   // Days from W01 Monday to Thursday
   const diffMs = thursday.getTime() - w1Monday.getTime();

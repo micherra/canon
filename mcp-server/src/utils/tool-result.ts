@@ -36,7 +36,8 @@ export function isToolError(result: unknown): result is CanonToolError {
   return (
     typeof result === "object" &&
     result !== null &&
-    (result as any).ok === false &&
+    "ok" in result &&
+    (result as { ok?: unknown }).ok === false &&
     "error_code" in result
   );
 }

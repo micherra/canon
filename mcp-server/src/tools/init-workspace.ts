@@ -13,7 +13,6 @@ import { initBoard } from "../orchestration/board.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { z } from "zod";
 import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import { join } from "path";
@@ -90,7 +89,7 @@ const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 async function runPreflightChecks(
   projectDir: string,
   branch: string,
-  candidateWorkspace: string,
+  _candidateWorkspace: string,
 ): Promise<string[]> {
   const issues: string[] = [];
 

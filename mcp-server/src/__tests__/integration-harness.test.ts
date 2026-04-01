@@ -252,7 +252,9 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     expect(board?.states["implement"].parallel_results).toEqual(parallelResults);
 
     // checkConvergence should still work (doesn't break on new field)
-    const convergence = await checkConvergence({ workspace, state_id: "implement" });
+    const convergenceResult = await checkConvergence({ workspace, state_id: "implement" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
     expect(convergence.can_enter).toBe(true); // iteration count=0, max=3
     expect(convergence.iteration_count).toBe(0);
   });
@@ -289,7 +291,9 @@ describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergen
       file_paths: ["a.ts"],
     });
 
-    const convergence = await checkConvergence({ workspace, state_id: "implement" });
+    const convergenceResult = await checkConvergence({ workspace, state_id: "implement" });
+    assertOk(convergenceResult);
+    const convergence = convergenceResult;
     expect(convergence.cannot_fix_items).toHaveLength(3);
 
     // Orchestrator excludes known cannot_fix from next iteration's principle set

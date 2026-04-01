@@ -81,11 +81,12 @@ export async function inspectDebateProgress(
 
   try {
     const store = getExecutionStore(workspace);
-    // Probe each possible round channel up to max_rounds to find populated ones
+    // Probe each possible round channel up to max_rounds to find populated ones.
+    // Use hasMessages (single-row probe) instead of getMessages to avoid loading
+    // all message content just to check existence.
     for (let r = 1; r <= config.max_rounds; r++) {
       const channel = debateChannel(r);
-      const msgs = store.getMessages(channel);
-      if (msgs.length > 0) {
+      if (store.hasMessages(channel)) {
         roundNumbers.push(r);
       }
     }
