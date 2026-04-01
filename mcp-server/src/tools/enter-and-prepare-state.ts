@@ -20,6 +20,7 @@ import { resolveConsultationPrompt } from "../orchestration/consultation-executo
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { gitExec } from "../adapters/git-adapter.ts";
+import { assembleEnrichment } from "../orchestration/context-enrichment.ts";
 import { toolError } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
 import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
@@ -271,12 +272,40 @@ export async function enterAndPrepareState(
     }
   }
 
+  // Step 4.7: Context enrichment (non-blocking)
+  let enrichmentVars: Record<string, string> = {};
+  try {
+    const enrichment = await assembleEnrichment({
+      workspace,
+      stateId: state_id,
+      board: enteredBoard,
+      flow,
+      baseCommit: enteredBoard.base_commit,
+      cwd: input.project_dir ?? process.cwd(),
+      projectDir: input.project_dir,
+    });
+    if (enrichment.content) {
+      enrichmentVars.enrichment = enrichment.content;
+    } else {
+      // Inject empty string so ${enrichment} in prompt templates resolves to ""
+      // rather than appearing as literal "${enrichment}"
+      enrichmentVars.enrichment = "";
+    }
+    if (enrichment.warnings.length > 0) {
+      // Emit warnings but don't block — enrichment warnings are observability only
+      console.error(`enrichment warnings: ${enrichment.warnings.join("; ")}`);
+    }
+  } catch {
+    // Enrichment is non-blocking — degrade gracefully to empty string
+    enrichmentVars.enrichment = "";
+  }
+
   // Step 5: Resolve spawn prompts.
   const spawnResult = await getSpawnPrompt({
     workspace,
     state_id,
     flow,
-    variables: { ...input.variables, ...reviewScopeVars },
+    variables: { ...input.variables, ...reviewScopeVars, ...enrichmentVars },
     items: input.items,
     role: input.role,
     wave: input.wave,
