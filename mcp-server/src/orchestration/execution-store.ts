@@ -8,6 +8,7 @@
  * Replaces: board.json, session.json, progress.md, messages, wave events, log.jsonl
  */
 
+import { existsSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { join, resolve } from 'node:path';
 import type {
@@ -828,6 +829,10 @@ export function getExecutionStore(workspace: string): ExecutionStore {
   const key = resolve(workspace);
   const existing = storeCache.get(key);
   if (existing) return existing;
+
+  if (!existsSync(key)) {
+    throw new Error(`Workspace directory does not exist: ${key}`);
+  }
 
   const dbPath = join(key, CANON_FILES.ORCHESTRATION_DB);
   const db = initExecutionDb(dbPath);

@@ -154,6 +154,30 @@ describe("wrapHandler — catch-all: non-Error throws", () => {
   });
 });
 
+describe("wrapHandler — workspace not found classification", () => {
+  it("converts 'directory does not exist' throw to WORKSPACE_NOT_FOUND", async () => {
+    const handler = wrapHandler(async (_input: unknown) => {
+      throw new Error("Workspace directory does not exist: /some/path");
+    });
+
+    const response = await handler({});
+    const parsed = JSON.parse(response.content[0].text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error_code).toBe("WORKSPACE_NOT_FOUND");
+  });
+
+  it("other errors still return UNEXPECTED", async () => {
+    const handler = wrapHandler(async (_input: unknown) => {
+      throw new Error("some unrelated failure");
+    });
+
+    const response = await handler({});
+    const parsed = JSON.parse(response.content[0].text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error_code).toBe("UNEXPECTED");
+  });
+});
+
 describe("wrapHandler — input passthrough", () => {
   it("passes input to the wrapped handler", async () => {
     let receivedInput: unknown = null;

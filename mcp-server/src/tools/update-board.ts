@@ -3,10 +3,6 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { appendFlowRun, type FlowRunEntry } from "../drift/analytics.ts";
-import { enterState, setBlocked } from "../orchestration/board.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, BoardStateStatus, WorktreeEntry } from "../orchestration/flow-schema.ts";
 import { generateId } from "../utils/id.ts";
 import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
 
@@ -16,12 +12,7 @@ interface UpdateBoardInput {
   state_id?: string;
   next_state_id?: string;
   blocked_reason?: string;
-  wave_data?: {
-    wave: number;
-    wave_total: number;
-    tasks: string[];
-    worktree_entries?: WorktreeEntry[];
-  };
+  wave_data?: { wave: number; wave_total: number; tasks: string[] };
   result?: string;
   artifacts?: string[];
   metadata?: Record<string, string | number | boolean>;
@@ -116,9 +107,6 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
       }
       break;
     }
-  });
-  return board;
-}
 
     case "block": {
       if (!input.state_id) {
@@ -183,16 +171,16 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
     case "complete_flow": {
       const currentEntry = board.states[board.current_state];
       board = {
-        ...boardOrNull,
+        ...board,
         states: {
-          ...boardOrNull.states,
-          [input.state_id!]: {
-            ...stateEntry,
-            status: "skipped",
+          ...board.states,
+          [board.current_state]: {
+            ...currentEntry,
+            status: "done",
+            completed_at: now,
           },
         },
-        skipped: newSkipped,
-        ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
+        blocked: null,
         last_updated: now,
       };
 
@@ -288,9 +276,6 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
       }
       break;
     }
-  });
-  return board;
-}
 
     case "set_wave_progress": {
       if (!input.state_id) {

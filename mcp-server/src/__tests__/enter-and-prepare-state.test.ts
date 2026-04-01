@@ -48,12 +48,11 @@ vi.mock("../orchestration/wave-variables.ts", () => ({
 
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
+import { wrapHandler } from "../utils/wrap-handler.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -663,7 +662,9 @@ describe("enterAndPrepareState", () => {
       store.upsertState("done", { status: "pending", entries: 0 });
 
       // escapeDollarBrace should escape the injection string
-      vi.mocked(escapeDollarBrace).mockImplementation((s: string) => s.replace(/\$\{/g, "\\${"));
+      vi.mocked(escapeDollarBrace).mockImplementation((s: string) =>
+        s.replace(/\$\{/g, "\\${")
+      );
 
       const flow = makeFlowWithConsultations("between");
       vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
@@ -697,5 +698,38 @@ describe("enterAndPrepareState", () => {
       expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
       expect(result.message).toContain(workspace);
     });
+  });
+});
+
+describe("enterAndPrepareState — missing directory", () => {
+  it("returns WORKSPACE_NOT_FOUND via wrapHandler when workspace directory does not exist", async () => {
+    const missingWorkspace = join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-eaps");
+
+    const flow: ResolvedFlow = {
+      name: "test-flow",
+      description: "",
+      entry: "implement",
+      states: {
+        implement: {
+          prompt: "test",
+          roles: [{ name: "implementor" }],
+        },
+      },
+    } as unknown as ResolvedFlow;
+
+    const wrappedEnterAndPrepare = wrapHandler(
+      async (input: Parameters<typeof enterAndPrepareState>[0]) => enterAndPrepareState(input)
+    );
+
+    const response = await wrappedEnterAndPrepare({
+      workspace: missingWorkspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+    });
+    const result = JSON.parse(response.content[0].text);
+
+    expect(result.ok).toBe(false);
+    expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
   });
 });

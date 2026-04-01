@@ -38,6 +38,7 @@ vi.mock("../orchestration/events.ts", () => ({
 }));
 
 import { updateBoard } from "../tools/update-board.ts";
+import { wrapHandler } from "../utils/wrap-handler.ts";
 import { appendFlowRun } from "../drift/analytics.ts";
 
 // ---------------------------------------------------------------------------
@@ -447,5 +448,25 @@ describe("updateBoard — error returns", () => {
       expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
       expect(result.message).toContain(workspace);
     }
+  });
+});
+
+describe("updateBoard — missing directory", () => {
+  it("returns WORKSPACE_NOT_FOUND via wrapHandler when workspace directory does not exist", async () => {
+    const missingWorkspace = join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-update-board");
+
+    const wrappedUpdateBoard = wrapHandler(async (input: Parameters<typeof updateBoard>[0]) =>
+      updateBoard(input)
+    );
+
+    const response = await wrappedUpdateBoard({
+      workspace: missingWorkspace,
+      action: "enter_state",
+      state_id: "research",
+    });
+    const result = JSON.parse(response.content[0].text);
+
+    expect(result.ok).toBe(false);
+    expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
   });
 });

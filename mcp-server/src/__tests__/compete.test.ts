@@ -1,12 +1,12 @@
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  expandCompetitorPrompts,
   buildSynthesizerPrompt,
   type CompeteConfig,
   type CompetitorOutput,
-  expandCompetitorPrompts,
 } from "../orchestration/compete.ts";
 import type { SpawnPromptEntry } from "../tools/get-spawn-prompt.ts";
 
@@ -143,7 +143,6 @@ describe("compete", () => {
 // ---------------------------------------------------------------------------
 
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
@@ -248,7 +247,7 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
         build: {
           type: "wave",
           agent: "canon-implementor",
-          compete: "auto" as const, // non-single with compete
+          compete: "auto" as any, // non-single with compete
           transitions: { done: "done_state" },
         },
         done_state: { type: "terminal" },

@@ -6,21 +6,13 @@ import { scanSourceFiles } from "../graph/scanner.ts";
 import { extractImports, resolveImport, type PathAlias } from "../graph/import-parser.ts";
 import { loadAllPrinciples } from "../matcher.ts";
 import { DriftStore } from "../drift/store.ts";
-import { extractImports, type PathAlias, resolveImport } from "../graph/import-parser.ts";
-import { type CodebaseInsights, generateInsights } from "../graph/insights.ts";
-import { runPipeline } from "../graph/kg-pipeline.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
-import { buildNameMaps, classifyMdNode, inferMdRelations } from "../graph/md-relations.ts";
-import { scanSourceFiles } from "../graph/scanner.ts";
-import { materialize } from "../graph/view-materializer.ts";
-import { loadAllPrinciples } from "../matcher.ts";
-import { atomicWriteFile } from "../utils/atomic-write.ts";
+import { generateInsights, type CodebaseInsights } from "../graph/insights.ts";
 import {
-  buildLayerInferrer,
   deriveSourceDirsFromLayers,
-  loadGraphCompositionConfig,
   loadLayerMappings,
   loadLayerMappingsStrict,
+  buildLayerInferrer,
+  loadGraphCompositionConfig,
 } from "../utils/config.ts";
 import { isNotFound } from "../utils/errors.ts";
 import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.ts";
@@ -112,7 +104,10 @@ async function gitRefExists(cwd: string, ref: string): Promise<boolean> {
 /** Canon directories to scan for .md nodes (agents, flows, templates, principles). */
 const CANON_SCAN_DIRS = ["agents", "flows", "templates", "principles", "commands"];
 
-async function scanProjectFiles(input: CodebaseGraphInput, projectDir: string): Promise<string[]> {
+async function scanProjectFiles(
+  input: CodebaseGraphInput,
+  projectDir: string,
+): Promise<string[]> {
   const explicitSourceDirs = input.source_dirs;
   const configSourceDirs = await deriveSourceDirsFromLayers(projectDir);
   const sourceDirs = explicitSourceDirs || configSourceDirs;
@@ -134,8 +129,10 @@ async function scanProjectFiles(input: CodebaseGraphInput, projectDir: string): 
       includeExtensions: input.include_extensions,
       excludeDirs: input.exclude_dirs,
     });
-    const prefix = input.root_dir === "." || abs ? "" : input.root_dir;
-    baseFiles = prefix ? scanned.map((f) => toPosix(join(prefix, f))) : scanned.map(toPosix);
+    const prefix = (input.root_dir === "." || abs) ? "" : input.root_dir;
+    baseFiles = prefix
+      ? scanned.map((f) => toPosix(join(prefix, f)))
+      : scanned.map(toPosix);
   }
 
   // Scan Canon .md directories that may not be under source_dirs
@@ -157,7 +154,10 @@ async function scanProjectFiles(input: CodebaseGraphInput, projectDir: string): 
 }
 
 /** Detect changed files via git diff or explicit input. */
-async function detectChangedFiles(input: CodebaseGraphInput, projectDir: string): Promise<Set<string>> {
+async function detectChangedFiles(
+  input: CodebaseGraphInput,
+  projectDir: string,
+): Promise<Set<string>> {
   let changedFiles = input.changed_files || [];
   if (changedFiles.length === 0) {
     const branch = await gitCurrentBranch(projectDir);
@@ -174,11 +174,18 @@ async function detectChangedFiles(input: CodebaseGraphInput, projectDir: string)
   return new Set(changedFiles.map(toPosix));
 }
 
-/** Build per-file violation and verdict maps from review data. */
-function buildComplianceMaps(reviews: Awaited<ReturnType<DriftStore["getReviews"]>>): {
-  fileViolations: Map<string, Map<string, number>>;
-  fileVerdicts: Map<string, { timestamp: string; verdict: string }>;
-} {
+/** Build graph nodes from file paths, enriched with compliance data. */
+async function buildNodes(
+  filePaths: string[],
+  inferLayer: (filePath: string) => string,
+  layerColors: Record<string, string>,
+  changedSet: Set<string>,
+  projectDir: string,
+): Promise<{ nodes: GraphNode[]; layerCounts: Map<string, number> }> {
+  const store = new DriftStore(projectDir);
+  const reviews = await store.getReviews();
+
+  // Per-file violation counts and verdicts
   const fileViolations = new Map<string, Map<string, number>>();
   const fileVerdicts = new Map<string, { timestamp: string; verdict: string }>();
   for (const review of reviews) {
@@ -196,62 +203,34 @@ function buildComplianceMaps(reviews: Awaited<ReturnType<DriftStore["getReviews"
       counts.set(v.principle_id, (counts.get(v.principle_id) || 0) + 1);
     }
   }
-  return { fileViolations, fileVerdicts };
-}
-
-/** Create a single GraphNode from a file path using compliance data. */
-function createGraphNode(
-  filePath: string,
-  inferLayer: (filePath: string) => string,
-  layerColors: Record<string, string>,
-  changedSet: Set<string>,
-  fileViolations: Map<string, Map<string, number>>,
-  fileVerdicts: Map<string, { timestamp: string; verdict: string }>,
-): GraphNode {
-  const layer = inferLayer(filePath) || "unknown";
-  const violations = fileViolations.get(filePath);
-  const violationCount = violations ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
-  const topViolations = violations
-    ? Array.from(violations.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([id]) => id)
-    : [];
-
-  const node: GraphNode = {
-    id: filePath,
-    layer,
-    color: layerColors[layer] || FALLBACK_LAYER_COLOR,
-    extension: filePath.split(".").pop() || "",
-    violation_count: violationCount,
-    top_violations: topViolations,
-    last_verdict: fileVerdicts.get(filePath)?.verdict || null,
-    compliance_score: null,
-    changed: changedSet.has(filePath),
-  };
-  const kind = classifyMdNode(filePath);
-  if (kind) node.kind = kind;
-  return node;
-}
-
-/** Build graph nodes from file paths, enriched with compliance data. */
-async function buildNodes(
-  filePaths: string[],
-  inferLayer: (filePath: string) => string,
-  layerColors: Record<string, string>,
-  changedSet: Set<string>,
-  projectDir: string,
-): Promise<{ nodes: GraphNode[]; layerCounts: Map<string, number> }> {
-  const store = new DriftStore(projectDir);
-  const reviews = await store.getReviews();
-  const { fileViolations, fileVerdicts } = buildComplianceMaps(reviews);
 
   const nodes: GraphNode[] = [];
   const layerCounts = new Map<string, number>();
 
   for (const filePath of filePaths) {
-    const node = createGraphNode(filePath, inferLayer, layerColors, changedSet, fileViolations, fileVerdicts);
-    layerCounts.set(node.layer, (layerCounts.get(node.layer) || 0) + 1);
+    const layer = inferLayer(filePath) || "unknown";
+    layerCounts.set(layer, (layerCounts.get(layer) || 0) + 1);
+
+    const violations = fileViolations.get(filePath);
+    const violationCount = violations
+      ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
+    const topViolations = violations
+      ? Array.from(violations.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id)
+      : [];
+
+    const node: GraphNode = {
+      id: filePath,
+      layer,
+      color: layerColors[layer] || FALLBACK_LAYER_COLOR,
+      extension: filePath.split(".").pop() || "",
+      violation_count: violationCount,
+      top_violations: topViolations,
+      last_verdict: fileVerdicts.get(filePath)?.verdict || null,
+      compliance_score: null,
+      changed: changedSet.has(filePath),
+    };
+    const kind = classifyMdNode(filePath);
+    if (kind) node.kind = kind;
     nodes.push(node);
   }
 
@@ -289,7 +268,11 @@ function shouldInspectForComposition(path: string, patterns: string[]): boolean 
   return patterns.some((pattern) => lower.endsWith(pattern.toLowerCase()));
 }
 
-function resolveCompositionTarget(rawRef: string, sourcePath: string, fileSet: Set<string>): string | null {
+function resolveCompositionTarget(
+  rawRef: string,
+  sourcePath: string,
+  fileSet: Set<string>,
+): string | null {
   const normalized = toPosix(rawRef.trim().replace(/^['"]|['"]$/g, ""));
   if (!normalized) return null;
 
@@ -318,73 +301,6 @@ function resolveCompositionTarget(rawRef: string, sourcePath: string, fileSet: S
   return null;
 }
 
-/** Try to add a composition edge to the map, respecting confidence thresholds. */
-function tryAddCompositionEdge(
-  edgesByKey: Map<string, GraphEdge>,
-  filePath: string,
-  rawRef: string,
-  fileSet: Set<string>,
-  confidence: number,
-  minConfidence: number,
-  evidence: string,
-): void {
-  const target = resolveCompositionTarget(rawRef, filePath, fileSet);
-  if (!target || target === filePath) return;
-  if (confidence < minConfidence) return;
-
-  const key = `${filePath}|${target}|composition`;
-  const existing = edgesByKey.get(key);
-  if (!existing || (existing.confidence || 0) < confidence) {
-    edgesByKey.set(key, {
-      source: filePath,
-      target,
-      type: "composition",
-      confidence,
-      evidence: evidence.trim().slice(0, 140),
-      origin: "inferred-llm",
-    });
-  }
-}
-
-/** Extract composition edges from a single file's content using marker and interpolation patterns. */
-function extractCompositionEdgesFromContent(
-  content: string,
-  filePath: string,
-  fileSet: Set<string>,
-  markerRegex: RegExp | null,
-  minConfidence: number,
-  maxRefsPerFile: number,
-  edgesByKey: Map<string, GraphEdge>,
-): void {
-  let refCount = 0;
-
-  if (markerRegex) {
-    markerRegex.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = markerRegex.exec(content)) !== null) {
-      if (refCount >= maxRefsPerFile) return;
-      refCount += 1;
-      tryAddCompositionEdge(edgesByKey, filePath, match[1], fileSet, 0.9, minConfidence, match[0]);
-    }
-  }
-
-  const interpolationRegex = /\{\{\s*([\w./-]+)\s*\}\}/g;
-  let interpolationMatch: RegExpExecArray | null;
-  while ((interpolationMatch = interpolationRegex.exec(content)) !== null) {
-    if (refCount >= maxRefsPerFile) return;
-    refCount += 1;
-    tryAddCompositionEdge(
-      edgesByKey,
-      filePath,
-      interpolationMatch[1],
-      fileSet,
-      0.75,
-      minConfidence,
-      interpolationMatch[0],
-    );
-  }
-}
-
 async function buildCompositionEdges(
   filePaths: string[],
   fileSet: Set<string>,
@@ -396,8 +312,9 @@ async function buildCompositionEdges(
   const markerAlternation = compositionConfig.markers
     .map((marker: string) => marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|");
-  const markerRegex =
-    markerAlternation.length > 0 ? new RegExp(`(?:${markerAlternation})\\s*[:=]\\s*["']?([\\w./-]+)["']?`, "gi") : null;
+  const markerRegex = markerAlternation.length > 0
+    ? new RegExp(`(?:${markerAlternation})\\s*[:=]\\s*["']?([\\w./-]+)["']?`, "gi")
+    : null;
 
   const edgesByKey = new Map<string, GraphEdge>();
   for (const filePath of filePaths) {
@@ -411,15 +328,58 @@ async function buildCompositionEdges(
       throw err;
     }
 
-    extractCompositionEdgesFromContent(
-      content,
-      filePath,
-      fileSet,
-      markerRegex,
-      compositionConfig.min_confidence,
-      compositionConfig.max_refs_per_file,
-      edgesByKey,
-    );
+    let refCount = 0;
+    if (markerRegex) {
+      markerRegex.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = markerRegex.exec(content)) !== null) {
+        if (refCount >= compositionConfig.max_refs_per_file) break;
+        refCount += 1;
+
+        const rawRef = match[1];
+        const target = resolveCompositionTarget(rawRef, filePath, fileSet);
+        if (!target || target === filePath) continue;
+
+        const confidence = 0.9;
+        if (confidence < compositionConfig.min_confidence) continue;
+        const key = `${filePath}|${target}|composition`;
+        const existing = edgesByKey.get(key);
+        if (!existing || (existing.confidence || 0) < confidence) {
+          edgesByKey.set(key, {
+            source: filePath,
+            target,
+            type: "composition",
+            confidence,
+            evidence: match[0].trim().slice(0, 140),
+            origin: "inferred-llm",
+          });
+        }
+      }
+    }
+
+    const interpolationRegex = /\{\{\s*([\w./-]+)\s*\}\}/g;
+    let interpolationMatch: RegExpExecArray | null;
+    while ((interpolationMatch = interpolationRegex.exec(content)) !== null) {
+      if (refCount >= compositionConfig.max_refs_per_file) break;
+      refCount += 1;
+      const rawRef = interpolationMatch[1];
+      const target = resolveCompositionTarget(rawRef, filePath, fileSet);
+      if (!target || target === filePath) continue;
+      const confidence = 0.75;
+      if (confidence < compositionConfig.min_confidence) continue;
+      const key = `${filePath}|${target}|composition`;
+      const existing = edgesByKey.get(key);
+      if (!existing || (existing.confidence || 0) < confidence) {
+        edgesByKey.set(key, {
+          source: filePath,
+          target,
+          type: "composition",
+          confidence,
+          evidence: interpolationMatch[0].trim().slice(0, 140),
+          origin: "inferred-llm",
+        });
+      }
+    }
   }
   return Array.from(edgesByKey.values());
 }
@@ -480,15 +440,15 @@ function enrichNodesWithInsights(
   }
 }
 
-// ── Main entry point helpers ──
+// ── Main entry point ──
 
-/** Load layer mappings with strict-then-fallback strategy. */
-async function loadLayerConfig(projectDir: string): Promise<{
-  layerMappings: Awaited<ReturnType<typeof loadLayerMappingsStrict>>;
-  layerEntries: string[];
-  layerColors: Record<string, string>;
-  inferLayer: ReturnType<typeof buildLayerInferrer>;
-}> {
+export async function codebaseGraph(
+  input: CodebaseGraphInput,
+  projectDir: string,
+  pluginDir: string
+): Promise<CodebaseGraphOutput> {
+  // Load layer mappings — fall back to non-strict defaults when layers are not
+  // configured so the tool always produces output instead of hanging.
   let layerMappings: Awaited<ReturnType<typeof loadLayerMappingsStrict>>;
   try {
     layerMappings = await loadLayerMappingsStrict(projectDir);
@@ -497,36 +457,26 @@ async function loadLayerConfig(projectDir: string): Promise<{
   }
   const layerEntries = Object.keys(layerMappings);
   const layerColors: Record<string, string> = {};
-  for (const layer of layerEntries) layerColors[layer] = colorFromLayerName(layer);
+  for (const layer of layerEntries) {
+    layerColors[layer] = colorFromLayerName(layer);
+  }
   layerColors.unknown = FALLBACK_LAYER_COLOR;
   const inferLayer = buildLayerInferrer(layerMappings);
-  return { layerMappings, layerEntries, layerColors, inferLayer };
-}
 
-/** Build supplemental edges (imports, composition, MD relations). */
-async function buildSupplementalEdges(
-  filePaths: string[],
-  fileSet: Set<string>,
-  projectDir: string,
-): Promise<GraphEdge[]> {
-  const aliases = await loadPathAliases(projectDir);
-  const importEdges = await buildEdges(filePaths, fileSet, aliases, projectDir);
-  const compositionEdges = await buildCompositionEdges(filePaths, fileSet, projectDir);
-  const nameMaps = await buildNameMaps(filePaths, projectDir);
-  const mdEdges = await inferMdRelations(filePaths, fileSet, nameMaps, projectDir);
-  return mergeEdges(importEdges, mergeEdges(compositionEdges, mdEdges));
-}
+  // Step 1: Determine which file paths the caller expects (for scope filtering)
+  const requestedFilePaths = await scanProjectFiles(input, projectDir);
+  const requestedFileSet = new Set(requestedFilePaths);
 
-/** Try the KG pipeline path; returns nodes and edges or null on failure. */
-async function tryPipelineGraph(
-  input: CodebaseGraphInput,
-  projectDir: string,
-  requestedFilePaths: string[],
-  requestedFileSet: Set<string>,
-  inferLayer: (filePath: string) => string,
-  layerColors: Record<string, string>,
-  changedSet: Set<string>,
-): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] } | null> {
+  // Step 2: Detect changed files
+  const changedSet = await detectChangedFiles(input, projectDir);
+
+  // Step 3: Run knowledge graph pipeline to populate/update SQLite DB,
+  // then materialize to get file-level nodes and edges.
+  // Falls back to the legacy regex-based approach if the pipeline errors.
+  let nodes: GraphNode[];
+  let edges: GraphEdge[];
+
+  // Resolve source_dirs for pipeline scoping
   const explicitSourceDirs = input.source_dirs;
   const configSourceDirs = await deriveSourceDirsFromLayers(projectDir);
   const pipelineSourceDirs = explicitSourceDirs || configSourceDirs || undefined;
@@ -543,103 +493,101 @@ async function tryPipelineGraph(
       db.close();
     }
 
-    const filteredNodes = graphData.nodes.filter((n) => requestedFileSet.size === 0 || requestedFileSet.has(n.id));
+    // Filter materialized nodes to only those within the requested scope
+    const filteredNodes = graphData.nodes.filter((n) =>
+      requestedFileSet.size === 0 || requestedFileSet.has(n.id),
+    );
     const filteredNodeSet = new Set(filteredNodes.map((n) => n.id));
-    const filteredEdges = graphData.edges.filter((e) => filteredNodeSet.has(e.source) && filteredNodeSet.has(e.target));
 
-    const supplementEdges = await buildSupplementalEdges(requestedFilePaths, requestedFileSet, projectDir);
+    // Filter edges to only those where both endpoints are in scope
+    const filteredEdges = graphData.edges.filter(
+      (e) => filteredNodeSet.has(e.source) && filteredNodeSet.has(e.target),
+    );
 
+    // Supplement pipeline edges with legacy alias-aware import resolution,
+    // composition edges, and MD-relation inference. These fill in gaps the
+    // SQLite pipeline doesn't yet cover (tsconfig path aliases, composition
+    // marker patterns, markdown cross-references).
+    const aliases = await loadPathAliases(projectDir);
+    const supplementImportEdges = await buildEdges(requestedFilePaths, requestedFileSet, aliases, projectDir);
+    const supplementCompositionEdges = await buildCompositionEdges(requestedFilePaths, requestedFileSet, projectDir);
+    const nameMaps = await buildNameMaps(requestedFilePaths, projectDir);
+    const supplementMdEdges = await inferMdRelations(requestedFilePaths, requestedFileSet, nameMaps, projectDir);
+    const supplementEdges = mergeEdges(supplementImportEdges, mergeEdges(supplementCompositionEdges, supplementMdEdges));
+
+    // Apply compliance overlay and layer colors onto materialized nodes
     const store = new DriftStore(projectDir);
     const reviews = await store.getReviews();
-    const { fileViolations, fileVerdicts } = buildComplianceMaps(reviews);
 
-    const nodes = filteredNodes.map((n) =>
-      createGraphNode(
-        n.id,
-        (id) => inferLayer(id) || n.layer || "unknown",
-        layerColors,
-        changedSet,
-        fileViolations,
-        fileVerdicts,
-      ),
-    );
+    const fileViolations = new Map<string, Map<string, number>>();
+    const fileVerdicts = new Map<string, { timestamp: string; verdict: string }>();
+    for (const review of reviews) {
+      for (const file of review.files) {
+        const existing = fileVerdicts.get(file);
+        if (!existing || review.timestamp > existing.timestamp) {
+          fileVerdicts.set(file, { timestamp: review.timestamp, verdict: review.verdict });
+        }
+      }
+      for (const v of review.violations) {
+        const targetFile = v.file_path || review.files[0];
+        if (!targetFile) continue;
+        if (!fileViolations.has(targetFile)) fileViolations.set(targetFile, new Map());
+        const counts = fileViolations.get(targetFile)!;
+        counts.set(v.principle_id, (counts.get(v.principle_id) || 0) + 1);
+      }
+    }
 
-    const edges = mergeEdges(filteredEdges, supplementEdges);
-    return { nodes, edges };
+    nodes = filteredNodes.map((n) => {
+      const layer = inferLayer(n.id) || n.layer || "unknown";
+      const violations = fileViolations.get(n.id);
+      const violationCount = violations
+        ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
+      const topViolations = violations
+        ? Array.from(violations.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id)
+        : [];
+
+      const node: GraphNode = {
+        id: n.id,
+        layer,
+        color: layerColors[layer] || FALLBACK_LAYER_COLOR,
+        extension: n.extension || n.id.split(".").pop() || "",
+        violation_count: violationCount,
+        top_violations: topViolations,
+        last_verdict: fileVerdicts.get(n.id)?.verdict || null,
+        compliance_score: null,
+        changed: changedSet.has(n.id),
+      };
+
+      const kind = classifyMdNode(n.id);
+      if (kind) node.kind = kind;
+
+      return node;
+    });
+
+    // Merge pipeline edges with supplemental legacy edges (deduplication handled by mergeEdges)
+    edges = mergeEdges(filteredEdges, supplementEdges);
   } catch (pipelineErr) {
+    // Pipeline unavailable (e.g., better-sqlite3 not installed) — fall back
+    // to the legacy scanner-based approach.
     console.warn(`[codebase-graph] pipeline unavailable, using legacy scanner: ${(pipelineErr as Error).message}`);
-    return null;
-  }
-}
 
-/** Build layer metadata from nodes. */
-function buildLayerMetadata(
-  nodes: GraphNode[],
-  layerEntries: string[],
-  layerColors: Record<string, string>,
-): Array<{ name: string; color: string; file_count: number; index: number }> {
-  const layerCounts = new Map<string, number>();
-  for (const node of nodes) layerCounts.set(node.layer, (layerCounts.get(node.layer) || 0) + 1);
-
-  const layerIndex = new Map<string, number>();
-  for (const [idx, layer] of layerEntries.entries()) layerIndex.set(layer, idx);
-  if (layerCounts.has("unknown")) layerIndex.set("unknown", layerEntries.length);
-
-  return Array.from(layerCounts.entries())
-    .map(([name, file_count]) => ({
-      name,
-      color: layerColors[name] || FALLBACK_LAYER_COLOR,
-      file_count,
-      index: layerIndex.get(name) ?? Number.MAX_SAFE_INTEGER,
-    }))
-    .sort((a, b) => a.index - b.index || b.file_count - a.file_count);
-}
-
-// ── Main entry point ──
-
-export async function codebaseGraph(
-  input: CodebaseGraphInput,
-  projectDir: string,
-  pluginDir: string,
-): Promise<CodebaseGraphOutput> {
-  const { layerEntries, layerColors, inferLayer } = await loadLayerConfig(projectDir);
-
-  const requestedFilePaths = await scanProjectFiles(input, projectDir);
-  const requestedFileSet = new Set(requestedFilePaths);
-  const changedSet = await detectChangedFiles(input, projectDir);
-
-  // Try KG pipeline, fall back to legacy scanner
-  let nodes: GraphNode[];
-  let edges: GraphEdge[];
-
-  const pipelineResult = await tryPipelineGraph(
-    input,
-    projectDir,
-    requestedFilePaths,
-    requestedFileSet,
-    inferLayer,
-    layerColors,
-    changedSet,
-  );
-
-  if (pipelineResult) {
-    nodes = pipelineResult.nodes;
-    edges = pipelineResult.edges;
-  } else {
+    const fileSet = requestedFileSet;
     const { nodes: legacyNodes } = await buildNodes(
-      requestedFilePaths,
-      inferLayer,
-      layerColors,
-      changedSet,
-      projectDir,
+      requestedFilePaths, inferLayer, layerColors, changedSet, projectDir,
     );
-    const supplementEdges = await buildSupplementalEdges(requestedFilePaths, requestedFileSet, projectDir);
+    const aliases = await loadPathAliases(projectDir);
+    const importEdges = await buildEdges(requestedFilePaths, fileSet, aliases, projectDir);
+    const compositionEdges = await buildCompositionEdges(requestedFilePaths, fileSet, projectDir);
+    const nameMaps = await buildNameMaps(requestedFilePaths, projectDir);
+    const mdEdges = await inferMdRelations(requestedFilePaths, fileSet, nameMaps, projectDir);
+
     nodes = legacyNodes;
-    edges = supplementEdges;
+    edges = mergeEdges(importEdges, mergeEdges(compositionEdges, mdEdges));
   }
 
-  // Load principles and derive structural violation IDs
+  // Step 4: Load principles and derive structural violation IDs
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
+
   const boundaryPrinciple = allPrinciples.find((p) => p.tags.includes("boundaries"));
   const cyclePrinciple = allPrinciples.find((p) => p.tags.includes("architecture"));
   const structuralIds: StructuralPrincipleIds = {
@@ -647,13 +595,32 @@ export async function codebaseGraph(
     circularDep: cyclePrinciple?.id ?? "circular-dependency",
   };
 
+  // Step 5: Generate insights and enrich nodes with structural violations
   const insights = generateInsights(
     nodes.map((n) => ({ id: n.id, layer: n.layer })),
     edges.map((e) => ({ source: e.source, target: e.target })),
   );
   enrichNodesWithInsights(nodes, insights, structuralIds);
 
-  const layers = buildLayerMetadata(nodes, layerEntries, layerColors);
+  // Step 6: Build layer metadata
+  const layerCounts = new Map<string, number>();
+  for (const node of nodes) {
+    layerCounts.set(node.layer, (layerCounts.get(node.layer) || 0) + 1);
+  }
+
+  const layerIndex = new Map<string, number>();
+  for (const [idx, layer] of layerEntries.entries()) layerIndex.set(layer, idx);
+  if (layerCounts.has("unknown")) {
+    layerIndex.set("unknown", layerEntries.length);
+  }
+  const layers = Array.from(layerCounts.entries())
+    .map(([name, file_count]) => ({
+      name,
+      color: layerColors[name] || FALLBACK_LAYER_COLOR,
+      file_count,
+      index: layerIndex.get(name) ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((a, b) => a.index - b.index || b.file_count - a.file_count);
 
   const principles: Record<string, { title: string; severity: string; summary: string }> = {};
   for (const p of allPrinciples) {
@@ -661,15 +628,11 @@ export async function codebaseGraph(
   }
 
   const fullGraph: CodebaseGraphOutput = {
-    nodes,
-    edges,
-    layers,
-    principles,
-    insights,
+    nodes, edges, layers, principles, insights,
     generated_at: new Date().toISOString(),
   };
 
-  // Persist graph + reverse index
+  // Step 6: Persist graph + reverse index
   const reverseIndex: Record<string, string[]> = {};
   for (const edge of edges) {
     if (!reverseIndex[edge.target]) reverseIndex[edge.target] = [];

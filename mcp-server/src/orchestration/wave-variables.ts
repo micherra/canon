@@ -8,10 +8,10 @@
  * before entering the variables map to prevent unintended prompt injection.
  */
 
+import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { gitExec } from "../adapters/git-adapter.ts";
 import path from "node:path";
-import { gitExec } from "../adapters/git-adapter.ts";
 
 /**
  * Escapes `${` patterns in agent-sourced text to prevent unintended
@@ -47,12 +47,13 @@ export async function resolveWaveVariables(
 ): Promise<Record<string, string>> {
   const plansDir = path.join(workspace, "plans", slug);
 
-  const [wave_plans, wave_summaries, wave_files, all_summaries] = await Promise.all([
-    readWavePlans(plansDir, wave),
-    readWaveSummaries(plansDir, wave),
-    readWaveFiles(plansDir, wave),
-    readAllSummaries(plansDir),
-  ]);
+  const [wave_plans, wave_summaries, wave_files, all_summaries] =
+    await Promise.all([
+      readWavePlans(plansDir, wave),
+      readWaveSummaries(plansDir, wave),
+      readWaveFiles(plansDir, wave),
+      readAllSummaries(plansDir),
+    ]);
 
   const resolvedProjectDir = projectDir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
   const wave_diff = readWaveDiff(resolvedProjectDir);
@@ -82,7 +83,10 @@ async function readWavePlans(plansDir: string, wave: number): Promise<string> {
 
   const contents = await Promise.all(
     taskIds.map((taskId) =>
-      safeReadFile(path.join(plansDir, `${taskId}-PLAN.md`), `wave_plans: plan file for ${taskId}`),
+      safeReadFile(
+        path.join(plansDir, `${taskId}-PLAN.md`),
+        `wave_plans: plan file for ${taskId}`,
+      ),
     ),
   );
 
@@ -105,7 +109,10 @@ async function readWaveSummaries(plansDir: string, wave: number): Promise<string
 
   const contents = await Promise.all(
     taskIds.map((taskId) =>
-      safeReadFile(path.join(plansDir, `${taskId}-SUMMARY.md`), `wave_summaries: summary for ${taskId}`),
+      safeReadFile(
+        path.join(plansDir, `${taskId}-SUMMARY.md`),
+        `wave_summaries: summary for ${taskId}`,
+      ),
     ),
   );
 
@@ -131,13 +138,16 @@ async function readWaveFiles(plansDir: string, wave: number): Promise<string> {
 
   const contents = await Promise.all(
     taskIds.map((taskId) =>
-      safeReadFile(path.join(plansDir, `${taskId}-SUMMARY.md`), `wave_files: summary for ${taskId}`),
+      safeReadFile(
+        path.join(plansDir, `${taskId}-SUMMARY.md`),
+        `wave_files: summary for ${taskId}`,
+      ),
     ),
   );
 
   for (const content of contents) {
     if (content !== null) {
-      for (const p of extractFilePaths(content)) allPaths.add(p);
+      extractFilePaths(content).forEach((p) => allPaths.add(p));
     }
   }
 
@@ -280,7 +290,7 @@ export function extractFilePaths(content: string): string[] {
   const paths = new Set<string>();
 
   // Match backtick-quoted paths: `src/foo/bar.ts`
-  const backtickPattern = /`([a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})`/g;
+  const backtickPattern = /`([a-zA-Z0-9_./\\-]+\.[a-zA-Z]{1,10})`/g;
   let m: RegExpExecArray | null;
   while ((m = backtickPattern.exec(content)) !== null) {
     const candidate = m[1];
@@ -290,7 +300,7 @@ export function extractFilePaths(content: string): string[] {
   }
 
   // Match lines that start with a path-like token (e.g., in "| `path` | created |" table rows)
-  const linePattern = /\|\s*`?([a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})`?\s*\|/g;
+  const linePattern = /\|\s*`?([a-zA-Z0-9_./\\-]+\.[a-zA-Z]{1,10})`?\s*\|/g;
   while ((m = linePattern.exec(content)) !== null) {
     const candidate = m[1].trim();
     if (looksLikeFilePath(candidate)) {
@@ -314,7 +324,10 @@ function looksLikeFilePath(s: string): boolean {
  * Read a file, returning null if it doesn't exist or can't be read.
  * Logs a warning only if warningPrefix is provided.
  */
-async function safeReadFile(filePath: string, warningPrefix: string | null): Promise<string | null> {
+async function safeReadFile(
+  filePath: string,
+  warningPrefix: string | null,
+): Promise<string | null> {
   if (!existsSync(filePath)) {
     if (warningPrefix) {
       console.error(`${warningPrefix}: file not found — ${filePath}`);

@@ -8,8 +8,8 @@
  * 4. getSpawnPrompt leaves ${progress} as literal when flow has no progress field
  */
 
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
@@ -22,14 +22,11 @@ vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn(),
 }));
 
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

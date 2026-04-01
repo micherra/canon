@@ -23,6 +23,14 @@ export function wrapHandler<T>(
       return jsonResponse(result);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
+      if (detail.includes("directory does not exist")) {
+        console.error(`MCP tool error (workspace not found): ${detail}`);
+        return jsonResponse(
+          toolError("WORKSPACE_NOT_FOUND", `Workspace directory does not exist`, false, {
+            detail,
+          }),
+        );
+      }
       console.error(`MCP tool error (unexpected): ${detail}`);
       return jsonResponse(toolError("UNEXPECTED", "An unexpected error occurred"));
     }
