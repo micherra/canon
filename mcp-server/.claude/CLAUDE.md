@@ -277,9 +277,9 @@ src/
 
 | Tool | Purpose |
 |------|---------|
+| `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status and stale sessions before creating; when preflight finds issues, returns `workspace: ""` (empty string) and puts the candidate path in `candidate_workspace` — callers must check `preflight_issues` before using `workspace` |
 | `load_flow` | Load and resolve a flow definition; throws (hard-blocking) on validation errors since ADR-004; reachability issues emit non-blocking warnings |
 | `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
-| `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status, locks, and stale sessions before creating |
 | `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop; briefing injection scans all three breakpoints: `before`, `between`, and `after` |
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress); at `complete_flow` aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
 | `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
