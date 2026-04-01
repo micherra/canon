@@ -38,6 +38,28 @@ export function gitStatus(cwd: string, timeout?: number): ProcessResult {
   return gitExec(["status", "--porcelain"], cwd, timeout);
 }
 
+/**
+ * Convenience wrapper: runs `git log --oneline -n <maxCount> -- <filePaths>`.
+ *
+ * Uses a 5s timeout (not the 30s default) since git log on scoped files is fast.
+ *
+ * SECURITY NOTE: This function returns raw ProcessResult. All agent-sourced text
+ * in the output (e.g., commit messages) must be escaped via escapeDollarBrace
+ * before prompt injection. The caller is responsible for escaping.
+ */
+export function gitLog(
+  filePaths: string[],
+  maxCount: number,
+  cwd: string,
+  timeout?: number,
+): ProcessResult {
+  return gitExec(
+    ["log", "--oneline", `-n`, String(maxCount), "--", ...filePaths],
+    cwd,
+    timeout ?? 5000,
+  );
+}
+
 /** Convenience wrapper: runs `git worktree add`. */
 export function gitWorktreeAdd(
   worktreePath: string,
