@@ -34,6 +34,19 @@ function makeTmpProjectDir(): string {
   return dir;
 }
 
+/** Create a tmp dir with an initialized git repo (clean working tree). */
+async function makeTmpGitRepo(): Promise<string> {
+  const projectDir = makeTmpProjectDir();
+  const { spawnSync } = await import("node:child_process");
+  spawnSync("git", ["init"], { cwd: projectDir });
+  spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir });
+  spawnSync("git", ["config", "user.name", "Test"], { cwd: projectDir });
+  writeFileSync(join(projectDir, "README.md"), "# test");
+  spawnSync("git", ["add", "."], { cwd: projectDir });
+  spawnSync("git", ["commit", "-m", "init"], { cwd: projectDir });
+  return projectDir;
+}
+
 afterEach(() => {
   for (const dir of tmpDirs) {
     rmSync(dir, { recursive: true, force: true });
@@ -60,17 +73,7 @@ describe("init_workspace — preflight checks", () => {
   });
 
   it("returns no issues on clean state with preflight: true", async () => {
-    const projectDir = makeTmpProjectDir();
-
-    // Init a git repo so git status works
-    const { spawnSync } = await import("node:child_process");
-    spawnSync("git", ["init"], { cwd: projectDir });
-    spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir });
-    spawnSync("git", ["config", "user.name", "Test"], { cwd: projectDir });
-    // Create an initial commit so git status is clean
-    writeFileSync(join(projectDir, "README.md"), "# test");
-    spawnSync("git", ["add", "."], { cwd: projectDir });
-    spawnSync("git", ["commit", "-m", "init"], { cwd: projectDir });
+    const projectDir = await makeTmpGitRepo();
 
     const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
 
@@ -80,15 +83,7 @@ describe("init_workspace — preflight checks", () => {
   });
 
   it("reports uncommitted changes when git working tree is dirty", async () => {
-    const projectDir = makeTmpProjectDir();
-
-    const { spawnSync } = await import("node:child_process");
-    spawnSync("git", ["init"], { cwd: projectDir });
-    spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir });
-    spawnSync("git", ["config", "user.name", "Test"], { cwd: projectDir });
-    writeFileSync(join(projectDir, "README.md"), "# test");
-    spawnSync("git", ["add", "."], { cwd: projectDir });
-    spawnSync("git", ["commit", "-m", "init"], { cwd: projectDir });
+    const projectDir = await makeTmpGitRepo();
 
     // Create dirty state
     writeFileSync(join(projectDir, "dirty.txt"), "uncommitted");
@@ -101,15 +96,7 @@ describe("init_workspace — preflight checks", () => {
   });
 
   it("returns empty workspace and candidate_workspace when preflight has issues", async () => {
-    const projectDir = makeTmpProjectDir();
-
-    const { spawnSync } = await import("node:child_process");
-    spawnSync("git", ["init"], { cwd: projectDir });
-    spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir });
-    spawnSync("git", ["config", "user.name", "Test"], { cwd: projectDir });
-    writeFileSync(join(projectDir, "README.md"), "# test");
-    spawnSync("git", ["add", "."], { cwd: projectDir });
-    spawnSync("git", ["commit", "-m", "init"], { cwd: projectDir });
+    const projectDir = await makeTmpGitRepo();
 
     // Create dirty state
     writeFileSync(join(projectDir, "dirty.txt"), "uncommitted");
@@ -127,15 +114,7 @@ describe("init_workspace — preflight checks", () => {
   });
 
   it("workspace contains path and candidate_workspace is undefined when preflight passes", async () => {
-    const projectDir = makeTmpProjectDir();
-
-    const { spawnSync } = await import("node:child_process");
-    spawnSync("git", ["init"], { cwd: projectDir });
-    spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir });
-    spawnSync("git", ["config", "user.name", "Test"], { cwd: projectDir });
-    writeFileSync(join(projectDir, "README.md"), "# test");
-    spawnSync("git", ["add", "."], { cwd: projectDir });
-    spawnSync("git", ["commit", "-m", "init"], { cwd: projectDir });
+    const projectDir = await makeTmpGitRepo();
 
     const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
 
@@ -159,9 +138,8 @@ describe("init_workspace — preflight checks", () => {
     spawnSync("git", ["init"], { cwd: projectDir });
     spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: projectDir });
     spawnSync("git", ["config", "user.name", "Test"], { cwd: projectDir });
-    writeFileSync(join(projectDir, "README.md"), "# test");
     spawnSync("git", ["add", "."], { cwd: projectDir });
-    spawnSync("git", ["commit", "-m", "init"], { cwd: projectDir });
+    spawnSync("git", ["commit", "-m", "init", "--allow-empty"], { cwd: projectDir });
 
     const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
 
