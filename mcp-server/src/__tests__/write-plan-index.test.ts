@@ -282,3 +282,64 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
     expect(parseTaskIdsForWave(content, 2)).toEqual(["ALL_CAPS_ID"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// ADR-004 acceptance: write_plan_index + parseTaskIdsForWave (dc-05, dc-06)
+// ---------------------------------------------------------------------------
+
+describe("ADR-004 acceptance: write_plan_index round-trip (dc-05)", () => {
+  it("produces INDEX.md that parseTaskIdsForWave can parse for multi-wave plans", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
+
+    const result = await writePlanIndex({
+      workspace: tmpDir,
+      slug: "test-slug",
+      tasks: [
+        { task_id: "t-01", wave: 1, files: ["a.ts"] },
+        { task_id: "t-02", wave: 1, files: ["b.ts"] },
+        { task_id: "t-03", wave: 2, depends_on: ["t-01", "t-02"] },
+      ],
+    });
+
+    assertOk(result);
+    const content = await readFile(result.path, "utf-8");
+
+    const wave1 = parseTaskIdsForWave(content, 1);
+    const wave2 = parseTaskIdsForWave(content, 2);
+
+    expect(wave1).toEqual(["t-01", "t-02"]);
+    expect(wave2).toEqual(["t-03"]);
+  });
+});
+
+describe("ADR-004 acceptance: parseTaskIdsForWave zero-task guard (dc-06)", () => {
+  it("returns empty array when INDEX.md has no tasks for the requested wave (zero-task guard)", () => {
+    // The zero-task guard: parseTaskIdsForWave returns [] when the requested wave
+    // has no entries — callers must handle this to avoid spawning zero agents.
+    const content = `## Plan Index: test\n\n| Task | Wave |\n|------|------|\n| t-01 | 1 |\n`;
+    expect(parseTaskIdsForWave(content, 2)).toEqual([]);
+    expect(parseTaskIdsForWave(content, 99)).toEqual([]);
+  });
+
+  it("returns empty array for completely empty INDEX.md content", () => {
+    expect(parseTaskIdsForWave("", 1)).toEqual([]);
+  });
+
+  it("writePlanIndex with empty tasks array produces parseable INDEX.md with wave_count 0", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
+
+    const result = await writePlanIndex({
+      workspace: tmpDir,
+      slug: "empty-slug",
+      tasks: [],
+    });
+
+    assertOk(result);
+    expect(result.task_count).toBe(0);
+    expect(result.wave_count).toBe(0);
+
+    const content = await readFile(result.path, "utf-8");
+    // No tasks in any wave
+    expect(parseTaskIdsForWave(content, 1)).toEqual([]);
+  });
+});
