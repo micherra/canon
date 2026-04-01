@@ -14,7 +14,7 @@ Most AI coding agents are capable — but unstructured. Without Canon, common pa
 - **Knowledge doesn't accumulate.** Conversations are stateless. Decisions, conventions, and review findings disappear. Nothing improves over time.
 - **One approach for everything.** A quick bug fix and a large migration get the same treatment: one prompt, one agent, one shot.
 
-Canon addresses each of these. You define principles — rules, opinions, and conventions — and Canon loads the relevant ones automatically for every task. Complex work is broken into phases (research → design → implement → test → review) with specialist agents at each step. Principles are enforced during implementation, not just at review. Review findings and principle violations accumulate across sessions, and `/canon:learn` surfaces improvements. Workflows scale from a quick single-agent fix to a multi-wave epic, selected automatically.
+Canon addresses each of these. You define principles — rules, opinions, and conventions — and Canon loads the relevant ones automatically for every task. Complex work is broken into phases (research → design → implement → test → review) with specialist agents at each step. Principles are enforced during implementation, not just at review. Review findings and principle violations accumulate across sessions, and `/canon:learn` surfaces improvements. Workflows scale from a quick hotfix to a multi-wave epic, selected automatically.
 
 ---
 
@@ -133,14 +133,14 @@ No flags, no flow names, no configuration needed. Canon auto-detects the right a
 
 | What you say | What happens |
 |-------------|-------------|
-| "The login page is broken" | Single-agent fast path — diagnose, fix, verify |
+| "The login page is broken" | Quick fix or hotfix depending on urgency — diagnose, fix, verify |
 | "Refactor the auth middleware" | Analyze, restructure with test verification, review |
 | "Migrate from Express to Hono" | Research, staged migration with rollback planning, security check, review |
 | "Rebuild the notification system" | Epic: parallel research, design, adaptive wave implementation, test, security, review |
 | "How does the payment system work?" | Research and synthesize — no code changes |
 | "Improve test coverage for the API layer" | Scan coverage gaps, write tests, fix revealed bugs, review |
 
-You can also steer Canon naturally: "skip research", "just plan, don't implement", "this is urgent".
+You can also steer Canon naturally: "skip research", "just plan, don't implement", "this is urgent", "use a quick fix".
 
 ---
 
@@ -222,7 +222,7 @@ Analyzes your accumulated review data to suggest principle improvements: severit
 
 **Principles** are the rules Canon enforces. They live in `.canon/principles/` and are matched to code by layer and file pattern. You can write project-specific principles that override built-ins.
 
-**Flows** are the workflows Canon picks from automatically — refactor, feature, migrate, epic, explore, test-gap, review-only, security-audit, and adopt (run automatically at the end of `init`). Small fixes use a single-agent fast path (ADR-009). You don't need to know which one is running; Canon selects based on scope and urgency.
+**Flows** are the workflows Canon picks from automatically — hotfix, quick-fix, refactor, feature, migrate, epic, explore, test-gap, review-only, security-audit, and adopt (run automatically at the end of `init`). You don't need to know which one is running; Canon selects based on scope and urgency.
 
 **Agents** are specialists Canon dispatches — Researcher, Architect, Implementor, Tester, Reviewer, Security, and others. Each runs in its own context with relevant principles loaded. You see their output but never manage them directly.
 
