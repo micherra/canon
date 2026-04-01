@@ -43,6 +43,8 @@ export interface SpawnPromptEntry {
   role?: string;
   item?: TaskItem;
   template_paths: string[];
+  isolation?: "worktree";
+  worktree_path?: string;
 }
 
 interface SpawnPromptResult {
@@ -356,7 +358,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
       const waveItems = items ?? [];
       for (const item of waveItems) {
         const prompt = substituteItem(basePrompt, item);
-        prompts.push({ agent, prompt, item, template_paths: paths });
+        prompts.push({ agent, prompt, item, template_paths: paths, isolation: "worktree" });
       }
       break;
     }
@@ -372,13 +374,13 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
             file_count: cluster.files.length,
           };
           const prompt = substituteItem(basePrompt, clusterItem);
-          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
+          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths, isolation: "worktree" });
         }
       } else {
         const perItems = items ?? [];
         for (const item of perItems) {
           const prompt = substituteItem(basePrompt, item);
-          prompts.push({ agent, prompt, item, template_paths: paths });
+          prompts.push({ agent, prompt, item, template_paths: paths, isolation: "worktree" });
         }
       }
       break;

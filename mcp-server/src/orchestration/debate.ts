@@ -228,7 +228,7 @@ export async function buildDebateSummary(workspace: string, channel: string): Pr
   const rounds = new Map<number, Message[]>();
   for (const msg of messages) {
     const roundMatch = msg.from.match(/round-(\d+)/i);
-    const roundNum = roundMatch ? parseInt(roundMatch[1], 10) : 0;
+    const roundNum = channelRoundNum ?? (roundMatch ? parseInt(roundMatch[1], 10) : 0);
     if (!rounds.has(roundNum)) rounds.set(roundNum, []);
     rounds.get(roundNum)!.push(msg);
   }

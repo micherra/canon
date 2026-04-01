@@ -37,3 +37,14 @@ export function gitDiff(args: string[], cwd: string, timeout?: number): ProcessR
 export function gitStatus(cwd: string, timeout?: number): ProcessResult {
   return gitExec(["status", "--porcelain"], cwd, timeout);
 }
+
+/** Convenience wrapper: runs `git worktree add`. */
+export function gitWorktreeAdd(
+  worktreePath: string,
+  branchName: string,
+  baseCommit: string,
+  cwd: string,
+  timeout?: number,
+): ProcessResult {
+  return gitExec(["worktree", "add", worktreePath, "-b", branchName, baseCommit], cwd, timeout);
+}

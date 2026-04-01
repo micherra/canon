@@ -14,9 +14,10 @@ import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { z } from "zod";
+import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import { join } from "path";
-import { gitStatus } from "../adapters/git-adapter.ts";
+import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
 
 interface InitWorkspaceInput {
   flow_name: string;
@@ -37,6 +38,8 @@ interface InitWorkspaceResult {
   created: boolean;
   resume_state?: string;
   preflight_issues?: string[];
+  worktree_path?: string;
+  worktree_branch?: string;
 }
 
 /**
@@ -159,6 +162,8 @@ export async function initWorkspaceFlow(
 
     // Only resume if the session is active
     if (session && session.status === "active" && board) {
+      const worktreePath = join(projectDir, ".canon", "worktrees", session.slug);
+      const worktreeExists = existsSync(worktreePath);
       return {
         workspace: candidateWorkspace,
         slug: session.slug,
@@ -166,6 +171,8 @@ export async function initWorkspaceFlow(
         session,
         created: false,
         resume_state: board.current_state,
+        worktree_path: worktreeExists ? worktreePath : undefined,
+        worktree_branch: worktreeExists ? `canon-build/${session.slug}` : undefined,
       };
     }
   } catch (err) {
@@ -283,5 +290,22 @@ export async function initWorkspaceFlow(
   // Seed progress
   store.appendProgress(`## Progress: ${input.task}`);
 
-  return { workspace, slug, board, session, created: true };
+  // Create worktree for isolated builds (graceful fallback on failure)
+  let actualWorktreePath: string | undefined;
+  let actualWorktreeBranch: string | undefined;
+  const worktreePath = join(projectDir, ".canon", "worktrees", slug);
+  const worktreeBranch = `canon-build/${slug}`;
+  const wtResult = gitWorktreeAdd(worktreePath, worktreeBranch, input.base_commit, projectDir);
+  if (wtResult.ok) {
+    actualWorktreePath = worktreePath;
+    actualWorktreeBranch = worktreeBranch;
+    session.worktree_path = worktreePath;
+    session.worktree_branch = worktreeBranch;
+  }
+
+  return {
+    workspace, slug, board, session, created: true,
+    worktree_path: actualWorktreePath,
+    worktree_branch: actualWorktreeBranch,
+  };
 }
