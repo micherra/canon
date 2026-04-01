@@ -195,6 +195,36 @@ export interface FileBlastRadiusResult {
   depth: number;
 }
 
+// ---------------------------------------------------------------------------
+// File Metrics Types
+// ---------------------------------------------------------------------------
+
+/**
+ * A layer violation where a file imports from a layer it is not allowed to
+ * depend on per the clean-architecture layer rules.
+ */
+export interface LayerViolation {
+  target: string;
+  source_layer: string;
+  target_layer: string;
+}
+
+/**
+ * Full structural metrics for a single file, computed from SQL aggregates
+ * over file_edges and enriched with hub/cycle/violation data.
+ */
+export interface FileMetrics {
+  in_degree: number;
+  out_degree: number;
+  is_hub: boolean;
+  in_cycle: boolean;
+  cycle_peers: string[];
+  layer: string;
+  layer_violation_count: number;
+  layer_violations: LayerViolation[];
+  impact_score: number;
+}
+
 /** Matches the `summaries` table. `summary_id` is undefined before DB insert. */
 export interface SummaryRow {
   summary_id?: number;

@@ -195,7 +195,7 @@ registerToolWithUi(
   "codebase_graph",
   "ui://canon/codebase-graph",
   "Codebase Graph",
-  "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, violations, insights).",
+  "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
   {
     root_dir: z
       .string()
@@ -245,7 +245,7 @@ server.registerTool(
   "store_summaries",
   {
     description:
-      "Store file summaries to .canon/summaries.json. Merges with existing summaries so you can generate them incrementally.",
+      "Store file summaries to the KG SQLite database. Summaries are written incrementally — calling multiple times is safe.",
     inputSchema: {
       summaries: z
         .array(

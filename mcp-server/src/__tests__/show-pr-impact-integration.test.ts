@@ -43,6 +43,11 @@ vi.mock("../graph/kg-blast-radius.ts", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
+// Mock KgQuery so buildSubgraph doesn't need a real SQLite DB
+vi.mock("../graph/kg-query.ts", () => ({
+  KgQuery: vi.fn(),
+}));
+
 vi.mock("../tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
@@ -51,6 +56,7 @@ import { existsSync } from "node:fs";
 import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
+import { KgQuery } from "../graph/kg-query.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
@@ -296,6 +302,9 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(false);
     vi.mocked(initDatabase).mockReset();
     vi.mocked(analyzeBlastRadius).mockReset();
+    vi.mocked(KgQuery).mockReset();
+    // Default KgQuery mock: getSubgraph returns empty
+    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockReturnValue({ nodes: [], edges: [] });
     vi.mocked(getPrReviewData).mockReset();
     vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
@@ -304,6 +313,17 @@ describe("showPrImpact — subgraph building gaps", () => {
     await rm(tmpDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
+
+  // Helper to configure KgQuery to return the given nodes/edges for paths in the inclusion set
+  function mockKgSubgraph(nodes: Array<{ path: string; layer: string }>, edges: Array<{ source: string; target: string }> = []) {
+    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockImplementation((paths: string[]) => {
+      const pathSet = new Set(paths);
+      const filteredNodes = nodes.filter((n) => pathSet.has(n.path)).map((n) => ({ ...n, file_id: 1 }));
+      const nodeIds = new Set(filteredNodes.map((n) => n.path));
+      const filteredEdges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+      return { nodes: filteredNodes, edges: filteredEdges };
+    });
+  }
 
   // -------------------------------------------------------------------------
   // Gap: unknown layer name → #888888 color fallback in layers array
@@ -318,16 +338,12 @@ describe("showPrImpact — subgraph building gaps", () => {
       }),
     );
 
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify({
-        nodes: [{ id: "src/exotic.ts", layer: "custom-exotic-layer", violation_count: 0 }],
-        edges: [],
-      }),
-      "utf-8",
-    );
-
-    vi.mocked(existsSync).mockReturnValue(false);
+    // KG is present and KgQuery returns the exotic file
+    vi.mocked(existsSync).mockReturnValue(true);
+    const mockDb = { close: vi.fn() };
+    vi.mocked(initDatabase).mockReturnValue(mockDb as never);
+    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    mockKgSubgraph([{ path: "src/exotic.ts", layer: "custom-exotic-layer" }]);
 
     const result = await showPrImpact(tmpDir);
 
@@ -354,19 +370,14 @@ describe("showPrImpact — subgraph building gaps", () => {
       }),
     );
 
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify({
-        nodes: [
-          { id: "src/tools/foo.ts", layer: "tools", violation_count: 0 },
-          { id: "src/utils/bar.ts", layer: "utils", violation_count: 0 },
-        ],
-        edges: [],
-      }),
-      "utf-8",
-    );
-
-    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(existsSync).mockReturnValue(true);
+    const mockDb = { close: vi.fn() };
+    vi.mocked(initDatabase).mockReturnValue(mockDb as never);
+    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    mockKgSubgraph([
+      { path: "src/tools/foo.ts", layer: "tools" },
+      { path: "src/utils/bar.ts", layer: "utils" },
+    ]);
 
     const result = await showPrImpact(tmpDir);
 
@@ -390,18 +401,6 @@ describe("showPrImpact — subgraph building gaps", () => {
       }),
     );
 
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify({
-        nodes: [
-          { id: "src/changed.ts", layer: "tools", violation_count: 0 },
-          { id: "src/affected.ts", layer: "tools", violation_count: 0 },
-        ],
-        edges: [],
-      }),
-      "utf-8",
-    );
-
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
@@ -420,6 +419,10 @@ describe("showPrImpact — subgraph building gaps", () => {
         },
       ],
     });
+    mockKgSubgraph([
+      { path: "src/changed.ts", layer: "tools" },
+      { path: "src/affected.ts", layer: "tools" },
+    ]);
 
     const result = await showPrImpact(tmpDir);
 
@@ -443,24 +446,21 @@ describe("showPrImpact — subgraph building gaps", () => {
       }),
     );
 
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify({
-        nodes: [
-          { id: "src/a.ts", layer: "tools", violation_count: 0 },
-          { id: "src/b.ts", layer: "tools", violation_count: 0 }, // not in review or blast radius
-        ],
-        edges: [
-          // Both endpoints in subgraph
-          { source: "src/a.ts", target: "src/a.ts", confidence: 1 },
-          // src/b.ts is NOT in the subgraph inclusion set
-          { source: "src/a.ts", target: "src/b.ts", confidence: 1 },
-        ],
-      }),
-      "utf-8",
+    vi.mocked(existsSync).mockReturnValue(true);
+    const mockDb = { close: vi.fn() };
+    vi.mocked(initDatabase).mockReturnValue(mockDb as never);
+    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    // KgQuery returns src/a.ts in the subgraph; src/b.ts is not in paths so it's excluded
+    mockKgSubgraph(
+      [
+        { path: "src/a.ts", layer: "tools" },
+        // src/b.ts deliberately omitted — it's not in the review files or blast radius
+      ],
+      [
+        { source: "src/a.ts", target: "src/a.ts" }, // self-edge within subgraph
+        { source: "src/a.ts", target: "src/b.ts" }, // edge leaving subgraph — should be excluded
+      ],
     );
-
-    vi.mocked(existsSync).mockReturnValue(false);
 
     const result = await showPrImpact(tmpDir);
 
@@ -474,10 +474,10 @@ describe("showPrImpact — subgraph building gaps", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Gap: subgraph with no nodes in graph-data.json matching review files
+  // Gap: subgraph with no nodes in KG matching review files
   // -------------------------------------------------------------------------
 
-  it("returns empty subgraph when no graph nodes match review files", async () => {
+  it("returns empty subgraph when no KG nodes match review files", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(
       makeReview({
@@ -486,15 +486,7 @@ describe("showPrImpact — subgraph building gaps", () => {
       }),
     );
 
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify({
-        nodes: [{ id: "src/other.ts", layer: "tools", violation_count: 0 }],
-        edges: [],
-      }),
-      "utf-8",
-    );
-
+    // KG is absent → buildSubgraph returns empty
     vi.mocked(existsSync).mockReturnValue(false);
 
     const result = await showPrImpact(tmpDir);
@@ -517,20 +509,15 @@ describe("showPrImpact — subgraph building gaps", () => {
       }),
     );
 
-    await writeFile(
-      join(tmpDir, ".canon", "graph-data.json"),
-      JSON.stringify({
-        nodes: [
-          { id: "src/a.ts", layer: "tools", violation_count: 0 },
-          { id: "src/b.ts", layer: "tools", violation_count: 0 },
-          { id: "src/c.ts", layer: "utils", violation_count: 0 },
-        ],
-        edges: [],
-      }),
-      "utf-8",
-    );
-
-    vi.mocked(existsSync).mockReturnValue(false);
+    vi.mocked(existsSync).mockReturnValue(true);
+    const mockDb = { close: vi.fn() };
+    vi.mocked(initDatabase).mockReturnValue(mockDb as never);
+    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    mockKgSubgraph([
+      { path: "src/a.ts", layer: "tools" },
+      { path: "src/b.ts", layer: "tools" },
+      { path: "src/c.ts", layer: "utils" },
+    ]);
 
     const result = await showPrImpact(tmpDir);
 

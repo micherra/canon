@@ -7,7 +7,7 @@
 
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { KgQuery } from "../graph/kg-query.ts";
+import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { EntityRow, FileRow } from "../graph/kg-types.ts";
@@ -394,5 +394,575 @@ describe("KgQuery.getFileBlastRadius()", () => {
     expect(results.length).toBe(1);
     expect(results[0].layer).toBe("api");
     expect(results[0].language).toBe("typescript");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getFileDegrees
+// ---------------------------------------------------------------------------
+
+describe("KgQuery.getFileDegrees()", () => {
+  let db: Database.Database;
+  let store: KgStore;
+  let query: KgQuery;
+
+  beforeEach(() => {
+    db = initDatabase(":memory:");
+    store = new KgStore(db);
+    query = new KgQuery(db);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns correct in_degree and out_degree for a file with known edges", () => {
+    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
+    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
+    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "domain" }));
+
+    // A imports B and C (out_degree = 2)
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileC.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    // B also imports C (so C has in_degree = 2)
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const degreesA = query.getFileDegrees(fileA.file_id!);
+    expect(degreesA.in_degree).toBe(0);
+    expect(degreesA.out_degree).toBe(2);
+
+    const degreesB = query.getFileDegrees(fileB.file_id!);
+    expect(degreesB.in_degree).toBe(1);
+    expect(degreesB.out_degree).toBe(1);
+
+    const degreesC = query.getFileDegrees(fileC.file_id!);
+    expect(degreesC.in_degree).toBe(2);
+    expect(degreesC.out_degree).toBe(0);
+  });
+
+  test("returns zero degrees for a file with no edges", () => {
+    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
+    const degrees = query.getFileDegrees(fileA.file_id!);
+    expect(degrees.in_degree).toBe(0);
+    expect(degrees.out_degree).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAllFileDegrees
+// ---------------------------------------------------------------------------
+
+describe("KgQuery.getAllFileDegrees()", () => {
+  let db: Database.Database;
+  let store: KgStore;
+  let query: KgQuery;
+
+  beforeEach(() => {
+    db = initDatabase(":memory:");
+    store = new KgStore(db);
+    query = new KgQuery(db);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns degree map matching manual count", () => {
+    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
+    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
+    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+
+    // A -> B, A -> C, B -> C
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileC.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const map = query.getAllFileDegrees();
+
+    expect(map.get(fileA.file_id!)).toEqual({ in_degree: 0, out_degree: 2 });
+    expect(map.get(fileB.file_id!)).toEqual({ in_degree: 1, out_degree: 1 });
+    expect(map.get(fileC.file_id!)).toEqual({ in_degree: 2, out_degree: 0 });
+  });
+
+  test("returns empty map for DB with no edges", () => {
+    const map = query.getAllFileDegrees();
+    expect(map.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getFileAdjacencyList
+// ---------------------------------------------------------------------------
+
+describe("KgQuery.getFileAdjacencyList()", () => {
+  let db: Database.Database;
+  let store: KgStore;
+  let query: KgQuery;
+
+  beforeEach(() => {
+    db = initDatabase(":memory:");
+    store = new KgStore(db);
+    query = new KgQuery(db);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns correct adjacency structure", () => {
+    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
+    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
+    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+
+    // A -> B, A -> C
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileC.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const adj = query.getFileAdjacencyList();
+
+    const neighborsA = adj.get(fileA.file_id!);
+    expect(neighborsA).toBeDefined();
+    expect(neighborsA).toContain(fileB.file_id!);
+    expect(neighborsA).toContain(fileC.file_id!);
+    // B has no outgoing edges, so it should not be in the map
+    expect(adj.has(fileB.file_id!)).toBe(false);
+  });
+
+  test("returns empty map when no edges exist", () => {
+    const adj = query.getFileAdjacencyList();
+    expect(adj.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getFileMetrics
+// ---------------------------------------------------------------------------
+
+describe("KgQuery.getFileMetrics()", () => {
+  let db: Database.Database;
+  let store: KgStore;
+  let query: KgQuery;
+
+  beforeEach(() => {
+    db = initDatabase(":memory:");
+    store = new KgStore(db);
+    query = new KgQuery(db);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns null for a nonexistent file path", () => {
+    const result = query.getFileMetrics("src/nonexistent.ts");
+    expect(result).toBeNull();
+  });
+
+  test("returns FileMetrics with correct values for a basic file", () => {
+    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
+    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "shared" }));
+
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const metrics = query.getFileMetrics("src/A.ts");
+    expect(metrics).not.toBeNull();
+    expect(metrics!.in_degree).toBe(0);
+    expect(metrics!.out_degree).toBe(1);
+    expect(metrics!.layer).toBe("domain");
+    expect(metrics!.is_hub).toBe(false);
+    expect(metrics!.in_cycle).toBe(false);
+    expect(metrics!.cycle_peers).toEqual([]);
+    expect(metrics!.layer_violations).toEqual([]);
+    expect(metrics!.layer_violation_count).toBe(0);
+    expect(typeof metrics!.impact_score).toBe("number");
+  });
+
+  test("returns FileMetrics for a hub file (many in_degree)", () => {
+    // Create a shared file that many files import — will be a hub
+    const sharedFile = store.upsertFile(makeFileRow({ path: "src/shared.ts", layer: "shared" }));
+    // Create 12 files that all import shared.ts (top 10 by degree makes it a hub)
+    for (let i = 0; i < 12; i++) {
+      const f = store.upsertFile(makeFileRow({ path: `src/module${i}.ts`, layer: "domain" }));
+      store.insertFileEdge({
+        source_file_id: f.file_id!,
+        target_file_id: sharedFile.file_id!,
+        edge_type: "imports",
+        confidence: 1.0,
+        evidence: null,
+        relation: null,
+      });
+    }
+
+    const hubMaps = computeFileInsightMaps(db);
+    const metrics = query.getFileMetrics("src/shared.ts", {
+      hubPaths: hubMaps.hubPaths,
+      cycleMemberPaths: hubMaps.cycleMemberPaths,
+      layerViolationsByPath: hubMaps.layerViolationsByPath,
+    });
+
+    expect(metrics).not.toBeNull();
+    expect(metrics!.in_degree).toBe(12);
+    expect(metrics!.is_hub).toBe(true);
+  });
+
+  test("returns FileMetrics for a cycle member", () => {
+    const fileA = store.upsertFile(makeFileRow({ path: "src/cycle-a.ts", layer: "domain" }));
+    const fileB = store.upsertFile(makeFileRow({ path: "src/cycle-b.ts", layer: "domain" }));
+
+    // A -> B and B -> A (cycle)
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: fileA.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const maps = computeFileInsightMaps(db);
+    const metrics = query.getFileMetrics("src/cycle-a.ts", {
+      cycleMemberPaths: maps.cycleMemberPaths,
+    });
+
+    expect(metrics).not.toBeNull();
+    expect(metrics!.in_cycle).toBe(true);
+    expect(metrics!.cycle_peers).toContain("src/cycle-b.ts");
+  });
+
+  test("returns FileMetrics with layer violations", () => {
+    // shared -> domain is a violation (shared should not depend on domain)
+    const sharedFile = store.upsertFile(makeFileRow({ path: "src/shared.ts", layer: "shared" }));
+    const domainFile = store.upsertFile(makeFileRow({ path: "src/domain.ts", layer: "domain" }));
+
+    store.insertFileEdge({
+      source_file_id: sharedFile.file_id!,
+      target_file_id: domainFile.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const maps = computeFileInsightMaps(db);
+    const metrics = query.getFileMetrics("src/shared.ts", {
+      layerViolationsByPath: maps.layerViolationsByPath,
+    });
+
+    expect(metrics).not.toBeNull();
+    expect(metrics!.layer_violations.length).toBeGreaterThan(0);
+    expect(metrics!.layer_violation_count).toBeGreaterThan(0);
+    expect(metrics!.layer_violations[0].target).toBe("src/domain.ts");
+    expect(metrics!.layer_violations[0].source_layer).toBe("shared");
+    expect(metrics!.layer_violations[0].target_layer).toBe("domain");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getKgFreshnessMs
+// ---------------------------------------------------------------------------
+
+describe("KgQuery.getKgFreshnessMs()", () => {
+  let db: Database.Database;
+  let store: KgStore;
+  let query: KgQuery;
+
+  beforeEach(() => {
+    db = initDatabase(":memory:");
+    store = new KgStore(db);
+    query = new KgQuery(db);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns null for an empty DB", () => {
+    const result = query.getKgFreshnessMs();
+    expect(result).toBeNull();
+  });
+
+  test("returns reasonable ms value for a DB with known last_indexed_at", () => {
+    const now = Date.now();
+    // Insert a file with a recent last_indexed_at
+    store.upsertFile({
+      ...makeFileRow({ path: "src/A.ts" }),
+      last_indexed_at: now - 5000, // 5 seconds ago
+    });
+
+    const freshness = query.getKgFreshnessMs();
+    expect(freshness).not.toBeNull();
+    // Freshness should be approximately 5000ms (within a 2-second tolerance for test execution)
+    expect(freshness).toBeGreaterThanOrEqual(5000);
+    expect(freshness).toBeLessThan(10000);
+  });
+
+  test("returns freshness based on OLDEST file (MIN last_indexed_at)", () => {
+    const now = Date.now();
+    // One very old file and one recent file
+    store.upsertFile({
+      ...makeFileRow({ path: "src/old.ts" }),
+      last_indexed_at: now - 60000, // 60 seconds ago
+    });
+    store.upsertFile({
+      ...makeFileRow({ path: "src/new.ts" }),
+      last_indexed_at: now - 1000, // 1 second ago
+    });
+
+    const freshness = query.getKgFreshnessMs();
+    expect(freshness).not.toBeNull();
+    // Should use the MIN (oldest), so >= 60000ms
+    expect(freshness).toBeGreaterThanOrEqual(60000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getSubgraph
+// ---------------------------------------------------------------------------
+
+describe("KgQuery.getSubgraph()", () => {
+  let db: Database.Database;
+  let store: KgStore;
+  let query: KgQuery;
+
+  beforeEach(() => {
+    db = initDatabase(":memory:");
+    store = new KgStore(db);
+    query = new KgQuery(db);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns correct nodes and edges for a subset of files", () => {
+    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
+    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
+    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+    // fileD is unrelated
+    store.upsertFile(makeFileRow({ path: "src/D.ts", layer: "infra" }));
+
+    // A -> B, B -> C
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const subgraph = query.getSubgraph(["src/A.ts", "src/B.ts"]);
+
+    // A and B are the seed; C should be included because B -> C
+    const nodePaths = subgraph.nodes.map((n) => n.path);
+    expect(nodePaths).toContain("src/A.ts");
+    expect(nodePaths).toContain("src/B.ts");
+    expect(nodePaths).toContain("src/C.ts"); // connected to B
+    // D is unrelated — should not appear
+    expect(nodePaths).not.toContain("src/D.ts");
+
+    // Should have edges for both A->B and B->C
+    const edges = subgraph.edges;
+    expect(edges.some((e) => e.source === "src/A.ts" && e.target === "src/B.ts")).toBe(true);
+    expect(edges.some((e) => e.source === "src/B.ts" && e.target === "src/C.ts")).toBe(true);
+  });
+
+  test("returns empty nodes and edges for empty input", () => {
+    const subgraph = query.getSubgraph([]);
+    expect(subgraph.nodes).toEqual([]);
+    expect(subgraph.edges).toEqual([]);
+  });
+
+  test("returns empty nodes and edges for paths not in DB", () => {
+    const subgraph = query.getSubgraph(["src/nonexistent.ts"]);
+    expect(subgraph.nodes).toEqual([]);
+    expect(subgraph.edges).toEqual([]);
+  });
+
+  test("includes file_id and layer in nodes", () => {
+    store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
+    store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
+
+    const subgraph = query.getSubgraph(["src/A.ts"]);
+    // With no edges, only A is returned (no connected files)
+    const nodeA = subgraph.nodes.find((n) => n.path === "src/A.ts");
+    expect(nodeA).toBeDefined();
+    expect(nodeA!.layer).toBe("api");
+    expect(typeof nodeA!.file_id).toBe("number");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeFileInsightMaps
+// ---------------------------------------------------------------------------
+
+describe("computeFileInsightMaps()", () => {
+  let db: Database.Database;
+  let store: KgStore;
+
+  beforeEach(() => {
+    db = initDatabase(":memory:");
+    store = new KgStore(db);
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("correctly identifies hubs (top 10 by total degree)", () => {
+    // Create 12 files where one file has many connections
+    const hubFile = store.upsertFile(makeFileRow({ path: "src/hub.ts", layer: "shared" }));
+    for (let i = 0; i < 11; i++) {
+      const f = store.upsertFile(makeFileRow({ path: `src/mod${i}.ts`, layer: "domain" }));
+      store.insertFileEdge({
+        source_file_id: f.file_id!,
+        target_file_id: hubFile.file_id!,
+        edge_type: "imports",
+        confidence: 1.0,
+        evidence: null,
+        relation: null,
+      });
+    }
+
+    const maps = computeFileInsightMaps(db);
+    expect(maps.hubPaths.has("src/hub.ts")).toBe(true);
+  });
+
+  test("correctly identifies cycle membership", () => {
+    const fileA = store.upsertFile(makeFileRow({ path: "src/cycle-a.ts", layer: "domain" }));
+    const fileB = store.upsertFile(makeFileRow({ path: "src/cycle-b.ts", layer: "domain" }));
+
+    // A -> B and B -> A (cycle)
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: fileA.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const maps = computeFileInsightMaps(db);
+    expect(maps.cycleMemberPaths.has("src/cycle-a.ts")).toBe(true);
+    expect(maps.cycleMemberPaths.has("src/cycle-b.ts")).toBe(true);
+    expect(maps.cycleMemberPaths.get("src/cycle-a.ts")).toContain("src/cycle-b.ts");
+  });
+
+  test("correctly identifies layer violations", () => {
+    // shared -> domain is a violation
+    const sharedFile = store.upsertFile(makeFileRow({ path: "src/shared.ts", layer: "shared" }));
+    const domainFile = store.upsertFile(makeFileRow({ path: "src/domain.ts", layer: "domain" }));
+
+    store.insertFileEdge({
+      source_file_id: sharedFile.file_id!,
+      target_file_id: domainFile.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
+
+    const maps = computeFileInsightMaps(db);
+    expect(maps.layerViolationsByPath.has("src/shared.ts")).toBe(true);
+    const violations = maps.layerViolationsByPath.get("src/shared.ts")!;
+    expect(violations.length).toBe(1);
+    expect(violations[0].target).toBe("src/domain.ts");
+    expect(violations[0].source_layer).toBe("shared");
+    expect(violations[0].target_layer).toBe("domain");
+  });
+
+  test("returns empty maps for a DB with no edges", () => {
+    store.upsertFile(makeFileRow({ path: "src/A.ts" }));
+    const maps = computeFileInsightMaps(db);
+    expect(maps.hubPaths.size).toBe(0);
+    expect(maps.cycleMemberPaths.size).toBe(0);
+    expect(maps.layerViolationsByPath.size).toBe(0);
   });
 });

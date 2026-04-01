@@ -1,7 +1,8 @@
-/** Store file summaries to the KG SQLite database (DB-only since ADR-005) */
+/** Store file summaries to the KG SQLite database (sole write path — ADR-005). */
 
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { extname } from "node:path";
+import { dirname, join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
@@ -24,23 +25,38 @@ export interface StoreSummariesOutput {
 }
 
 /**
- * Infer a programming language from the file extension.
- * Used by the KG store when upserting file rows.
+ * Infer language string from a file path's extension.
+ * Used when auto-creating stub file rows for files not yet in the KG.
  */
 export function inferLanguageFromExtension(filePath: string): string {
-  if (filePath.endsWith(".ts") || filePath.endsWith(".tsx")) return "typescript";
-  if (filePath.endsWith(".js") || filePath.endsWith(".jsx")) return "javascript";
-  if (filePath.endsWith(".py")) return "python";
-  if (filePath.endsWith(".md")) return "markdown";
-  return "unknown";
+  const ext = extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".ts":
+    case ".tsx":
+      return "typescript";
+    case ".js":
+    case ".jsx":
+      return "javascript";
+    case ".py":
+      return "python";
+    case ".md":
+      return "markdown";
+    default:
+      return "unknown";
+  }
 }
 
 export async function storeSummaries(input: StoreSummariesInput, projectDir: string): Promise<StoreSummariesOutput> {
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   const now = new Date().toISOString();
 
+  // Ensure .canon directory exists
+  await mkdir(dirname(dbPath), { recursive: true });
+
+  // Write all summaries to DB — creates DB if absent
   const db = initDatabase(dbPath);
   let stored = 0;
+  let total = 0;
   try {
     const store = new KgStore(db);
 
@@ -48,23 +64,21 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
     const writtenSummaries: Array<{ summary: string; summaryId: number }> = [];
 
     for (const { file_path, summary } of input.summaries) {
-      // Auto-stub missing file rows so summaries can always be stored
-      let fileRow = store.getFile(file_path);
-      if (!fileRow) {
-        store.upsertFile({
-          path: file_path,
-          language: inferLanguageFromExtension(file_path),
-          content_hash: "",
+      const normalizedPath = file_path.replace(/\\/g, '/');
+      let fileRow = store.getFile(normalizedPath);
+      if (fileRow?.file_id === undefined) {
+        // File not in KG yet — auto-create a stub row so the summary is never silently dropped
+        fileRow = store.upsertFile({
+          path: normalizedPath,
           mtime_ms: Date.now(),
-          layer: null as unknown as string,
+          content_hash: "stub",
+          language: inferLanguageFromExtension(normalizedPath),
+          layer: "unknown",
           last_indexed_at: Date.now(),
         });
-        fileRow = store.getFile(file_path);
       }
-      if (fileRow?.file_id === undefined) continue;
-
       const summaryRow = store.upsertSummary({
-        file_id: fileRow.file_id,
+        file_id: fileRow.file_id!,
         entity_id: null,
         scope: "file",
         summary,
@@ -76,7 +90,7 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
       if (summaryRow.summary_id !== undefined) {
         writtenSummaries.push({ summary, summaryId: summaryRow.summary_id });
       }
-      stored++;
+      stored += 1;
     }
 
     // Embed written summaries — best-effort, never fatal
@@ -100,13 +114,16 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
         embeddingService.dispose();
       }
     }
+
+    const totalRow = db.prepare("SELECT COUNT(*) as count FROM summaries WHERE scope = 'file'").get() as { count: number };
+    total = totalRow.count;
   } finally {
     db.close();
   }
 
   return {
     stored,
-    total: stored,
+    total,
     path: dbPath,
   };
 }
