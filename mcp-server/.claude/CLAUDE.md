@@ -6,7 +6,7 @@
 TypeScript MCP (Model Context Protocol) server that provides tools for managing, enforcing, and tracking engineering principles across a codebase.
 
 ## Architecture
-<!-- last-updated: 2026-03-31 -->
+<!-- last-updated: 2026-04-01 (ADR-005: query.ts + view-materializer.ts deleted; KgQuery is sole graph query path) -->
 
 ES module TypeScript project using `@modelcontextprotocol/sdk` and `zod` for schema validation.
 
@@ -28,12 +28,12 @@ src/
 
 **Key subsystems:**
 - **Drift tracking** (`drift/`) — JSONL-backed store for reviews with auto-rotation
-- **Dependency graph** (`graph/`) — Scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs
+ - **Dependency graph** (`graph/`) — SQLite KG via `KgQuery`/`KgStore`; scans imports/exports (JS/TS/Python), computes in/out degree, detects cycles and hubs; `graph/query.ts` and `graph/view-materializer.ts` deleted (ADR-005, 2026-04-01)
 - **Principle matching** (`matcher.ts`) — Context-aware filtering by layers, file patterns, tags, severity
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-03-31 (ADR-002: ToolResult migration, adapter modules) -->
+<!-- last-updated: 2026-04-01 (ADR-005: KG consolidation — deleted query.ts/view-materializer.ts, new KgQuery methods, renamed kg_freshness_ms) -->
 
 **Tool error types** (`src/utils/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -53,13 +53,37 @@ src/
 - `git-adapter-async.ts`: `gitExecAsync(args, cwd, timeout?)` → `Promise<ProcessResult>`; never rejects; default 30s timeout
 - `process-adapter.ts`: `runShell(command, cwd, timeout?)` → `ProcessResult` (sync, `shell: true`); 512KB maxBuffer; default 30s timeout
 
-**Tool return types updated to `ToolResult<T>`** (ADR-002, 2026-03-31):
-- `loadFlow(input, pluginDir, projectDir?)` → `Promise<ToolResult<LoadFlowResult>>` (was `Promise<LoadFlowResult>`)
+**Tool return types updated to `ToolResult<T>`** (ADR-002, 2026-03-31; ADR-004 updates 2026-04-01):
+- `loadFlow(input, pluginDir, projectDir?)` → `Promise<ToolResult<LoadFlowResult>>` (was `Promise<LoadFlowResult>`); `LoadFlowResult.errors` field removed 2026-04-01 — validation errors now throw inside `loadAndResolveFlow`; `load-flow.ts` catches and returns `FLOW_PARSE_ERROR` or `FLOW_NOT_FOUND`
 - `updateBoard(input)` → `Promise<ToolResult<UpdateBoardResult>>` (was `Promise<UpdateBoardResult>`)
 - `graphQuery(input)` → `ToolResult<GraphQueryOutput>` (was `GraphQueryOutput`; `KG_NOT_INDEXED` is `recoverable: true`)
 - `getFileContext(input)` → `Promise<ToolResult<FileContextOutput>>` (was `Promise<FileContextOutput>`)
 - `enterAndPrepareState(input)` → `Promise<ToolResult<EnterAndPrepareStateResult>>` (was `Promise<EnterAndPrepareStateResult>`)
 - `reportResult(input)` / `reportResultLocked(input)` → `Promise<ToolResult<ReportResultResult>>` (was `Promise<ReportResultResult>`)
+
+**Flow parser** (`src/orchestration/flow-parser.ts`) — updated 2026-04-01 (ADR-004):
+- `loadAndResolveFlow(pluginDir, flowName, projectDir?)` → `Promise<ResolvedFlow>` — **breaking**: was `Promise<{ flow: ResolvedFlow; errors: string[] }>`; now throws `Error` when hard validation errors exist; reachability warnings are non-blocking (prefixed `"Warning:"`)
+- `validateSpawnCoverage(flow: ResolvedFlow): string[]` — new export; returns error strings for non-terminal states with no spawn instruction
+- `analyzeReachability(flow: ResolvedFlow): string[]` — new export; returns `"Warning:"` prefixed strings for unreachable states; does not include `hitl` / `no_items` virtual sinks
+- `checkUnresolvedRefs(flow: ResolvedFlow): string[]` — new export; returns error strings for spawn instructions or transition targets containing unresolved `${param}` references
+- `validateStateIdParams(flow, fragmentParams, fragmentName)` — new export; validates that `state_id`-typed fragment params resolve to real states
+- `VIRTUAL_SINKS: Set<string>` — new export; `{ "hitl", "no_items" }`
+- `RUNTIME_VARIABLES: Set<string>` — new export; known runtime variable names exempt from ref checks
+
+**Execution store** (`src/orchestration/execution-store.ts`) — updated 2026-04-01 (ADR-004):
+- `ExecutionStore.recordIterationResult(stateId, iteration, status, data)` — new method; records raw iteration result in `iteration_results` table; `INSERT OR REPLACE` on `(state_id, iteration)` unique key
+- `ExecutionStore.isStuck(stateId, stuckWhen: StuckWhen): boolean` — new method; SQL-based stuck detection; reads last two rows from `iteration_results`; returns `false` when fewer than 2 results exist; mirrors `stuck_when` logic for all 5 strategies
+- Pure `isStuck` functions in `transitions.ts` are deprecated; prefer `ExecutionStore.isStuck`
+
+**Execution schema** (`src/orchestration/execution-schema.ts`) — updated 2026-04-01 (ADR-004):
+- `SCHEMA_VERSION = '2'` — new export; current DB schema version
+- `runMigrations(db)` — new export; runs pending migrations against the given database; version-gated; safe to call repeatedly
+- Migration v2 adds `iteration_results` table: `(id, state_id, iteration, status, data TEXT DEFAULT '{}', timestamp)` with `UNIQUE(state_id, iteration)` constraint and index on `state_id`
+
+**Fragment param syntax** (`flows/fragments/*.md`) — updated 2026-04-01 (ADR-004):
+- Typed param declarations replace null-marker `~` syntax in all 7 fragments with params; format: `param_name: { type: state_id|string|number|boolean, default?: value }`
+- Old null-marker `~` format still accepted by `FragmentParamValueSchema` (backward compat); new typed format is canonical going forward
+- `state_id`-typed params are validated against real state names by `validateStateIdParams` during `loadAndResolveFlow`
 
 **Drift Store** (`src/drift/store.ts`):
 - `ReviewEntry` — unified type for all reviews (principle and PR); optional PR fields: `pr_number?: number`, `branch?: string`, `last_reviewed_sha?: string`, `file_priorities?: Array<{ path: string; priority_score: number }>`
@@ -83,6 +107,34 @@ src/
 **`get_drift_report` tool** (`src/tools/get-drift-report.ts`):
 - Output field `pr_reviews` is `ReviewEntry[]` (was `PrReviewEntry[]` until 2026-03-25); entries are filtered by `pr_number !== undefined || branch !== undefined`
 
+**Knowledge Graph types** (`src/graph/kg-types.ts`) — updated ADR-005 2026-04-01:
+- `FileMetrics` interface — `{ in_degree, out_degree, is_hub, in_cycle, cycle_peers: string[], layer, layer_violation_count, layer_violations: LayerViolation[], impact_score }`
+- `LayerViolation` interface — `{ target: string; source_layer: string; target_layer: string }`
+
+**KgQuery** (`src/graph/kg-query.ts`) — updated ADR-005 2026-04-01:
+- `computeImpactScore(inDegree, violationCount, isChanged, layer)` → `number` — re-exported (moved from deleted `query.ts`); uses `LAYER_CENTRALITY` from `constants.ts`
+- `FileInsightMaps` interface — `{ hubPaths: Set<string>; cycleMemberPaths: Map<string, string[]>; layerViolationsByPath: Map<string, LayerViolation[]> }`
+- `computeFileInsightMaps(db)` → `FileInsightMaps` — batch helper; call once per request, pass result to `getFileMetrics()` to avoid N+1 queries
+- `KgQuery.getFileDegrees(fileId)` → `{ in_degree, out_degree }` — per-file degree from `file_edges`
+- `KgQuery.getAllFileDegrees()` → `Map<number, { in_degree, out_degree }>` — all file degrees in one query
+- `KgQuery.getFileAdjacencyList()` → `Map<number, number[]>` — full file-level adjacency list
+- `KgQuery.getFileMetrics(filePath, insightMaps?, changedFiles?)` → `FileMetrics | null` — full structural metrics; `null` when file not in DB
+- `KgQuery.getKgFreshnessMs()` → `number | null` — ms since oldest `last_indexed_at`; `null` when DB empty
+- `KgQuery.getSubgraph(filePaths)` → `{ nodes, edges }` — subgraph for PR impact UI; nodes include `file_id` and `layer`
+
+**`store-summaries.ts`** (`src/tools/store-summaries.ts`) — updated ADR-005 2026-04-01:
+- `inferLanguageFromExtension(filePath)` → `string` — new export; maps `.ts`/`.tsx` → `"typescript"`, `.js`/`.jsx` → `"javascript"`, `.py` → `"python"`, `.md` → `"markdown"`, default `"unknown"`
+- `loadSummariesFile` — REMOVED 2026-04-01 (ADR-005); DB is sole summary read path
+- `flattenSummaries` — REMOVED 2026-04-01 (ADR-005); no longer needed
+- `StoreSummariesOutput.path` — now returns SQLite DB path (was `summaries.json` path)
+- `storeSummaries` — DB-only write; auto-stubs missing file rows via `upsertFile`; inits DB if absent; no JSON fallback
+
+**`CANON_FILES` constants** (`src/constants.ts`) — updated ADR-005 2026-04-01:
+- `CANON_FILES.GRAPH_DATA` — REMOVED; `graph-data.json` no longer written
+- `CANON_FILES.REVERSE_DEPS` — REMOVED; `reverse-deps.json` no longer written
+- `CANON_FILES.SUMMARIES` — REMOVED; `summaries.json` no longer written
+- Remaining keys: `CONFIG`, `KNOWLEDGE_DB`, `ORCHESTRATION_DB`, `DRIFT_DB`
+
 **File Context** (`src/tools/get-file-context.ts`):
 - `FileContextOutput` interface — fields: `file_path`, `layer`, `content`, `imports`, `imported_by`, `exports`, `violation_count`, `last_verdict`, `summary`, `violations`, `imports_by_layer`, `imported_by_layer`, `layer_stack`, `role`, `shape`, `project_max_impact`, `graph_metrics?`, `entities?`, `blast_radius?`
 - `imported_by_layer: Record<string, string[]>` — mirrors `imports_by_layer`; groups reverse-dependency paths by their inferred layer
@@ -94,7 +146,7 @@ src/
 - `PrViolation` interface — `{ principle_id: string; severity: "rule"|"strong-opinion"|"convention"; message?: string }`
 - `PrFileInfo` interface — fields: `path`, `layer`, `status`, `priority_score?`, `priority_factors?`, `bucket: "needs-attention"|"worth-a-look"|"low-risk"`, `reason: string`, `violations?: PrViolation[]`
 - `PrFileSummary` interface — `{ path: string; layer: string; status: "added"|"modified"|"deleted"|"renamed" }` — lightweight entry for clustering
-- `PrReviewDataOutput` interface — fields: `files: PrFileSummary[]` (lightweight), `impact_files: PrFileInfo[]` (needs-attention OR priority_score >= 15 OR has violations), `layers`, `total_files`, `total_violations`, `net_new_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `graph_data_age_ms?`, `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
+- `PrReviewDataOutput` interface — fields: `files: PrFileSummary[]` (lightweight), `impact_files: PrFileInfo[]` (needs-attention OR priority_score >= 15 OR has violations), `layers`, `total_files`, `total_violations`, `net_new_files`, `incremental`, `last_reviewed_sha?`, `diff_command`, `kg_freshness_ms?` (was `graph_data_age_ms?`, renamed ADR-005 2026-04-01), `error?`, `narrative: string`, `blast_radius: BlastRadiusEntry[]`
 - `BlastRadiusEntry` interface — `{ file: string; affected: Array<{ path: string; depth: number }> }`
 - `classifyFile(file: Omit<PrFileInfo, "bucket"|"reason">)` — pure function; returns `{ bucket, reason }`; thresholds: needs-attention = `violation_count > 0` OR (`in_degree >= 5` AND `is_changed`); worth-a-look = `priority_score >= 5`; low-risk = else
 - `generateNarrative(files, layers)` — pure function; returns human-readable summary string
@@ -124,7 +176,7 @@ src/
 - Prep-only mode (`has_review === false`): run-review banner + header bar + `NarrativeSummary`, `ChangeStoryGrid`, staleness warning (when stale), `ImpactTabs`
 - Review mode (`has_review === true`): `VerdictBanner`, `StatsRow`, then a 2-column grid dashboard — Row 1: `FixBeforeMerge` (left), `ViolationsByPrinciple` + `ComplianceScore` stacked (right); Row 2: `BlastRadiusChart` (left), `LayerChart` + `SubsystemsPanel` stacked (right)
 - When no stored review: shows "Run Review" button that calls `bridge.sendMessage("Run a Canon review on this PR")`
-- Staleness warning banner shown when `graph_data_age_ms > 3_600_000`
+- Staleness warning banner shown when `kg_freshness_ms > 3_600_000` (field renamed from `graph_data_age_ms` ADR-005 2026-04-01)
 - `PrReviewPrep.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
 - `PrImpact.svelte` — DELETED 2026-03-25 (absorbed into `PrReview.svelte`)
 
@@ -149,7 +201,7 @@ src/
 | `list_principles` | Browse principle index (metadata only) |
 | `review_code` | Surface principles for code review + code content |
 | `report` | Log reviews (drift tracking) |
-| `store_summaries` | Persist file summaries to disk |
+| `store_summaries` | Persist file summaries to SQLite KG DB (DB-only since ADR-005 2026-04-01; JSON write path removed) |
 | `get_drift_report` | Full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, PR reviews |
 | `get_compliance` | Compliance stats for a specific principle — violation counts, rate, trend, weekly history |
 | `graph_query` | Query codebase knowledge graph — callers, callees, blast radius, dead code, search |
@@ -187,7 +239,7 @@ src/
 - Assertion types: `file_exists`, `file_changed`, `pattern_match`, `no_pattern`, `bash_check`
 - `bash_check` denylist: `rm`, `sudo`, `curl`, `wget`, `chmod`, `chown`, `mkfs`, `dd` — blocked before execution
 
-**Flow schema types** (`src/orchestration/flow-schema.ts`) — added 2026-03-26:
+**Flow schema types** (`src/orchestration/flow-schema.ts`) — added 2026-03-26; updated 2026-04-01 (ADR-004):
 - `GateResultSchema` / `GateResult` — gate execution result; source of truth (replaces former local interface in gate-runner)
 - `DiscoveredGateSchema` / `DiscoveredGate` — `{ command: string; source: string }` for agent-reported gate discovery
 - `PostconditionAssertionSchema` / `PostconditionAssertion` — typed assertion `{ type, target, pattern?, command? }`
@@ -198,6 +250,11 @@ src/
 - `EffectTypeSchema` now includes `"check_postconditions"` — triggers contract checker on the state's postconditions
 - `StateMetricsSchema` fields (`duration_ms`, `spawns`, `model`) are now `.optional()`; 7 new optional fields: `gate_results`, `postcondition_results`, `violation_count`, `violation_severities`, `test_results`, `files_changed`, `revision_count`
 - `BoardStateEntrySchema` new optional fields: `gate_results`, `postcondition_results`, `discovered_gates`, `discovered_postconditions`
+- `StateDefinitionSchema` is now a `z.discriminatedUnion("type", [...])` — updated 2026-04-01 (ADR-004); five per-type schemas exported: `SingleStateSchema`, `WaveStateSchema`, `ParallelStateSchema`, `ParallelPerStateSchema`, `TerminalStateSchema`; corresponding TS types also exported: `SingleState`, `WaveState`, `WavePolicy`, `ParallelState`, `ParallelPerState`, `TerminalState`
+- `WavePolicySchema` / `WavePolicy` — optional config on `WaveStateSchema`; fields: `isolation` (`"worktree"|"branch"|"none"`, default `"worktree"`), `merge_strategy` (`"sequential"|"rebase"|"squash"`, default `"sequential"`), `on_conflict` (`"hitl"|"replan"|"retry-single"`, default `"hitl"`), `gate?`, `coordination?`; defaults applied at parse time; absent `wave_policy` on a wave state uses these defaults
+- `TypedParamSchema` / `TypedParam` — fragment typed param declaration: `{ type: "state_id"|"string"|"number"|"boolean"; default?: string|number|boolean }`
+- `FragmentParamValueSchema` / `FragmentParamValue` — accepts both old null-marker format and new typed format; backward compatible
+- `FragmentStateDefinitionSchema` — discriminated union mirroring `StateDefinitionSchema` with relaxed fields for fragment substitution
 
 **Analytics** (`src/drift/analytics.ts`) — added 2026-03-26:
 - `FlowAnalytics` interface — `{ avg_gate_pass_rate?, avg_postcondition_pass_rate?, total_runs, runs_with_gate_data }`
@@ -220,8 +277,9 @@ src/
 
 | Tool | Purpose |
 |------|---------|
-| `load_flow` | Load and resolve a flow definition |
 | `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status and stale sessions before creating; when preflight finds issues, returns `workspace: ""` (empty string) and puts the candidate path in `candidate_workspace` — callers must check `preflight_issues` before using `workspace` |
+| `load_flow` | Load and resolve a flow definition; throws (hard-blocking) on validation errors since ADR-004; reachability issues emit non-blocking warnings |
+| `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
 | `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop; briefing injection scans all three breakpoints: `before`, `between`, and `after` |
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress); at `complete_flow` aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
 | `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
@@ -245,13 +303,13 @@ src/
 | `vitest` | Unit testing (dev) |
 
 ## Invariants
-<!-- last-updated: 2026-03-31 (ADR-002: subprocess isolation, ToolResult) -->
+<!-- last-updated: 2026-04-01 (ADR-005: KG sole data source, computeFileInsightMaps call pattern) -->
 
 - **ADR-002 subprocess isolation**: Only files in `src/adapters/` may import `node:child_process`; all `tools/` and `orchestration/` code must use adapter functions (`gitExec`, `gitExecAsync`, `runShell`) — added 2026-03-31
 - **ADR-002 ToolResult contract**: Tools return `ToolResult<T>` for all expected error conditions; unexpected errors are caught by `wrapHandler` and returned as `UNEXPECTED` `CanonToolError`; tools never throw for expected conditions — added 2026-03-31
 - **ADR-002 security boundary**: `git-adapter.ts` never sets `shell: true`; `process-adapter.ts` sets `shell: true` for arbitrary shell commands; the two adapters must not be interchanged for git operations — added 2026-03-31
 - All subprocess adapters enforce a default 30s timeout; callers may pass an explicit timeout override — added 2026-03-31
-- All data persists to `.canon/` directory (reviews.jsonl, graph-data.json, summaries.json)
+- All data persists to `.canon/` directory (reviews.jsonl, knowledge-graph.db, orchestration.db, drift.db); `graph-data.json`, `summaries.json`, `reverse-deps.json` no longer written (removed ADR-005 2026-04-01)
 - JSONL files auto-rotate when exceeding size limits
 - Atomic file writes prevent corruption on concurrent access
 - `CANON_PROJECT_DIR` env var sets project root (defaults to `process.cwd()`)
@@ -263,6 +321,11 @@ src/
 - All new schema fields in `flow-schema.ts` MUST be `.optional()` — `BoardSchema.parse()` must not throw on existing workspace `board.json` files
 - `discovered_gates` and `discovered_postconditions` on `BoardStateEntry` accumulate across multiple `report_result` calls (append, not replace)
 - `EffectTypeSchema` switch in `effects.ts` has no `default` case — TypeScript enforces exhaustiveness when new effect types are added
+- **ADR-004 hard-blocking validation**: `loadAndResolveFlow` throws on spawn coverage errors or unresolved refs; callers must not expect an `errors` field on the return value — added 2026-04-01
+- **ADR-004 SQL stuck detection**: `ExecutionStore.recordIterationResult` must be called after each iteration before `isStuck` is queried; `isStuck` returns `false` (not stuck) when fewer than 2 results exist — added 2026-04-01
+- **ADR-004 fragment typed params**: `state_id`-typed params in fragment `with:` maps are validated against real state IDs at load time; supplying a non-existent state ID is a hard error — added 2026-04-01
+- **ADR-005 KG sole data source**: `graph/query.ts` and `graph/view-materializer.ts` deleted; SQLite KG (via `KgQuery`/`KgStore`) is the exclusive store for graph and summary data; no JSON artifacts are written for graph or summary data — added 2026-04-01
+- **ADR-005 computeFileInsightMaps call pattern**: call `computeFileInsightMaps(db)` once per request and pass the `FileInsightMaps` result into `KgQuery.getFileMetrics()`; do not call `getFileMetrics()` in a loop without pre-computing insight maps — added 2026-04-01
 
 ## Development
 <!-- last-updated: 2026-03-22 -->
