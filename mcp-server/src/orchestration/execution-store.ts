@@ -758,7 +758,7 @@ export class ExecutionStore {
     this.stmtAppendEvent.run({
       type,
       payload: JSON.stringify(payload),
-      correlation_id: correlationId ?? null,
+      correlation_id: correlationId ?? this.getCorrelationId(),
       timestamp: new Date().toISOString(),
     });
   }

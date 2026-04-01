@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  FlowEventType,
   EventPayloadSchemas,
   validateEventPayload,
 } from "../orchestration/events.ts";

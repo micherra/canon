@@ -9,7 +9,7 @@
  * - walCheckpoint() method
  */
 
-import { describe, test, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { initExecutionDb } from '../orchestration/execution-schema.ts';
 import { ExecutionStore } from '../orchestration/execution-store.ts';
 
@@ -64,7 +64,7 @@ describe('appendEvent — correlation_id', () => {
     expect(events[0].type).toBe('state_entered');
   });
 
-  test('stores NULL when correlationId is omitted', () => {
+  test('defaults to execution correlation_id when correlationId is omitted', () => {
     store.appendEvent('board_updated', {
       action: 'enter_state',
       timestamp: '2026-01-01T00:00:00.000Z',
@@ -72,7 +72,9 @@ describe('appendEvent — correlation_id', () => {
 
     const events = store.getEvents();
     expect(events).toHaveLength(1);
-    expect(events[0].correlation_id).toBeNull();
+    // Should inherit the execution's correlation_id, not be null
+    const executionCorrelationId = store.getCorrelationId();
+    expect(events[0].correlation_id).toBe(executionCorrelationId);
   });
 
   test('emits console.warn but still writes when payload is invalid for known type', () => {
