@@ -17,6 +17,7 @@ import {
 import { isNotFound } from "../utils/errors.ts";
 import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.ts";
 import { toPosix, loadPathAliases } from "../utils/paths.ts";
+import { sanitizeGitRef } from "../utils/git-ref.ts";
 import { classifyMdNode, buildNameMaps, inferMdRelations } from "../graph/md-relations.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
 import { materialize } from "../graph/view-materializer.ts";
@@ -161,10 +162,11 @@ async function detectChangedFiles(
   if (changedFiles.length === 0) {
     const branch = await gitCurrentBranch(projectDir);
     if (branch && branch !== "main" && branch !== "master") {
-      const base = input.diff_base
+      const rawBase = input.diff_base
         || (await gitRefExists(projectDir, "origin/main") ? "origin/main"
         : (await gitRefExists(projectDir, "origin/master") ? "origin/master" : null));
-      if (base) {
+      if (rawBase) {
+        const base = sanitizeGitRef(rawBase);
         changedFiles = await gitChangedFiles(projectDir, base);
       }
     }

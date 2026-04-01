@@ -22,9 +22,9 @@ export function wrapHandler<T>(
       const result = await handler(input);
       return jsonResponse(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`MCP tool error (unexpected): ${message}`);
-      return jsonResponse(toolError("UNEXPECTED", message));
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error(`MCP tool error (unexpected): ${detail}`);
+      return jsonResponse(toolError("UNEXPECTED", "An unexpected error occurred"));
     }
   };
 }

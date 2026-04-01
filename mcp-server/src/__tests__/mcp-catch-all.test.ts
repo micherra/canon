@@ -82,18 +82,20 @@ describe("wrapHandler — catch-all: Error throws", () => {
     const parsed = JSON.parse(response.content[0].text);
     expect(parsed.ok).toBe(false);
     expect(parsed.error_code).toBe("UNEXPECTED");
-    expect(parsed.message).toBe("boom");
+    // Raw error detail must NOT be forwarded to caller (security: error leakage prevention)
+    expect(parsed.message).toBe("An unexpected error occurred");
     expect(parsed.recoverable).toBe(false);
   });
 
-  it("preserves error message in UNEXPECTED result", async () => {
+  it("returns generic message in UNEXPECTED result (not raw error detail)", async () => {
     const handler = wrapHandler(async (_input: unknown) => {
       throw new Error("database connection failed");
     });
 
     const response = await handler({});
     const parsed = JSON.parse(response.content[0].text);
-    expect(parsed.message).toBe("database connection failed");
+    // Raw error detail is logged to console.error only, not forwarded to MCP caller
+    expect(parsed.message).toBe("An unexpected error occurred");
   });
 
   it("result is valid JSON (content[0].text is parseable)", async () => {
@@ -109,7 +111,7 @@ describe("wrapHandler — catch-all: Error throws", () => {
 });
 
 describe("wrapHandler — catch-all: non-Error throws", () => {
-  it("converts string throw to UNEXPECTED error with string as message", async () => {
+  it("converts string throw to UNEXPECTED error with generic message", async () => {
     const handler = wrapHandler(async (_input: unknown) => {
       // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw "something bad happened";
@@ -119,10 +121,11 @@ describe("wrapHandler — catch-all: non-Error throws", () => {
     const parsed = JSON.parse(response.content[0].text);
     expect(parsed.ok).toBe(false);
     expect(parsed.error_code).toBe("UNEXPECTED");
-    expect(parsed.message).toContain("something bad happened");
+    // Raw string detail is logged to console.error only, not forwarded to MCP caller
+    expect(parsed.message).toBe("An unexpected error occurred");
   });
 
-  it("converts number throw to UNEXPECTED error", async () => {
+  it("converts number throw to UNEXPECTED error with generic message", async () => {
     const handler = wrapHandler(async (_input: unknown) => {
       // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw 42;
@@ -132,7 +135,8 @@ describe("wrapHandler — catch-all: non-Error throws", () => {
     const parsed = JSON.parse(response.content[0].text);
     expect(parsed.ok).toBe(false);
     expect(parsed.error_code).toBe("UNEXPECTED");
-    expect(parsed.message).toContain("42");
+    // Raw number detail is logged to console.error only, not forwarded to MCP caller
+    expect(parsed.message).toBe("An unexpected error occurred");
   });
 
   it("converts object throw to UNEXPECTED error", async () => {

@@ -251,7 +251,8 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
       },
     }));
 
-    const { evaluatePostconditions } = await import("../orchestration/contract-checker.ts?fileChanged=1");
+    vi.resetModules();
+    const { evaluatePostconditions } = await import("../orchestration/contract-checker.ts");
 
     const results = evaluatePostconditions(
       [{ type: "file_changed", target: "initial.ts" }],
@@ -293,7 +294,8 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
       },
     }));
 
-    const { evaluatePostconditions } = await import("../orchestration/contract-checker.ts?bashCheck=1");
+    vi.resetModules();
+    const { evaluatePostconditions } = await import("../orchestration/contract-checker.ts");
 
     const results = evaluatePostconditions(
       [{ type: "bash_check", command: "echo ok" }],
@@ -409,7 +411,7 @@ describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
     const parsed = JSON.parse(errorResponse.content[0].text);
     expect(parsed.ok).toBe(false);
     expect(parsed.error_code).toBe("UNEXPECTED");
-    expect(parsed.message).toContain("internal db error");
+    expect(parsed.message).toBe("An unexpected error occurred");
 
     // Normal path still works after an error
     const okResponse = await handler({ shouldThrow: false });
