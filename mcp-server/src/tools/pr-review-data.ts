@@ -284,6 +284,9 @@ export async function getPrReviewData(
       // We'll re-populate after parsing the diff — store the query instance for later
     } catch {
       // KG unavailable — skip priority enrichment and freshness
+      if (kgDb) {
+        kgDb.close();
+      }
       kgDb = undefined;
     }
   }

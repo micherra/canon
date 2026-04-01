@@ -2,7 +2,7 @@
  * Designed to give Claude everything needed to write a meaningful summary. */
 
 import { readFile } from "fs/promises";
-import { existsSync } from "fs";
+import { existsSync, statSync } from "fs";
 import { join, resolve, sep } from "path";
 import { extractImports, resolveImport } from "../graph/import-parser.ts";
 import { extractExports } from "../graph/export-parser.ts";
@@ -74,6 +74,39 @@ export interface FileContextOutput {
   blast_radius?: UnifiedBlastRadiusReport;
 }
 
+// ---------------------------------------------------------------------------
+// Module-level cache for project_max_impact
+// ---------------------------------------------------------------------------
+// Computing project_max_impact requires loading all file stats, all file
+// degrees, and iterating every node — O(V) per getFileContext call. Since the
+// KG DB only changes when the indexer runs, we cache the result keyed by DB
+// path + last-modified time. The cache is invalidated automatically when the
+// DB file changes.
+const _maxImpactCache = new Map<string, number>();
+
+function getCachedMaxImpact(dbPath: string): number | undefined {
+  try {
+    const mtime = statSync(dbPath).mtimeMs;
+    return _maxImpactCache.get(`${dbPath}:${mtime}`);
+  } catch {
+    return undefined;
+  }
+}
+
+function setCachedMaxImpact(dbPath: string, value: number): void {
+  try {
+    const mtime = statSync(dbPath).mtimeMs;
+    // Evict stale entries for the same path before storing the fresh one.
+    for (const key of _maxImpactCache.keys()) {
+      if (key.startsWith(`${dbPath}:`)) {
+        _maxImpactCache.delete(key);
+      }
+    }
+    _maxImpactCache.set(`${dbPath}:${mtime}`, value);
+  } catch {
+    // If stat fails, skip caching — the value will be recomputed next call.
+  }
+}
 
 /** Derive a human-readable shape characterization from graph metrics. */
 function deriveShape(metrics: FileGraphMetrics | undefined): { label: string; description: string } {
@@ -286,14 +319,24 @@ export async function getFileContext(
       }
 
       // ---- project_max_impact from all files with degree data ----
-      const allFilesWithStats = kgQuery.getAllFilesWithStats();
-      const allDegrees = kgQuery.getAllFileDegrees();
-      for (const fileRow of allFilesWithStats) {
-        if (fileRow.file_id === undefined) continue;
-        const degrees = allDegrees.get(fileRow.file_id) ?? { in_degree: 0, out_degree: 0 };
-        const violations_count = insightMaps.layerViolationsByPath.get(fileRow.path)?.length ?? 0;
-        const score = computeImpactScore(degrees.in_degree, violations_count, false, fileRow.layer || "unknown");
-        if (score > project_max_impact) project_max_impact = score;
+      // This is O(V) — load all files, all degrees, iterate every node. We
+      // cache the result keyed by DB path + mtime so repeated calls within the
+      // same indexer run are free. The cache is invalidated automatically when
+      // the DB file is updated by the indexer.
+      const cached = getCachedMaxImpact(dbPath);
+      if (cached !== undefined) {
+        project_max_impact = cached;
+      } else {
+        const allFilesWithStats = kgQuery.getAllFilesWithStats();
+        const allDegrees = kgQuery.getAllFileDegrees();
+        for (const fileRow of allFilesWithStats) {
+          if (fileRow.file_id === undefined) continue;
+          const degrees = allDegrees.get(fileRow.file_id) ?? { in_degree: 0, out_degree: 0 };
+          const violations_count = insightMaps.layerViolationsByPath.get(fileRow.path)?.length ?? 0;
+          const score = computeImpactScore(degrees.in_degree, violations_count, false, fileRow.layer || "unknown");
+          if (score > project_max_impact) project_max_impact = score;
+        }
+        setCachedMaxImpact(dbPath, project_max_impact);
       }
 
       // ---- entities and summary from KgStore ----

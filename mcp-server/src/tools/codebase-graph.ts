@@ -508,7 +508,7 @@ export async function codebaseGraph(
           extension: path.extname(f.path).replace(".", "") || "",
         }));
 
-      const fileEdgeRows = (db as import("better-sqlite3").Database)
+      const fileEdgeRows = db
         .prepare(`
           SELECT fe.edge_type, fe.confidence, fe.relation,
                  src.path AS source_path, tgt.path AS target_path
