@@ -48,6 +48,7 @@ import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -291,6 +292,7 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
       flow,
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     // The board in the result must be the entered board (post-enterState)
     expect(result.board).toBeDefined();
@@ -309,6 +311,7 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
       flow: makeFlow(),
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     // The board snapshot in result reflects state entered, not the pre-enter state
     expect(result.board!.states["implement"].status).toBe("in_progress");
@@ -412,6 +415,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
       flow,
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.skip_reason).toBeDefined();
     // Must include the state id
@@ -445,6 +449,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
       flow,
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     expect(result.skip_reason).toContain("condition satisfied");
   });
@@ -471,6 +476,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
       flow,
       variables: { task: "test", CANON_PLUGIN_ROOT: "" },
     });
+    assertOk(result);
 
     // Skipped is NOT a convergence failure — can_enter must be true
     expect(result.can_enter).toBe(true);

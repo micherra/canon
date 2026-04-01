@@ -29,6 +29,7 @@ import {
   assertWorkspacePath,
 } from "../orchestration/execution-store.ts";
 import { reportResult } from "../tools/report-result.ts";
+import { assertOk } from "../utils/tool-result.ts";
 import { postMessage } from "../tools/post-message.ts";
 import { getMessages } from "../tools/get-messages.ts";
 import { DriftStore } from "../drift/store.ts";
@@ -130,6 +131,7 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
       artifacts: ["src/fix.ts"],
     });
 
+    assertOk(buildResult);
     expect(buildResult.transition_condition).toBe("done");
     expect(buildResult.next_state).toBe("review");
     expect(buildResult.stuck).toBe(false);
@@ -150,6 +152,7 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
       flow,
     });
 
+    assertOk(reviewResult);
     expect(reviewResult.next_state).toBe("ship");
 
     // Verify ship state is the next state in the board
@@ -655,6 +658,8 @@ describe("concurrent report_result calls serialize without SQLITE_BUSY", () => {
     ]);
 
     // Both calls should complete without throwing
+    assertOk(r1);
+    assertOk(r2);
     expect(r1.transition_condition).toBe("done");
     expect(r2.transition_condition).toBe("done");
 

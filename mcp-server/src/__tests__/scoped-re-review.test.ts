@@ -50,6 +50,7 @@ vi.mock("node:child_process", () => ({
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 import { spawnSync } from "node:child_process";
 
 // ---------------------------------------------------------------------------
@@ -155,6 +156,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       // git diff should NOT have been called for entries <= 1
@@ -214,6 +216,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(spawnSync).toHaveBeenCalledWith(
@@ -257,6 +260,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       // Should still succeed -- full review, no scope restriction
       expect(result.can_enter).toBe(true);
@@ -288,6 +292,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       // Should degrade gracefully
       expect(result.can_enter).toBe(true);
@@ -369,6 +374,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "abc1234", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       // Empty file list means review_scope remains empty
@@ -410,6 +416,7 @@ describe("scoped re-review (review_scope injection)", () => {
         flow,
         variables: { task: "test", base_commit: "deadbeef", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.prompts).toHaveLength(1);
       const prompt = result.prompts[0].prompt;

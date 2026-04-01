@@ -51,6 +51,7 @@ import { resolveConsultationPrompt } from "../orchestration/consultation-executo
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -160,6 +161,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(false);
       expect(result.iteration_count).toBe(3);
@@ -188,6 +190,7 @@ describe("enterAndPrepareState", () => {
         flow: makeFlow(),
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(false);
       expect(result.cannot_fix_items).toEqual(cannotFixItems);
@@ -221,6 +224,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(result.skip_reason).toBeDefined();
@@ -254,6 +258,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(result.skip_reason).toBeUndefined();
@@ -277,6 +282,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "build the widget", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(result.state_type).toBe("single");
@@ -296,6 +302,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.board).toBeDefined();
       expect(result.board!.states["implement"].status).toBe("in_progress");
@@ -364,6 +371,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.iteration_count).toBe(0);
       expect(result.max_iterations).toBe(0);
@@ -389,6 +397,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.can_enter).toBe(true);
       expect(result.state_type).toBe("terminal");
@@ -423,6 +432,7 @@ describe("enterAndPrepareState", () => {
         flow,
         variables: { task: "security", CANON_PLUGIN_ROOT: "" },
       });
+      assertOk(result);
 
       expect(result.state_type).toBe("parallel");
       expect(result.prompts).toHaveLength(2);
@@ -481,6 +491,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 0,
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
@@ -512,6 +523,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         // wave is undefined
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
@@ -536,6 +548,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 1,
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
@@ -559,6 +572,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 1, // uses "between" breakpoint — but only "before" declared
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeUndefined();
       expect(resolveConsultationPrompt).not.toHaveBeenCalled();
@@ -577,6 +591,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 0,
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeUndefined();
       expect(resolveConsultationPrompt).not.toHaveBeenCalled();
@@ -596,6 +611,7 @@ describe("enterAndPrepareState", () => {
         variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
         wave: 0,
       });
+      assertOk(result);
 
       expect(result.consultation_prompts).toBeUndefined();
     });
@@ -661,6 +677,25 @@ describe("enterAndPrepareState", () => {
       });
 
       expect(escapeDollarBrace).toHaveBeenCalledWith("Risk: ${evil} injection attempt");
+    });
+  });
+
+  describe("workspace not found", () => {
+    it("returns WORKSPACE_NOT_FOUND ToolResult when workspace has no execution", async () => {
+      const workspace = makeTmpDir(); // not seeded — no execution row
+
+      const flow = makeFlow();
+      const result = await enterAndPrepareState({
+        workspace,
+        state_id: "implement",
+        flow,
+        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toContain(workspace);
     });
   });
 });

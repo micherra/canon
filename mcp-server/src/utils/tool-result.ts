@@ -41,6 +41,17 @@ export function isToolError(result: unknown): result is CanonToolError {
   );
 }
 
+/**
+ * Assert that a ToolResult is ok, narrowing the type to the success branch.
+ * Throws if the result is an error. Intended for use in tests and places
+ * where the caller knows the call should succeed.
+ */
+export function assertOk<T>(result: ToolResult<T>): asserts result is { ok: true } & T {
+  if (!result.ok) {
+    throw new Error(`assertOk: expected ok result but got error ${result.error_code}: ${result.message}`);
+  }
+}
+
 /** Shared subprocess result type — returned by all adapter functions. */
 export interface ProcessResult {
   ok: boolean;

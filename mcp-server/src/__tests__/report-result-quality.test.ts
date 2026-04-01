@@ -39,6 +39,7 @@ import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,6 +155,7 @@ describe("report_result: quality metrics enrichment", () => {
       flow: makeMinimalFlow() as any,
       gate_results: gateResults,
     });
+    assertOk(result);
 
     expect(result.board.states["impl"].gate_results).toEqual(gateResults);
   });
@@ -174,6 +176,7 @@ describe("report_result: quality metrics enrichment", () => {
       flow: makeMinimalFlow() as any,
       postcondition_results: postconditionResults,
     });
+    assertOk(result);
 
     expect(result.board.states["impl"].postcondition_results).toEqual(postconditionResults);
   });
@@ -288,6 +291,7 @@ describe("report_result: quality metrics enrichment", () => {
       test_results: { passed: 10, failed: 1, skipped: 2 },
       files_changed: 4,
     });
+    assertOk(result);
 
     const m = result.board.states["impl"].metrics;
     expect(m).toBeDefined();
@@ -310,6 +314,7 @@ describe("report_result: quality metrics enrichment", () => {
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 1000, spawns: 1, model: "claude-sonnet" },
     });
+    assertOk(result);
 
     const m = result.board.states["impl"].metrics;
     expect(m?.revision_count).toBe(2);
@@ -326,6 +331,7 @@ describe("report_result: quality metrics enrichment", () => {
       flow: makeMinimalFlow() as any,
       artifacts: ["dist/index.js"],
     });
+    assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("terminal");
@@ -401,6 +407,7 @@ describe("report_result: quality metrics enrichment", () => {
       discovered_gates: [{ command: "npm test", source: "tester" }],
       discovered_postconditions: [{ type: "file_exists" as const, target: "dist/index.js" }],
     });
+    assertOk(result);
 
     const log_entry = result.log_entry as any;
     expect(log_entry.gate_results).toHaveLength(1);
@@ -423,6 +430,7 @@ describe("report_result: quality metrics enrichment", () => {
       status_keyword: "done",
       flow: makeMinimalFlow() as any,
     });
+    assertOk(result);
 
     const log_entry = result.log_entry as any;
     expect(log_entry.gate_results).toBeUndefined();
@@ -451,6 +459,7 @@ describe("report_result: quality metrics enrichment", () => {
       metrics: { duration_ms: 1500, spawns: 1, model: "claude-sonnet" },
       gate_results: gateResults,
     });
+    assertOk(result);
 
     // gate_results should be on both top-level BoardStateEntry and inside metrics
     expect(result.board.states["impl"].gate_results).toEqual(gateResults);

@@ -42,6 +42,7 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { ConsultationFragmentSchema } from "../orchestration/flow-schema.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -285,6 +286,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 1, // wave >= 1 triggers "between" breakpoint
     });
+    assertOk(result);
 
     // Should be skipped: wave_total (1) < min_waves (2)
     const patternCheck = result.consultation_prompts?.find(e => e.name === "pattern-check");
@@ -303,6 +305,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 1, // wave >= 1 triggers "between" breakpoint
     });
+    assertOk(result);
 
     // Should be included: wave_total (2) >= min_waves (2)
     const patternCheck = result.consultation_prompts?.find(e => e.name === "pattern-check");
@@ -322,6 +325,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 2,
     });
+    assertOk(result);
 
     const patternCheck = result.consultation_prompts?.find(e => e.name === "pattern-check");
     expect(patternCheck).toBeDefined();
@@ -340,6 +344,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 1,
     });
+    assertOk(result);
 
     // Fail-open: wave_total undefined → do NOT skip
     const patternCheck = result.consultation_prompts?.find(e => e.name === "pattern-check");
@@ -358,6 +363,7 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 1,
     });
+    assertOk(result);
 
     const planReview = result.consultation_prompts?.find(e => e.name === "plan-review");
     expect(planReview).toBeDefined();
@@ -395,6 +401,7 @@ describe("enterAndPrepareState — min_waves filtering for before consultations"
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0, // wave 0 triggers "before" breakpoint
     });
+    assertOk(result);
 
     const earlyScan = result.consultation_prompts?.find(e => e.name === "early-scan");
     expect(earlyScan).toBeUndefined();
@@ -412,6 +419,7 @@ describe("enterAndPrepareState — min_waves filtering for before consultations"
       variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       wave: 0,
     });
+    assertOk(result);
 
     const earlyScan = result.consultation_prompts?.find(e => e.name === "early-scan");
     expect(earlyScan).toBeDefined();

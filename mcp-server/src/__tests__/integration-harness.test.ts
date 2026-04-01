@@ -39,6 +39,7 @@ import { getExecutionStore, clearStoreCache } from "../orchestration/execution-s
 import { BoardSchema } from "../orchestration/flow-schema.ts";
 import type { FlowEventMap } from "../orchestration/events.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -159,6 +160,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
         { item: "file-b.ts", status: "cannot_fix" },
       ],
     });
+    assertOk(result);
 
     // Aggregated result: mixed done/cannot_fix → "done"
     expect(result.transition_condition).toBe("done");
@@ -188,6 +190,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
         { item: "file-b.ts", status: "cannot_fix" },
       ],
     });
+    assertOk(result);
 
     // Aggregated to cannot_fix → hitl
     expect(result.transition_condition).toBe("cannot_fix");
@@ -212,6 +215,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
       principle_ids: ["no-hidden-side-effects"],
       file_paths: ["src/tools/report-result.ts"],
     });
+    assertOk(result);
 
     // Cannot_fix items accumulated
     expect(result.board.iterations["implement"]?.cannot_fix).toHaveLength(1);
