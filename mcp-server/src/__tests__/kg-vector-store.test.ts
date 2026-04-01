@@ -14,44 +14,7 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import type { EntityRow } from "../graph/kg-types.ts";
-
-// ---------------------------------------------------------------------------
-// Mock EmbeddingService
-// ---------------------------------------------------------------------------
-
-/** Returns a random normalized 384-dim Float32Array (sufficient for testing round-trips). */
-function randomEmbedding(seed = 0): Float32Array {
-  const vec = new Float32Array(384);
-  // Deterministic pseudo-random based on seed
-  let s = seed + 1;
-  for (let i = 0; i < 384; i++) {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    vec[i] = (s / 0xffffffff) * 2 - 1;
-  }
-  // L2 normalize
-  let norm = 0;
-  for (const v of vec) norm += v * v;
-  norm = Math.sqrt(norm);
-  for (let i = 0; i < 384; i++) vec[i] /= norm;
-  return vec;
-}
-
-/** Mock EmbeddingService that returns deterministic vectors without loading any model. */
-class MockEmbeddingService {
-  private seed = 0;
-
-  async embed(texts: string[]): Promise<Float32Array[]> {
-    return texts.map((_, i) => randomEmbedding(this.seed + i));
-  }
-
-  async embedOne(text: string): Promise<Float32Array> {
-    return randomEmbedding(this.seed++);
-  }
-
-  dispose(): void {
-    /* no-op */
-  }
-}
+import { MockEmbeddingService, randomEmbedding } from "./embedding-test-helpers.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -687,5 +650,78 @@ describe("KgVectorQuery.semanticSearch", () => {
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("code");
     expect(results).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// KgVectorStore — integer validation guards (Fix for PR #58 review)
+// ---------------------------------------------------------------------------
+
+describe("KgVectorStore integer validation guards", () => {
+  let db: Database.Database;
+  let vectorStore: KgVectorStore;
+
+  beforeEach(() => {
+    db = makeDb();
+    vectorStore = new KgVectorStore(db);
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  test("upsertEntityVector throws for non-integer entityId (float)", () => {
+    expect(() => vectorStore.upsertEntityVector(1.5, randomEmbedding(0), "hash")).toThrow(
+      "entityId must be a finite integer",
+    );
+  });
+
+  test("upsertEntityVector throws for non-integer entityId (NaN)", () => {
+    expect(() => vectorStore.upsertEntityVector(NaN, randomEmbedding(0), "hash")).toThrow(
+      "entityId must be a finite integer",
+    );
+  });
+
+  test("upsertEntityVector throws for non-integer entityId (Infinity)", () => {
+    expect(() => vectorStore.upsertEntityVector(Infinity, randomEmbedding(0), "hash")).toThrow(
+      "entityId must be a finite integer",
+    );
+  });
+
+  test("upsertEntityVector accepts a valid integer entityId", () => {
+    const store = makeStore(db);
+    const { entityId } = seedEntity(store);
+    // Should not throw
+    expect(() => vectorStore.upsertEntityVector(entityId, randomEmbedding(0), "hash")).not.toThrow();
+  });
+
+  test("upsertSummaryVector throws for non-integer summaryId (float)", () => {
+    expect(() => vectorStore.upsertSummaryVector(2.7, randomEmbedding(0), "hash")).toThrow(
+      "summaryId must be a finite integer",
+    );
+  });
+
+  test("upsertSummaryVector throws for non-integer summaryId (NaN)", () => {
+    expect(() => vectorStore.upsertSummaryVector(NaN, randomEmbedding(0), "hash")).toThrow(
+      "summaryId must be a finite integer",
+    );
+  });
+
+  test("upsertSummaryVector accepts a valid integer summaryId", () => {
+    const store = makeStore(db);
+    const { fileId } = seedEntity(store);
+    const summaryRow = store.upsertSummary({
+      file_id: fileId,
+      entity_id: null,
+      scope: "file",
+      summary: "test",
+      model: null,
+      content_hash: null,
+      updated_at: new Date().toISOString(),
+    });
+    // Should not throw
+    expect(() =>
+      vectorStore.upsertSummaryVector(summaryRow.summary_id!, randomEmbedding(0), "hash"),
+    ).not.toThrow();
   });
 });

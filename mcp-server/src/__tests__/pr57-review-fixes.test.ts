@@ -22,6 +22,7 @@ import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { resolveFragments } from "../orchestration/flow-parser.ts";
 import type { FragmentDefinition } from "../orchestration/flow-schema.ts";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
+import { MockEmbeddingService, randomEmbedding } from "./embedding-test-helpers.ts";
 
 // ---------------------------------------------------------------------------
 // Fix 1: write-plan-index.ts — path traversal validation on slug
@@ -279,37 +280,6 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
 // Verify that threshold filtering works correctly with bound params.
 // ---------------------------------------------------------------------------
 
-/** Returns a deterministic normalized 384-dim Float32Array. */
-function deterministicEmbedding(seed: number): Float32Array {
-  const vec = new Float32Array(384);
-  let s = seed + 1;
-  for (let i = 0; i < 384; i++) {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    vec[i] = (s / 0xffffffff) * 2 - 1;
-  }
-  let norm = 0;
-  for (const v of vec) norm += v * v;
-  norm = Math.sqrt(norm);
-  for (let i = 0; i < 384; i++) vec[i] /= norm;
-  return vec;
-}
-
-class MockEmbeddingService {
-  private callCount = 0;
-
-  async embed(texts: string[]): Promise<Float32Array[]> {
-    return texts.map((_, i) => deterministicEmbedding(this.callCount++ + i));
-  }
-
-  async embedOne(_text: string): Promise<Float32Array> {
-    // Return a vector very similar to seed 0 (distance ~ 0 when matched against same seed)
-    return deterministicEmbedding(this.callCount++);
-  }
-
-  dispose(): void {
-    /* no-op */
-  }
-}
 
 describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   let db: Database.Database;
@@ -353,7 +323,7 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
       metadata: null,
       file_id: fileRow.file_id!,
     });
-    const vec = deterministicEmbedding(seed);
+    const vec = randomEmbedding(seed);
     vectorStore.upsertEntityVector(entityRow.entity_id!, vec, KgVectorStore.textHash(`vec-${seed}`));
     return { entityId: entityRow.entity_id!, fileId: fileRow.file_id! };
   }
@@ -398,7 +368,7 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
       content_hash: "c-hash",
       updated_at: new Date().toISOString(),
     });
-    const vec = deterministicEmbedding(30);
+    const vec = randomEmbedding(30);
     vectorStore.upsertSummaryVector(summaryRow.summary_id!, vec, KgVectorStore.textHash("A helpful file"));
 
     const query = new KgVectorQuery(db, mockService as any);

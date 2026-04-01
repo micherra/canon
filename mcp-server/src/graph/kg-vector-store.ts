@@ -102,6 +102,9 @@ export class KgVectorStore {
    * We use db.exec() with an inline JSON array literal instead.
    */
   upsertEntityVector(entityId: number, embedding: Float32Array, textHash: string): void {
+    if (!Number.isInteger(entityId) || !Number.isFinite(entityId)) {
+      throw new Error(`entityId must be a finite integer, got: ${entityId}`);
+    }
     const jsonVec = "[" + Array.from(embedding).join(",") + "]";
     const updatedAt = new Date().toISOString();
 
@@ -131,6 +134,9 @@ export class KgVectorStore {
    * Same workaround pattern as upsertEntityVector.
    */
   upsertSummaryVector(summaryId: number, embedding: Float32Array, textHash: string): void {
+    if (!Number.isInteger(summaryId) || !Number.isFinite(summaryId)) {
+      throw new Error(`summaryId must be a finite integer, got: ${summaryId}`);
+    }
     const jsonVec = "[" + Array.from(embedding).join(",") + "]";
     const updatedAt = new Date().toISOString();
 
@@ -183,6 +189,9 @@ export class KgVectorStore {
           .prepare("SELECT 1 FROM entities WHERE entity_id = ?")
           .get(entity_id);
         if (!exists) {
+          if (!Number.isInteger(entity_id) || !Number.isFinite(entity_id)) {
+            throw new Error(`entity_id must be a finite integer, got: ${entity_id}`);
+          }
           this.db.exec(`DELETE FROM entity_vectors WHERE entity_id = ${entity_id}`);
           deleted++;
         }
@@ -211,6 +220,9 @@ export class KgVectorStore {
           .prepare("SELECT 1 FROM summaries WHERE summary_id = ?")
           .get(summary_id);
         if (!exists) {
+          if (!Number.isInteger(summary_id) || !Number.isFinite(summary_id)) {
+            throw new Error(`summary_id must be a finite integer, got: ${summary_id}`);
+          }
           this.db.exec(`DELETE FROM summary_vectors WHERE summary_id = ${summary_id}`);
           deleted++;
         }
