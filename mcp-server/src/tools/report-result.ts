@@ -35,7 +35,19 @@ interface ReportResultInput {
   artifacts?: string[];
   concern_text?: string;
   error?: string;
-  metrics?: { duration_ms: number; spawns: number; model: string };
+  metrics?: {
+    duration_ms: number;
+    spawns: number;
+    model: string;
+    // ADR-003a agent performance metrics (all optional for backward compat)
+    tool_calls?: number;
+    orientation_calls?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_tokens?: number;
+    cache_write_tokens?: number;
+    turns?: number;
+  };
   parallel_results?: Array<{
     item: string;
     status: string;
@@ -76,7 +88,18 @@ interface LogEntry {
   timestamp: string;
   artifacts?: string[];
   error?: string;
-  metrics?: { duration_ms: number; spawns: number; model: string };
+  metrics?: {
+    duration_ms: number;
+    spawns: number;
+    model: string;
+    tool_calls?: number;
+    orientation_calls?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_tokens?: number;
+    cache_write_tokens?: number;
+    turns?: number;
+  };
   stuck_reason?: string;
   hitl_reason?: string;
   // Quality signal fields
@@ -556,14 +579,42 @@ async function reportResultLocked(
     await executeEffects(stateDef, input.workspace, input.artifacts, projectDir).catch(() => {});
   }
 
+  // Emit stuck_detected event (best-effort — follows established best-effort pattern).
+  // This is explicit and happens before the other events so it's visible in the event log
+  // before state_completed / transition_evaluated are appended.
+  if (stuck && stuck_reason) {
+    const correlationId = store.getCorrelationId();
+    const iteration = board.iterations[input.state_id];
+    const history = iteration?.history ?? [];
+    const iterationCount = history.length;
+    const previous = history.length >= 2 ? (history[history.length - 2] as Record<string, unknown>) : {};
+    const current = history.length >= 1 ? (history[history.length - 1] as Record<string, unknown>) : {};
+    const stuckPayload = {
+      stateId: input.state_id,
+      strategy: stateDef?.stuck_when ?? "unknown",
+      reason: stuck_reason,
+      iteration_count: iterationCount,
+      comparison: { previous, current },
+      timestamp: new Date().toISOString(),
+      ...(correlationId ? { correlation_id: correlationId } : {}),
+    };
+    try {
+      store.appendEvent("stuck_detected", stuckPayload, correlationId ?? undefined);
+    } catch { /* best-effort */ }
+    try {
+      flowEventBus.emit("stuck_detected", stuckPayload);
+    } catch { /* best-effort */ }
+  }
+
   // Emit events (best-effort — listeners must swallow errors).
   // once() auto-removes listeners on first fire; the finally block removes any
   // listeners that were registered but not fired due to an error mid-sequence.
+  const correlationId = store.getCorrelationId();
   const onStateCompleted = (event: import("../orchestration/events.js").FlowEventMap["state_completed"]) => {
-    try { store.appendEvent("state_completed", event as Record<string, unknown>); } catch { /* best-effort */ }
+    try { store.appendEvent("state_completed", event as Record<string, unknown>, correlationId ?? undefined); } catch { /* best-effort */ }
   };
   const onTransitionEvaluated = (event: import("../orchestration/events.js").FlowEventMap["transition_evaluated"]) => {
-    try { store.appendEvent("transition_evaluated", event as Record<string, unknown>); } catch { /* best-effort */ }
+    try { store.appendEvent("transition_evaluated", event as Record<string, unknown>, correlationId ?? undefined); } catch { /* best-effort */ }
   };
   flowEventBus.once("state_completed", onStateCompleted);
   flowEventBus.once("transition_evaluated", onTransitionEvaluated);
@@ -582,6 +633,7 @@ async function reportResultLocked(
       ...(input.files_changed != null ? { files_changed: input.files_changed } : {}),
       ...(input.discovered_gates?.length ? { discovered_gates_count: input.discovered_gates.length } : {}),
       ...(input.discovered_postconditions?.length ? { discovered_postconditions_count: input.discovered_postconditions.length } : {}),
+      ...(correlationId ? { correlation_id: correlationId } : {}),
     });
     flowEventBus.emit("transition_evaluated", {
       stateId: input.state_id,
@@ -589,6 +641,7 @@ async function reportResultLocked(
       normalizedCondition: condition,
       nextState: nextState ?? "null",
       timestamp: new Date().toISOString(),
+      ...(correlationId ? { correlation_id: correlationId } : {}),
     });
     if (hitl_required) {
       flowEventBus.emit("hitl_triggered", {

@@ -9,6 +9,7 @@
  */
 
 import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { join, resolve } from 'node:path';
 import type {
@@ -19,6 +20,7 @@ import type {
   WaveEvent,
 } from './flow-schema.ts';
 import { initExecutionDb } from './execution-schema.ts';
+import { validateEventPayload } from './events.ts';
 import { CANON_FILES } from '../constants.ts';
 
 // ---------------------------------------------------------------------------
@@ -49,6 +51,7 @@ interface ExecutionRow {
   completed_at: string | null;
   rolled_back_at: string | null;
   rolled_back_to: string | null;
+  correlation_id: string | null;
 }
 
 interface ExecutionStateRow {
@@ -168,6 +171,21 @@ export interface UpdateWaveEventFields {
   rejection_reason?: string;
 }
 
+export interface GetEventsOptions {
+  correlation_id?: string;
+  type?: string;
+  since?: string;
+  limit?: number;
+}
+
+export interface EventOutput {
+  id: number;
+  type: string;
+  payload: Record<string, unknown>;
+  correlation_id: string | null;
+  timestamp: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helper — parse nullable JSON column
 // ---------------------------------------------------------------------------
@@ -223,6 +241,9 @@ export class ExecutionStore {
 
   // ---- Event statements ----
   private readonly stmtAppendEvent: Database.Statement;
+  private readonly stmtGetEventsByCorrelation: Database.Statement;
+  private readonly stmtGetEventsByType: Database.Statement;
+  private readonly stmtGetEventsAll: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -234,13 +255,13 @@ export class ExecutionStore {
         started, last_updated, blocked, concerns, skipped, metadata,
         branch, sanitized, created, original_task,
         tier, flow_name, slug, status, completed_at,
-        rolled_back_at, rolled_back_to
+        rolled_back_at, rolled_back_to, correlation_id
       ) VALUES (
         1, @flow, @task, @entry, @current_state, @base_commit,
         @started, @last_updated, @blocked, @concerns, @skipped, @metadata,
         @branch, @sanitized, @created, @original_task,
         @tier, @flow_name, @slug, @status, @completed_at,
-        @rolled_back_at, @rolled_back_to
+        @rolled_back_at, @rolled_back_to, @correlation_id
       )
     `);
 
@@ -373,7 +394,20 @@ export class ExecutionStore {
 
     // Events
     this.stmtAppendEvent = db.prepare(`
-      INSERT INTO events (type, payload, timestamp) VALUES (@type, @payload, @timestamp)
+      INSERT INTO events (type, payload, correlation_id, timestamp)
+      VALUES (@type, @payload, @correlation_id, @timestamp)
+    `);
+
+    this.stmtGetEventsByCorrelation = db.prepare(`
+      SELECT * FROM events WHERE correlation_id = ? ORDER BY id ASC
+    `);
+
+    this.stmtGetEventsByType = db.prepare(`
+      SELECT * FROM events WHERE type = ? ORDER BY id ASC
+    `);
+
+    this.stmtGetEventsAll = db.prepare(`
+      SELECT * FROM events ORDER BY id ASC
     `);
   }
 
@@ -405,6 +439,7 @@ export class ExecutionStore {
       completed_at: params.completed_at ?? null,
       rolled_back_at: params.rolled_back_at ?? null,
       rolled_back_to: params.rolled_back_to ?? null,
+      correlation_id: randomUUID(),
     });
   }
 
@@ -715,12 +750,122 @@ export class ExecutionStore {
   // Event log
   // --------------------------------------------------------------------------
 
-  appendEvent(type: string, payload: Record<string, unknown>): void {
+  appendEvent(type: string, payload: Record<string, unknown>, correlationId?: string): void {
+    const validation = validateEventPayload(type, payload);
+    if (!validation.valid) {
+      console.warn(`[canon] Event payload validation failed for type "${type}":`, validation.errors);
+    }
     this.stmtAppendEvent.run({
       type,
       payload: JSON.stringify(payload),
+      correlation_id: correlationId ?? this.getCorrelationId(),
       timestamp: new Date().toISOString(),
     });
+  }
+
+  /**
+   * Query events with optional filtering.
+   * Returns empty array when no events match. SQLite errors may still be thrown.
+   */
+  getEvents(options?: GetEventsOptions): EventOutput[] {
+    const { correlation_id, type, since, limit } = options ?? {};
+
+    // Use prepared statements for the common single-filter cases to avoid
+    // string interpolation. Fall back to dynamic SQL when multiple filters
+    // or the `since` / `limit` modifiers are needed.
+    const hasCorrelation = correlation_id !== undefined;
+    const hasType = type !== undefined;
+    const hasSince = since !== undefined;
+    const hasLimit = limit !== undefined;
+
+    let rows: Array<{ id: number; type: string; payload: string; correlation_id: string | null; timestamp: string }>;
+
+    if (!hasCorrelation && !hasType && !hasSince && !hasLimit) {
+      rows = this.stmtGetEventsAll.all() as typeof rows;
+    } else if (hasCorrelation && !hasType && !hasSince && !hasLimit) {
+      rows = this.stmtGetEventsByCorrelation.all(correlation_id) as typeof rows;
+    } else if (hasType && !hasCorrelation && !hasSince && !hasLimit) {
+      rows = this.stmtGetEventsByType.all(type) as typeof rows;
+    } else {
+      rows = this.buildEventQuery(options ?? {});
+    }
+
+    const events: EventOutput[] = [];
+    for (const r of rows) {
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(r.payload) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      events.push({
+        id: r.id,
+        type: r.type,
+        payload,
+        correlation_id: r.correlation_id,
+        timestamp: r.timestamp,
+      });
+    }
+    return events;
+  }
+
+  /** Returns all events of the given type, ordered by id ASC. */
+  getEventsByType(type: string): EventOutput[] {
+    return this.getEvents({ type });
+  }
+
+  /** Returns the correlation_id from the execution row, or null if absent. */
+  getCorrelationId(): string | null {
+    const row = this.stmtGetExecution.get() as ExecutionRow | undefined;
+    return row?.correlation_id ?? null;
+  }
+
+  /** Run a WAL passive checkpoint. Safe to call at any time. */
+  walCheckpoint(): void {
+    this.db.pragma('wal_checkpoint(PASSIVE)');
+  }
+
+  // --------------------------------------------------------------------------
+  // Private helpers — event query builder
+  // --------------------------------------------------------------------------
+
+  private buildEventQuery(
+    options: GetEventsOptions,
+  ): Array<{ id: number; type: string; payload: string; correlation_id: string | null; timestamp: string }> {
+    const { correlation_id, type, since, limit } = options;
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (correlation_id !== undefined) {
+      conditions.push('correlation_id = ?');
+      params.push(correlation_id);
+    }
+    if (type !== undefined) {
+      conditions.push('type = ?');
+      params.push(type);
+    }
+    if (since !== undefined) {
+      conditions.push('timestamp > ?');
+      params.push(since);
+    }
+
+    let sql = 'SELECT * FROM events';
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+    sql += ' ORDER BY id ASC';
+    if (limit !== undefined) {
+      sql += ' LIMIT ?';
+      params.push(limit);
+    }
+
+    return this.db.prepare(sql).all(...params) as Array<{
+      id: number;
+      type: string;
+      payload: string;
+      correlation_id: string | null;
+      timestamp: string;
+    }>;
   }
 
   // --------------------------------------------------------------------------

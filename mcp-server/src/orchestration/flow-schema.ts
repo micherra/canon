@@ -325,7 +325,28 @@ export const StateMetricsSchema = z.object({
   test_results: TestResultsSchema.optional(),
   files_changed: z.number().optional(),
   revision_count: z.number().optional(),
+  // ADR-003a agent performance metrics
+  tool_calls: z.number().optional(),
+  orientation_calls: z.number().optional(),
+  input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+  cache_read_tokens: z.number().optional(),
+  cache_write_tokens: z.number().optional(),
+  turns: z.number().optional(),
 });
+
+/** Focused schema for agent-reported performance metrics (ADR-003a input validation). */
+export const AgentMetricsSchema = z.object({
+  tool_calls: z.number().optional(),
+  orientation_calls: z.number().optional(),
+  input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+  cache_read_tokens: z.number().optional(),
+  cache_write_tokens: z.number().optional(),
+  duration_ms: z.number().optional(),
+  turns: z.number().optional(),
+});
+export type AgentMetrics = z.infer<typeof AgentMetricsSchema>;
 
 export const ArtifactHistoryEntrySchema = z.object({
   entry: z.number(),
