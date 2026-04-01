@@ -36,6 +36,7 @@ import { showPrImpact } from "./tools/show-pr-impact.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
 import { updateBoard } from "./tools/update-board.ts";
+import { writePlanIndex } from "./tools/write-plan-index.ts";
 import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
 import { wrapHandler } from "./utils/wrap-handler.ts";
 
@@ -695,6 +696,30 @@ server.registerTool(
   wrapHandler(async (input) => {
     return graphQuery(input, projectDir);
   })
+);
+
+server.registerTool(
+  "write_plan_index",
+  {
+    description:
+      "Write a structured plan index (INDEX.md) for wave execution. Accepts typed task entries and produces normalized markdown that parseTaskIdsForWave can reliably parse.",
+    inputSchema: {
+      workspace: z.string(),
+      slug: z.string(),
+      tasks: z.array(
+        z.object({
+          task_id: z
+            .string()
+            .describe("Task identifier — alphanumeric, hyphens, underscores only"),
+          wave: z.number().min(1).describe("Wave number (1-based)"),
+          depends_on: z.array(z.string()).optional(),
+          files: z.array(z.string()).optional(),
+          principles: z.array(z.string()).optional(),
+        }),
+      ),
+    },
+  },
+  wrapHandler(async (input) => writePlanIndex(input)),
 );
 
 // Start the server
