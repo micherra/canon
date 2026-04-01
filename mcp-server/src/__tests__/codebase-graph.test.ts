@@ -317,7 +317,7 @@ describe("codebaseGraph — git adapter integration", () => {
     }));
 
     // Re-import to pick up the mock
-    const { codebaseGraph: cg } = await import("../tools/codebase-graph.js");
+    const { codebaseGraph: cg } = await import("../tools/codebase-graph.ts");
     const result = await cg({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     // When gitCurrentBranch returns null, no git-based changed file detection occurs.
@@ -337,7 +337,7 @@ describe("codebaseGraph — git adapter integration", () => {
     });
     vi.doMock("../adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
 
-    const { codebaseGraph: cg } = await import("../tools/codebase-graph.js");
+    const { codebaseGraph: cg } = await import("../tools/codebase-graph.ts");
     await cg({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     // gitExecAsync should have been called (for gitCurrentBranch at minimum)

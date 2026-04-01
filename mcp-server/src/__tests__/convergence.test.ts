@@ -380,6 +380,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     });
 
     const convergence = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergence);
 
     expect(convergence.cannot_fix_items).toEqual([
       { principle_id: "no-hidden-side-effects", file_path: "src/tools/check-convergence.ts" },
@@ -412,6 +413,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     });
 
     const convergence = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergence);
 
     expect(convergence.cannot_fix_items).toHaveLength(2);
     expect(convergence.cannot_fix_items).toEqual(
@@ -437,6 +439,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     });
 
     const convergence = await checkConvergence({ workspace, state_id: "review" });
+    assertOk(convergence);
 
     // Orchestrator uses filterCannotFix to exclude items from next iteration
     const allItems = [
@@ -450,5 +453,23 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     expect(remaining).toEqual([
       { principle_id: "p3", file_path: "a.ts" },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// check-convergence: WORKSPACE_NOT_FOUND when no execution exists
+// ---------------------------------------------------------------------------
+
+describe("checkConvergence: error on missing execution", () => {
+  it("returns WORKSPACE_NOT_FOUND when workspace has no execution", async () => {
+    const workspace = makeTmpWorkspace(); // fresh dir, no seedWorkspace call
+
+    const result = await checkConvergence({ workspace, state_id: "review" });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.message).toMatch(/No execution found/);
+    }
   });
 });

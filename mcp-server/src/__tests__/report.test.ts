@@ -6,9 +6,6 @@ import { reportInputSchema } from "../schema.ts";
 import { report } from "../tools/report.ts";
 import { DriftStore } from "../drift/store.ts";
 
-// Clear the DriftDb module cache between tests
-import { getDriftDb } from "../drift/drift-db.ts";
-
 // --- Schema validation ---
 
 describe("reportInputSchema", () => {
@@ -54,12 +51,7 @@ describe("report()", () => {
   });
 
   afterEach(async () => {
-    // Clear DriftDb cache so each test gets a fresh DB
-    const cache = (getDriftDb as any).__cache ?? (globalThis as any).__driftDbCache;
-    // Access the module-level cache via a side-channel approach
-    // The cache is a module-scoped Map in drift-db.ts; clear it via the exported function
-    // by closing the DB for this tmpDir. Since we can't directly access the cache,
-    // we rely on each test using a unique tmpDir.
+    // Each test uses a unique tmpDir so no explicit cache clearing is needed.
     await rm(tmpDir, { recursive: true, force: true });
   });
 

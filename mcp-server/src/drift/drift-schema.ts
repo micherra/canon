@@ -27,7 +27,7 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${DRIFT_SCHEMA_VERSION}')`,
+  `INSERT INTO meta (key, value) VALUES ('schema_version', '${DRIFT_SCHEMA_VERSION}') ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 
   // Reviews (replaces reviews.jsonl)
   `CREATE TABLE IF NOT EXISTS reviews (

@@ -27,7 +27,7 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`,
+  `INSERT INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}') ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 
   // Execution — singleton row (replaces board.json top-level fields + session.json)
   `CREATE TABLE IF NOT EXISTS execution (

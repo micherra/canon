@@ -92,8 +92,8 @@ export function toISOWeek(timestamp: string): string {
   const thursday = new Date(date);
   // Day of week: 0=Sun, 1=Mon, ..., 4=Thu, ..., 6=Sat
   const dayOfWeek = date.getDay();
-  // Shift to Thursday: Mon(1)->+3, Tue(2)->+2, Wed(3)->+1, Thu(4)->0, Fri(5)->-1, Sat(6)->-2, Sun(0)->+3
-  const daysToThursday = dayOfWeek === 0 ? 3 : 4 - dayOfWeek;
+  // Shift to Thursday: Mon(1)->+3, Tue(2)->+2, Wed(3)->+1, Thu(4)->0, Fri(5)->-1, Sat(6)->-2, Sun(0)->+4
+  const daysToThursday = dayOfWeek === 0 ? 4 : 4 - dayOfWeek;
   thursday.setDate(date.getDate() + daysToThursday);
 
   const year = thursday.getFullYear();

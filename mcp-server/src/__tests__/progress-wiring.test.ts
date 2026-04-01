@@ -120,7 +120,7 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     const progressContent = store.getProgress(100);
     const lines = progressContent.split("\n").filter(l => l.trim() !== "");
     expect(lines).toHaveLength(1);
-    // getProgress() prepends "- " to each stored line
+    // getProgress() returns stored lines verbatim with no prefix
     expect(lines[0]).toContain("## Progress: My task");
   });
 
