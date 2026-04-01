@@ -17,6 +17,7 @@ import type {
   BoardStateEntry,
   IterationEntry,
   WaveEvent,
+  StuckWhen,
 } from './flow-schema.ts';
 import { initExecutionDb } from './execution-schema.ts';
 import { CANON_FILES } from '../constants.ts';
@@ -224,6 +225,10 @@ export class ExecutionStore {
   // ---- Event statements ----
   private readonly stmtAppendEvent: Database.Statement;
 
+  // ---- Iteration results statements (SQL-based stuck detection) ----
+  private readonly stmtRecordIterationResult: Database.Statement;
+  private readonly stmtGetLastTwoIterationResults: Database.Statement;
+
   constructor(db: Database.Database) {
     this.db = db;
 
@@ -374,6 +379,19 @@ export class ExecutionStore {
     // Events
     this.stmtAppendEvent = db.prepare(`
       INSERT INTO events (type, payload, timestamp) VALUES (@type, @payload, @timestamp)
+    `);
+
+    // Iteration results (SQL-based stuck detection)
+    this.stmtRecordIterationResult = db.prepare(`
+      INSERT OR REPLACE INTO iteration_results (state_id, iteration, status, data, timestamp)
+      VALUES (@state_id, @iteration, @status, @data, @timestamp)
+    `);
+
+    this.stmtGetLastTwoIterationResults = db.prepare(`
+      SELECT status, data FROM iteration_results
+      WHERE state_id = ?
+      ORDER BY iteration DESC
+      LIMIT 2
     `);
   }
 
@@ -611,6 +629,71 @@ export class ExecutionStore {
   }
 
   // --------------------------------------------------------------------------
+  // Iteration results (SQL-based stuck detection — ADR-004)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Record a raw iteration result for a state.
+   * `data` should contain the fields relevant to the state's `stuck_when` strategy.
+   * Uses INSERT OR REPLACE — re-recording the same iteration number overwrites the previous entry.
+   */
+  recordIterationResult(
+    stateId: string,
+    iteration: number,
+    status: string,
+    data: Record<string, unknown>,
+  ): void {
+    this.stmtRecordIterationResult.run({
+      state_id: stateId,
+      iteration,
+      status,
+      data: JSON.stringify(data),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Determine whether a state is stuck by querying the last two iteration results.
+   * Returns false when fewer than 2 iteration results exist.
+   *
+   * The comparison logic mirrors the pure `isStuck` in transitions.ts but reads from
+   * the `iteration_results` table rather than caller-supplied history arrays.
+   */
+  isStuck(stateId: string, stuckWhen: StuckWhen): boolean {
+    const rows = this.stmtGetLastTwoIterationResults.all(stateId) as Array<{ status: string; data: string }>;
+
+    if (rows.length < 2) return false;
+
+    // rows[0] is the latest (DESC order), rows[1] is the previous
+    const curr = rows[0];
+    const prev = rows[1];
+    const currData = JSON.parse(curr.data) as Record<string, unknown>;
+    const prevData = JSON.parse(prev.data) as Record<string, unknown>;
+
+    switch (stuckWhen) {
+      case 'same_violations':
+        return (
+          setsEqual(currData.principle_ids as string[] ?? [], prevData.principle_ids as string[] ?? []) &&
+          setsEqual(currData.file_paths as string[] ?? [], prevData.file_paths as string[] ?? [])
+        );
+      case 'same_file_test':
+        return JSON.stringify(currData.pairs ?? []) === JSON.stringify(prevData.pairs ?? []);
+      case 'same_status':
+        return curr.status === prev.status;
+      case 'no_progress':
+        return (
+          currData.commit_sha === prevData.commit_sha &&
+          currData.artifact_count === prevData.artifact_count
+        );
+      case 'no_gate_progress':
+        return (
+          currData.gate_output_hash === prevData.gate_output_hash &&
+          !currData.passed
+        );
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // Progress
   // --------------------------------------------------------------------------
 
@@ -793,6 +876,16 @@ export class ExecutionStore {
       rejection_reason: row.rejection_reason ?? undefined,
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Private helpers — stuck detection
+// ---------------------------------------------------------------------------
+
+function setsEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setA = new Set(a);
+  return b.every(item => setA.has(item));
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@ import Database from 'better-sqlite3';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '1';
+export const SCHEMA_VERSION = '2';
 
 // ---------------------------------------------------------------------------
 // DDL statements
@@ -27,7 +27,7 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`,
+  `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1')`,
 
   // Execution — singleton row (replaces board.json top-level fields + session.json)
   `CREATE TABLE IF NOT EXISTS execution (
@@ -134,6 +134,59 @@ const DDL_STATEMENTS = [
 ];
 
 // ---------------------------------------------------------------------------
+// Migration runner
+// ---------------------------------------------------------------------------
+
+interface Migration {
+  version: string;
+  up: (db: Database.Database) => void;
+}
+
+/**
+ * Ordered list of schema migrations.
+ * Each migration runs only when the stored schema version is less than migration.version.
+ * Versions are compared as strings — use zero-padded integers if > 9.
+ */
+const MIGRATIONS: Migration[] = [
+  {
+    version: '2',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS iteration_results (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          state_id  TEXT NOT NULL,
+          iteration INTEGER NOT NULL,
+          status    TEXT NOT NULL,
+          data      TEXT NOT NULL DEFAULT '{}',
+          timestamp TEXT NOT NULL,
+          UNIQUE(state_id, iteration)
+        )
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_iteration_results_state ON iteration_results(state_id)`);
+      db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
+    },
+  },
+];
+
+/**
+ * Run any pending migrations against the given database.
+ * Version gated: only runs migrations whose version is greater than the current stored version.
+ * All DDL in migrations uses IF NOT EXISTS, making repeated calls safe.
+ *
+ * Exported for direct testing of upgrade scenarios.
+ */
+export function runMigrations(db: Database.Database): void {
+  const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
+  const version = currentRow?.value ?? '1';
+
+  for (const migration of MIGRATIONS) {
+    if (migration.version > version) {
+      migration.up(db);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // initExecutionDb
 // ---------------------------------------------------------------------------
 
@@ -162,6 +215,11 @@ export function initExecutionDb(dbPath: string): Database.Database {
   });
 
   applySchema();
+
+  // Run version-gated migrations (idempotent — IF NOT EXISTS guards).
+  // New workspaces start at version '1' (the INSERT OR IGNORE above) and
+  // immediately migrate to the current SCHEMA_VERSION.
+  runMigrations(db);
 
   return db;
 }
