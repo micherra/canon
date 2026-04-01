@@ -10,38 +10,38 @@
 // ---------------------------------------------------------------------------
 
 export type EntityKind =
-  | 'file'
-  | 'function'
-  | 'class'
-  | 'method'
-  | 'interface'
-  | 'type-alias'
-  | 'enum'
-  | 'variable'
-  | 'property'
-  | 'principle'
-  | 'flow'
-  | 'flow-fragment'
-  | 'agent'
-  | 'template'
-  | 'decision'
-  | 'hook';
+  | "file"
+  | "function"
+  | "class"
+  | "method"
+  | "interface"
+  | "type-alias"
+  | "enum"
+  | "variable"
+  | "property"
+  | "principle"
+  | "flow"
+  | "flow-fragment"
+  | "agent"
+  | "template"
+  | "decision"
+  | "hook";
 
 export type EdgeType =
-  | 'imports'
-  | 'calls'
-  | 'extends'
-  | 'implements'
-  | 'type-references'
-  | 'contains'
-  | 're-exports'
-  | 'composition'
-  | 'fm:references'
-  | 'doc:references'
-  | 'applies-to'
-  | 'includes'
-  | 'spawns'
-  | 'tests';
+  | "imports"
+  | "calls"
+  | "extends"
+  | "implements"
+  | "type-references"
+  | "contains"
+  | "re-exports"
+  | "composition"
+  | "fm:references"
+  | "doc:references"
+  | "applies-to"
+  | "includes"
+  | "spawns"
+  | "tests";
 
 // ---------------------------------------------------------------------------
 // SQLite Row Interfaces
@@ -125,7 +125,7 @@ export interface ImportSpecifier {
  * ingestion layer after database insertion.
  */
 export interface AdapterResult {
-  entities: Omit<EntityRow, 'entity_id' | 'file_id'>[];
+  entities: Omit<EntityRow, "entity_id" | "file_id">[];
   intraFileEdges: IntraFileEdge[];
   importSpecifiers: ImportSpecifier[];
 }
@@ -200,7 +200,7 @@ export interface SummaryRow {
   summary_id?: number;
   file_id: number;
   entity_id: number | null;
-  scope: 'file' | 'entity';
+  scope: "file" | "entity";
   summary: string;
   model: string | null;
   content_hash: string | null;

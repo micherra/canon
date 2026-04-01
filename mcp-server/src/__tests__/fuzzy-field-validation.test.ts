@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { suggestField, checkUnknownFields } from "../utils/fuzzy-field-validation.ts";
+import { describe, expect, it } from "vitest";
+import { checkUnknownFields, suggestField } from "../utils/fuzzy-field-validation.ts";
 
 const REPORT_RESULT_KEYS = [
   "workspace",
@@ -69,11 +69,7 @@ describe("checkUnknownFields", () => {
   });
 
   it("reports multiple unknown fields", () => {
-    const errors = checkUnknownFields(
-      "report_result",
-      { status: "clean", stateId: "review" },
-      REPORT_RESULT_KEYS,
-    );
+    const errors = checkUnknownFields("report_result", { status: "clean", stateId: "review" }, REPORT_RESULT_KEYS);
     expect(errors).toHaveLength(2);
     expect(errors[0]).toContain('"status"');
     expect(errors[1]).toContain('"stateId"');

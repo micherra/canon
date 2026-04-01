@@ -1,26 +1,27 @@
 <script lang="ts">
-  /**
-   * NarrativeSummary.svelte
-   *
-   * Displays the narrative text paragraph and three metric cards:
-   *   - Files Changed (totalFiles across layerCount layers)
-   *   - Net New Files (netNewFiles)
-   *   - Violations (violationCount, red if > 0)
-   *
-   * Canon principles:
-   *   - compose-from-small-to-large: atom component, composed by container in Wave 4
-   *   - props-are-the-component-contract: receives exactly what it needs, no global state
-   */
+/**
+ * NarrativeSummary.svelte
+ *
+ * Displays the narrative text paragraph and three metric cards:
+ *   - Files Changed (totalFiles across layerCount layers)
+ *   - Net New Files (netNewFiles)
+ *   - Violations (violationCount, red if > 0)
+ *
+ * Canon principles:
+ *   - compose-from-small-to-large: atom component, composed by container in Wave 4
+ *   - props-are-the-component-contract: receives exactly what it needs, no global state
+ */
 
-  interface NarrativeSummaryProps {
-    narrative: string;
-    totalFiles: number;
-    layerCount: number;
-    netNewFiles: number;
-    violationCount: number;
-  }
+interface NarrativeSummaryProps {
+  narrative: string;
+  totalFiles: number;
+  layerCount: number;
+  netNewFiles: number;
+  violationCount: number;
+}
 
-  let { narrative, totalFiles, layerCount, netNewFiles, violationCount }: NarrativeSummaryProps = $props();
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { narrative, totalFiles, layerCount, netNewFiles, violationCount }: NarrativeSummaryProps = $props();
 </script>
 
 <div class="narrative-summary">

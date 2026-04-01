@@ -11,17 +11,16 @@
  * - loadFlow() with projectDir parameter (load-flow.ts → flow-parser.ts cross-task boundary)
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
-import { mkdir, writeFile, rm } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import { loadFlow } from "../tools/load-flow.ts";
-import { normalizeStatus } from "../orchestration/transitions.ts";
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import type { Board } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { normalizeStatus } from "../orchestration/transitions.ts";
+import { loadFlow } from "../tools/load-flow.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -371,27 +370,25 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
 
 describe("loadAndResolveFlow error message — lists flows from both project and plugin dirs", () => {
   it("error message mentions the project flows dir and plugin path when projectDir is given", async () => {
-    await expect(
-      loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir),
-    ).rejects.toThrow(/nonexistent-xyz-flow/);
+    await expect(loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir)).rejects.toThrow(
+      /nonexistent-xyz-flow/,
+    );
   });
 
   it("error message includes the project .canon/flows/ directory path", async () => {
-    await expect(
-      loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir),
-    ).rejects.toThrow(new RegExp(`${tmpDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*\\.canon.*flows`));
+    await expect(loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir)).rejects.toThrow(
+      new RegExp(`${tmpDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*\\.canon.*flows`),
+    );
   });
 
   it("error message includes project-level flow names in the available list", async () => {
-    await expect(
-      loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir),
-    ).rejects.toThrow(/project-only-flow/);
+    await expect(loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir)).rejects.toThrow(
+      /project-only-flow/,
+    );
   });
 
   it("error message includes plugin-level flow names in the available list", async () => {
-    await expect(
-      loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir),
-    ).rejects.toThrow(/feature/);
+    await expect(loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir)).rejects.toThrow(/feature/);
   });
 });
 

@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { codebaseGraph } from "../tools/codebase-graph.ts";
 
 describe("codebaseGraph", () => {
@@ -32,12 +32,9 @@ describe("codebaseGraph", () => {
   it("scans files and creates nodes with layer inference", async () => {
     await writeFile(
       join(tmpDir, "src", "api", "orders.ts"),
-      `import { OrderService } from '../services/order-service';\nexport function handler() {}`
+      `import { OrderService } from '../services/order-service';\nexport function handler() {}`,
     );
-    await writeFile(
-      join(tmpDir, "src", "services", "order-service.ts"),
-      `export class OrderService {}`
-    );
+    await writeFile(join(tmpDir, "src", "services", "order-service.ts"), `export class OrderService {}`);
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
@@ -48,18 +45,13 @@ describe("codebaseGraph", () => {
   });
 
   it("creates edges from imports", async () => {
-    await writeFile(
-      join(tmpDir, "src", "api", "orders.ts"),
-      `import { helper } from '../utils/helper';`
-    );
+    await writeFile(join(tmpDir, "src", "api", "orders.ts"), `import { helper } from '../utils/helper';`);
     await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     expect(result.edges.length).toBeGreaterThanOrEqual(1);
-    const edge = result.edges.find(
-      (e) => e.source.includes("orders") && e.target.includes("helper")
-    );
+    const edge = result.edges.find((e) => e.source.includes("orders") && e.target.includes("helper"));
     expect(edge).toBeDefined();
     expect(edge!.type).toBe("import");
   });
@@ -85,7 +77,7 @@ describe("codebaseGraph", () => {
     const result = await codebaseGraph(
       { source_dirs: ["src"], changed_files: ["src/api/orders.ts"] },
       tmpDir,
-      "/nonexistent"
+      "/nonexistent",
     );
 
     const changedNode = result.nodes.find((n) => n.id === "src/api/orders.ts");
@@ -114,7 +106,7 @@ describe("codebaseGraph", () => {
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
         layers: { src: ["src/**"] },
-      })
+      }),
     );
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
 
@@ -136,7 +128,7 @@ describe("codebaseGraph", () => {
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
         layers: { src: ["src/**"] },
-      })
+      }),
     );
     // File inside src
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export const h = 1;`);
@@ -157,23 +149,15 @@ describe("codebaseGraph", () => {
         compilerOptions: {
           paths: { "@/*": ["./src/*"] },
         },
-      })
+      }),
     );
-    await writeFile(
-      join(tmpDir, "src", "api", "handler.ts"),
-      `import { helper } from '@/utils/helper';`
-    );
-    await writeFile(
-      join(tmpDir, "src", "utils", "helper.ts"),
-      `export function helper() {}`
-    );
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '@/utils/helper';`);
+    await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     expect(result.nodes).toHaveLength(2);
-    const edge = result.edges.find(
-      (e) => e.source.includes("handler") && e.target.includes("helper")
-    );
+    const edge = result.edges.find((e) => e.source.includes("handler") && e.target.includes("helper"));
     expect(edge).toBeDefined();
   });
 
@@ -230,23 +214,17 @@ describe("codebaseGraph", () => {
             min_confidence: 0.7,
           },
         },
-      })
+      }),
     );
-    await writeFile(
-      join(tmpDir, "src", "templates", "planner.md"),
-      "uses: ./summarizer.md\n"
-    );
-    await writeFile(
-      join(tmpDir, "src", "templates", "summarizer.md"),
-      "name: summarizer\n"
-    );
+    await writeFile(join(tmpDir, "src", "templates", "planner.md"), "uses: ./summarizer.md\n");
+    await writeFile(join(tmpDir, "src", "templates", "summarizer.md"), "name: summarizer\n");
 
     const result = await codebaseGraph({}, tmpDir, "/nonexistent");
     const compositionEdge = result.edges.find(
       (e) =>
         e.source === "src/templates/planner.md" &&
         e.target === "src/templates/summarizer.md" &&
-        e.type === "composition"
+        e.type === "composition",
     );
     expect(compositionEdge).toBeDefined();
     expect(compositionEdge?.origin).toBe("inferred-llm");
@@ -265,16 +243,10 @@ describe("codebaseGraph", () => {
             file_patterns: [".md"],
           },
         },
-      })
+      }),
     );
-    await writeFile(
-      join(tmpDir, "src", "templates", "planner.md"),
-      "uses: ./summarizer.md\n"
-    );
-    await writeFile(
-      join(tmpDir, "src", "templates", "summarizer.md"),
-      "name: summarizer\n"
-    );
+    await writeFile(join(tmpDir, "src", "templates", "planner.md"), "uses: ./summarizer.md\n");
+    await writeFile(join(tmpDir, "src", "templates", "summarizer.md"), "name: summarizer\n");
 
     const result = await codebaseGraph({}, tmpDir, "/nonexistent");
     const compositionEdge = result.edges.find((e) => e.type === "composition");
@@ -292,10 +264,7 @@ describe("codebaseGraph — git adapter integration", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-graph-git-test-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
     await mkdir(join(tmpDir, "src", "api"), { recursive: true });
-    await writeFile(
-      join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ layers: { api: ["src/api"] } }),
-    );
+    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { api: ["src/api"] } }));
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handler() {}`);
   });
 
@@ -347,4 +316,3 @@ describe("codebaseGraph — git adapter integration", () => {
     expect(firstArgs).toEqual(["rev-parse", "--abbrev-ref", "HEAD"]);
   });
 });
-

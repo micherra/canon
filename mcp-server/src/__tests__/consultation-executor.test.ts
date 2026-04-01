@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+  type ConsultationInput,
   executeConsultations,
   resolveConsultationPrompt,
-  type ConsultationInput,
 } from "../orchestration/consultation-executor.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 

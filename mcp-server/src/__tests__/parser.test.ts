@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { parseFrontmatter, parsePrinciple } from "../parser.ts";
 
 describe("parseFrontmatter", () => {
@@ -42,10 +42,7 @@ Body`;
     const { frontmatter } = parseFrontmatter(content);
     const scope = frontmatter.scope as Record<string, unknown>;
     expect(scope.layers).toEqual(["api", "ui"]);
-    expect(scope.file_patterns).toEqual([
-      "src/routes/**",
-      "**/*.controller.ts",
-    ]);
+    expect(scope.file_patterns).toEqual(["src/routes/**", "**/*.controller.ts"]);
   });
 
   it("parses nested arrays with list items", () => {

@@ -41,10 +41,7 @@ export interface CompetitorOutput {
  * If lenses are not provided or fewer than count, competitors without
  * explicit lenses get a generic "general-purpose" framing.
  */
-export function expandCompetitorPrompts(
-  basePrompt: SpawnPromptEntry,
-  config: CompeteConfig,
-): CompetitorPrompt[] {
+export function expandCompetitorPrompts(basePrompt: SpawnPromptEntry, config: CompeteConfig): CompetitorPrompt[] {
   const teamLabels = ["A", "B", "C", "D", "E"];
   const prompts: CompetitorPrompt[] = [];
 
@@ -94,10 +91,12 @@ export function buildSynthesizerPrompt(
   competitorOutputs: CompetitorOutput[],
   strategy: "synthesize" | "select",
 ): string {
-  const outputSections = competitorOutputs.map((out) => {
-    const label = out.lens ? `Team ${out.index + 1} (lens: ${out.lens})` : `Team ${out.index + 1}`;
-    return `### ${label}\n\n${out.content}`;
-  }).join("\n\n---\n\n");
+  const outputSections = competitorOutputs
+    .map((out) => {
+      const label = out.lens ? `Team ${out.index + 1} (lens: ${out.lens})` : `Team ${out.index + 1}`;
+      return `### ${label}\n\n${out.content}`;
+    })
+    .join("\n\n---\n\n");
 
   if (strategy === "select") {
     return `## Selection Task

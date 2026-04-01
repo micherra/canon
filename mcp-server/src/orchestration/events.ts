@@ -1,5 +1,12 @@
 import { EventEmitter } from "node:events";
-import type { HistoryEntry, ConcernEntry, GateResult, PostconditionResult, ViolationSeverities, TestResults } from "./flow-schema.ts";
+import type {
+  ConcernEntry,
+  GateResult,
+  HistoryEntry,
+  PostconditionResult,
+  TestResults,
+  ViolationSeverities,
+} from "./flow-schema.ts";
 
 export type FlowEventType =
   | "state_entered"
@@ -97,16 +104,13 @@ export class FlowEventBus extends EventEmitter {
     return super.emit(type, event);
   }
 
-  on<T extends FlowEventType>(
-    type: T,
-    handler: (event: FlowEventMap[T]) => void,
-  ): this {
+  on<T extends FlowEventType>(type: T, handler: (event: FlowEventMap[T]) => void): this {
     return super.on(type, handler);
   }
 }
 
 export function createMetricsAccumulator(): {
-  handler: (type: FlowEventType, event: any) => void;
+  handler: (type: FlowEventType, event: Record<string, unknown>) => void;
   getMetrics: () => {
     totalSpawns: number;
     totalDuration: number;
@@ -123,15 +127,18 @@ export function createMetricsAccumulator(): {
     }
   }
 
-  const handler = (type: FlowEventType, event: any) => {
+  const handler = (type: FlowEventType, event: Record<string, unknown>) => {
     if (type === "agent_spawned") {
       totalSpawns++;
-      ensureState(event.stateId);
-      perState[event.stateId].spawns++;
+      const stateId = event.stateId as string;
+      ensureState(stateId);
+      perState[stateId].spawns++;
     } else if (type === "state_completed") {
-      totalDuration += event.duration_ms;
-      ensureState(event.stateId);
-      perState[event.stateId].duration_ms += event.duration_ms;
+      const durationMs = event.duration_ms as number;
+      const stateId = event.stateId as string;
+      totalDuration += durationMs;
+      ensureState(stateId);
+      perState[stateId].duration_ms += durationMs;
     }
   };
 

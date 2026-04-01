@@ -42,7 +42,7 @@ export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
   layers?: Array<{ name: string; color: string; file_count: number; index?: number }>;
-  insights?: any;
+  insights?: unknown;
   principles?: Record<string, PrincipleInfo>;
 }
 

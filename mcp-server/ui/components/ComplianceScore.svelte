@@ -1,45 +1,42 @@
 <script lang="ts">
-  /**
-   * ComplianceScore.svelte
-   *
-   * Renders compliance scores as horizontal progress bars with honored principle badges.
-   * Pure presentation — receives all data via props, no data fetching.
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders compliance score section only
-   *   - compose-from-small-to-large: used as a leaf panel by PrReview.svelte
-   */
+/**
+ * ComplianceScore.svelte
+ *
+ * Renders compliance scores as horizontal progress bars with honored principle badges.
+ * Pure presentation — receives all data via props, no data fetching.
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders compliance score section only
+ *   - compose-from-small-to-large: used as a leaf panel by PrReview.svelte
+ */
 
-  import { SEVERITY_COLORS } from "../lib/constants";
+interface ScoreGroup {
+  passed: number;
+  total: number;
+}
 
-  interface ScoreGroup {
-    passed: number;
-    total: number;
-  }
+interface ComplianceScoreProps {
+  score: {
+    rules: ScoreGroup;
+    opinions: ScoreGroup;
+    conventions: ScoreGroup;
+  };
+  honoredPrinciples: string[];
+}
 
-  interface ComplianceScoreProps {
-    score: {
-      rules: ScoreGroup;
-      opinions: ScoreGroup;
-      conventions: ScoreGroup;
-    };
-    honoredPrinciples: string[];
-  }
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { score, honoredPrinciples }: ComplianceScoreProps = $props();
 
-  let { score, honoredPrinciples }: ComplianceScoreProps = $props();
+const _hasData = $derived(score.rules.total > 0 || score.opinions.total > 0 || score.conventions.total > 0);
 
-  const hasData = $derived(
-    score.rules.total > 0 || score.opinions.total > 0 || score.conventions.total > 0,
-  );
+function _barWidth(passed: number, total: number): string {
+  if (total === 0) return "0%";
+  return `${Math.round((passed / total) * 100)}%`;
+}
 
-  function barWidth(passed: number, total: number): string {
-    if (total === 0) return "0%";
-    return `${Math.round((passed / total) * 100)}%`;
-  }
-
-  function barColor(passed: number, total: number, baseColor: string): string {
-    return passed === total ? "var(--success, #52b052)" : baseColor;
-  }
+function _barColor(passed: number, total: number, baseColor: string): string {
+  return passed === total ? "var(--success, #52b052)" : baseColor;
+}
 </script>
 
 <div class="compliance-score">

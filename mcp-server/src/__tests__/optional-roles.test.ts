@@ -9,10 +9,10 @@
  * 5. reportResult: threads optional roles from state definition into aggregation
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { aggregateParallelPerResults, isRoleOptional } from "../orchestration/transitions.ts";
 
 // ---------------------------------------------------------------------------
@@ -31,9 +31,9 @@ vi.mock("../orchestration/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -76,10 +76,7 @@ function makeFlowWithOptionalRoles(): ResolvedFlow {
       review: {
         type: "parallel",
         agents: ["canon:canon-reviewer"],
-        roles: [
-          "required-reviewer",
-          { name: "optional-reviewer", optional: true },
-        ],
+        roles: ["required-reviewer", { name: "optional-reviewer", optional: true }],
         transitions: {
           done: "ship",
           blocked: "hitl",

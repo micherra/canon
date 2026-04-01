@@ -2,11 +2,11 @@
 
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { buildDegreeMaps } from "./degree.ts";
+import { detectDeadCode } from "./kg-dead-code.ts";
 import { initDatabase } from "./kg-schema.ts";
 import { KgStore } from "./kg-store.ts";
-import { detectDeadCode } from "./kg-dead-code.ts";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 export interface CodebaseInsights {
   overview: {
@@ -79,20 +79,14 @@ function getParentCandidates(testPath: string): string[] {
   return Array.from(candidates);
 }
 
-function hasMatchedParentTestConnection(
-  path: string,
-  nodeSet: Set<string>,
-): boolean {
+function hasMatchedParentTestConnection(path: string, nodeSet: Set<string>): boolean {
   if (isTestFile(path)) {
     const parents = getParentCandidates(path);
     return parents.some((candidate) => nodeSet.has(candidate));
   }
 
   // Also clear a source file from orphan list if it has colocated tests.
-  const testCandidates = [
-    path.replace(/\.([^.]+)$/i, ".test.$1"),
-    path.replace(/\.([^.]+)$/i, ".spec.$1"),
-  ];
+  const testCandidates = [path.replace(/\.([^.]+)$/i, ".test.$1"), path.replace(/\.([^.]+)$/i, ".spec.$1")];
   if (path.includes("/")) {
     testCandidates.push(
       path.replace(/\/([^/]+)$/i, "/__tests__/$1"),
@@ -138,8 +132,7 @@ export function generateInsights(
   const overview = {
     total_files: nodes.length,
     total_edges: edges.length,
-    avg_dependencies_per_file:
-      nodes.length > 0 ? Math.round((edges.length / nodes.length) * 100) / 100 : 0,
+    avg_dependencies_per_file: nodes.length > 0 ? Math.round((edges.length / nodes.length) * 100) / 100 : 0,
     layers: Array.from(layerCounts.entries())
       .map(([name, file_count]) => ({ name, file_count }))
       .sort((a, b) => b.file_count - a.file_count),
@@ -162,9 +155,7 @@ export function generateInsights(
     .filter((n) => (inDegree.get(n.id) || 0) === 0 && (outDegree.get(n.id) || 0) === 0)
     .map((n) => n.id);
   const nodeSet = new Set(nodes.map((n) => n.id));
-  const orphan_files = rawOrphans
-    .filter((path) => !hasMatchedParentTestConnection(path, nodeSet))
-    .sort();
+  const orphan_files = rawOrphans.filter((path) => !hasMatchedParentTestConnection(path, nodeSet)).sort();
 
   // Circular dependencies (DFS cycle detection, max cycle length 5)
   const circular_dependencies = detectCycles(nodes, edges);
@@ -212,10 +203,7 @@ export function generateInsights(
  * that any failure (missing DB, schema mismatch, query error) leaves the base
  * insights untouched.
  */
-function enrichWithKgInsights(
-  base: CodebaseInsights,
-  projectDir?: string,
-): CodebaseInsights {
+function enrichWithKgInsights(base: CodebaseInsights, projectDir?: string): CodebaseInsights {
   const root = projectDir ?? (process.env["CANON_PROJECT_DIR"] || process.cwd());
   const dbPath = path.join(root, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
 
@@ -232,14 +220,16 @@ function enrichWithKgInsights(
     // 1. Entity overview — totals and by-kind / by-edge-type breakdowns   //
     // ------------------------------------------------------------------ //
 
-    const byKindRows = db
-      .prepare(`SELECT kind, COUNT(*) AS n FROM entities GROUP BY kind`)
-      .all() as Array<{ kind: string; n: number }>;
+    const byKindRows = db.prepare(`SELECT kind, COUNT(*) AS n FROM entities GROUP BY kind`).all() as Array<{
+      kind: string;
+      n: number;
+    }>;
     const by_kind = Object.fromEntries(byKindRows.map((r) => [r.kind, r.n]));
 
-    const byEdgeTypeRows = db
-      .prepare(`SELECT edge_type, COUNT(*) AS n FROM edges GROUP BY edge_type`)
-      .all() as Array<{ edge_type: string; n: number }>;
+    const byEdgeTypeRows = db.prepare(`SELECT edge_type, COUNT(*) AS n FROM edges GROUP BY edge_type`).all() as Array<{
+      edge_type: string;
+      n: number;
+    }>;
     const by_edge_type = Object.fromEntries(byEdgeTypeRows.map((r) => [r.edge_type, r.n]));
 
     const stats = store.getStats();
@@ -285,13 +275,11 @@ function enrichWithKgInsights(
       )
       .all() as Array<{ name: string; file_path: string; incoming: number }>;
 
-    const blast_radius_hotspots: CodebaseInsights["blast_radius_hotspots"] = hotspotRows.map(
-      (row) => ({
-        entity_name: row.name,
-        file_path: row.file_path,
-        affected_count: row.incoming,
-      }),
-    );
+    const blast_radius_hotspots: CodebaseInsights["blast_radius_hotspots"] = hotspotRows.map((row) => ({
+      entity_name: row.name,
+      file_path: row.file_path,
+      affected_count: row.incoming,
+    }));
 
     return {
       ...base,
@@ -312,8 +300,8 @@ function enrichWithKgInsights(
   }
 }
 
-/** Detect cycles using iterative DFS. Returns unique cycles up to length 5. */
-function detectCycles(nodes: NodeLike[], edges: EdgeLike[]): string[][] {
+/** Build adjacency list from nodes and edges. */
+function buildAdjacencyList(nodes: NodeLike[], edges: EdgeLike[]): Map<string, string[]> {
   const adj = new Map<string, string[]>();
   for (const node of nodes) {
     adj.set(node.id, []);
@@ -322,66 +310,91 @@ function detectCycles(nodes: NodeLike[], edges: EdgeLike[]): string[][] {
     const list = adj.get(edge.source);
     if (list) list.push(edge.target);
   }
+  return adj;
+}
 
-  const MAX_CYCLE_LEN = 5;
-  const cycles: string[][] = [];
-  const cycleSet = new Set<string>();
-  const visited = new Set<string>();
+/** Try to record a cycle from the current DFS path. */
+function tryRecordCycle(
+  neighbor: string,
+  path: string[],
+  maxLen: number,
+  cycleSet: Set<string>,
+  cycles: string[][],
+): void {
+  const cycleStart = path.indexOf(neighbor);
+  if (cycleStart < 0) return;
+
+  const cycle = path.slice(cycleStart);
+  if (cycle.length > maxLen) return;
+
+  const normalized = normalizeCycle(cycle);
+  const key = normalized.join(" -> ");
+  if (cycleSet.has(key)) return;
+
+  cycleSet.add(key);
+  cycles.push(normalized);
+}
+
+/** Process one DFS component starting from startNode. */
+function dfsComponent(
+  startNodeId: string,
+  adj: Map<string, string[]>,
+  visited: Set<string>,
+  maxCycleLen: number,
+  cycleSet: Set<string>,
+  cycles: string[][],
+  maxCycles: number,
+): void {
+  type Frame = { node: string; neighborIdx: number };
+
   const inStack = new Set<string>();
   const path: string[] = [];
 
-  // Iterative DFS using explicit call stack to avoid stack overflow on deep graphs
-  // Each frame tracks: node, neighbor index (which neighbor to visit next)
-  type Frame = { node: string; neighborIdx: number };
+  const callStack: Frame[] = [{ node: startNodeId, neighborIdx: 0 }];
+  visited.add(startNodeId);
+  inStack.add(startNodeId);
+  path.push(startNodeId);
 
-  for (const startNode of nodes) {
-    if (visited.has(startNode.id) || cycles.length >= 20) continue;
+  while (callStack.length > 0 && cycles.length < maxCycles) {
+    const frame = callStack[callStack.length - 1];
+    const neighbors = adj.get(frame.node) || [];
 
-    const callStack: Frame[] = [{ node: startNode.id, neighborIdx: 0 }];
-    visited.add(startNode.id);
-    inStack.add(startNode.id);
-    path.push(startNode.id);
-
-    while (callStack.length > 0 && cycles.length < 20) {
-      const frame = callStack[callStack.length - 1];
-      const neighbors = adj.get(frame.node) || [];
-
-      if (frame.neighborIdx >= neighbors.length) {
-        // All neighbors explored — backtrack
-        callStack.pop();
-        path.pop();
-        inStack.delete(frame.node);
-        continue;
-      }
-
-      const neighbor = neighbors[frame.neighborIdx];
-      frame.neighborIdx++;
-
-      if (inStack.has(neighbor)) {
-        // Found a cycle — extract it
-        const cycleStart = path.indexOf(neighbor);
-        if (cycleStart >= 0) {
-          const cycle = path.slice(cycleStart);
-          if (cycle.length <= MAX_CYCLE_LEN) {
-            const normalized = normalizeCycle(cycle);
-            const key = normalized.join(" -> ");
-            if (!cycleSet.has(key)) {
-              cycleSet.add(key);
-              cycles.push(normalized);
-            }
-          }
-        }
-      } else if (!visited.has(neighbor)) {
-        visited.add(neighbor);
-        inStack.add(neighbor);
-        path.push(neighbor);
-        callStack.push({ node: neighbor, neighborIdx: 0 });
-      }
+    if (frame.neighborIdx >= neighbors.length) {
+      callStack.pop();
+      path.pop();
+      inStack.delete(frame.node);
+      continue;
     }
 
-    // Clean up if we exited early (cycle cap reached)
-    for (const node of path) inStack.delete(node);
-    path.length = 0;
+    const neighbor = neighbors[frame.neighborIdx];
+    frame.neighborIdx++;
+
+    if (inStack.has(neighbor)) {
+      tryRecordCycle(neighbor, path, maxCycleLen, cycleSet, cycles);
+    } else if (!visited.has(neighbor)) {
+      visited.add(neighbor);
+      inStack.add(neighbor);
+      path.push(neighbor);
+      callStack.push({ node: neighbor, neighborIdx: 0 });
+    }
+  }
+
+  // Clean up if we exited early (cycle cap reached)
+  for (const node of path) inStack.delete(node);
+}
+
+/** Detect cycles using iterative DFS. Returns unique cycles up to length 5. */
+function detectCycles(nodes: NodeLike[], edges: EdgeLike[]): string[][] {
+  const adj = buildAdjacencyList(nodes, edges);
+  const MAX_CYCLE_LEN = 5;
+  const MAX_CYCLES = 20;
+  const cycles: string[][] = [];
+  const cycleSet = new Set<string>();
+  const visited = new Set<string>();
+
+  for (const startNode of nodes) {
+    if (visited.has(startNode.id) || cycles.length >= MAX_CYCLES) continue;
+    dfsComponent(startNode.id, adj, visited, MAX_CYCLE_LEN, cycleSet, cycles, MAX_CYCLES);
   }
 
   return cycles;

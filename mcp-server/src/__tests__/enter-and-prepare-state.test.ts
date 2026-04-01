@@ -10,13 +10,11 @@
  * 6. No board.json or .lock file created
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -46,11 +44,11 @@ vi.mock("../orchestration/wave-variables.ts", () => ({
   extractFilePaths: vi.fn(() => []),
 }));
 
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -90,7 +88,7 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
   });
 
   // Create initial state rows
-  const states = (overrides.states as Board['states']) ?? {
+  const states = (overrides.states as Board["states"]) ?? {
     implement: { status: "pending", entries: 0 },
     done: { status: "pending", entries: 0 },
   };
@@ -99,7 +97,7 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
   }
 
   // Create iteration rows if provided
-  const iterations = overrides.iterations as Board['iterations'] | undefined;
+  const iterations = overrides.iterations as Board["iterations"] | undefined;
   if (iterations) {
     for (const [stateId, iter] of Object.entries(iterations)) {
       store.upsertIteration(stateId, {
@@ -130,7 +128,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 
 afterEach(() => {
   // Clear store cache between tests
-  const cache = (getExecutionStore as any).__cache;
+  const cache = (getExecutionStore as unknown as { __cache: Map<string, unknown> }).__cache;
   if (cache instanceof Map) cache.clear();
 
   for (const d of tmpDirs) {
@@ -552,11 +550,10 @@ describe("enterAndPrepareState", () => {
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
-      expect(resolveConsultationPrompt).toHaveBeenCalledWith(
-        "risk-assessment",
-        flow,
-        { task: "test task", CANON_PLUGIN_ROOT: "" },
-      );
+      expect(resolveConsultationPrompt).toHaveBeenCalledWith("risk-assessment", flow, {
+        task: "test task",
+        CANON_PLUGIN_ROOT: "",
+      });
     });
 
     it("returns no consultation_prompts when wave > 0 but only before consultations declared", async () => {
@@ -661,9 +658,7 @@ describe("enterAndPrepareState", () => {
       store.upsertState("done", { status: "pending", entries: 0 });
 
       // escapeDollarBrace should escape the injection string
-      vi.mocked(escapeDollarBrace).mockImplementation((s: string) =>
-        s.replace(/\$\{/g, "\\${")
-      );
+      vi.mocked(escapeDollarBrace).mockImplementation((s: string) => s.replace(/\$\{/g, "\\${"));
 
       const flow = makeFlowWithConsultations("between");
       vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
@@ -845,12 +840,12 @@ describe("enterAndPrepareState", () => {
 
       assertOk(result);
       // rwf-01 is "active" — worktree_path should be set
-      const prompt01 = result.prompts.find((p: any) => p.item === "rwf-01");
+      const prompt01 = result.prompts.find((p) => p.item === "rwf-01");
       expect(prompt01).toBeDefined();
       expect(prompt01!.worktree_path).toBe("/tmp/wt/rwf-01");
 
       // rwf-02 is "merged" — worktree_path should NOT be set
-      const prompt02 = result.prompts.find((p: any) => p.item === "rwf-02");
+      const prompt02 = result.prompts.find((p) => p.item === "rwf-02");
       expect(prompt02).toBeDefined();
       expect(prompt02!.worktree_path).toBeUndefined();
     });

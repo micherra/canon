@@ -4,10 +4,10 @@
  * and surfaces cannot-fix items and history.
  */
 
-import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { canEnterState } from "../orchestration/convergence.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
-import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 interface CheckConvergenceInput {
   workspace: string;
@@ -23,15 +23,10 @@ interface CheckConvergenceResult {
   reason?: string;
 }
 
-export async function checkConvergence(
-  input: CheckConvergenceInput,
-): Promise<ToolResult<CheckConvergenceResult>> {
+export async function checkConvergence(input: CheckConvergenceInput): Promise<ToolResult<CheckConvergenceResult>> {
   const board = getExecutionStore(input.workspace).getBoard();
   if (!board) {
-    return toolError(
-      "WORKSPACE_NOT_FOUND",
-      "No execution found — workspace may not be initialized",
-    );
+    return toolError("WORKSPACE_NOT_FOUND", "No execution found — workspace may not be initialized");
   }
 
   const { allowed, reason } = canEnterState(board, input.state_id);

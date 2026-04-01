@@ -54,7 +54,5 @@ export function getLayerColor(layer: string, layerColors?: Record<string, string
 }
 
 export function truncate(text: string, maxLen: number): string {
-  return text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
+  return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
 }
-
-

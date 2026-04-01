@@ -53,9 +53,5 @@ export function gitWorktreeAdd(
   cwd: string,
   timeout?: number,
 ): ProcessResult {
-  return gitExec(
-    ["worktree", "add", worktreePath, "-b", branchName, baseCommit],
-    cwd,
-    timeout,
-  );
+  return gitExec(["worktree", "add", worktreePath, "-b", branchName, baseCommit], cwd, timeout);
 }

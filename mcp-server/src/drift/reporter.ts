@@ -1,4 +1,4 @@
-import { type DriftReport } from "./analyzer.ts";
+import type { DriftReport } from "./analyzer.ts";
 
 export function formatDriftReport(report: DriftReport): string {
   const lines: string[] = [];
@@ -8,7 +8,9 @@ export function formatDriftReport(report: DriftReport): string {
 
   // Overview
   lines.push(`### Overview (${report.total_reviews} reviews)`);
-  lines.push(`Avg score: Rules ${report.avg_score.rules}% | Opinions ${report.avg_score.opinions}% | Conventions ${report.avg_score.conventions}%`);
+  lines.push(
+    `Avg score: Rules ${report.avg_score.rules}% | Opinions ${report.avg_score.opinions}% | Conventions ${report.avg_score.conventions}%`,
+  );
   lines.push(`Trend: ${formatTrend(report.trend)}`);
   lines.push("");
 
@@ -17,7 +19,7 @@ export function formatDriftReport(report: DriftReport): string {
     lines.push("### Most violated principles");
     for (const stat of report.most_violated) {
       lines.push(
-        `${stat.principle_id} — ${stat.total_violations} violations (${stat.unintentional_violations} unintentional), ${stat.compliance_rate}% compliance`
+        `${stat.principle_id} — ${stat.total_violations} violations (${stat.unintentional_violations} unintentional), ${stat.compliance_rate}% compliance`,
       );
     }
     lines.push("");
@@ -76,11 +78,11 @@ function generateRecommendations(report: DriftReport): string[] {
   for (const stat of report.most_violated.slice(0, 3)) {
     if (stat.compliance_rate < 50) {
       recs.push(
-        `Consider revising **${stat.principle_id}** — ${stat.compliance_rate}% compliance suggests the principle may be too strict or unclear.`
+        `Consider revising **${stat.principle_id}** — ${stat.compliance_rate}% compliance suggests the principle may be too strict or unclear.`,
       );
     } else if (stat.unintentional_violations > 5) {
       recs.push(
-        `**${stat.principle_id}** has ${stat.unintentional_violations} unintentional violations. Consider adding more examples to the principle or running a focused review.`
+        `**${stat.principle_id}** has ${stat.unintentional_violations} unintentional violations. Consider adding more examples to the principle or running a focused review.`,
       );
     }
   }
@@ -89,7 +91,7 @@ function generateRecommendations(report: DriftReport): string[] {
   for (const dir of report.violation_directories.slice(0, 2)) {
     if (dir.total_violations > 5) {
       recs.push(
-        `**${dir.directory}** is a hotspot with ${dir.total_violations} violations. Consider a dedicated code review pass.`
+        `**${dir.directory}** is a hotspot with ${dir.total_violations} violations. Consider a dedicated code review pass.`,
       );
     }
   }
@@ -97,7 +99,7 @@ function generateRecommendations(report: DriftReport): string[] {
   // Never-triggered principles
   if (report.never_triggered.length > 3) {
     recs.push(
-      `${report.never_triggered.length} principles have never been triggered. Review them for relevance — they may be too narrowly scoped.`
+      `${report.never_triggered.length} principles have never been triggered. Review them for relevance — they may be too narrowly scoped.`,
     );
   }
 

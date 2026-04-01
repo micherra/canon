@@ -9,8 +9,8 @@
  * - WaveResultSchema.parse() without worktree_entries — backward compat (optional field)
  */
 
-import { describe, it, expect } from "vitest";
-import { WorktreeEntrySchema, WaveResultSchema } from "../orchestration/flow-schema.ts";
+import { describe, expect, it } from "vitest";
+import { WaveResultSchema, WorktreeEntrySchema } from "../orchestration/flow-schema.ts";
 
 describe("WorktreeEntrySchema", () => {
   it("parses a valid worktree entry with all fields", () => {
@@ -66,7 +66,7 @@ describe("WorktreeEntrySchema", () => {
         worktree_path: "/tmp/worktrees/rwf-05",
         branch: "feat/rwf-05",
         status: "unknown",
-      })
+      }),
     ).toThrow();
   });
 });

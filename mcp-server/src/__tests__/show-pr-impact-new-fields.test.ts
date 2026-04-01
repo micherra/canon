@@ -15,10 +15,10 @@
  *   9. Threshold boundary: exactly 2 files does NOT trigger subsystem
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Module-level mocks — must be hoisted before imports of mocked modules
@@ -44,14 +44,12 @@ vi.mock("../tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 
-import { existsSync } from "fs";
-import { initDatabase } from "../graph/kg-schema.ts";
-import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
-import { getPrReviewData } from "../tools/pr-review-data.ts";
-
-import { showPrImpact } from "../tools/show-pr-impact.ts";
-import { detectSubsystems, buildBlastRadiusByFile } from "../tools/show-pr-impact.ts";
+import { existsSync } from "node:fs";
 import { DriftStore } from "../drift/store.ts";
+import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { getPrReviewData } from "../tools/pr-review-data.ts";
+import { buildBlastRadiusByFile, detectSubsystems, showPrImpact } from "../tools/show-pr-impact.ts";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -83,13 +81,15 @@ function makePrepStub(fileOverrides: Array<{ path: string; status: string }> = [
   };
 }
 
-function makeReview(overrides: Partial<{
-  files: string[];
-  violations: Array<{ principle_id: string; severity: string; file_path?: string }>;
-  verdict: "BLOCKING" | "WARNING" | "CLEAN";
-}> = {}) {
+function makeReview(
+  overrides: Partial<{
+    files: string[];
+    violations: Array<{ principle_id: string; severity: string; file_path?: string }>;
+    verdict: "BLOCKING" | "WARNING" | "CLEAN";
+  }> = {},
+) {
   return {
-    review_id: "rev_test_" + Math.random().toString(36).slice(2),
+    review_id: `rev_test_${Math.random().toString(36).slice(2)}`,
     timestamp: new Date().toISOString(),
     verdict: overrides.verdict ?? ("CLEAN" as const),
     branch: "feat/test",
@@ -140,9 +140,11 @@ describe("showPrImpact — new fields present in all output paths", () => {
 
   it("full pipeline with review returns subsystems field (may be empty when no threshold reached)", async () => {
     const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({
-      files: ["src/a.ts", "src/b.ts"],
-    }));
+    await store.appendReview(
+      makeReview({
+        files: ["src/a.ts", "src/b.ts"],
+      }),
+    );
 
     vi.mocked(getPrReviewData).mockResolvedValue(
       makePrepStub([
@@ -161,9 +163,11 @@ describe("showPrImpact — new fields present in all output paths", () => {
 
   it("full pipeline with review returns blast_radius_by_file field (empty without KG)", async () => {
     const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({
-      files: ["src/a.ts"],
-    }));
+    await store.appendReview(
+      makeReview({
+        files: ["src/a.ts"],
+      }),
+    );
 
     vi.mocked(existsSync).mockReturnValue(false); // no KG
 
@@ -198,11 +202,7 @@ describe("showPrImpact — subsystems populated from prep file statuses", () => 
   });
 
   it("detects a new subsystem when 3+ review files are added in the same directory", async () => {
-    const reviewFiles = [
-      "src/widgets/alpha.ts",
-      "src/widgets/beta.ts",
-      "src/widgets/gamma.ts",
-    ];
+    const reviewFiles = ["src/widgets/alpha.ts", "src/widgets/beta.ts", "src/widgets/gamma.ts"];
 
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({ files: reviewFiles }));
@@ -223,12 +223,7 @@ describe("showPrImpact — subsystems populated from prep file statuses", () => 
   });
 
   it("detects a removed subsystem when 3+ review files are deleted in the same directory", async () => {
-    const reviewFiles = [
-      "src/legacy/a.ts",
-      "src/legacy/b.ts",
-      "src/legacy/c.ts",
-      "src/legacy/d.ts",
-    ];
+    const reviewFiles = ["src/legacy/a.ts", "src/legacy/b.ts", "src/legacy/c.ts", "src/legacy/d.ts"];
 
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({ files: reviewFiles }));
@@ -264,11 +259,7 @@ describe("showPrImpact — subsystems populated from prep file statuses", () => 
 
   it("cross-task contract: only prep.files status drives subsystem detection (not review.files status)", async () => {
     // Review files includes 3 files in src/widgets, but prep reports them as "modified" — no subsystem
-    const reviewFiles = [
-      "src/widgets/alpha.ts",
-      "src/widgets/beta.ts",
-      "src/widgets/gamma.ts",
-    ];
+    const reviewFiles = ["src/widgets/alpha.ts", "src/widgets/beta.ts", "src/widgets/gamma.ts"];
 
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({ files: reviewFiles }));
@@ -338,9 +329,11 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
 
   it("blast_radius_by_file populated from KG affected entities when KG is available", async () => {
     const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({
-      files: ["src/core.ts"],
-    }));
+    await store.appendReview(
+      makeReview({
+        files: ["src/core.ts"],
+      }),
+    );
 
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
@@ -370,9 +363,11 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
 
   it("blast_radius_by_file is sorted descending by dep_count", async () => {
     const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({
-      files: ["src/core.ts"],
-    }));
+    await store.appendReview(
+      makeReview({
+        files: ["src/core.ts"],
+      }),
+    );
 
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
@@ -405,9 +400,11 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
 
   it("blast_radius_by_file limited to 15 entries even when KG has more files", async () => {
     const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({
-      files: ["src/core.ts"],
-    }));
+    await store.appendReview(
+      makeReview({
+        files: ["src/core.ts"],
+      }),
+    );
 
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
@@ -437,9 +434,11 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
 
   it("blast_radius_by_file entry shape matches BlastRadiusFileEntry contract", async () => {
     const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({
-      files: ["src/core.ts"],
-    }));
+    await store.appendReview(
+      makeReview({
+        files: ["src/core.ts"],
+      }),
+    );
 
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
@@ -472,11 +471,7 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
 describe("detectSubsystems — declared known gaps", () => {
   it("does not count 'modified' files toward subsystem threshold", () => {
     // Per design: only 'added' and 'deleted' trigger subsystem labels
-    const files = [
-      "src/widgets/alpha.ts",
-      "src/widgets/beta.ts",
-      "src/widgets/gamma.ts",
-    ];
+    const files = ["src/widgets/alpha.ts", "src/widgets/beta.ts", "src/widgets/gamma.ts"];
     const statusMap = new Map<string, string>([
       ["src/widgets/alpha.ts", "modified"],
       ["src/widgets/beta.ts", "modified"],
@@ -490,11 +485,7 @@ describe("detectSubsystems — declared known gaps", () => {
   });
 
   it("does not count 'renamed' files toward subsystem threshold", () => {
-    const files = [
-      "src/widgets/alpha.ts",
-      "src/widgets/beta.ts",
-      "src/widgets/gamma.ts",
-    ];
+    const files = ["src/widgets/alpha.ts", "src/widgets/beta.ts", "src/widgets/gamma.ts"];
     const statusMap = new Map<string, string>([
       ["src/widgets/alpha.ts", "renamed"],
       ["src/widgets/beta.ts", "renamed"],
@@ -511,8 +502,8 @@ describe("detectSubsystems — declared known gaps", () => {
     const files = [
       "src/mixed/a.ts",
       "src/mixed/b.ts",
-      "src/mixed/c.ts",  // modified — should not count
-      "src/mixed/d.ts",  // modified — should not count
+      "src/mixed/c.ts", // modified — should not count
+      "src/mixed/d.ts", // modified — should not count
     ];
     const statusMap = new Map<string, string>([
       ["src/mixed/a.ts", "added"],
@@ -528,11 +519,7 @@ describe("detectSubsystems — declared known gaps", () => {
   });
 
   it("threshold is inclusive at exactly 3 — exactly 3 added files triggers subsystem", () => {
-    const files = [
-      "src/exact/a.ts",
-      "src/exact/b.ts",
-      "src/exact/c.ts",
-    ];
+    const files = ["src/exact/a.ts", "src/exact/b.ts", "src/exact/c.ts"];
     const statusMap = new Map<string, string>([
       ["src/exact/a.ts", "added"],
       ["src/exact/b.ts", "added"],
@@ -559,11 +546,7 @@ describe("detectSubsystems — declared known gaps", () => {
 
   it("file with no status in statusMap is not counted", () => {
     // File in list but no entry in statusMap — treated as having no counted status
-    const files = [
-      "src/ghost/a.ts",
-      "src/ghost/b.ts",
-      "src/ghost/c.ts",
-    ];
+    const files = ["src/ghost/a.ts", "src/ghost/b.ts", "src/ghost/c.ts"];
     // statusMap is empty — none have a status
     const result = detectSubsystems(files, new Map());
 

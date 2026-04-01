@@ -1,14 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import {
-  executeEffects,
-  parseReviewArtifact,
-} from "../orchestration/effects.ts";
-import type { StateDefinition } from "../orchestration/flow-schema.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DriftStore } from "../drift/store.ts";
+import { executeEffects, parseReviewArtifact } from "../orchestration/effects.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { StateDefinition } from "../orchestration/flow-schema.ts";
 
 const SAMPLE_REVIEW = `---
 verdict: "WARNING"
@@ -143,12 +140,7 @@ describe("executeEffects", () => {
       effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(
-      stateDef,
-      workspace,
-      ["plans/test-task/REVIEW.md"],
-      tmpDir,
-    );
+    const results = await executeEffects(stateDef, workspace, ["plans/test-task/REVIEW.md"], tmpDir);
 
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe("persist_review");
@@ -264,9 +256,7 @@ describe("executeEffects — check_postconditions", () => {
     store.upsertState("review", {
       status: "in_progress",
       entries: 1,
-      discovered_postconditions: [
-        { type: "file_exists", target: "discovered.ts" },
-      ],
+      discovered_postconditions: [{ type: "file_exists", target: "discovered.ts" }],
     });
 
     // stateDef has NO explicit postconditions — only discovered
@@ -308,9 +298,7 @@ describe("executeEffects — check_postconditions", () => {
     store.upsertState("review", {
       status: "in_progress",
       entries: 1,
-      discovered_postconditions: [
-        { type: "file_exists", target: "discovered.ts" },
-      ],
+      discovered_postconditions: [{ type: "file_exists", target: "discovered.ts" }],
     });
 
     const stateDef: StateDefinition = {

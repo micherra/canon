@@ -6,16 +6,16 @@
  * performance. All operations are purely SELECT — no mutations here.
  */
 
-import Database from 'better-sqlite3';
+import type Database from "better-sqlite3";
 import type {
-  EntityRow,
-  CallerResult,
   BlastRadiusResult,
-  FileBlastRadiusResult,
-  SearchResult,
+  CallerResult,
   DeadCodeResult,
+  EntityRow,
+  FileBlastRadiusResult,
   FileRow,
-} from './kg-types.ts';
+  SearchResult,
+} from "./kg-types.ts";
 
 // ---------------------------------------------------------------------------
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
@@ -24,8 +24,8 @@ import type {
 function toEntityRow(row: Record<string, unknown>): EntityRow {
   return {
     ...(row as unknown as EntityRow),
-    is_exported: Boolean(row['is_exported']),
-    is_default_export: Boolean(row['is_default_export']),
+    is_exported: Boolean(row["is_exported"]),
+    is_default_export: Boolean(row["is_default_export"]),
   };
 }
 
@@ -234,7 +234,7 @@ export class KgQuery {
     if (entityIds.length === 0) return [];
 
     // Build "SELECT ?, 0 UNION ALL SELECT ?, 0 ..." seed rows
-    const seedRows = entityIds.map(() => 'SELECT ?, 0').join(' UNION ALL ');
+    const seedRows = entityIds.map(() => "SELECT ?, 0").join(" UNION ALL ");
 
     const sql = `
       WITH RECURSIVE blast(entity_id, depth) AS (
@@ -311,7 +311,7 @@ export class KgQuery {
     } catch (err: unknown) {
       // FTS5 throws on malformed query syntax (bare AND, trailing OR, etc.)
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('fts5') || msg.includes('syntax')) {
+      if (msg.includes("fts5") || msg.includes("syntax")) {
         return [];
       }
       throw err;
@@ -331,12 +331,12 @@ export class KgQuery {
     const stmt = options.includeTests ? this.stmtDeadCodeIncludeTests : this.stmtDeadCode;
     const rows = stmt.all() as Array<Record<string, unknown>>;
     return rows.map((row) => ({
-      entity_id: row['entity_id'] as number,
-      file_id: row['file_id'] as number,
-      name: row['name'] as string,
-      qualified_name: row['qualified_name'] as string,
-      kind: row['kind'] as DeadCodeResult['kind'],
-      is_unreferenced: Boolean(row['is_unreferenced']),
+      entity_id: row["entity_id"] as number,
+      file_id: row["file_id"] as number,
+      name: row["name"] as string,
+      qualified_name: row["qualified_name"] as string,
+      kind: row["kind"] as DeadCodeResult["kind"],
+      is_unreferenced: Boolean(row["is_unreferenced"]),
     }));
   }
 
@@ -400,8 +400,6 @@ export class KgQuery {
    * Return all files with their aggregate entity and export counts.
    */
   getAllFilesWithStats(): Array<FileRow & { entity_count: number; export_count: number }> {
-    return this.stmtAllFilesWithStats.all() as Array<
-      FileRow & { entity_count: number; export_count: number }
-    >;
+    return this.stmtAllFilesWithStats.all() as Array<FileRow & { entity_count: number; export_count: number }>;
   }
 }

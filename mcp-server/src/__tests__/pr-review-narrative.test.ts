@@ -1,13 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { generateNarrative } from "../tools/pr-review-data.ts";
+import { describe, expect, it } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
+import { generateNarrative } from "../tools/pr-review-data.ts";
 
 // Helper to build a PrFileInfo with priority factors
-function makeFile(
-  path: string,
-  layer: string,
-  overrides: Partial<PrFileInfo> = {},
-): PrFileInfo {
+function makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {
   return {
     path,
     layer,
@@ -110,10 +106,7 @@ describe("generateNarrative — most consequential file", () => {
   });
 
   it("does not mention a most consequential file when no factors available", () => {
-    const files: PrFileInfo[] = [
-      makeFile("src/tools/a.ts", "tools"),
-      makeFile("src/graph/b.ts", "graph"),
-    ];
+    const files: PrFileInfo[] = [makeFile("src/tools/a.ts", "tools"), makeFile("src/graph/b.ts", "graph")];
     const layers = [
       { name: "tools", file_count: 1 },
       { name: "graph", file_count: 1 },
@@ -180,10 +173,7 @@ describe("generateNarrative — edge cases", () => {
   });
 
   it("handles all factors undefined (no graph data available)", () => {
-    const files: PrFileInfo[] = [
-      makeFile("src/a.ts", "domain"),
-      makeFile("src/b.ts", "domain"),
-    ];
+    const files: PrFileInfo[] = [makeFile("src/a.ts", "domain"), makeFile("src/b.ts", "domain")];
     const layers = [{ name: "domain", file_count: 2 }];
     const narrative = generateNarrative(files, layers);
     expect(narrative).toContain("domain");

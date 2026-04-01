@@ -8,10 +8,10 @@
  * - SpawnPromptEntry.worktree_path field is present as optional (not set by getSpawnPrompt itself)
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock execution-store so tests don't need a real SQLite DB
@@ -33,8 +33,8 @@ vi.mock("../orchestration/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn().mockReturnValue(""),
 }));
 
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

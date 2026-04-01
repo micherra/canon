@@ -5,13 +5,13 @@
  * All DDL is idempotent (IF NOT EXISTS) and executed in a single transaction.
  */
 
-import Database from 'better-sqlite3';
+import Database from "better-sqlite3";
 
 // ---------------------------------------------------------------------------
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '2';
+export const SCHEMA_VERSION = "2";
 
 // ---------------------------------------------------------------------------
 // DDL statements
@@ -148,9 +148,9 @@ export function initDatabase(dbPath: string): Database.Database {
   const db = new Database(dbPath);
 
   // WAL mode must be set before table creation for consistent behaviour
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('synchronous = NORMAL');
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.pragma("synchronous = NORMAL");
 
   // Execute all DDL inside a single transaction for atomicity and speed
   const applySchema = db.transaction(() => {

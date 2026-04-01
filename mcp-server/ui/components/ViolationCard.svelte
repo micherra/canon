@@ -1,48 +1,43 @@
 <script lang="ts">
-  /**
-   * ViolationCard.svelte
-   *
-   * A card showing a single principle violation for a file. Renders:
-   *   - File path with filename portion bold
-   *   - Severity pill using SEVERITY_COLORS from constants.ts
-   *   - Principle ID in bold
-   *   - Description text (fallback to "Principle violation" if absent)
-   *   - Click handler calling onPrompt with a contextual explanation prompt
-   *
-   * Canon principles:
-   *   - compose-from-small-to-large: atom component, composed into the violations section
-   *   - props-are-the-component-contract: no bridge access, no global state
-   */
+/**
+ * ViolationCard.svelte
+ *
+ * A card showing a single principle violation for a file. Renders:
+ *   - File path with filename portion bold
+ *   - Severity pill using SEVERITY_COLORS from constants.ts
+ *   - Principle ID in bold
+ *   - Description text (fallback to "Principle violation" if absent)
+ *   - Click handler calling onPrompt with a contextual explanation prompt
+ *
+ * Canon principles:
+ *   - compose-from-small-to-large: atom component, composed into the violations section
+ *   - props-are-the-component-contract: no bridge access, no global state
+ */
 
-  import FilePath from "./FilePath.svelte";
-  import { getSeverityColor } from "../lib/utils";
+import { getSeverityColor } from "../lib/utils";
 
-  interface ViolationCardProps {
-    filePath: string;
-    principleId: string;
-    severity: "rule" | "strong-opinion" | "convention";
-    description?: string;
-    onPrompt: (text: string) => void;
-  }
+interface ViolationCardProps {
+  filePath: string;
+  principleId: string;
+  severity: "rule" | "strong-opinion" | "convention";
+  description?: string;
+  onPrompt: (text: string) => void;
+}
 
-  let { filePath, principleId, severity, description, onPrompt }: ViolationCardProps = $props();
+let { filePath, principleId, severity, description, onPrompt }: ViolationCardProps = $props();
 
-  /** Color for the severity pill */
-  let severityColor = $derived(getSeverityColor(severity));
+/** Color for the severity pill */
+let _severityColor = $derived(getSeverityColor(severity));
 
-  /** Human-readable severity label */
-  let severityLabel = $derived(
-    severity === "rule" ? "Rule"
-    : severity === "strong-opinion" ? "Opinion"
-    : "Convention"
-  );
+/** Human-readable severity label */
+let _severityLabel = $derived(severity === "rule" ? "Rule" : severity === "strong-opinion" ? "Opinion" : "Convention");
 
-  /** Fallback description */
-  let displayDescription = $derived(description ?? "Principle violation");
+/** Fallback description */
+let _displayDescription = $derived(description ?? "Principle violation");
 
-  function handleClick() {
-    onPrompt(`Explain the ${principleId} violation in ${filePath} and how to fix it`);
-  }
+function _handleClick() {
+  onPrompt(`Explain the ${principleId} violation in ${filePath} and how to fix it`);
+}
 </script>
 
 <button class="violation-card btn-reset" onclick={handleClick} title={filePath}>

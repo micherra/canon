@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen, matchGlob } from "../orchestration/skip-when.ts";
 
@@ -197,18 +197,16 @@ describe("SkipWhenSchema", () => {
 
 describe("evaluateSkipWhen — unknown condition", () => {
   it("returns skip: false and logs a console.error warning", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {
+      // noop
+    });
     const board = makeBoard();
 
     const result = await evaluateSkipWhen("unknown_condition_xyz", "/tmp/ws", board);
 
     expect(result).toEqual({ skip: false });
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Unknown skip_when condition"),
-    );
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("unknown_condition_xyz"),
-    );
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Unknown skip_when condition"));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("unknown_condition_xyz"));
 
     errorSpy.mockRestore();
   });
@@ -259,7 +257,13 @@ describe("evaluateSkipWhen — no_open_questions", () => {
 
 describe("evaluateSkipWhen — no_contract_changes", () => {
   it("returns skip: true when only non-contract files changed", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "src/some-internal.ts\nsrc/utils/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      ok: true,
+      stdout: "src/some-internal.ts\nsrc/utils/helper.ts\n",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -268,7 +272,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when API files changed", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "src/api/users.ts\nsrc/internal/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      ok: true,
+      stdout: "src/api/users.ts\nsrc/internal/helper.ts\n",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -407,5 +417,4 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
 
     expect(result.skip).toBe(true);
   });
-
 });

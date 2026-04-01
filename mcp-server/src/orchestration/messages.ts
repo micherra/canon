@@ -37,11 +37,7 @@ function assertValidChannel(channel: string): void {
  * Build messaging instructions to inject into agent prompts.
  * Builds coordination instructions injected into wave agent prompts.
  */
-export function buildMessageInstructions(
-  channel: string,
-  peerCount: number,
-  workspace: string,
-): string {
+export function buildMessageInstructions(channel: string, peerCount: number, workspace: string): string {
   return `## Wave Coordination
 
 You are working in parallel with ${peerCount} other agent${peerCount === 1 ? "" : "s"}.
@@ -125,7 +121,7 @@ export async function readChannelAsContext(
 
   let result = sections.join("\n\n---\n\n");
   if (result.length > maxChars) {
-    result = result.slice(0, maxChars).trimEnd() + "\n\n[Messages truncated]";
+    result = `${result.slice(0, maxChars).trimEnd()}\n\n[Messages truncated]`;
   }
 
   return result;

@@ -5,23 +5,14 @@
  * All fixtures are static arrays — no randomness, deterministic results.
  */
 
-import { describe, it, expect } from "vitest";
-import {
-  clusterFiles,
-  findCommonPrefix,
-  type Cluster,
-  type ClusterInput,
-} from "../lib/clustering.ts";
+import { describe, expect, it } from "vitest";
+import { type ClusterInput, clusterFiles, findCommonPrefix } from "../lib/clustering.ts";
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makeFile(
-  path: string,
-  status: ClusterInput["status"],
-  layer: string,
-): ClusterInput {
+function makeFile(path: string, status: ClusterInput["status"], layer: string): ClusterInput {
   return { path, status, layer };
 }
 
@@ -241,9 +232,7 @@ describe("clusterFiles() — layer grouping (fallthrough)", () => {
     ];
     const result = clusterFiles(files);
     expect(result.length).toBeGreaterThan(0);
-    const hasLayerOrPrefix = result.some(
-      (c) => c.type === "layer-group" || c.type === "prefix-group",
-    );
+    const hasLayerOrPrefix = result.some((c) => c.type === "layer-group" || c.type === "prefix-group");
     expect(hasLayerOrPrefix).toBe(true);
   });
 });
@@ -255,22 +244,15 @@ describe("clusterFiles() — layer grouping (fallthrough)", () => {
 describe("clusterFiles() — small cluster merge", () => {
   it("merges 1-file clusters into 'other' cluster", () => {
     // Different directories, no common prefix, different layers -> many tiny clusters
-    const files = [
-      makeFile("src/a/one.ts", "modified", "tools"),
-      makeFile("src/b/two.ts", "modified", "graph"),
-    ];
+    const files = [makeFile("src/a/one.ts", "modified", "tools"), makeFile("src/b/two.ts", "modified", "graph")];
     const result = clusterFiles(files);
     // Each 1-file group should merge — result should contain an 'other' cluster
-    const other = result.find(
-      (c) => c.type === "other" || c.title.toLowerCase().includes("other"),
-    );
+    const other = result.find((c) => c.type === "other" || c.title.toLowerCase().includes("other"));
     expect(other).toBeDefined();
   });
 
   it("cluster with < 2 files is merged away", () => {
-    const files = [
-      makeFile("src/a/alone.ts", "modified", "tools"),
-    ];
+    const files = [makeFile("src/a/alone.ts", "modified", "tools")];
     const result = clusterFiles(files);
     expect(result).toHaveLength(1);
     // It ends up in the other bucket

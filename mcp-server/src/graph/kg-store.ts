@@ -6,8 +6,8 @@
  * performance. The API is fully synchronous (better-sqlite3 is sync).
  */
 
-import Database from 'better-sqlite3';
-import type { FileRow, EntityRow, EdgeRow, FileEdgeRow, SummaryRow } from './kg-types.ts';
+import type Database from "better-sqlite3";
+import type { EdgeRow, EntityRow, FileEdgeRow, FileRow, SummaryRow } from "./kg-types.ts";
 
 // ---------------------------------------------------------------------------
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
@@ -17,8 +17,8 @@ function toEntityRow(row: Record<string, unknown>): EntityRow {
   const base = row as unknown as EntityRow;
   return {
     ...base,
-    is_exported: Boolean(row['is_exported']),
-    is_default_export: Boolean(row['is_default_export']),
+    is_exported: Boolean(row["is_exported"]),
+    is_default_export: Boolean(row["is_default_export"]),
   };
 }
 
@@ -222,7 +222,7 @@ export class KgStore {
   // Files
   // --------------------------------------------------------------------------
 
-  upsertFile(file: Omit<FileRow, 'file_id'>): FileRow {
+  upsertFile(file: Omit<FileRow, "file_id">): FileRow {
     const row = this.stmtUpsertFile.get(file) as FileRow;
     return row;
   }
@@ -243,7 +243,7 @@ export class KgStore {
   // Entities
   // --------------------------------------------------------------------------
 
-  insertEntity(entity: Omit<EntityRow, 'entity_id'>): EntityRow {
+  insertEntity(entity: Omit<EntityRow, "entity_id">): EntityRow {
     const params = {
       ...entity,
       is_exported: entity.is_exported ? 1 : 0,
@@ -271,9 +271,7 @@ export class KgStore {
   }
 
   getEntityByQualifiedName(fileId: number, qualifiedName: string): EntityRow | undefined {
-    const row = this.stmtGetEntityByQualifiedName.get(fileId, qualifiedName) as
-      | Record<string, unknown>
-      | undefined;
+    const row = this.stmtGetEntityByQualifiedName.get(fileId, qualifiedName) as Record<string, unknown> | undefined;
     return row ? toEntityRow(row) : undefined;
   }
 
@@ -290,7 +288,7 @@ export class KgStore {
   // Edges (entity-level)
   // --------------------------------------------------------------------------
 
-  insertEdge(edge: Omit<EdgeRow, 'edge_id'>): EdgeRow {
+  insertEdge(edge: Omit<EdgeRow, "edge_id">): EdgeRow {
     const row = this.stmtInsertEdge.get(edge) as EdgeRow;
     return row;
   }
@@ -311,7 +309,7 @@ export class KgStore {
   // File edges
   // --------------------------------------------------------------------------
 
-  insertFileEdge(edge: Omit<FileEdgeRow, 'file_edge_id'>): FileEdgeRow {
+  insertFileEdge(edge: Omit<FileEdgeRow, "file_edge_id">): FileEdgeRow {
     const row = this.stmtInsertFileEdge.get(edge) as FileEdgeRow;
     return row;
   }
@@ -332,7 +330,7 @@ export class KgStore {
   // Summaries
   // --------------------------------------------------------------------------
 
-  upsertSummary(params: Omit<SummaryRow, 'summary_id'>): SummaryRow {
+  upsertSummary(params: Omit<SummaryRow, "summary_id">): SummaryRow {
     // SQLite UNIQUE constraints treat NULLs as distinct, so ON CONFLICT never fires
     // for rows where entity_id IS NULL. Handle that case with DELETE + INSERT.
     if (params.entity_id === null) {
@@ -348,7 +346,7 @@ export class KgStore {
 
   getSummariesByFiles(fileIds: number[]): SummaryRow[] {
     if (fileIds.length === 0) return [];
-    const placeholders = fileIds.map(() => '?').join(',');
+    const placeholders = fileIds.map(() => "?").join(",");
     const stmt = this.db.prepare(
       `SELECT * FROM summaries WHERE file_id IN (${placeholders}) AND entity_id IS NULL AND scope = 'file'`,
     );
@@ -360,9 +358,7 @@ export class KgStore {
   }
 
   getStaleSummaries(limit = 100): Array<SummaryRow & { path: string; file_content_hash: string }> {
-    return this.stmtGetStaleSummaries.all(limit) as Array<
-      SummaryRow & { path: string; file_content_hash: string }
-    >;
+    return this.stmtGetStaleSummaries.all(limit) as Array<SummaryRow & { path: string; file_content_hash: string }>;
   }
 
   // --------------------------------------------------------------------------

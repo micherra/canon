@@ -7,13 +7,18 @@ export const reportInputSchema = z.discriminatedUnion("type", [
     type: z.literal("review"),
     files: z.array(z.string()).max(1000).describe("File paths that were reviewed"),
     violations: z
-      .array(z.object({
-        principle_id: z.string(),
-        severity: z.string(),
-        file_path: z.string().optional().describe("Specific file where violation occurred"),
-        impact_score: z.number().optional().describe("Graph-derived impact score (higher = more dependents affected)"),
-        message: z.string().optional().describe("Human-readable violation reason"),
-      }))
+      .array(
+        z.object({
+          principle_id: z.string(),
+          severity: z.string(),
+          file_path: z.string().optional().describe("Specific file where violation occurred"),
+          impact_score: z
+            .number()
+            .optional()
+            .describe("Graph-derived impact score (higher = more dependents affected)"),
+          message: z.string().optional().describe("Human-readable violation reason"),
+        }),
+      )
       .max(1000)
       .describe("Principle violations found"),
     honored: z.array(z.string()).max(1000).describe("IDs of principles honored"),

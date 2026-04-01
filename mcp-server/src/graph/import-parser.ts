@@ -1,4 +1,4 @@
-import { dirname, join, normalize } from "path";
+import { dirname, join, normalize } from "node:path";
 import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../constants.ts";
 import { toPosix } from "../utils/paths.ts";
 
@@ -11,10 +11,7 @@ for (const ext of PY_EXTENSIONS) importExtractors.set(ext, extractPyImports);
  * Extract import paths from source file content.
  * Returns raw import specifiers (relative paths, package names, etc.)
  */
-export function extractImports(
-  content: string,
-  filePath: string
-): string[] {
+export function extractImports(content: string, filePath: string): string[] {
   const ext = filePath.split(".").pop() || "";
   const extractor = importExtractors.get(ext);
   return extractor ? extractor(content) : [];
@@ -22,8 +19,8 @@ export function extractImports(
 
 const JS_IMPORT_RES = [
   /import\s+(?:[\w{},*\s]+\s+from\s+)?['"]([^'"]+)['"]/g, // ES module
-  /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g,                // Dynamic
-  /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,               // CommonJS
+  /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g, // Dynamic
+  /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g, // CommonJS
   /export\s+(?:[\w{},*\s]+\s+from\s+)['"]([^'"]+)['"]/g, // Re-export
 ];
 
@@ -31,7 +28,7 @@ function extractJsImports(content: string): string[] {
   const imports: string[] = [];
 
   for (const re of JS_IMPORT_RES) {
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = re.exec(content)) !== null) {
       imports.push(match[1]);
     }
@@ -46,7 +43,7 @@ function extractPyImports(content: string): string[] {
 
   // from X import Y
   const fromImportRe = /^from\s+([\w.]+)\s+import/gm;
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = fromImportRe.exec(content)) !== null) {
     imports.push(match[1]);
   }
@@ -70,12 +67,9 @@ export interface PathAlias {
  * Parse tsconfig.json compilerOptions.paths into PathAlias entries.
  * Supports patterns like { "@/*": ["./src/*"] } and { "@components/*": ["src/components/*"] }
  */
-export function parseTsconfigPaths(
-  paths: Record<string, string[]>,
-  baseUrl?: string,
-): PathAlias[] {
+export function parseTsconfigPaths(paths: Record<string, string[]>, baseUrl?: string): PathAlias[] {
   const aliases: PathAlias[] = [];
-  const base = baseUrl ? baseUrl.replace(/\/$/, "") + "/" : "";
+  const base = baseUrl ? `${baseUrl.replace(/\/$/, "")}/` : "";
 
   for (const [pattern, targets] of Object.entries(paths)) {
     if (!pattern.endsWith("/*") || targets.length === 0) continue;
@@ -97,7 +91,7 @@ export function parseTsconfigPaths(
  * e.g. `./store.js` → try `./store.ts` then `./store.tsx`
  */
 const ESM_JS_TO_TS: Record<string, string[]> = {
-  ".js":  [".ts", ".tsx"],
+  ".js": [".ts", ".tsx"],
   ".jsx": [".tsx", ".ts"],
   ".mjs": [".mts", ".ts"],
 };
@@ -110,7 +104,7 @@ function tryResolve(candidate: string, allFiles: Set<string>): string | null {
     if (allFiles.has(posix + ext)) return posix + ext;
   }
   for (const ext of RESOLVE_EXTENSIONS) {
-    const indexPath = toPosix(join(candidate, "index" + ext));
+    const indexPath = toPosix(join(candidate, `index${ext}`));
     if (allFiles.has(indexPath)) return indexPath;
   }
 
@@ -125,7 +119,7 @@ function tryResolve(candidate: string, allFiles: Set<string>): string | null {
       }
       // Also try index resolution after stripping the JS extension
       for (const tsExt of tsExts) {
-        const indexPath = toPosix(join(base, "index" + tsExt));
+        const indexPath = toPosix(join(base, `index${tsExt}`));
         if (allFiles.has(indexPath)) return indexPath;
       }
     }

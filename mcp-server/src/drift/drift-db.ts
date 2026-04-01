@@ -9,20 +9,20 @@
  * methods, transaction wrapper. Callers never see SQL.
  */
 
-import { join, resolve } from 'path';
-import { mkdirSync } from 'fs';
-import Database from 'better-sqlite3';
-import { initDriftDb } from './drift-schema.ts';
-import { CANON_DIR } from '../constants.ts';
-import type { ReviewEntry, ReviewViolation } from '../schema.ts';
-import type { FlowRunEntry, FlowAnalytics } from './drift-analytics-types.ts';
+import { mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type Database from "better-sqlite3";
+import { CANON_DIR } from "../constants.ts";
+import type { ReviewEntry, ReviewViolation } from "../schema.ts";
+import type { FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
+import { initDriftDb } from "./drift-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Re-export WeeklyTrendPoint so callers can import from drift-db
 // ---------------------------------------------------------------------------
 
 export interface WeeklyTrendPoint {
-  week: string;      // ISO week: "2026-W12"
+  week: string; // ISO week: "2026-W12"
   pass_rate: number; // 0-1
   violations: number;
   reviews: number;
@@ -110,7 +110,7 @@ export function toISOWeek(timestamp: string): string {
   const diffDays = Math.round(diffMs / 86400000);
   const weekNum = Math.floor(diffDays / 7) + 1;
 
-  return `${year}-W${String(weekNum).padStart(2, '0')}`;
+  return `${year}-W${String(weekNum).padStart(2, "0")}`;
 }
 
 /** Deserialize a ReviewRow + ViolationRow[] into a ReviewEntry. */
@@ -120,9 +120,9 @@ function rowToReviewEntry(row: ReviewRow, violations: ViolationRow[]): ReviewEnt
     timestamp: row.timestamp,
     files: JSON.parse(row.files) as string[],
     honored: JSON.parse(row.honored) as string[],
-    score: JSON.parse(row.score) as ReviewEntry['score'],
-    verdict: row.verdict as ReviewEntry['verdict'],
-    violations: violations.map(v => {
+    score: JSON.parse(row.score) as ReviewEntry["score"],
+    verdict: row.verdict as ReviewEntry["verdict"],
+    violations: violations.map((v) => {
       const violation: ReviewViolation = {
         principle_id: v.principle_id,
         severity: v.severity,
@@ -137,14 +137,14 @@ function rowToReviewEntry(row: ReviewRow, violations: ViolationRow[]): ReviewEnt
   if (row.branch !== null) entry.branch = row.branch;
   if (row.last_reviewed_sha !== null) entry.last_reviewed_sha = row.last_reviewed_sha;
   if (row.file_priorities !== null)
-    entry.file_priorities = JSON.parse(row.file_priorities) as ReviewEntry['file_priorities'];
+    entry.file_priorities = JSON.parse(row.file_priorities) as ReviewEntry["file_priorities"];
   if (row.recommendations !== null)
-    entry.recommendations = JSON.parse(row.recommendations) as ReviewEntry['recommendations'];
+    entry.recommendations = JSON.parse(row.recommendations) as ReviewEntry["recommendations"];
   return entry;
 }
 
 /** Deserialize a FlowRunRow into a FlowRunEntry. */
-function rowToFlowRunEntry(row: FlowRunRow): FlowRunEntry {
+function _rowToFlowRunEntry(row: FlowRunRow): FlowRunEntry {
   const entry: FlowRunEntry = {
     run_id: row.run_id,
     flow: row.flow,
@@ -159,11 +159,10 @@ function rowToFlowRunEntry(row: FlowRunRow): FlowRunEntry {
     total_spawns: row.total_spawns,
   };
   if (row.gate_pass_rate !== null) entry.gate_pass_rate = row.gate_pass_rate;
-  if (row.postcondition_pass_rate !== null)
-    entry.postcondition_pass_rate = row.postcondition_pass_rate;
+  if (row.postcondition_pass_rate !== null) entry.postcondition_pass_rate = row.postcondition_pass_rate;
   if (row.total_violations !== null) entry.total_violations = row.total_violations;
   if (row.total_test_results !== null)
-    entry.total_test_results = JSON.parse(row.total_test_results) as FlowRunEntry['total_test_results'];
+    entry.total_test_results = JSON.parse(row.total_test_results) as FlowRunEntry["total_test_results"];
   if (row.total_files_changed !== null) entry.total_files_changed = row.total_files_changed;
   return entry;
 }
@@ -285,12 +284,8 @@ export class DriftDb {
         pr_number: entry.pr_number ?? null,
         branch: entry.branch ?? null,
         last_reviewed_sha: entry.last_reviewed_sha ?? null,
-        file_priorities: entry.file_priorities != null
-          ? JSON.stringify(entry.file_priorities)
-          : null,
-        recommendations: entry.recommendations != null
-          ? JSON.stringify(entry.recommendations)
-          : null,
+        file_priorities: entry.file_priorities != null ? JSON.stringify(entry.file_priorities) : null,
+        recommendations: entry.recommendations != null ? JSON.stringify(entry.recommendations) : null,
       });
 
       for (const v of entry.violations ?? []) {
@@ -313,11 +308,7 @@ export class DriftDb {
    * Returns ReviewEntry[] with violations reconstituted from violations table.
    * Returns empty array when no reviews exist (define-errors-out-of-existence).
    */
-  getReviews(options?: {
-    principleId?: string;
-    branch?: string;
-    prNumber?: number;
-  }): ReviewEntry[] {
+  getReviews(options?: { principleId?: string; branch?: string; prNumber?: number }): ReviewEntry[] {
     const { principleId, branch, prNumber } = options ?? {};
 
     let rows: ReviewRow[];
@@ -336,10 +327,9 @@ export class DriftDb {
     // or have the principle in their honored JSON array.
     if (principleId !== undefined) {
       const violationReviewIds = new Set(
-        (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>)
-          .map(r => r.review_id),
+        (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map((r) => r.review_id),
       );
-      rows = rows.filter(row => {
+      rows = rows.filter((row) => {
         if (violationReviewIds.has(row.review_id)) return true;
         // Check honored JSON array
         try {
@@ -352,7 +342,7 @@ export class DriftDb {
     }
 
     // Reconstitute violations for each review row
-    return rows.map(row => {
+    return rows.map((row) => {
       const violations = this.stmtGetViolationsByReviewId.all(row.review_id) as ViolationRow[];
       return rowToReviewEntry(row, violations);
     });
@@ -386,9 +376,7 @@ export class DriftDb {
   getComplianceTrend(principleId: string, weeks?: number): WeeklyTrendPoint[] {
     // Build set of review_ids that have a violation for this principle
     const violationReviewIds = new Set(
-      (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map(
-        r => r.review_id,
-      ),
+      (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map((r) => r.review_id),
     );
 
     // Fetch all reviews, then filter in JS to those that either:
@@ -396,7 +384,7 @@ export class DriftDb {
     // (b) have the principle in their honored JSON array
     const allRows = this.stmtGetAllReviews.all() as ReviewRow[];
 
-    const relevant = allRows.filter(row => {
+    const relevant = allRows.filter((row) => {
       if (violationReviewIds.has(row.review_id)) return true;
       try {
         const honored = JSON.parse(row.honored) as string[];
@@ -464,9 +452,7 @@ export class DriftDb {
       gate_pass_rate: entry.gate_pass_rate ?? null,
       postcondition_pass_rate: entry.postcondition_pass_rate ?? null,
       total_violations: entry.total_violations ?? null,
-      total_test_results: entry.total_test_results != null
-        ? JSON.stringify(entry.total_test_results)
-        : null,
+      total_test_results: entry.total_test_results != null ? JSON.stringify(entry.total_test_results) : null,
       total_files_changed: entry.total_files_changed ?? null,
     });
   }
@@ -506,8 +492,7 @@ export class DriftDb {
     };
 
     if (gateCount > 0) result.avg_gate_pass_rate = gateSum / gateCount;
-    if (postconditionCount > 0)
-      result.avg_postcondition_pass_rate = postconditionSum / postconditionCount;
+    if (postconditionCount > 0) result.avg_postcondition_pass_rate = postconditionSum / postconditionCount;
 
     return result;
   }
@@ -540,7 +525,7 @@ export function getDriftDb(projectDir: string): DriftDb {
   const canonDir = join(key, CANON_DIR);
   mkdirSync(canonDir, { recursive: true });
 
-  const dbPath = join(canonDir, 'drift.db');
+  const dbPath = join(canonDir, "drift.db");
   const db = initDriftDb(dbPath);
   const store = new DriftDb(db);
   cache.set(key, store);

@@ -12,13 +12,12 @@
  * - No board.json or .lock file created
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { getDriftDb } from "../drift/drift-db.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import type { BoardStateStatus } from "../orchestration/flow-schema.ts";
 
 // Mock analytics so appendFlowRun doesn't need drift.db during most tests
 vi.mock("../drift/analytics.ts", () => ({
@@ -37,8 +36,8 @@ vi.mock("../orchestration/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
-import { updateBoard } from "../tools/update-board.ts";
 import { appendFlowRun } from "../drift/analytics.ts";
+import { updateBoard } from "../tools/update-board.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,11 +54,14 @@ function makeTmpDir(): string {
 /**
  * Seed a workspace with a minimal execution row + state rows.
  */
-function seedWorkspace(workspace: string, overrides: {
-  currentState?: string;
-  states?: Record<string, { status: string; entries: number }>;
-  blocked?: { state: string; reason: string; since: string } | null;
-} = {}) {
+function seedWorkspace(
+  workspace: string,
+  overrides: {
+    currentState?: string;
+    states?: Record<string, { status: string; entries: number }>;
+    blocked?: { state: string; reason: string; since: string } | null;
+  } = {},
+) {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
@@ -84,7 +86,7 @@ function seedWorkspace(workspace: string, overrides: {
     done: { status: "pending", entries: 0 },
   };
   for (const [stateId, state] of Object.entries(states)) {
-    store.upsertState(stateId, { status: state.status as any, entries: state.entries });
+    store.upsertState(stateId, { status: state.status as BoardStateStatus, entries: state.entries });
   }
 
   return store;

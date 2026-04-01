@@ -4,7 +4,7 @@
  * Tests that bridge.callTool() correctly routes to MCP server tools.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock the ext-apps module before importing bridge
@@ -23,8 +23,12 @@ class MockApp {
   connect = mockConnect;
   getHostContext = mockGetHostContext;
   callServerTool = mockCallServerTool;
-  set onhostcontextchanged(_cb: unknown) { /* no-op */ }
-  set onerror(_cb: unknown) { /* no-op */ }
+  set onhostcontextchanged(_cb: unknown) {
+    /* no-op */
+  }
+  set onerror(_cb: unknown) {
+    /* no-op */
+  }
 }
 
 vi.mock("@modelcontextprotocol/ext-apps", () => ({
@@ -130,5 +134,4 @@ describe("bridge.callTool()", () => {
       arguments: { principle_id: "deep-modules" },
     });
   });
-
 });

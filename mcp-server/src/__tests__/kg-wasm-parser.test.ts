@@ -3,8 +3,8 @@
  * Strict TDD: these tests are written first; implementation makes them pass.
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
-import { initParsers, getParser, isInitialized } from "../graph/kg-wasm-parser.ts";
+import { beforeAll, describe, expect, it } from "vitest";
+import { getParser, initParsers, isInitialized } from "../graph/kg-wasm-parser.ts";
 
 // ---------------------------------------------------------------------------
 // Initialization state tests (before init)

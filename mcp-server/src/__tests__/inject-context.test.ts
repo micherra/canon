@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { rmSync } from "node:fs";
-import { resolveContextInjections, extractSection } from "../orchestration/inject-context.ts";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Board, ContextInjection } from "../orchestration/flow-schema.ts";
+import { extractSection, resolveContextInjections } from "../orchestration/inject-context.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -116,9 +116,7 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       research: { status: "done", entries: 1, artifacts: [artifactPath] },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "RESEARCH_OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "RESEARCH_OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
@@ -134,9 +132,7 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       analysis: { status: "done", entries: 1, artifacts: [artifactPath] },
     });
-    const injections: ContextInjection[] = [
-      { from: "analysis", section: "Findings", as: "FINDINGS" },
-    ];
+    const injections: ContextInjection[] = [{ from: "analysis", section: "Findings", as: "FINDINGS" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
@@ -152,9 +148,7 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       analysis: { status: "done", entries: 1, artifacts: [artifactPath] },
     });
-    const injections: ContextInjection[] = [
-      { from: "analysis", section: "Missing Section", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "analysis", section: "Missing Section", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(1);
@@ -166,9 +160,7 @@ describe("resolveContextInjections", () => {
 
   it("produces warning when source state is not found in board", async () => {
     const board = makeBoard({});
-    const injections: ContextInjection[] = [
-      { from: "nonexistent-state", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "nonexistent-state", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(1);
@@ -181,9 +173,7 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       empty_state: { status: "done", entries: 1 },
     });
-    const injections: ContextInjection[] = [
-      { from: "empty_state", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "empty_state", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(1);
@@ -196,13 +186,11 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       research: { status: "done", entries: 1, artifacts: ["nonexistent/path.md"] },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
-    expect(result.warnings.some(w => w.includes("nonexistent/path.md"))).toBe(true);
-    expect(result.warnings.some(w => w.includes("not found on disk"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("nonexistent/path.md"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("not found on disk"))).toBe(true);
   });
 
   it("produces warning when all artifacts are missing, variable not set", async () => {
@@ -213,13 +201,11 @@ describe("resolveContextInjections", () => {
         artifacts: ["missing1.md", "missing2.md"],
       },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     // Expect warnings for each missing file plus the "all artifacts missing" warning
-    expect(result.warnings.some(w => w.includes("all artifacts"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("all artifacts"))).toBe(true);
     expect(result.variables).not.toHaveProperty("OUTPUT");
   });
 
@@ -234,13 +220,11 @@ describe("resolveContextInjections", () => {
         artifacts: [existingPath, "missing.md"],
       },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     // Warning for missing file, but variable IS set with existing content
-    expect(result.warnings.some(w => w.includes("missing.md"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("missing.md"))).toBe(true);
     expect(result.variables["OUTPUT"]).toContain("Found content.");
   });
 
@@ -253,9 +237,7 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       research: { status: "done", entries: 1, artifacts: [path1, path2] },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
@@ -278,9 +260,7 @@ describe("resolveContextInjections", () => {
 
   it("uses default prompt text for from:user injection with no prompt field", async () => {
     const board = makeBoard({});
-    const injections: ContextInjection[] = [
-      { from: "user", as: "USER_INPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "user", as: "USER_INPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.hitl).toBeDefined();
@@ -294,9 +274,7 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       research: { status: "done", entries: 1, artifacts: [artifactPath] },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
@@ -307,12 +285,10 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       research: { status: "done", entries: 1, artifacts: ["/etc/passwd"] },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
-    expect(result.warnings.some(w => w.includes("/etc/passwd") && w.includes("escapes workspace"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("/etc/passwd") && w.includes("escapes workspace"))).toBe(true);
     expect(result.variables).not.toHaveProperty("OUTPUT");
   });
 
@@ -320,12 +296,10 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       research: { status: "done", entries: 1, artifacts: ["../../etc/passwd"] },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
-    expect(result.warnings.some(w => w.includes("../../etc/passwd") && w.includes("escapes workspace"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("../../etc/passwd") && w.includes("escapes workspace"))).toBe(true);
     expect(result.variables).not.toHaveProperty("OUTPUT");
   });
 
@@ -337,9 +311,7 @@ describe("resolveContextInjections", () => {
     const board = makeBoard({
       research: { status: "done", entries: 1, artifacts: ["artifacts/relative.md"] },
     });
-    const injections: ContextInjection[] = [
-      { from: "research", as: "OUTPUT" },
-    ];
+    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
@@ -361,6 +333,6 @@ describe("resolveContextInjections", () => {
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.variables["GOOD"]).toContain("Good content.");
     expect(result.variables).not.toHaveProperty("MISSING");
-    expect(result.warnings.some(w => w.includes("missing_state"))).toBe(true);
+    expect(result.warnings.some((w) => w.includes("missing_state"))).toBe(true);
   });
 });

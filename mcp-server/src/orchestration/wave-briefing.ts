@@ -10,8 +10,8 @@
  *   substituteVariables cannot expand them unintentionally.
  */
 
-import { readFile, appendFile, mkdir, access } from "fs/promises";
-import { join, dirname } from "path";
+import { access, appendFile, mkdir, readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 /** Maximum character length of the assembled briefing before truncation. */
 const MAX_BRIEFING_CHARS = 2000;
@@ -68,7 +68,7 @@ export function assembleWaveBriefing(input: WaveBriefingInput): string {
   let result = sections.join("").trimEnd();
 
   if (result.length > MAX_BRIEFING_CHARS) {
-    result = result.slice(0, MAX_BRIEFING_CHARS).trimEnd() + "\n\n[Briefing truncated]";
+    result = `${result.slice(0, MAX_BRIEFING_CHARS).trimEnd()}\n\n[Briefing truncated]`;
   }
 
   return result;
@@ -92,12 +92,7 @@ function extractLines(allLines: string[], predicate: (line: string) => boolean):
 function isNewSharedCodeLine(line: string): boolean {
   const lower = line.toLowerCase();
   // "created" / "added" keywords OR presence of a file-path-like pattern
-  return (
-    lower.includes("created") ||
-    lower.includes("added") ||
-    /\bsrc\//.test(line) ||
-    /\.\w{2,4}/.test(line)
-  );
+  return lower.includes("created") || lower.includes("added") || /\bsrc\//.test(line) || /\.\w{2,4}/.test(line);
 }
 
 /**
@@ -105,11 +100,7 @@ function isNewSharedCodeLine(line: string): boolean {
  */
 function isPatternLine(line: string): boolean {
   const lower = line.toLowerCase();
-  return (
-    lower.includes("pattern") ||
-    lower.includes("convention") ||
-    lower.includes("approach")
-  );
+  return lower.includes("pattern") || lower.includes("convention") || lower.includes("approach");
 }
 
 /**
@@ -118,10 +109,7 @@ function isPatternLine(line: string): boolean {
 function isGotchaLine(line: string): boolean {
   const lower = line.toLowerCase();
   return (
-    lower.includes("concern") ||
-    lower.includes("gotcha") ||
-    lower.includes("warning") ||
-    lower.includes("unexpected")
+    lower.includes("concern") || lower.includes("gotcha") || lower.includes("warning") || lower.includes("unexpected")
   );
 }
 

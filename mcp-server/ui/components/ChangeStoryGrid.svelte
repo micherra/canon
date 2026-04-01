@@ -1,50 +1,55 @@
 <script lang="ts">
-  import { clusterFiles, clusterIcon } from "../lib/clustering.ts";
-  import type { ClusterInput, Cluster } from "../lib/clustering.ts";
+import type { Cluster, ClusterInput } from "../lib/clustering.ts";
+import { clusterFiles } from "../lib/clustering.ts";
 
-  // ── Props ────────────────────────────────────────────────────────────────
+// ── Props ────────────────────────────────────────────────────────────────
 
-  interface ChangeStoryGridProps {
-    files: Array<{
-      path: string;
-      status: "added" | "modified" | "deleted" | "renamed";
-      layer: string;
-    }>;
-    onPrompt: (text: string) => void;
+interface ChangeStoryGridProps {
+  files: Array<{
+    path: string;
+    status: "added" | "modified" | "deleted" | "renamed";
+    layer: string;
+  }>;
+  onPrompt: (text: string) => void;
+}
+
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { files, onPrompt }: ChangeStoryGridProps = $props();
+
+// ── Derived ───────────────────────────────────────────────────────────────
+
+let _clusters = $derived(clusterFiles(files as ClusterInput[]));
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function _buildPrompt(cluster: Cluster): string {
+  switch (cluster.type) {
+    case "new-feature":
+      return `Walk me through what ${cluster.title} adds to the codebase`;
+    case "removal":
+      return `Why was ${cluster.title} removed and what replaced it`;
+    default:
+      return `Explain the changes in ${cluster.title}`;
   }
+}
 
-  let { files, onPrompt }: ChangeStoryGridProps = $props();
-
-  // ── Derived ───────────────────────────────────────────────────────────────
-
-  let clusters = $derived(clusterFiles(files as ClusterInput[]));
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  function buildPrompt(cluster: Cluster): string {
-    switch (cluster.type) {
-      case "new-feature":
-        return `Walk me through what ${cluster.title} adds to the codebase`;
-      case "removal":
-        return `Why was ${cluster.title} removed and what replaced it`;
-      default:
-        return `Explain the changes in ${cluster.title}`;
-    }
+function _statusChipClass(status: ClusterInput["status"]): string {
+  switch (status) {
+    case "added":
+      return "chip-added";
+    case "deleted":
+      return "chip-deleted";
+    case "modified":
+      return "chip-modified";
+    case "renamed":
+      return "chip-renamed";
   }
+}
 
-  function statusChipClass(status: ClusterInput["status"]): string {
-    switch (status) {
-      case "added":    return "chip-added";
-      case "deleted":  return "chip-deleted";
-      case "modified": return "chip-modified";
-      case "renamed":  return "chip-renamed";
-    }
-  }
-
-  function shortFileName(path: string): string {
-    const parts = path.split("/");
-    return parts[parts.length - 1];
-  }
+function _shortFileName(path: string): string {
+  const parts = path.split("/");
+  return parts[parts.length - 1];
+}
 </script>
 
 <div class="change-story-grid">

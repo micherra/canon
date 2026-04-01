@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { analyzeDrift } from "../drift/analyzer.ts";
 import type { ReviewEntry } from "../schema.ts";
 
@@ -63,9 +63,7 @@ describe("analyzeDrift", () => {
   });
 
   it("identifies never-triggered principles", () => {
-    const reviews = [
-      makeReview({ honored: ["p1"] }),
-    ];
+    const reviews = [makeReview({ honored: ["p1"] })];
     const report = analyzeDrift(reviews, ["p1", "p2", "p3"]);
     expect(report.never_triggered).toEqual(["p2", "p3"]);
   });
@@ -104,13 +102,11 @@ describe("analyzeDrift", () => {
             { principle_id: "p1", severity: "rule" },
             { principle_id: "p2", severity: "rule" },
           ],
-        })
+        }),
       );
     }
     for (let i = 4; i < 8; i++) {
-      reviews.push(
-        makeReview({ review_id: `rev_${i}`, violations: [] })
-      );
+      reviews.push(makeReview({ review_id: `rev_${i}`, violations: [] }));
     }
     const report = analyzeDrift(reviews, ["p1", "p2"]);
     expect(report.trend).toBe("improving");
@@ -119,9 +115,7 @@ describe("analyzeDrift", () => {
   it("detects declining trend", () => {
     const reviews: ReviewEntry[] = [];
     for (let i = 0; i < 4; i++) {
-      reviews.push(
-        makeReview({ review_id: `rev_${i}`, violations: [] })
-      );
+      reviews.push(makeReview({ review_id: `rev_${i}`, violations: [] }));
     }
     for (let i = 4; i < 8; i++) {
       reviews.push(
@@ -131,7 +125,7 @@ describe("analyzeDrift", () => {
             { principle_id: "p1", severity: "rule" },
             { principle_id: "p2", severity: "rule" },
           ],
-        })
+        }),
       );
     }
     const report = analyzeDrift(reviews, ["p1", "p2"]);
@@ -145,7 +139,7 @@ describe("analyzeDrift", () => {
         makeReview({
           review_id: `rev_${i}`,
           violations: [{ principle_id: "p1", severity: "rule" }],
-        })
+        }),
       );
     }
     const report = analyzeDrift(reviews, ["p1"]);
@@ -174,10 +168,7 @@ describe("analyzeDrift", () => {
   });
 
   it("filters by lastN", () => {
-    const reviews = [
-      makeReview({ review_id: "old" }),
-      makeReview({ review_id: "new" }),
-    ];
+    const reviews = [makeReview({ review_id: "old" }), makeReview({ review_id: "new" })];
     const report = analyzeDrift(reviews, [], { lastN: 1 });
     expect(report.total_reviews).toBe(1);
   });

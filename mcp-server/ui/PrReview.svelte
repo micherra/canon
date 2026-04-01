@@ -1,83 +1,67 @@
 <script lang="ts">
-  /**
-   * PrReview.svelte
-   *
-   * Unified progressive PR Review container.
-   *
-   * Two-mode layout:
-   *   - prep-only mode (has_review === false): single-column view — NarrativeSummary,
-   *     ChangeStoryGrid, ImpactTabs, plus a "Run Review" banner.
-   *   - review mode (has_review === true): scrollable dashboard of 8 panels:
-   *     VerdictBanner, StatsRow, FixBeforeMerge, ViolationsByPrinciple,
-   *     ComplianceScore, BlastRadiusChart, LayerChart, SubsystemsPanel.
-   *
-   * Canon principles:
-   *   - compose-from-small-to-large: pure composition container; no leaf logic
-   *   - deep-modules: minimal interface — no props; all state internal
-   */
+/**
+ * PrReview.svelte
+ *
+ * Unified progressive PR Review container.
+ *
+ * Two-mode layout:
+ *   - prep-only mode (has_review === false): single-column view — NarrativeSummary,
+ *     ChangeStoryGrid, ImpactTabs, plus a "Run Review" banner.
+ *   - review mode (has_review === true): scrollable dashboard of 8 panels:
+ *     VerdictBanner, StatsRow, FixBeforeMerge, ViolationsByPrinciple,
+ *     ComplianceScore, BlastRadiusChart, LayerChart, SubsystemsPanel.
+ *
+ * Canon principles:
+ *   - compose-from-small-to-large: pure composition container; no leaf logic
+ *   - deep-modules: minimal interface — no props; all state internal
+ */
 
-  import { bridge } from "./stores/bridge";
-  import { useDataLoader } from "./lib/useDataLoader.svelte";
-  import EmptyState from "./components/EmptyState.svelte";
-  import NarrativeSummary from "./components/NarrativeSummary.svelte";
-  import ChangeStoryGrid from "./components/ChangeStoryGrid.svelte";
-  import ImpactTabs from "./components/ImpactTabs.svelte";
-  import VerdictBanner from "./components/VerdictBanner.svelte";
-  import StatsRow from "./components/StatsRow.svelte";
-  import FixBeforeMerge from "./components/FixBeforeMerge.svelte";
-  import ViolationsByPrinciple from "./components/ViolationsByPrinciple.svelte";
-  import ComplianceScore from "./components/ComplianceScore.svelte";
-  import BlastRadiusChart from "./components/BlastRadiusChart.svelte";
-  import LayerChart from "./components/LayerChart.svelte";
-  import SubsystemsPanel from "./components/SubsystemsPanel.svelte";
-  import type { UnifiedPrOutput } from "./stores/pr-review";
+import { useDataLoader } from "./lib/useDataLoader.svelte";
+import { bridge } from "./stores/bridge";
+import type { UnifiedPrOutput } from "./stores/pr-review";
 
-  // ── Data loading ──────────────────────────────────────────────────────────
+// ── Data loading ──────────────────────────────────────────────────────────
 
-  const loader = useDataLoader(async () => {
-    await bridge.init();
-    const result = await bridge.waitForToolResult() as UnifiedPrOutput;
-    if (!result) throw new Error("No data received from tool");
-    return result;
-  });
+const loader = useDataLoader(async () => {
+  await bridge.init();
+  const result = (await bridge.waitForToolResult()) as UnifiedPrOutput;
+  if (!result) throw new Error("No data received from tool");
+  return result;
+});
 
-  let status = $derived(loader.status);
-  let data = $derived(loader.data);
-  let errorMsg = $derived(loader.errorMsg);
+let _status = $derived(loader.status);
+let data = $derived(loader.data);
+let _errorMsg = $derived(loader.errorMsg);
 
-  // ── Derived: prep-level ────────────────────────────────────────────────────
+// ── Derived: prep-level ────────────────────────────────────────────────────
 
-  let totalViolations = $derived(data?.prep?.total_violations ?? 0);
+let _totalViolations = $derived(data?.prep?.total_violations ?? 0);
 
-  let netNewFiles = $derived(data?.prep?.net_new_files ?? 0);
+let _netNewFiles = $derived(data?.prep?.net_new_files ?? 0);
 
-  let isStale = $derived((data?.prep?.graph_data_age_ms ?? 0) > 3_600_000);
+let _isStale = $derived((data?.prep?.graph_data_age_ms ?? 0) > 3_600_000);
 
-  let hasReview = $derived(!!data?.has_review);
+let _hasReview = $derived(!!data?.has_review);
 
-  // ── Derived: review-level (only meaningful when review exists) ─────────────
+// ── Derived: review-level (only meaningful when review exists) ─────────────
 
-  let ruleViolationCount = $derived(
-    (data?.review?.violations ?? []).filter(v => v.severity === "rule").length
-  );
+let _ruleViolationCount = $derived((data?.review?.violations ?? []).filter((v) => v.severity === "rule").length);
 
-  let highestBlastRadius = $derived(
-    (data?.blast_radius_by_file ?? []).length > 0
-      ? data!.blast_radius_by_file[0]
-      : null
-  );
+let _highestBlastRadius = $derived(
+  (data?.blast_radius_by_file ?? []).length > 0 ? data!.blast_radius_by_file[0] : null,
+);
 
-  let honoredPrinciples = $derived(data?.review?.honored ?? []);
+let _honoredPrinciples = $derived(data?.review?.honored ?? []);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+// ── Handlers ──────────────────────────────────────────────────────────────
 
-  function handlePrompt(text: string) {
-    bridge.sendMessage(text);
-  }
+function _handlePrompt(text: string) {
+  bridge.sendMessage(text);
+}
 
-  function handleRunReview() {
-    bridge.sendMessage("Run a Canon review on this PR");
-  }
+function _handleRunReview() {
+  bridge.sendMessage("Run a Canon review on this PR");
+}
 </script>
 
 <div class="pr-review">

@@ -6,7 +6,9 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc",
-    "lint": "tsc -p tsconfig.lint.json",
+    "lint": "biome check src/ ui/",
+    "lint:fix": "biome check --write src/ ui/",
+    "lint:types": "tsc -p tsconfig.lint.json",
     "start": "tsx src/index.ts",
     "test": "vitest run"
   },
@@ -25,6 +27,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.10",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.5.0",

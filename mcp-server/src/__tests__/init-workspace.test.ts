@@ -10,11 +10,11 @@
  * - Progress entry exists in DB after init
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { access } from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
@@ -30,8 +30,8 @@ vi.mock("../orchestration/flow-parser.ts", () => ({
   }),
 }));
 
-import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 

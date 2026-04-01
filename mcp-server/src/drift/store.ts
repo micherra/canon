@@ -22,11 +22,7 @@ export class DriftStore {
     this.projectDir = projectDir;
   }
 
-  async getReviews(options?: {
-    principleId?: string;
-    branch?: string;
-    prNumber?: number;
-  }): Promise<ReviewEntry[]> {
+  async getReviews(options?: { principleId?: string; branch?: string; prNumber?: number }): Promise<ReviewEntry[]> {
     return getDriftDb(this.projectDir).getReviews(options);
   }
 

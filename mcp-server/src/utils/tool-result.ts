@@ -36,7 +36,7 @@ export function isToolError(result: unknown): result is CanonToolError {
   return (
     typeof result === "object" &&
     result !== null &&
-    (result as any).ok === false &&
+    (result as Record<string, unknown>).ok === false &&
     "error_code" in result
   );
 }
@@ -51,7 +51,6 @@ export function assertOk<T>(result: ToolResult<T>): asserts result is { ok: true
     throw new Error(`assertOk: expected ok result but got error ${result.error_code}: ${result.message}`);
   }
 }
-
 
 /** Shared subprocess result type — returned by all adapter functions. */
 export interface ProcessResult {

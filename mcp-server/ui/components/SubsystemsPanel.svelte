@@ -1,28 +1,29 @@
 <script lang="ts">
-  /**
-   * SubsystemsPanel.svelte
-   *
-   * Displays new and removed subsystems detected in the PR.
-   * Each subsystem entry shows a directory path, a colored label badge
-   * ("new" in green, "removed" in red), and a file count.
-   * Pure presentation — receives all data via props, no data fetching.
-   *
-   * Canon principles:
-   *   - functions-do-one-thing: renders subsystem labels panel only
-   *   - compose-from-small-to-large: used as a leaf panel by PrReview.svelte
-   */
+/**
+ * SubsystemsPanel.svelte
+ *
+ * Displays new and removed subsystems detected in the PR.
+ * Each subsystem entry shows a directory path, a colored label badge
+ * ("new" in green, "removed" in red), and a file count.
+ * Pure presentation — receives all data via props, no data fetching.
+ *
+ * Canon principles:
+ *   - functions-do-one-thing: renders subsystem labels panel only
+ *   - compose-from-small-to-large: used as a leaf panel by PrReview.svelte
+ */
 
-  interface SubsystemEntry {
-    directory: string;
-    label: "new" | "removed";
-    file_count: number;
-  }
+interface SubsystemEntry {
+  directory: string;
+  label: "new" | "removed";
+  file_count: number;
+}
 
-  interface SubsystemsPanelProps {
-    subsystems: SubsystemEntry[];
-  }
+interface SubsystemsPanelProps {
+  subsystems: SubsystemEntry[];
+}
 
-  let { subsystems }: SubsystemsPanelProps = $props();
+// biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
+let { subsystems }: SubsystemsPanelProps = $props();
 </script>
 
 <div class="subsystems-panel">

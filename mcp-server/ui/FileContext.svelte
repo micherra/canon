@@ -1,439 +1,481 @@
 <script lang="ts">
-  import { bridge } from "./stores/bridge";
-  import { useDataLoader } from "./lib/useDataLoader.svelte";
-  import EmptyState from "./components/EmptyState.svelte";
-  import { getLayerColor, truncate } from "./lib/constants";
-  import { getSeverityColor, pluralize } from "./lib/utils";
+import { truncate } from "./lib/constants";
+import { useDataLoader } from "./lib/useDataLoader.svelte";
+import { bridge } from "./stores/bridge";
 
-  // ── Types ─────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────
 
-  interface FileGraphMetrics {
-    in_degree: number;
-    out_degree: number;
-    is_hub: boolean;
-    in_cycle: boolean;
-    cycle_peers: string[];
-    layer_violation_count: number;
-    impact_score: number;
+interface FileGraphMetrics {
+  in_degree: number;
+  out_degree: number;
+  is_hub: boolean;
+  in_cycle: boolean;
+  cycle_peers: string[];
+  layer_violation_count: number;
+  impact_score: number;
+}
+
+interface BlastRadiusFile {
+  path: string;
+  depth: number;
+  relationship: string;
+  layer: string;
+  is_test: boolean;
+  in_degree: number;
+  affected_entities?: string[];
+}
+
+interface BlastRadiusSummary {
+  severity: "contained" | "low" | "moderate" | "high" | "critical";
+  total_files: number;
+  total_production_files: number;
+  cross_layer_count: number;
+  max_depth_reached: number;
+  amplification_risk: boolean;
+  description: string;
+}
+
+interface UnifiedBlastRadiusReport {
+  seed_file: string;
+  seed_layer: string;
+  summary: BlastRadiusSummary;
+  by_depth: Record<string, BlastRadiusFile[]>; // JSON keys are strings
+  affected: BlastRadiusFile[];
+}
+
+interface FileViolationDetail {
+  principle_id: string;
+  severity: string;
+  message?: string;
+}
+
+interface FileContextOutput {
+  file_path: string;
+  layer: string;
+  content: string;
+  imports: string[];
+  imported_by: string[];
+  exports: string[];
+  violation_count: number;
+  last_verdict: string | null;
+  summary: string | null;
+  violations: FileViolationDetail[];
+  imports_by_layer: Record<string, string[]>;
+  imported_by_layer?: Record<string, string[]>;
+  layer_stack: string[];
+  role: string;
+  shape?: { label: string; description: string };
+  project_max_impact?: number;
+  graph_metrics?: FileGraphMetrics;
+  entities?: Array<{
+    name: string;
+    kind: string;
+    is_exported: boolean;
+    line_start: number;
+    line_end: number;
+  }>;
+  blast_radius?: UnifiedBlastRadiusReport | BlastRadiusFile[];
+}
+
+// ── Data loading (push-mode — waits for tool to push result) ─────────────
+
+const loader = useDataLoader(async () => {
+  await bridge.init();
+  const result = (await bridge.waitForToolResult()) as FileContextOutput;
+  if (!result) throw new Error("No data received from tool");
+  return result;
+});
+
+let status = $derived(loader.status);
+let data = $derived(loader.data);
+let _errorMsg = $derived(loader.errorMsg);
+
+// ── Canvas state ──────────────────────────────────────────────────────────
+
+let canvasEl = $state<HTMLCanvasElement | null>(null);
+
+// ── Derived state ─────────────────────────────────────────────────────────
+
+let fileName = $derived(data?.file_path.split("/").pop() ?? "");
+
+let crossLayerImports = $derived.by(() => {
+  if (!data) return new Set<string>();
+  const result = new Set<string>();
+  for (const [layerName, files] of Object.entries(data.imports_by_layer)) {
+    if (layerName !== data.layer) {
+      for (const f of files) result.add(f);
+    }
+  }
+  return result;
+});
+
+let _hasCrossLayerImports = $derived(crossLayerImports.size > 0);
+
+let _importedByLabel = $derived.by(() => {
+  if (!data) return "";
+  const deps = data.imported_by;
+  if (deps.length <= 3) return deps.map(shortName).join(", ");
+  return `${deps.length} files`;
+});
+
+let _uniqueImportLayers = $derived.by(() => {
+  if (!data) return 0;
+  return Object.keys(data.imports_by_layer).length;
+});
+
+let _entityTypeCounts = $derived.by(() => {
+  if (!data?.entities) return { types: 0, fns: 0 };
+  const types = data.entities.filter((e) => e.kind === "type" || e.kind === "interface").length;
+  const fns = data.entities.filter((e) => e.kind === "function").length;
+  return { types, fns };
+});
+
+let _sortedViolations = $derived.by(() => {
+  if (!data?.violations) return [];
+  const order: Record<string, number> = { rule: 0, "strong-opinion": 1, convention: 2 };
+  return [...data.violations].sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
+});
+
+let _sortedEntities = $derived.by(() => {
+  if (!data?.entities) return [];
+  const kindOrder: Record<string, number> = { function: 0, interface: 1, type: 2, class: 3, variable: 4 };
+  return [...data.entities].sort((a, b) => {
+    if (a.is_exported !== b.is_exported) return a.is_exported ? -1 : 1;
+    const kd = (kindOrder[a.kind] ?? 5) - (kindOrder[b.kind] ?? 5);
+    if (kd !== 0) return kd;
+    return a.name.localeCompare(b.name);
+  });
+});
+
+/** True when blast_radius is the old array format (pre-br-03). */
+let blastRadiusIsLegacy = $derived.by(() => {
+  return Array.isArray(data?.blast_radius);
+});
+
+/** The unified report, or null when data is absent or legacy format. */
+let blastRadiusReport = $derived.by((): UnifiedBlastRadiusReport | null => {
+  if (!data?.blast_radius || blastRadiusIsLegacy) return null;
+  return data.blast_radius as UnifiedBlastRadiusReport;
+});
+
+let _blastRadiusByDepth = $derived.by(() => {
+  if (!blastRadiusReport) return new Map<number, BlastRadiusFile[]>();
+  const map = new Map<number, BlastRadiusFile[]>();
+  for (const [key, files] of Object.entries(blastRadiusReport.by_depth)) {
+    map.set(Number(key), files);
+  }
+  return map;
+});
+
+let _blastRadiusSummary = $derived(blastRadiusReport?.summary ?? null);
+
+// ── Reverse-dependency layer lookup ────────────────────────────────────────
+
+let importedByLayerMap = $derived.by(() => {
+  if (!data?.imported_by_layer) return new Map<string, string>();
+  const map = new Map<string, string>();
+  for (const [layer, files] of Object.entries(data.imported_by_layer)) {
+    for (const f of files) map.set(f, layer);
+  }
+  return map;
+});
+
+let crossLayerDependents = $derived.by(() => {
+  if (!data) return new Set<string>();
+  const result = new Set<string>();
+  for (const [layer, files] of Object.entries(data.imported_by_layer ?? {})) {
+    if (layer !== data.layer) {
+      for (const f of files) result.add(f);
+    }
+  }
+  return result;
+});
+
+// ── Canvas graph ──────────────────────────────────────────────────────────
+
+interface GraphLayout {
+  W: number;
+  H: number;
+  CX: number;
+  CY: number;
+  LEFT_X: number;
+  RIGHT_X: number;
+  graphTop: number;
+  graphH: number;
+  maxLabelChars: number;
+}
+
+interface NodePos {
+  x: number;
+  y: number;
+  path: string;
+}
+
+const NODE_R = 5;
+const LABEL_GAP = 10;
+const EDGE_PAD = 8;
+const HEADER_Y = 16;
+
+function computeLayout(ctx: CanvasRenderingContext2D, W: number, imports: string[], dependents: string[]): GraphLayout {
+  const maxNodes = Math.max(imports.length, dependents.length, 1);
+  const H = Math.max(280, maxNodes * 28 + 80);
+  const maxLabelChars = 26;
+
+  ctx.font = "10px monospace";
+  let maxLeftLabel = 0;
+  for (const imp of imports) {
+    maxLeftLabel = Math.max(maxLeftLabel, ctx.measureText(truncate(shortName(imp), maxLabelChars)).width);
+  }
+  let maxRightLabel = 0;
+  for (const dep of dependents) {
+    maxRightLabel = Math.max(maxRightLabel, ctx.measureText(truncate(shortName(dep), maxLabelChars)).width);
   }
 
-  interface BlastRadiusFile {
-    path: string;
-    depth: number;
-    relationship: string;
-    layer: string;
-    is_test: boolean;
-    in_degree: number;
-    affected_entities?: string[];
+  const LEFT_X = Math.max(EDGE_PAD + maxLeftLabel + LABEL_GAP + NODE_R, 80);
+  const RIGHT_X = Math.min(W - EDGE_PAD - maxRightLabel - LABEL_GAP - NODE_R, W - 80);
+  const graphTop = HEADER_Y + 16;
+  const graphH = H - graphTop - 12;
+
+  return { W, H, CX: W / 2, CY: H / 2, LEFT_X, RIGHT_X, graphTop, graphH, maxLabelChars };
+}
+
+function computeNodePositions(items: string[], x: number, graphTop: number, graphH: number): NodePos[] {
+  return items.map((path, i) => ({
+    x,
+    y: graphTop + (graphH / (items.length + 1)) * (i + 1),
+    path,
+  }));
+}
+
+function drawCurvedEdge(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: string,
+  arrowAtEnd: boolean,
+) {
+  const dx = x2 - x1;
+  const cpOffset = Math.min(Math.abs(dx) * 0.4, 60);
+
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.bezierCurveTo(x1 + cpOffset, y1, x2 - cpOffset, y2, x2, y2);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.5;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  drawArrowhead(ctx, x1, y1, x2, y2, cpOffset, color, arrowAtEnd);
+}
+
+function drawArrowhead(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  cpOffset: number,
+  color: string,
+  arrowAtEnd: boolean,
+) {
+  const t = arrowAtEnd ? 0.97 : 0.03;
+  const tI = 1 - t;
+  const tx =
+    3 * tI * tI * (x1 + cpOffset - x1) +
+    6 * tI * t * (x2 - cpOffset - (x1 + cpOffset)) +
+    3 * t * t * (x2 - (x2 - cpOffset));
+  const ty = 3 * tI * tI * (y1 - y1) + 6 * tI * t * (y2 - y1) + 3 * t * t * (y2 - y2);
+  const angle = arrowAtEnd ? Math.atan2(ty, tx) : Math.atan2(-ty, -tx);
+  const tip = arrowAtEnd ? { x: x2, y: y2 } : { x: x1, y: y1 };
+  const AL = 8;
+  const AW = Math.PI / 6;
+
+  ctx.beginPath();
+  ctx.moveTo(tip.x, tip.y);
+  ctx.lineTo(tip.x - AL * Math.cos(angle - AW), tip.y - AL * Math.sin(angle - AW));
+  ctx.lineTo(tip.x - AL * Math.cos(angle + AW), tip.y - AL * Math.sin(angle + AW));
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.8;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawEdges(
+  ctx: CanvasRenderingContext2D,
+  importPositions: NodePos[],
+  dependentPositions: NodePos[],
+  layout: GraphLayout,
+) {
+  for (const pos of importPositions) {
+    const isCross = crossLayerImports.has(pos.path);
+    drawCurvedEdge(ctx, pos.x, pos.y, layout.CX, layout.CY, isCross ? "#EF9F27" : "#888780", true);
   }
-
-  interface BlastRadiusSummary {
-    severity: 'contained' | 'low' | 'moderate' | 'high' | 'critical';
-    total_files: number;
-    total_production_files: number;
-    cross_layer_count: number;
-    max_depth_reached: number;
-    amplification_risk: boolean;
-    description: string;
+  for (const pos of dependentPositions) {
+    const isCross = crossLayerDependents.has(pos.path);
+    drawCurvedEdge(ctx, layout.CX, layout.CY, pos.x, pos.y, isCross ? "#EF9F27" : "#1D9E75", true);
   }
+}
 
-  interface UnifiedBlastRadiusReport {
-    seed_file: string;
-    seed_layer: string;
-    summary: BlastRadiusSummary;
-    by_depth: Record<string, BlastRadiusFile[]>;  // JSON keys are strings
-    affected: BlastRadiusFile[];
-  }
-
-  interface FileViolationDetail {
-    principle_id: string;
-    severity: string;
-    message?: string;
-  }
-
-  interface FileContextOutput {
-    file_path: string;
-    layer: string;
-    content: string;
-    imports: string[];
-    imported_by: string[];
-    exports: string[];
-    violation_count: number;
-    last_verdict: string | null;
-    summary: string | null;
-    violations: FileViolationDetail[];
-    imports_by_layer: Record<string, string[]>;
-    imported_by_layer?: Record<string, string[]>;
-    layer_stack: string[];
-    role: string;
-    shape?: { label: string; description: string };
-    project_max_impact?: number;
-    graph_metrics?: FileGraphMetrics;
-    entities?: Array<{
-      name: string;
-      kind: string;
-      is_exported: boolean;
-      line_start: number;
-      line_end: number;
-    }>;
-    blast_radius?: UnifiedBlastRadiusReport | BlastRadiusFile[];
-  }
-
-  // ── Data loading (push-mode — waits for tool to push result) ─────────────
-
-  const loader = useDataLoader(async () => {
-    await bridge.init();
-    const result = await bridge.waitForToolResult() as FileContextOutput;
-    if (!result) throw new Error("No data received from tool");
-    return result;
-  });
-
-  let status = $derived(loader.status);
-  let data = $derived(loader.data);
-  let errorMsg = $derived(loader.errorMsg);
-
-  // ── Canvas state ──────────────────────────────────────────────────────────
-
-  let canvasEl = $state<HTMLCanvasElement | null>(null);
-
-  // ── Derived state ─────────────────────────────────────────────────────────
-
-  let fileName = $derived(data?.file_path.split("/").pop() ?? "");
-
-  let crossLayerImports = $derived.by(() => {
-    if (!data) return new Set<string>();
-    const result = new Set<string>();
-    for (const [layerName, files] of Object.entries(data.imports_by_layer)) {
-      if (layerName !== data.layer) {
-        for (const f of files) result.add(f);
-      }
-    }
-    return result;
-  });
-
-  let hasCrossLayerImports = $derived(crossLayerImports.size > 0);
-
-  let importedByLabel = $derived.by(() => {
-    if (!data) return "";
-    const deps = data.imported_by;
-    if (deps.length <= 3) return deps.map(shortName).join(", ");
-    return `${deps.length} files`;
-  });
-
-  let uniqueImportLayers = $derived.by(() => {
-    if (!data) return 0;
-    return Object.keys(data.imports_by_layer).length;
-  });
-
-  let entityTypeCounts = $derived.by(() => {
-    if (!data?.entities) return { types: 0, fns: 0 };
-    const types = data.entities.filter(e => e.kind === "type" || e.kind === "interface").length;
-    const fns = data.entities.filter(e => e.kind === "function").length;
-    return { types, fns };
-  });
-
-  let sortedViolations = $derived.by(() => {
-    if (!data?.violations) return [];
-    const order: Record<string, number> = { rule: 0, "strong-opinion": 1, convention: 2 };
-    return [...data.violations].sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3));
-  });
-
-  let sortedEntities = $derived.by(() => {
-    if (!data?.entities) return [];
-    const kindOrder: Record<string, number> = { function: 0, interface: 1, type: 2, class: 3, variable: 4 };
-    return [...data.entities].sort((a, b) => {
-      if (a.is_exported !== b.is_exported) return a.is_exported ? -1 : 1;
-      const kd = (kindOrder[a.kind] ?? 5) - (kindOrder[b.kind] ?? 5);
-      if (kd !== 0) return kd;
-      return a.name.localeCompare(b.name);
-    });
-  });
-
-  /** True when blast_radius is the old array format (pre-br-03). */
-  let blastRadiusIsLegacy = $derived.by(() => {
-    return Array.isArray(data?.blast_radius);
-  });
-
-  /** The unified report, or null when data is absent or legacy format. */
-  let blastRadiusReport = $derived.by((): UnifiedBlastRadiusReport | null => {
-    if (!data?.blast_radius || blastRadiusIsLegacy) return null;
-    return data.blast_radius as UnifiedBlastRadiusReport;
-  });
-
-  let blastRadiusByDepth = $derived.by(() => {
-    if (!blastRadiusReport) return new Map<number, BlastRadiusFile[]>();
-    const map = new Map<number, BlastRadiusFile[]>();
-    for (const [key, files] of Object.entries(blastRadiusReport.by_depth)) {
-      map.set(Number(key), files);
-    }
-    return map;
-  });
-
-  let blastRadiusSummary = $derived(blastRadiusReport?.summary ?? null);
-
-  // ── Reverse-dependency layer lookup ────────────────────────────────────────
-
-  let importedByLayerMap = $derived.by(() => {
-    if (!data?.imported_by_layer) return new Map<string, string>();
-    const map = new Map<string, string>();
-    for (const [layer, files] of Object.entries(data.imported_by_layer)) {
-      for (const f of files) map.set(f, layer);
-    }
-    return map;
-  });
-
-  let crossLayerDependents = $derived.by(() => {
-    if (!data) return new Set<string>();
-    const result = new Set<string>();
-    for (const [layer, files] of Object.entries(data.imported_by_layer ?? {})) {
-      if (layer !== data.layer) {
-        for (const f of files) result.add(f);
-      }
-    }
-    return result;
-  });
-
-  // ── Canvas graph ──────────────────────────────────────────────────────────
-
-  function drawGraph(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
-    if (!data) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const W = canvas.offsetWidth;
-    const imports = data.imports ?? [];
-    const dependents = data.imported_by ?? [];
-    const maxNodes = Math.max(imports.length, dependents.length, 1);
-    const H = Math.max(280, maxNodes * 28 + 80);
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.height = `${H}px`;
-    ctx.scale(dpr, dpr);
-
-    ctx.clearRect(0, 0, W, H);
-
-    const CX = W / 2;
-    const CY = H / 2;
-    const NODE_R = 5;
-    const LABEL_GAP = 10;
-    const EDGE_PAD = 8;
-    const HEADER_Y = 16;
-
-    // Measure widest labels
-    ctx.font = "10px monospace";
-    const maxLabelChars = 26;
-    let maxLeftLabel = 0;
-    for (const imp of imports) {
-      maxLeftLabel = Math.max(maxLeftLabel, ctx.measureText(truncate(shortName(imp), maxLabelChars)).width);
-    }
-    let maxRightLabel = 0;
-    for (const dep of dependents) {
-      maxRightLabel = Math.max(maxRightLabel, ctx.measureText(truncate(shortName(dep), maxLabelChars)).width);
-    }
-
-    const LEFT_X = Math.max(EDGE_PAD + maxLeftLabel + LABEL_GAP + NODE_R, 80);
-    const RIGHT_X = Math.min(W - EDGE_PAD - maxRightLabel - LABEL_GAP - NODE_R, W - 80);
-
-    // Column headers
-    ctx.font = "9px monospace";
-    ctx.textAlign = "center";
-    ctx.letterSpacing = "0.08em";
-    ctx.fillStyle = "#636a80";
-    if (imports.length > 0) {
-      ctx.textAlign = "center";
-      ctx.fillText("DEPENDS ON", LEFT_X, HEADER_Y);
-    }
-    if (dependents.length > 0) {
-      ctx.textAlign = "center";
-      ctx.fillText("USED BY", RIGHT_X, HEADER_Y);
-    }
-    ctx.letterSpacing = "0em";
-
-    const graphTop = HEADER_Y + 16;
-    const graphH = H - graphTop - 12;
-
-    // Node positions
-    const importPositions = imports.map((imp, i) => ({
-      x: LEFT_X,
-      y: graphTop + (graphH / (imports.length + 1)) * (i + 1),
-      path: imp,
-    }));
-
-    const dependentPositions = dependents.map((dep, i) => ({
-      x: RIGHT_X,
-      y: graphTop + (graphH / (dependents.length + 1)) * (i + 1),
-      path: dep,
-    }));
-
-    // ── Draw edges ──────────────────────────────────────────────────────
-
-    function drawCurvedEdge(
-      x1: number, y1: number,
-      x2: number, y2: number,
-      color: string,
-      arrowAtEnd: boolean,
-    ) {
-      const dx = x2 - x1;
-      const cpOffset = Math.min(Math.abs(dx) * 0.4, 60);
-
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.bezierCurveTo(x1 + cpOffset, y1, x2 - cpOffset, y2, x2, y2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.globalAlpha = 0.5;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      // Arrowhead — compute tangent at the arrow end of the bezier
-      const t = arrowAtEnd ? 0.97 : 0.03;
-      const tI = 1 - t;
-      // Derivative of cubic bezier for tangent direction
-      const tx = 3 * tI * tI * (x1 + cpOffset - x1)
-               + 6 * tI * t * ((x2 - cpOffset) - (x1 + cpOffset))
-               + 3 * t * t * (x2 - (x2 - cpOffset));
-      const ty = 3 * tI * tI * (y1 - y1)
-               + 6 * tI * t * (y2 - y1)
-               + 3 * t * t * (y2 - y2);
-      const angle = arrowAtEnd ? Math.atan2(ty, tx) : Math.atan2(-ty, -tx);
-      const tip = arrowAtEnd ? { x: x2, y: y2 } : { x: x1, y: y1 };
-      const AL = 8;
-      const AW = Math.PI / 6;
-
-      ctx.beginPath();
-      ctx.moveTo(tip.x, tip.y);
-      ctx.lineTo(tip.x - AL * Math.cos(angle - AW), tip.y - AL * Math.sin(angle - AW));
-      ctx.lineTo(tip.x - AL * Math.cos(angle + AW), tip.y - AL * Math.sin(angle + AW));
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.8;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-
-    // Import edges: arrow points FROM import node → TO centre (this file uses them)
-    for (const pos of importPositions) {
-      const isCross = crossLayerImports.has(pos.path);
-      drawCurvedEdge(pos.x, pos.y, CX, CY, isCross ? "#EF9F27" : "#888780", true);
-    }
-
-    // Dependent edges: arrow points FROM centre → TO dependent (they use this file)
-    for (const pos of dependentPositions) {
-      const isCross = crossLayerDependents.has(pos.path);
-      drawCurvedEdge(CX, CY, pos.x, pos.y, isCross ? "#EF9F27" : "#1D9E75", true);
-    }
-
-    // ── Draw nodes ──────────────────────────────────────────────────────
-
-    // Import nodes (left side)
-    for (const pos of importPositions) {
-      const isCross = crossLayerImports.has(pos.path);
-      const color = isCross ? "#EF9F27" : "#888780";
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, NODE_R, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-
-      // Label left of node
-      ctx.font = "10px monospace";
-      ctx.fillStyle = "#b4b8c8";
-      ctx.textAlign = "end";
-      ctx.fillText(truncate(shortName(pos.path), maxLabelChars), pos.x - LABEL_GAP, pos.y + 3);
-    }
-
-    // Dependent nodes (right side)
-    for (const pos of dependentPositions) {
-      const isCross = crossLayerDependents.has(pos.path);
-      const color = isCross ? "#EF9F27" : "#1D9E75";
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, NODE_R, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-
-      // Label right of node
-      ctx.font = "10px monospace";
-      ctx.fillStyle = "#b4b8c8";
-      ctx.textAlign = "start";
-      ctx.fillText(truncate(shortName(pos.path), maxLabelChars), pos.x + LABEL_GAP, pos.y + 3);
-
-      // Layer badge for cross-layer dependents — drawn below the filename to avoid overflow
-      if (isCross) {
-        const depLayer = importedByLayerMap.get(pos.path);
-        if (depLayer) {
-          ctx.font = "8px monospace";
-          ctx.fillStyle = "#EF9F27";
-          ctx.globalAlpha = 0.7;
-          const maxBadgeChars = 18;
-          const badgeText = truncate(depLayer, maxBadgeChars);
-          ctx.fillText(badgeText, pos.x + LABEL_GAP, pos.y + 13);
-          ctx.globalAlpha = 1;
-        }
-      }
-    }
-
-    // Centre node with halo
+function drawImportNodes(ctx: CanvasRenderingContext2D, positions: NodePos[], maxLabelChars: number) {
+  for (const pos of positions) {
+    const isCross = crossLayerImports.has(pos.path);
+    const color = isCross ? "#EF9F27" : "#888780";
     ctx.beginPath();
-    ctx.arc(CX, CY, 16, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(127, 119, 221, 0.25)";
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(CX, CY, 10, 0, Math.PI * 2);
-    ctx.fillStyle = "#7F77DD";
+    ctx.arc(pos.x, pos.y, NODE_R, 0, Math.PI * 2);
+    ctx.fillStyle = color;
     ctx.fill();
 
-    // Centre label below node
-    ctx.font = "11px monospace";
-    ctx.fillStyle = "#e8eaf0";
+    ctx.font = "10px monospace";
+    ctx.fillStyle = "#b4b8c8";
+    ctx.textAlign = "end";
+    ctx.fillText(truncate(shortName(pos.path), maxLabelChars), pos.x - LABEL_GAP, pos.y + 3);
+  }
+}
+
+function drawDependentNodes(ctx: CanvasRenderingContext2D, positions: NodePos[], maxLabelChars: number) {
+  for (const pos of positions) {
+    const isCross = crossLayerDependents.has(pos.path);
+    const color = isCross ? "#EF9F27" : "#1D9E75";
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, NODE_R, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    ctx.font = "10px monospace";
+    ctx.fillStyle = "#b4b8c8";
+    ctx.textAlign = "start";
+    ctx.fillText(truncate(shortName(pos.path), maxLabelChars), pos.x + LABEL_GAP, pos.y + 3);
+
+    if (!isCross) continue;
+    const depLayer = importedByLayerMap.get(pos.path);
+    if (!depLayer) continue;
+    ctx.font = "8px monospace";
+    ctx.fillStyle = "#EF9F27";
+    ctx.globalAlpha = 0.7;
+    ctx.fillText(truncate(depLayer, 18), pos.x + LABEL_GAP, pos.y + 13);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawCentreNode(
+  ctx: CanvasRenderingContext2D,
+  layout: GraphLayout,
+  exportCount: number,
+  hasDependents: boolean,
+) {
+  const { CX, CY } = layout;
+
+  ctx.beginPath();
+  ctx.arc(CX, CY, 16, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(127, 119, 221, 0.25)";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(CX, CY, 10, 0, Math.PI * 2);
+  ctx.fillStyle = "#7F77DD";
+  ctx.fill();
+
+  ctx.font = "11px monospace";
+  ctx.fillStyle = "#e8eaf0";
+  ctx.textAlign = "center";
+  ctx.fillText(truncate(fileName, 28), CX, CY + 28);
+
+  if (exportCount > 0 && hasDependents) {
+    ctx.font = "8px monospace";
+    ctx.fillStyle = "#7F77DD";
+    ctx.globalAlpha = 0.7;
     ctx.textAlign = "center";
-    ctx.fillText(truncate(fileName, 28), CX, CY + 28);
-
-    // Export count badge above centre node
-    const exportCount = data.exports?.length ?? 0;
-    if (exportCount > 0 && dependents.length > 0) {
-      ctx.font = "8px monospace";
-      ctx.fillStyle = "#7F77DD";
-      ctx.globalAlpha = 0.7;
-      ctx.textAlign = "center";
-      ctx.fillText(`${exportCount} exports`, CX, CY - 22);
-      ctx.globalAlpha = 1;
-    }
+    ctx.fillText(`${exportCount} exports`, CX, CY - 22);
+    ctx.globalAlpha = 1;
   }
+}
 
-  $effect(() => {
-    if (status !== "done" || !canvasEl) return;
-    const canvas = canvasEl;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+function drawColumnHeaders(
+  ctx: CanvasRenderingContext2D,
+  layout: GraphLayout,
+  hasImports: boolean,
+  hasDependents: boolean,
+) {
+  ctx.font = "9px monospace";
+  ctx.textAlign = "center";
+  ctx.letterSpacing = "0.08em";
+  ctx.fillStyle = "#636a80";
+  if (hasImports) ctx.fillText("DEPENDS ON", layout.LEFT_X, HEADER_Y);
+  if (hasDependents) ctx.fillText("USED BY", layout.RIGHT_X, HEADER_Y);
+  ctx.letterSpacing = "0em";
+}
 
-    drawGraph(canvas, ctx);
+function drawGraph(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
+  if (!data) return;
 
-    const ro = new ResizeObserver(() => drawGraph(canvas, ctx));
-    ro.observe(canvas.parentElement ?? canvas);
-    return () => ro.disconnect();
-  });
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth;
+  const imports = data.imports ?? [];
+  const dependents = data.imported_by ?? [];
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  const layout = computeLayout(ctx, W, imports, dependents);
 
-  function shortName(path: string): string {
-    return path.split("/").pop() ?? path;
+  canvas.width = W * dpr;
+  canvas.height = layout.H * dpr;
+  canvas.style.height = `${layout.H}px`;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, layout.H);
+
+  drawColumnHeaders(ctx, layout, imports.length > 0, dependents.length > 0);
+
+  const importPositions = computeNodePositions(imports, layout.LEFT_X, layout.graphTop, layout.graphH);
+  const dependentPositions = computeNodePositions(dependents, layout.RIGHT_X, layout.graphTop, layout.graphH);
+
+  drawEdges(ctx, importPositions, dependentPositions, layout);
+  drawImportNodes(ctx, importPositions, layout.maxLabelChars);
+  drawDependentNodes(ctx, dependentPositions, layout.maxLabelChars);
+  drawCentreNode(ctx, layout, data.exports?.length ?? 0, dependents.length > 0);
+}
+
+$effect(() => {
+  if (status !== "done" || !canvasEl) return;
+  const canvas = canvasEl;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  drawGraph(canvas, ctx);
+
+  const ro = new ResizeObserver(() => drawGraph(canvas, ctx));
+  ro.observe(canvas.parentElement ?? canvas);
+  return () => ro.disconnect();
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function shortName(path: string): string {
+  return path.split("/").pop() ?? path;
+}
+
+function _kindBadgeColor(kind: string): string {
+  switch (kind) {
+    case "function":
+      return "#7F77DD";
+    case "interface":
+      return "#1D9E75";
+    case "type":
+      return "#6c8cff";
+    case "class":
+      return "#e07060";
+    default:
+      return "#636a80";
   }
+}
 
-  function kindBadgeColor(kind: string): string {
-    switch (kind) {
-      case "function": return "#7F77DD";
-      case "interface": return "#1D9E75";
-      case "type": return "#6c8cff";
-      case "class": return "#e07060";
-      default: return "#636a80";
-    }
-  }
-
-  function depthChipBorderColor(depth: number): string {
-    if (depth === 1) return "#5F5E5A";
-    if (depth === 2) return "#B4B2A9";
-    return "#D3D1C7";
-  }
+function _depthChipBorderColor(depth: number): string {
+  if (depth === 1) return "#5F5E5A";
+  if (depth === 2) return "#B4B2A9";
+  return "#D3D1C7";
+}
 </script>
 
 <div class="file-context">

@@ -1,12 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, rmSync } from "node:fs";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { generateInsights } from "../graph/insights.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 describe("generateInsights", () => {
   it("returns zeroed insights for empty graph", () => {

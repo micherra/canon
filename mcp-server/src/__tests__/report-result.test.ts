@@ -8,17 +8,17 @@
  * All workspace setup uses ExecutionStore instead of readBoard/writeBoard.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import type { FlowEventMap } from "../orchestration/events.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
+import { writeMessage } from "../orchestration/messages.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { writeMessage } from "../orchestration/messages.ts";
-import type { FlowEventMap } from "../orchestration/events.ts";
-import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -168,10 +168,7 @@ describe("reportResult — basic functionality", () => {
     });
     assertOk(result);
 
-    expect(result.board.states["build"].artifacts).toEqual([
-      "summary.md",
-      "diff.patch",
-    ]);
+    expect(result.board.states["build"].artifacts).toEqual(["summary.md", "diff.patch"]);
   });
 
   it("persists board state to execution_states table (no board.json)", async () => {
@@ -698,9 +695,7 @@ describe("reportResult — quality signals", () => {
     const flow = makeMinimalFlow();
     setupWorkspace(workspace, flow);
 
-    const gateResults = [
-      { gate: "npm test", command: "npm test", passed: true, output: "All pass", exitCode: 0 },
-    ];
+    const gateResults = [{ gate: "npm test", command: "npm test", passed: true, output: "All pass", exitCode: 0 }];
 
     const result = await reportResult({
       workspace,
@@ -855,7 +850,11 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
 
     const store = getExecutionStore(workspace);
     const prevState = store.getState("build");
-    store.upsertState("build", { status: "pending", entries: 0, discovered_postconditions: prevState?.discovered_postconditions });
+    store.upsertState("build", {
+      status: "pending",
+      entries: 0,
+      discovered_postconditions: prevState?.discovered_postconditions,
+    });
     store.updateExecution({ current_state: "build" });
 
     await reportResult({
@@ -972,7 +971,7 @@ describe("reportResult — concurrent calls", () => {
         status_keyword: "DONE",
         flow,
         progress_line: `- done in ${workspace}`,
-      })
+      }),
     );
 
     // All should resolve without error

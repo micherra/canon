@@ -5,20 +5,13 @@
  * frontmatter parsing and remark for body content analysis.
  */
 
-// @ts-ignore esModuleInterop handles this at project level; single-file tsc needs the suppression
-import matter from 'gray-matter';
-import { unified } from 'unified';
-import remarkParse from 'remark-parse';
-import remarkFrontmatter from 'remark-frontmatter';
-import remarkGfm from 'remark-gfm';
-import { visit } from 'unist-util-visit';
-import type {
-  LanguageAdapter,
-  AdapterResult,
-  EntityKind,
-  IntraFileEdge,
-  ImportSpecifier,
-} from './kg-types.ts';
+import matter from "gray-matter";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { visit } from "unist-util-visit";
+import type { AdapterResult, EntityKind, ImportSpecifier, IntraFileEdge, LanguageAdapter } from "./kg-types.ts";
 
 // ---------------------------------------------------------------------------
 // Entity kind classification
@@ -28,41 +21,35 @@ import type {
  * Classify the Canon entity kind from frontmatter data and file path.
  * Returns null if the file doesn't match a known Canon entity type.
  */
-function classifyEntityKind(
-  filePath: string,
-  data: Record<string, unknown>
-): EntityKind | null {
+function classifyEntityKind(filePath: string, data: Record<string, unknown>): EntityKind | null {
   // Principle: has a `severity` frontmatter field
-  if ('severity' in data) {
-    return 'principle';
+  if ("severity" in data) {
+    return "principle";
   }
 
   // Flow fragment: located in flows/fragments/
-  if (filePath.includes('/flows/fragments/') || filePath.includes('flows/fragments/')) {
-    return 'flow-fragment';
+  if (filePath.includes("/flows/fragments/") || filePath.includes("flows/fragments/")) {
+    return "flow-fragment";
   }
 
   // Flow: has `tier` or `states` frontmatter field
-  if ('tier' in data || 'states' in data) {
-    return 'flow';
+  if ("tier" in data || "states" in data) {
+    return "flow";
   }
 
   // Agent: has `role` and is located in agents/ directory
-  if ('role' in data && (filePath.includes('/agents/') || filePath.includes('agents/'))) {
-    return 'agent';
+  if ("role" in data && (filePath.includes("/agents/") || filePath.includes("agents/"))) {
+    return "agent";
   }
 
   // Template: located in templates/ directory
-  if (filePath.includes('/templates/') || filePath.includes('templates/')) {
-    return 'template';
+  if (filePath.includes("/templates/") || filePath.includes("templates/")) {
+    return "template";
   }
 
   // Decision: has `status` and is located in decisions/ directory
-  if (
-    'status' in data &&
-    (filePath.includes('/decisions/') || filePath.includes('decisions/'))
-  ) {
-    return 'decision';
+  if ("status" in data && (filePath.includes("/decisions/") || filePath.includes("decisions/"))) {
+    return "decision";
   }
 
   return null;
@@ -72,27 +59,24 @@ function classifyEntityKind(
 // Metadata extraction
 // ---------------------------------------------------------------------------
 
-function extractMetadata(
-  kind: EntityKind | null,
-  data: Record<string, unknown>
-): Record<string, unknown> | null {
+function extractMetadata(kind: EntityKind | null, data: Record<string, unknown>): Record<string, unknown> | null {
   switch (kind) {
-    case 'principle':
+    case "principle":
       return {
-        severity: data['severity'] ?? null,
-        tags: Array.isArray(data['tags']) ? data['tags'] : [],
-        layers: Array.isArray(data['layers']) ? data['layers'] : [],
+        severity: data["severity"] ?? null,
+        tags: Array.isArray(data["tags"]) ? data["tags"] : [],
+        layers: Array.isArray(data["layers"]) ? data["layers"] : [],
       };
-    case 'flow':
-    case 'flow-fragment':
+    case "flow":
+    case "flow-fragment":
       return {
-        tier: data['tier'] ?? null,
-        states: Array.isArray(data['states']) ? data['states'] : [],
+        tier: data["tier"] ?? null,
+        states: Array.isArray(data["states"]) ? data["states"] : [],
       };
-    case 'agent':
-      return { role: data['role'] ?? null };
-    case 'decision':
-      return { status: data['status'] ?? null };
+    case "agent":
+      return { role: data["role"] ?? null };
+    case "decision":
+      return { status: data["status"] ?? null };
     default:
       return null;
   }
@@ -105,9 +89,9 @@ function extractMetadata(
 function isRelativePath(url: string): boolean {
   // Relative paths start with ./ or ../ or are bare paths without a protocol
   return (
-    url.startsWith('./') ||
-    url.startsWith('../') ||
-    (!url.includes('://') && !url.startsWith('#') && !url.startsWith('mailto:'))
+    url.startsWith("./") ||
+    url.startsWith("../") ||
+    (!url.includes("://") && !url.startsWith("#") && !url.startsWith("mailto:"))
   );
 }
 
@@ -116,7 +100,7 @@ function isRelativePath(url: string): boolean {
 // ---------------------------------------------------------------------------
 
 export const markdownAdapter: LanguageAdapter = {
-  extensions: ['.md'],
+  extensions: [".md"],
 
   parse(filePath: string, content: string): AdapterResult {
     // -------------------------------------------------------------------------
@@ -129,22 +113,22 @@ export const markdownAdapter: LanguageAdapter = {
     const metadata = extractMetadata(kind, frontmatterData);
 
     // Derive a display name from the file path (basename without extension)
-    const pathParts = filePath.replace(/\\/g, '/').split('/');
+    const pathParts = filePath.replace(/\\/g, "/").split("/");
     const basename = pathParts[pathParts.length - 1] ?? filePath;
-    const name = (frontmatterData['title'] as string | undefined) ?? basename.replace(/\.md$/, '');
+    const name = (frontmatterData["title"] as string | undefined) ?? basename.replace(/\.md$/, "");
 
     // The qualified name is the file path itself (unique per file)
     const qualifiedName = filePath;
 
-    const entities: AdapterResult['entities'] = [];
+    const entities: AdapterResult["entities"] = [];
     const intraFileEdges: IntraFileEdge[] = [];
     const importSpecifiers: ImportSpecifier[] = [];
 
     // Count lines in content so we can set line_end
-    const lineCount = content.split('\n').length;
+    const lineCount = content.split("\n").length;
 
     // Emit the canonical entity for this file
-    const entityKind: EntityKind = kind ?? 'file';
+    const entityKind: EntityKind = kind ?? "file";
     entities.push({
       name,
       qualified_name: qualifiedName,
@@ -160,10 +144,7 @@ export const markdownAdapter: LanguageAdapter = {
     // -------------------------------------------------------------------------
     // Phase 2: Body parsing (remark)
     // -------------------------------------------------------------------------
-    const processor = unified()
-      .use(remarkParse)
-      .use(remarkFrontmatter)
-      .use(remarkGfm);
+    const processor = unified().use(remarkParse).use(remarkFrontmatter).use(remarkGfm);
 
     const tree = processor.parse(content);
 
@@ -174,8 +155,8 @@ export const markdownAdapter: LanguageAdapter = {
 
     visit(tree, (node) => {
       // Links: extract URL for relative file references
-      if (node.type === 'link') {
-        const linkNode = node as { type: 'link'; url: string };
+      if (node.type === "link") {
+        const linkNode = node as { type: "link"; url: string };
         const url = linkNode.url;
         if (url && isRelativePath(url)) {
           linkUrls.push(url);
@@ -183,8 +164,8 @@ export const markdownAdapter: LanguageAdapter = {
       }
 
       // Inline code spans: record raw name for doc:references
-      if (node.type === 'inlineCode') {
-        const codeNode = node as { type: 'inlineCode'; value: string };
+      if (node.type === "inlineCode") {
+        const codeNode = node as { type: "inlineCode"; value: string };
         const val = codeNode.value.trim();
         if (val.length > 0) {
           backtickRefs.push(val);
@@ -195,14 +176,14 @@ export const markdownAdapter: LanguageAdapter = {
     // -------------------------------------------------------------------------
     // Frontmatter field references (includes, template, agent, etc.)
     // -------------------------------------------------------------------------
-    const fmRefFields = ['includes', 'template', 'agent', 'extends', 'inherits'];
+    const fmRefFields = ["includes", "template", "agent", "extends", "inherits"];
     for (const field of fmRefFields) {
       const val = frontmatterData[field];
-      if (typeof val === 'string' && isRelativePath(val)) {
+      if (typeof val === "string" && isRelativePath(val)) {
         importSpecifiers.push({ specifier: val, names: [] });
       } else if (Array.isArray(val)) {
         for (const item of val) {
-          if (typeof item === 'string' && isRelativePath(item)) {
+          if (typeof item === "string" && isRelativePath(item)) {
             importSpecifiers.push({ specifier: item, names: [] });
           }
         }
@@ -223,7 +204,7 @@ export const markdownAdapter: LanguageAdapter = {
       intraFileEdges.push({
         source_qualified: qualifiedName,
         target_qualified: ref,
-        edge_type: 'doc:references',
+        edge_type: "doc:references",
         confidence: 0.6,
       });
     }
@@ -233,7 +214,7 @@ export const markdownAdapter: LanguageAdapter = {
       intraFileEdges.push({
         source_qualified: qualifiedName,
         target_qualified: url,
-        edge_type: 'doc:references',
+        edge_type: "doc:references",
         confidence: 0.8,
       });
     }

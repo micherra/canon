@@ -6,9 +6,9 @@
  * results with confidence scoring, reason strings, and structured groupings.
  */
 
-import type Database from 'better-sqlite3';
-import { KgQuery } from './kg-query.ts';
-import { KgStore } from './kg-store.ts';
+import type Database from "better-sqlite3";
+import { KgQuery } from "./kg-query.ts";
+import { KgStore } from "./kg-store.ts";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -68,14 +68,14 @@ function assignConfidenceAndReason(isExported: boolean): { confidence: number; r
   if (!isExported) {
     return {
       confidence: 0.9,
-      reason: 'unexported and unreferenced',
+      reason: "unexported and unreferenced",
     };
   }
   // Exported but surfaced by findDeadCode (should not normally happen given the
   // current SQL, but handle defensively).
   return {
     confidence: 0.7,
-    reason: 'exported but no importers detected',
+    reason: "exported but no importers detected",
   };
 }
 
@@ -109,7 +109,7 @@ export function detectDeadCode(db: Database.Database, options: DeadCodeOptions =
     const cached = filePathCache.get(fileId);
     if (cached !== undefined) return cached;
     const file = store.getFileById(fileId);
-    const path = file?.path ?? '<unknown>';
+    const path = file?.path ?? "<unknown>";
     filePathCache.set(fileId, path);
     return path;
   }

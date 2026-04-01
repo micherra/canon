@@ -5,10 +5,10 @@
  * (merged into unified PrReview view).
  */
 
-import { describe, it, expect } from "vitest";
-import { existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const uiDir = join(__dirname, "..");

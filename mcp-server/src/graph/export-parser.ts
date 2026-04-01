@@ -29,7 +29,7 @@ function extractJsExports(content: string): string[] {
   const exports = new Set<string>();
 
   for (const { re } of JS_EXPORT_RES) {
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = re.exec(content)) !== null) {
       if (match[1]) exports.add(match[1].trim());
     }
@@ -37,7 +37,7 @@ function extractJsExports(content: string): string[] {
 
   // Named exports: export { a, b, c }
   const namedRe = /export\s*\{([^}]+)\}/g;
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = namedRe.exec(content)) !== null) {
     for (const name of match[1].split(",")) {
       const parts = name.trim().split(/\s+as\s+/);
@@ -76,7 +76,7 @@ function extractPyExports(content: string): string[] {
 
   // Top-level def and class definitions
   const defRe = /^def\s+(\w+)/gm;
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = defRe.exec(content)) !== null) {
     add(match[1]);
   }

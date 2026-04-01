@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { getFileContext } from "../tools/get-file-context.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DriftStore } from "../drift/store.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
-import { DriftStore } from "../drift/store.ts";
+import { getFileContext } from "../tools/get-file-context.ts";
 
 describe("getFileContext", () => {
   let tmpDir: string;
@@ -53,14 +53,8 @@ describe("getFileContext", () => {
   });
 
   it("resolves imports to project-relative paths", async () => {
-    await writeFile(
-      join(tmpDir, "src", "api", "handler.ts"),
-      `import { helper } from '../utils/helper';`,
-    );
-    await writeFile(
-      join(tmpDir, "src", "utils", "helper.ts"),
-      `export function helper() {}`,
-    );
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '../utils/helper';`);
+    await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
     const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
     if (!result.ok) throw new Error(result.message);
@@ -69,18 +63,9 @@ describe("getFileContext", () => {
   });
 
   it("finds reverse dependencies (imported_by)", async () => {
-    await writeFile(
-      join(tmpDir, "src", "utils", "helper.ts"),
-      `export function helper() {}`,
-    );
-    await writeFile(
-      join(tmpDir, "src", "api", "handler.ts"),
-      `import { helper } from '../utils/helper';`,
-    );
-    await writeFile(
-      join(tmpDir, "src", "services", "svc.ts"),
-      `import { helper } from '../utils/helper';`,
-    );
+    await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '../utils/helper';`);
+    await writeFile(join(tmpDir, "src", "services", "svc.ts"), `import { helper } from '../utils/helper';`);
 
     const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
     if (!result.ok) throw new Error(result.message);
@@ -111,10 +96,7 @@ describe("getFileContext", () => {
   });
 
   it("returns ok: true for existing file", async () => {
-    await writeFile(
-      join(tmpDir, "src", "api", "handler.ts"),
-      `export function handleRequest() {}`,
-    );
+    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
     const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
 
@@ -138,10 +120,7 @@ describe("getFileContext", () => {
 
   describe("summary field", () => {
     it("returns null when no summaries file exists", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -150,10 +129,7 @@ describe("getFileContext", () => {
     });
 
     it("returns summary text from summaries.json", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       await writeFile(
         join(tmpDir, ".canon", "summaries.json"),
         JSON.stringify({
@@ -168,10 +144,7 @@ describe("getFileContext", () => {
     });
 
     it("returns null when file has no matching summary entry", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       await writeFile(
         join(tmpDir, ".canon", "summaries.json"),
         JSON.stringify({
@@ -186,10 +159,7 @@ describe("getFileContext", () => {
     });
 
     it("handles legacy string format in summaries.json", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       await writeFile(
         join(tmpDir, ".canon", "summaries.json"),
         JSON.stringify({
@@ -206,10 +176,7 @@ describe("getFileContext", () => {
 
   describe("violations field", () => {
     it("returns empty array when no reviews exist", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -218,10 +185,7 @@ describe("getFileContext", () => {
     });
 
     it("returns violations from the most recent review that includes the file", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       // Write a review with per-file violations
       const driftStore = new DriftStore(tmpDir);
       await driftStore.appendReview({
@@ -229,38 +193,59 @@ describe("getFileContext", () => {
         timestamp: "2025-01-10T00:00:00Z",
         files: ["src/api/handler.ts"],
         violations: [
-          { principle_id: "thin-handlers", severity: "strong-opinion", file_path: "src/api/handler.ts", message: "Handler is too thick" },
-          { principle_id: "secrets-never-in-code", severity: "rule", file_path: "src/api/handler.ts", message: "Secret found" },
+          {
+            principle_id: "thin-handlers",
+            severity: "strong-opinion",
+            file_path: "src/api/handler.ts",
+            message: "Handler is too thick",
+          },
+          {
+            principle_id: "secrets-never-in-code",
+            severity: "rule",
+            file_path: "src/api/handler.ts",
+            message: "Secret found",
+          },
         ],
         honored: [],
         verdict: "BLOCKING",
-        score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 0 } },
+        score: {
+          rules: { passed: 0, total: 1 },
+          opinions: { passed: 0, total: 1 },
+          conventions: { passed: 0, total: 0 },
+        },
       });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
 
       expect(result.violations).toHaveLength(2);
-      expect(result.violations[0]).toEqual({ principle_id: "thin-handlers", severity: "strong-opinion", message: "Handler is too thick" });
-      expect(result.violations[1]).toEqual({ principle_id: "secrets-never-in-code", severity: "rule", message: "Secret found" });
+      expect(result.violations[0]).toEqual({
+        principle_id: "thin-handlers",
+        severity: "strong-opinion",
+        message: "Handler is too thick",
+      });
+      expect(result.violations[1]).toEqual({
+        principle_id: "secrets-never-in-code",
+        severity: "rule",
+        message: "Secret found",
+      });
     });
 
     it("picks the most recent review when multiple reviews include the file", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       const driftStore = new DriftStore(tmpDir);
       await driftStore.appendReview({
         review_id: "r1",
         timestamp: "2025-01-05T00:00:00Z",
         files: ["src/api/handler.ts"],
-        violations: [
-          { principle_id: "old-violation", severity: "convention", file_path: "src/api/handler.ts" },
-        ],
+        violations: [{ principle_id: "old-violation", severity: "convention", file_path: "src/api/handler.ts" }],
         honored: [],
         verdict: "WARNING",
-        score: { rules: { passed: 1, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 0, total: 1 } },
+        score: {
+          rules: { passed: 1, total: 1 },
+          opinions: { passed: 1, total: 1 },
+          conventions: { passed: 0, total: 1 },
+        },
       });
       await driftStore.appendReview({
         review_id: "r2",
@@ -271,7 +256,11 @@ describe("getFileContext", () => {
         ],
         honored: [],
         verdict: "BLOCKING",
-        score: { rules: { passed: 0, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 1, total: 1 } },
+        score: {
+          rules: { passed: 0, total: 1 },
+          opinions: { passed: 1, total: 1 },
+          conventions: { passed: 1, total: 1 },
+        },
       });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
@@ -282,21 +271,20 @@ describe("getFileContext", () => {
     });
 
     it("keeps violation_count for backwards compatibility", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       const driftStore = new DriftStore(tmpDir);
       await driftStore.appendReview({
         review_id: "r1",
         timestamp: "2025-01-10T00:00:00Z",
         files: ["src/api/handler.ts"],
-        violations: [
-          { principle_id: "thin-handlers", severity: "strong-opinion", file_path: "src/api/handler.ts" },
-        ],
+        violations: [{ principle_id: "thin-handlers", severity: "strong-opinion", file_path: "src/api/handler.ts" }],
         honored: [],
         verdict: "WARNING",
-        score: { rules: { passed: 1, total: 1 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 0 } },
+        score: {
+          rules: { passed: 1, total: 1 },
+          opinions: { passed: 0, total: 1 },
+          conventions: { passed: 0, total: 0 },
+        },
       });
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
@@ -309,10 +297,7 @@ describe("getFileContext", () => {
 
   describe("imports_by_layer field", () => {
     it("returns empty object when no imports", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -346,14 +331,8 @@ describe("getFileContext", () => {
     });
 
     it("keeps the flat imports array alongside imports_by_layer", async () => {
-      await writeFile(
-        join(tmpDir, ".canon", "config.json"),
-        JSON.stringify({ layers: { utils: ["src/utils/**"] } }),
-      );
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `import { helper } from '../utils/helper';`,
-      );
+      await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { utils: ["src/utils/**"] } }));
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '../utils/helper';`);
       await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
@@ -366,10 +345,7 @@ describe("getFileContext", () => {
 
   describe("layer_stack field", () => {
     it("returns default layer names when no layers config exists", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -392,10 +368,7 @@ describe("getFileContext", () => {
           },
         }),
       );
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -406,10 +379,7 @@ describe("getFileContext", () => {
 
   describe("role field", () => {
     it("returns 'internal' when no graph metrics available", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -420,10 +390,7 @@ describe("getFileContext", () => {
 
   describe("imported_by_layer field", () => {
     it("returns empty object when nothing imports this file", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -436,18 +403,9 @@ describe("getFileContext", () => {
         join(tmpDir, ".canon", "config.json"),
         JSON.stringify({ layers: { api: ["src/api/**"], services: ["src/services/**"], utils: ["src/utils/**"] } }),
       );
-      await writeFile(
-        join(tmpDir, "src", "utils", "helper.ts"),
-        `export function helper() {}`,
-      );
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `import { helper } from '../utils/helper';`,
-      );
-      await writeFile(
-        join(tmpDir, "src", "services", "svc.ts"),
-        `import { helper } from '../utils/helper';`,
-      );
+      await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '../utils/helper';`);
+      await writeFile(join(tmpDir, "src", "services", "svc.ts"), `import { helper } from '../utils/helper';`);
 
       const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -465,14 +423,8 @@ describe("getFileContext", () => {
         join(tmpDir, ".canon", "config.json"),
         JSON.stringify({ layers: { api: ["src/api/**"], utils: ["src/utils/**"] } }),
       );
-      await writeFile(
-        join(tmpDir, "src", "utils", "helper.ts"),
-        `export function helper() {}`,
-      );
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `import { helper } from '../utils/helper';`,
-      );
+      await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '../utils/helper';`);
 
       const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -484,10 +436,7 @@ describe("getFileContext", () => {
 
   describe("shape field", () => {
     it("returns Internal shape when no graph metrics available", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -499,18 +448,13 @@ describe("getFileContext", () => {
 
     it("returns Leaf shape with correct description when no graph data (in_degree=0 default)", async () => {
       // When graph data exists and shows in_degree=0, shape must be "Leaf" with specific description.
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       // Write graph data showing in_degree=0 (nothing imports handler.ts)
       const nodes = [
         { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
         { id: "src/utils/helper.ts", layer: "utils", violation_count: 0, changed: false },
       ];
-      const edges = [
-        { source: "src/api/handler.ts", target: "src/utils/helper.ts" },
-      ];
+      const edges = [{ source: "src/api/handler.ts", target: "src/utils/helper.ts" }];
       await writeFile(
         join(tmpDir, ".canon", "graph-data.json"),
         JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
@@ -524,14 +468,16 @@ describe("getFileContext", () => {
     });
 
     it("returns Sink shape for high in_degree, low out_degree node", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       // Build a graph where handler.ts has in_degree=10, out_degree=1
       const nodes = [
         { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
-        ...Array.from({ length: 10 }, (_, i) => ({ id: `src/services/svc${i}.ts`, layer: "services", violation_count: 0, changed: false })),
+        ...Array.from({ length: 10 }, (_, i) => ({
+          id: `src/services/svc${i}.ts`,
+          layer: "services",
+          violation_count: 0,
+          changed: false,
+        })),
         { id: "src/utils/helper.ts", layer: "utils", violation_count: 0, changed: false },
       ];
       const edges = [
@@ -552,15 +498,17 @@ describe("getFileContext", () => {
     });
 
     it("returns High fan-out hub shape for low in_degree, high out_degree node", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       // Build a graph where handler.ts has in_degree=1, out_degree=10
       const nodes = [
         { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
         { id: "src/services/caller.ts", layer: "services", violation_count: 0, changed: false },
-        ...Array.from({ length: 10 }, (_, i) => ({ id: `src/utils/dep${i}.ts`, layer: "utils", violation_count: 0, changed: false })),
+        ...Array.from({ length: 10 }, (_, i) => ({
+          id: `src/utils/dep${i}.ts`,
+          layer: "utils",
+          violation_count: 0,
+          changed: false,
+        })),
       ];
       const edges = [
         // 1 file depends on handler.ts (in_degree=1)
@@ -580,10 +528,7 @@ describe("getFileContext", () => {
     });
 
     it("returns Leaf shape for in_degree=0 node", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       // Build a graph where handler.ts has in_degree=0
       const nodes = [
         { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
@@ -605,10 +550,7 @@ describe("getFileContext", () => {
     });
 
     it("prefixes shape label with 'Cycle member — ' when in cycle", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       const nodes = [
         { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
         { id: "src/services/svc.ts", layer: "services", violation_count: 0, changed: false },
@@ -636,10 +578,7 @@ describe("getFileContext", () => {
 
   describe("project_max_impact field", () => {
     it("returns 0 when no graph data available", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -650,10 +589,7 @@ describe("getFileContext", () => {
 
   describe("summary field — DB-first reads", () => {
     it("returns summary from DB when present (DB-first path)", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
       const db = initDatabase(dbPath);
@@ -686,10 +622,7 @@ describe("getFileContext", () => {
     });
 
     it("falls back to summaries.json when no DB summary exists", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
       // KG DB exists with file registered, but no summary in DB
       const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
       const db = initDatabase(dbPath);
@@ -720,10 +653,7 @@ describe("getFileContext", () => {
     });
 
     it("returns DB summary when both DB and JSON have a summary (DB takes priority)", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
       const db = initDatabase(dbPath);
@@ -763,10 +693,7 @@ describe("getFileContext", () => {
     });
 
     it("returns null when neither DB nor JSON has a summary", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       // KG DB exists but no summary for the file
       const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
@@ -794,10 +721,7 @@ describe("getFileContext", () => {
 
   describe("blast_radius field — UnifiedBlastRadiusReport shape", () => {
     it("returns UnifiedBlastRadiusReport shape when KG database is available", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       // Create a KG database with the seed file registered
       const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
@@ -831,10 +755,7 @@ describe("getFileContext", () => {
     });
 
     it("blast_radius is undefined when KG database does not exist", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
 
       // No KG database created
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
