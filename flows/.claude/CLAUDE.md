@@ -14,6 +14,8 @@ Flows use YAML frontmatter (defining states, transitions, loops, constraints) fo
 
 | Flow | Tier | Scope |
 |------|------|-------|
+| `hotfix.md` | Small (urgent) | Minimal-ceremony emergency fix — implement, verify, ship |
+| `quick-fix.md` | Small (1-3 files) | Bug fix or minor addition |
 | `refactor.md` | Medium | Behavior-preserving restructuring with continuous test verification |
 | `feature.md` | Medium (4-10 files) | Feature-specific pipeline |
 | `migrate.md` | Medium | Staged migration with rollback planning and verification |
