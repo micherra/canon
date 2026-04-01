@@ -19,14 +19,13 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, basename, dirname } from "node:path";
-import type { Board, ResolvedFlow } from "./flow-schema.ts";
-import { resolveTaskScope } from "./scope-resolver.ts";
+import { basename, dirname, join } from "node:path";
 import { gitLog } from "../adapters/git-adapter.ts";
 import { DriftStore } from "../drift/store.ts";
-import { escapeDollarBrace } from "./wave-variables.ts";
-import { extractSection } from "./inject-context.ts";
 import type { ReviewEntry } from "../schema.ts";
+import type { Board, ResolvedFlow } from "./flow-schema.ts";
+import { resolveTaskScope } from "./scope-resolver.ts";
+import { escapeDollarBrace } from "./wave-variables.ts";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -43,7 +42,7 @@ export interface EnrichmentInput {
 }
 
 export interface EnrichmentResult {
-  content: string;        // The assembled ${enrichment} block, or empty string
+  content: string; // The assembled ${enrichment} block, or empty string
   warnings: string[];
 }
 
@@ -126,20 +125,10 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
 
   const [gitSection, driftSection] = await Promise.all([
     safeAssembleGitSection(filePaths, input.cwd, sectionBudget, warnings),
-    safeAssembleDriftSection(
-      filePaths,
-      input.projectDir,
-      sectionBudget,
-      warnings,
-    ),
+    safeAssembleDriftSection(filePaths, input.projectDir, sectionBudget, warnings),
   ]);
 
-  const workspaceSection = await safeAssembleWorkspaceSection(
-    filePaths,
-    input.workspace,
-    sectionBudget,
-    warnings,
-  );
+  const workspaceSection = await safeAssembleWorkspaceSection(filePaths, input.workspace, sectionBudget, warnings);
 
   const tensionsSection = assembleTensionsSection(
     gitSection.data as Map<string, string[]> | null,
@@ -150,12 +139,9 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
   warnings.push(...tensionsSection.warnings);
 
   // Step 6: concatenate non-empty sections
-  const sections = [
-    gitSection.content,
-    driftSection.content,
-    workspaceSection.content,
-    tensionsSection.content,
-  ].filter((s) => s.length > 0);
+  const sections = [gitSection.content, driftSection.content, workspaceSection.content, tensionsSection.content].filter(
+    (s) => s.length > 0,
+  );
 
   if (sections.length === 0) {
     return { content: "", warnings };
@@ -166,7 +152,7 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
 
   // Step 7: truncate if needed
   if (assembled.length > MAX_ENRICHMENT_CHARS) {
-    assembled = assembled.slice(0, MAX_ENRICHMENT_CHARS - 12) + "\n[truncated]";
+    assembled = `${assembled.slice(0, MAX_ENRICHMENT_CHARS - 12)}\n[truncated]`;
   }
 
   return { content: assembled, warnings };
@@ -290,7 +276,7 @@ function assembleGitSection(
 
   outerWarnings.push(...warnings);
 
-  let content = "### Recent Changes\n\n" + lines.join("\n");
+  let content = `### Recent Changes\n\n${lines.join("\n")}`;
   if (content.length > budget) {
     content = content.slice(0, budget);
   }
@@ -330,9 +316,7 @@ async function assembleDriftSection(
     // Find the most recent review that includes this file
     const fileReviews = reviews
       .filter((r) => r.files.includes(filePath))
-      .sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-      );
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     if (fileReviews.length === 0) {
       continue;
@@ -340,9 +324,7 @@ async function assembleDriftSection(
 
     const latest = fileReviews[0];
     const relativeTime = formatRelativeTime(latest.timestamp);
-    const violationCount = (latest.violations ?? []).filter(
-      (v) => v.file_path === filePath || !v.file_path,
-    ).length;
+    const violationCount = (latest.violations ?? []).filter((v) => v.file_path === filePath || !v.file_path).length;
 
     const verdictEscaped = escapeDollarBrace(latest.verdict);
     lines.push(
@@ -354,7 +336,7 @@ async function assembleDriftSection(
     return { content: "", warnings: [], data: null };
   }
 
-  let content = "### Drift Signals\n\n" + lines.join("\n");
+  let content = `### Drift Signals\n\n${lines.join("\n")}`;
   if (content.length > budget) {
     content = content.slice(0, budget);
   }
@@ -373,11 +355,7 @@ async function assembleDriftSection(
  * and REVIEW.md files that mention any of the scoped file paths.
  * Caps at MAX_WORKSPACE_REFS references.
  */
-function assembleWorkspaceSection(
-  filePaths: string[],
-  workspace: string,
-  budget: number,
-): SectionResult {
+function assembleWorkspaceSection(filePaths: string[], workspace: string, budget: number): SectionResult {
   const branchDir = dirname(workspace);
 
   if (!existsSync(branchDir)) {
@@ -416,7 +394,7 @@ function assembleWorkspaceSection(
     return { content: "", warnings: [] };
   }
 
-  let content = "### Prior Work\n\n" + entries.join("\n");
+  let content = `### Prior Work\n\n${entries.join("\n")}`;
   if (content.length > budget) {
     content = content.slice(0, budget);
   }
@@ -524,7 +502,7 @@ function assembleTensionsSection(
     return { content: "", warnings: [] };
   }
 
-  let content = "### Tensions\n\n" + entries.join("\n");
+  let content = `### Tensions\n\n${entries.join("\n")}`;
   if (content.length > budget) {
     content = content.slice(0, budget);
   }
@@ -542,9 +520,7 @@ function countViolationsForFile(reviews: ReviewEntry[], filePath: string): numbe
     if (!review.files.includes(filePath)) {
       continue;
     }
-    const fileViolations = (review.violations ?? []).filter(
-      (v) => v.file_path === filePath || !v.file_path,
-    );
+    const fileViolations = (review.violations ?? []).filter((v) => v.file_path === filePath || !v.file_path);
     count += fileViolations.length;
   }
   return count;

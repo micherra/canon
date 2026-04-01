@@ -47,17 +47,8 @@ export function gitStatus(cwd: string, timeout?: number): ProcessResult {
  * in the output (e.g., commit messages) must be escaped via escapeDollarBrace
  * before prompt injection. The caller is responsible for escaping.
  */
-export function gitLog(
-  filePaths: string[],
-  maxCount: number,
-  cwd: string,
-  timeout?: number,
-): ProcessResult {
-  return gitExec(
-    ["log", "--oneline", `-n`, String(maxCount), "--", ...filePaths],
-    cwd,
-    timeout ?? 5000,
-  );
+export function gitLog(filePaths: string[], maxCount: number, cwd: string, timeout?: number): ProcessResult {
+  return gitExec(["log", "--oneline", `-n`, String(maxCount), "--", ...filePaths], cwd, timeout ?? 5000);
 }
 
 /** Convenience wrapper: runs `git worktree add`. */
