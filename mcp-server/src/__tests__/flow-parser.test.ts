@@ -612,3 +612,61 @@ describe("loadAndResolveFlow", () => {
     expect(flow.spawn_instructions["review"]).toContain("git diff");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Integration: all 11 production flows load with no unresolved ${...} refs
+// ---------------------------------------------------------------------------
+
+const ALL_FLOWS = [
+  "feature",
+  "epic",
+  "refactor",
+  "migrate",
+  "quick-fix",
+  "hotfix",
+  "review-only",
+  "test-gap",
+  "explore",
+  "security-audit",
+  "adopt",
+] as const;
+
+describe("all production flows: load without errors (integration)", () => {
+  for (const flowName of ALL_FLOWS) {
+    it(`${flowName} loads without throwing`, async () => {
+      const flow = await loadAndResolveFlow(pluginDir, flowName);
+      expect(flow).toBeDefined();
+      expect(flow.entry).toBeDefined();
+    });
+  }
+});
+
+describe("all production flows: no unresolved ${...} references after fragment substitution", () => {
+  for (const flowName of ALL_FLOWS) {
+    it(`${flowName} has no unresolved variable refs`, async () => {
+      const flow = await loadAndResolveFlow(pluginDir, flowName);
+      const errors = validateFlow(flow).filter((e) => e.includes("unresolved reference"));
+      expect(errors, `${flowName}: ${errors.join(", ")}`).toEqual([]);
+    });
+  }
+});
+
+describe("all production flows: all non-terminal states have spawn instructions", () => {
+  for (const flowName of ALL_FLOWS) {
+    it(`${flowName} has full spawn coverage`, async () => {
+      const flow = await loadAndResolveFlow(pluginDir, flowName);
+      const errors = validateFlow(flow).filter((e) => e.includes("no spawn instruction"));
+      expect(errors, `${flowName}: ${errors.join(", ")}`).toEqual([]);
+    });
+  }
+});
+
+describe("all production flows: all transition targets are valid states", () => {
+  for (const flowName of ALL_FLOWS) {
+    it(`${flowName} has no broken transitions`, async () => {
+      const flow = await loadAndResolveFlow(pluginDir, flowName);
+      const errors = validateFlow(flow).filter((e) => e.includes("targets non-existent state"));
+      expect(errors, `${flowName}: ${errors.join(", ")}`).toEqual([]);
+    });
+  }
+});

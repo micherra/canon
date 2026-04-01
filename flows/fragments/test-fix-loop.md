@@ -3,8 +3,11 @@ fragment: test-fix-loop
 description: Test, fix implementation bugs, sync docs, loop until all tests pass
 entry: test
 params:
-  after_all_passing: ~
-  max_iterations: 2
+  after_all_passing:
+    type: state_id
+  max_iterations:
+    type: number
+    default: 2
 
 states:
   test:

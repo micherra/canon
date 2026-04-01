@@ -3,10 +3,17 @@ fragment: verify-fix-loop
 description: Verify tests pass, fix implementation bugs if needed, loop until all passing
 entry: verify
 params:
-  after_all_passing: ~
-  role: verify
-  max_iterations: 2
-  write_tests: false
+  after_all_passing:
+    type: state_id
+  role:
+    type: string
+    default: verify
+  max_iterations:
+    type: number
+    default: 2
+  write_tests:
+    type: boolean
+    default: false
 
 states:
   verify:

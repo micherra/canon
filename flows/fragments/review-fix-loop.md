@@ -3,9 +3,13 @@ fragment: review-fix-loop
 description: Review code against principles, fix violations, loop until clean
 entry: review
 params:
-  after_clean: ~
-  after_warning: ~
-  max_iterations: 3
+  after_clean:
+    type: state_id
+  after_warning:
+    type: state_id
+  max_iterations:
+    type: number
+    default: 3
 
 states:
   review:
