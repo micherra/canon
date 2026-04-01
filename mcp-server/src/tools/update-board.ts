@@ -26,26 +26,42 @@ interface UpdateBoardResult {
 export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<UpdateBoardResult>> {
   const store = getExecutionStore(input.workspace);
 
-  // Read the current board state (synchronous)
-  const boardOrNull = store.getBoard();
-  if (!boardOrNull) {
-    return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
+  // Validate input that doesn't need board state first (fast-path validation)
+  if (input.action === "enter_state" && !input.state_id) {
+    return toolError("INVALID_INPUT", "enter_state requires state_id");
   }
-  let board: Board = boardOrNull;
+  if (input.action === "skip_state" && !input.state_id) {
+    return toolError("INVALID_INPUT", "skip_state requires state_id");
+  }
+  if (input.action === "block" && !input.state_id) {
+    return toolError("INVALID_INPUT", "block requires state_id");
+  }
+  if (input.action === "unblock" && !input.state_id) {
+    return toolError("INVALID_INPUT", "unblock requires state_id");
+  }
+  if (input.action === "set_wave_progress" && !input.state_id) {
+    return toolError("INVALID_INPUT", "set_wave_progress requires state_id");
+  }
+  if (input.action === "set_wave_progress" && !input.wave_data) {
+    return toolError("INVALID_INPUT", "set_wave_progress requires wave_data");
+  }
+  if (input.action === "set_metadata" && !input.metadata) {
+    return toolError("INVALID_INPUT", "set_metadata requires metadata");
+  }
 
-  const now = new Date().toISOString();
+  let board: Board | null = null;
 
   switch (input.action) {
     case "enter_state": {
-      if (!input.state_id) {
-        return toolError("INVALID_INPUT", "enter_state requires state_id");
-      }
-      board = enterState(board, input.state_id);
-
       store.transaction(() => {
+        // Read board inside transaction for atomic read-modify-write
+        const boardOrNull = store.getBoard();
+        if (!boardOrNull) return; // handled below
+        board = enterState(boardOrNull, input.state_id!);
+
         store.updateExecution({
           current_state: input.state_id!,
-          last_updated: now,
+          last_updated: board.last_updated,
         });
         const stateEntry = board.states[input.state_id!];
         if (stateEntry) {
@@ -65,34 +81,45 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
           });
         }
       });
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
+      }
       break;
     }
 
     case "skip_state": {
-      if (!input.state_id) {
-        return toolError("INVALID_INPUT", "skip_state requires state_id");
+      // Validate next_state_id before entering the transaction (requires one read,
+      // but this check is idempotent so it doesn't need to be inside the CAS).
+      if (input.next_state_id) {
+        const checkBoard = store.getBoard();
+        if (!checkBoard) {
+          return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
+        }
+        if (!checkBoard.states[input.next_state_id]) {
+          return toolError("INVALID_INPUT", `skip_state next_state_id "${input.next_state_id}" does not exist in board states`);
+        }
       }
-      if (input.next_state_id && !board.states[input.next_state_id]) {
-        return toolError("INVALID_INPUT", `skip_state next_state_id "${input.next_state_id}" does not exist in board states`);
-      }
-      const stateEntry = board.states[input.state_id];
-      if (stateEntry) {
-        const newSkipped = [...board.skipped, input.state_id];
-        board = {
-          ...board,
-          states: {
-            ...board.states,
-            [input.state_id]: {
-              ...stateEntry,
-              status: "skipped",
+      store.transaction(() => {
+        const boardOrNull = store.getBoard();
+        if (!boardOrNull) return; // handled below
+        const stateEntry = boardOrNull.states[input.state_id!];
+        if (stateEntry) {
+          const newSkipped = [...boardOrNull.skipped, input.state_id!];
+          const now = new Date().toISOString();
+          board = {
+            ...boardOrNull,
+            states: {
+              ...boardOrNull.states,
+              [input.state_id!]: {
+                ...stateEntry,
+                status: "skipped",
+              },
             },
-          },
-          skipped: newSkipped,
-          ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
-          last_updated: now,
-        };
+            skipped: newSkipped,
+            ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
+            last_updated: now,
+          };
 
-        store.transaction(() => {
           store.upsertState(input.state_id!, {
             ...board.states[input.state_id!],
             status: "skipped",
@@ -100,25 +127,30 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
           });
           store.updateExecution({
             skipped: newSkipped,
-            last_updated: now,
+            last_updated: board.last_updated,
             ...(input.next_state_id ? { current_state: input.next_state_id } : {}),
           });
-        });
+        } else {
+          // State entry not in board but workspace exists — treat as no-op, return current board
+          board = boardOrNull;
+        }
+      });
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
       }
       break;
     }
 
     case "block": {
-      if (!input.state_id) {
-        return toolError("INVALID_INPUT", "block requires state_id");
-      }
-      const reason = input.blocked_reason ?? "No reason provided";
-      board = setBlocked(board, input.state_id, reason);
-
       store.transaction(() => {
+        const boardOrNull = store.getBoard();
+        if (!boardOrNull) return;
+        const reason = input.blocked_reason ?? "No reason provided";
+        board = setBlocked(boardOrNull, input.state_id!, reason);
+
         store.updateExecution({
           blocked: board.blocked,
-          last_updated: now,
+          last_updated: board.last_updated,
         });
         const blockedState = board.states[input.state_id!];
         if (blockedState) {
@@ -129,32 +161,35 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
           });
         }
       });
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
+      }
       break;
     }
 
     case "unblock": {
-      if (!input.state_id) {
-        return toolError("INVALID_INPUT", "unblock requires state_id");
-      }
-      const stateEntry = board.states[input.state_id];
-      board = {
-        ...board,
-        blocked: null,
-        states: {
-          ...board.states,
-          [input.state_id]: {
-            ...stateEntry,
-            status: "in_progress",
-            error: undefined,
-          },
-        },
-        last_updated: now,
-      };
-
       store.transaction(() => {
+        const boardOrNull = store.getBoard();
+        if (!boardOrNull) return;
+        const stateEntry = boardOrNull.states[input.state_id!];
+        const now = new Date().toISOString();
+        board = {
+          ...boardOrNull,
+          blocked: null,
+          states: {
+            ...boardOrNull.states,
+            [input.state_id!]: {
+              ...stateEntry,
+              status: "in_progress",
+              error: undefined,
+            },
+          },
+          last_updated: now,
+        };
+
         store.updateExecution({
           blocked: null,
-          last_updated: now,
+          last_updated: board.last_updated,
         });
         const unblocked = board.states[input.state_id!];
         if (unblocked) {
@@ -165,28 +200,34 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
           });
         }
       });
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
+      }
       break;
     }
 
     case "complete_flow": {
-      const currentEntry = board.states[board.current_state];
-      board = {
-        ...board,
-        states: {
-          ...board.states,
-          [board.current_state]: {
-            ...currentEntry,
-            status: "done",
-            completed_at: now,
-          },
-        },
-        blocked: null,
-        last_updated: now,
-      };
-
-      const currentStateId = board.current_state;
-
       store.transaction(() => {
+        const boardOrNull = store.getBoard();
+        if (!boardOrNull) return;
+        const now = new Date().toISOString();
+        const currentEntry = boardOrNull.states[boardOrNull.current_state];
+        board = {
+          ...boardOrNull,
+          states: {
+            ...boardOrNull.states,
+            [boardOrNull.current_state]: {
+              ...currentEntry,
+              status: "done",
+              completed_at: now,
+            },
+          },
+          blocked: null,
+          last_updated: now,
+        };
+
+        const currentStateId = boardOrNull.current_state;
+
         // Mark current state as done
         const doneState = board.states[currentStateId];
         if (doneState) {
@@ -203,9 +244,14 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
           blocked: null,
           status: "completed",
           completed_at: now,
-          last_updated: now,
+          last_updated: board.last_updated,
         });
       });
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
+      }
+      // TypeScript can't narrow through the closure assignment — assert after null check
+      const completedBoard = board as Board;
 
       // Get tier from session (now embedded in execution row)
       const session = store.getSession();
@@ -224,18 +270,18 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
         let totalViolations = 0, totalFilesChanged = 0;
         const aggregateTestResults = { passed: 0, failed: 0, skipped: 0 };
 
-        for (const [stateId, stateEntry] of Object.entries(board.states)) {
+        for (const [stateId, stateEntry] of Object.entries(completedBoard.states)) {
           if (stateEntry.metrics) {
             const m = stateEntry.metrics;
             stateDurations[stateId] = m.duration_ms ?? 0;
             totalSpawns += m.spawns ?? 0;
             if (m.gate_results) {
               totalGates += m.gate_results.length;
-              passedGates += m.gate_results.filter((g) => g.passed).length;
+              passedGates += m.gate_results.filter((g: { passed: boolean }) => g.passed).length;
             }
             if (m.postcondition_results) {
               totalPostconditions += m.postcondition_results.length;
-              passedPostconditions += m.postcondition_results.filter((p) => p.passed).length;
+              passedPostconditions += m.postcondition_results.filter((p: { passed: boolean }) => p.passed).length;
             }
             if (m.violation_count != null) totalViolations += m.violation_count;
             if (m.files_changed != null) totalFilesChanged += m.files_changed;
@@ -245,22 +291,23 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
               aggregateTestResults.skipped += m.test_results.skipped;
             }
           }
-          if (board.iterations[stateId]) {
-            stateIterations[stateId] = board.iterations[stateId].count;
+          if (completedBoard.iterations[stateId]) {
+            stateIterations[stateId] = completedBoard.iterations[stateId].count;
           }
         }
 
+        const completedAt = completedBoard.last_updated;
         const flowRun: FlowRunEntry = {
           run_id: generateId("run"),
-          flow: board.flow,
+          flow: completedBoard.flow,
           tier: sessionTier,
-          task: board.task,
-          started: board.started,
-          completed: now,
-          total_duration_ms: new Date(now).getTime() - new Date(board.started).getTime(),
+          task: completedBoard.task,
+          started: completedBoard.started,
+          completed: completedAt,
+          total_duration_ms: new Date(completedAt).getTime() - new Date(completedBoard.started).getTime(),
           state_durations: stateDurations,
           state_iterations: stateIterations,
-          skipped_states: board.skipped,
+          skipped_states: completedBoard.skipped,
           total_spawns: totalSpawns,
           ...(totalGates > 0 ? { gate_pass_rate: passedGates / totalGates } : {}),
           ...(totalPostconditions > 0 ? { postcondition_pass_rate: passedPostconditions / totalPostconditions } : {}),
@@ -278,37 +325,33 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
     }
 
     case "set_wave_progress": {
-      if (!input.state_id) {
-        return toolError("INVALID_INPUT", "set_wave_progress requires state_id");
-      }
-      if (!input.wave_data) {
-        return toolError("INVALID_INPUT", "set_wave_progress requires wave_data");
-      }
-      const stateEntry = board.states[input.state_id];
-      const waveKey = `wave_${input.wave_data.wave}`;
-      const newWaveResults = {
-        ...(stateEntry?.wave_results ?? {}),
-        [waveKey]: {
-          tasks: input.wave_data.tasks,
-          status: input.result ?? "pending",
-        },
-      };
-
-      board = {
-        ...board,
-        states: {
-          ...board.states,
-          [input.state_id]: {
-            ...stateEntry,
-            wave: input.wave_data.wave,
-            wave_total: input.wave_data.wave_total,
-            wave_results: newWaveResults,
-          },
-        },
-        last_updated: now,
-      };
-
       store.transaction(() => {
+        const boardOrNull = store.getBoard();
+        if (!boardOrNull) return;
+        const stateEntry = boardOrNull.states[input.state_id!];
+        const waveKey = `wave_${input.wave_data!.wave}`;
+        const newWaveResults = {
+          ...(stateEntry?.wave_results ?? {}),
+          [waveKey]: {
+            tasks: input.wave_data!.tasks,
+            status: input.result ?? "pending",
+          },
+        };
+        const now = new Date().toISOString();
+        board = {
+          ...boardOrNull,
+          states: {
+            ...boardOrNull.states,
+            [input.state_id!]: {
+              ...stateEntry,
+              wave: input.wave_data!.wave,
+              wave_total: input.wave_data!.wave_total,
+              wave_results: newWaveResults,
+            },
+          },
+          last_updated: now,
+        };
+
         store.upsertState(input.state_id!, {
           ...(stateEntry ?? { status: "pending" as const, entries: 0 }),
           status: (stateEntry?.status as any) ?? "pending",
@@ -317,27 +360,33 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
           wave_total: input.wave_data!.wave_total,
           wave_results: newWaveResults,
         });
-        store.updateExecution({ last_updated: now });
+        store.updateExecution({ last_updated: board.last_updated });
       });
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
+      }
       break;
     }
 
     case "set_metadata": {
-      if (!input.metadata) {
-        return toolError("INVALID_INPUT", "set_metadata requires metadata");
-      }
-      board = {
-        ...board,
-        metadata: { ...(board.metadata ?? {}), ...input.metadata },
-        last_updated: now,
-      };
-
       store.transaction(() => {
+        const boardOrNull = store.getBoard();
+        if (!boardOrNull) return;
+        const now = new Date().toISOString();
+        board = {
+          ...boardOrNull,
+          metadata: { ...(boardOrNull.metadata ?? {}), ...input.metadata! },
+          last_updated: now,
+        };
+
         store.updateExecution({
           metadata: board.metadata,
-          last_updated: now,
+          last_updated: board.last_updated,
         });
       });
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${input.workspace}`);
+      }
       break;
     }
 
@@ -345,7 +394,11 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
       return toolError("INVALID_INPUT", `Unknown action: ${(input as UpdateBoardInput).action}`);
   }
 
+  // board is guaranteed non-null here (all cases return early on null or set board)
+  const finalBoard = board as Board;
+
   // Emit events (best-effort)
+  const now = finalBoard.last_updated;
   const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
     try { store.appendEvent("board_updated", event as Record<string, unknown>); } catch { /* best-effort */ }
   };
@@ -366,7 +419,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
           stateId: input.state_id,
           stateType: "unknown",
           timestamp: now,
-          iterationCount: board.iterations[input.state_id]?.count ?? 0,
+          iterationCount: finalBoard.iterations[input.state_id]?.count ?? 0,
         });
       } finally {
         flowEventBus.removeListener("state_entered", onStateEntered);
@@ -376,5 +429,5 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
     flowEventBus.removeListener("board_updated", onBoardUpdated);
   }
 
-  return toolOk({ board });
+  return toolOk({ board: finalBoard });
 }

@@ -663,6 +663,18 @@ export class ExecutionStore {
     }));
   }
 
+  /**
+   * Returns true if any messages exist for the given channel.
+   * Uses a LIMIT 1 query — much cheaper than loading all messages when
+   * you only need to know whether a channel is populated.
+   */
+  hasMessages(channel: string): boolean {
+    const row = this.db.prepare(
+      'SELECT 1 FROM messages WHERE channel = ? LIMIT 1'
+    ).get(channel);
+    return row !== undefined;
+  }
+
   // --------------------------------------------------------------------------
   // Wave events
   // --------------------------------------------------------------------------
@@ -696,7 +708,11 @@ export class ExecutionStore {
       rejection_reason: fields.rejection_reason ?? null,
     });
     if (result.changes === 0) {
-      throw new Error(`Event ${id} is already not pending — CAS update rejected (no rows changed)`);
+      // The event was already resolved (applied or rejected) by the time this update ran.
+      // Fetch the current status for a user-friendly error message.
+      const current = this.getWaveEvents().find((e) => e.id === id);
+      const status = current ? current.status : "unknown";
+      throw new Error(`Event ${id} is already ${status}`);
     }
   }
 

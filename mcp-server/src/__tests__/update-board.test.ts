@@ -16,7 +16,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { getDriftDb } from "../drift/drift-db.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
@@ -91,9 +91,7 @@ function seedWorkspace(workspace: string, overrides: {
 }
 
 afterEach(() => {
-  // Clear store cache between tests
-  const execCache = (getExecutionStore as any).__cache;
-  if (execCache instanceof Map) execCache.clear();
+  clearStoreCache();
 
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });
@@ -447,5 +445,120 @@ describe("updateBoard — error returns", () => {
       expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
       expect(result.message).toContain(workspace);
     }
+  });
+});
+
+describe("updateBoard — timestamp consistency (item #8)", () => {
+  it("enter_state: execution last_updated matches board last_updated", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+
+    const result = await updateBoard({
+      workspace,
+      action: "enter_state",
+      state_id: "research",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const exec = store.getExecution();
+    // The execution row's last_updated must equal the board's last_updated
+    expect(exec?.last_updated).toBe(result.board.last_updated);
+  });
+
+  it("skip_state: execution last_updated matches board last_updated", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+
+    const result = await updateBoard({
+      workspace,
+      action: "skip_state",
+      state_id: "research",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const exec = store.getExecution();
+    expect(exec?.last_updated).toBe(result.board.last_updated);
+  });
+
+  it("block: execution last_updated matches board last_updated", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+
+    const result = await updateBoard({
+      workspace,
+      action: "block",
+      state_id: "research",
+      blocked_reason: "test",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const exec = store.getExecution();
+    expect(exec?.last_updated).toBe(result.board.last_updated);
+  });
+
+  it("unblock: execution last_updated matches board last_updated", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace, {
+      states: {
+        research: { status: "blocked", entries: 1 },
+        done: { status: "pending", entries: 0 },
+      },
+    });
+    store.updateExecution({
+      blocked: { state: "research", reason: "test", since: new Date().toISOString() },
+    });
+
+    const result = await updateBoard({
+      workspace,
+      action: "unblock",
+      state_id: "research",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const exec = store.getExecution();
+    expect(exec?.last_updated).toBe(result.board.last_updated);
+  });
+
+  it("set_wave_progress: execution last_updated matches board last_updated", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+
+    const result = await updateBoard({
+      workspace,
+      action: "set_wave_progress",
+      state_id: "research",
+      wave_data: { wave: 1, wave_total: 2, tasks: ["t1"] },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const exec = store.getExecution();
+    expect(exec?.last_updated).toBe(result.board.last_updated);
+  });
+
+  it("set_metadata: execution last_updated matches board last_updated", async () => {
+    const workspace = makeTmpDir();
+    const store = seedWorkspace(workspace);
+
+    const result = await updateBoard({
+      workspace,
+      action: "set_metadata",
+      metadata: { key: "value" },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const exec = store.getExecution();
+    expect(exec?.last_updated).toBe(result.board.last_updated);
   });
 });

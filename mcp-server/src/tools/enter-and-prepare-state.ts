@@ -131,15 +131,14 @@ export async function enterAndPrepareState(
   // Step 4: Enter the state inside a SQLite transaction (replaces withBoardLock).
   // Pure mutation on in-memory board, then persist only changed fields.
   let enteredBoard: Board = board;
-  const now = new Date().toISOString();
 
   store.transaction(() => {
     enteredBoard = enterState(board, state_id);
 
-    // Persist execution-level changes
+    // Persist execution-level changes using the timestamp set by enterState on the board
     store.updateExecution({
       current_state: state_id,
-      last_updated: now,
+      last_updated: enteredBoard.last_updated,
     });
 
     // Persist the entered state
@@ -165,7 +164,8 @@ export async function enterAndPrepareState(
     }
   });
 
-  // Emit events (best-effort)
+  // Emit events (best-effort) — use the timestamp from the board to ensure consistency
+  const enteredAt = enteredBoard.last_updated;
   const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
     try { store.appendEvent("board_updated", event as Record<string, unknown>); } catch { /* best-effort */ }
   };
@@ -174,7 +174,7 @@ export async function enterAndPrepareState(
     flowEventBus.emit("board_updated", {
       action: "enter_state",
       stateId: state_id,
-      timestamp: now,
+      timestamp: enteredAt,
     });
     const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
       try { store.appendEvent("state_entered", event as Record<string, unknown>); } catch { /* best-effort */ }
@@ -184,7 +184,7 @@ export async function enterAndPrepareState(
       flowEventBus.emit("state_entered", {
         stateId: state_id,
         stateType: stateDef?.type ?? "unknown",
-        timestamp: now,
+        timestamp: enteredAt,
         iterationCount: enteredBoard.iterations[state_id]?.count ?? 0,
       });
     } finally {

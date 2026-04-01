@@ -75,11 +75,12 @@ export async function inspectDebateProgress(
 
   try {
     const store = getExecutionStore(workspace);
-    // Probe each possible round channel up to max_rounds to find populated ones
+    // Probe each possible round channel up to max_rounds to find populated ones.
+    // Use hasMessages (SELECT 1 LIMIT 1) instead of loading full message arrays —
+    // we only need existence here, not message content.
     for (let r = 1; r <= config.max_rounds; r++) {
       const channel = debateChannel(r);
-      const msgs = store.getMessages(channel);
-      if (msgs.length > 0) {
+      if (store.hasMessages(channel)) {
         roundNumbers.push(r);
       }
     }
@@ -212,11 +213,21 @@ export async function buildDebateSummary(
   const messages = await readMessages(workspace, channel);
   if (messages.length === 0) return "No debate messages found.";
 
-  // Group messages by round (parsed from filename prefix pattern: round-N-)
+  // Infer round number from the channel parameter (primary source) since
+  // the channel is the authoritative identifier for a round. Fall back to
+  // msg.from regex only when the channel doesn't carry round info.
+  const channelRoundMatch = channel.match(/debate-round-(\d+)/i);
+  const channelRoundNum = channelRoundMatch ? parseInt(channelRoundMatch[1], 10) : null;
+
+  // Group messages by round
   const rounds = new Map<number, Message[]>();
   for (const msg of messages) {
-    const roundMatch = msg.from.match(/round-(\d+)/i);
-    const roundNum = roundMatch ? parseInt(roundMatch[1], 10) : 0;
+    // Primary: use channel-derived round number; fallback: parse from msg.from
+    let roundNum = channelRoundNum;
+    if (roundNum === null) {
+      const fromMatch = msg.from.match(/round-(\d+)/i);
+      roundNum = fromMatch ? parseInt(fromMatch[1], 10) : 0;
+    }
     if (!rounds.has(roundNum)) rounds.set(roundNum, []);
     rounds.get(roundNum)!.push(msg);
   }

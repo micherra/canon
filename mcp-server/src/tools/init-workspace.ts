@@ -14,6 +14,7 @@ import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { z } from "zod";
+import { existsSync } from "fs";
 import { mkdir } from "fs/promises";
 import { join } from "path";
 import { gitStatus } from "../adapters/git-adapter.ts";
@@ -62,6 +63,9 @@ export async function listBranchWorkspaces(
 
   for (const entry of entries) {
     const ws = join(branchDir, entry);
+    // Check DB existence before opening — better-sqlite3 creates the file on open,
+    // which would leave empty DBs as a side effect of scanning non-workspace directories.
+    if (!existsSync(join(ws, "orchestration.db"))) continue;
     try {
       const store = getExecutionStore(ws);
       const session = store.getSession();

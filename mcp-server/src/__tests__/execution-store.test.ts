@@ -505,6 +505,37 @@ describe('appendMessage + getMessages', () => {
 });
 
 // ---------------------------------------------------------------------------
+// hasMessages — existence check (item #14)
+// ---------------------------------------------------------------------------
+
+describe('hasMessages', () => {
+  let store: ExecutionStore;
+
+  beforeEach(() => { store = makeStore(); });
+  afterEach(() => { store.close(); });
+
+  test('returns false for empty channel', () => {
+    expect(store.hasMessages('debate-round-1')).toBe(false);
+  });
+
+  test('returns true after a message is posted', () => {
+    store.appendMessage('debate-round-1', 'agent-a', 'my position');
+    expect(store.hasMessages('debate-round-1')).toBe(true);
+  });
+
+  test('returns false for channel with no messages when another channel has messages', () => {
+    store.appendMessage('debate-round-1', 'agent-a', 'position');
+    expect(store.hasMessages('debate-round-2')).toBe(false);
+  });
+
+  test('returns true for channel with multiple messages', () => {
+    store.appendMessage('chan', 'a1', 'msg1');
+    store.appendMessage('chan', 'a2', 'msg2');
+    expect(store.hasMessages('chan')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // postWaveEvent + getWaveEvents + updateWaveEvent lifecycle
 // ---------------------------------------------------------------------------
 

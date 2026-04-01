@@ -184,6 +184,18 @@ describe("listBranchWorkspaces", () => {
     }
   });
 
+  it("does not create empty orchestration.db as a side effect of scanning (item #13)", async () => {
+    const projectDir = makeTmpProjectDir();
+    // Create a directory that has no DB — simulates a non-workspace dir
+    const nonWsDir = join(projectDir, ".canon", "workspaces", "main", "not-a-workspace");
+    mkdirSync(nonWsDir, { recursive: true });
+
+    await listBranchWorkspaces(projectDir, "main");
+
+    // The scan must NOT have created an empty orchestration.db as a side effect
+    expect(existsSync(join(nonWsDir, "orchestration.db"))).toBe(false);
+  });
+
   it("returns empty array for branch with no workspaces", async () => {
     const projectDir = makeTmpProjectDir();
     const workspaces = await listBranchWorkspaces(projectDir, "nonexistent-branch");

@@ -36,10 +36,10 @@ export async function resolveWaveEvent(
     throw new Error(`Event not found: ${input.event_id}`);
   }
 
-  // Validate event is pending
-  if (event.status !== "pending") {
-    throw new Error(`Event ${input.event_id} is already ${event.status}`);
-  }
+  // Note: the status pre-check is intentionally omitted here. The store's
+  // updateWaveEvent uses a WHERE status='pending' CAS guard and throws when
+  // the event is already resolved. This avoids a TOCTOU race between the
+  // read above and the update below.
 
   // Apply or reject the event via store — SQLite UPDATE is naturally atomic
   if (input.action === "apply") {
