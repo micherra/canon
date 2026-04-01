@@ -26,17 +26,14 @@ import type { InitExecutionParams } from "../orchestration/execution-store.ts";
 // Top-level mock for flow-parser — used by Comment 5 tests
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    flow: {
-      name: "quick-fix",
-      description: "test",
-      entry: "build",
-      states: {
-        build: { type: "single", transitions: { done: "done" } },
-        done: { type: "terminal" },
-      },
-      spawn_instructions: {},
+    name: "quick-fix",
+    description: "test",
+    entry: "build",
+    states: {
+      build: { type: "single", transitions: { done: "done" } },
+      done: { type: "terminal" },
     },
-    errors: [],
+    spawn_instructions: {},
   }),
 }));
 

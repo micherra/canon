@@ -356,6 +356,168 @@ function mergeSpawnInstructions(
 }
 
 // ---------------------------------------------------------------------------
+// VIRTUAL_SINKS / RUNTIME_VARIABLES constants
+// ---------------------------------------------------------------------------
+
+/**
+ * Virtual transition targets that are handled by the orchestrator at runtime
+ * rather than being real flow states. These are exempt from reachability
+ * analysis and transition-target validation.
+ */
+export const VIRTUAL_SINKS = new Set(["hitl", "no_items"]);
+
+/**
+ * Variables that are substituted at runtime by the orchestrator rather than
+ * at flow-load time. These are allowed to remain as `${var}` patterns in
+ * spawn instructions after fragment param substitution.
+ */
+export const RUNTIME_VARIABLES = new Set([
+  // Core orchestrator variables
+  "WORKSPACE",
+  "task",
+  "slug",
+  "task_id",
+  "base_commit",
+  "CLAUDE_PLUGIN_ROOT",
+  // Progress and review
+  "wave_briefing",
+  "progress",
+  "review_scope",
+  // Wave-level variables
+  "wave",
+  "wave_plans",
+  "wave_summaries",
+  "wave_files",
+  "wave_diff",
+  "all_summaries",
+  // Parallel-per iteration variables
+  "item.principle_id",
+  "item.severity",
+  "item.file_path",
+  "item.detail",
+  "item.test_file",
+  "item.test_name",
+  "item.error_message",
+  "item.source_file",
+  // Role variable (used in parallel state spawn instructions)
+  "role",
+  // Consultation open questions
+  "open_questions",
+  // Adopt flow runtime variables
+  "directory",
+  "severity_filter",
+  "top_n",
+  // Verify flow variables
+  "user_write_tests",
+  "write_tests",
+]);
+
+// ---------------------------------------------------------------------------
+// validateSpawnCoverage
+// ---------------------------------------------------------------------------
+
+/**
+ * Check that every non-terminal state has a matching key in flow.spawn_instructions.
+ * Terminal states are exempt — they don't need spawn instructions.
+ *
+ * Returns an array of error messages (empty if valid).
+ */
+export function validateSpawnCoverage(flow: ResolvedFlow): string[] {
+  const errors: string[] = [];
+  for (const [stateId, stateDef] of Object.entries(flow.states)) {
+    if (stateDef.type === "terminal") continue;
+    if (!flow.spawn_instructions[stateId]) {
+      errors.push(`State "${stateId}" (type: ${stateDef.type}) has no spawn instruction heading`);
+    }
+  }
+  return errors;
+}
+
+// ---------------------------------------------------------------------------
+// analyzeReachability
+// ---------------------------------------------------------------------------
+
+/**
+ * BFS from the entry state to find all reachable states.
+ * Virtual sinks (hitl, no_items) are skipped — they are not real states.
+ *
+ * Returns an array of warning messages for unreachable states (empty if all reachable).
+ * These are warnings only — they do NOT block flow loading per ADR-004.
+ */
+export function analyzeReachability(flow: ResolvedFlow): string[] {
+  const warnings: string[] = [];
+  const visited = new Set<string>();
+  const queue = [flow.entry];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    const state = flow.states[current];
+    if (state?.transitions) {
+      for (const target of Object.values(state.transitions)) {
+        if (!VIRTUAL_SINKS.has(target) && !visited.has(target)) {
+          queue.push(target);
+        }
+      }
+    }
+  }
+
+  for (const stateId of Object.keys(flow.states)) {
+    if (!visited.has(stateId)) {
+      warnings.push(`Warning: state "${stateId}" is unreachable from entry "${flow.entry}"`);
+    }
+  }
+
+  return warnings;
+}
+
+// ---------------------------------------------------------------------------
+// checkUnresolvedRefs
+// ---------------------------------------------------------------------------
+
+/**
+ * After fragment param substitution, check for remaining `${...}` patterns
+ * in spawn instructions and transition targets that are not known runtime variables.
+ *
+ * Only checks spawn instructions and transition target values.
+ * Does NOT check flow-level YAML fields (e.g. progress, description) which may
+ * legitimately contain `${WORKSPACE}` and similar patterns.
+ *
+ * Returns an array of error messages (empty if valid).
+ */
+export function checkUnresolvedRefs(flow: ResolvedFlow): string[] {
+  const errors: string[] = [];
+  const refPattern = /\$\{([^}]+)\}/g;
+
+  // Check spawn instructions for unknown ${...} references
+  for (const [stateId, text] of Object.entries(flow.spawn_instructions)) {
+    refPattern.lastIndex = 0;
+    let match;
+    while ((match = refPattern.exec(text)) !== null) {
+      if (!RUNTIME_VARIABLES.has(match[1])) {
+        errors.push(`Spawn instruction "${stateId}" has unresolved reference: \${${match[1]}}`);
+      }
+    }
+  }
+
+  // Check state transition targets for leftover ${...}
+  for (const [stateId, stateDef] of Object.entries(flow.states)) {
+    if (stateDef.transitions) {
+      for (const [cond, target] of Object.entries(stateDef.transitions)) {
+        if (/\$\{/.test(target)) {
+          errors.push(
+            `State "${stateId}" transition "${cond}" has unresolved reference in target: "${target}"`,
+          );
+        }
+      }
+    }
+  }
+
+  return errors;
+}
+
+// ---------------------------------------------------------------------------
 // validateStateIdParams
 // ---------------------------------------------------------------------------
 
@@ -396,7 +558,13 @@ export function validateStateIdParams(
 
 /**
  * Validate a resolved flow definition. Returns an array of error messages
- * (empty if valid).
+ * and warnings (empty if valid).
+ *
+ * Includes four validation passes:
+ *   1. Structural checks (entry, transitions, max_iterations, parallel-per, terminal)
+ *   2. Spawn instruction coverage (ADR-004)
+ *   3. Reachability analysis — WARN only, does not block (ADR-004)
+ *   4. Unresolved reference check (ADR-004)
  */
 export function validateFlow(flow: ResolvedFlow): string[] {
   const errors: string[] = [];
@@ -408,10 +576,10 @@ export function validateFlow(flow: ResolvedFlow): string[] {
   }
 
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    // All transition targets must exist (or be "hitl")
+    // All transition targets must exist (or be a virtual sink)
     if (stateDef.transitions) {
       for (const [condition, target] of Object.entries(stateDef.transitions)) {
-        if (target !== "hitl" && !stateIds.has(target)) {
+        if (!VIRTUAL_SINKS.has(target) && !stateIds.has(target)) {
           errors.push(`State "${stateId}" transition "${condition}" targets non-existent state "${target}"`);
         }
       }
@@ -432,6 +600,24 @@ export function validateFlow(flow: ResolvedFlow): string[] {
       errors.push(`State "${stateId}" is terminal but has transitions`);
     }
   }
+
+  // ADR-004 pass 2: spawn instruction coverage (hard errors)
+  errors.push(...validateSpawnCoverage(flow));
+
+  // ADR-004 pass 3: reachability analysis (warnings only — do not block)
+  const reachabilityWarnings = analyzeReachability(flow);
+  if (reachabilityWarnings.length > 0) {
+    // Log to console — reachability issues are visible but non-blocking
+    for (const warning of reachabilityWarnings) {
+      console.warn(`[flow-parser] ${warning}`);
+    }
+    // Include in output so callers can see them (but loadAndResolveFlow
+    // separates warnings from errors by the "Warning:" prefix)
+    errors.push(...reachabilityWarnings);
+  }
+
+  // ADR-004 pass 4: unresolved reference check (hard errors)
+  errors.push(...checkUnresolvedRefs(flow));
 
   return errors;
 }
@@ -533,13 +719,16 @@ async function resolveFlowFile(pluginDir: string, flowName: string, projectDir?:
  * 2. Validate frontmatter
  * 3. Resolve fragment includes
  * 4. Build ResolvedFlow
- * 5. Validate and return
+ * 5. Validate — throws on any error (hard-blocking per ADR-004)
+ *
+ * Returns the resolved flow directly (no errors field — validation either
+ * passes or throws a descriptive error).
  */
 export async function loadAndResolveFlow(
   pluginDir: string,
   flowName: string,
   projectDir?: string,
-): Promise<{ flow: ResolvedFlow; errors: string[] }> {
+): Promise<ResolvedFlow> {
   if (!/^[a-zA-Z0-9_-]+$/.test(flowName)) {
     throw new Error(
       `Invalid flow name "${flowName}": only alphanumeric characters, hyphens, and underscores are allowed`,
@@ -616,7 +805,15 @@ export async function loadAndResolveFlow(
     ...(Object.keys(resolvedConsultations).length > 0 ? { consultations: resolvedConsultations } : {}),
   };
 
-  const errors = [...schemaErrors, ...stateIdParamErrors, ...validateFlow(resolvedFlow)];
+  // Hard-blocking validation (ADR-004): separate hard errors from reachability warnings.
+  // Reachability warnings start with "Warning:" and are non-blocking (already logged to
+  // console.warn inside validateFlow). All other messages are hard errors that block loading.
+  const allMessages = [...schemaErrors, ...stateIdParamErrors, ...validateFlow(resolvedFlow)];
+  const hardErrors = allMessages.filter((msg) => !msg.startsWith("Warning:"));
 
-  return { flow: resolvedFlow, errors };
+  if (hardErrors.length > 0) {
+    throw new Error(`Flow "${flowName}" validation failed:\n${hardErrors.join("\n")}`);
+  }
+
+  return resolvedFlow;
 }

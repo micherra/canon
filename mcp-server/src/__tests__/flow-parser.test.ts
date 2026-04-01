@@ -238,7 +238,7 @@ describe("validateFlow", () => {
       name: "valid",
       description: "valid flow",
       entry: "start",
-      spawn_instructions: {},
+      spawn_instructions: { start: "Do work." },
       states: {
         start: {
           type: "single",
@@ -272,7 +272,7 @@ describe("validateFlow", () => {
       name: "bad-trans",
       description: "bad transitions",
       entry: "start",
-      spawn_instructions: {},
+      spawn_instructions: { start: "Do work." },
       states: {
         start: {
           type: "single",
@@ -291,7 +291,7 @@ describe("validateFlow", () => {
       name: "hitl-ok",
       description: "hitl transitions",
       entry: "start",
-      spawn_instructions: {},
+      spawn_instructions: { start: "Do work." },
       states: {
         start: {
           type: "single",
@@ -310,7 +310,7 @@ describe("validateFlow", () => {
       name: "no-stuck",
       description: "missing stuck_when",
       entry: "loop",
-      spawn_instructions: {},
+      spawn_instructions: { loop: "Do loopy work." },
       states: {
         loop: {
           type: "single",
@@ -331,7 +331,7 @@ describe("validateFlow", () => {
       name: "no-iterate",
       description: "missing iterate_on",
       entry: "par",
-      spawn_instructions: {},
+      spawn_instructions: { par: "Run in parallel." },
       states: {
         par: {
           type: "parallel-per",
@@ -351,7 +351,7 @@ describe("validateFlow", () => {
       name: "bad-terminal",
       description: "terminal with transitions",
       entry: "start",
-      spawn_instructions: {},
+      spawn_instructions: { start: "Do work." },
       states: {
         start: {
           type: "single",
@@ -597,7 +597,7 @@ describe("resolveFragments — typed params", () => {
 
 describe("loadAndResolveFlow", () => {
   it("loads the review-only flow from real files", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "review-only");
+    const flow = await loadAndResolveFlow(pluginDir, "review-only");
 
     expect(flow.name).toBe("review-only");
     expect(flow.entry).toBe("review");
@@ -610,7 +610,5 @@ describe("loadAndResolveFlow", () => {
     // Should have spawn instruction for review
     expect(flow.spawn_instructions["review"]).toBeDefined();
     expect(flow.spawn_instructions["review"]).toContain("git diff");
-
-    expect(errors).toEqual([]);
   });
 });
