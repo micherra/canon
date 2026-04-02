@@ -648,7 +648,7 @@ import { writePlanIndex } from "../tools/write-plan-index.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 describe("writePlanIndex — additional edge cases", () => {
-  it("creates INDEX.md with empty slug (empty string slug)", async () => {
+  it("rejects an empty slug", async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
     try {
       const result = await writePlanIndex({
@@ -656,11 +656,8 @@ describe("writePlanIndex — additional edge cases", () => {
         slug: "",
         tasks: [{ task_id: "t-01", wave: 1 }],
       });
-      // Empty slug is technically valid at the tool level; file system path just becomes
-      // workspace/plans//INDEX.md → workspace/plans/INDEX.md after normalization
-      // The key contract: must return ok:true and produce a file
-      assertOk(result);
-      expect(result.task_count).toBe(1);
+      // Empty slug is rejected — SLUG_PATTERN requires at least 1 character
+      expect(result.ok).toBe(false);
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }

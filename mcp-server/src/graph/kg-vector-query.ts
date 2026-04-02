@@ -89,7 +89,7 @@ export class KgVectorQuery {
     let thresholdClause = "";
     let thresholdParams: number[] = [];
     if (threshold != null) {
-      thresholdClause = `AND ev.distance <= ?`;
+      thresholdClause = "AND ev.distance <= ?";
       thresholdParams = [threshold];
     }
 
@@ -144,7 +144,7 @@ export class KgVectorQuery {
     let thresholdClause = "";
     let thresholdParams: number[] = [];
     if (threshold != null) {
-      thresholdClause = `AND sv.distance <= ?`;
+      thresholdClause = "AND sv.distance <= ?";
       thresholdParams = [threshold];
     }
 

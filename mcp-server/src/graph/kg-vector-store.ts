@@ -14,7 +14,7 @@
 
 import type Database from "better-sqlite3";
 import { createHash } from "node:crypto";
-import { EMBEDDING_MODEL_ID } from "../constants.ts";
+import { EMBEDDING_DIM, EMBEDDING_MODEL_ID } from "../constants.ts";
 
 // ---------------------------------------------------------------------------
 // KgVectorStore
@@ -105,6 +105,14 @@ export class KgVectorStore {
     if (!Number.isInteger(entityId) || !Number.isFinite(entityId)) {
       throw new Error(`entityId must be a finite integer, got: ${entityId}`);
     }
+    if (embedding.length !== EMBEDDING_DIM) {
+      throw new Error(
+        `embedding must have length ${EMBEDDING_DIM}, got ${embedding.length}`,
+      );
+    }
+    if (embedding.some((v) => !Number.isFinite(v))) {
+      throw new Error("embedding contains non-finite values (NaN or Infinity)");
+    }
     const jsonVec = "[" + Array.from(embedding).join(",") + "]";
     const updatedAt = new Date().toISOString();
 
@@ -136,6 +144,14 @@ export class KgVectorStore {
   upsertSummaryVector(summaryId: number, embedding: Float32Array, textHash: string): void {
     if (!Number.isInteger(summaryId) || !Number.isFinite(summaryId)) {
       throw new Error(`summaryId must be a finite integer, got: ${summaryId}`);
+    }
+    if (embedding.length !== EMBEDDING_DIM) {
+      throw new Error(
+        `embedding must have length ${EMBEDDING_DIM}, got ${embedding.length}`,
+      );
+    }
+    if (embedding.some((v) => !Number.isFinite(v))) {
+      throw new Error("embedding contains non-finite values (NaN or Infinity)");
     }
     const jsonVec = "[" + Array.from(embedding).join(",") + "]";
     const updatedAt = new Date().toISOString();

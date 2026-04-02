@@ -89,15 +89,15 @@ describe("writePlanIndex — slug path traversal validation", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("accepts an empty slug (edge case: no path manipulation possible)", async () => {
+  it("rejects an empty slug", async () => {
     const result = await writePlanIndex({
       workspace: tmpDir,
       slug: "",
       tasks: [{ task_id: "task-01", wave: 1 }],
     });
 
-    // Empty slug is allowed by the pattern — it writes to plans/ directly
-    expect(result.ok).toBe(true);
+    // Empty slug is rejected — SLUG_PATTERN requires at least 1 character
+    expect(result.ok).toBe(false);
   });
 });
 
