@@ -18,9 +18,13 @@ import { writeFile } from "node:fs/promises";
 // Hoist mock for loadAndResolveFlow used by initWorkspaceFlow
 // ---------------------------------------------------------------------------
 
-vi.mock("../orchestration/flow-parser.ts", () => ({
-  loadAndResolveFlow: vi.fn(),
-}));
+vi.mock("../orchestration/flow-parser.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../orchestration/flow-parser.ts")>();
+  return {
+    ...actual,
+    loadAndResolveFlow: vi.fn(),
+  };
+});
 
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import { initWorkspaceFlow } from "../tools/init-workspace.ts";
