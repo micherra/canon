@@ -131,8 +131,7 @@ export async function fanout(ctx: PromptContext): Promise<PromptContext> {
 
   // Evaluate large_diff_threshold — cluster files when diff exceeds threshold
   if ("large_diff_threshold" in state && state.large_diff_threshold != null) {
-    const board = undefined; // cluster eval doesn't need board in this stage
-    const baseCommit = ""; // will use whatever board provides at wiring time
+    const baseCommit = ctx.board?.base_commit ?? "";
     const strategy = ("cluster_by" in state && state.cluster_by) ? state.cluster_by as "directory" | "layer" : "directory";
     const result = clusterDiff(baseCommit, state.large_diff_threshold as number, strategy);
     if (result) {

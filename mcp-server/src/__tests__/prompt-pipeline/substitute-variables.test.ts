@@ -132,12 +132,12 @@ describe("substituteVariablesStage (Stage 4)", () => {
     expect(result.basePrompt.startsWith("Do the work")).toBe(true);
   });
 
-  it("skips cache prefix when getCachePrefix is not available on store", async () => {
-    // When parallel task adr006-03 hasn't added getCachePrefix yet, handle gracefully
-    vi.mocked(getExecutionStore).mockReturnValue({} as ReturnType<typeof getExecutionStore>);
+  it("skips cache prefix when store returns empty string", async () => {
+    vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>);
     const ctx = makeCtx("Do ${task}", { task: "something" });
     const result = await substituteVariablesStage(ctx);
     expect(result.basePrompt).toBe("Do something");
+    expect(result.cachePrefix).toBeUndefined();
   });
 
   it("uses mergedVariables (not input.variables) for substitution", async () => {

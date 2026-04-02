@@ -6,8 +6,7 @@
  * and prepends it to basePrompt when non-empty.
  *
  * The cache prefix is a stable context block computed at init_workspace time
- * (added by adr006-03). When getCachePrefix is not yet available on the store
- * (e.g., running against an older store version), degrades gracefully to no prefix.
+ * (added by adr006-03). Returns empty string when no prefix has been set.
  */
 
 import { substituteVariables } from "../../orchestration/variables.ts";
@@ -26,10 +25,9 @@ export async function substituteVariablesStage(ctx: PromptContext): Promise<Prom
   // Substitute all known variables from mergedVariables
   const substituted = substituteVariables(rawInstruction, mergedVariables);
 
-  // Read cache prefix from store — degrades gracefully if getCachePrefix not available
+  // Read cache prefix from store
   const store = getExecutionStore(input.workspace);
-  const getCachePrefix = (store as unknown as { getCachePrefix?: () => string }).getCachePrefix;
-  const cachePrefix = typeof getCachePrefix === "function" ? getCachePrefix.call(store) : "";
+  const cachePrefix = store.getCachePrefix();
 
   // Prepend cache prefix when non-empty
   const basePrompt = cachePrefix ? `${cachePrefix}${substituted}` : substituted;
