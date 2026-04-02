@@ -133,6 +133,17 @@ For each `.jsonl` file, count entries:
 **WARN** if > 500 entries in active file: "{file} has {N} entries — rotation may not be working. Expected max 500."
 **INFO** if archive exists: "{file}.archive has {N} archived entries."
 
+#### Check 12: Failed state transcript availability
+
+For each workspace in `.canon/workspaces/`:
+- Read `orchestration.db` and query `execution_states` for rows where `status = 'failed'` or `result` contains 'error' or 'stuck'
+- Use try/catch around all SQLite queries — gracefully skip workspaces that predate the `transcript_path` column (migration v4) or have no `orchestration.db`
+- For each failed state, check if `transcript_path` is set and the file exists
+- If a failed state has a transcript, show the last 5 assistant-role entries as diagnostic context
+
+**INFO** if failed state has transcript: "State '{state_id}' failed — transcript available at {path}. Last assistant message: {excerpt}"
+**WARN** if failed state has no transcript: "State '{state_id}' failed but no transcript recorded — unable to show diagnostic context"
+
 ### Step 3: Present results
 
 ```markdown
@@ -153,6 +164,7 @@ For each `.jsonl` file, count entries:
 | 9 | Data files | OK | All valid |
 | 10 | Convention bloat | OK | 12 conventions |
 | 11 | Data file size | OK | All within limits |
+| 12 | Failed state transcripts | INFO | 1 failed state with transcript available |
 
 ### Issues
 
@@ -165,3 +177,5 @@ N checks passed, N warnings, N errors
 If all checks pass: "Canon is healthy. No issues found."
 If errors exist: "Found {N} error(s) that need fixing. {details}"
 If only warnings: "Canon is functional but has {N} warning(s) worth addressing."
+
+The summary count covers all 12 checks. Check 12 may produce INFO entries (not warnings or errors) when failed states have transcripts available for review.
