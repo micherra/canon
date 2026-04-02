@@ -31,12 +31,27 @@ vi.mock("../orchestration/diff-cluster.ts", () => ({
 
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const mockBoard: Board = {
+  flow: "test",
+  task: "test",
+  entry: "review",
+  current_state: "review",
+  base_commit: "abc1234",
+  started: new Date().toISOString(),
+  last_updated: new Date().toISOString(),
+  states: {},
+  iterations: {},
+  blocked: null,
+  concerns: [],
+  skipped: [],
+};
 
 let tmpDirs: string[] = [];
 
@@ -94,6 +109,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       state_id: "review",
       flow,
       variables: { task: "review the PR" },
+      _board: mockBoard,
     });
 
     expect(result.prompts).toHaveLength(sampleClusters.length);
@@ -109,6 +125,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       state_id: "review",
       flow,
       variables: { task: "review the PR" },
+      _board: mockBoard,
     });
 
     expect(result.fanned_out).toBe(true);
@@ -124,6 +141,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       state_id: "review",
       flow,
       variables: { task: "review the PR" },
+      _board: mockBoard,
     });
 
     // First cluster
@@ -147,6 +165,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       state_id: "review",
       flow,
       variables: { task: "review the PR" },
+      _board: mockBoard,
     });
 
     const firstEntry = result.prompts[0];
@@ -167,6 +186,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       state_id: "review",
       flow,
       variables: {},
+      _board: mockBoard,
     });
 
     for (const entry of result.prompts) {
@@ -195,6 +215,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       state_id: "review",
       flow,
       variables: { CANON_PLUGIN_ROOT: "/plugin", task: "test" },
+      _board: mockBoard,
     });
 
     expect(result.prompts).toHaveLength(sampleClusters.length);
@@ -219,6 +240,7 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       flow,
       variables: {},
       role: "security-reviewer",
+      _board: mockBoard,
     });
 
     expect(result.prompts).toHaveLength(sampleClusters.length);
@@ -248,6 +270,7 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
       state_id: "review",
       flow,
       variables: {},
+      _board: mockBoard,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -263,6 +286,7 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
       state_id: "review",
       flow,
       variables: {},
+      _board: mockBoard,
     });
 
     expect(result.fanned_out).toBeUndefined();
@@ -306,6 +330,7 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
       state_id: "review",
       flow,
       variables: {},
+      _board: mockBoard,
     });
 
     // Empty clusters array should fall through to single prompt
@@ -339,6 +364,7 @@ describe("getSpawnPrompt — compete expansion", () => {
       state_id: "review",
       flow,
       variables: { task: "review the PR" },
+      _board: mockBoard,
     });
 
     expect(result.prompts).toHaveLength(3);
@@ -368,6 +394,7 @@ describe("getSpawnPrompt — compete expansion", () => {
       state_id: "review",
       flow,
       variables: { task: "review the PR" },
+      _board: mockBoard,
     });
 
     expect(result.prompts).toHaveLength(3);

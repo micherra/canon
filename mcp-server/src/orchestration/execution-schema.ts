@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '4';
+export const SCHEMA_VERSION = '5';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -239,19 +239,26 @@ const MIGRATIONS: Migration[] = [
     },
   },
   {
-    // transcript_path column on execution_states (ADR-015)
+    // cache_prefix column (ADR-006a)
     version: '4',
     up: (db) => {
-      // Guard: only ALTER TABLE if execution_states exists and the column is absent.
-      // columnExists returns false for both non-existent tables and non-existent columns,
-      // so we check the table exists via PRAGMA first.
+      if (!columnExists(db, 'execution', 'cache_prefix')) {
+        db.exec(`ALTER TABLE execution ADD COLUMN cache_prefix TEXT DEFAULT ''`);
+      }
+      db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // transcript_path column on execution_states (ADR-015)
+    version: '5',
+    up: (db) => {
       const tableRow = db
         .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='execution_states'`)
         .get() as { name: string } | undefined;
       if (tableRow && !columnExists(db, 'execution_states', 'transcript_path')) {
         db.exec(`ALTER TABLE execution_states ADD COLUMN transcript_path TEXT`);
       }
-      db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
+      db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
     },
   },
 ];

@@ -21,7 +21,6 @@ import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, CannotFixItem, HistoryEntry, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
 import { toolError } from "../utils/tool-result.ts";
 import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
@@ -250,7 +249,7 @@ export async function enterAndPrepareState(
               const fragment = flow.consultations?.[cName];
               consultationOutputs[cName] = {
                 section: fragment?.section,
-                summary: escapeDollarBrace(cResult.summary),
+                summary: cResult.summary,
               };
             }
           }

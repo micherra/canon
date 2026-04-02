@@ -1,6 +1,6 @@
 /**
  * Tests for ADR-015 transcript schema additions:
- * - Migration v4 adds transcript_path column on execution_states
+ * - Migration v5 adds transcript_path column on execution_states
  * - ExecutionStore setTranscriptPath / getTranscriptPath methods
  * - TranscriptEntrySchema validation
  * - initWorkspace creates transcripts/ subdirectory
@@ -171,16 +171,16 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("schema version", () => {
-  it("SCHEMA_VERSION is '4'", () => {
-    expect(SCHEMA_VERSION).toBe("4");
+  it("SCHEMA_VERSION is '5'", () => {
+    expect(SCHEMA_VERSION).toBe("5");
   });
 });
 
 // ---------------------------------------------------------------------------
-// 2. Migration v4 adds transcript_path column to execution_states on fresh DB
+// 2. Migration v5 adds transcript_path column to execution_states on fresh DB
 // ---------------------------------------------------------------------------
 
-describe("migration v4 — fresh DB", () => {
+describe("migration v5 — fresh DB", () => {
   it("fresh DB has transcript_path column on execution_states", () => {
     const dbPath = makeTmpDb();
     const db = initExecutionDb(dbPath);
@@ -190,7 +190,7 @@ describe("migration v4 — fresh DB", () => {
     db.close();
   });
 
-  it("fresh DB meta table has schema_version '4'", () => {
+  it("fresh DB meta table has schema_version '5'", () => {
     const dbPath = makeTmpDb();
     const db = initExecutionDb(dbPath);
 
@@ -198,17 +198,17 @@ describe("migration v4 — fresh DB", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("4");
+    expect(row?.value).toBe("5");
 
     db.close();
   });
 });
 
 // ---------------------------------------------------------------------------
-// 3. Migration v4 is idempotent (running twice does not error)
+// 3. Migration v5 is idempotent (running twice does not error)
 // ---------------------------------------------------------------------------
 
-describe("migration v4 — idempotency", () => {
+describe("migration v5 — idempotency", () => {
   it("calling initExecutionDb twice does not throw", () => {
     const dbPath = makeTmpDb();
     const db1 = initExecutionDb(dbPath);
@@ -232,13 +232,13 @@ describe("migration v4 — idempotency", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("4");
+    expect(row?.value).toBe("5");
     db2.close();
   });
 
-  it("running runMigrations twice on a v4 DB does not error", () => {
+  it("running runMigrations twice on a v5 DB does not error", () => {
     const dbPath = makeTmpDb();
-    const db = initExecutionDb(dbPath); // already at v4
+    const db = initExecutionDb(dbPath); // already at v5
 
     expect(() => runMigrations(db)).not.toThrow();
 
@@ -247,10 +247,10 @@ describe("migration v4 — idempotency", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. Migration v4 upgrades existing v3 database correctly
+// 4. Migration v5 upgrades existing v3 database correctly
 // ---------------------------------------------------------------------------
 
-describe("migration v4 — v3 to v4 upgrade", () => {
+describe("migration v5 — v3 to v5 upgrade", () => {
   it("migrates v3 DB: transcript_path column added to execution_states", () => {
     const dbPath = makeTmpDb();
     const v3db = createV3Db(dbPath);
@@ -274,7 +274,7 @@ describe("migration v4 — v3 to v4 upgrade", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("4");
+    expect(row?.value).toBe("5");
 
     db.close();
   });

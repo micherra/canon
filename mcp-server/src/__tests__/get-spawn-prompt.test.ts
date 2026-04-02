@@ -21,6 +21,7 @@ const mockStore = {
   getProgress: vi.fn(),
   appendProgress: vi.fn(),
   getExecution: vi.fn(),
+  getCachePrefix: vi.fn().mockReturnValue(""),
 };
 
 vi.mock("../orchestration/execution-store.ts", () => ({

@@ -3,11 +3,13 @@
  * summarising what prior-wave agents learned and any consultation outputs.
  *
  * INPUT CONTRACT:
- *   All text in `summaries` and `consultationOutputs` must already be escaped
- *   by the caller (e.g. via escapeDollarBrace from wave-variables.ts) before
- *   being passed here. This module does NOT escape input — it trusts that
- *   ${...} patterns in input have already been neutralised to \${...} so that
- *   substituteVariables cannot expand them unintentionally.
+ *   When called via the prompt assembly pipeline (ADR-006), escaping is handled
+ *   by stage 6 (inject-wave-briefing) before calling this function. Direct
+ *   callers outside the pipeline must still pre-escape text.
+ *
+ *   This module does NOT escape input — it trusts that ${...} patterns in
+ *   summaries and consultationOutputs have already been neutralised to \${...}
+ *   so that substituteVariables cannot expand them unintentionally.
  */
 
 import { access, appendFile, mkdir, readFile } from "node:fs/promises";
@@ -18,9 +20,9 @@ const MAX_BRIEFING_CHARS = 2000;
 
 export interface WaveBriefingInput {
   wave: number;
-  summaries: string[]; // Previous wave's summary texts (must be pre-escaped)
+  summaries: string[]; // Previous wave's summary texts (pre-escaped by caller or stage 6)
   consultationOutputs: Record<string, { section?: string; summary: string }>;
-  // section = heading from ConsultationFragment.section (must be pre-escaped)
+  // section = heading from ConsultationFragment.section (pre-escaped by caller or stage 6)
 }
 
 /**
@@ -30,8 +32,9 @@ export interface WaveBriefingInput {
  * Sections that contain no matching content are omitted entirely.
  * The final output is truncated to ~2000 characters (~500 tokens) if needed.
  *
- * Input text must already be escaped by the caller — this function does NOT
- * call escapeDollarBrace and does NOT sanitise ${...} patterns in input.
+ * Input text must already be escaped — either by the pipeline (stage 6) or by
+ * direct callers. This function does NOT call escapeDollarBrace and does NOT
+ * sanitise ${...} patterns in input.
  */
 export function assembleWaveBriefing(input: WaveBriefingInput): string {
   const { wave, summaries, consultationOutputs } = input;
