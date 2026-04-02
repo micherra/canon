@@ -436,8 +436,8 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
 Before returning your final status, call the \`record_agent_metrics\` tool to record your session counters:
 
 record_agent_metrics({
-  workspace: "${input.workspace}",
-  state_id: "${state_id}",
+  workspace: ${JSON.stringify(input.workspace)},
+  state_id: ${JSON.stringify(state_id)},
   tool_calls: <total tool invocations you made>,
   orientation_calls: <Read/Glob/Grep calls made for orientation before writing>,
   turns: <number of assistant turns in your conversation>

@@ -217,7 +217,7 @@ describe("recordAgentMetrics — validation errors", () => {
     }
   });
 
-  it("returns WORKSPACE_NOT_FOUND for non-existent state_id", async () => {
+  it("returns INVALID_INPUT for non-existent state_id", async () => {
     const workspace = makeTmpWorkspace();
     setupWorkspace(workspace, "build");
 
@@ -229,7 +229,7 @@ describe("recordAgentMetrics — validation errors", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.error_code).toBe("INVALID_INPUT");
     }
   });
 });

@@ -250,6 +250,9 @@ export class ExecutionStore {
   private readonly stmtRecordIterationResult: Database.Statement;
   private readonly stmtGetLastTwoIterationResults: Database.Statement;
 
+  // ---- Metrics statements ----
+  private readonly stmtUpdateStateMetrics: Database.Statement;
+
   constructor(db: Database.Database) {
     this.db = db;
 
@@ -427,6 +430,11 @@ export class ExecutionStore {
       ORDER BY iteration DESC
       LIMIT 2
     `);
+
+    // Metrics
+    this.stmtUpdateStateMetrics = db.prepare(
+      `UPDATE execution_states SET metrics = ? WHERE state_id = ?`,
+    );
   }
 
   // --------------------------------------------------------------------------
@@ -1047,8 +1055,7 @@ export class ExecutionStore {
     const existing: Record<string, unknown> = row.metrics ? JSON.parse(row.metrics) : {};
     const merged = { ...existing, ...metrics };
 
-    this.db.prepare(`UPDATE execution_states SET metrics = ? WHERE state_id = ?`)
-      .run(JSON.stringify(merged), stateId);
+    this.stmtUpdateStateMetrics.run(JSON.stringify(merged), stateId);
 
     return true;
   }

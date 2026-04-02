@@ -43,12 +43,34 @@ export async function recordAgentMetrics(
   if (orientation_calls !== undefined) provided.orientation_calls = orientation_calls;
   if (turns !== undefined) provided.turns = turns;
 
+  // Validate: all provided values must be non-negative integers
+  for (const [key, value] of Object.entries(provided)) {
+    if (!Number.isInteger(value) || value < 0) {
+      return toolError(
+        "INVALID_INPUT",
+        `Metric "${key}" must be a non-negative integer, got: ${value}`,
+        false,
+        { field: key, value },
+      );
+    }
+  }
+
   // Get the store and check state exists
-  const store = getExecutionStore(workspace);
+  let store: ReturnType<typeof getExecutionStore>;
+  try {
+    store = getExecutionStore(workspace);
+  } catch (err) {
+    return toolError(
+      "WORKSPACE_NOT_FOUND",
+      `Workspace not found or invalid: ${workspace}`,
+      false,
+      { workspace, cause: String(err) },
+    );
+  }
   const state = store.getState(state_id);
   if (!state) {
     return toolError(
-      "WORKSPACE_NOT_FOUND",
+      "INVALID_INPUT",
       `State "${state_id}" not found in workspace`,
       false,
       { workspace, state_id },

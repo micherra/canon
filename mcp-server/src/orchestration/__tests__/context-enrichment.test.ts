@@ -4,7 +4,7 @@
  * Covers done criteria:
  *   dc-01: git history + drift signals + prior work sections all appear
  *   dc-02: tensions section generated when drift violations + recent commits overlap
- *   dc-03: tier cap (5 fast-path) and total char cap (6000)
+ *   dc-03: tier cap (small=5) and total char cap (6000)
  *   dc-04: graceful degradation when sources unavailable
  *   dc-05: escapeDollarBrace applied to git output
  *
