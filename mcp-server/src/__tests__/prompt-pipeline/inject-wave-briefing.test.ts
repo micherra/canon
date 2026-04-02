@@ -251,7 +251,7 @@ describe("injectWaveBriefing — escaping consultation outputs", () => {
     expect(result.basePrompt).not.toContain("Wave Guidance");
   });
 
-  it("preserves section field in consultation outputs passed to assembleWaveBriefing", async () => {
+  it("escapes ${var} patterns in section field of consultation outputs", async () => {
     const ctx = makeCtx({
       wave: 1,
       consultation_outputs: {
@@ -263,7 +263,22 @@ describe("injectWaveBriefing — escaping consultation outputs", () => {
     await injectWaveBriefing(ctx);
 
     const callArg = vi.mocked(assembleWaveBriefing).mock.calls[0][0];
-    // Section is passed through (not escaped by this stage — only summaries are escaped)
-    expect(callArg.consultationOutputs["key"].section).toBe("My Section ${title}");
+    // Section is escaped at the read boundary, same as summary
+    expect(callArg.consultationOutputs["key"].section).toBe("My Section \\${title}");
+  });
+
+  it("preserves section field when it has no ${var} patterns", async () => {
+    const ctx = makeCtx({
+      wave: 1,
+      consultation_outputs: {
+        key: { section: "Architecture Notes", summary: "text" },
+      },
+    });
+    vi.mocked(assembleWaveBriefing).mockReturnValue("briefing");
+
+    await injectWaveBriefing(ctx);
+
+    const callArg = vi.mocked(assembleWaveBriefing).mock.calls[0][0];
+    expect(callArg.consultationOutputs["key"].section).toBe("Architecture Notes");
   });
 });

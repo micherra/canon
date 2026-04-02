@@ -52,6 +52,7 @@ export async function injectWaveBriefing(ctx: PromptContext): Promise<PromptCont
     for (const [key, output] of Object.entries(consultation_outputs)) {
       escapedOutputs[key] = {
         ...output,
+        ...(output.section != null ? { section: escapeDollarBrace(output.section) } : {}),
         summary: escapeDollarBrace(output.summary),
       };
     }

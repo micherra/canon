@@ -74,7 +74,7 @@ export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnProm
   // directly to avoid a redundant store round-trip.
   const needsBoard =
     !!state.skip_when ||
-    (state.inject_context != null && (state.inject_context as unknown[]).length > 0) ||
+    (state.inject_context != null && Array.isArray(state.inject_context) && state.inject_context.length > 0) ||
     ("large_diff_threshold" in state && state.large_diff_threshold != null);
 
   const board =
