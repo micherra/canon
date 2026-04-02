@@ -28,6 +28,7 @@ Each agent file uses YAML frontmatter (name, description, model, color, tools) f
 | `canon-fixer` | Fixes failing tests and principle violations identified by reviewers | sonnet |
 | `canon-shipper` | Handles final shipping decisions | sonnet |
 | `canon-writer` | Creates and edits Canon principles and agent-rules | sonnet |
+| `canon-generalist` | Combined implement + test + self-review for small tasks | sonnet |
 
 ## Conventions
 <!-- last-updated: 2026-03-24 -->

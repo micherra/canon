@@ -10,8 +10,7 @@ See `SCHEMA.md` for the complete frontmatter reference.
 
 | Flow | Tier | Description |
 |------|------|-------------|
-| `hotfix` | Small (urgent) | Minimal-ceremony emergency fix — implement, verify, ship |
-| `quick-fix` | Small (1-3 files) | Bug fix or minor addition |
+| `fast-path` | Small | Single-agent fast path — implement, test, self-review in one pass |
 | `refactor` | Medium | Behavior-preserving restructuring with continuous test verification |
 | `feature` | Medium (4-10 files) | New feature pipeline |
 | `migrate` | Medium | Staged migration with rollback planning and verification |

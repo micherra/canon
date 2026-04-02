@@ -63,7 +63,7 @@ Recognize modifiers in the user's input:
 
 | Flag / Natural Language | Effect |
 |------------------------|--------|
-| `--flow <name>` / "use the quick-fix flow" | Set flow name |
+| `--flow <name>` / "use the fast-path flow" | Set flow name |
 | `--skip-research` / "skip research" | `skip_flags: ["research"]` |
 | `--skip-tests` / "no tests" | `skip_flags: ["tests"]` |
 | `--skip-security` / "skip security" | `skip_flags: ["security"]` |
@@ -124,8 +124,7 @@ For review intents, extract scope hints:
 
 | Signal | Flow | When |
 |--------|------|------|
-| Production incident, urgent fix | `hotfix` | User says "urgent", "production", "hotfix", or similar |
-| Bug fix, small change (1-3 files) | `quick-fix` | Single concern, localized change |
+| Bug fix, small change, urgent fix (1-3 files) | `fast-path` | Single concern, localized change, clear instructions. Includes urgent/production fixes. |
 | Refactoring, restructuring | `refactor` | User says "refactor", "rename", "extract", "restructure", "clean up" |
 | New feature (4-10 files) | `feature` | Adding something new, medium scope |
 | Migration, upgrade, version bump | `migrate` | User says "migrate", "upgrade", "move to", "switch from X to Y" |
