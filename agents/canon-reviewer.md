@@ -96,6 +96,10 @@ This stage is **advisory** by default — suggestions, not violations. Only incl
 
 **Upgrading Stage 2 to WARNING**: When a Stage 2 finding maps to the *spirit* of a loaded Canon principle — even if it is not a literal, textbook violation — upgrade it to a WARNING finding. State which principle's spirit applies and why the code undermines it. A WARNING from Stage 2 contributes to the verdict the same as a Stage 1 `strong-opinion` violation.
 
+**Example that qualifies**: A function has 15 parameters. The `small-focused-modules` principle says "each module should have a single responsibility." While 15 parameters isn't a literal module-level violation, it undermines the spirit — a function needing 15 inputs is doing too much → upgrade to WARNING.
+
+**Example that does NOT qualify**: Code uses `var` instead of `const`. Even though `explicit-contracts` exists, using `var` is a generic style issue not meaningfully connected to the principle's intent → stays advisory.
+
 ### Recommendations array
 
 After completing Stages 1 and 2, produce a `recommendations` array for the `store_pr_review` call. This is the top-5 most actionable suggestions, mixing principle violations with holistic observations:
@@ -165,10 +169,10 @@ Only report commands for tools that have visible configuration. Do not guess or 
 
 ## Stage 4: Drift-from-Plan Check
 
-When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, or *-SUMMARY.md), compare what was actually changed against what the architect planned.
+When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, or *-SUMMARY.md), compare what was actually changed against what the architect planned. If plan files are not available, include a note in your output: "Stage 4 skipped — no architect plan files in workspace." so the user knows the check exists but wasn't run.
 
 1. Get the list of files changed: `git diff --name-only ${base_commit}..HEAD`
-2. Parse plan files to extract the set of files mentioned (look for file paths in Scope, Files, Tasks, or Implementation sections)
+2. Parse plan files to extract the set of files mentioned in **actionable sections only** (Scope, Files, Tasks, Implementation, Deliverables, Changes). Explicitly exclude paths mentioned in Background, Alternatives Considered, Context, Rationale, or similar explanatory sections — those are narrative references, not planned work items.
 3. Classify **unplanned files** (changed but not in plan) and **missing planned work** (in plan but not changed)
 
 Follow the `### Drift from Plan` section in the review-checklist template for output format.
