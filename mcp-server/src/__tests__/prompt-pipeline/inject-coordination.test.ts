@@ -40,26 +40,34 @@ function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry 
   };
 }
 
-function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
+function makeCtx(overrides: Partial<PromptContext> & { workspace?: string; state_id?: string; flow?: ResolvedFlow; variables?: Record<string, string>; role?: string; wave?: number; peer_count?: number } = {}): PromptContext {
+  const { workspace, state_id, flow, variables, role, wave, peer_count, ...rest } = overrides;
   return {
-    workspace: "/tmp/test-workspace",
-    state_id: "implement",
+    input: {
+      workspace: workspace ?? "/tmp/test-workspace",
+      state_id: state_id ?? "implement",
+      flow: flow ?? {
+        name: "test-flow",
+        description: "Test",
+        entry: "implement",
+        states: {
+          implement: { type: "single", agent: "canon-implementor" },
+          done: { type: "terminal" },
+        },
+        spawn_instructions: { implement: "Do the thing" },
+      } as ResolvedFlow,
+      variables: variables ?? {},
+      ...("role" in overrides ? { role } : {}),
+      ...("wave" in overrides ? { wave } : {}),
+      ...("peer_count" in overrides ? { peer_count } : {}),
+    },
     state: { type: "single", agent: "canon-implementor" } as StateDefinition,
-    flow: {
-      name: "test-flow",
-      description: "Test",
-      entry: "implement",
-      states: {
-        implement: { type: "single", agent: "canon-implementor" },
-        done: { type: "terminal" },
-      },
-      spawn_instructions: { implement: "Do the thing" },
-    } as ResolvedFlow,
-    variables: {},
+    rawInstruction: "Do the thing",
     basePrompt: "Do the thing",
     prompts: [makeEntry()],
     warnings: [],
-    ...overrides,
+    mergedVariables: {},
+    ...rest,
   };
 }
 

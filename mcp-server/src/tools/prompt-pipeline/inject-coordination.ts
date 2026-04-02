@@ -51,7 +51,8 @@ record_agent_metrics({
  * Stage 8: Inject role substitution, messaging instructions, and metrics footer.
  */
 export async function injectCoordination(ctx: PromptContext): Promise<PromptContext> {
-  const { state, state_id, workspace, wave, peer_count, role } = ctx;
+  const { state } = ctx;
+  const { state_id, workspace, wave, peer_count, role } = ctx.input;
   let prompts = [...ctx.prompts];
 
   // 1. Role substitution for single-role states

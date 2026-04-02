@@ -115,7 +115,8 @@ export function parseTimeout(timeout: string): number | undefined {
  * Stage 7: Expand ctx.basePrompt into ctx.prompts[] based on state type.
  */
 export async function fanout(ctx: PromptContext): Promise<PromptContext> {
-  const { state, state_id, flow, variables, items, workspace } = ctx;
+  const { state } = ctx;
+  const { state_id, flow, variables, items, workspace } = ctx.input;
   let { basePrompt, warnings } = ctx;
   let timeout_ms: number | undefined;
   let clusters: FileCluster[] | undefined;

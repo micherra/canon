@@ -51,26 +51,32 @@ import type { FileCluster } from "../../orchestration/diff-cluster.ts";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
+function makeCtx(overrides: Partial<PromptContext> & { workspace?: string; state_id?: string; flow?: ResolvedFlow; variables?: Record<string, string>; items?: PromptContext["input"]["items"] } = {}): PromptContext {
+  const { workspace, state_id, flow, variables, items, ...rest } = overrides;
   return {
-    workspace: "/tmp/test-ws",
-    state_id: "implement",
+    input: {
+      workspace: workspace ?? "/tmp/test-ws",
+      state_id: state_id ?? "implement",
+      flow: flow ?? {
+        name: "test-flow",
+        description: "Test",
+        entry: "implement",
+        states: {
+          implement: { type: "single", agent: "canon-implementor" },
+          done: { type: "terminal" },
+        },
+        spawn_instructions: { implement: "Do the thing" },
+      } as ResolvedFlow,
+      variables: variables ?? { CANON_PLUGIN_ROOT: "" },
+      ...("items" in overrides ? { items } : {}),
+    },
     state: { type: "single", agent: "canon-implementor" } as StateDefinition,
-    flow: {
-      name: "test-flow",
-      description: "Test",
-      entry: "implement",
-      states: {
-        implement: { type: "single", agent: "canon-implementor" },
-        done: { type: "terminal" },
-      },
-      spawn_instructions: { implement: "Do the thing" },
-    } as ResolvedFlow,
-    variables: { CANON_PLUGIN_ROOT: "" },
+    rawInstruction: "Do the thing",
     basePrompt: "Do the thing",
     prompts: [],
     warnings: [],
-    ...overrides,
+    mergedVariables: { CANON_PLUGIN_ROOT: "" },
+    ...rest,
   };
 }
 

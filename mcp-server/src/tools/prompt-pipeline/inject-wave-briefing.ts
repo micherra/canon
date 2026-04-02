@@ -28,7 +28,8 @@ import type { PromptContext } from "./types.ts";
  * Only active for wave/parallel-per states with a non-null wave number.
  */
 export async function injectWaveBriefing(ctx: PromptContext): Promise<PromptContext> {
-  const { state, wave, workspace, consultation_outputs } = ctx;
+  const { state } = ctx;
+  const { wave, workspace, consultation_outputs } = ctx.input;
 
   // Only active for wave/parallel-per states with a wave number
   if ((state.type !== "wave" && state.type !== "parallel-per") || wave == null) {

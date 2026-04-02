@@ -30,24 +30,30 @@ import type { ResolvedFlow, StateDefinition } from "../../orchestration/flow-sch
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
+function makeCtx(overrides: Partial<PromptContext> & { wave?: number; consultation_outputs?: PromptContext["input"]["consultation_outputs"] } = {}): PromptContext {
+  const { wave, consultation_outputs, ...rest } = overrides;
   return {
-    workspace: "/tmp/test-workspace",
-    state_id: "implement",
+    input: {
+      workspace: "/tmp/test-workspace",
+      state_id: "implement",
+      flow: {
+        name: "test-flow",
+        description: "Test",
+        entry: "implement",
+        states: { implement: { type: "wave", agent: "canon-implementor" }, done: { type: "terminal" } },
+        spawn_instructions: { implement: "Do the thing" },
+      } as ResolvedFlow,
+      variables: {},
+      ...("wave" in overrides ? { wave } : { wave: 2 }),
+      ...("consultation_outputs" in overrides ? { consultation_outputs } : {}),
+    },
     state: { type: "wave", agent: "canon-implementor" } as StateDefinition,
-    flow: {
-      name: "test-flow",
-      description: "Test",
-      entry: "implement",
-      states: { implement: { type: "wave", agent: "canon-implementor" }, done: { type: "terminal" } },
-      spawn_instructions: { implement: "Do the thing" },
-    } as ResolvedFlow,
-    variables: {},
+    rawInstruction: "Do the thing",
     basePrompt: "Base prompt text",
     prompts: [],
     warnings: [],
-    wave: 2,
-    ...overrides,
+    mergedVariables: {},
+    ...rest,
   };
 }
 
