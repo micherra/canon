@@ -63,7 +63,7 @@ Recognize modifiers in the user's input:
 
 | Flag / Natural Language | Effect |
 |------------------------|--------|
-| `--flow <name>` / "use the quick-fix flow" | Set flow name |
+| `--flow <name>` / "use the fast-path flow" | Set flow name |
 | `--skip-research` / "skip research" | `skip_flags: ["research"]` |
 | `--skip-tests` / "no tests" | `skip_flags: ["tests"]` |
 | `--skip-security` / "skip security" | `skip_flags: ["security"]` |
@@ -124,8 +124,7 @@ For review intents, extract scope hints:
 
 | Signal | Flow | When |
 |--------|------|------|
-| Production incident, urgent fix | `hotfix` | User says "urgent", "production", "hotfix", or similar |
-| Bug fix, small change (1-3 files) | `quick-fix` | Single concern, localized change |
+| Bug fix, small change, urgent fix (1-3 files) | `fast-path` | Single concern, localized change, clear instructions. Includes urgent/production fixes. |
 | Refactoring, restructuring | `refactor` | User says "refactor", "rename", "extract", "restructure", "clean up" |
 | New feature (4-10 files) | `feature` | Adding something new, medium scope |
 | Migration, upgrade, version bump | `migrate` | User says "migrate", "upgrade", "move to", "switch from X to Y" |
@@ -343,24 +342,25 @@ This applies to `fix-impl` states, post-wave cleanup, and any ad-hoc fix spawnin
 
 ### Silent Dispatch Rule
 
-**Produce ZERO text output between prescribed output moments.** Every assistant message adds to conversation depth, and conversations exceeding ~100 messages trigger Claude Code cache_control TTL ordering bugs ([claude-code#37188](https://github.com/anthropics/claude-code/issues/37188)).
+**Minimize text output during the state machine loop.** Every assistant message adds to conversation depth, and conversations exceeding ~100 messages trigger Claude Code cache_control TTL ordering bugs ([claude-code#37188](https://github.com/anthropics/claude-code/issues/37188)).
 
-The state machine loop should be tool calls only — no narration between them:
+**The rule is one line per state transition, not zero lines ever.** Wrapping every tool call in narration causes TTL bugs. A single progress line between states is fine and keeps users informed.
 
 ```
-// CORRECT: silent dispatch
-[tool: enter_and_prepare_state] → [tool: Agent spawn] → [tool: report_result] → [tool: enter_and_prepare_state] → ...
+// CORRECT: progress-aware dispatch
+"Researching the codebase..." → [tool: enter_and_prepare_state] → [tool: Agent spawn] → [tool: report_result] → "Research complete. Planning implementation..." → [tool: enter_and_prepare_state] → ...
 
-// WRONG: narrated dispatch
-"Entering research state..." → [tool: enter_and_prepare_state] → "Spawning researcher..." → [tool: Agent spawn] → "Research complete, moving to design..." → [tool: report_result] → ...
+// WRONG: narrated dispatch (wrapping every tool call)
+"Entering research state..." → [tool: enter_and_prepare_state] → "Spawning researcher with prompt..." → [tool: Agent spawn] → "Research complete, moving to design..." → [tool: report_result] → "Now entering design state..." → ...
 ```
 
 **Prescribed output moments** (text IS allowed here):
 1. **Tier classification** — 1 sentence after intent detection (e.g., "Starting — I'll research first, then plan and build.")
 2. **HITL presentations** — blocked state, options, iteration history
-3. **Wave checkpoints** — epic flow inter-wave summaries for user review
-4. **Completion summary** — final state results, artifacts, metrics
-5. **Errors** — preflight failures, unrecoverable agent errors
+3. **Agent progress** — one brief natural-language line per state transition: one when entering a new state (e.g., "Researching the codebase...", "Implementing 3 tasks in parallel...") and one when completing and transitioning (e.g., "Research complete. Planning implementation...", "All tasks complete. Running review..."). No Canon jargon — no state IDs, no flow names, no agent type names.
+4. **Wave checkpoints** — epic flow inter-wave summaries for user review
+5. **Completion summary** — final state results, artifacts, metrics
+6. **Errors** — preflight failures, unrecoverable agent errors
 
 ### Variables for spawn prompts
 

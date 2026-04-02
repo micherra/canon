@@ -32,8 +32,7 @@ Flows are state machines in `flows/`. Format: YAML frontmatter (states, transiti
 
 | Flow | Tier | Purpose |
 |------|------|---------|
-| `hotfix` | Small (urgent) | Emergency fix — minimal ceremony, implement → verify → ship |
-| `quick-fix` | Small | Bug fix or minor addition (1-3 files) |
+| `fast-path` | Small | Single-agent fast path — implement + test + self-review in one pass (1-3 files) |
 | `refactor` | Medium | Behavior-preserving restructuring with continuous test verification |
 | `feature` | Medium | New feature pipeline (4-10 files) |
 | `migrate` | Medium | Staged migration with rollback planning and verification |

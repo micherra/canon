@@ -206,8 +206,8 @@ describe("v1 to v2 migration", () => {
         `INSERT INTO execution
           (id, flow, task, entry, current_state, base_commit, started, last_updated,
            branch, sanitized, created, tier, flow_name, slug)
-         VALUES (1, 'quick-fix', 'test task', 'build', 'build', 'deadbeef',
-                 ?, ?, 'main', 'main', ?, 'small', 'quick-fix', 'test-task')`,
+         VALUES (1, 'fast-path', 'test task', 'build', 'build', 'deadbeef',
+                 ?, ?, 'main', 'main', ?, 'small', 'fast-path', 'test-task')`,
       )
       .run(now, now, now);
 
@@ -220,7 +220,7 @@ describe("v1 to v2 migration", () => {
       .get() as { flow: string; task: string; entry: string; current_state: string } | undefined;
 
     expect(row).toBeDefined();
-    expect(row!.flow).toBe("quick-fix");
+    expect(row!.flow).toBe("fast-path");
     expect(row!.task).toBe("test task");
     expect(row!.entry).toBe("build");
     expect(row!.current_state).toBe("build");
@@ -244,8 +244,8 @@ describe("correlation_id backfill", () => {
         `INSERT INTO execution
           (id, flow, task, entry, current_state, base_commit, started, last_updated,
            branch, sanitized, created, tier, flow_name, slug)
-         VALUES (1, 'quick-fix', 'test task', 'build', 'build', 'deadbeef',
-                 ?, ?, 'main', 'main', ?, 'small', 'quick-fix', 'test-task')`,
+         VALUES (1, 'fast-path', 'test task', 'build', 'build', 'deadbeef',
+                 ?, ?, 'main', 'main', ?, 'small', 'fast-path', 'test-task')`,
       )
       .run(now, now, now);
 

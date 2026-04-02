@@ -64,16 +64,25 @@ The user should never need to know about flows, tiers, workspaces, or state mach
 
 ## Silent Dispatch
 
-The orchestrator MUST NOT produce text output between tool calls during the state machine loop. Text output adds messages to the conversation, and conversations exceeding ~100 messages trigger Claude Code cache_control TTL ordering bugs.
+The orchestrator MUST minimize text output during the state machine loop. Every assistant message adds to conversation depth, and conversations exceeding ~100 messages trigger Claude Code cache_control TTL ordering bugs.
 
 **Prescribed output moments** (the ONLY times text is allowed):
 1. Brief tier/flow classification (1 sentence after intent detection)
 2. HITL presentations (when a state is blocked and needs user input)
-3. Wave checkpoint summaries (epic flow, between waves)
-4. Completion summary (final results after terminal state)
-5. Error/preflight presentations (when something goes wrong)
+3. **Agent progress** — one brief natural-language line per state transition: one when entering a new state (e.g., "Researching the codebase...", "Implementing 3 tasks in parallel...") and one when completing and transitioning (e.g., "Research complete. Planning implementation...", "All tasks complete. Running review..."). No Canon jargon — no state IDs, no flow names, no agent type names.
+4. Wave checkpoint summaries (epic flow, between waves)
+5. Completion summary (final results after terminal state)
+6. Error/preflight presentations (when something goes wrong)
 
-**Between these moments: make tool calls with no surrounding text.** Do not narrate state transitions ("entering research state..."), do not summarize agent results ("agent completed with..."), do not explain what happens next. The MCP tools handle progress tracking via `progress.md` server-side.
+**The rule is one line per state transition, not zero lines ever.** Do not wrap every tool call in narration — that's what causes TTL bugs. A single progress line between states is fine and keeps users informed.
+
+```
+// CORRECT: progress-aware dispatch
+"Researching the codebase..." → [tool: enter_and_prepare_state] → [tool: Agent spawn] → [tool: report_result] → "Research complete. Planning implementation..." → [tool: enter_and_prepare_state] → ...
+
+// WRONG: narrated dispatch (wrapping every tool call)
+"Entering research state..." → [tool: enter_and_prepare_state] → "Spawning researcher with prompt..." → [tool: Agent spawn] → "Research complete, moving to design..." → [tool: report_result] → "Now entering design state..." → ...
+```
 
 ## Driving the State Machine
 

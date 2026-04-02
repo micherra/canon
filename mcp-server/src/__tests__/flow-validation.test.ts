@@ -367,13 +367,12 @@ describe("loadAndResolveFlow — hard-blocking validation", () => {
     await expect(loadAndResolveFlow("/nonexistent/dir", "no-such-flow")).rejects.toThrow(/not found/i);
   });
 
-  it("all 11 production flows load successfully with hard-blocking validation", async () => {
+  it("all 10 production flows load successfully with hard-blocking validation", async () => {
     const flows = [
       "review-only",
       "epic",
       "feature",
-      "quick-fix",
-      "hotfix",
+      "fast-path",
       "refactor",
       "migrate",
       "explore",

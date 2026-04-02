@@ -315,7 +315,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
     }
   });
 
-  it("feature tier uses 15-file cap per section (not hotfix 5 or epic 30)", async () => {
+  it("feature tier uses 15-file cap per section (not fast-path 5 or epic 30)", async () => {
     const twentyFiles = Array.from({ length: 20 }, (_, i) => `src/file-${i}.ts`);
     vi.mocked(resolveTaskScope).mockReturnValue(twentyFiles);
 

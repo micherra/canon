@@ -611,6 +611,15 @@ describe("loadAndResolveFlow", () => {
     expect(flow.spawn_instructions["review"]).toBeDefined();
     expect(flow.spawn_instructions["review"]).toContain("git diff");
   });
+
+  it("fast-path execute state has agent: canon-generalist", async () => {
+    const flow = await loadAndResolveFlow(pluginDir, "fast-path");
+
+    expect(flow.name).toBe("fast-path");
+    expect(flow.entry).toBe("execute");
+    expect(flow.states["execute"]).toBeDefined();
+    expect(flow.states["execute"].agent).toBe("canon-generalist");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -622,8 +631,7 @@ const ALL_FLOWS = [
   "epic",
   "refactor",
   "migrate",
-  "quick-fix",
-  "hotfix",
+  "fast-path",
   "review-only",
   "test-gap",
   "explore",

@@ -40,16 +40,6 @@ describe("review-fix-loop fragment effects", () => {
     });
   });
 
-  it("quick-fix: review state has persist_review effect", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "quick-fix");
-    const review = flow.states["review"];
-    expect(review).toBeDefined();
-    expect(review.effects).toBeDefined();
-    expect(review.effects).toContainEqual({
-      type: "persist_review",
-      artifact: "REVIEW.md",
-    });
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -75,17 +65,8 @@ describe("ship-done fragment effects", () => {
     expect(types).not.toContain("persist_patterns");
   });
 
-  it("quick-fix: ship state does not have persist_decisions or persist_patterns effects", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "quick-fix");
-    const ship = flow.states["ship"];
-    expect(ship).toBeDefined();
-    const types = ship.effects?.map((e) => e.type) ?? [];
-    expect(types).not.toContain("persist_decisions");
-    expect(types).not.toContain("persist_patterns");
-  });
-
-  it("hotfix: ship state does not have persist_decisions or persist_patterns effects", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "hotfix");
+  it("fast-path: ship state does not have persist_decisions or persist_patterns effects", async () => {
+    const flow = await loadAndResolveFlow(pluginDir, "fast-path");
     const ship = flow.states["ship"];
     expect(ship).toBeDefined();
     const types = ship.effects?.map((e) => e.type) ?? [];
@@ -99,19 +80,11 @@ describe("ship-done fragment effects", () => {
 // ---------------------------------------------------------------------------
 
 describe("implement-verify fragment effects (single-type implement)", () => {
-  it("quick-fix: implement state does not have persist_decisions effect", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "quick-fix");
-    const implement = flow.states["implement"];
-    expect(implement).toBeDefined();
-    const types = implement.effects?.map((e) => e.type) ?? [];
-    expect(types).not.toContain("persist_decisions");
-  });
-
-  it("hotfix: implement state does not have persist_decisions effect", async () => {
-    const flow = await loadAndResolveFlow(pluginDir, "hotfix");
-    const implement = flow.states["implement"];
-    expect(implement).toBeDefined();
-    const types = implement.effects?.map((e) => e.type) ?? [];
+  it("fast-path: execute state does not have persist_decisions effect", async () => {
+    const flow = await loadAndResolveFlow(pluginDir, "fast-path");
+    const execute = flow.states["execute"];
+    expect(execute).toBeDefined();
+    const types = execute.effects?.map((e) => e.type) ?? [];
     expect(types).not.toContain("persist_decisions");
   });
 });
