@@ -43,7 +43,7 @@ vi.mock("node:child_process", () => ({
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-import { gitExec, gitDiff, gitStatus } from "../adapters/git-adapter.ts";
+import { gitExec, gitDiff, gitStatus, gitLog } from "../adapters/git-adapter.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;
@@ -254,5 +254,56 @@ describe("gitStatus — convenience wrapper", () => {
   it("passes the timeout through when provided", () => {
     gitStatus("/project", 5_000);
     expect(spawnSyncCalls[0].opts.timeout).toBe(5_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// gitLog — convenience wrapper
+// ---------------------------------------------------------------------------
+
+describe("gitLog — convenience wrapper", () => {
+  it("passes correct args for git log with file paths", () => {
+    gitLog(["file1.ts", "file2.ts"], 5, "/project");
+    expect(spawnSyncCalls[0].args).toEqual([
+      "log",
+      "--oneline",
+      "-n",
+      "5",
+      "--",
+      "file1.ts",
+      "file2.ts",
+    ]);
+  });
+
+  it("calls spawnSync with 'git' as command", () => {
+    gitLog(["src/foo.ts"], 10, "/project");
+    expect(spawnSyncCalls[0].cmd).toBe("git");
+  });
+
+  it("uses 5000ms timeout by default", () => {
+    gitLog(["src/foo.ts"], 5, "/project");
+    expect(spawnSyncCalls[0].opts.timeout).toBe(5000);
+  });
+
+  it("passes explicit timeout override when provided", () => {
+    gitLog(["src/foo.ts"], 5, "/project", 10_000);
+    expect(spawnSyncCalls[0].opts.timeout).toBe(10_000);
+  });
+
+  it("passes cwd correctly", () => {
+    gitLog(["src/foo.ts"], 3, "/my/repo");
+    expect(spawnSyncCalls[0].opts.cwd).toBe("/my/repo");
+  });
+
+  it("uses the provided maxCount as the -n argument (string)", () => {
+    gitLog(["file.ts"], 15, "/project");
+    const nIdx = spawnSyncCalls[0].args.indexOf("-n");
+    expect(nIdx).toBeGreaterThan(-1);
+    expect(spawnSyncCalls[0].args[nIdx + 1]).toBe("15");
+  });
+
+  it("handles empty file paths array (log of all files)", () => {
+    gitLog([], 5, "/project");
+    expect(spawnSyncCalls[0].args).toEqual(["log", "--oneline", "-n", "5", "--"]);
   });
 });

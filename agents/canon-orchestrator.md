@@ -212,6 +212,23 @@ Loop until the current state is `terminal`:
 
 **Note on legacy tools**: `check_convergence`, `update_board`, and `get_spawn_prompt` remain available and registered. Use them directly for non-enter operations: `update_board` for `skip_state`, `block`, `unblock`, `complete_flow`, `set_wave_progress`; `check_convergence` standalone when needed outside the main loop.
 
+### Combined Report-and-Enter (Preferred Hot Path)
+
+For non-terminal, non-HITL transitions, use `report_and_enter_next_state` instead of separate `report_result` + `enter_and_prepare_state` calls. This reduces per-state round-trips from 2 to 1:
+
+```
+1. enter_and_prepare_state(workspace, first_state_id, resolved_flow, variables)
+   → Spawn agent
+
+2. report_and_enter_next_state(workspace, state_id, status, resolved_flow, variables, ...)
+   → If result.enter exists: spawn next agent using result.enter.prompts
+   → If result.report.hitl_required: enter HITL
+   → If result.report.next_state is null: terminal, complete flow
+   → Loop to step 2
+```
+
+The tool returns both `report` (transition result) and `enter` (next state's spawn prompts) in one response. When HITL is triggered or the flow reaches a terminal state, `enter` is absent — fall back to the standard `enter_and_prepare_state` after HITL resolution.
+
 ### Spawning Agents
 
 Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells you how:

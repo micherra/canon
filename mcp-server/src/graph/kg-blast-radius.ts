@@ -6,10 +6,7 @@
  * then performs a recursive CTE traversal to find all transitively affected entities.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type Database from "better-sqlite3";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { inferLayer } from "../matcher.ts";
 import { KgQuery } from "./kg-query.ts";
 import { KgStore } from "./kg-store.ts";
@@ -179,12 +176,6 @@ export interface UnifiedBlastRadiusOptions {
   maxDepth?: number;
   /** Currently unused — test files are always included in `affected` but excluded from severity. Default: false */
   includeTests?: boolean;
-  /**
-   * Project root directory. When provided and the KG has no file_edges or entity
-   * edges for the seed file (common for markdown/doc files), the function falls back
-   * to reading `.canon/reverse-deps.json` to populate direct dependents (depth=1).
-   */
-  projectDir?: string;
 }
 
 /** Merge entity-level blast radius results into the file map. */
@@ -225,59 +216,6 @@ function mergeEntityBlastRadius(
       affected_entities: [er.name],
     });
   }
-}
-
-/** Merge reverse-deps.json fallback dependents into the file map. */
-function mergeReverseDeps(
-  store: KgStore,
-  filePath: string,
-  projectDir: string,
-  fileMap: Map<number, BlastRadiusFile>,
-): void {
-  try {
-    const reverseDepsPath = join(projectDir, CANON_DIR, CANON_FILES.REVERSE_DEPS);
-    const raw = readFileSync(reverseDepsPath, "utf-8");
-    const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
-    const directDependents = reverseIndex[filePath] ?? [];
-
-    for (const depPath of directDependents) {
-      addReverseDep(store, depPath, fileMap);
-    }
-  } catch {
-    // reverse-deps.json absent or malformed — skip fallback silently
-  }
-}
-
-/** Add a single reverse-dep entry to the file map. */
-function addReverseDep(store: KgStore, depPath: string, fileMap: Map<number, BlastRadiusFile>): void {
-  const depFileRow = store.getFile(depPath);
-  if (depFileRow?.file_id != null) {
-    if (fileMap.has(depFileRow.file_id)) return;
-    const depLayer = depFileRow.layer ?? inferLayer(depPath) ?? "";
-    fileMap.set(depFileRow.file_id, {
-      path: depPath,
-      depth: 1,
-      relationship: "reverse-dep",
-      layer: depLayer,
-      is_test: isTestFile(depPath),
-      in_degree: 0,
-      affected_entities: [],
-    });
-    return;
-  }
-
-  // File not in KG — synthesize with a negative sentinel id
-  const syntheticKey = -(fileMap.size + 1);
-  const depLayer = inferLayer(depPath) ?? "";
-  fileMap.set(syntheticKey, {
-    path: depPath,
-    depth: 1,
-    relationship: "reverse-dep",
-    layer: depLayer,
-    is_test: isTestFile(depPath),
-    in_degree: 0,
-    affected_entities: [],
-  });
 }
 
 /**
@@ -338,11 +276,6 @@ export function computeUnifiedBlastRadius(
 
   // Step 3: Entity-level blast radius (exported entities only)
   mergeEntityBlastRadius(store, query, seedFileId, maxDepth, fileMap);
-
-  // Step 4 (fallback): reverse-deps.json for files with no KG edges
-  if (fileMap.size === 0 && options?.projectDir) {
-    mergeReverseDeps(store, filePath, options.projectDir, fileMap);
-  }
 
   // Step 7: Populate in_degree for each affected file from file_edges
   for (const [affectedFileId, entry] of fileMap) {

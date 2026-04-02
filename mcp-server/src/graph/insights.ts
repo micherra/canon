@@ -202,6 +202,13 @@ export function generateInsights(
  * knowledge graph SQLite database.  All KG logic is wrapped in a try/catch so
  * that any failure (missing DB, schema mismatch, query error) leaves the base
  * insights untouched.
+ *
+ * NOTE (ADR-005): This function is now the ONLY consumer of the SQLite KG data
+ * for the codebase-graph tool output.  Previously, view-materializer.ts called
+ * materialize() which persisted graph-data.json, and query.ts re-consumed that
+ * JSON file.  Both have been deleted (adr005-05).  The in-memory node/edge
+ * arrays passed to generateInsights() by codebase-graph.ts come directly from
+ * the KgQuery scan — no intermediate JSON persistence happens.
  */
 function enrichWithKgInsights(base: CodebaseInsights, projectDir?: string): CodebaseInsights {
   const root = projectDir ?? (process.env["CANON_PROJECT_DIR"] || process.cwd());

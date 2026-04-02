@@ -1,21 +1,21 @@
-## Workspace Context: Fix resume-after-rate-limit worktree context loss
+## Workspace Context: ADR-004 Flow Validation
 
 ### Goal
-Persist worktree tracking in board state so the orchestrator can resume implementors in their existing worktrees after rate-limit interruptions.
+Harden Canon flow loading with strict schema validation, hard-blocking error throws, SQL-based stuck detection, and typed fragment params.
 
 ### Architecture Summary
-- Worktree metadata stored inside `WaveResult` per wave (not a separate board field)
-- `SpawnPromptEntry` extended with `isolation` and `worktree_path` fields
-- `EnterAndPrepareStateResult` extended with `worktree_entries` for resume
-- No SQLite DDL changes — JSON within existing `wave_results` TEXT column
+- `StateDefinitionSchema` is a `z.discriminatedUnion("type", [...])` — five per-type schemas; per-type TS types exported
+- `loadAndResolveFlow` now throws on hard errors (spawn coverage, unresolved refs); no `errors` field on return
+- `LoadFlowResult.errors` removed; `load-flow.ts` catches thrown errors and returns `FLOW_PARSE_ERROR`/`FLOW_NOT_FOUND`
+- SQL-based stuck detection: `ExecutionStore.recordIterationResult` + `ExecutionStore.isStuck` backed by new `iteration_results` table (schema v3, auto-migrated)
+- `write_plan_index` MCP tool writes normalized `INDEX.md` for wave execution; round-trips through `parseTaskIdsForWave`
+- Fragment params migrated from null-marker `~` to typed declarations (`type: state_id|string|number|boolean, default?`)
+- `parseTaskIdsForWave` now accepts backtick-wrapped task IDs in addition to plain IDs
 
 ### Key Patterns
 - All new Zod schema fields use `.optional()` for backward compat
-- Worktree entries use `{task_id, worktree_path, branch, status}` shape
-- Status values: "active" (spawned, not yet merged), "merged", "failed"
+- Reachability warnings (non-blocking) use `"Warning:"` prefix; hard errors do not
+- DB schema migrations version-gated via `meta.schema_version`; all DDL uses `IF NOT EXISTS`
 
 ### Known Issues
-- None yet
-
-### Agent Notes
-- None yet
+- None

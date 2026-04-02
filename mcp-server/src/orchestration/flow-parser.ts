@@ -258,7 +258,7 @@ function buildEffectiveParams(
         defaults[paramName] = paramDef.default as string | number | boolean;
       }
     } else if (paramDef !== null && paramDef !== undefined) {
-      // Old format: non-null scalar is a default value (includes boolean false)
+      // Old format: non-null scalar is a default value (includes false)
       defaults[paramName] = paramDef as string | number | boolean;
     }
   }

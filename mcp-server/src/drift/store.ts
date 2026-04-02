@@ -45,4 +45,13 @@ export class DriftStore {
   async getComplianceTrend(principleId: string, weeks?: number): Promise<WeeklyTrendPoint[]> {
     return getDriftDb(this.projectDir).getComplianceTrend(principleId, weeks);
   }
+
+  /**
+   * Returns reviews that contain at least one of the specified file paths.
+   * Delegates to DriftDb.getReviewsByFiles for client-side filtering.
+   * Returns empty array when filePaths is empty or when no reviews match.
+   */
+  async getReviewsForFiles(filePaths: string[]): Promise<ReviewEntry[]> {
+    return getDriftDb(this.projectDir).getReviewsByFiles(filePaths);
+  }
 }

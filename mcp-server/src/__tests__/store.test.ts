@@ -360,4 +360,35 @@ describe("DriftStore (SQLite-backed)", () => {
     const trend = await store.getComplianceTrend("nonexistent");
     expect(trend).toEqual([]);
   });
+
+  // --------------------------------------------------------------------------
+  // getReviewsForFiles — facade method
+  // --------------------------------------------------------------------------
+
+  it("getReviewsForFiles returns reviews whose files overlap with input", async () => {
+    await store.appendReview(makeReview({
+      review_id: "rev_files_001",
+      files: ["src/a.ts", "src/b.ts"],
+    }));
+    await store.appendReview(makeReview({
+      review_id: "rev_files_002",
+      files: ["src/c.ts"],
+    }));
+
+    const results = await store.getReviewsForFiles(["src/a.ts"]);
+    expect(results).toHaveLength(1);
+    expect(results[0].review_id).toBe("rev_files_001");
+  });
+
+  it("getReviewsForFiles returns empty array for non-matching files", async () => {
+    await store.appendReview(makeReview({ files: ["src/a.ts"] }));
+    const results = await store.getReviewsForFiles(["src/nonexistent.ts"]);
+    expect(results).toEqual([]);
+  });
+
+  it("getReviewsForFiles returns empty array for empty input", async () => {
+    await store.appendReview(makeReview({ files: ["src/a.ts"] }));
+    const results = await store.getReviewsForFiles([]);
+    expect(results).toEqual([]);
+  });
 });

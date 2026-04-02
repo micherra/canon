@@ -6,18 +6,31 @@
  *
  * All DDL uses IF NOT EXISTS — idempotent on re-init.
  * Schema version is stored in the meta table for future migrations.
+ *
+ * Migration strategy (ADR dd-01):
+ * - DDL_STATEMENTS contain the v1 base tables (no correlation_id).
+ * - After applySchema() runs, the migration runner reads schema_version from meta.
+ * - If the stored version is < 2, migrateV1ToV2 runs ALTER TABLE ADD COLUMN.
+ * - This approach handles both fresh DBs (v1 DDL runs, then v2 migration adds columns)
+ *   and existing v1 DBs (IF NOT EXISTS skips tables, migration adds missing columns).
  */
 
 import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
 
 // ---------------------------------------------------------------------------
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '2';
+export const SCHEMA_VERSION = '3';
 
 // ---------------------------------------------------------------------------
-// DDL statements
+// DDL statements — v1 base tables (no correlation_id)
+//
+// IMPORTANT: Keep these as v1 base DDL. The migration runner adds new columns
+// via ALTER TABLE after applySchema() completes. This ensures that:
+// - Fresh DBs: v1 tables created, then migration immediately runs to add v2 columns
+// - Existing v1 DBs: IF NOT EXISTS skips table creation, migration adds missing columns
 // ---------------------------------------------------------------------------
 
 const DDL_STATEMENTS = [
@@ -134,6 +147,43 @@ const DDL_STATEMENTS = [
 ];
 
 // ---------------------------------------------------------------------------
+// columnExists — PRAGMA table_info helper
+//
+// SQLite does not support ALTER TABLE ADD COLUMN IF NOT EXISTS, so we check
+// whether a column exists before running ALTER TABLE to ensure idempotency.
+// ---------------------------------------------------------------------------
+
+/** Allowed characters for a SQLite table identifier. */
+const IDENTIFIER_RE = /^[A-Za-z0-9_]+$/;
+
+/**
+ * Returns true if the given column exists on the given table.
+ * Returns false if the table does not exist or the column is absent.
+ *
+ * Throws an Error if `table` contains characters outside `[A-Za-z0-9_]`
+ * to prevent SQL injection via PRAGMA string interpolation.
+ */
+export function columnExists(
+  db: Database.Database,
+  table: string,
+  column: string,
+): boolean {
+  if (!IDENTIFIER_RE.test(table)) {
+    throw new Error(
+      `columnExists: invalid table name "${table}" — only [A-Za-z0-9_] characters are allowed`,
+    );
+  }
+  try {
+    const rows = db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as Array<{ name: string }>;
+    return rows.some((row) => row.name === column);
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Migration runner
 // ---------------------------------------------------------------------------
 
@@ -149,7 +199,29 @@ interface Migration {
  */
 const MIGRATIONS: Migration[] = [
   {
+    // correlation_id columns — shipped on main
     version: '2',
+    up: (db) => {
+      if (!columnExists(db, 'execution', 'correlation_id')) {
+        db.exec(`ALTER TABLE execution ADD COLUMN correlation_id TEXT`);
+      }
+      if (!columnExists(db, 'events', 'correlation_id')) {
+        db.exec(`ALTER TABLE events ADD COLUMN correlation_id TEXT`);
+      }
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_events_correlation_type ON events(correlation_id, type)`);
+
+      // Backfill existing execution row with a UUID
+      db.prepare(
+        `UPDATE execution SET correlation_id = ? WHERE id = 1 AND correlation_id IS NULL`,
+      ).run(randomUUID());
+
+      db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // iteration_results table (ADR-004)
+    version: '3',
     up: (db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS iteration_results (
@@ -163,7 +235,7 @@ const MIGRATIONS: Migration[] = [
         )
       `);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_iteration_results_state ON iteration_results(state_id)`);
-      db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
+      db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
     },
   },
 ];
@@ -177,11 +249,13 @@ const MIGRATIONS: Migration[] = [
  */
 export function runMigrations(db: Database.Database): void {
   const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-  const version = currentRow?.value ?? '1';
+  let version = currentRow?.value ?? '1';
 
   for (const migration of MIGRATIONS) {
     if (migration.version > version) {
-      migration.up(db);
+      const run = db.transaction(() => migration.up(db));
+      run();
+      version = migration.version;
     }
   }
 }
@@ -192,10 +266,15 @@ export function runMigrations(db: Database.Database): void {
 
 /**
  * Open (or create) a better-sqlite3 database at `dbPath`, configure PRAGMAs,
- * and apply the full DDL schema in a single transaction.
+ * apply the full DDL schema, and run any pending migrations.
  *
  * Synchronous — better-sqlite3 is a synchronous library.
  * All DDL statements use IF NOT EXISTS, making repeated calls idempotent.
+ *
+ * Migration strategy:
+ * 1. applySchema() runs v1 base DDL (IF NOT EXISTS — safe to re-run)
+ * 2. Read schema_version from meta table
+ * 3. If version < 2, run migrateV1ToV2()
  */
 export function initExecutionDb(dbPath: string): Database.Database {
   const db = new Database(dbPath);

@@ -176,6 +176,7 @@ describe("resolveWaveVariables", () => {
       stderr: "",
       exitCode: 0,
       timedOut: false,
+      duration_ms: 0,
     });
   });
 
@@ -290,6 +291,7 @@ describe("resolveWaveVariables", () => {
       stderr: "",
       exitCode: 0,
       timedOut: false,
+      duration_ms: 0,
     });
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);
@@ -306,6 +308,7 @@ describe("resolveWaveVariables", () => {
       stderr: "fatal: not a git repository",
       exitCode: 128,
       timedOut: false,
+      duration_ms: 0,
     });
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);
@@ -322,6 +325,7 @@ describe("resolveWaveVariables", () => {
       stderr: "",
       exitCode: 1,
       timedOut: true,
+      duration_ms: 0,
     });
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);
@@ -331,7 +335,7 @@ describe("resolveWaveVariables", () => {
 
   it("wave_diff: calls gitExec with diff HEAD~1 args", async () => {
     await writeIndex([{ id: "iwc-01", wave: 1 }]);
-    mockGitExec.mockReturnValue({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
+    mockGitExec.mockReturnValue({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false, duration_ms: 0 });
 
     await resolveWaveVariables(tmpDir, 1, slug, 1);
 
@@ -452,6 +456,7 @@ describe("resolveWaveVariables", () => {
       stderr: "",
       exitCode: 0,
       timedOut: false,
+      duration_ms: 0,
     });
 
     const vars = await resolveWaveVariables(tmpDir, 1, slug, 1);

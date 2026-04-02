@@ -11,20 +11,21 @@
  * 6. Return combined result.
  */
 
-import { enterState } from "../orchestration/board.ts";
-import { canEnterState } from "../orchestration/convergence.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { getSpawnPrompt } from "./get-spawn-prompt.ts";
-import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
-import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { gitExec } from "../adapters/git-adapter.ts";
-import { toolError } from "../utils/tool-result.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
-import type { ResolvedFlow, Board, CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
-import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
+import { enterState } from "../orchestration/board.ts";
+import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
+import { assembleEnrichment } from "../orchestration/context-enrichment.ts";
+import { canEnterState } from "../orchestration/convergence.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Board, CannotFixItem, HistoryEntry, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
+import { toolError } from "../utils/tool-result.ts";
+import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
+import { getSpawnPrompt } from "./get-spawn-prompt.ts";
 
 export interface ConsultationPromptEntry {
   name: string;
@@ -167,7 +168,11 @@ export async function enterAndPrepareState(
 
   // Emit events (best-effort)
   const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
-    try { store.appendEvent("board_updated", event as Record<string, unknown>); } catch { /* best-effort */ }
+    try {
+      store.appendEvent("board_updated", event as Record<string, unknown>);
+    } catch {
+      /* best-effort */
+    }
   };
   flowEventBus.once("board_updated", onBoardUpdated);
   try {
@@ -177,7 +182,11 @@ export async function enterAndPrepareState(
       timestamp: now,
     });
     const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
-      try { store.appendEvent("state_entered", event as Record<string, unknown>); } catch { /* best-effort */ }
+      try {
+        store.appendEvent("state_entered", event as Record<string, unknown>);
+      } catch {
+        /* best-effort */
+      }
     };
     flowEventBus.once("state_entered", onStateEntered);
     try {
@@ -200,7 +209,7 @@ export async function enterAndPrepareState(
 
   if (stateDef?.consultations) {
     // Determine breakpoint: "before" for first wave (0 or null), "between" for subsequent waves
-    const breakpoint: "before" | "between" = (input.wave == null || input.wave === 0) ? "before" : "between";
+    const breakpoint: "before" | "between" = input.wave == null || input.wave === 0 ? "before" : "between";
     const names = stateDef.consultations[breakpoint] ?? [];
 
     for (const name of names) {
@@ -251,7 +260,7 @@ export async function enterAndPrepareState(
   }
 
   // Step 4.6: Resolve review_scope for re-entered review states.
-  let reviewScopeVars: Record<string, string> = {};
+  const reviewScopeVars: Record<string, string> = {};
   if (enteredBoard.states[state_id]?.entries > 1) {
     const baseRef = enteredBoard.base_commit;
     if (baseRef && /^[a-f0-9]{7,40}$/.test(baseRef)) {
@@ -259,9 +268,8 @@ export async function enterAndPrepareState(
         const result = gitExec(["diff", "--name-only", `${baseRef}..HEAD`], process.cwd(), 5000);
         if (result.ok && result.stdout) {
           const files = result.stdout.trim().split("\n").filter(Boolean);
-          reviewScopeVars.review_scope = files.length > 0
-            ? `Scoped re-review. Files changed since last review:\n${files.join("\n")}`
-            : "";
+          reviewScopeVars.review_scope =
+            files.length > 0 ? `Scoped re-review. Files changed since last review:\n${files.join("\n")}` : "";
         } else {
           reviewScopeVars.review_scope = "";
         }
@@ -271,12 +279,40 @@ export async function enterAndPrepareState(
     }
   }
 
+  // Step 4.7: Context enrichment (non-blocking)
+  const enrichmentVars: Record<string, string> = {};
+  try {
+    const enrichment = await assembleEnrichment({
+      workspace,
+      stateId: state_id,
+      board: enteredBoard,
+      flow,
+      baseCommit: enteredBoard.base_commit,
+      cwd: input.project_dir ?? process.cwd(),
+      projectDir: input.project_dir,
+    });
+    if (enrichment.content) {
+      enrichmentVars.enrichment = enrichment.content;
+    } else {
+      // Inject empty string so ${enrichment} in prompt templates resolves to ""
+      // rather than appearing as literal "${enrichment}"
+      enrichmentVars.enrichment = "";
+    }
+    if (enrichment.warnings.length > 0) {
+      // Emit warnings but don't block — enrichment warnings are observability only
+      console.error(`enrichment warnings: ${enrichment.warnings.join("; ")}`);
+    }
+  } catch {
+    // Enrichment is non-blocking — degrade gracefully to empty string
+    enrichmentVars.enrichment = "";
+  }
+
   // Step 5: Resolve spawn prompts.
   const spawnResult = await getSpawnPrompt({
     workspace,
     state_id,
     flow,
-    variables: { ...input.variables, ...reviewScopeVars },
+    variables: { ...input.variables, ...reviewScopeVars, ...enrichmentVars },
     items: input.items,
     role: input.role,
     wave: input.wave,

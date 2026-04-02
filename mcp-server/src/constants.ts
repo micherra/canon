@@ -39,13 +39,14 @@ export const RESOLVE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
 /** Canon data directory and file names. */
 export const CANON_DIR = ".canon";
 export const CANON_FILES = {
-  GRAPH_DATA: "graph-data.json",
-  REVERSE_DEPS: "reverse-deps.json",
-  SUMMARIES: "summaries.json",
   CONFIG: "config.json",
   KNOWLEDGE_DB: "knowledge-graph.db",
   ORCHESTRATION_DB: "orchestration.db",
   DRIFT_DB: "drift.db",
+  // GRAPH_DATA and REVERSE_DEPS are still written by query.ts/view-materializer.ts
+  // pending full ADR-005 migration. Keep constants so existing readers compile.
+  GRAPH_DATA: "graph-data.json",
+  REVERSE_DEPS: "reverse-deps.json",
 } as const;
 
 /** Maximum lines of file content returned by get_file_context. */
