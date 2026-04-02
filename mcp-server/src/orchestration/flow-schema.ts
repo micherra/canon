@@ -198,6 +198,7 @@ const BaseStateFields = {
   gates: z.array(z.string()).optional(),
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
+  inject_messages: z.boolean().optional(),
 };
 
 export const SingleStateSchema = z.object({
@@ -331,6 +332,7 @@ const FragmentBaseStateFields = {
   gates: z.array(z.string()).optional(),
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
+  inject_messages: z.boolean().optional(),
 };
 
 const FragmentSingleStateSchema = z.object({
