@@ -674,6 +674,22 @@ export type CompeteConfig = z.infer<typeof CompeteConfigSchema>;
 export type DebateConfig = z.infer<typeof DebateConfigSchema>;
 
 // ---------------------------------------------------------------------------
+// Transcript types (ADR-015)
+// ---------------------------------------------------------------------------
+
+export const TranscriptEntrySchema = z.object({
+  role: z.enum(["system", "user", "assistant", "tool_use", "tool_result"]),
+  timestamp: z.string(),
+  content: z.string(),
+  tool_name: z.string().optional(),
+  tokens: z.number().optional(),
+  cumulative_tokens: z.number().optional(),
+  turn_number: z.number(),
+});
+
+export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>;
+
+// ---------------------------------------------------------------------------
 // Wave event types (used by wave-events.ts, inject-wave-event.ts, etc.)
 // ---------------------------------------------------------------------------
 
