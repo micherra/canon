@@ -39,6 +39,11 @@ vi.mock("../graph/kg-blast-radius.ts", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
+// Mock KgQuery so buildSubgraph doesn't need a real SQLite DB
+vi.mock("../graph/kg-query.ts", () => ({
+  KgQuery: vi.fn(),
+}));
+
 // Mock getPrReviewData so tests don't need git/diff infrastructure
 vi.mock("../tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
@@ -48,6 +53,7 @@ import { existsSync } from "node:fs";
 import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
+import { KgQuery } from "../graph/kg-query.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
@@ -144,6 +150,10 @@ describe("showPrImpact", () => {
     // Default: analyzeBlastRadius not called
     vi.mocked(initDatabase).mockReset();
     vi.mocked(analyzeBlastRadius).mockReset();
+    vi.mocked(KgQuery).mockReset();
+    // Default KgQuery mock: getSubgraph returns empty
+    // Using prototype mock pattern for class constructor mocks
+    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockReturnValue({ nodes: [], edges: [] });
 
     // Default: getPrReviewData returns minimal prep stub
     vi.mocked(getPrReviewData).mockReset();
@@ -319,20 +329,22 @@ describe("showPrImpact", () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(SAMPLE_REVIEW); // files: foo.ts, bar.ts
 
-    // Write graph-data.json
-    await writeFile(join(tmpDir, ".canon", "graph-data.json"), JSON.stringify(SAMPLE_GRAPH_DATA), "utf-8");
-
-    vi.mocked(existsSync).mockImplementation((p) => {
-      const pathStr = String(p);
-      // KG path exists for the DB check, false for other paths
-      if (pathStr.includes("knowledge-graph.db")) return true;
-      return true; // let the actual readFile for graph-data.json work
-    });
-
+    vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue(SAMPLE_BLAST_RADIUS);
     // SAMPLE_BLAST_RADIUS affected: baz.ts + qux.ts
+
+    // Mock KgQuery.getSubgraph to return nodes from SAMPLE_GRAPH_DATA for the included paths
+    const allNodes = SAMPLE_GRAPH_DATA.nodes.map((n) => ({ path: n.id, layer: n.layer, file_id: 1 }));
+    const allEdges = SAMPLE_GRAPH_DATA.edges.map((e) => ({ source: e.source, target: e.target }));
+    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockImplementation((paths: string[]) => {
+      const pathSet = new Set(paths);
+      const nodes = allNodes.filter((n) => pathSet.has(n.path));
+      const nodeIds = new Set(nodes.map((n) => n.path));
+      const edges = allEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+      return { nodes, edges };
+    });
 
     const result = await showPrImpact(tmpDir);
 

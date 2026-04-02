@@ -206,6 +206,13 @@ export const SingleStateSchema = z.object({
   role: z.string().optional(),
 });
 
+/**
+ * Wave execution policy. When `wave_policy` is omitted from a wave state
+ * definition, it is `undefined` — no defaults are applied. When an empty
+ * object `{}` is provided, Zod applies field-level defaults (isolation:
+ * "worktree", merge_strategy: "sequential", on_conflict: "hitl").
+ * Consumers should treat `undefined` the same as the default values.
+ */
 export const WavePolicySchema = z
   .object({
     isolation: z.enum(["worktree", "branch", "none"]).default("worktree"),
@@ -250,7 +257,7 @@ export const StateDefinitionSchema = z.discriminatedUnion("type", [
 
 export const FragmentIncludeSchema = z.object({
   fragment: z.string(),
-  with: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  with: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   as: z.string().optional(),
   overrides: z
     .record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])))
@@ -452,7 +459,28 @@ export const StateMetricsSchema = z.object({
   test_results: TestResultsSchema.optional(),
   files_changed: z.number().optional(),
   revision_count: z.number().optional(),
+  // ADR-003a agent performance metrics
+  tool_calls: z.number().optional(),
+  orientation_calls: z.number().optional(),
+  input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+  cache_read_tokens: z.number().optional(),
+  cache_write_tokens: z.number().optional(),
+  turns: z.number().optional(),
 });
+
+/** Focused schema for agent-reported performance metrics (ADR-003a input validation). */
+export const AgentMetricsSchema = z.object({
+  tool_calls: z.number().optional(),
+  orientation_calls: z.number().optional(),
+  input_tokens: z.number().optional(),
+  output_tokens: z.number().optional(),
+  cache_read_tokens: z.number().optional(),
+  cache_write_tokens: z.number().optional(),
+  duration_ms: z.number().optional(),
+  turns: z.number().optional(),
+});
+export type AgentMetrics = z.infer<typeof AgentMetricsSchema>;
 
 export const ArtifactHistoryEntrySchema = z.object({
   entry: z.number(),

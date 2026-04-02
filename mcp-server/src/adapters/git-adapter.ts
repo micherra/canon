@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { performance } from "node:perf_hooks";
 import type { ProcessResult } from "../utils/tool-result.ts";
 
 const DEFAULT_TIMEOUT = 30_000;
@@ -10,11 +11,13 @@ const DEFAULT_TIMEOUT = 30_000;
  * array args to prevent shell injection.
  */
 export function gitExec(args: string[], cwd: string, timeout = DEFAULT_TIMEOUT): ProcessResult {
+  const start = performance.now();
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
     timeout,
   });
+  const duration_ms = Math.round(performance.now() - start);
 
   return {
     ok: result.status === 0 && !result.error,
@@ -25,6 +28,7 @@ export function gitExec(args: string[], cwd: string, timeout = DEFAULT_TIMEOUT):
       result.error?.message?.includes("ETIMEDOUT") === true ||
       result.error?.message?.includes("timed out") === true ||
       result.signal === "SIGTERM",
+    duration_ms,
   };
 }
 
@@ -47,8 +51,17 @@ export function gitStatus(cwd: string, timeout?: number): ProcessResult {
  * in the output (e.g., commit messages) must be escaped via escapeDollarBrace
  * before prompt injection. The caller is responsible for escaping.
  */
-export function gitLog(filePaths: string[], maxCount: number, cwd: string, timeout?: number): ProcessResult {
-  return gitExec(["log", "--oneline", `-n`, String(maxCount), "--", ...filePaths], cwd, timeout ?? 5000);
+export function gitLog(
+  filePaths: string[],
+  maxCount: number,
+  cwd: string,
+  timeout?: number,
+): ProcessResult {
+  return gitExec(
+    ["log", "--oneline", `-n`, String(maxCount), "--", ...filePaths],
+    cwd,
+    timeout ?? 5000,
+  );
 }
 
 /** Convenience wrapper: runs `git worktree add`. */

@@ -142,12 +142,20 @@ Negative: event modeling discipline, diagnostic surface area.
 
 ### Implementation
 
-- Add `correlation_id` (execution ID) to every event
-- Standardize event shapes in `events` table
-- Instrument adapter calls with timing and outcome events
-- Stuck detection evaluation results become queryable events ("compared X to Y, not stuck because Z")
-- Evolve `canon-inspector` to query SQLite events
-- Add `diagnose` command: reads events + execution state, produces actionable report
+**Phase 1 (this epic):** Diagnostic infrastructure foundation
+- Add `correlation_id` (UUID per execution) to every event
+- Schema migration runner (v1 → v2) with `ALTER TABLE ADD COLUMN`
+- Standardize event payload shapes with Zod validation (discriminated union)
+- Instrument adapter calls (git, shell) with `duration_ms` on `ProcessResult`
+- Stuck detection evaluation results persisted as `stuck_detected` events
+- ADR-003a agent performance metrics on `StateMetricsSchema` and `report_result`
+- Event read path (`getEvents` with correlation_id, type, time range filters)
+- WAL checkpoint method for orchestrator to call between waves
+
+**Phase 2 (future — consumers of phase 1 infrastructure):**
+- Evolve `canon-inspector` agent to query SQLite events (currently absent from main, stale worktree version reads removed file-based sources)
+- Add `diagnose` MCP tool/command: reads events + execution state, produces actionable report
+- Diagnostic dashboard queries (slowest states, most-retried flows, agent cost breakdowns)
 
 ---
 

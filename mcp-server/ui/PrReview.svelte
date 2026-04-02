@@ -39,7 +39,7 @@ let _totalViolations = $derived(data?.prep?.total_violations ?? 0);
 
 let _netNewFiles = $derived(data?.prep?.net_new_files ?? 0);
 
-let _isStale = $derived((data?.prep?.graph_data_age_ms ?? 0) > 3_600_000);
+let _isStale = $derived((data?.prep?.kg_freshness_ms ?? 0) > 3_600_000);
 
 let _hasReview = $derived(!!data?.has_review);
 

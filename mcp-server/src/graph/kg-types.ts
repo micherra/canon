@@ -195,6 +195,36 @@ export interface FileBlastRadiusResult {
   depth: number;
 }
 
+// ---------------------------------------------------------------------------
+// File Metrics Types
+// ---------------------------------------------------------------------------
+
+/**
+ * A layer violation where a file imports from a layer it is not allowed to
+ * depend on per the clean-architecture layer rules.
+ */
+export interface LayerViolation {
+  target: string;
+  source_layer: string;
+  target_layer: string;
+}
+
+/**
+ * Full structural metrics for a single file, computed from SQL aggregates
+ * over file_edges and enriched with hub/cycle/violation data.
+ */
+export interface FileMetrics {
+  in_degree: number;
+  out_degree: number;
+  is_hub: boolean;
+  in_cycle: boolean;
+  cycle_peers: string[];
+  layer: string;
+  layer_violation_count: number;
+  layer_violations: LayerViolation[];
+  impact_score: number;
+}
+
 /** Matches the `summaries` table. `summary_id` is undefined before DB insert. */
 export interface SummaryRow {
   summary_id?: number;
@@ -205,4 +235,26 @@ export interface SummaryRow {
   model: string | null;
   content_hash: string | null;
   updated_at: string;
+}
+
+/** Matches the entity_vector_meta / summary_vector_meta tables */
+export interface VectorMetaRow {
+  entity_id?: number;    // or summary_id for summary vectors
+  summary_id?: number;
+  text_hash: string;
+  model_id: string;
+  updated_at: string;
+}
+
+/** Result from semantic search across vector tables */
+export interface SemanticSearchResult {
+  entity_id: number;
+  file_id: number;
+  name: string;
+  qualified_name: string;
+  kind: EntityKind;
+  distance: number;
+  source: "entity" | "summary";
+  summary?: string;
+  file_path?: string;
 }

@@ -35,6 +35,7 @@ import { resolveWaveEvent } from "./tools/resolve-wave-event.ts";
 import { reviewCode } from "./tools/review-code.ts";
 import { showPrImpact } from "./tools/show-pr-impact.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
+import { semanticSearch } from "./tools/semantic-search.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
 import { updateBoard } from "./tools/update-board.ts";
 import { writePlanIndex } from "./tools/write-plan-index.ts";
@@ -194,7 +195,7 @@ registerToolWithUi(
   "codebase_graph",
   "ui://canon/codebase-graph",
   "Codebase Graph",
-  "Generate a dependency graph of the codebase with Canon compliance overlay. Full graph is persisted to .canon/graph-data.json. Returns a compact summary (layers, violations, insights).",
+  "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
   {
     root_dir: z
       .string()
@@ -244,7 +245,7 @@ server.registerTool(
   "store_summaries",
   {
     description:
-      "Store file summaries to .canon/summaries.json. Merges with existing summaries so you can generate them incrementally.",
+      "Store file summaries to the KG SQLite database. Summaries are written incrementally — calling multiple times is safe.",
     inputSchema: {
       summaries: z
         .array(
@@ -824,6 +825,39 @@ server.registerTool(
   wrapHandler(async (input) => {
     return graphQuery(input, projectDir);
   })
+);
+
+server.registerTool(
+  "semantic_search",
+  {
+    description:
+      "Search the codebase with natural language. Finds code entities and summaries by meaning, not just name matching. Requires the knowledge graph to be built first via codebase_graph.",
+    inputSchema: {
+      query: z.string().describe("Natural language search query (e.g., 'error handling middleware')"),
+      kind_filter: z
+        .array(z.string())
+        .optional()
+        .describe("Filter results by entity kind (e.g., ['function', 'class'])"),
+      scope: z
+        .enum(["entities", "summaries", "both"])
+        .optional()
+        .describe("Search scope: entity signatures, AI summaries, or both (default: both)"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe("Max results to return (default: 20)"),
+      threshold: z
+        .number()
+        .optional()
+        .describe("Maximum distance threshold — lower means more similar (default: no threshold)"),
+    },
+  },
+  wrapHandler(async (input) => {
+    return semanticSearch(input, projectDir);
+  }),
 );
 
 server.registerTool(

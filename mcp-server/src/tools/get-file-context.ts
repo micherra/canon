@@ -1,31 +1,30 @@
 /** Get rich context for a file — contents, graph relationships, exports.
  * Designed to give Claude everything needed to write a meaningful summary. */
 
+import { existsSync, statSync } from "fs";
 import { readFile } from "fs/promises";
-import { existsSync } from "fs";
 import { join, resolve, sep } from "path";
-import { extractImports, resolveImport } from "../graph/import-parser.ts";
-import { extractExports } from "../graph/export-parser.ts";
-import { scanSourceFiles } from "../graph/scanner.ts";
-import { DriftStore } from "../drift/store.ts";
-import { deriveSourceDirsFromLayers, loadLayerMappings, buildLayerInferrer } from "../utils/config.ts";
-import { isNotFound } from "../utils/errors.ts";
-import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
-import { loadCachedGraph, getNodeMetrics, computeImpactScore, type GraphMetrics } from "../graph/query.ts";
-import { toPosix, loadPathAliases } from "../utils/paths.ts";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.ts";
+import { DriftStore } from "../drift/store.ts";
+import { extractExports } from "../graph/export-parser.ts";
+import { extractImports, resolveImport } from "../graph/import-parser.ts";
+import { computeUnifiedBlastRadius, type UnifiedBlastRadiusReport } from "../graph/kg-blast-radius.ts";
+import { computeFileInsightMaps, computeImpactScore, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { computeUnifiedBlastRadius, type UnifiedBlastRadiusReport } from "../graph/kg-blast-radius.ts";
-import type { EntityKind } from "../graph/kg-types.ts";
-import { loadSummariesFile } from "./store-summaries.ts";
+import type { EntityKind, FileMetrics } from "../graph/kg-types.ts";
+import { scanSourceFiles } from "../graph/scanner.ts";
+import { buildLayerInferrer, deriveSourceDirsFromLayers, loadLayerMappings } from "../utils/config.ts";
+import { isNotFound } from "../utils/errors.ts";
+import { loadPathAliases, toPosix } from "../utils/paths.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 export interface FileContextInput {
   file_path: string;
 }
 
 export type FileGraphMetrics = Pick<
-  GraphMetrics,
+  FileMetrics,
   "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "cycle_peers" | "layer_violation_count" | "impact_score"
 >;
 
@@ -54,7 +53,7 @@ export interface FileContextOutput {
   exports: string[];
   violation_count: number;
   last_verdict: string | null;
-  /** Plain-English summary from .canon/summaries.json, or null if not available. */
+  /** Plain-English summary from knowledge-graph.db, or null if not available. */
   summary: string | null;
   /** Violation details from the most recent review that includes this file. */
   violations: FileViolationDetail[];
@@ -68,13 +67,46 @@ export interface FileContextOutput {
   role: string;
   /** Shape characterization derived from graph metrics. */
   shape: { label: string; description: string };
-  /** Maximum impact score across all nodes in the cached graph. Used for relative comparison. */
+  /** Maximum impact score across all nodes in the knowledge graph. Used for relative comparison. */
   project_max_impact: number;
   graph_metrics?: FileGraphMetrics;
   entities?: FileEntitySummary[];
   blast_radius?: UnifiedBlastRadiusReport;
 }
 
+// ---------------------------------------------------------------------------
+// Module-level cache for project_max_impact
+// ---------------------------------------------------------------------------
+// Computing project_max_impact requires loading all file stats, all file
+// degrees, and iterating every node — O(V) per getFileContext call. Since the
+// KG DB only changes when the indexer runs, we cache the result keyed by DB
+// path + last-modified time. The cache is invalidated automatically when the
+// DB file changes.
+const _maxImpactCache = new Map<string, number>();
+
+function getCachedMaxImpact(dbPath: string): number | undefined {
+  try {
+    const mtime = statSync(dbPath).mtimeMs;
+    return _maxImpactCache.get(`${dbPath}:${mtime}`);
+  } catch {
+    return undefined;
+  }
+}
+
+function setCachedMaxImpact(dbPath: string, value: number): void {
+  try {
+    const mtime = statSync(dbPath).mtimeMs;
+    // Evict stale entries for the same path before storing the fresh one.
+    for (const key of _maxImpactCache.keys()) {
+      if (key.startsWith(`${dbPath}:`)) {
+        _maxImpactCache.delete(key);
+      }
+    }
+    _maxImpactCache.set(`${dbPath}:${mtime}`, value);
+  } catch {
+    // If stat fails, skip caching — the value will be recomputed next call.
+  }
+}
 
 /** Derive a human-readable shape characterization from graph metrics. */
 function deriveShape(metrics: FileGraphMetrics | undefined): { label: string; description: string } {
@@ -157,9 +189,10 @@ export async function getFileContext(
   try {
     const raw = await readFile(absPath, "utf-8");
     const lines = raw.split("\n");
-    content = lines.length > FILE_PREVIEW_MAX_LINES
-      ? lines.slice(0, FILE_PREVIEW_MAX_LINES).join("\n") + "\n... (truncated)"
-      : raw;
+    content =
+      lines.length > FILE_PREVIEW_MAX_LINES
+        ? lines.slice(0, FILE_PREVIEW_MAX_LINES).join("\n") + "\n... (truncated)"
+        : raw;
   } catch (err: unknown) {
     if (isNotFound(err)) {
       return toolError("INVALID_INPUT", `File not found: ${filePath}`);
@@ -181,7 +214,7 @@ export async function getFileContext(
 
   // Scan all project files to resolve this file's imports
   const sourceDirs = await deriveSourceDirsFromLayers(projectDir);
-  let allFiles: string[] = [];
+  const allFiles: string[] = [];
 
   if (sourceDirs && sourceDirs.length > 0) {
     for (const dir of sourceDirs) {
@@ -200,34 +233,6 @@ export async function getFileContext(
   for (const imp of rawImports) {
     const resolved = resolveImport(imp, filePath, fileSet, aliases);
     if (resolved) imports.push(resolved);
-  }
-
-  // Find files that import this file (reverse dependencies).
-  // Try the cached reverse index first (O(1)), fall back to O(n) scan.
-  let imported_by: string[] = [];
-  try {
-    const raw = await readFile(join(projectDir, CANON_DIR, CANON_FILES.REVERSE_DEPS), "utf-8");
-    const reverseIndex = JSON.parse(raw) as Record<string, string[]>;
-    imported_by = reverseIndex[filePath] || [];
-  } catch {
-    // No reverse index — fall back to scanning all files
-    for (const otherFile of allFiles) {
-      if (otherFile === filePath) continue;
-      try {
-        const otherContent = await readFile(join(projectDir, otherFile), "utf-8");
-        const otherImports = extractImports(otherContent, otherFile);
-        for (const imp of otherImports) {
-          const resolved = resolveImport(imp, otherFile, fileSet, aliases);
-          if (resolved === filePath) {
-            imported_by.push(otherFile);
-            break;
-          }
-        }
-      } catch (err: unknown) {
-        if (isNotFound(err)) continue;
-        throw err;
-      }
-    }
   }
 
   // Load compliance data
@@ -275,48 +280,70 @@ export async function getFileContext(
     // no compliance data
   }
 
-  // Load graph metrics if graph data exists
+  // Load graph metrics, entities, blast_radius, summary, imported_by, and project_max_impact
+  // from the KG database. When DB is absent, these fields are either undefined or derived
+  // from the file scan fallback.
   let graph_metrics: FileGraphMetrics | undefined;
   let project_max_impact = 0;
-  const graph = await loadCachedGraph(projectDir);
-  if (graph) {
-    const metrics = getNodeMetrics(graph, filePath);
-    if (metrics) {
-      graph_metrics = {
-        in_degree: metrics.in_degree,
-        out_degree: metrics.out_degree,
-        is_hub: metrics.is_hub,
-        in_cycle: metrics.in_cycle,
-        cycle_peers: metrics.cycle_peers,
-        layer_violation_count: metrics.layer_violation_count,
-        impact_score: metrics.impact_score,
-      };
-    }
-    // Compute the max impact score across all nodes for relative comparison
-    for (const [nodeId, inDeg] of graph.inDegree) {
-      const violations = graph.nodeViolations.get(nodeId) ?? 0;
-      const changed = graph.nodeChanged.get(nodeId) ?? false;
-      const layer = graph.nodeLayer.get(nodeId) ?? "unknown";
-      const score = computeImpactScore(inDeg, violations, changed, layer);
-      if (score > project_max_impact) project_max_impact = score;
-    }
-  }
-
-  // Load entity data from the knowledge graph DB if it exists
   let entities: FileEntitySummary[] | undefined;
   let blast_radius: UnifiedBlastRadiusReport | undefined;
-  let dbSummary: string | null = null;
+  let summary: string | null = null;
+  let imported_by: string[] = [];
+
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   if (existsSync(dbPath)) {
     let db: ReturnType<typeof initDatabase> | undefined;
     try {
       db = initDatabase(dbPath);
       const store = new KgStore(db);
+      const kgQuery = new KgQuery(db);
 
+      // ---- Compute file insight maps (hub/cycle/violations) once ----
+      const insightMaps = computeFileInsightMaps(db);
+
+      // ---- graph_metrics via KgQuery.getFileMetrics ----
+      const fileMetrics = kgQuery.getFileMetrics(filePath, {
+        hubPaths: insightMaps.hubPaths,
+        cycleMemberPaths: insightMaps.cycleMemberPaths,
+        layerViolationsByPath: insightMaps.layerViolationsByPath,
+      });
+      if (fileMetrics) {
+        graph_metrics = {
+          in_degree: fileMetrics.in_degree,
+          out_degree: fileMetrics.out_degree,
+          is_hub: fileMetrics.is_hub,
+          in_cycle: fileMetrics.in_cycle,
+          cycle_peers: fileMetrics.cycle_peers,
+          layer_violation_count: fileMetrics.layer_violation_count,
+          impact_score: fileMetrics.impact_score,
+        };
+      }
+
+      // ---- project_max_impact from all files with degree data ----
+      // This is O(V) — load all files, all degrees, iterate every node. We
+      // cache the result keyed by DB path + mtime so repeated calls within the
+      // same indexer run are free. The cache is invalidated automatically when
+      // the DB file is updated by the indexer.
+      const cached = getCachedMaxImpact(dbPath);
+      if (cached !== undefined) {
+        project_max_impact = cached;
+      } else {
+        const allFilesWithStats = kgQuery.getAllFilesWithStats();
+        const allDegrees = kgQuery.getAllFileDegrees();
+        for (const fileRow of allFilesWithStats) {
+          if (fileRow.file_id === undefined) continue;
+          const degrees = allDegrees.get(fileRow.file_id) ?? { in_degree: 0, out_degree: 0 };
+          const violations_count = insightMaps.layerViolationsByPath.get(fileRow.path)?.length ?? 0;
+          const score = computeImpactScore(degrees.in_degree, violations_count, false, fileRow.layer || "unknown");
+          if (score > project_max_impact) project_max_impact = score;
+        }
+        setCachedMaxImpact(dbPath, project_max_impact);
+      }
+
+      // ---- entities and summary from KgStore ----
       const fileRow = store.getFile(filePath);
       if (fileRow?.file_id !== undefined) {
         const entityRows = store.getEntitiesByFile(fileRow.file_id);
-
         entities = entityRows.map((e) => ({
           name: e.name,
           kind: e.kind,
@@ -325,36 +352,60 @@ export async function getFileContext(
           line_end: e.line_end,
         }));
 
-        // DB-first summary lookup
+        // Summary from DB — DB is the sole source
         try {
           const summaryRow = store.getSummaryByFile(fileRow.file_id);
           if (summaryRow) {
-            dbSummary = summaryRow.summary;
+            summary = summaryRow.summary;
           }
         } catch {
           // ignore DB summary errors
         }
       }
 
-      blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2, projectDir });
+      // ---- imported_by via file_edges SQL query ----
+      // SELECT source files that have an edge targeting this file
+      const fileIdRow = store.getFile(filePath);
+      if (fileIdRow?.file_id !== undefined) {
+        const importerRows = db
+          .prepare(
+            `SELECT DISTINCT f.path FROM file_edges fe JOIN files f ON f.file_id = fe.source_file_id WHERE fe.target_file_id = ? ORDER BY f.path`,
+          )
+          .all(fileIdRow.file_id) as Array<{ path: string }>;
+        imported_by = importerRows.map((r) => r.path);
+      }
+
+      // ---- blast_radius ----
+      blast_radius = computeUnifiedBlastRadius(db, filePath, { maxDepth: 2 });
     } catch {
-      // KG unavailable — skip entity data gracefully
+      // KG unavailable — skip graph data gracefully
     } finally {
       db?.close();
     }
   }
 
-  // Load summary — DB first, fall back to summaries.json
-  let summary: string | null = dbSummary;
-  if (summary === null) {
+  // When DB is absent, fall back to O(n) file scan for imported_by
+  if (!existsSync(dbPath)) {
     try {
-      const summaries = await loadSummariesFile(projectDir);
-      const entry = summaries[filePath];
-      if (entry) {
-        summary = entry.summary;
+      for (const otherFile of allFiles) {
+        if (otherFile === filePath) continue;
+        try {
+          const otherContent = await readFile(join(projectDir, otherFile), "utf-8");
+          const otherImports = extractImports(otherContent, otherFile);
+          for (const imp of otherImports) {
+            const resolved = resolveImport(imp, otherFile, fileSet, aliases);
+            if (resolved === filePath) {
+              imported_by.push(otherFile);
+              break;
+            }
+          }
+        } catch (err: unknown) {
+          if (isNotFound(err)) continue;
+          throw err;
+        }
       }
     } catch {
-      // no summaries file
+      // fallback failed — leave imported_by empty
     }
   }
 

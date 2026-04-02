@@ -1,5 +1,10 @@
+import { existsSync } from "fs";
+import { join } from "path";
 import { extractSummary } from "../constants.ts";
-import { type GraphMetrics, getNodeMetrics, loadCachedGraph } from "../graph/query.ts";
+import { type FileMetrics } from "../graph/kg-types.ts";
+import { KgQuery, computeFileInsightMaps } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { loadAllPrinciples, matchPrinciples } from "../matcher.ts";
 import { loadConfigNumber } from "../utils/config.ts";
 
@@ -10,7 +15,7 @@ export interface GetPrinciplesInput {
   summary_only?: boolean;
 }
 
-type PrinciplesGraphContext = Pick<GraphMetrics, "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "impact_score">;
+type PrinciplesGraphContext = Pick<FileMetrics, "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "impact_score">;
 
 export interface GetPrinciplesOutput {
   principles: Array<{
@@ -48,17 +53,31 @@ export async function getPrinciples(
   // Load graph context if file_path is provided
   let graph_context: GetPrinciplesOutput["graph_context"];
   if (input.file_path) {
-    const graph = await loadCachedGraph(projectDir);
-    if (graph) {
-      const metrics = getNodeMetrics(graph, input.file_path);
-      if (metrics) {
-        graph_context = {
-          in_degree: metrics.in_degree,
-          out_degree: metrics.out_degree,
-          is_hub: metrics.is_hub,
-          in_cycle: metrics.in_cycle,
-          impact_score: metrics.impact_score,
-        };
+    const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+    if (existsSync(dbPath)) {
+      let db: ReturnType<typeof initDatabase> | undefined;
+      try {
+        db = initDatabase(dbPath);
+        const kgQuery = new KgQuery(db);
+        const insightMaps = computeFileInsightMaps(db);
+        const metrics = kgQuery.getFileMetrics(input.file_path, {
+          hubPaths: insightMaps.hubPaths,
+          cycleMemberPaths: insightMaps.cycleMemberPaths,
+          layerViolationsByPath: insightMaps.layerViolationsByPath,
+        });
+        if (metrics) {
+          graph_context = {
+            in_degree: metrics.in_degree,
+            out_degree: metrics.out_degree,
+            is_hub: metrics.is_hub,
+            in_cycle: metrics.in_cycle,
+            impact_score: metrics.impact_score,
+          };
+        }
+      } catch {
+        // KG unavailable — graceful degradation
+      } finally {
+        db?.close();
       }
     }
   }

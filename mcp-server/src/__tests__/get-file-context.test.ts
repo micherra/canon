@@ -8,6 +8,36 @@ import { KgStore } from "../graph/kg-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
 import { DriftStore } from "../drift/store.ts";
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Insert a file row and return its file_id. */
+function insertFile(store: KgStore, path: string, layer: string): number {
+  const fileRow: Omit<FileRow, "file_id"> = {
+    path,
+    mtime_ms: Date.now(),
+    content_hash: `hash-${path}`,
+    language: "typescript",
+    layer,
+    last_indexed_at: Date.now(),
+  };
+  store.upsertFile(fileRow);
+  return store.getFile(path)!.file_id!;
+}
+
+/** Insert a file_edge between two already-inserted file_ids. */
+function insertEdge(store: KgStore, sourceId: number, targetId: number): void {
+  store.insertFileEdge({
+    source_file_id: sourceId,
+    target_file_id: targetId,
+    edge_type: "imports",
+    confidence: 1.0,
+    evidence: null,
+    relation: null,
+  });
+}
+
 describe("getFileContext", () => {
   let tmpDir: string;
 
@@ -68,28 +98,6 @@ describe("getFileContext", () => {
     expect(result.imports).toContain("src/utils/helper.ts");
   });
 
-  it("finds reverse dependencies (imported_by)", async () => {
-    await writeFile(
-      join(tmpDir, "src", "utils", "helper.ts"),
-      `export function helper() {}`,
-    );
-    await writeFile(
-      join(tmpDir, "src", "api", "handler.ts"),
-      `import { helper } from '../utils/helper';`,
-    );
-    await writeFile(
-      join(tmpDir, "src", "services", "svc.ts"),
-      `import { helper } from '../utils/helper';`,
-    );
-
-    const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
-    if (!result.ok) throw new Error(result.message);
-
-    expect(result.imported_by).toHaveLength(2);
-    expect(result.imported_by).toContain("src/api/handler.ts");
-    expect(result.imported_by).toContain("src/services/svc.ts");
-  });
-
   it("returns INVALID_INPUT for path traversal outside project directory", async () => {
     const result = await getFileContext({ file_path: "../../etc/passwd" }, tmpDir);
 
@@ -134,10 +142,10 @@ describe("getFileContext", () => {
     expect(result.content.split("\n").length).toBeLessThanOrEqual(202);
   });
 
-  // ── New fields ────────────────────────────────────────────────────────────
+  // ── summary field ──────────────────────────────────────────────────────────
 
   describe("summary field", () => {
-    it("returns null when no summaries file exists", async () => {
+    it("returns null when no DB exists", async () => {
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
@@ -149,35 +157,45 @@ describe("getFileContext", () => {
       expect(result.summary).toBeNull();
     });
 
-    it("returns summary text from summaries.json", async () => {
+    it("returns summary from DB when present", async () => {
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
       );
-      await writeFile(
-        join(tmpDir, ".canon", "summaries.json"),
-        JSON.stringify({
-          "src/api/handler.ts": { summary: "Handles HTTP requests", updated_at: "2025-01-01T00:00:00Z" },
-        }),
-      );
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const fileId = insertFile(store, "src/api/handler.ts", "api");
+      store.upsertSummary({
+        file_id: fileId,
+        entity_id: null,
+        scope: "file",
+        summary: "DB-sourced summary",
+        model: null,
+        content_hash: "abc123",
+        updated_at: new Date().toISOString(),
+      });
+      db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
 
-      expect(result.summary).toBe("Handles HTTP requests");
+      expect(result.summary).toBe("DB-sourced summary");
     });
 
-    it("returns null when file has no matching summary entry", async () => {
+    it("returns null when DB exists but file has no summary entry", async () => {
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
       );
-      await writeFile(
-        join(tmpDir, ".canon", "summaries.json"),
-        JSON.stringify({
-          "src/other/file.ts": { summary: "Some other file", updated_at: "2025-01-01T00:00:00Z" },
-        }),
-      );
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      insertFile(store, "src/api/handler.ts", "api");
+      // no summary written
+      db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -185,24 +203,27 @@ describe("getFileContext", () => {
       expect(result.summary).toBeNull();
     });
 
-    it("handles legacy string format in summaries.json", async () => {
+    it("ignores summaries.json even when it exists (DB is the sole source)", async () => {
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
       );
+      // Write a JSON file — it should be ignored
       await writeFile(
         join(tmpDir, ".canon", "summaries.json"),
         JSON.stringify({
-          "src/api/handler.ts": "Legacy plain text summary",
+          "src/api/handler.ts": { summary: "JSON summary (ignored)", updated_at: "2025-01-01T00:00:00Z" },
         }),
       );
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
 
-      expect(result.summary).toBe("Legacy plain text summary");
+      expect(result.summary).toBeNull();
     });
   });
+
+  // ── violations field ───────────────────────────────────────────────────────
 
   describe("violations field", () => {
     it("returns empty array when no reviews exist", async () => {
@@ -307,6 +328,8 @@ describe("getFileContext", () => {
     });
   });
 
+  // ── imports_by_layer field ─────────────────────────────────────────────────
+
   describe("imports_by_layer field", () => {
     it("returns empty object when no imports", async () => {
       await writeFile(
@@ -364,6 +387,8 @@ describe("getFileContext", () => {
     });
   });
 
+  // ── layer_stack field ──────────────────────────────────────────────────────
+
   describe("layer_stack field", () => {
     it("returns default layer names when no layers config exists", async () => {
       await writeFile(
@@ -404,6 +429,8 @@ describe("getFileContext", () => {
     });
   });
 
+  // ── role field ─────────────────────────────────────────────────────────────
+
   describe("role field", () => {
     it("returns 'internal' when no graph metrics available", async () => {
       await writeFile(
@@ -418,6 +445,8 @@ describe("getFileContext", () => {
     });
   });
 
+  // ── imported_by_layer field ────────────────────────────────────────────────
+
   describe("imported_by_layer field", () => {
     it("returns empty object when nothing imports this file", async () => {
       await writeFile(
@@ -431,27 +460,31 @@ describe("getFileContext", () => {
       expect(result.imported_by_layer).toEqual({});
     });
 
-    it("groups imported_by files by their inferred layer", async () => {
+    it("groups imported_by files by their inferred layer (from DB file_edges)", async () => {
       await writeFile(
         join(tmpDir, ".canon", "config.json"),
         JSON.stringify({ layers: { api: ["src/api/**"], services: ["src/services/**"], utils: ["src/utils/**"] } }),
       );
-      await writeFile(
-        join(tmpDir, "src", "utils", "helper.ts"),
-        `export function helper() {}`,
-      );
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `import { helper } from '../utils/helper';`,
-      );
-      await writeFile(
-        join(tmpDir, "src", "services", "svc.ts"),
-        `import { helper } from '../utils/helper';`,
-      );
+      await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '../utils/helper';`);
+      await writeFile(join(tmpDir, "src", "services", "svc.ts"), `import { helper } from '../utils/helper';`);
+
+      // Set up the DB with file_edges so imported_by is served from DB
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const helperId = insertFile(store, "src/utils/helper.ts", "shared");
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+      const svcId = insertFile(store, "src/services/svc.ts", "services");
+      insertEdge(store, handlerId, helperId); // handler imports helper
+      insertEdge(store, svcId, helperId);     // svc imports helper
+      db.close();
 
       const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
 
+      expect(result.imported_by).toContain("src/api/handler.ts");
+      expect(result.imported_by).toContain("src/services/svc.ts");
       expect(result.imported_by_layer).toBeDefined();
       const layers = Object.keys(result.imported_by_layer);
       expect(layers).toContain("api");
@@ -465,6 +498,26 @@ describe("getFileContext", () => {
         join(tmpDir, ".canon", "config.json"),
         JSON.stringify({ layers: { api: ["src/api/**"], utils: ["src/utils/**"] } }),
       );
+      await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '../utils/helper';`);
+
+      // Set up DB file_edges
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const helperId = insertFile(store, "src/utils/helper.ts", "shared");
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+      insertEdge(store, handlerId, helperId);
+      db.close();
+
+      const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
+
+      expect(result.imported_by).toContain("src/api/handler.ts");
+      expect(result.imported_by_layer["api"]).toContain("src/api/handler.ts");
+    });
+
+    it("falls back to file scanning when DB is absent (no file_edges)", async () => {
       await writeFile(
         join(tmpDir, "src", "utils", "helper.ts"),
         `export function helper() {}`,
@@ -473,14 +526,22 @@ describe("getFileContext", () => {
         join(tmpDir, "src", "api", "handler.ts"),
         `import { helper } from '../utils/helper';`,
       );
+      await writeFile(
+        join(tmpDir, "src", "services", "svc.ts"),
+        `import { helper } from '../utils/helper';`,
+      );
 
+      // No DB — should fall back to scan
       const result = await getFileContext({ file_path: "src/utils/helper.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
 
+      expect(result.imported_by).toHaveLength(2);
       expect(result.imported_by).toContain("src/api/handler.ts");
-      expect(result.imported_by_layer["api"]).toContain("src/api/handler.ts");
+      expect(result.imported_by).toContain("src/services/svc.ts");
     });
   });
+
+  // ── shape field ────────────────────────────────────────────────────────────
 
   describe("shape field", () => {
     it("returns Internal shape when no graph metrics available", async () => {
@@ -497,24 +558,21 @@ describe("getFileContext", () => {
       expect(result.shape.description).toBeTruthy();
     });
 
-    it("returns Leaf shape with correct description when no graph data (in_degree=0 default)", async () => {
-      // When graph data exists and shows in_degree=0, shape must be "Leaf" with specific description.
+    it("returns Leaf shape for in_degree=0 node (file in DB with no importers)", async () => {
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
       );
-      // Write graph data showing in_degree=0 (nothing imports handler.ts)
-      const nodes = [
-        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
-        { id: "src/utils/helper.ts", layer: "utils", violation_count: 0, changed: false },
-      ];
-      const edges = [
-        { source: "src/api/handler.ts", target: "src/utils/helper.ts" },
-      ];
-      await writeFile(
-        join(tmpDir, ".canon", "graph-data.json"),
-        JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
-      );
+      await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+      const helperId = insertFile(store, "src/utils/helper.ts", "shared");
+      // handler imports helper → handler in_degree=0, helper in_degree=1
+      insertEdge(store, handlerId, helperId);
+      db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -524,26 +582,26 @@ describe("getFileContext", () => {
     });
 
     it("returns Sink shape for high in_degree, low out_degree node", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
-      // Build a graph where handler.ts has in_degree=10, out_degree=1
-      const nodes = [
-        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
-        ...Array.from({ length: 10 }, (_, i) => ({ id: `src/services/svc${i}.ts`, layer: "services", violation_count: 0, changed: false })),
-        { id: "src/utils/helper.ts", layer: "utils", violation_count: 0, changed: false },
-      ];
-      const edges = [
-        // 10 files depend on handler.ts (in_degree=10)
-        ...Array.from({ length: 10 }, (_, i) => ({ source: `src/services/svc${i}.ts`, target: "src/api/handler.ts" })),
-        // handler.ts depends on 1 file (out_degree=1)
-        { source: "src/api/handler.ts", target: "src/utils/helper.ts" },
-      ];
-      await writeFile(
-        join(tmpDir, ".canon", "graph-data.json"),
-        JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
+      await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
+      for (let i = 0; i < 10; i++) {
+        await mkdir(join(tmpDir, "src", "services"), { recursive: true });
+        await writeFile(join(tmpDir, "src", "services", `svc${i}.ts`), `export function svc() {}`);
+      }
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+      const helperId = insertFile(store, "src/utils/helper.ts", "shared");
+      // 10 services import handler (in_degree=10)
+      for (let i = 0; i < 10; i++) {
+        const svcId = insertFile(store, `src/services/svc${i}.ts`, "services");
+        insertEdge(store, svcId, handlerId);
+      }
+      // handler imports helper (out_degree=1)
+      insertEdge(store, handlerId, helperId);
+      db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -552,26 +610,25 @@ describe("getFileContext", () => {
     });
 
     it("returns High fan-out hub shape for low in_degree, high out_degree node", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
-      // Build a graph where handler.ts has in_degree=1, out_degree=10
-      const nodes = [
-        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
-        { id: "src/services/caller.ts", layer: "services", violation_count: 0, changed: false },
-        ...Array.from({ length: 10 }, (_, i) => ({ id: `src/utils/dep${i}.ts`, layer: "utils", violation_count: 0, changed: false })),
-      ];
-      const edges = [
-        // 1 file depends on handler.ts (in_degree=1)
-        { source: "src/services/caller.ts", target: "src/api/handler.ts" },
-        // handler.ts depends on 10 files (out_degree=10)
-        ...Array.from({ length: 10 }, (_, i) => ({ source: "src/api/handler.ts", target: `src/utils/dep${i}.ts` })),
-      ];
-      await writeFile(
-        join(tmpDir, ".canon", "graph-data.json"),
-        JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
-      );
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
+      await writeFile(join(tmpDir, "src", "services", "caller.ts"), `export function caller() {}`);
+      for (let i = 0; i < 10; i++) {
+        await writeFile(join(tmpDir, "src", "utils", `dep${i}.ts`), `export function dep() {}`);
+      }
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+      const callerId = insertFile(store, "src/services/caller.ts", "services");
+      // 1 caller imports handler (in_degree=1)
+      insertEdge(store, callerId, handlerId);
+      // handler imports 10 deps (out_degree=10)
+      for (let i = 0; i < 10; i++) {
+        const depId = insertFile(store, `src/utils/dep${i}.ts`, "shared");
+        insertEdge(store, handlerId, depId);
+      }
+      db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -579,53 +636,19 @@ describe("getFileContext", () => {
       expect(result.shape.label).toBe("High fan-out hub");
     });
 
-    it("returns Leaf shape for in_degree=0 node", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
-      // Build a graph where handler.ts has in_degree=0
-      const nodes = [
-        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
-        { id: "src/utils/helper.ts", layer: "utils", violation_count: 0, changed: false },
-      ];
-      const edges = [
-        // handler.ts imports helper (out_degree=1 for handler, in_degree=0 still since nothing imports handler)
-        { source: "src/api/handler.ts", target: "src/utils/helper.ts" },
-      ];
-      await writeFile(
-        join(tmpDir, ".canon", "graph-data.json"),
-        JSON.stringify({ nodes, edges, insights: {}, generated_at: new Date().toISOString() }),
-      );
+    it("prefixes shape label with 'Cycle member — ' when in cycle (from DB)", async () => {
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
+      await writeFile(join(tmpDir, "src", "services", "svc.ts"), `export function svc() {}`);
 
-      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
-      if (!result.ok) throw new Error(result.message);
-
-      expect(result.shape.label).toBe("Leaf");
-    });
-
-    it("prefixes shape label with 'Cycle member — ' when in cycle", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
-      const nodes = [
-        { id: "src/api/handler.ts", layer: "api", violation_count: 0, changed: false },
-        { id: "src/services/svc.ts", layer: "services", violation_count: 0, changed: false },
-      ];
-      const edges = [
-        { source: "src/api/handler.ts", target: "src/services/svc.ts" },
-        { source: "src/services/svc.ts", target: "src/api/handler.ts" },
-      ];
-      await writeFile(
-        join(tmpDir, ".canon", "graph-data.json"),
-        JSON.stringify({
-          nodes,
-          edges,
-          insights: { circular_dependencies: [["src/api/handler.ts", "src/services/svc.ts"]] },
-          generated_at: new Date().toISOString(),
-        }),
-      );
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+      const svcId = insertFile(store, "src/services/svc.ts", "services");
+      // Cycle: handler → svc → handler
+      insertEdge(store, handlerId, svcId);
+      insertEdge(store, svcId, handlerId);
+      db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
@@ -634,8 +657,10 @@ describe("getFileContext", () => {
     });
   });
 
+  // ── project_max_impact field ───────────────────────────────────────────────
+
   describe("project_max_impact field", () => {
-    it("returns 0 when no graph data available", async () => {
+    it("returns 0 when no DB exists", async () => {
       await writeFile(
         join(tmpDir, "src", "api", "handler.ts"),
         `export function handleRequest() {}`,
@@ -646,151 +671,106 @@ describe("getFileContext", () => {
 
       expect(result.project_max_impact).toBe(0);
     });
-  });
 
-  describe("summary field — DB-first reads", () => {
-    it("returns summary from DB when present (DB-first path)", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
+    it("computes project_max_impact from DB file_edges degree data", async () => {
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
+      await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
       const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
       const db = initDatabase(dbPath);
       const store = new KgStore(db);
-      const fileRow: Omit<FileRow, "file_id"> = {
-        path: "src/api/handler.ts",
-        mtime_ms: Date.now(),
-        content_hash: "abc123",
-        language: "typescript",
-        layer: "api",
-        last_indexed_at: Date.now(),
-      };
-      store.upsertFile(fileRow);
-      const insertedRow = store.getFile("src/api/handler.ts")!;
-      store.upsertSummary({
-        file_id: insertedRow.file_id!,
-        entity_id: null,
-        scope: "file",
-        summary: "DB-sourced summary",
-        model: null,
-        content_hash: "abc123",
-        updated_at: new Date().toISOString(),
-      });
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+      const helperId = insertFile(store, "src/utils/helper.ts", "shared");
+      // helper has in_degree=1 (handler imports it) → non-zero impact
+      insertEdge(store, handlerId, helperId);
       db.close();
 
       const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
       if (!result.ok) throw new Error(result.message);
 
-      expect(result.summary).toBe("DB-sourced summary");
-    });
-
-    it("falls back to summaries.json when no DB summary exists", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
-      // KG DB exists with file registered, but no summary in DB
-      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
-      const db = initDatabase(dbPath);
-      const store = new KgStore(db);
-      const fileRow: Omit<FileRow, "file_id"> = {
-        path: "src/api/handler.ts",
-        mtime_ms: Date.now(),
-        content_hash: "abc123",
-        language: "typescript",
-        layer: "api",
-        last_indexed_at: Date.now(),
-      };
-      store.upsertFile(fileRow);
-      db.close();
-
-      // Write JSON summary
-      await writeFile(
-        join(tmpDir, ".canon", "summaries.json"),
-        JSON.stringify({
-          "src/api/handler.ts": { summary: "JSON-sourced summary", updated_at: "2025-01-01T00:00:00Z" },
-        }),
-      );
-
-      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
-      if (!result.ok) throw new Error(result.message);
-
-      expect(result.summary).toBe("JSON-sourced summary");
-    });
-
-    it("returns DB summary when both DB and JSON have a summary (DB takes priority)", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
-
-      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
-      const db = initDatabase(dbPath);
-      const store = new KgStore(db);
-      const fileRow: Omit<FileRow, "file_id"> = {
-        path: "src/api/handler.ts",
-        mtime_ms: Date.now(),
-        content_hash: "abc123",
-        language: "typescript",
-        layer: "api",
-        last_indexed_at: Date.now(),
-      };
-      store.upsertFile(fileRow);
-      const insertedRow = store.getFile("src/api/handler.ts")!;
-      store.upsertSummary({
-        file_id: insertedRow.file_id!,
-        entity_id: null,
-        scope: "file",
-        summary: "DB is canonical",
-        model: null,
-        content_hash: "abc123",
-        updated_at: new Date().toISOString(),
-      });
-      db.close();
-
-      await writeFile(
-        join(tmpDir, ".canon", "summaries.json"),
-        JSON.stringify({
-          "src/api/handler.ts": { summary: "JSON version (stale)", updated_at: "2025-01-01T00:00:00Z" },
-        }),
-      );
-
-      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
-      if (!result.ok) throw new Error(result.message);
-
-      expect(result.summary).toBe("DB is canonical");
-    });
-
-    it("returns null when neither DB nor JSON has a summary", async () => {
-      await writeFile(
-        join(tmpDir, "src", "api", "handler.ts"),
-        `export function handleRequest() {}`,
-      );
-
-      // KG DB exists but no summary for the file
-      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
-      const db = initDatabase(dbPath);
-      const store = new KgStore(db);
-      const fileRow: Omit<FileRow, "file_id"> = {
-        path: "src/api/handler.ts",
-        mtime_ms: Date.now(),
-        content_hash: "abc123",
-        language: "typescript",
-        layer: "api",
-        last_indexed_at: Date.now(),
-      };
-      store.upsertFile(fileRow);
-      db.close();
-
-      // No summaries.json written
-
-      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
-      if (!result.ok) throw new Error(result.message);
-
-      expect(result.summary).toBeNull();
+      // helper has in_degree=1, so max_impact should be > 0
+      expect(result.project_max_impact).toBeGreaterThan(0);
     });
   });
+
+  // ── graph_metrics field — KgQuery-based ───────────────────────────────────
+
+  describe("graph_metrics field", () => {
+    it("is undefined when KG DB does not exist", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
+
+      expect(result.graph_metrics).toBeUndefined();
+    });
+
+    it("is undefined when file is not in the KG DB", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      // Create an empty DB (no files registered)
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      db.close();
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
+
+      expect(result.graph_metrics).toBeUndefined();
+    });
+
+    it("returns correct in_degree and out_degree from DB", async () => {
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
+      await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+      const helperId = insertFile(store, "src/utils/helper.ts", "shared");
+      insertEdge(store, handlerId, helperId); // handler imports helper
+      db.close();
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
+
+      expect(result.graph_metrics).toBeDefined();
+      expect(result.graph_metrics!.in_degree).toBe(0);
+      expect(result.graph_metrics!.out_degree).toBe(1);
+    });
+
+    it("is_hub is true for a file in the top-10 by total degree", async () => {
+      await writeFile(join(tmpDir, "src", "api", "handler.ts"), `export function handleRequest() {}`);
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const handlerId = insertFile(store, "src/api/handler.ts", "api");
+
+      // Give handler high in_degree (9 importers) → total degree ≥ 9 → top-10
+      for (let i = 0; i < 9; i++) {
+        await mkdir(join(tmpDir, "src", "services"), { recursive: true });
+        await writeFile(join(tmpDir, "src", "services", `svc${i}.ts`), `export function svc() {}`);
+        const svcId = insertFile(store, `src/services/svc${i}.ts`, "services");
+        insertEdge(store, svcId, handlerId);
+      }
+      db.close();
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
+
+      expect(result.graph_metrics).toBeDefined();
+      expect(result.graph_metrics!.is_hub).toBe(true);
+    });
+  });
+
+  // ── blast_radius field ─────────────────────────────────────────────────────
 
   describe("blast_radius field — UnifiedBlastRadiusReport shape", () => {
     it("returns UnifiedBlastRadiusReport shape when KG database is available", async () => {
@@ -841,6 +821,81 @@ describe("getFileContext", () => {
       if (!result.ok) throw new Error(result.message);
 
       expect(result.blast_radius).toBeUndefined();
+    });
+  });
+
+  // ── summary field — DB-first reads (legacy compat tests preserved) ─────────
+
+  describe("summary field — DB-first reads", () => {
+    it("returns summary from DB when present (DB-first path)", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const fileRow: Omit<FileRow, "file_id"> = {
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      };
+      store.upsertFile(fileRow);
+      const insertedRow = store.getFile("src/api/handler.ts")!;
+      store.upsertSummary({
+        file_id: insertedRow.file_id!,
+        entity_id: null,
+        scope: "file",
+        summary: "DB-sourced summary",
+        model: null,
+        content_hash: "abc123",
+        updated_at: new Date().toISOString(),
+      });
+      db.close();
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
+
+      expect(result.summary).toBe("DB-sourced summary");
+    });
+
+    it("returns null when neither DB nor JSON has a summary (DB is sole source)", async () => {
+      await writeFile(
+        join(tmpDir, "src", "api", "handler.ts"),
+        `export function handleRequest() {}`,
+      );
+
+      // KG DB exists but no summary for the file
+      const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
+      const db = initDatabase(dbPath);
+      const store = new KgStore(db);
+      const fileRow: Omit<FileRow, "file_id"> = {
+        path: "src/api/handler.ts",
+        mtime_ms: Date.now(),
+        content_hash: "abc123",
+        language: "typescript",
+        layer: "api",
+        last_indexed_at: Date.now(),
+      };
+      store.upsertFile(fileRow);
+      db.close();
+
+      // summaries.json also written but should be ignored
+      await writeFile(
+        join(tmpDir, ".canon", "summaries.json"),
+        JSON.stringify({
+          "src/api/handler.ts": { summary: "JSON version (ignored)", updated_at: "2025-01-01T00:00:00Z" },
+        }),
+      );
+
+      const result = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);
+      if (!result.ok) throw new Error(result.message);
+
+      expect(result.summary).toBeNull();
     });
   });
 });

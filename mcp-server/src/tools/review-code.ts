@@ -1,4 +1,9 @@
-import { type GraphMetrics, getNodeMetrics, loadCachedGraph } from "../graph/query.ts";
+import { existsSync } from "fs";
+import { join } from "path";
+import { type FileMetrics } from "../graph/kg-types.ts";
+import { KgQuery, computeFileInsightMaps } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { loadAllPrinciples, matchPrinciples } from "../matcher.ts";
 import { loadConfigNumber } from "../utils/config.ts";
 
@@ -17,7 +22,7 @@ export interface PrincipleForReview {
 }
 
 export type ReviewGraphContext = Pick<
-  GraphMetrics,
+  FileMetrics,
   "in_degree" | "out_degree" | "is_hub" | "in_cycle" | "layer" | "impact_score" | "layer_violations"
 >;
 
@@ -86,44 +91,58 @@ function capPrinciples(matched: PrincipleEntry[], maxReviewPrinciples: number): 
   return [...rules, ...nonRules.slice(0, budgetForNonRules)];
 }
 
-/** Load graph context and inject graph-derived principles. */
+/** Load graph context using KgQuery. Returns null graph context when DB is absent. */
 async function loadGraphContext(
   projectDir: string,
   filePath: string,
   allPrinciples: PrincipleEntry[],
   capped: PrincipleEntry[],
-): Promise<{ graphContext?: ReviewGraphContext; metrics: GraphMetrics | null; injected: PrincipleEntry[] }> {
+): Promise<{ graphContext?: ReviewGraphContext; metrics: FileMetrics | null; injected: PrincipleEntry[] }> {
   const injected: PrincipleEntry[] = [];
-  const graph = await loadCachedGraph(projectDir);
-  if (!graph) return { graphContext: undefined, metrics: null, injected };
+  const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  if (!existsSync(dbPath)) return { graphContext: undefined, metrics: null, injected };
 
-  const metrics = getNodeMetrics(graph, filePath);
-  if (!metrics) return { graphContext: undefined, metrics: null, injected };
+  let db: ReturnType<typeof initDatabase> | undefined;
+  try {
+    db = initDatabase(dbPath);
+    const kgQuery = new KgQuery(db);
+    const insightMaps = computeFileInsightMaps(db);
+    const metrics = kgQuery.getFileMetrics(filePath, {
+      hubPaths: insightMaps.hubPaths,
+      cycleMemberPaths: insightMaps.cycleMemberPaths,
+      layerViolationsByPath: insightMaps.layerViolationsByPath,
+    });
+    if (!metrics) return { graphContext: undefined, metrics: null, injected };
 
-  const graphContext: ReviewGraphContext = {
-    in_degree: metrics.in_degree,
-    out_degree: metrics.out_degree,
-    is_hub: metrics.is_hub,
-    in_cycle: metrics.in_cycle,
-    layer: metrics.layer,
-    impact_score: metrics.impact_score,
-    layer_violations: metrics.layer_violations,
-  };
+    const graphContext: ReviewGraphContext = {
+      in_degree: metrics.in_degree,
+      out_degree: metrics.out_degree,
+      is_hub: metrics.is_hub,
+      in_cycle: metrics.in_cycle,
+      layer: metrics.layer,
+      impact_score: metrics.impact_score,
+      layer_violations: metrics.layer_violations,
+    };
 
-  if (metrics.layer_violation_count > 0 && !capped.some((c) => c.id === "bounded-context-boundaries")) {
-    const found = allPrinciples.find((a) => a.id === "bounded-context-boundaries");
-    if (found) injected.push(found);
+    if (metrics.layer_violation_count > 0 && !capped.some((c) => c.id === "bounded-context-boundaries")) {
+      const found = allPrinciples.find((a) => a.id === "bounded-context-boundaries");
+      if (found) injected.push(found);
+    }
+    if (metrics.in_cycle && !capped.some((c) => c.id === "architectural-fitness-functions")) {
+      const found = allPrinciples.find((a) => a.id === "architectural-fitness-functions");
+      if (found) injected.push(found);
+    }
+
+    return { graphContext, metrics, injected };
+  } catch {
+    return { graphContext: undefined, metrics: null, injected };
+  } finally {
+    db?.close();
   }
-  if (metrics.in_cycle && !capped.some((c) => c.id === "architectural-fitness-functions")) {
-    const found = allPrinciples.find((a) => a.id === "architectural-fitness-functions");
-    if (found) injected.push(found);
-  }
-
-  return { graphContext, metrics, injected };
 }
 
 /** Build a human-readable graph hint string from metrics. */
-function buildGraphHint(metrics: GraphMetrics | null): string {
+function buildGraphHint(metrics: FileMetrics | null): string {
   if (!metrics) return "";
   const hints: string[] = [];
   if (metrics.is_hub) hints.push(`hub file (${metrics.in_degree} dependents)`);
