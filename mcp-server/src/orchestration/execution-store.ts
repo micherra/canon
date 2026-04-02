@@ -253,6 +253,10 @@ export class ExecutionStore {
   // ---- Metrics statements ----
   private readonly stmtUpdateStateMetrics: Database.Statement;
 
+  // ---- Cache prefix statements (ADR-006a) ----
+  private readonly stmtGetCachePrefix: Database.Statement;
+  private readonly stmtSetCachePrefix: Database.Statement;
+
   constructor(db: Database.Database) {
     this.db = db;
 
@@ -434,6 +438,14 @@ export class ExecutionStore {
     // Metrics
     this.stmtUpdateStateMetrics = db.prepare(
       `UPDATE execution_states SET metrics = ? WHERE state_id = ?`,
+    );
+
+    // Cache prefix (ADR-006a)
+    this.stmtGetCachePrefix = db.prepare(
+      `SELECT cache_prefix FROM execution WHERE id = 1`,
+    );
+    this.stmtSetCachePrefix = db.prepare(
+      `UPDATE execution SET cache_prefix = ? WHERE id = 1`,
     );
   }
 
@@ -1058,6 +1070,29 @@ export class ExecutionStore {
     this.stmtUpdateStateMetrics.run(JSON.stringify(merged), stateId);
 
     return true;
+  }
+
+  // --------------------------------------------------------------------------
+  // Cache prefix (ADR-006a)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Returns the shared prompt cache prefix for this workspace.
+   * Returns an empty string when no prefix has been stored yet or when the
+   * execution row does not exist (e.g. unmigrated workspace or pre-init call).
+   */
+  getCachePrefix(): string {
+    const row = this.stmtGetCachePrefix.get() as { cache_prefix: string } | undefined;
+    return row?.cache_prefix ?? '';
+  }
+
+  /**
+   * Stores the shared prompt cache prefix for this workspace.
+   * The prefix content must be bit-for-bit stable across all agent spawns.
+   * Called once during initWorkspaceFlow after board initialization.
+   */
+  setCachePrefix(prefix: string): void {
+    this.stmtSetCachePrefix.run(prefix);
   }
 }
 
