@@ -70,14 +70,6 @@ export async function writePlanIndex(
     return `| ${t.task_id} | ${t.wave} | ${deps} | ${files} | ${principles} |`;
   });
 
-  // Validate slug to prevent path traversal
-  if (!TASK_ID_PATTERN.test(input.slug)) {
-    return toolError(
-      "INVALID_INPUT",
-      `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]+$/`,
-    );
-  }
-
   const waveCount = new Set(input.tasks.map((t) => t.wave)).size;
   const content = `## Plan Index: ${input.slug}\n\n${header}\n${separator}\n${rows.join("\n")}\n`;
 
