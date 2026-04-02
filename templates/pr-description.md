@@ -29,7 +29,7 @@ output-path: ${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md
 {Only if SECURITY.md exists. "Clean" or brief summary of findings and resolutions.}
 
 ## Unresolved Concerns
-<!-- REQUIRED when review verdict is WARNING or security status is FINDINGS. Omit only when both are clean. -->
+<!-- REQUIRED when review verdict is WARNING or security status is not CLEAN (FINDINGS or CRITICAL). Omit only when review is CLEAN and security is CLEAN. -->
 {Prominently list: unresolved review warnings, security findings, drift-from-plan issues, board concerns.}
 - **Review**: {verdict and unresolved violations, or "Clean"}
 - **Security**: {finding count and severities, or "Clean"}

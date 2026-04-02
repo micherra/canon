@@ -95,6 +95,6 @@ principles-checked: {N}
 
 - Verdict is always the first thing in the document — reviewers reading this need to know immediately
 - Violations ordered by impact (rule > strong-opinion > convention, then by impact score)
-- The reviewer never reads research or plans — this template enforces cold review
+- The reviewer never reads research or plans during Stages 1-2 (cold review) — plan files (DESIGN.md, INDEX.md) are read only in Stage 4 for drift detection, not for cold review context
 - Graph context section only appears when `review_code` returned graph data
 - Keep concise — favor tables over prose

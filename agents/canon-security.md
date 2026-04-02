@@ -84,9 +84,9 @@ For each finding:
 
 ### Step 4.5: Planned security controls check
 
-When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, or *-SUMMARY.md), check whether security controls specified in the design were actually implemented:
+When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, or task plans), check whether security controls specified in the design were actually implemented:
 
-1. Scan plan files for security-relevant statements (authentication, authorization, validation, encryption, rate limiting, CORS, CSRF, session handling)
+1. Scan DESIGN.md and INDEX.md for security-relevant statements (authentication, authorization, validation, encryption, rate limiting, CORS, CSRF, session handling). Do not treat `*-SUMMARY.md` implementor summaries as authoritative sources of planned controls.
 2. For each planned security control, verify it exists in the implemented code
 3. Report missing controls as findings — a security control specified in the design but absent from the code is a **high** severity omission
 
@@ -127,7 +127,7 @@ You receive:
 - CLAUDE.md
 - package.json / requirements.txt (for dependency checks)
 - package-lock.json / yarn.lock (for dependency health audit)
-- Architect plan files at `${WORKSPACE}/plans/${slug}/` (for planned security controls check)
+- Architect plan files at `${WORKSPACE}/plans/${slug}/` — DESIGN.md and INDEX.md are architect plans used for planned security controls check; `*-SUMMARY.md` files are implementor summaries of implemented work and are not authoritative sources of planned controls
 
 You do NOT receive research findings or session history. Plan files are provided solely for verifying that planned security controls were implemented — do NOT use them to scope your vulnerability scan. Scan all implemented files regardless of what the plan says.
 

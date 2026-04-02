@@ -56,7 +56,7 @@ Produce a structured PR description using the pr-description template at `${CLAU
 
 ### Step 3.5: Validate DONE_WITH_CONCERNS output
 
-Before proceeding, verify your own output: if you are reporting `DONE_WITH_CONCERNS`, grep your generated PR description for the `### Unresolved Concerns` heading. If it's missing, add it before finalizing. A `DONE_WITH_CONCERNS` status without a visible Unresolved Concerns section is a bug.
+Before proceeding, verify your own output: if you are reporting `DONE_WITH_CONCERNS`, grep your generated PR description for an `Unresolved Concerns` heading regardless of heading level (the template uses `## Unresolved Concerns`). If it's missing, add it before finalizing. A `DONE_WITH_CONCERNS` status without a visible Unresolved Concerns section is a bug.
 
 ### Step 4: Generate changelog entry (if applicable)
 
@@ -97,7 +97,7 @@ Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
 Report per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md`. Your available statuses:
 
 - **DONE** — PR description generated (and PR created if requested)
-- **DONE_WITH_CONCERNS** — Generated, but flagging issues (missing test report, review had concerns, security findings unresolved). **When the review verdict is WARNING or security status is FINDINGS, the PR description MUST prominently surface these** — use the `### Unresolved Concerns` section in the PR description template. Do not bury build-time concerns in artifact summaries.
+- **DONE_WITH_CONCERNS** — Generated, but flagging issues (missing test report, review had concerns, security findings unresolved). **When the review verdict is WARNING or security status is FINDINGS, the PR description MUST prominently surface these** — use the `## Unresolved Concerns` section in the PR description template. Do not bury build-time concerns in artifact summaries.
 - **BLOCKED** — Cannot generate (missing required artifacts like session.json or all summaries)
 
 ## Context Isolation

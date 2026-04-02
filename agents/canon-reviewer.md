@@ -95,11 +95,11 @@ When graph context is available, also evaluate coupling quality, dependency dire
 
 This stage is **advisory** by default — suggestions, not violations. Only include Stage 2 suggestions that address a concrete risk (bug potential, maintenance burden, readability for next developer). Omit style preferences that don't affect correctness or comprehension. Follow the **Code Quality** section of the review-checklist template.
 
-**Upgrading Stage 2 to WARNING**: When a Stage 2 finding maps to the *spirit* of a loaded Canon principle — even if it is not a literal, textbook violation — upgrade it to a WARNING finding. State which principle's spirit applies and why the code undermines it. A WARNING from Stage 2 contributes to the verdict the same as a Stage 1 `strong-opinion` violation.
+**Upgrading Stage 2 to WARNING**: Upgrade a Stage 2 finding to WARNING only when it satisfies **all** of the following: (1) it clearly maps to a loaded Canon principle's specific sentence, requirement, or stated intent, (2) you explain the concrete engineering risk created by the code (for example: bug potential, change amplification, unclear ownership, testability problems, or comprehension cost for the next developer), and (3) the concern is not just a generic style nit. Do **not** upgrade based only on "feels misaligned with the principle" reasoning. In the finding, cite the principle and the exact sentence or expectation being undermined, then explain why that creates the concrete risk. A WARNING from Stage 2 contributes to the verdict the same as a Stage 1 `strong-opinion` violation.
 
-**Example that qualifies**: A function has 15 parameters. The `small-focused-modules` principle says "each module should have a single responsibility." While 15 parameters isn't a literal module-level violation, it undermines the spirit — a function needing 15 inputs is doing too much → upgrade to WARNING.
+**Example that qualifies**: A function has 15 parameters. The `small-focused-modules` principle says "each module should have a single responsibility." While 15 parameters isn't a literal module-level violation, it directly undermines that expectation and creates a concrete maintenance and testability risk because callers must assemble and understand too many inputs → upgrade to WARNING.
 
-**Example that does NOT qualify**: Code uses `var` instead of `const`. Even though `explicit-contracts` exists, using `var` is a generic style issue not meaningfully connected to the principle's intent → stays advisory.
+**Example that does NOT qualify**: Code uses `var` instead of `const`. Even though `explicit-contracts` is loaded, this is still a generic style issue unless the reviewer can tie it to a specific principle expectation and a concrete risk beyond preference. Without that, it stays advisory.
 
 ### Recommendations array
 
