@@ -8,7 +8,6 @@ export interface LoadFlowInput {
 
 export interface LoadFlowResult {
   flow: ResolvedFlow;
-  errors: string[];
   state_graph: Record<string, string[]>;
 }
 
@@ -18,9 +17,9 @@ export async function loadFlow(
   projectDir?: string,
 ): Promise<ToolResult<LoadFlowResult>> {
   try {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, input.flow_name, projectDir);
+    const flow = await loadAndResolveFlow(pluginDir, input.flow_name, projectDir);
     const state_graph = buildStateGraph(flow);
-    return toolOk({ flow, errors, state_graph });
+    return toolOk({ flow, state_graph });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const code = message.includes("not found") ? "FLOW_NOT_FOUND" : "FLOW_PARSE_ERROR";

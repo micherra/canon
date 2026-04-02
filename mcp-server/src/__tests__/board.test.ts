@@ -23,8 +23,8 @@ function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
     entry: "start",
     spawn_instructions: {},
     states: {
-      start: { type: "single" },
-      review: { type: "single", max_iterations: 3 },
+      start: { type: "single", agent: "canon:canon-implementor" },
+      review: { type: "single", agent: "canon:canon-implementor", max_iterations: 3 },
       done: { type: "terminal" },
     },
     ...overrides,

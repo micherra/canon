@@ -51,6 +51,10 @@ export function applyReviewThresholdToCondition(
 
 /**
  * Build a history entry shaped by the stuck_when strategy.
+ *
+ * @deprecated Use {@link ExecutionStore.recordIterationResult} to record raw state results
+ * in the `iteration_results` table. SQL-based stuck detection via {@link ExecutionStore.isStuck}
+ * is preferred. These pure functions remain for testing and fallback purposes.
  */
 export function buildHistoryEntry(
   stuckWhen: StuckWhen,
@@ -96,6 +100,10 @@ export function buildHistoryEntry(
  * Compare the two most recent history entries to determine if the agent
  * is stuck (making no meaningful progress). Returns false if fewer than
  * 2 entries exist.
+ *
+ * @deprecated Use {@link ExecutionStore.isStuck} which queries the `iteration_results`
+ * table directly. SQL-based detection avoids the "caller forgot a field" failure mode
+ * that motivated ADR-004. These pure functions remain for testing and fallback purposes.
  */
 export function isStuck(history: HistoryEntry[], stuckWhen: StuckWhen): boolean {
   if (history.length < 2) return false;

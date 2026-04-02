@@ -361,6 +361,37 @@ export class DriftDb {
   }
 
   /**
+   * Returns reviews whose `files` array contains at least one of the specified
+   * file paths. Uses client-side filtering because the reviews table is small
+   * (typically <100 rows) and the files column is stored as a JSON array string.
+   *
+   * Returns empty array for empty input (define-errors-out-of-existence).
+   */
+  getReviewsByFiles(filePaths: string[]): ReviewEntry[] {
+    if (filePaths.length === 0) {
+      return [];
+    }
+
+    const allRows = this.stmtGetAllReviews.all() as ReviewRow[];
+    const fileSet = new Set(filePaths);
+    const matching: ReviewEntry[] = [];
+
+    for (const row of allRows) {
+      try {
+        const reviewFiles = JSON.parse(row.files) as string[];
+        if (reviewFiles.some(f => fileSet.has(f))) {
+          const violations = this.stmtGetViolationsByReviewId.all(row.review_id) as ViolationRow[];
+          matching.push(rowToReviewEntry(row, violations));
+        }
+      } catch {
+        // Skip reviews with malformed files JSON
+      }
+    }
+
+    return matching;
+  }
+
+  /**
    * Returns the most recent review for a given PR number, or null if none exists.
    */
   getLastReviewForPr(prNumber: number): ReviewEntry | null {

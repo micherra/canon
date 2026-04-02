@@ -88,6 +88,41 @@ describe("parseTaskIdsForWave", () => {
     const result = parseTaskIdsForWave(indexContent, 1);
     expect(result).not.toContain("Task");
   });
+
+  it("handles backtick-wrapped task IDs: | `task-01` | 1 |", () => {
+    const backtickContent = `## Plan Index
+
+| Task | Wave | Depends on | Files | Principles |
+|------|------|------------|-------|------------|
+| \`adr004-01\` | 1 | — |  |  |
+| \`adr004-02\` | 1 | — |  |  |
+| \`adr004-03\` | 2 | adr004-01 |  |  |
+`;
+    expect(parseTaskIdsForWave(backtickContent, 1)).toEqual(["adr004-01", "adr004-02"]);
+    expect(parseTaskIdsForWave(backtickContent, 2)).toEqual(["adr004-03"]);
+  });
+
+  it("handles plain (no-backtick) task IDs as regression test", () => {
+    const plainContent = `## Plan Index
+
+| Task | Wave | Depends on |
+|------|------|------------|
+| plain-01 | 1 | — |
+| plain-02 | 2 | plain-01 |
+`;
+    expect(parseTaskIdsForWave(plainContent, 1)).toEqual(["plain-01"]);
+    expect(parseTaskIdsForWave(plainContent, 2)).toEqual(["plain-02"]);
+  });
+
+  it("skips separator row (--- in table)", () => {
+    const contentWithSep = `| Task | Wave |
+|------|------|
+| real-01 | 1 |
+`;
+    const result = parseTaskIdsForWave(contentWithSep, 1);
+    expect(result).toEqual(["real-01"]);
+    expect(result).not.toContain("---");
+  });
 });
 
 // ---------------------------------------------------------------------------

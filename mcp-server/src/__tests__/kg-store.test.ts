@@ -8,7 +8,7 @@
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { KgQuery } from "../graph/kg-query.ts";
-import { initDatabase, SCHEMA_VERSION } from "../graph/kg-schema.ts";
+import { initDatabase, runMigrations, SCHEMA_VERSION } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { EntityRow, FileRow } from "../graph/kg-types.ts";
 
@@ -183,13 +183,13 @@ describe("Knowledge Graph Store", () => {
       }).not.toThrow();
     });
 
-    test("schema_version is set to 2", () => {
+    test("schema_version is set to 3", () => {
       const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
         | { value: string }
         | undefined;
       expect(row).toBeDefined();
       expect(row!.value).toBe(SCHEMA_VERSION);
-      expect(row!.value).toBe("2");
+      expect(row!.value).toBe("3");
     });
 
     test("WAL mode pragma is applied (in-memory uses memory mode)", () => {
@@ -243,11 +243,11 @@ describe("Knowledge Graph Store", () => {
       expect(colNames).toContain("updated_at");
     });
 
-    test('SCHEMA_VERSION is "2" after initDatabase', () => {
+    test('SCHEMA_VERSION is "3" after initDatabase', () => {
       const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
         | { value: string }
         | undefined;
-      expect(row?.value).toBe("2");
+      expect(row?.value).toBe("3");
     });
 
     test("inserting a summary row with valid file_id succeeds", () => {
@@ -898,6 +898,129 @@ describe("Knowledge Graph Store", () => {
 
         store2.close();
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Schema v3 — vec0 tables and migration
+  // ---------------------------------------------------------------------------
+
+  describe("Schema v3 — vector tables", () => {
+    let db: Database.Database;
+
+    beforeEach(() => {
+      db = initDatabase(":memory:");
+    });
+
+    afterEach(() => {
+      db.close();
+    });
+
+    test("initDatabase creates entity_vectors virtual table", () => {
+      const row = db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name='entity_vectors'`,
+        )
+        .get() as { name: string } | undefined;
+      expect(row).toBeDefined();
+      expect(row!.name).toBe("entity_vectors");
+    });
+
+    test("initDatabase creates summary_vectors virtual table", () => {
+      const row = db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name='summary_vectors'`,
+        )
+        .get() as { name: string } | undefined;
+      expect(row).toBeDefined();
+      expect(row!.name).toBe("summary_vectors");
+    });
+
+    test("initDatabase creates entity_vector_meta table", () => {
+      const cols = db.prepare(`PRAGMA table_info(entity_vector_meta)`).all() as Array<{ name: string }>;
+      const colNames = cols.map((c) => c.name);
+      expect(colNames).toContain("entity_id");
+      expect(colNames).toContain("text_hash");
+      expect(colNames).toContain("model_id");
+      expect(colNames).toContain("updated_at");
+    });
+
+    test("initDatabase creates summary_vector_meta table", () => {
+      const cols = db.prepare(`PRAGMA table_info(summary_vector_meta)`).all() as Array<{ name: string }>;
+      const colNames = cols.map((c) => c.name);
+      expect(colNames).toContain("summary_id");
+      expect(colNames).toContain("text_hash");
+      expect(colNames).toContain("model_id");
+      expect(colNames).toContain("updated_at");
+    });
+
+    test("schema_version is '3' for new databases", () => {
+      const row = db
+        .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
+        .get() as { value: string } | undefined;
+      expect(row?.value).toBe("3");
+      expect(SCHEMA_VERSION).toBe("3");
+    });
+
+    test("entity_vectors accepts insert with valid embedding", () => {
+      // sqlite-vec pre-v1 quirk: only db.exec() with inline SQL works for vec0 inserts.
+      // Prepared statement parameterized inserts fail with "Only integers are allows for
+      // primary key values" — this is a known bug in sqlite-vec 0.1.6-alpha.2.
+      const jsonEmbedding = `[${new Array(384).fill("0.1").join(",")}]`;
+      expect(() =>
+        db.exec(`INSERT INTO entity_vectors (entity_id, embedding) VALUES (1, '${jsonEmbedding}')`),
+      ).not.toThrow();
+    });
+
+    test("summary_vectors accepts insert with valid embedding", () => {
+      const jsonEmbedding = `[${new Array(384).fill("0.2").join(",")}]`;
+      expect(() =>
+        db.exec(`INSERT INTO summary_vectors (summary_id, embedding) VALUES (1, '${jsonEmbedding}')`),
+      ).not.toThrow();
+    });
+  });
+
+  describe("Schema v3 — migration from v2", () => {
+    test("runMigrations upgrades v2 DB to v3 (creates vec0 tables)", () => {
+      // Build a v2 DB by applying DDL manually without v3 tables
+      // We simulate a v2 DB by creating base schema, setting schema_version to '2',
+      // then calling runMigrations() to migrate forward.
+      const db = initDatabase(":memory:");
+
+      // Confirm the migration already ran (new DB starts at v3)
+      const before = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string };
+      expect(before.value).toBe("3");
+
+      // Simulate a v2 DB: downgrade schema_version to '2' and drop v3 tables
+      db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
+      db.exec(`DROP TABLE IF EXISTS entity_vector_meta`);
+      db.exec(`DROP TABLE IF EXISTS summary_vector_meta`);
+      // Note: vec0 virtual tables need sqlite-vec loaded; can't drop and recreate
+      // but we can verify meta tables are created by the migration
+
+      // Re-run migrations — should upgrade from 2 to 3
+      runMigrations(db);
+
+      // schema_version should now be '3'
+      const after = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string };
+      expect(after.value).toBe("3");
+
+      // entity_vector_meta should exist
+      const metaTable = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='entity_vector_meta'`)
+        .get() as { name: string } | undefined;
+      expect(metaTable).toBeDefined();
+
+      db.close();
+    });
+
+    test("runMigrations is idempotent when already at v3", () => {
+      const db = initDatabase(":memory:");
+      // Should not throw on double-call
+      expect(() => runMigrations(db)).not.toThrow();
+      const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string };
+      expect(row.value).toBe("3");
+      db.close();
     });
   });
 });

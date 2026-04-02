@@ -3,9 +3,14 @@ fragment: security-scan
 description: Security scan with optional fix loop for critical findings
 entry: security
 params:
-  after_done: ~
-  on_critical: hitl
-  fix_max_iterations: 2
+  after_done:
+    type: state_id
+  on_critical:
+    type: state_id
+    default: hitl
+  fix_max_iterations:
+    type: number
+    default: 2
 
 states:
   security:

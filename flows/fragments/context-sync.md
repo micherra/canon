@@ -3,7 +3,8 @@ fragment: context-sync
 description: Sync documentation after implementation or fix changes
 entry: context-sync
 params:
-  next: ~
+  next:
+    type: state_id
 
 states:
   context-sync:

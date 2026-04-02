@@ -1,11 +1,12 @@
 /** Store file summaries to the KG SQLite database (sole write path — ADR-005). */
 
 import { mkdir } from "node:fs/promises";
-import { extname } from "node:path";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
+import { KgVectorStore } from "../graph/kg-vector-store.ts";
 
 export interface SummaryEntry {
   summary: string;
@@ -57,8 +58,12 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
   let total = 0;
   try {
     const store = new KgStore(db);
+
+    // Track which summaries were written so we can embed them
+    const writtenSummaries: Array<{ summary: string; summaryId: number }> = [];
+
     for (const { file_path, summary } of input.summaries) {
-      const normalizedPath = file_path.replace(/\\/g, '/');
+      const normalizedPath = file_path.replace(/\\/g, "/");
       let fileRow = store.getFile(normalizedPath);
       if (fileRow?.file_id === undefined) {
         // File not in KG yet — auto-create a stub row so the summary is never silently dropped
@@ -71,7 +76,7 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
           last_indexed_at: Date.now(),
         });
       }
-      store.upsertSummary({
+      const summaryRow = store.upsertSummary({
         file_id: fileRow.file_id!,
         entity_id: null,
         scope: "file",
@@ -80,10 +85,38 @@ export async function storeSummaries(input: StoreSummariesInput, projectDir: str
         content_hash: fileRow.content_hash,
         updated_at: now,
       });
+
+      if (summaryRow.summary_id !== undefined) {
+        writtenSummaries.push({ summary, summaryId: summaryRow.summary_id });
+      }
       stored += 1;
     }
 
-    const totalRow = db.prepare("SELECT COUNT(*) as count FROM summaries WHERE scope = 'file'").get() as { count: number };
+    // Embed written summaries — best-effort, never fatal
+    if (writtenSummaries.length > 0) {
+      const embeddingService = new EmbeddingService();
+      try {
+        const vectorStore = new KgVectorStore(db);
+        const texts = writtenSummaries.map((s) => s.summary);
+        const embeddings = await embeddingService.embed(texts);
+        for (let i = 0; i < writtenSummaries.length; i++) {
+          vectorStore.upsertSummaryVector(
+            writtenSummaries[i].summaryId,
+            embeddings[i],
+            KgVectorStore.textHash(writtenSummaries[i].summary),
+          );
+        }
+      } catch (err) {
+        // Embedding is best-effort — never fail the summary write
+        console.warn("[store-summaries] embedding failed (non-fatal):", err);
+      } finally {
+        embeddingService.dispose();
+      }
+    }
+
+    const totalRow = db.prepare("SELECT COUNT(*) as count FROM summaries WHERE scope = 'file'").get() as {
+      count: number;
+    };
     total = totalRow.count;
   } finally {
     db.close();

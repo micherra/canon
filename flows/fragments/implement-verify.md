@@ -3,7 +3,8 @@ fragment: implement-verify
 description: Direct-mode implement then verify — fast path for small changes with no plan file
 entry: implement
 params:
-  after_all_passing: ~
+  after_all_passing:
+    type: state_id
 
 states:
   implement:

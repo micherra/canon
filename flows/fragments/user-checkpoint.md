@@ -3,8 +3,10 @@ fragment: user-checkpoint
 description: Present work summary for user approval or revision feedback before proceeding
 entry: checkpoint
 params:
-  after_approved: ~
-  on_revise: ~
+  after_approved:
+    type: state_id
+  on_revise:
+    type: state_id
 
 states:
   checkpoint:

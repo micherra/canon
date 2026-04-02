@@ -164,33 +164,100 @@ export const TestResultsSchema = z.object({
   skipped: z.number(),
 });
 
-export const StateDefinitionSchema = z.object({
-  type: StateTypeSchema,
-  agent: z.string().optional(),
-  agents: z.array(z.string()).optional(),
-  role: z.string().optional(),
-  roles: z.array(RoleEntrySchema).optional(),
+// ---------------------------------------------------------------------------
+// Per-type state schemas (discriminated union members)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fields shared across all state types.
+ *
+ * Several fields are included here even though they are only semantically meaningful
+ * for certain state types. This is intentional: production orchestration code accesses
+ * these fields on the union type without exhaustive type narrowing (e.g. reading
+ * `stateDef.max_iterations` in board initialization, or `state.cluster_by` before
+ * branching on state.type). Zod's discriminated union still enforces the correct
+ * discriminant; the shared fields just allow safe reads across all members.
+ */
+const BaseStateFields = {
   template: z.union([z.string(), z.array(z.string())]).optional(),
+  inject_context: z.array(ContextInjectionSchema).optional(),
+  skip_when: SkipWhenSchema.optional(),
+  timeout: z.string().optional(),
+  effects: z.array(EffectSchema).optional(),
   transitions: z.record(z.string(), z.string()).optional(),
   max_iterations: z.coerce.number().optional(),
   stuck_when: StuckWhenSchema.optional(),
+  // Cross-type fields needed without narrowing in orchestration code
+  agent: z.string().optional(),
+  agents: z.array(z.string()).optional(),
+  roles: z.array(RoleEntrySchema).optional(),
+  compete: CompeteConfigSchema.optional(),
+  large_diff_threshold: z.number().optional(),
+  cluster_by: z.enum(["directory", "layer"]).optional(),
   gate: z.string().optional(),
   gates: z.array(z.string()).optional(),
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
-  iterate_on: z.string().optional(),
-  inject_context: z.array(ContextInjectionSchema).optional(),
-  skip_when: SkipWhenSchema.optional(),
-  large_diff_threshold: z.number().optional(),
-  cluster_by: z.enum(["directory", "layer"]).optional(),
-  timeout: z.string().optional(),
-  effects: z.array(EffectSchema).optional(),
-  compete: CompeteConfigSchema.optional(),
+};
+
+export const SingleStateSchema = z.object({
+  ...BaseStateFields,
+  type: z.literal("single"),
+  role: z.string().optional(),
 });
+
+/**
+ * Wave execution policy. When `wave_policy` is omitted from a wave state
+ * definition, it is `undefined` — no defaults are applied. When an empty
+ * object `{}` is provided, Zod applies field-level defaults (isolation:
+ * "worktree", merge_strategy: "sequential", on_conflict: "hitl").
+ * Consumers should treat `undefined` the same as the default values.
+ */
+export const WavePolicySchema = z
+  .object({
+    isolation: z.enum(["worktree", "branch", "none"]).default("worktree"),
+    merge_strategy: z.enum(["sequential", "rebase", "squash"]).default("sequential"),
+    gate: z.string().optional(),
+    on_conflict: z.enum(["hitl", "replan", "retry-single"]).default("hitl"),
+    coordination: z.string().optional(),
+  })
+  .optional();
+
+export const WaveStateSchema = z.object({
+  ...BaseStateFields,
+  type: z.literal("wave"),
+  role: z.string().optional(),
+  wave_policy: WavePolicySchema,
+});
+
+export const ParallelStateSchema = z.object({
+  ...BaseStateFields,
+  type: z.literal("parallel"),
+});
+
+export const ParallelPerStateSchema = z.object({
+  ...BaseStateFields,
+  type: z.literal("parallel-per"),
+  role: z.string().optional(),
+  iterate_on: z.string().optional(), // required semantically but kept optional for backward compat
+});
+
+export const TerminalStateSchema = z.object({
+  ...BaseStateFields,
+  type: z.literal("terminal"),
+});
+
+export const StateDefinitionSchema = z.discriminatedUnion("type", [
+  SingleStateSchema,
+  WaveStateSchema,
+  ParallelStateSchema,
+  ParallelPerStateSchema,
+  TerminalStateSchema,
+]);
 
 export const FragmentIncludeSchema = z.object({
   fragment: z.string(),
-  with: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  with: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   as: z.string().optional(),
   overrides: z
     .record(z.string(), z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])))
@@ -211,40 +278,107 @@ export const FlowDefinitionSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Fragment param schemas
+// ---------------------------------------------------------------------------
+
+/** Typed param declaration for fragment params (ADR-004). */
+export const TypedParamSchema = z.object({
+  type: z.enum(["state_id", "string", "number", "boolean"]),
+  default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+});
+
+/**
+ * Fragment param value: accepts both old (value | null) and new (typed) formats.
+ * Backward compat: null means required param (old marker syntax).
+ */
+export const FragmentParamValueSchema = z.union([
+  TypedParamSchema,
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+]);
+
+export type TypedParam = z.infer<typeof TypedParamSchema>;
+export type FragmentParamValue = z.infer<typeof FragmentParamValueSchema>;
+
+// ---------------------------------------------------------------------------
 // Fragment definition schemas
 // ---------------------------------------------------------------------------
 
-/** Loose state schema for fragments — allows param placeholders in numeric fields. */
-export const FragmentStateDefinitionSchema = z.object({
-  type: StateTypeSchema,
-  agent: z.string().optional(),
-  agents: z.array(z.string()).optional(),
-  role: z.string().optional(),
-  roles: z.array(RoleEntrySchema).optional(),
+// ---------------------------------------------------------------------------
+// Fragment state schemas — parallel discriminated union with relaxed numeric fields
+// ---------------------------------------------------------------------------
+
+/** Fragment base fields — relaxes numeric and enum fields for param placeholders. */
+const FragmentBaseStateFields = {
   template: z.union([z.string(), z.array(z.string())]).optional(),
+  inject_context: z.array(ContextInjectionSchema).optional(),
+  skip_when: z.string().optional(), // relaxed: accepts enum values OR param placeholders
+  timeout: z.string().optional(),
+  effects: z.array(EffectSchema).optional(),
   transitions: z.record(z.string(), z.string()).optional(),
   max_iterations: z.union([z.coerce.number(), z.string()]).optional(),
   stuck_when: z.union([StuckWhenSchema, z.string()]).optional(),
+  // Cross-type fields (same as BaseStateFields; relaxed numeric variants where applicable)
+  agent: z.string().optional(),
+  agents: z.array(z.string()).optional(),
+  roles: z.array(RoleEntrySchema).optional(),
+  compete: CompeteConfigSchema.optional(),
+  large_diff_threshold: z.union([z.number(), z.string()]).optional(),
+  cluster_by: z.enum(["directory", "layer"]).optional(),
   gate: z.string().optional(),
   gates: z.array(z.string()).optional(),
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
-  iterate_on: z.string().optional(),
-  inject_context: z.array(ContextInjectionSchema).optional(),
-  skip_when: z.string().optional(),
-  large_diff_threshold: z.union([z.number(), z.string()]).optional(),
-  cluster_by: z.enum(["directory", "layer"]).optional(),
-  timeout: z.string().optional(),
-  effects: z.array(EffectSchema).optional(),
-  compete: CompeteConfigSchema.optional(),
+};
+
+const FragmentSingleStateSchema = z.object({
+  ...FragmentBaseStateFields,
+  type: z.literal("single"),
+  role: z.string().optional(),
+  // large_diff_threshold is in FragmentBaseStateFields with relaxed z.union([z.number(), z.string()])
 });
+
+const FragmentWaveStateSchema = z.object({
+  ...FragmentBaseStateFields,
+  type: z.literal("wave"),
+  role: z.string().optional(),
+  wave_policy: WavePolicySchema,
+});
+
+const FragmentParallelStateSchema = z.object({
+  ...FragmentBaseStateFields,
+  type: z.literal("parallel"),
+});
+
+const FragmentParallelPerStateSchema = z.object({
+  ...FragmentBaseStateFields,
+  type: z.literal("parallel-per"),
+  role: z.string().optional(),
+  iterate_on: z.string().optional(),
+});
+
+const FragmentTerminalStateSchema = z.object({
+  ...FragmentBaseStateFields,
+  type: z.literal("terminal"),
+});
+
+/** Loose state schema for fragments — allows param placeholders in numeric fields. */
+export const FragmentStateDefinitionSchema = z.discriminatedUnion("type", [
+  FragmentSingleStateSchema,
+  FragmentWaveStateSchema,
+  FragmentParallelStateSchema,
+  FragmentParallelPerStateSchema,
+  FragmentTerminalStateSchema,
+]);
 
 export const FragmentDefinitionSchema = z.object({
   fragment: z.string(),
   description: z.string().optional(),
   type: z.literal("consultation").optional(),
   entry: z.string().optional(),
-  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+  params: z.record(z.string(), FragmentParamValueSchema).optional(),
   states: z.record(z.string(), FragmentStateDefinitionSchema).optional(),
   // Consultation-specific fields
   agent: z.string().optional(),
@@ -506,6 +640,12 @@ export type ContextInjection = z.infer<typeof ContextInjectionSchema>;
 export type ConsultationsMap = z.infer<typeof ConsultationsMapSchema>;
 export type RoleEntry = z.infer<typeof RoleEntrySchema>;
 export type StateDefinition = z.infer<typeof StateDefinitionSchema>;
+export type SingleState = z.infer<typeof SingleStateSchema>;
+export type WaveState = z.infer<typeof WaveStateSchema>;
+export type WavePolicy = z.infer<typeof WavePolicySchema>;
+export type ParallelState = z.infer<typeof ParallelStateSchema>;
+export type ParallelPerState = z.infer<typeof ParallelPerStateSchema>;
+export type TerminalState = z.infer<typeof TerminalStateSchema>;
 export type FragmentInclude = z.infer<typeof FragmentIncludeSchema>;
 export type FlowDefinition = z.infer<typeof FlowDefinitionSchema>;
 export type FragmentDefinition = z.infer<typeof FragmentDefinitionSchema>;

@@ -615,6 +615,87 @@ describe('appendFlowRun and computeAnalytics', () => {
 });
 
 // ---------------------------------------------------------------------------
+// getReviewsByFiles
+// ---------------------------------------------------------------------------
+
+describe('getReviewsByFiles', () => {
+  let store: DriftDb;
+
+  beforeEach(() => {
+    ({ store } = makeDb());
+
+    // Seed reviews:
+    // rev_001: files = [src/foo.ts, src/bar.ts]
+    // rev_002: files = [src/baz.ts]
+    // rev_003: files = [src/foo.ts, src/qux.ts] with violations
+    store.appendReview(
+      makeReviewEntry({
+        review_id: 'rev_001',
+        files: ['src/foo.ts', 'src/bar.ts'],
+      }),
+    );
+    store.appendReview(
+      makeReviewEntry({
+        review_id: 'rev_002',
+        files: ['src/baz.ts'],
+      }),
+    );
+    store.appendReview(
+      makeReviewEntry({
+        review_id: 'rev_003',
+        files: ['src/foo.ts', 'src/qux.ts'],
+        violations: [{ principle_id: 'thin-handlers', severity: 'rule', file_path: 'src/foo.ts' }],
+      }),
+    );
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test('returns reviews whose files overlap with input', () => {
+    const results = store.getReviewsByFiles(['src/foo.ts']);
+    const ids = results.map(r => r.review_id);
+    expect(ids).toContain('rev_001');
+    expect(ids).toContain('rev_003');
+    expect(ids).not.toContain('rev_002');
+  });
+
+  test('returns reviews matching any file in input (union)', () => {
+    const results = store.getReviewsByFiles(['src/bar.ts', 'src/baz.ts']);
+    const ids = results.map(r => r.review_id);
+    expect(ids).toContain('rev_001'); // has src/bar.ts
+    expect(ids).toContain('rev_002'); // has src/baz.ts
+    expect(ids).not.toContain('rev_003');
+  });
+
+  test('returns empty array for non-matching files', () => {
+    const results = store.getReviewsByFiles(['src/does-not-exist.ts']);
+    expect(results).toEqual([]);
+  });
+
+  test('returns empty array for empty input', () => {
+    const results = store.getReviewsByFiles([]);
+    expect(results).toEqual([]);
+  });
+
+  test('reconstitutes violations for matched reviews', () => {
+    const results = store.getReviewsByFiles(['src/foo.ts']);
+    const rev3 = results.find(r => r.review_id === 'rev_003');
+    expect(rev3).toBeDefined();
+    expect(rev3!.violations).toHaveLength(1);
+    expect(rev3!.violations[0].principle_id).toBe('thin-handlers');
+    expect(rev3!.violations[0].file_path).toBe('src/foo.ts');
+  });
+
+  test('returns all reviews when all match', () => {
+    // src/foo.ts appears in rev_001 and rev_003; src/baz.ts in rev_002
+    const results = store.getReviewsByFiles(['src/foo.ts', 'src/baz.ts']);
+    expect(results).toHaveLength(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getDriftDb factory
 // ---------------------------------------------------------------------------
 

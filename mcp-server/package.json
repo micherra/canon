@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "@modelcontextprotocol/ext-apps": "^1.3.2",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "better-sqlite3": "^12.8.0",
@@ -20,6 +21,7 @@
     "remark-frontmatter": "^5.0.0",
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
+    "sqlite-vec": "^0.1.6-alpha.2",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "web-tree-sitter": "^0.26.7",

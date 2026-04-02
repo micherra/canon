@@ -163,19 +163,17 @@ afterAll(async () => {
 
 describe("loadAndResolveFlow — plugin-only (no projectDir)", () => {
   it("loads the feature flow from plugin dir without projectDir", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "feature");
+    const flow = await loadAndResolveFlow(pluginDir, "feature");
 
     expect(flow.name).toBe("feature");
     expect(flow.entry).toBeDefined();
-    expect(errors).toEqual([]);
   });
 
   it("loads review-only from plugin dir (regression check)", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "review-only");
+    const flow = await loadAndResolveFlow(pluginDir, "review-only");
 
     expect(flow.name).toBe("review-only");
     expect(flow.entry).toBe("review");
-    expect(errors).toEqual([]);
   });
 });
 
@@ -185,19 +183,18 @@ describe("loadAndResolveFlow — plugin-only (no projectDir)", () => {
 
 describe("loadAndResolveFlow — project-level resolution", () => {
   it("loads a flow from project .canon/flows/ when projectDir is provided", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "my-project-flow", projectDir);
+    const flow = await loadAndResolveFlow(pluginDir, "my-project-flow", projectDir);
 
     expect(flow.name).toBe("my-project-flow");
     expect(flow.entry).toBe("research");
     expect(flow.states["research"]).toBeDefined();
     expect(flow.states["research"].agent).toBe("canon-researcher");
-    expect(errors).toEqual([]);
   });
 
   it("project-level flow overrides plugin-level flow of the same name", async () => {
     // The project has a "feature.md" that overrides the plugin's "feature.md"
-    const { flow: projectFlow } = await loadAndResolveFlow(pluginDir, "feature", projectDir);
-    const { flow: pluginFlow } = await loadAndResolveFlow(pluginDir, "feature");
+    const projectFlow = await loadAndResolveFlow(pluginDir, "feature", projectDir);
+    const pluginFlow = await loadAndResolveFlow(pluginDir, "feature");
 
     // Project flow has "build" state with custom-implementor
     expect(projectFlow.states["build"]).toBeDefined();
@@ -210,11 +207,10 @@ describe("loadAndResolveFlow — project-level resolution", () => {
 
   it("falls back to plugin flow when flow not in project dir", async () => {
     // review-only is only in plugin dir; project dir does not have it
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "review-only", projectDir);
+    const flow = await loadAndResolveFlow(pluginDir, "review-only", projectDir);
 
     expect(flow.name).toBe("review-only");
     expect(flow.entry).toBe("review");
-    expect(errors).toEqual([]);
   });
 
   it("throws informative error when flow not found in either location", async () => {
@@ -265,7 +261,7 @@ describe("loadFragment — project dir first", () => {
 
 describe("loadAndResolveFlow — mixed project/plugin fragment resolution", () => {
   it("project-level flow can reference project-level consultation fragment", async () => {
-    const { flow, errors } = await loadAndResolveFlow(pluginDir, "test-epic", projectDir);
+    const flow = await loadAndResolveFlow(pluginDir, "test-epic", projectDir);
 
     expect(flow.name).toBe("test-epic");
     expect(flow.entry).toBe("research");
@@ -274,11 +270,10 @@ describe("loadAndResolveFlow — mixed project/plugin fragment resolution", () =
     // The targeted-research fragment should be resolved as a consultation
     expect(flow.consultations).toBeDefined();
     expect(flow.consultations?.["targeted-research"]).toBeDefined();
-    expect(errors).toEqual([]);
   });
 
   it("targeted-research consultation has skip_when propagated from fragment definition", async () => {
-    const { flow } = await loadAndResolveFlow(pluginDir, "test-epic", projectDir);
+    const flow = await loadAndResolveFlow(pluginDir, "test-epic", projectDir);
 
     const consultation = flow.consultations?.["targeted-research"];
     expect(consultation).toBeDefined();

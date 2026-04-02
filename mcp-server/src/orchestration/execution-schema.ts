@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '2';
+export const SCHEMA_VERSION = '3';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -184,55 +184,80 @@ export function columnExists(
 }
 
 // ---------------------------------------------------------------------------
-// migrateV1ToV2 — adds correlation_id columns and indexes
+// Migration runner
 // ---------------------------------------------------------------------------
 
+interface Migration {
+  version: string;
+  up: (db: Database.Database) => void;
+}
+
 /**
- * Migrates a v1 database to v2.
- *
- * Changes:
- * - ALTER TABLE execution ADD COLUMN correlation_id TEXT
- * - ALTER TABLE events ADD COLUMN correlation_id TEXT
- * - CREATE INDEX idx_events_correlation ON events(correlation_id)
- * - CREATE INDEX idx_events_correlation_type ON events(correlation_id, type)
- * - Backfill existing execution row (id = 1) with a UUID if correlation_id is NULL
- * - UPDATE meta SET value = '2' WHERE key = 'schema_version'
- *
- * Uses columnExists() to guard ALTER TABLE calls for idempotency.
- * Wrapped in a transaction for atomicity.
+ * Ordered list of schema migrations.
+ * Each migration runs only when the stored schema version is less than migration.version.
+ * Versions are compared as strings — use zero-padded integers if > 9.
  */
-function migrateV1ToV2(db: Database.Database): void {
-  const migrate = db.transaction(() => {
-    // Add correlation_id to execution if not already present
-    if (!columnExists(db, 'execution', 'correlation_id')) {
-      db.exec(`ALTER TABLE execution ADD COLUMN correlation_id TEXT`);
+const MIGRATIONS: Migration[] = [
+  {
+    // correlation_id columns — shipped on main
+    version: '2',
+    up: (db) => {
+      if (!columnExists(db, 'execution', 'correlation_id')) {
+        db.exec(`ALTER TABLE execution ADD COLUMN correlation_id TEXT`);
+      }
+      if (!columnExists(db, 'events', 'correlation_id')) {
+        db.exec(`ALTER TABLE events ADD COLUMN correlation_id TEXT`);
+      }
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_events_correlation_type ON events(correlation_id, type)`);
+
+      // Backfill existing execution row with a UUID
+      db.prepare(
+        `UPDATE execution SET correlation_id = ? WHERE id = 1 AND correlation_id IS NULL`,
+      ).run(randomUUID());
+
+      db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // iteration_results table (ADR-004)
+    version: '3',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS iteration_results (
+          id        INTEGER PRIMARY KEY AUTOINCREMENT,
+          state_id  TEXT NOT NULL,
+          iteration INTEGER NOT NULL,
+          status    TEXT NOT NULL,
+          data      TEXT NOT NULL DEFAULT '{}',
+          timestamp TEXT NOT NULL,
+          UNIQUE(state_id, iteration)
+        )
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_iteration_results_state ON iteration_results(state_id)`);
+      db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
+    },
+  },
+];
+
+/**
+ * Run any pending migrations against the given database.
+ * Version gated: only runs migrations whose version is greater than the current stored version.
+ * All DDL in migrations uses IF NOT EXISTS, making repeated calls safe.
+ *
+ * Exported for direct testing of upgrade scenarios.
+ */
+export function runMigrations(db: Database.Database): void {
+  const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
+  let version = currentRow?.value ?? '1';
+
+  for (const migration of MIGRATIONS) {
+    if (migration.version > version) {
+      const run = db.transaction(() => migration.up(db));
+      run();
+      version = migration.version;
     }
-
-    // Add correlation_id to events if not already present
-    if (!columnExists(db, 'events', 'correlation_id')) {
-      db.exec(`ALTER TABLE events ADD COLUMN correlation_id TEXT`);
-    }
-
-    // Create indexes (IF NOT EXISTS for idempotency)
-    db.exec(
-      `CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id)`,
-    );
-    db.exec(
-      `CREATE INDEX IF NOT EXISTS idx_events_correlation_type ON events(correlation_id, type)`,
-    );
-
-    // Backfill existing execution row with a UUID (only if row exists and correlation_id is NULL)
-    db.prepare(
-      `UPDATE execution SET correlation_id = ? WHERE id = 1 AND correlation_id IS NULL`,
-    ).run(randomUUID());
-
-    // Bump schema version
-    db.prepare(
-      `UPDATE meta SET value = '2' WHERE key = 'schema_version'`,
-    ).run();
-  });
-
-  migrate();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -270,18 +295,10 @@ export function initExecutionDb(dbPath: string): Database.Database {
 
   applySchema();
 
-  // Run pending migrations
-  const versionRow = db
-    .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-    .get() as { value: string } | undefined;
-
-  const storedVersionRaw = versionRow?.value ?? '1';
-  const storedVersion = Number.parseInt(storedVersionRaw, 10);
-  const effectiveVersion = Number.isNaN(storedVersion) ? 1 : storedVersion;
-
-  if (effectiveVersion < 2) {
-    migrateV1ToV2(db);
-  }
+  // Run version-gated migrations (idempotent — IF NOT EXISTS guards).
+  // New workspaces start at version '1' (the INSERT OR IGNORE above) and
+  // immediately migrate to the current SCHEMA_VERSION.
+  runMigrations(db);
 
   return db;
 }
