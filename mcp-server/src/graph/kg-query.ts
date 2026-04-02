@@ -333,7 +333,6 @@ export class KgQuery {
   private readonly stmtGetAllOutDegrees: Database.Statement;
   private readonly stmtGetFileAdjacencyList: Database.Statement;
   private readonly stmtGetFileIdByPath: Database.Statement;
-  private readonly stmtGetFileById: Database.Statement;
   private readonly stmtGetKgFreshness: Database.Statement;
 
   constructor(db: Database.Database) {
@@ -495,10 +494,6 @@ export class KgQuery {
 
     this.stmtGetFileIdByPath = db.prepare(`
       SELECT file_id, layer FROM files WHERE path = ?
-    `);
-
-    this.stmtGetFileById = db.prepare(`
-      SELECT file_id, path, layer FROM files WHERE file_id = ?
     `);
 
     this.stmtGetKgFreshness = db.prepare(`

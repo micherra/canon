@@ -58,8 +58,8 @@ export async function listBranchWorkspaces(
   try {
     const { readdir } = await import("node:fs/promises");
     entries = await readdir(branchDir);
-  } catch (err: any) {
-    if (err.code === "ENOENT") return results;
+  } catch (err: unknown) {
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT") return results;
     throw err;
   }
 

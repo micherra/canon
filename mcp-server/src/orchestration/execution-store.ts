@@ -266,12 +266,6 @@ export class ExecutionStore {
       SELECT * FROM execution WHERE id = 1
     `);
 
-    // Dynamic update — we build SET clauses at runtime for the fields provided
-    // This single-column statement is unused; updateExecution builds statements dynamically
-    this.stmtUpdateExecution = db.prepare(`
-      UPDATE execution SET last_updated = @last_updated WHERE id = 1
-    `);
-
     // States
     this.stmtUpsertState = db.prepare(`
       INSERT INTO execution_states (

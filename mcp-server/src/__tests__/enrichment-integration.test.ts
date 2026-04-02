@@ -157,6 +157,15 @@ function makeReviewEntry(
   };
 }
 
+/** Set up a DriftStore constructor mock with the given store partial. */
+function mockDriftStore(store: { getReviewsForFiles: ReturnType<typeof vi.fn> }): void {
+  // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function() for `new` binding
+  vi.mocked(DriftStore).mockImplementation(function () {
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    return store as any;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // 1. End-to-end: scope resolver → enrichment assembler → pipeline integration
 // ---------------------------------------------------------------------------
@@ -170,10 +179,7 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
   });
 
   afterEach(() => {
@@ -262,10 +268,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
           makeReviewEntry(files.slice(5, 10), 3, "WARNING"),
         ]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
@@ -285,10 +288,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 10, "BLOCKING")]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
@@ -310,10 +310,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("feature") }));
 
@@ -341,10 +338,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/foo.ts"], 4, "BLOCKING")]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -364,10 +358,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/foo.ts"], 4, "BLOCKING", true)]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -385,10 +376,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/no-git.ts"], 3, "WARNING")]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -405,10 +393,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 2, "WARNING")]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -426,10 +411,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/a.ts", "src/b.ts"], 0, "CLEAN")]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -462,10 +444,7 @@ describe("enrichment integration — graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -485,10 +464,7 @@ describe("enrichment integration — graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/foo.ts"], 2, "WARNING")]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -522,10 +498,7 @@ describe("enrichment integration — graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -546,10 +519,7 @@ describe("enrichment integration — graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     let result: Awaited<ReturnType<typeof assembleEnrichment>> | undefined;
     try {
@@ -582,10 +552,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -603,10 +570,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -627,10 +591,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -712,10 +673,7 @@ describe("enrichment integration — workspace section edge cases", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
   });
 
   afterEach(() => {

@@ -51,14 +51,6 @@ export class KgVectorStore {
         updated_at = excluded.updated_at
     `);
 
-    this.stmtDeleteEntityMeta = db.prepare(`
-      DELETE FROM entity_vector_meta WHERE entity_id = ?
-    `);
-
-    this.stmtDeleteSummaryMeta = db.prepare(`
-      DELETE FROM summary_vector_meta WHERE summary_id = ?
-    `);
-
     // Stats via meta tables (meta tables stay in sync with vec0 rows via upsert/cleanup)
     this.stmtCountEntityVectorMeta = db.prepare(`SELECT COUNT(*) AS n FROM entity_vector_meta`);
     this.stmtCountSummaryVectorMeta = db.prepare(`SELECT COUNT(*) AS n FROM summary_vector_meta`);

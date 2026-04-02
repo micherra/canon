@@ -24,6 +24,7 @@ vi.mock("../graph/kg-schema.ts", () => ({
 }));
 
 vi.mock("../graph/kg-query.ts", () => ({
+  // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function() for `new` binding
   KgQuery: vi.fn(function () {
     return {
       search: vi.fn().mockReturnValue([]),
@@ -153,7 +154,7 @@ describe("graphQuery — success cases", () => {
 
   it("returns ok: true with results for 'search' query", () => {
     // Mock search to return a hit so we can verify the result shape
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function() for `new` binding
     vi.mocked(KgQuery).mockImplementationOnce(function () {
       return {
         search: vi.fn().mockReturnValue([{ entity_id: 1, name: "myFunc", kind: "function" }]),
@@ -163,6 +164,7 @@ describe("graphQuery — success cases", () => {
         getBlastRadius: vi.fn().mockReturnValue([]),
         getAncestors: vi.fn().mockReturnValue([]),
       };
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     } as any);
 
     const result = graphQuery({ query_type: "search", target: "myFunc" }, tmpDir);
@@ -176,7 +178,7 @@ describe("graphQuery — success cases", () => {
 
   it("returns ok: true with empty results when entity not found for 'callers'", () => {
     // search returns empty → entity not found → empty callers
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function() for `new` binding
     vi.mocked(KgQuery).mockImplementationOnce(function () {
       return {
         search: vi.fn().mockReturnValue([]), // no entity found
@@ -186,6 +188,7 @@ describe("graphQuery — success cases", () => {
         getBlastRadius: vi.fn().mockReturnValue([]),
         getAncestors: vi.fn().mockReturnValue([]),
       };
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     } as any);
 
     const result = graphQuery({ query_type: "callers", target: "unknownFunc" }, tmpDir);

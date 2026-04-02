@@ -127,6 +127,15 @@ function makeReviewEntry(files: string[], violationCount = 0, verdict: "BLOCKING
   };
 }
 
+/** Set up a DriftStore constructor mock with the given store partial. */
+function mockDriftStore(store: { getReviewsForFiles: ReturnType<typeof vi.fn> }): void {
+  // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function() for `new` binding
+  vi.mocked(DriftStore).mockImplementation(function () {
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    return store as any;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests: dc-04 — Empty scope → graceful degradation
 // ---------------------------------------------------------------------------
@@ -158,10 +167,7 @@ describe("assembleEnrichment — dc-01: all sections present", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/foo.ts", "src/bar.ts"])]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
   });
 
   it("output contains Recent Changes section (git)", async () => {
@@ -196,10 +202,7 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("hotfix") }));
 
@@ -222,10 +225,7 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 3)]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
@@ -244,10 +244,7 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 5)]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
@@ -274,10 +271,7 @@ describe("assembleEnrichment — dc-04: graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -293,10 +287,7 @@ describe("assembleEnrichment — dc-04: graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockRejectedValue(new Error("DB not found")),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     await expect(assembleEnrichment(makeInput())).resolves.toBeDefined();
   });
@@ -307,10 +298,7 @@ describe("assembleEnrichment — dc-04: graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
     expect(result).toBeDefined();
@@ -323,10 +311,7 @@ describe("assembleEnrichment — dc-04: graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
     // All sections fail/empty → content should be empty string
@@ -349,10 +334,7 @@ describe("assembleEnrichment — dc-05: dollar-brace escaping", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -369,10 +351,7 @@ describe("assembleEnrichment — dc-05: dollar-brace escaping", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -401,10 +380,7 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
         makeReviewEntry(["src/foo.ts"], 2), // 2 violations
       ]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -423,10 +399,7 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
         makeReviewEntry(["src/foo.ts"], 0), // clean
       ]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -442,10 +415,7 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/foo.ts"], 3)]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -463,10 +433,7 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 2)]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
 
     const result = await assembleEnrichment(makeInput());
 
@@ -490,10 +457,7 @@ describe("assembleEnrichment — prior work section", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
-    vi.mocked(DriftStore).mockImplementation(function () {
-      return mockStore as any;
-    });
+    mockDriftStore(mockStore);
   });
 
   afterEach(() => {
