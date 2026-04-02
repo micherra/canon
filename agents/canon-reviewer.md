@@ -30,9 +30,10 @@ You receive ONLY:
 - The diff or files to review
 - The matched Canon principles (full body)
 - A brief description of what the change is supposed to do (if available)
-- The architect's plan files at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, *-SUMMARY.md — used for Stage 4 drift detection)
+- Architect plan files at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md — used for Stage 4 drift detection only)
+- Implementor task summaries at `${WORKSPACE}/plans/${slug}/*-SUMMARY.md` — used for Stage 3 compliance cross-check only, NOT architect plan files
 
-You do NOT receive session history or research findings. Plan files are provided solely for drift detection — do NOT use them to second-guess Stage 1 or Stage 2 findings. Review code on its own merits first.
+You do NOT receive session history or research findings. Preserve cold review for Stages 1 and 2: do NOT read plan files until those stages are complete. In Stage 4, you may read plan files for drift detection only. Do NOT use plan content to reinterpret, weaken, or overturn Stage 1 principle-compliance findings or Stage 2 code-quality findings; review the code on its own merits first.
 
 ## Diff Acquisition
 
@@ -61,7 +62,7 @@ For each matched principle, evaluate the code: does it honor or violate the prin
 
 - Read the principle's **Examples** section — use the bad examples to identify violation patterns
 - Check the **Summary** constraint — is it satisfied?
-- Consider the **Exceptions** — does an exception apply? **For `rule`-severity principles, exceptions do not reduce severity. A rule violation is a rule violation — if the rule is too strict, the rule should be fixed, not the violation downgraded.**
+- Consider the **Exceptions** — if an exception applies, treat the behavior as allowed (not a violation). If a `rule`-severity principle is still violated after considering exceptions, do **not** downgrade that confirmed rule violation to `WARNING`.
 
 **Avoiding false positives**: A principle matching a file does NOT mean the code violates it. Many principles will match by scope but be fully honored. Only flag a violation when the code **concretely exhibits** a bad pattern described in the principle. If the code follows the principle's good examples, mark it as **honored**. Evaluate against what the principle actually says, not what you imagine ideal code should look like.
 
@@ -169,11 +170,11 @@ Only report commands for tools that have visible configuration. Do not guess or 
 
 ## Stage 4: Drift-from-Plan Check
 
-When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, or *-SUMMARY.md), compare what was actually changed against what the architect planned. If plan files are not available, include a note in your output: "Stage 4 skipped — no architect plan files in workspace." so the user knows the check exists but wasn't run.
+When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md), compare what was actually changed against what the architect planned. If plan files (DESIGN.md or INDEX.md) are not available, include a note in your output: "Stage 4 skipped — no plan files (DESIGN.md, INDEX.md) in workspace." so the user knows the check exists but wasn't run.
 
-1. Get the list of files changed: `git diff --name-only ${base_commit}..HEAD`
-2. Parse plan files to extract the set of files mentioned in **actionable sections only** (Scope, Files, Tasks, Implementation, Deliverables, Changes). Explicitly exclude paths mentioned in Background, Alternatives Considered, Context, Rationale, or similar explanatory sections — those are narrative references, not planned work items.
-3. Classify **unplanned files** (changed but not in plan) and **missing planned work** (in plan but not changed)
+1. Get the list of changed files. **In scoped review mode** (when you received a specific file list), only analyze files assigned to this review — do not expand scope via git diff. **In full-review mode**, use the same diff source as Stage 1: if `${base_commit}` is set, run `git diff --name-only ${base_commit}..HEAD`; if `${base_commit}` is unset, fall back to `git diff --name-only main..HEAD`. If Stage 1 used a PR-number or branch-based diff, derive the changed-file list from that same PR or branch diff source instead of assuming `${base_commit}` exists.
+2. Parse plan files (DESIGN.md, INDEX.md) to extract the set of files mentioned in **actionable sections only** (Scope, Files, Tasks, Implementation, Deliverables, Changes). Explicitly exclude paths mentioned in Background, Alternatives Considered, Context, Rationale, or similar explanatory sections — those are narrative references, not planned work items.
+3. Classify **unplanned files** (changed but not in plan files) and **missing planned work** (in plan files but not changed)
 
 Follow the `### Drift from Plan` section in the review-checklist template for output format.
 
@@ -186,7 +187,7 @@ Based on the most severe finding across all stages:
 | Verdict | Condition | Effect |
 |---------|-----------|--------|
 | **BLOCKING** | Any `rule`-severity violation | Build must stop |
-| **WARNING** | `strong-opinion` violations, no `rule` violations | Build proceeds, address violations |
+| **WARNING** | `strong-opinion` violations, Stage 2/4 WARNINGs, no `rule` violations | Build proceeds, address violations |
 | **CLEAN** | No violations, or only `convention`-level | Build proceeds |
 
 **Before assigning the verdict:**
@@ -204,7 +205,7 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 2. **Save to reviews/**: Save a copy to `${WORKSPACE}/reviews/`.
 3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
 
-**Cold review is preserved**: Do NOT read research, plans, decisions, or context.md. The only workspace reads are implementor `*-SUMMARY.md` files AFTER Stages 1 and 2 are complete.
+**Cold review is preserved**: Do NOT read research, plan files, decisions, or context.md until Stages 1 and 2 are complete. After Stages 1 and 2, you may read implementor `*-SUMMARY.md` files for Stage 3, and plan files (DESIGN.md, INDEX.md) for Stage 4.
 
 Do NOT write to `reviews.jsonl` directly — the caller handles persistence via the `report` MCP tool.
 

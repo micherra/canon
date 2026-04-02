@@ -41,9 +41,9 @@ states:
 ## Spawn Instructions
 
 ### review
-Review changes via `git diff ${base_commit}..HEAD` (scoped to file list if provided). After Stages 1-2, cross-check against ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.
+Review changes via `git diff ${base_commit}..HEAD` (scoped to file list if provided). After Stages 1-2 are complete, cross-check against `${WORKSPACE}/plans/${slug}/*-SUMMARY.md` for the Stage 3 summary review. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.
 
-**Architect plans**: Read all files in `${WORKSPACE}/plans/${slug}/` — including DESIGN.md, INDEX.md, and *-SUMMARY.md — for Stage 4 drift-from-plan detection.
+**Plan artifacts**: For Stage 4 drift-from-plan detection, read `${WORKSPACE}/plans/${slug}/DESIGN.md` and `${WORKSPACE}/plans/${slug}/INDEX.md`. Do not read `*-SUMMARY.md` until after Stages 1-2, as part of the Stage 3 summary cross-check above.
 
 ${review_scope}
 
