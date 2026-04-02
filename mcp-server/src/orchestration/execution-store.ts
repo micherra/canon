@@ -262,6 +262,10 @@ export class ExecutionStore {
   private readonly stmtGetCachePrefix: Database.Statement;
   private readonly stmtSetCachePrefix: Database.Statement;
 
+  // ---- Agent session statements (ADR-009a) ----
+  private readonly stmtUpdateAgentSession: Database.Statement;
+  private readonly stmtGetAgentSession: Database.Statement;
+
   constructor(db: Database.Database) {
     this.db = db;
 
@@ -460,6 +464,14 @@ export class ExecutionStore {
     );
     this.stmtGetTranscriptPath = db.prepare(
       `SELECT transcript_path FROM execution_states WHERE state_id = ?`,
+    );
+
+    // Agent session (ADR-009a)
+    this.stmtUpdateAgentSession = db.prepare(
+      `UPDATE execution_states SET agent_session_id = ?, last_agent_activity = ? WHERE state_id = ?`,
+    );
+    this.stmtGetAgentSession = db.prepare(
+      `SELECT agent_session_id, last_agent_activity FROM execution_states WHERE state_id = ?`,
     );
   }
 
@@ -1131,6 +1143,39 @@ export class ExecutionStore {
   getTranscriptPath(stateId: string): string | null {
     const row = this.stmtGetTranscriptPath.get(stateId) as { transcript_path: string | null } | undefined;
     return row?.transcript_path ?? null;
+  }
+
+  // --------------------------------------------------------------------------
+  // Agent session (ADR-009a)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Record the agent session ID and update the last activity timestamp.
+   * Used to track session continuations for the fix-loop in drive_flow.
+   * The sessionId is the agentId returned by Claude Code's Agent tool.
+   */
+  updateAgentSession(stateId: string, sessionId: string): void {
+    this.stmtUpdateAgentSession.run(sessionId, new Date().toISOString(), stateId);
+  }
+
+  /**
+   * Retrieve the agent session ID and last activity timestamp for a state.
+   * Returns null when no session has been recorded for this state.
+   * Callers use last_agent_activity to determine whether the session has expired
+   * (idle > 600000ms = 10 minutes) before attempting SendMessage continuation.
+   */
+  getAgentSession(stateId: string): { agent_session_id: string; last_agent_activity: string } | null {
+    const row = this.stmtGetAgentSession.get(stateId) as {
+      agent_session_id: string | null;
+      last_agent_activity: string | null;
+    } | undefined;
+    if (!row || row.agent_session_id === null || row.last_agent_activity === null) {
+      return null;
+    }
+    return {
+      agent_session_id: row.agent_session_id,
+      last_agent_activity: row.last_agent_activity,
+    };
   }
 }
 
