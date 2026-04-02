@@ -29,8 +29,8 @@ export async function substituteVariablesStage(ctx: PromptContext): Promise<Prom
   const store = getExecutionStore(input.workspace);
   const cachePrefix = store.getCachePrefix();
 
-  // Prepend cache prefix when non-empty
-  const basePrompt = cachePrefix ? `${cachePrefix}${substituted}` : substituted;
+  // Prepend cache prefix when non-empty, with separator
+  const basePrompt = cachePrefix ? `${cachePrefix}\n\n---\n\n${substituted}` : substituted;
 
   return {
     ...ctx,

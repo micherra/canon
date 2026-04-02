@@ -120,7 +120,7 @@ describe("substituteVariablesStage (Stage 4)", () => {
     vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => prefix) as ReturnType<typeof getExecutionStore>);
     const ctx = makeCtx("Do ${task}", { task: "the work" });
     const result = await substituteVariablesStage(ctx);
-    expect(result.basePrompt).toBe(`${prefix}Do the work`);
+    expect(result.basePrompt).toBe(`${prefix}\n\n---\n\nDo the work`);
   });
 
   it("skips cache prefix when store returns empty string", async () => {

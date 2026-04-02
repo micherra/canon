@@ -139,7 +139,7 @@ export async function fanout(ctx: PromptContext): Promise<PromptContext> {
     }
   }
 
-  const pluginDir = variables.CANON_PLUGIN_ROOT ?? "";
+  const pluginDir = ctx.mergedVariables.CANON_PLUGIN_ROOT ?? variables.CANON_PLUGIN_ROOT ?? "";
   const paths = pluginDir ? templatePaths(("template" in state ? state.template : undefined) as string | string[] | undefined, pluginDir) : [];
   const prompts: SpawnPromptEntry[] = [];
 

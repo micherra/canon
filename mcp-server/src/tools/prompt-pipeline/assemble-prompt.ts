@@ -81,6 +81,15 @@ export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnProm
     input._board ??
     (needsBoard ? getExecutionStore(input.workspace).getBoard() ?? undefined : undefined);
 
+  // If the pipeline needs a board but none was found, fail gracefully
+  if (needsBoard && !board) {
+    return {
+      prompts: [],
+      state_type: state.type,
+      skip_reason: `Workspace board not initialized for state "${state_id}"`,
+    };
+  }
+
   // --- Pre-pipeline: skip_when evaluation ---
 
   if (state.skip_when) {
