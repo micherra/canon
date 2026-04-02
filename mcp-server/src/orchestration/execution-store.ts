@@ -250,6 +250,9 @@ export class ExecutionStore {
   private readonly stmtRecordIterationResult: Database.Statement;
   private readonly stmtGetLastTwoIterationResults: Database.Statement;
 
+  // ---- Metrics statements ----
+  private readonly stmtUpdateStateMetrics: Database.Statement;
+
   constructor(db: Database.Database) {
     this.db = db;
 
@@ -427,6 +430,11 @@ export class ExecutionStore {
       ORDER BY iteration DESC
       LIMIT 2
     `);
+
+    // Metrics
+    this.stmtUpdateStateMetrics = db.prepare(
+      `UPDATE execution_states SET metrics = ? WHERE state_id = ?`,
+    );
   }
 
   // --------------------------------------------------------------------------
@@ -1025,6 +1033,31 @@ export class ExecutionStore {
       resolution: row.resolution !== null ? JSON.parse(row.resolution) : undefined,
       rejection_reason: row.rejection_reason ?? undefined,
     };
+  }
+
+  // --------------------------------------------------------------------------
+  // Targeted metrics update (ADR-003a agent performance metrics)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Merge the provided metrics fields into the existing metrics JSON for a state.
+   * Only defined fields from `metrics` are merged — existing fields not present
+   * in `metrics` are preserved (including orchestrator-written fields like
+   * duration_ms, spawns, model).
+   *
+   * The row must exist (i.e. the state must have been upserted) before calling this.
+   * Returns `true` when the row was found and updated, `false` when not found.
+   */
+  updateStateMetrics(stateId: string, metrics: Record<string, number | string>): boolean {
+    const row = this.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
+    if (!row) return false;
+
+    const existing: Record<string, unknown> = row.metrics ? JSON.parse(row.metrics) : {};
+    const merged = { ...existing, ...metrics };
+
+    this.stmtUpdateStateMetrics.run(JSON.stringify(merged), stateId);
+
+    return true;
   }
 }
 

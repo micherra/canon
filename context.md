@@ -16,6 +16,7 @@ Harden Canon flow loading with strict schema validation, hard-blocking error thr
 - All new Zod schema fields use `.optional()` for backward compat
 - Reachability warnings (non-blocking) use `"Warning:"` prefix; hard errors do not
 - DB schema migrations version-gated via `meta.schema_version`; all DDL uses `IF NOT EXISTS`
+- Agent self-reporting metrics: `get_spawn_prompt` injects a `record_agent_metrics` footer into every prompt; agents call the tool before returning status; metrics merge into execution state, preserving orchestrator fields
 
 ### Known Issues
 - None

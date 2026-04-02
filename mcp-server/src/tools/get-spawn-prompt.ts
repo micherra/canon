@@ -429,6 +429,27 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     }
   }
 
+  // Append metrics instruction footer to all prompts
+  for (const entry of prompts) {
+    entry.prompt += `\n\n## Performance Metrics
+
+Before returning your final status, call the \`record_agent_metrics\` tool to record your session counters:
+
+record_agent_metrics({
+  workspace: ${JSON.stringify(input.workspace)},
+  state_id: ${JSON.stringify(state_id)},
+  tool_calls: <total tool invocations you made>,
+  orientation_calls: <Read/Glob/Grep calls made for orientation before writing>,
+  turns: <number of assistant turns in your conversation>
+})
+
+- Count every tool invocation (Read, Write, Edit, Bash, Glob, Grep, etc.) toward tool_calls
+- Count Read/Glob/Grep calls made before your first Write/Edit/Bash-write toward orientation_calls
+- Count each assistant response as one turn
+- If you cannot count accurately, omit that field — partial data is better than wrong data
+- If the tool call fails, continue with your work — metrics are best-effort`;
+  }
+
   const fanned_out = state.type === "single" && prompts.length > 1;
   return {
     prompts,

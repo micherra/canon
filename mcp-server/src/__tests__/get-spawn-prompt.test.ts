@@ -404,3 +404,135 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// getSpawnPrompt — metrics footer injection
+// ---------------------------------------------------------------------------
+
+describe("getSpawnPrompt — metrics footer injection", () => {
+  it("appends metrics footer to every prompt entry from a single state", async () => {
+    const workspace = makeTmpDir();
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
+
+    const flow = makeFlow();
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+    });
+
+    expect(result.prompts).toHaveLength(1);
+    expect(result.prompts[0].prompt).toContain("## Performance Metrics");
+    expect(result.prompts[0].prompt).toContain("record_agent_metrics");
+    expect(result.prompts[0].prompt).toContain(`workspace: "${workspace}"`);
+    expect(result.prompts[0].prompt).toContain(`state_id: "implement"`);
+  });
+
+  it("includes correct workspace and state_id values in footer", async () => {
+    const workspace = makeTmpDir();
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
+
+    const flow: ResolvedFlow = {
+      ...makeFlow(),
+      states: {
+        review: { type: "single" as const, agent: "canon-reviewer" },
+        done: { type: "terminal" as const },
+      },
+      spawn_instructions: { review: "Review the code." },
+      entry: "review",
+    };
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "review",
+      flow,
+      variables: { task: "review task", CANON_PLUGIN_ROOT: "" },
+    });
+
+    const prompt = result.prompts[0].prompt;
+    expect(prompt).toContain(`workspace: "${workspace}"`);
+    expect(prompt).toContain(`state_id: "review"`);
+  });
+
+  it("metrics footer appears after all other injections (after template, messaging, wave guidance)", async () => {
+    const workspace = makeTmpDir();
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
+    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\nSome briefing.");
+
+    const flow = makeWaveFlow();
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "build",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      items: ["task-a"],
+      wave: 1,
+      consultation_outputs: {
+        security: { section: "Security", summary: "Use parameterized queries." },
+      },
+    });
+
+    expect(result.prompts).toHaveLength(1);
+    const prompt = result.prompts[0].prompt;
+
+    // Wave briefing should appear before metrics footer
+    const briefingIndex = prompt.indexOf("## Wave Briefing");
+    const footerIndex = prompt.indexOf("## Performance Metrics");
+    expect(briefingIndex).toBeGreaterThan(-1);
+    expect(footerIndex).toBeGreaterThan(-1);
+    expect(footerIndex).toBeGreaterThan(briefingIndex);
+  });
+
+  it("appends footer to all prompt entries in a wave state", async () => {
+    const workspace = makeTmpDir();
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
+
+    const flow = makeWaveFlow();
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "build",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      items: ["task-a", "task-b", "task-c"],
+    });
+
+    expect(result.prompts).toHaveLength(3);
+    for (const entry of result.prompts) {
+      expect(entry.prompt).toContain("## Performance Metrics");
+      expect(entry.prompt).toContain("record_agent_metrics");
+    }
+  });
+
+  it("terminal states return empty prompts array — no footer injection", async () => {
+    const workspace = makeTmpDir();
+    mockStore.getBoard.mockReturnValue(makeBoard());
+    mockStore.getProgress.mockReturnValue("");
+
+    const flow: ResolvedFlow = {
+      ...makeFlow(),
+      states: {
+        implement: { type: "single" as const, agent: "canon-implementor" },
+        done: { type: "terminal" as const },
+      },
+      spawn_instructions: { implement: "Implement ${task}." },
+    };
+
+    const result = await getSpawnPrompt({
+      workspace,
+      state_id: "done",
+      flow,
+      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+    });
+
+    expect(result.state_type).toBe("terminal");
+    expect(result.prompts).toHaveLength(0);
+  });
+});

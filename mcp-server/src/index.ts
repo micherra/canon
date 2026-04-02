@@ -39,6 +39,7 @@ import { semanticSearch } from "./tools/semantic-search.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
 import { updateBoard } from "./tools/update-board.ts";
 import { writePlanIndex } from "./tools/write-plan-index.ts";
+import { recordAgentMetrics } from "./tools/record-agent-metrics.ts";
 import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
 import { wrapHandler } from "./utils/wrap-handler.ts";
 
@@ -349,7 +350,18 @@ server.registerTool(
       artifacts: z.array(z.string()).optional(),
       concern_text: z.string().optional(),
       error: z.string().optional(),
-      metrics: z.object({ duration_ms: z.number(), spawns: z.number(), model: z.string() }).optional(),
+      metrics: z.object({
+        duration_ms: z.number(),
+        spawns: z.number(),
+        model: z.string(),
+        tool_calls: z.number().optional(),
+        orientation_calls: z.number().optional(),
+        input_tokens: z.number().optional(),
+        output_tokens: z.number().optional(),
+        cache_read_tokens: z.number().optional(),
+        cache_write_tokens: z.number().optional(),
+        turns: z.number().optional(),
+      }).optional(),
       principle_ids: z
         .array(z.string())
         .optional()
@@ -470,7 +482,18 @@ server.registerTool(
       artifacts: z.array(z.string()).optional(),
       concern_text: z.string().optional(),
       error: z.string().optional(),
-      metrics: z.object({ duration_ms: z.number(), spawns: z.number(), model: z.string() }).optional(),
+      metrics: z.object({
+        duration_ms: z.number(),
+        spawns: z.number(),
+        model: z.string(),
+        tool_calls: z.number().optional(),
+        orientation_calls: z.number().optional(),
+        input_tokens: z.number().optional(),
+        output_tokens: z.number().optional(),
+        cache_read_tokens: z.number().optional(),
+        cache_write_tokens: z.number().optional(),
+        turns: z.number().optional(),
+      }).optional(),
       principle_ids: z
         .array(z.string())
         .optional()
@@ -595,6 +618,24 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return checkConvergence(input);
+  })
+);
+
+server.registerTool(
+  "record_agent_metrics",
+  {
+    description:
+      "Record agent performance metrics (tool_calls, orientation_calls, turns) directly to the execution store. Agents call this at the end of their work, before returning status. Merges with existing metrics — does not overwrite orchestrator-tracked fields.",
+    inputSchema: {
+      workspace: z.string().describe("Workspace path"),
+      state_id: z.string().describe("Current state ID the agent is working in"),
+      tool_calls: z.number().optional().describe("Total tool invocations the agent made"),
+      orientation_calls: z.number().optional().describe("Read/Glob/Grep calls made for orientation before writing"),
+      turns: z.number().optional().describe("Number of assistant turns in the agent conversation"),
+    },
+  },
+  wrapHandler(async (input) => {
+    return recordAgentMetrics(input);
   })
 );
 
