@@ -6,6 +6,7 @@ export type CanonErrorCode =
   | "BOARD_LOCKED"
   | "CONVERGENCE_EXCEEDED"
   | "INVALID_INPUT"
+  | "TRANSCRIPT_NOT_FOUND"
   | "PREFLIGHT_FAILED"
   | "UNEXPECTED";
 

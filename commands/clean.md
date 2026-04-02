@@ -31,6 +31,7 @@ For each workspace to clean, show the user:
 - Branch name and creation date (from `session.json`)
 - Number of research docs, decisions, plans, reviews
 - Size of `log.jsonl` (number of entries)
+- Number of transcript files in `transcripts/`
 - Any notes in `notes/`
 
 ### Step 3: Ask user what to do
@@ -54,6 +55,8 @@ Create `.canon/history/{sanitized-branch}/` and preserve:
 ├── notes/                    # User and agent notes
 └── summary.md                # Auto-generated summary of what happened
 ```
+
+Note: Transcript files (`transcripts/`) are not archived — they contain ephemeral agent conversation data.
 
 Generate `summary.md` by reading:
 - `session.json` for task description and dates

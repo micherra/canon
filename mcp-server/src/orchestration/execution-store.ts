@@ -76,6 +76,7 @@ interface ExecutionStateRow {
   parallel_results: string | null;      // JSON array | null
   compete_results: string | null;       // JSON array | null
   synthesized: number | null;           // 0/1 | null
+  transcript_path: string | null;       // ADR-015
 }
 
 interface IterationRow {
@@ -250,6 +251,10 @@ export class ExecutionStore {
   private readonly stmtRecordIterationResult: Database.Statement;
   private readonly stmtGetLastTwoIterationResults: Database.Statement;
 
+  // ---- Transcript path statements (ADR-015) ----
+  private readonly stmtSetTranscriptPath: Database.Statement;
+  private readonly stmtGetTranscriptPath: Database.Statement;
+
   // ---- Metrics statements ----
   private readonly stmtUpdateStateMetrics: Database.Statement;
 
@@ -318,6 +323,7 @@ export class ExecutionStore {
         parallel_results          = excluded.parallel_results,
         compete_results           = excluded.compete_results,
         synthesized               = excluded.synthesized
+        -- transcript_path intentionally omitted: preserves existing value on update
     `);
 
     this.stmtGetState = db.prepare(`
@@ -434,6 +440,14 @@ export class ExecutionStore {
     // Metrics
     this.stmtUpdateStateMetrics = db.prepare(
       `UPDATE execution_states SET metrics = ? WHERE state_id = ?`,
+    );
+
+    // Transcript path (ADR-015)
+    this.stmtSetTranscriptPath = db.prepare(
+      `UPDATE execution_states SET transcript_path = ? WHERE state_id = ?`,
+    );
+    this.stmtGetTranscriptPath = db.prepare(
+      `SELECT transcript_path FROM execution_states WHERE state_id = ?`,
     );
   }
 
@@ -1058,6 +1072,30 @@ export class ExecutionStore {
     this.stmtUpdateStateMetrics.run(JSON.stringify(merged), stateId);
 
     return true;
+  }
+
+  // --------------------------------------------------------------------------
+  // Transcript path (ADR-015)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Store the transcript file path for a state.
+   * Returns true when the row was found and updated, false when the state does not exist.
+   * Errors-are-values: never throws for expected conditions.
+   */
+  setTranscriptPath(stateId: string, transcriptPath: string): boolean {
+    const info = this.stmtSetTranscriptPath.run(transcriptPath, stateId);
+    return info.changes > 0;
+  }
+
+  /**
+   * Retrieve the transcript file path for a state.
+   * Returns null when the state does not exist or no transcript has been set.
+   * Errors-are-values: never throws for expected conditions.
+   */
+  getTranscriptPath(stateId: string): string | null {
+    const row = this.stmtGetTranscriptPath.get(stateId) as { transcript_path: string | null } | undefined;
+    return row?.transcript_path ?? null;
   }
 }
 

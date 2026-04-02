@@ -4,6 +4,7 @@
  * and board state updates.
  */
 
+import { resolve, relative } from "node:path";
 import {
   normalizeStatus,
   evaluateTransition,
@@ -76,6 +77,8 @@ interface ReportResultInput {
   progress_line?: string;
   // Project directory for drift effect persistence
   project_dir?: string;
+  // ADR-015: path to the agent transcript JSONL file (best-effort persistence)
+  transcript_path?: string;
 }
 
 interface LogEntry {
@@ -574,6 +577,18 @@ async function reportResultLocked(
 
       return { board, condition, nextState, stuck, stuck_reason, hitl_required, hitl_reason };
     });
+
+  // Persist transcript path (ADR-015) — path validation is pure, setTranscriptPath
+  // returns boolean (errors-are-values). No try/catch needed; if the DB is broken,
+  // let it propagate to wrapHandler.
+  if (input.transcript_path) {
+    const transcriptsDir = resolve(input.workspace, "transcripts");
+    const resolvedPath = resolve(input.transcript_path);
+    const rel = relative(transcriptsDir, resolvedPath);
+    if (!rel.startsWith("..") && resolve(transcriptsDir, rel) === resolvedPath) {
+      store.setTranscriptPath(input.state_id, input.transcript_path);
+    }
+  }
 
   // Append progress line (best-effort — cosmetic, never blocks the flow)
   if (input.progress_line) {

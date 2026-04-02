@@ -85,11 +85,12 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `init_workspace` | Create or resume a workspace (`board.json`, `session.json`, `progress.md`); seeds `progress.md` with task header on creation |
 | `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress |
 | `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, wave context); reads `progress.md` from disk and injects as `${progress}` when flow declares `progress:` field |
-| `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state` |
+| `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state`; accepts optional `transcript_path` (best-effort write to execution state) |
 | `check_convergence` | Check iteration limits before re-entering a looping state |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
 | `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
 | `inject_wave_event` | Inject user events into running wave execution |
+| `get_transcript` | Read a recorded agent transcript from a workspace state; modes: `full` (all entries) or `summary` (assistant-only); returns `total_tokens` when available <!-- last-updated: 2026-04-02 --> |
 
 ## Canon Engineering Principles
 
