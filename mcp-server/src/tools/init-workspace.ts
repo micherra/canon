@@ -14,8 +14,9 @@ import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { existsSync } from "fs";
-import { mkdir } from "fs/promises";
+import { mkdir, readFile } from "fs/promises";
 import { join } from "path";
+import { createHash } from "node:crypto";
 import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
 
 interface InitWorkspaceInput {
@@ -40,6 +41,7 @@ interface InitWorkspaceResult {
   preflight_issues?: string[];
   worktree_path?: string;
   worktree_branch?: string;
+  cache_prefix_hash?: string;
 }
 
 /**
@@ -290,6 +292,35 @@ export async function initWorkspaceFlow(
     }
   }
 
+  // Compute shared prompt cache prefix (ADR-006a)
+  // Content must be stable across all agent spawns in the workspace.
+  // Progress is explicitly excluded — it is append-only and changes per state.
+  const prefixParts: string[] = [];
+
+  // 1. Flow description (from resolved flow metadata)
+  if (flow.description) {
+    prefixParts.push(`## Flow: ${flow.name}\n\n${flow.description}`);
+  }
+
+  // 2. Project conventions (CLAUDE.md from plugin dir if available)
+  const claudeMdPath = join(pluginDir, "CLAUDE.md");
+  if (existsSync(claudeMdPath)) {
+    try {
+      const claudeMd = await readFile(claudeMdPath, "utf-8");
+      prefixParts.push(claudeMd);
+    } catch { /* graceful degradation — CLAUDE.md unreadable */ }
+  }
+
+  // 3. Workspace metadata (stable identifiers only)
+  prefixParts.push(
+    `## Workspace\n\n- Task: ${input.task}\n- Branch: ${input.branch}\n- Slug: ${slug}\n- Base commit: ${input.base_commit}`,
+  );
+
+  const cachePrefix = prefixParts.join("\n\n---\n\n");
+  store.setCachePrefix(cachePrefix);
+
+  const prefixHash = createHash("sha256").update(cachePrefix).digest("hex").slice(0, 12);
+
   // Seed progress
   store.appendProgress(`## Progress: ${input.task}`);
 
@@ -310,5 +341,6 @@ export async function initWorkspaceFlow(
     workspace, slug, board, session, created: true,
     worktree_path: actualWorktreePath,
     worktree_branch: actualWorktreeBranch,
+    cache_prefix_hash: prefixHash,
   };
 }

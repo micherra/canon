@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '3';
+export const SCHEMA_VERSION = '4';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -236,6 +236,16 @@ const MIGRATIONS: Migration[] = [
       `);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_iteration_results_state ON iteration_results(state_id)`);
       db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // cache_prefix column (ADR-006a)
+    version: '4',
+    up: (db) => {
+      if (!columnExists(db, 'execution', 'cache_prefix')) {
+        db.exec(`ALTER TABLE execution ADD COLUMN cache_prefix TEXT DEFAULT ''`);
+      }
+      db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
     },
   },
 ];

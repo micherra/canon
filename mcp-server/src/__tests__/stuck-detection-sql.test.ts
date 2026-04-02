@@ -102,7 +102,7 @@ describe('runMigrations', () => {
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe('3');
+    expect(row?.value).toBe('4');
   });
 
   test('is idempotent: running migrations twice on v1 does not throw', () => {
@@ -112,24 +112,24 @@ describe('runMigrations', () => {
     expect(() => runMigrations(db)).not.toThrow();
   });
 
-  test('is a no-op on a v3 database (tables already created by initExecutionDb)', () => {
+  test('is a no-op on a v4 database (tables already created by initExecutionDb)', () => {
     const db = initExecutionDb(':memory:');
-    // Already at v3 — running migrations again should not throw and keep version at 3
+    // Already at v4 — running migrations again should not throw and keep version at 4
     expect(() => runMigrations(db)).not.toThrow();
 
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe('3');
+    expect(row?.value).toBe('4');
   });
 
-  test('initExecutionDb sets SCHEMA_VERSION to 3', () => {
+  test('initExecutionDb sets SCHEMA_VERSION to 4', () => {
     const db = initExecutionDb(':memory:');
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
     expect(row?.value).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe('3');
+    expect(SCHEMA_VERSION).toBe('4');
   });
 });
 
