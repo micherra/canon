@@ -33,7 +33,7 @@ src/
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-04-01 (ADR-005: KG consolidation — deleted query.ts/view-materializer.ts, new KgQuery methods, renamed kg_freshness_ms) -->
+<!-- last-updated: 2026-04-01 (ADR-003a: record_agent_metrics tool; widened metrics schema; updateStateMetrics on ExecutionStore; metrics footer in get_spawn_prompt) -->
 
 **Tool error types** (`src/utils/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -70,10 +70,11 @@ src/
 - `VIRTUAL_SINKS: Set<string>` — new export; `{ "hitl", "no_items" }`
 - `RUNTIME_VARIABLES: Set<string>` — new export; known runtime variable names exempt from ref checks
 
-**Execution store** (`src/orchestration/execution-store.ts`) — updated 2026-04-01 (ADR-004):
+**Execution store** (`src/orchestration/execution-store.ts`) — updated 2026-04-01 (ADR-004); updated 2026-04-01 (ADR-003a):
 - `ExecutionStore.recordIterationResult(stateId, iteration, status, data)` — new method; records raw iteration result in `iteration_results` table; `INSERT OR REPLACE` on `(state_id, iteration)` unique key
 - `ExecutionStore.isStuck(stateId, stuckWhen: StuckWhen): boolean` — new method; SQL-based stuck detection; reads last two rows from `iteration_results`; returns `false` when fewer than 2 results exist; mirrors `stuck_when` logic for all 5 strategies
 - Pure `isStuck` functions in `transitions.ts` are deprecated; prefer `ExecutionStore.isStuck`
+- `ExecutionStore.updateStateMetrics(stateId, metrics: Record<string, number|string>): boolean` — added 2026-04-01 (ADR-003a); merges provided fields into existing `metrics` JSON via targeted SQL `UPDATE`; preserves orchestrator-written fields (`duration_ms`, `spawns`, `model`); returns `true` when row found and updated, `false` when state not found
 
 **Execution schema** (`src/orchestration/execution-schema.ts`) — updated 2026-04-01 (ADR-004):
 - `SCHEMA_VERSION = '3'` — new export; current DB schema version
@@ -248,7 +249,7 @@ src/
 - `TestResultsSchema` / `TestResults` — `{ passed: number; failed: number; skipped: number }`
 - `StateDefinitionSchema` now accepts `gates?: string[]` and `postconditions?: PostconditionAssertion[]`
 - `EffectTypeSchema` now includes `"check_postconditions"` — triggers contract checker on the state's postconditions
-- `StateMetricsSchema` fields (`duration_ms`, `spawns`, `model`) are now `.optional()`; 7 new optional fields: `gate_results`, `postcondition_results`, `violation_count`, `violation_severities`, `test_results`, `files_changed`, `revision_count`
+- `StateMetricsSchema` fields (`duration_ms`, `spawns`, `model`) are now `.optional()`; 7 optional contract-checker fields: `gate_results`, `postcondition_results`, `violation_count`, `violation_severities`, `test_results`, `files_changed`, `revision_count`; 7 optional agent-performance fields added 2026-04-01 (ADR-003a): `tool_calls`, `orientation_calls`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `turns` — all accepted by `report_result` and `report_and_enter_next_state`; `tool_calls`, `orientation_calls`, `turns` also writable via `record_agent_metrics` tool
 - `BoardStateEntrySchema` new optional fields: `gate_results`, `postcondition_results`, `discovered_gates`, `discovered_postconditions`
 - `StateDefinitionSchema` is now a `z.discriminatedUnion("type", [...])` — updated 2026-04-01 (ADR-004); five per-type schemas exported: `SingleStateSchema`, `WaveStateSchema`, `ParallelStateSchema`, `ParallelPerStateSchema`, `TerminalStateSchema`; corresponding TS types also exported: `SingleState`, `WaveState`, `WavePolicy`, `ParallelState`, `ParallelPerState`, `TerminalState`
 - `WavePolicySchema` / `WavePolicy` — optional config on `WaveStateSchema`; fields: `isolation` (`"worktree"|"branch"|"none"`, default `"worktree"`), `merge_strategy` (`"sequential"|"rebase"|"squash"`, default `"sequential"`), `on_conflict` (`"hitl"|"replan"|"retry-single"`, default `"hitl"`), `gate?`, `coordination?`; defaults applied at parse time; absent `wave_policy` on a wave state uses these defaults
@@ -282,7 +283,7 @@ src/
 | `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
 | `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop; briefing injection scans all three breakpoints: `before`, `between`, and `after` |
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress); at `complete_flow` aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
-| `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent |
+| `get_spawn_prompt` | Resolve spawn prompt; reads `progress.md` from disk and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if file absent; appends metrics instruction footer to every prompt entry (added 2026-04-01 ADR-003a) — footer contains concrete `workspace` and `state_id` values so agents receive a runnable `record_agent_metrics` invocation example |
 | `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
 | `check_convergence` | Check iteration limits |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
@@ -290,6 +291,7 @@ src/
 | `inject_wave_event` | Inject user events into running wave execution |
 | `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
 | `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
+| `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
 
 ## Dependencies
 <!-- last-updated: 2026-03-26 -->
