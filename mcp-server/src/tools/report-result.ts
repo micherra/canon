@@ -589,8 +589,8 @@ async function reportResultLocked(
         store.setTranscriptPath(input.state_id, input.transcript_path);
       }
       // Silently skip paths outside the expected directory (best-effort, never blocks the flow)
-    } catch {
-      // best-effort — never blocks the flow
+    } catch (err) {
+      console.error(`[report_result] transcript_path persistence failed for state '${input.state_id}':`, err);
     }
   }
 
