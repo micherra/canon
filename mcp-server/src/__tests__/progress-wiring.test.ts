@@ -256,7 +256,9 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     });
 
     // ${progress} substituted with empty string, not literal "${progress}"
-    expect(result.prompts[0].prompt).toBe("Status: ''");
+    // The metrics footer is appended after the prompt body, so we check startsWith
+    expect(result.prompts[0].prompt).toMatch(/^Status: ''/);
+    expect(result.prompts[0].prompt).not.toContain("${progress}");
   });
 
   // -------------------------------------------------------------------------
@@ -282,6 +284,8 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     });
 
     // Without flow.progress, ${progress} is never resolved — stays literal
-    expect(result.prompts[0].prompt).toBe("Current progress: ${progress}");
+    // The metrics footer is appended after the prompt body, so we check startsWith
+    expect(result.prompts[0].prompt).toMatch(/^Current progress: \$\{progress\}/);
+    expect(result.prompts[0].prompt).not.toContain("Should not appear");
   });
 });
