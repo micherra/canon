@@ -71,7 +71,7 @@ function makeBoard(overrides: Partial<Board> = {}): Board {
   };
 }
 
-function makeFlow(tier = "feature"): ResolvedFlow {
+function makeFlow(tier = "medium"): ResolvedFlow {
   return {
     name: "build",
     tier,
@@ -205,7 +205,7 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     };
     vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
 
-    const result = await assembleEnrichment(makeInput({ flow: makeFlow("fast-path") }));
+    const result = await assembleEnrichment(makeInput({ flow: makeFlow("small") }));
 
     // Count how many unique file-N entries appear — should be at most 5
     const fileMatches = result.content.match(/`src\/file-\d+\.ts`/g) ?? [];
@@ -232,7 +232,7 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     };
     vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
 
-    const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
+    const result = await assembleEnrichment(makeInput({ flow: makeFlow("large") }));
 
     expect(result.content.length).toBeLessThanOrEqual(6000);
   });
@@ -255,7 +255,7 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     };
     vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
 
-    const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
+    const result = await assembleEnrichment(makeInput({ flow: makeFlow("large") }));
 
     // If truncated, should have the marker
     if (result.content.length >= 6000 - 15) {

@@ -53,9 +53,9 @@ export interface EnrichmentResult {
 
 /** Budget caps by flow tier (number of files to include per section). */
 const TIER_FILE_CAPS: Record<string, number> = {
-  "fast-path": 5,
-  feature: 15,
-  epic: 30,
+  small: 5,
+  medium: 15,
+  large: 30,
 };
 
 /** Default file cap when tier is not recognized. */
@@ -114,7 +114,7 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
   }
 
   // Step 3: determine tier cap
-  const tier = (input.flow as { tier?: string }).tier ?? "feature";
+  const tier = (input.flow as { tier?: string }).tier ?? "medium";
   const fileCap = TIER_FILE_CAPS[tier] ?? DEFAULT_FILE_CAP;
 
   // Step 4: slice to cap
