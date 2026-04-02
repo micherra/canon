@@ -167,37 +167,13 @@ Only report commands for tools that have visible configuration. Do not guess or 
 
 When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, or *-SUMMARY.md), compare what was actually changed against what the architect planned.
 
-### Process
-
 1. Get the list of files changed: `git diff --name-only ${base_commit}..HEAD`
-2. Parse the design doc to extract the set of files mentioned (look for file paths in the Scope, Files, Tasks, or Implementation sections)
-3. Classify:
-   - **Unplanned files**: Changed but NOT mentioned in the design doc
-   - **Missing planned work**: Mentioned in the design doc but NOT changed
+2. Parse plan files to extract the set of files mentioned (look for file paths in Scope, Files, Tasks, or Implementation sections)
+3. Classify **unplanned files** (changed but not in plan) and **missing planned work** (in plan but not changed)
 
-### Output
+Follow the `### Drift from Plan` section in the review-checklist template for output format.
 
-Produce a `## Drift from Plan` section in your review report:
-
-```
-## Drift from Plan
-
-**Unplanned files changed:**
-- `path/to/file.ts` — not mentioned in design doc; review for scope creep
-
-**Missing planned work:**
-- `path/to/other.ts` — design doc specified changes here; none found in diff
-```
-
-If there is no drift (all changed files are planned and all planned files are changed), write:
-```
-## Drift from Plan
-No drift detected — all changed files match the design doc scope.
-```
-
-If no design doc is available, skip this stage and note its absence.
-
-**Severity**: Unplanned files are a WARNING (scope creep risk). Missing planned work is a WARNING (incomplete implementation risk). Neither is BLOCKING on its own, but both must be noted. If the same unplanned change also triggers a Stage 1 rule violation, the BLOCKING verdict still applies.
+**Severity**: Unplanned files and missing planned work are both WARNINGs. Neither is BLOCKING on its own, but both must be noted.
 
 ## Verdict
 

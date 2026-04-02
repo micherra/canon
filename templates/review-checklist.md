@@ -52,6 +52,19 @@ principles-checked: {N}
 - **Cycles**: {observations about circular dependencies}
 - **Layer boundaries**: {observations about cross-layer imports}
 
+### Drift from Plan
+<!-- Only when architect plan files exist in ${WORKSPACE}/plans/${slug}/. Otherwise note "No design doc available — Stage 4 skipped." -->
+
+**Unplanned files changed:**
+<!-- Files in git diff but NOT mentioned in any plan file. Omit section if none. -->
+- `path/to/file.ts` — not mentioned in design doc; review for scope creep
+
+**Missing planned work:**
+<!-- Files mentioned in plan files but NOT in git diff. Omit section if none. -->
+- `path/to/other.ts` — design doc specified changes here; none found in diff
+
+<!-- If no drift: "No drift detected — all changed files match the design doc scope." -->
+
 ### Compliance Cross-Check
 <!-- Only during build pipelines when implementor summaries are available. Omit for standalone reviews. -->
 
