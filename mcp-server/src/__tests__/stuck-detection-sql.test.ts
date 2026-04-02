@@ -76,7 +76,7 @@ function makeV1Db(): Database.Database {
 // ---------------------------------------------------------------------------
 
 describe('runMigrations', () => {
-  test('upgrades a v1 database to v4: creates iteration_results table', () => {
+  test('upgrades a v1 database to v5: creates iteration_results table', () => {
     const db = makeV1Db();
 
     // Verify table does NOT exist yet
@@ -95,14 +95,14 @@ describe('runMigrations', () => {
     expect(afterTables.map(r => r.name)).toContain('iteration_results');
   });
 
-  test('upgrades schema_version to 4 in meta table', () => {
+  test('upgrades schema_version to 5 in meta table', () => {
     const db = makeV1Db();
     runMigrations(db);
 
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe('4');
+    expect(row?.value).toBe('5');
   });
 
   test('is idempotent: running migrations twice on v1 does not throw', () => {
@@ -112,24 +112,24 @@ describe('runMigrations', () => {
     expect(() => runMigrations(db)).not.toThrow();
   });
 
-  test('is a no-op on a v4 database (tables already created by initExecutionDb)', () => {
+  test('is a no-op on a v5 database (tables already created by initExecutionDb)', () => {
     const db = initExecutionDb(':memory:');
-    // Already at v4 — running migrations again should not throw and keep version at 4
+    // Already at v5 — running migrations again should not throw and keep version at 5
     expect(() => runMigrations(db)).not.toThrow();
 
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe('4');
+    expect(row?.value).toBe('5');
   });
 
-  test('initExecutionDb sets SCHEMA_VERSION to 4', () => {
+  test('initExecutionDb sets SCHEMA_VERSION to 5', () => {
     const db = initExecutionDb(':memory:');
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
     expect(row?.value).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe('4');
+    expect(SCHEMA_VERSION).toBe('5');
   });
 });
 

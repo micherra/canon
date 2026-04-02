@@ -10,8 +10,7 @@
  * The function never throws for expected error conditions.
  */
 
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readFile, access } from "node:fs/promises";
 import { resolve } from "node:path";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { toolError, toolOk } from "../utils/tool-result.ts";
@@ -48,7 +47,7 @@ export async function getTranscript(
 
   if (!transcriptPath) {
     return toolError(
-      "INVALID_INPUT",
+      "TRANSCRIPT_NOT_FOUND",
       `No transcript recorded for state '${input.state_id}' in workspace '${input.workspace}'`,
       false,
     );
@@ -59,15 +58,17 @@ export async function getTranscript(
   const resolvedTranscriptPath = resolve(transcriptPath);
   if (!resolvedTranscriptPath.startsWith(transcriptsDir + "/")) {
     return toolError(
-      "INVALID_INPUT",
+      "TRANSCRIPT_NOT_FOUND",
       `Transcript path is outside the expected transcripts directory for workspace '${input.workspace}'`,
       false,
     );
   }
 
-  if (!existsSync(transcriptPath)) {
+  try {
+    await access(transcriptPath);
+  } catch {
     return toolError(
-      "INVALID_INPUT",
+      "TRANSCRIPT_NOT_FOUND",
       `Transcript file not found for state '${input.state_id}' in workspace '${input.workspace}': ${transcriptPath}`,
       false,
     );
@@ -85,13 +86,14 @@ export async function getTranscript(
     }
   }
 
+  // Compute total_tokens from ALL entries (not just filtered ones)
+  const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+  const totalTokens = lastEntry?.cumulative_tokens;
+
   const mode = input.mode ?? "full";
   if (mode === "summary") {
     entries = entries.filter((e) => e.role === "assistant");
   }
-
-  const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
-  const totalTokens = lastEntry?.cumulative_tokens;
 
   return toolOk({
     state_id: input.state_id,

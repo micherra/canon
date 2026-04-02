@@ -244,7 +244,7 @@ describe("getTranscript — summary mode", () => {
     }
   });
 
-  it("summary mode returns total_tokens from last assistant entry's cumulative_tokens", async () => {
+  it("summary mode returns total_tokens from last overall entry's cumulative_tokens", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     setupWorkspace(workspace, flow);
@@ -261,7 +261,9 @@ describe("getTranscript — summary mode", () => {
     const result = await getTranscript({ workspace, state_id: "build", mode: "summary" });
 
     assertOk(result);
-    // Last assistant entry has cumulative_tokens: 390
+    // total_tokens is always computed from ALL entries (before filtering),
+    // so it uses the last overall entry's cumulative_tokens (390).
+    // In this test data the last overall entry happens to be an assistant entry.
     expect(result.total_tokens).toBe(390);
   });
 });
@@ -271,7 +273,7 @@ describe("getTranscript — summary mode", () => {
 // ---------------------------------------------------------------------------
 
 describe("getTranscript — error cases", () => {
-  it("returns INVALID_INPUT error when no transcript_path recorded for state", async () => {
+  it("returns TRANSCRIPT_NOT_FOUND error when no transcript_path recorded for state", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     setupWorkspace(workspace, flow);
@@ -283,12 +285,12 @@ describe("getTranscript — error cases", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.error_code).toBe("TRANSCRIPT_NOT_FOUND");
       expect(result.message).toContain("build");
     }
   });
 
-  it("returns INVALID_INPUT error when transcript file does not exist on disk", async () => {
+  it("returns TRANSCRIPT_NOT_FOUND error when transcript file does not exist on disk", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     setupWorkspace(workspace, flow);
@@ -304,13 +306,13 @@ describe("getTranscript — error cases", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.error_code).toBe("TRANSCRIPT_NOT_FOUND");
       expect(result.message).toContain("build");
       expect(result.message).toContain(workspace);
     }
   });
 
-  it("returns INVALID_INPUT error when transcript path is outside the transcripts directory", async () => {
+  it("returns TRANSCRIPT_NOT_FOUND error when transcript path is outside the transcripts directory", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     setupWorkspace(workspace, flow);
@@ -327,7 +329,7 @@ describe("getTranscript — error cases", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.error_code).toBe("TRANSCRIPT_NOT_FOUND");
       expect(result.message).toContain("outside the expected transcripts directory");
     }
   });
