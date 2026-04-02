@@ -492,10 +492,17 @@ export function checkUnresolvedRefs(flow: ResolvedFlow): string[] {
 
   // Check spawn instructions for unknown ${...} references
   for (const [stateId, text] of Object.entries(flow.spawn_instructions)) {
+    // Collect inject_context aliases declared on this state — they are resolved
+    // at runtime by the orchestrator and must be treated as known variables.
+    const stateDef = flow.states[stateId];
+    const injectAliases = new Set<string>(
+      stateDef?.inject_context?.map((ic) => ic.as) ?? [],
+    );
+
     refPattern.lastIndex = 0;
     let match;
     while ((match = refPattern.exec(text)) !== null) {
-      if (!RUNTIME_VARIABLES.has(match[1])) {
+      if (!RUNTIME_VARIABLES.has(match[1]) && !injectAliases.has(match[1])) {
         errors.push(`Spawn instruction "${stateId}" has unresolved reference: \${${match[1]}}`);
       }
     }

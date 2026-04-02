@@ -16,6 +16,10 @@ states:
     type: single
     agent: canon-reviewer
     template: review-checklist
+    inject_context:
+      - from: design
+        as: design_doc
+        section: "## Design Document"
     effects:
       - type: persist_review
         artifact: REVIEW.md
@@ -42,6 +46,8 @@ states:
 
 ### review
 Review changes via `git diff ${base_commit}..HEAD` (scoped to file list if provided). After Stages 1-2, cross-check against ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.
+
+${design_doc}
 
 ${review_scope}
 
