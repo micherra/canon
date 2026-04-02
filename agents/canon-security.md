@@ -80,6 +80,8 @@ For each finding:
 - **low** — Defensive improvement, nice to have
 - **info** — Observation, no immediate risk
 
+**No severity downgrade**: Contextual mitigations (e.g., "only reachable from internal tooling", "behind a feature flag", "requires admin access") do NOT reduce a finding's severity level. An exploitable vulnerability in internal tooling is still exploitable. Record mitigating context in the finding's Detail field, but keep the severity based on the vulnerability's inherent exploitability.
+
 ### Step 5: Produce assessment
 
 The orchestrator **must** provide the security-assessment template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format. Reference format at `${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md`. (This guard does not apply in `early-scan` mode — early-scan short-circuits before Step 5.)
@@ -105,6 +107,16 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 
 1. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
 
+### Step 4.5: Planned security controls check
+
+When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, or *-SUMMARY.md), check whether security controls specified in the design were actually implemented:
+
+1. Scan plan files for security-relevant statements (authentication, authorization, validation, encryption, rate limiting, CORS, CSRF, session handling)
+2. For each planned security control, verify it exists in the implemented code
+3. Report missing controls as findings — a security control specified in the design but absent from the code is a **high** severity omission
+
+Follow the `### Planned Security Controls` section in the security-assessment template for output format.
+
 ## Context Isolation
 
 You receive:
@@ -113,8 +125,9 @@ You receive:
 - CLAUDE.md
 - package.json / requirements.txt (for dependency checks)
 - package-lock.json / yarn.lock (for dependency health audit)
+- Architect plan files at `${WORKSPACE}/plans/${slug}/` (for planned security controls check)
 
-You do NOT receive the plan, design, research, or workspace context. Security review is independent.
+You do NOT receive research findings or session history. Plan files are provided solely for verifying that planned security controls were implemented — do NOT use them to scope your vulnerability scan. Scan all implemented files regardless of what the plan says.
 
 You do NOT check: business logic correctness, authorization design decisions, performance, or code quality. Those are the reviewer's and tester's responsibilities.
 

@@ -40,5 +40,7 @@ states:
 ### security
 Scan implemented code for security vulnerabilities. File list from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save to ${WORKSPACE}/plans/${slug}/SECURITY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md.
 
+**Architect plans**: Read plan files in `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, *-SUMMARY.md) for planned security controls verification (Step 4.5).
+
 ### fix-security
 Mode: violation-fix. Security finding: ${item.severity} — ${item.detail} in ${item.file_path}. Preserve behavior, verify with tests.

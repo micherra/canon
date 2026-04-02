@@ -91,7 +91,7 @@ Before committing, explicitly declare compliance for each loaded Canon principle
 
 For each principle, evaluate your implementation and declare one of:
 - **✓ COMPLIANT**: The implementation honors this principle. State how in one line.
-- **⚠ JUSTIFIED_DEVIATION**: The implementation intentionally deviates. State why in the Canon Compliance section of your summary. The pipeline automatically extracts and persists deviations from your summary — no manual tool call needed.
+- **⚠ JUSTIFIED_DEVIATION**: The implementation intentionally deviates. State why in the Canon Compliance section of your summary. The pipeline automatically extracts and persists deviations from your summary — no manual tool call needed. **Not valid for `rule`-severity principles** — rules are either COMPLIANT, VIOLATION_FOUND → FIXED, or they block. If you think a rule is too strict, report BLOCKED and explain why; don't relabel the violation.
 - **✗ VIOLATION_FOUND → FIXED**: You found a violation and fixed it before committing. This applies when you discover a pre-existing violation in code you're modifying, OR when your initial implementation violated a principle and you corrected it. Run your compliance check after writing code but before the final commit. State what was wrong and what you changed.
 
 If a `rule`-severity principle is violated and cannot be fixed, report status `BLOCKED` — do NOT commit with a known rule violation.
