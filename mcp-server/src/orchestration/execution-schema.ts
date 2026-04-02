@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '4';
+export const SCHEMA_VERSION = '5';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -246,6 +246,19 @@ const MIGRATIONS: Migration[] = [
         db.exec(`ALTER TABLE execution ADD COLUMN cache_prefix TEXT DEFAULT ''`);
       }
       db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // transcript_path column on execution_states (ADR-015)
+    version: '5',
+    up: (db) => {
+      const tableRow = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='execution_states'`)
+        .get() as { name: string } | undefined;
+      if (tableRow && !columnExists(db, 'execution_states', 'transcript_path')) {
+        db.exec(`ALTER TABLE execution_states ADD COLUMN transcript_path TEXT`);
+      }
+      db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
     },
   },
 ];
