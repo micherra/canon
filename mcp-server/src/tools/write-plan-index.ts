@@ -1,5 +1,5 @@
 import { writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
 
 export interface WritePlanIndexInput {
@@ -20,26 +20,25 @@ export interface WritePlanIndexResult {
   wave_count: number;
 }
 
-const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const SLUG_PATTERN = /^[a-zA-Z0-9_-]*$/;
+const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 export async function writePlanIndex(
   input: WritePlanIndexInput,
 ): Promise<ToolResult<WritePlanIndexResult>> {
-  // Validate slug (path traversal prevention)
+  // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
       "INVALID_INPUT",
-      `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]*$/`,
+      `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]+$/`,
     );
   }
 
   // Validate task IDs and wave numbers
   for (const task of input.tasks) {
-    if (!TASK_ID_PATTERN.test(task.task_id)) {
+    if (!SLUG_PATTERN.test(task.task_id)) {
       return toolError(
         "INVALID_INPUT",
-        `Invalid task_id "${task.task_id}": must match /^[a-zA-Z0-9_-]+$/`,
+        `Invalid task_id "${task.task_id}": must match /^[a-zA-Z0-9_-]+$/; only alphanumeric, underscore, and hyphen allowed`,
       );
     }
     if (task.wave < 1) {
@@ -73,7 +72,14 @@ export async function writePlanIndex(
   const waveCount = new Set(input.tasks.map((t) => t.wave)).size;
   const content = `## Plan Index: ${input.slug}\n\n${header}\n${separator}\n${rows.join("\n")}\n`;
 
-  const plansDir = join(input.workspace, "plans", input.slug);
+  const plansDir = resolve(join(input.workspace, "plans", input.slug));
+  const plansRoot = resolve(join(input.workspace, "plans"));
+  if (!plansDir.startsWith(plansRoot + "/")) {
+    return toolError(
+      "INVALID_INPUT",
+      `Slug "${input.slug}" resolves outside workspace plans directory`,
+    );
+  }
   await mkdir(plansDir, { recursive: true });
   const indexPath = join(plansDir, "INDEX.md");
   await writeFile(indexPath, content, "utf-8");
