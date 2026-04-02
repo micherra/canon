@@ -41,6 +41,14 @@ Findings: {N} ({X} critical, {X} high, {X} medium, {X} low)
 **Verified Facts:** {externally supported claims relevant to this finding}
 **Assumptions:** {anything not fully verified from the available evidence}
 
+### Planned Security Controls
+<!-- Only when architect plan files exist. Otherwise note "No plan files available — planned controls check skipped." -->
+| Planned Control | Source | Implemented | Finding |
+|----------------|--------|-------------|---------|
+| {e.g., JWT validation on write endpoints} | DESIGN.md | {YES/NO} | {finding ref or "N/A"} |
+
+<!-- If all planned controls are implemented: "All planned security controls verified in code." -->
+
 ### Passed Checks
 - {Check that passed — e.g., "No hardcoded secrets found"}
 - {Check that passed — e.g., "Auth middleware present on protected routes"}

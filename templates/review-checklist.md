@@ -76,12 +76,25 @@ principles-checked: {N}
 #### Cross-Check Summary
 <!-- "All declarations aligned" or "N discrepancies found — implementor may have misunderstood {principle-ids}" -->
 {summary}
+
+### Drift from Plan
+<!-- Only when architect plan files exist in ${WORKSPACE}/plans/${slug}/. Otherwise note "No plan files available — Stage 4 skipped." -->
+
+**Unplanned files changed:**
+<!-- Files in git diff but NOT mentioned in any plan file. Omit section if none. -->
+- `path/to/file.ts` — not mentioned in plan files; review for scope creep
+
+**Missing planned work:**
+<!-- Files mentioned in plan files but NOT in git diff. Omit section if none. -->
+- `path/to/other.ts` — plan files specified changes here; none found in diff
+
+<!-- If no drift: "No drift detected — all changed files match the plan file scope." -->
 ```
 
 ## Rules
 
 - Verdict is always the first thing in the document — reviewers reading this need to know immediately
 - Violations ordered by impact (rule > strong-opinion > convention, then by impact score)
-- The reviewer never reads research or plans — this template enforces cold review
+- The reviewer never reads research or plans during Stages 1-2 (cold review) — plan files (DESIGN.md, INDEX.md) are read only in Stage 4 for drift detection, not for cold review context
 - Graph context section only appears when `review_code` returned graph data
 - Keep concise — favor tables over prose

@@ -65,7 +65,7 @@ When `role: verify`:
 
 ## Process
 
-### Step 1: Read task summaries and coverage notes
+### Step 1: Read task summaries, coverage notes, and plan risk mitigations
 
 Read the implementation summaries provided by the orchestrator. For each summary, focus on:
 - **`### Coverage Notes`** section — this is your primary input. The implementor explicitly lists:
@@ -76,6 +76,8 @@ Read the implementation summaries provided by the orchestrator. For each summary
 - **`### Files`** section — which files were created/modified
 
 If any summary is missing the `### Coverage Notes` section, treat it as a red flag — assume coverage is minimal and do a thorough review of that implementor's test files.
+
+**Plan risk mitigations**: Read architect plan files at `${WORKSPACE}/plans/${slug}/` — specifically the `### Risk mitigations` sections in task plans and DESIGN.md. Cross-reference the architect's required risk coverage against the implementor's actual coverage notes. If the architect specified a risk mitigation that the implementor didn't mention in their coverage notes (tested or untested), treat it as a gap and write a test for it. Report discrepancies in the `### Architect Risk Coverage` section of your test report. If plan files are not available, include a note in your output: "Architect risk coverage check skipped — no architect plan files in workspace." so the user knows the check exists but wasn't run.
 
 ### Step 2: Read the implemented code and existing tests
 
@@ -184,7 +186,7 @@ You receive:
 - CLAUDE.md
 - Existing test patterns in the codebase
 
-You do NOT receive plan files, research, or design doc.
+You receive architect plan files at `${WORKSPACE}/plans/${slug}/` solely for verifying risk mitigation coverage. Do NOT use plans to scope your testing — test what's actually implemented, not what was planned. You do NOT receive research findings.
 
 ## Status Protocol
 

@@ -46,6 +46,8 @@ states:
 ### test
 Write integration tests and fill coverage gaps. Start with Coverage Notes from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/test-report.md.
 
+**Architect plans**: Read plan files in `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, task plans) for `### Risk mitigations` sections — verify architect-specified risk coverage was implemented.
+
 ${progress}
 
 ### fix-impl

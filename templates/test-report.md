@@ -44,6 +44,15 @@ tests-failed: {N}
 |-----------|--------|------|--------|
 | {risk item} | {PLAN / implementor} | `{test name}` | {PASS/FAIL/NOT_TESTED} |
 
+### Architect Risk Coverage
+<!-- Only when plan files exist at ${WORKSPACE}/plans/${slug}/. Otherwise note "No plan files available — architect risk check skipped." -->
+<!-- Cross-reference architect's ### Risk mitigations sections against actual coverage. -->
+| Architect Risk | Plan File | Implementor Covered | Tester Covered | Status |
+|---------------|-----------|--------------------:|---------------:|--------|
+| {risk from plan} | {DESIGN.md / task-plan} | {YES/NO/PARTIAL} | {YES/NO/N/A} | {COVERED/GAP} |
+
+<!-- If all architect risks are covered: "All architect-specified risks have test coverage." -->
+
 ### Remaining Gaps
 <!-- Gaps the tester could not fill and why. -->
 - {gap}: {reason — e.g., requires manual testing, needs staging environment}
