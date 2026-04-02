@@ -19,6 +19,7 @@ import { getCompliance } from "./tools/get-compliance.ts";
 import { getDriftReport } from "./tools/get-drift-report.ts";
 import { getFileContext } from "./tools/get-file-context.ts";
 import { getMessages } from "./tools/get-messages.ts";
+import { getTranscript } from "./tools/get-transcript.ts";
 import { getPrinciples } from "./tools/get-principles.ts";
 import { getSpawnPrompt } from "./tools/get-spawn-prompt.ts";
 import { graphQuery } from "./tools/graph-query.ts";
@@ -461,6 +462,10 @@ server.registerTool(
         .string()
         .optional()
         .describe("One-line progress entry to append to progress.md (e.g. '- [state_id] done: summary')"),
+      transcript_path: z
+        .string()
+        .optional()
+        .describe("Path to the agent transcript JSONL file (ADR-015)"),
     },
   },
   wrapHandler(async (input) => {
@@ -593,6 +598,10 @@ server.registerTool(
         .string()
         .optional()
         .describe("One-line progress entry to append to progress.md (e.g. '- [{state_id}] {status}: {one-sentence summary}')"),
+      transcript_path: z
+        .string()
+        .optional()
+        .describe("Path to the agent transcript JSONL file (ADR-015)"),
       // Enter-next-state fields
       variables: z.record(z.string(), z.string()),
       items: z.array(z.any()).optional(),
@@ -636,6 +645,25 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return recordAgentMetrics(input);
+  })
+);
+
+server.registerTool(
+  "get_transcript",
+  {
+    description:
+      "Retrieve the transcript of a specialist agent's conversation for a given state execution. Supports full mode (all entries) and summary mode (assistant messages only, ~20% of full).",
+    inputSchema: {
+      workspace: z.string(),
+      state_id: z.string().describe("State ID to retrieve transcript for"),
+      mode: z
+        .enum(["full", "summary"])
+        .optional()
+        .describe("full returns all entries, summary returns only assistant messages (default: full)"),
+    },
+  },
+  wrapHandler(async (input) => {
+    return getTranscript(input);
   })
 );
 

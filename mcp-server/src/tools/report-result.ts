@@ -76,6 +76,8 @@ interface ReportResultInput {
   progress_line?: string;
   // Project directory for drift effect persistence
   project_dir?: string;
+  // ADR-015: path to the agent transcript JSONL file (best-effort persistence)
+  transcript_path?: string;
 }
 
 interface LogEntry {
@@ -574,6 +576,15 @@ async function reportResultLocked(
 
       return { board, condition, nextState, stuck, stuck_reason, hitl_required, hitl_reason };
     });
+
+  // Persist transcript path (ADR-015 — best-effort, never blocks the flow)
+  if (input.transcript_path) {
+    try {
+      store.setTranscriptPath(input.state_id, input.transcript_path);
+    } catch {
+      // best-effort — never blocks the flow
+    }
+  }
 
   // Append progress line (best-effort — cosmetic, never blocks the flow)
   if (input.progress_line) {

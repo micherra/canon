@@ -57,6 +57,8 @@ export interface ReportAndEnterNextStateInput {
   synthesized?: boolean;
   progress_line?: string;
   project_dir?: string;
+  // ADR-015: path to the agent transcript JSONL file
+  transcript_path?: string;
 
   // Enter-next-state fields
   variables: Record<string, string>;
