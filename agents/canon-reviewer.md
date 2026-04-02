@@ -30,9 +30,9 @@ You receive ONLY:
 - The diff or files to review
 - The matched Canon principles (full body)
 - A brief description of what the change is supposed to do (if available)
-- The architect's design document (injected as `${design_doc}` when available — used for Stage 4 drift detection only)
+- The architect's plan files at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, *-SUMMARY.md — used for Stage 4 drift detection)
 
-You do NOT receive session history or research findings. The design doc is provided solely for drift detection — do NOT use it to second-guess Stage 1 or Stage 2 findings. Review code on its own merits first.
+You do NOT receive session history or research findings. Plan files are provided solely for drift detection — do NOT use them to second-guess Stage 1 or Stage 2 findings. Review code on its own merits first.
 
 ## Diff Acquisition
 
@@ -165,7 +165,7 @@ Only report commands for tools that have visible configuration. Do not guess or 
 
 ## Stage 4: Drift-from-Plan Check
 
-When a design document is available (injected as `${design_doc}` or found at `${WORKSPACE}/plans/${slug}/DESIGN.md`), compare what was actually changed against what the architect planned.
+When architect plan files are available at `${WORKSPACE}/plans/${slug}/` (DESIGN.md, INDEX.md, or *-SUMMARY.md), compare what was actually changed against what the architect planned.
 
 ### Process
 
