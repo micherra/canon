@@ -51,7 +51,7 @@ function makeTmpWorkspace(prefix = "sqlite-integ-"): string {
 /** A canonical three-state flow: build → review → ship */
 function makeThreeStateFlow(): ResolvedFlow {
   return {
-    name: "quick-fix",
+    name: "fast-path",
     description: "Build, review, ship",
     entry: "build",
     spawn_instructions: {},

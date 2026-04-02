@@ -26,7 +26,7 @@ import type { InitExecutionParams } from "../orchestration/execution-store.ts";
 // Top-level mock for flow-parser — used by Comment 5 tests
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "quick-fix",
+    name: "fast-path",
     description: "test",
     entry: "build",
     states: {
@@ -322,7 +322,7 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
     const projectDir = makeTmpDir();
 
     const result = await initWorkspaceFlow(
-      { flow_name: "quick-fix", task: "fresh task", branch: "main", base_commit: "abc", tier: "small" },
+      { flow_name: "fast-path", task: "fresh task", branch: "main", base_commit: "abc", tier: "small" },
       projectDir,
       "/fake/plugin",
     );
@@ -334,14 +334,14 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
     const projectDir = makeTmpDir();
 
     const first = await initWorkspaceFlow(
-      { flow_name: "quick-fix", task: "resume test", branch: "feat/narrow", base_commit: "abc", tier: "small" },
+      { flow_name: "fast-path", task: "resume test", branch: "feat/narrow", base_commit: "abc", tier: "small" },
       projectDir,
       "/fake/plugin",
     );
     expect(first.created).toBe(true);
 
     const second = await initWorkspaceFlow(
-      { flow_name: "quick-fix", task: "resume test", branch: "feat/narrow", base_commit: "abc", tier: "small" },
+      { flow_name: "fast-path", task: "resume test", branch: "feat/narrow", base_commit: "abc", tier: "small" },
       projectDir,
       "/fake/plugin",
     );

@@ -408,7 +408,7 @@ The orchestrator maps tiers to flows via `tier` field or a separate config:
 
 | Tier | Default Flow |
 |------|-------------|
-| `small` | `quick-fix` |
+| `small` | `fast-path` |
 | `medium` | `feature` |
 | `large` | `epic` |
 

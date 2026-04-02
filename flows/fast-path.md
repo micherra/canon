@@ -14,6 +14,7 @@ states:
     agent: canon-generalist
     template: implementation-log
     max_iterations: 1
+    stuck_when: same_status
     transitions:
       done: ship
       done_with_concerns: ship

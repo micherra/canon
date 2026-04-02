@@ -53,7 +53,7 @@ export interface EnrichmentResult {
 
 /** Budget caps by flow tier (number of files to include per section). */
 const TIER_FILE_CAPS: Record<string, number> = {
-  hotfix: 5,
+  "fast-path": 5,
   feature: 15,
   epic: 30,
 };

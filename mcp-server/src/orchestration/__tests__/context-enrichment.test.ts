@@ -4,7 +4,7 @@
  * Covers done criteria:
  *   dc-01: git history + drift signals + prior work sections all appear
  *   dc-02: tensions section generated when drift violations + recent commits overlap
- *   dc-03: tier cap (5 hotfix) and total char cap (6000)
+ *   dc-03: tier cap (5 fast-path) and total char cap (6000)
  *   dc-04: graceful degradation when sources unavailable
  *   dc-05: escapeDollarBrace applied to git output
  *
@@ -192,7 +192,7 @@ describe("assembleEnrichment — dc-01: all sections present", () => {
 // ---------------------------------------------------------------------------
 
 describe("assembleEnrichment — dc-03: tier and char caps", () => {
-  it("hotfix tier caps file entries at 5 even with 50 files", async () => {
+  it("fast-path tier caps file entries at 5 even with 50 files", async () => {
     const fiftyFiles = Array.from({ length: 50 }, (_, i) => `src/file-${i}.ts`);
     vi.mocked(resolveTaskScope).mockReturnValue(fiftyFiles);
 
@@ -205,7 +205,7 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     };
     vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
 
-    const result = await assembleEnrichment(makeInput({ flow: makeFlow("hotfix") }));
+    const result = await assembleEnrichment(makeInput({ flow: makeFlow("fast-path") }));
 
     // Count how many unique file-N entries appear — should be at most 5
     const fileMatches = result.content.match(/`src\/file-\d+\.ts`/g) ?? [];

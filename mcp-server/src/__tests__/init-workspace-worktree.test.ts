@@ -19,7 +19,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "quick-fix",
+    name: "fast-path",
     description: "test",
     entry: "build",
     states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
@@ -58,7 +58,7 @@ afterEach(() => {
 });
 
 const baseInput = {
-  flow_name: "quick-fix",
+  flow_name: "fast-path",
   task: "fix the bug",
   branch: "main",
   base_commit: "abc123",

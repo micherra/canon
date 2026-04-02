@@ -19,7 +19,7 @@ import { access } from "node:fs/promises";
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "quick-fix",
+    name: "fast-path",
     description: "test",
     entry: "build",
     states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 const baseInput = {
-  flow_name: "quick-fix",
+  flow_name: "fast-path",
   task: "fix the bug",
   branch: "main",
   base_commit: "abc123",
@@ -116,7 +116,7 @@ describe("initWorkspaceFlow — SQLite creation", () => {
     const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
 
     expect(result.board).toBeDefined();
-    expect(result.board.flow).toBe("quick-fix");
+    expect(result.board.flow).toBe("fast-path");
     expect(result.session).toBeDefined();
     expect(result.session.branch).toBe("main");
     expect(result.session.status).toBe("active");
