@@ -1344,28 +1344,26 @@ interface AgentMetrics {
 | 4 | 003+003a Diagnostics | Builds on adapter seam (002) + SQLite events (001); 003a metrics land with schema |
 | 5 | 005 KG Consolidation | Extends 001 to the graph layer |
 | 6 | 015 Transcripts | Low effort, needs only 001 (transcript_path column); unblocks 016 |
-| 7 | 006+006a Prompt Pipeline | Needs stable flow schema (004) and SQLite reads (001); 006a cache prefix lands here |
-| 8 | 014+014a Tool Scoping + Permission Bypass | Parallel with 006; 014a lands with 009 (needs SpawnRequest + worktree_path) |
-| 9 | 008 Context Assembly | Needs pipeline stages (006) + KG (005) + SQLite (001) |
-| 10 | 018 Workspace Structure | Parallel with 008; formalizes handoff paths for pipeline injection |
-| 11 | 007 Background Jobs | Prerequisite for 016; KG freshness mitigates stale-context risk from 008 |
-| 12 | 009+009a Server-Side Loop | Needs SQLite state (001), typed errors (002), validated flows (004); 009a continue-vs-spawn lands here |
-| 13 | 017 Approval Gates | Parallel with 009; extends drive_flow with approval breakpoints |
-| 14 | 010 Output Contracts | Parallel with 009; needs typed errors (002), validated flow schema (004) |
-| 15 | 011 Flow Composition | Parallel with 009, 010; needs load-time validation (004) |
-| 16 | 013 Flow Simulation | Parallel with 009, 010, 011; builds on validateFlow (004) |
+| 7 | 009+009a Server-Side Loop | Needs SQLite state (001), typed errors (002), validated flows (004); unblocks 014, 017, 012; 009a continue-vs-spawn lands here |
+| 8 | 006+006a Prompt Pipeline | Needs stable flow schema (004) and SQLite reads (001); 006a cache prefix lands here |
+| 9 | 014+014a Tool Scoping + Permission Bypass | Needs SpawnRequest from 009 + prompt pipeline from 006; 014a worktree_path lands with 009 |
+| 10 | 008 Context Assembly | Needs pipeline stages (006) + KG (005) + SQLite (001) |
+| 11 | 018 Workspace Structure | Parallel with 008; formalizes handoff paths for pipeline injection |
+| 12 | 007 Background Jobs | Prerequisite for 016; KG freshness (005) mitigates stale-context risk from 008 |
+| 13 | 010 Output Contracts | Parallel with 007; needs typed errors (002), validated flow schema (004) |
+| 14 | 017 Approval Gates | Extends drive_flow (009) with approval breakpoints; needs validated flow schema (004) |
+| 15 | 011 Flow Composition | Needs load-time validation (004); parallel with 010, 017 |
+| 16 | 013 Flow Simulation | Builds on validateFlow (004); parallel with 010, 011, 017 |
 | 17 | 016 Auto-Learn | After 007 (background jobs) + 015 (transcripts) + 014 (learner tool restrictions) |
 | 18 | 012 Conditional States | After 009 (server driver evaluates conditions); needs validated flow schema (004) |
 
-**First cohort (foundation):** ADRs 001, 002, 003, 004, 005 — can progress in parallel once 001 schema is defined. ADR 015 (transcripts) slots in early because it's low-effort and unblocks the learning pipeline.
+**First cohort (foundation):** ADRs 001, 002, 003, 004, 005, 015 — can progress in parallel once 001 schema is defined. ADR 015 (transcripts) slots in early because it's low-effort and unblocks the learning pipeline.
 
-**Second cohort (pipeline + structure):** ADRs 006, 008, 014, 018 — prompt pipeline, context assembly, tool scoping, and workspace structure. These are mutually reinforcing and can develop in parallel.
+**Second cohort (execution + pipeline):** ADRs 009, 006, 014, 008, 018 — server-side loop moves up as the centerpiece that unblocks tool scoping (014), approval gates (017), and conditional states (012). Prompt pipeline and context assembly follow, with tool scoping now correctly placed after its 009 dependency.
 
-**Third cohort (execution + contracts):** ADRs 007, 009, 010, 011, 013, 017 — server-side loop, output contracts, flow composition, simulation, and approval gates. 009 is the centerpiece; others extend it.
+**Third cohort (contracts + composition):** ADRs 007, 010, 011, 013, 017 — background jobs, output contracts, flow composition, simulation, and approval gates. These extend the execution and pipeline layers and can develop in parallel.
 
 **Fourth cohort (automation):** ADR 016 (auto-learn) and 012 (conditional states) — these depend on the full stack being stable. Auto-learn needs transcripts (015), background jobs (007), and tool restrictions (014). Conditional states need the server-side driver (009).
-
-ADRs 014 (tool scoping) and 015 (transcripts) are deliberately early — they're low-effort, low-risk, and unlock higher-value ADRs downstream.
 
 ## Decision Summary
 
