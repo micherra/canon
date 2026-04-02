@@ -28,7 +28,6 @@ import type { PromptContext } from "./types.ts";
 export const PIPELINE_ALLOWED_VARIABLES: Set<string> = new Set([
   ...RUNTIME_VARIABLES,
   // New variables populated by pipeline stages
-  "messages",      // Stage 3: inject_messages opt-in
   "enrichment",    // Spawn enrichment context injection
   // Additional runtime variables not in RUNTIME_VARIABLES
   "item",          // Exact ${item} (covered by item.* pattern too, but be explicit)

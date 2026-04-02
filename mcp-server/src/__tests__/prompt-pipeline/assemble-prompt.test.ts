@@ -462,7 +462,7 @@ describe("assemblePrompt — Stage 3 inject_messages", () => {
     expect(result.prompts[0].prompt).toContain("Message from peer: done.");
   });
 
-  it("leaves ${messages} unresolved when inject_messages is false", async () => {
+  it("flags unresolved ${messages} when inject_messages is false", async () => {
     const flow = makeFlow({
       spawn_instructions: { implement: "Do the work. Context: ${messages}" },
     });
@@ -470,8 +470,11 @@ describe("assemblePrompt — Stage 3 inject_messages", () => {
 
     const result = await assemblePrompt(input);
 
-    // messages not injected — ${messages} either unresolved (in warnings) or absent
+    // messages not injected — readChannelAsContext not called
     expect(readChannelAsContext).not.toHaveBeenCalled();
+    // Validate stage flags unresolved ${messages} since it's not in the allowlist
+    const errorWarnings = (result.warnings ?? []).filter((w) => w.startsWith("ERROR:"));
+    expect(errorWarnings.some((w) => w.includes("messages"))).toBe(true);
   });
 });
 

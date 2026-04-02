@@ -6,10 +6,7 @@
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { PromptContext, SpawnPromptEntry } from "../../tools/prompt-pipeline/types.ts";
+import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
 import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -26,14 +23,6 @@ import { substituteVariablesStage } from "../../tools/prompt-pipeline/substitute
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-let tmpDirs: string[] = [];
-
-function makeTmpDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "substitute-vars-test-"));
-  tmpDirs.push(dir);
-  return dir;
-}
 
 function makeBoard(): Board {
   return {
@@ -89,10 +78,6 @@ function makeStoreWith(getCachePrefix: () => string): unknown {
 }
 
 afterEach(() => {
-  for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
-  }
-  tmpDirs = [];
   vi.clearAllMocks();
 });
 
@@ -132,7 +117,7 @@ describe("substituteVariablesStage (Stage 4)", () => {
     expect(result.basePrompt.startsWith("Do the work")).toBe(true);
   });
 
-  it("skips cache prefix when store returns empty string", async () => {
+  it("sets cachePrefix to undefined when store returns empty string", async () => {
     vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>);
     const ctx = makeCtx("Do ${task}", { task: "something" });
     const result = await substituteVariablesStage(ctx);

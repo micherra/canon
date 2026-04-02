@@ -125,11 +125,12 @@ describe("validatePrompts (Stage 9)", () => {
     expect(errorWarnings).toHaveLength(0);
   });
 
-  it("does not flag ${messages} (in allowlist for inject_messages feature)", async () => {
+  it("flags unresolved ${messages} when inject_messages is not opted in", async () => {
     const ctx = makeCtx([makePromptEntry("Prior messages: ${messages}")]);
     const result = await validatePrompts(ctx);
     const errorWarnings = result.warnings.filter(w => w.startsWith("ERROR:"));
-    expect(errorWarnings).toHaveLength(0);
+    expect(errorWarnings).toHaveLength(1);
+    expect(errorWarnings[0]).toContain("messages");
   });
 
   it("does not flag ${enrichment} (in allowlist)", async () => {

@@ -22,8 +22,8 @@ import type { PromptContext } from "./types.ts";
  *
  * If the channel has messages, escapes content at the read boundary and
  * sets mergedVariables.messages. If the channel is empty, returns ctx
- * unchanged (messages variable remains absent — ${messages} will pass
- * through unsubstituted since it is in the validate stage's allowlist).
+ * unchanged (messages variable remains absent — an unresolved ${messages}
+ * in the prompt will be flagged by the validate stage as an ERROR).
  */
 export async function resolveMessages(ctx: PromptContext): Promise<PromptContext> {
   const { state, input } = ctx;
