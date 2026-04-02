@@ -12,8 +12,8 @@
  * handler). Callers that need graceful degradation should catch errors.
  */
 
-import type Database from "better-sqlite3";
 import { createHash } from "node:crypto";
+import type Database from "better-sqlite3";
 import { EMBEDDING_MODEL_ID } from "../constants.ts";
 
 // ---------------------------------------------------------------------------
@@ -26,8 +26,6 @@ export class KgVectorStore {
   // Prepared statements for meta table operations (regular SQLite tables work fine)
   private readonly stmtUpsertEntityMeta: Database.Statement;
   private readonly stmtUpsertSummaryMeta: Database.Statement;
-  private readonly stmtDeleteEntityMeta: Database.Statement;
-  private readonly stmtDeleteSummaryMeta: Database.Statement;
   private readonly stmtCountEntityVectorMeta: Database.Statement;
   private readonly stmtCountSummaryVectorMeta: Database.Statement;
 
@@ -105,7 +103,7 @@ export class KgVectorStore {
     if (!Number.isInteger(entityId) || !Number.isFinite(entityId)) {
       throw new Error(`entityId must be a finite integer, got: ${entityId}`);
     }
-    const jsonVec = "[" + Array.from(embedding).join(",") + "]";
+    const jsonVec = `[${Array.from(embedding).join(",")}]`;
     const updatedAt = new Date().toISOString();
 
     const doUpsert = this.db.transaction(() => {
@@ -113,9 +111,7 @@ export class KgVectorStore {
       this.db.exec(`DELETE FROM entity_vectors WHERE entity_id = ${entityId}`);
 
       // Insert new vec0 row using exec + JSON literal (workaround for binding bug)
-      this.db.exec(
-        `INSERT INTO entity_vectors (entity_id, embedding) VALUES (${entityId}, '${jsonVec}')`,
-      );
+      this.db.exec(`INSERT INTO entity_vectors (entity_id, embedding) VALUES (${entityId}, '${jsonVec}')`);
 
       // Upsert meta row (regular table — prepared statements work fine)
       this.stmtUpsertEntityMeta.run({
@@ -137,7 +133,7 @@ export class KgVectorStore {
     if (!Number.isInteger(summaryId) || !Number.isFinite(summaryId)) {
       throw new Error(`summaryId must be a finite integer, got: ${summaryId}`);
     }
-    const jsonVec = "[" + Array.from(embedding).join(",") + "]";
+    const jsonVec = `[${Array.from(embedding).join(",")}]`;
     const updatedAt = new Date().toISOString();
 
     const doUpsert = this.db.transaction(() => {
@@ -145,9 +141,7 @@ export class KgVectorStore {
       this.db.exec(`DELETE FROM summary_vectors WHERE summary_id = ${summaryId}`);
 
       // Insert new vec0 row using exec + JSON literal
-      this.db.exec(
-        `INSERT INTO summary_vectors (summary_id, embedding) VALUES (${summaryId}, '${jsonVec}')`,
-      );
+      this.db.exec(`INSERT INTO summary_vectors (summary_id, embedding) VALUES (${summaryId}, '${jsonVec}')`);
 
       // Upsert meta row
       this.stmtUpsertSummaryMeta.run({
@@ -175,9 +169,7 @@ export class KgVectorStore {
    */
   cleanOrphanEntityVectors(): number {
     // Enumerate all entity_ids present in the vec0 table (direct SELECT works without MATCH)
-    const vecRows = this.db
-      .prepare("SELECT entity_id FROM entity_vectors")
-      .all() as Array<{ entity_id: number }>;
+    const vecRows = this.db.prepare("SELECT entity_id FROM entity_vectors").all() as Array<{ entity_id: number }>;
 
     if (vecRows.length === 0) return 0;
 
@@ -185,9 +177,7 @@ export class KgVectorStore {
     let deleted = 0;
     const doClean = this.db.transaction(() => {
       for (const { entity_id } of vecRows) {
-        const exists = this.db
-          .prepare("SELECT 1 FROM entities WHERE entity_id = ?")
-          .get(entity_id);
+        const exists = this.db.prepare("SELECT 1 FROM entities WHERE entity_id = ?").get(entity_id);
         if (!exists) {
           if (!Number.isInteger(entity_id) || !Number.isFinite(entity_id)) {
             throw new Error(`entity_id must be a finite integer, got: ${entity_id}`);
@@ -207,18 +197,14 @@ export class KgVectorStore {
    * Returns count of rows deleted.
    */
   cleanOrphanSummaryVectors(): number {
-    const vecRows = this.db
-      .prepare("SELECT summary_id FROM summary_vectors")
-      .all() as Array<{ summary_id: number }>;
+    const vecRows = this.db.prepare("SELECT summary_id FROM summary_vectors").all() as Array<{ summary_id: number }>;
 
     if (vecRows.length === 0) return 0;
 
     let deleted = 0;
     const doClean = this.db.transaction(() => {
       for (const { summary_id } of vecRows) {
-        const exists = this.db
-          .prepare("SELECT 1 FROM summaries WHERE summary_id = ?")
-          .get(summary_id);
+        const exists = this.db.prepare("SELECT 1 FROM summaries WHERE summary_id = ?").get(summary_id);
         if (!exists) {
           if (!Number.isInteger(summary_id) || !Number.isFinite(summary_id)) {
             throw new Error(`summary_id must be a finite integer, got: ${summary_id}`);
@@ -386,9 +372,7 @@ export class KgVectorStore {
       const currentHash = KgVectorStore.textHash(row.summary);
 
       const isStale =
-        row.stored_hash === null ||
-        row.stored_model_id !== EMBEDDING_MODEL_ID ||
-        row.stored_hash !== currentHash;
+        row.stored_hash === null || row.stored_model_id !== EMBEDDING_MODEL_ID || row.stored_hash !== currentHash;
 
       if (isStale) {
         result.push({

@@ -1,12 +1,12 @@
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { canEnterState, filterCannotFix } from "../orchestration/convergence.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { checkConvergence } from "../tools/check-convergence.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { checkConvergence } from "../tools/check-convergence.ts";
+import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
@@ -231,7 +231,7 @@ describe("reportResult — cannot_fix accumulation", () => {
         { principle_id: "p1", file_path: "b.ts" },
         { principle_id: "p2", file_path: "a.ts" },
         { principle_id: "p2", file_path: "b.ts" },
-      ])
+      ]),
     );
   });
 
@@ -263,9 +263,7 @@ describe("reportResult — cannot_fix accumulation", () => {
 
     const iteration = result.board.iterations["review"];
     expect(iteration.cannot_fix).toHaveLength(1);
-    expect(iteration.cannot_fix).toEqual([
-      { principle_id: "p1", file_path: "a.ts" },
-    ]);
+    expect(iteration.cannot_fix).toEqual([{ principle_id: "p1", file_path: "a.ts" }]);
   });
 
   it("skips accumulation when no iteration record exists for the state", async () => {
@@ -422,7 +420,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       expect.arrayContaining([
         { principle_id: "p1", file_path: "a.ts" },
         { principle_id: "p2", file_path: "b.ts" },
-      ])
+      ]),
     );
   });
 
@@ -453,8 +451,6 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
 
     const remaining = filterCannotFix(allItems, convergence.cannot_fix_items);
 
-    expect(remaining).toEqual([
-      { principle_id: "p3", file_path: "a.ts" },
-    ]);
+    expect(remaining).toEqual([{ principle_id: "p3", file_path: "a.ts" }]);
   });
 });

@@ -135,11 +135,7 @@ export class KgVectorQuery {
     }));
   }
 
-  private _querySummaryVectors(
-    queryBuf: Buffer,
-    limit: number,
-    threshold: number | undefined,
-  ): SemanticSearchResult[] {
+  private _querySummaryVectors(queryBuf: Buffer, limit: number, threshold: number | undefined): SemanticSearchResult[] {
     // Build threshold clause — use a bound parameter to avoid NaN/Infinity issues
     let thresholdClause = "";
     let thresholdParams: number[] = [];

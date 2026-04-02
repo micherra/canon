@@ -48,6 +48,7 @@ export interface GraphData {
 
 /** Index-encoded compact graph from the MCP tool. */
 export interface CompactGraphData {
+  // biome-ignore lint/style/useNamingConvention: matches MCP wire format from codebase-graph tool
   _compact: true;
   node_ids: string[];
   nodes: Array<{

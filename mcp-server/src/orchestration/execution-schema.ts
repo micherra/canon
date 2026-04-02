@@ -15,14 +15,14 @@
  *   and existing v1 DBs (IF NOT EXISTS skips tables, migration adds missing columns).
  */
 
-import Database from 'better-sqlite3';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
+import Database from "better-sqlite3";
 
 // ---------------------------------------------------------------------------
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '3';
+export const SCHEMA_VERSION = "3";
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -163,20 +163,12 @@ const IDENTIFIER_RE = /^[A-Za-z0-9_]+$/;
  * Throws an Error if `table` contains characters outside `[A-Za-z0-9_]`
  * to prevent SQL injection via PRAGMA string interpolation.
  */
-export function columnExists(
-  db: Database.Database,
-  table: string,
-  column: string,
-): boolean {
+export function columnExists(db: Database.Database, table: string, column: string): boolean {
   if (!IDENTIFIER_RE.test(table)) {
-    throw new Error(
-      `columnExists: invalid table name "${table}" — only [A-Za-z0-9_] characters are allowed`,
-    );
+    throw new Error(`columnExists: invalid table name "${table}" — only [A-Za-z0-9_] characters are allowed`);
   }
   try {
-    const rows = db
-      .prepare(`PRAGMA table_info(${table})`)
-      .all() as Array<{ name: string }>;
+    const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
     return rows.some((row) => row.name === column);
   } catch {
     return false;
@@ -200,28 +192,26 @@ interface Migration {
 const MIGRATIONS: Migration[] = [
   {
     // correlation_id columns — shipped on main
-    version: '2',
+    version: "2",
     up: (db) => {
-      if (!columnExists(db, 'execution', 'correlation_id')) {
+      if (!columnExists(db, "execution", "correlation_id")) {
         db.exec(`ALTER TABLE execution ADD COLUMN correlation_id TEXT`);
       }
-      if (!columnExists(db, 'events', 'correlation_id')) {
+      if (!columnExists(db, "events", "correlation_id")) {
         db.exec(`ALTER TABLE events ADD COLUMN correlation_id TEXT`);
       }
       db.exec(`CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id)`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_events_correlation_type ON events(correlation_id, type)`);
 
       // Backfill existing execution row with a UUID
-      db.prepare(
-        `UPDATE execution SET correlation_id = ? WHERE id = 1 AND correlation_id IS NULL`,
-      ).run(randomUUID());
+      db.prepare(`UPDATE execution SET correlation_id = ? WHERE id = 1 AND correlation_id IS NULL`).run(randomUUID());
 
       db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
     },
   },
   {
     // iteration_results table (ADR-004)
-    version: '3',
+    version: "3",
     up: (db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS iteration_results (
@@ -248,8 +238,10 @@ const MIGRATIONS: Migration[] = [
  * Exported for direct testing of upgrade scenarios.
  */
 export function runMigrations(db: Database.Database): void {
-  const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-  let version = currentRow?.value ?? '1';
+  const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+    | { value: string }
+    | undefined;
+  let version = currentRow?.value ?? "1";
 
   for (const migration of MIGRATIONS) {
     if (migration.version > version) {
@@ -280,11 +272,11 @@ export function initExecutionDb(dbPath: string): Database.Database {
   const db = new Database(dbPath);
 
   // WAL mode for concurrent read/write; must be set before table creation
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('synchronous = NORMAL');
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.pragma("synchronous = NORMAL");
   // Busy timeout: wait up to 5s on write contention instead of failing
-  db.pragma('busy_timeout = 5000');
+  db.pragma("busy_timeout = 5000");
 
   // Apply all DDL inside a single transaction for atomicity and speed
   const applySchema = db.transaction(() => {

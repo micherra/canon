@@ -8,7 +8,7 @@
  * 4. Handle non-Error throws (strings, objects) gracefully
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { wrapHandler } from "../utils/wrap-handler.ts";
 
 describe("wrapHandler — happy path (ok:true)", () => {

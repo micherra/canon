@@ -32,6 +32,14 @@ interface ViolationsByPrincipleProps {
 // biome-ignore lint/correctness/noUnusedVariables: used in Svelte template
 let { violations, onPrompt }: ViolationsByPrincipleProps = $props();
 
+function promoteWorstSeverity(existing: PrincipleGroup, incoming: string): void {
+  if (incoming === "rule" && existing.severity !== "rule") {
+    existing.severity = "rule";
+  } else if (incoming === "strong-opinion" && existing.severity === "convention") {
+    existing.severity = "strong-opinion";
+  }
+}
+
 /** Group violations by principle_id; keep worst severity per principle */
 const _groups = $derived.by(() => {
   const map = new Map<string, PrincipleGroup>();
@@ -45,12 +53,7 @@ const _groups = $derived.by(() => {
         files: v.file_path ? [v.file_path] : [],
       });
     } else {
-      // Keep the highest-severity label: rule > strong-opinion > convention
-      if (v.severity === "rule" && existing.severity !== "rule") {
-        existing.severity = "rule";
-      } else if (v.severity === "strong-opinion" && existing.severity === "convention") {
-        existing.severity = "strong-opinion";
-      }
+      promoteWorstSeverity(existing, v.severity);
       if (v.file_path && !existing.files.includes(v.file_path)) {
         existing.files.push(v.file_path);
       }

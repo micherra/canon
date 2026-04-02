@@ -9,16 +9,15 @@
  * All workspace setup uses ExecutionStore directly (no legacy readBoard/writeBoard).
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import { afterEach, describe, expect, it } from "vitest";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -265,7 +264,9 @@ describe("report_result: stuck_detected event", () => {
     });
 
     let capturedEvent: unknown;
-    flowEventBus.on("stuck_detected", (e) => { capturedEvent = e; });
+    flowEventBus.on("stuck_detected", (e) => {
+      capturedEvent = e;
+    });
 
     // Second call triggers stuck
     await reportResult({
@@ -331,7 +332,9 @@ describe("report_result: stuck_detected event", () => {
     });
 
     let capturedEvent: unknown;
-    flowEventBus.on("stuck_detected", (e) => { capturedEvent = e; });
+    flowEventBus.on("stuck_detected", (e) => {
+      capturedEvent = e;
+    });
 
     await reportResult({
       workspace,
@@ -385,7 +388,9 @@ describe("report_result: correlation_id in events", () => {
     expect(correlationId).not.toBeNull();
 
     let capturedEvent: unknown;
-    flowEventBus.on("state_completed", (e) => { capturedEvent = e; });
+    flowEventBus.on("state_completed", (e) => {
+      capturedEvent = e;
+    });
 
     const result = await reportResult({
       workspace,
@@ -410,7 +415,9 @@ describe("report_result: correlation_id in events", () => {
     expect(correlationId).not.toBeNull();
 
     let capturedEvent: unknown;
-    flowEventBus.on("transition_evaluated", (e) => { capturedEvent = e; });
+    flowEventBus.on("transition_evaluated", (e) => {
+      capturedEvent = e;
+    });
 
     const result = await reportResult({
       workspace,
@@ -478,8 +485,12 @@ describe("report_result: correlation_id in events", () => {
 
     let stateEvent: unknown;
     let transEvent: unknown;
-    flowEventBus.on("state_completed", (e) => { stateEvent = e; });
-    flowEventBus.on("transition_evaluated", (e) => { transEvent = e; });
+    flowEventBus.on("state_completed", (e) => {
+      stateEvent = e;
+    });
+    flowEventBus.on("transition_evaluated", (e) => {
+      transEvent = e;
+    });
 
     await reportResult({
       workspace,

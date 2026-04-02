@@ -21,8 +21,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 // Canon repo root — two levels up from mcp-server/src/__tests__/
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(__dirname, "../../..");
+const testDir = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(testDir, "../../..");
 
 const DOMAINS_DIR = join(REPO_ROOT, "domains");
 const ARCHITECT_MD = join(REPO_ROOT, "agents", "canon-architect.md");

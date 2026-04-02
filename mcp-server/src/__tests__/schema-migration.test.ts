@@ -11,17 +11,13 @@
  * 7. Schema version integer comparison
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
+import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  initExecutionDb,
-  SCHEMA_VERSION,
-  columnExists,
-} from "../orchestration/execution-schema.ts";
+import { columnExists, initExecutionDb, SCHEMA_VERSION } from "../orchestration/execution-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -140,9 +136,9 @@ describe("fresh database v2 schema", () => {
     const dbPath = makeTmpDb();
     const db = initExecutionDb(dbPath);
 
-    const row = db
-      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-      .get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
 
     expect(row?.value).toBe("3");
 
@@ -187,9 +183,9 @@ describe("v1 to v2 migration", () => {
 
     const db = initExecutionDb(dbPath);
 
-    const row = db
-      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-      .get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
 
     expect(row?.value).toBe("3");
 
@@ -215,9 +211,9 @@ describe("v1 to v2 migration", () => {
 
     const db = initExecutionDb(dbPath);
 
-    const row = db
-      .prepare("SELECT flow, task, entry, current_state FROM execution WHERE id = 1")
-      .get() as { flow: string; task: string; entry: string; current_state: string } | undefined;
+    const row = db.prepare("SELECT flow, task, entry, current_state FROM execution WHERE id = 1").get() as
+      | { flow: string; task: string; entry: string; current_state: string }
+      | undefined;
 
     expect(row).toBeDefined();
     expect(row!.flow).toBe("quick-fix");
@@ -253,16 +249,15 @@ describe("correlation_id backfill", () => {
 
     const db = initExecutionDb(dbPath);
 
-    const row = db
-      .prepare("SELECT correlation_id FROM execution WHERE id = 1")
-      .get() as { correlation_id: string | null } | undefined;
+    const row = db.prepare("SELECT correlation_id FROM execution WHERE id = 1").get() as
+      | { correlation_id: string | null }
+      | undefined;
 
     expect(row).toBeDefined();
     expect(row!.correlation_id).not.toBeNull();
 
     // Validate it's a UUID (8-4-4-4-12 hex format)
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     expect(row!.correlation_id).toMatch(uuidRegex);
 
     db.close();
@@ -306,9 +301,11 @@ describe("existing event rows preserved after migration", () => {
 
     const db = initExecutionDb(dbPath);
 
-    const events = db
-      .prepare("SELECT type, payload, correlation_id FROM events ORDER BY id ASC")
-      .all() as Array<{ type: string; payload: string; correlation_id: string | null }>;
+    const events = db.prepare("SELECT type, payload, correlation_id FROM events ORDER BY id ASC").all() as Array<{
+      type: string;
+      payload: string;
+      correlation_id: string | null;
+    }>;
 
     expect(events).toHaveLength(2);
     expect(events[0].type).toBe("state_completed");
@@ -361,9 +358,9 @@ describe("migration idempotency", () => {
 
     const db2 = initExecutionDb(dbPath);
 
-    const row = db2
-      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-      .get() as { value: string } | undefined;
+    const row = db2.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
 
     expect(row?.value).toBe("3");
 
@@ -449,9 +446,9 @@ describe("schema version comparison uses integer parsing", () => {
     // and should produce schema version '2'
     const db = initExecutionDb(dbPath);
 
-    const row = db
-      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-      .get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
 
     // Migrations ran — version upgraded to 3
     expect(row?.value).toBe("3");
@@ -463,16 +460,20 @@ describe("schema version comparison uses integer parsing", () => {
     const dbPath = makeTmpDb();
     const db1 = initExecutionDb(dbPath);
     // Both correlation_id indexes exist after first init
-    const indexesBefore = (db1
-      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='events'")
-      .all() as Array<{ name: string }>).map((i) => i.name);
+    const indexesBefore = (
+      db1.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='events'").all() as Array<{
+        name: string;
+      }>
+    ).map((i) => i.name);
     db1.close();
 
     // Second init must not error (idempotent)
     const db2 = initExecutionDb(dbPath);
-    const indexesAfter = (db2
-      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='events'")
-      .all() as Array<{ name: string }>).map((i) => i.name);
+    const indexesAfter = (
+      db2.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='events'").all() as Array<{
+        name: string;
+      }>
+    ).map((i) => i.name);
     db2.close();
 
     // Index count must not change — migration did not re-run

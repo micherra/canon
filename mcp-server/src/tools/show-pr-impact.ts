@@ -24,8 +24,8 @@ import { isAbsolute, join, resolve } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
 import { KgQuery } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 import type { ReviewEntry, ReviewViolation } from "../schema.ts";
 import type { PrReviewDataOutput } from "./pr-review-data.ts";
 import { getPrReviewData } from "./pr-review-data.ts";
@@ -346,20 +346,20 @@ function buildSubgraph(
   // Map KgQuery nodes to PrImpactSubgraphNode
   const changedSet = new Set(changedFiles);
   const filteredNodes: PrImpactSubgraphNode[] = rawSubgraph.nodes
-    .filter(n => includedPaths.has(n.path))
-    .map(n => ({
+    .filter((n) => includedPaths.has(n.path))
+    .map((n) => ({
       id: n.path,
       layer: n.layer ?? "unknown",
       changed: changedSet.has(n.path),
       violation_count: violationCountByFile?.get(n.path) ?? 0,
     }));
 
-  const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+  const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
 
   // Filter edges — both endpoints must be in the subgraph inclusion set
   const filteredEdges: PrImpactSubgraphEdge[] = rawSubgraph.edges
-    .filter(e => filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target))
-    .map(e => ({ source: e.source, target: e.target }));
+    .filter((e) => filteredNodeIds.has(e.source) && filteredNodeIds.has(e.target))
+    .map((e) => ({ source: e.source, target: e.target }));
 
   // Extract layer summary
   const layerCounts = new Map<string, number>();
@@ -374,6 +374,55 @@ function buildSubgraph(
   }));
 
   return { nodes: filteredNodes, edges: filteredEdges, layers };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: computeKgData
+//
+// Extracts KG-dependent computation (blast radius + subgraph) out of the
+// main showPrImpact body to reduce nesting depth and cognitive complexity.
+// ---------------------------------------------------------------------------
+
+function computeKgData(
+  dbPath: string,
+  files: string[],
+  violations: ReviewViolation[],
+): { blastRadius: PrImpactOutput["blastRadius"]; subgraph: PrImpactSubgraph } {
+  let blastRadius: PrImpactOutput["blastRadius"];
+  let subgraph: PrImpactSubgraph = { nodes: [], edges: [], layers: [] };
+
+  const db = initDatabase(dbPath);
+  try {
+    const report = analyzeBlastRadius(db, files, { maxDepth: 3, includeTests: false });
+    blastRadius = {
+      total_affected: report.total_affected,
+      affected_files: report.affected_files,
+      by_depth: report.by_depth,
+      affected: report.affected.map((e) => ({
+        entity_name: e.entity_name,
+        entity_kind: e.entity_kind,
+        file_path: e.file_path,
+        depth: e.depth,
+      })),
+    };
+  } catch {
+    // KG query failed — continue without blast radius
+  }
+
+  try {
+    const violationCountByFile = new Map<string, number>();
+    for (const v of violations) {
+      if (v.file_path) {
+        violationCountByFile.set(v.file_path, (violationCountByFile.get(v.file_path) ?? 0) + 1);
+      }
+    }
+    subgraph = buildSubgraph(db, files, blastRadius, violationCountByFile);
+  } catch {
+    // Subgraph build failed — continue with empty subgraph
+  }
+
+  db.close();
+  return { blastRadius, subgraph };
 }
 
 // ---------------------------------------------------------------------------
@@ -437,60 +486,24 @@ export async function showPrImpact(
     (v) => !v.file_path || safeResolvePath(projectDir, v.file_path) !== null,
   );
 
-  // 3. Check KG availability
+  // 3. Compute blast radius and subgraph from KG (if available)
   const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   const hasKg = existsSync(dbPath);
+  const { blastRadius, subgraph } = hasKg
+    ? computeKgData(dbPath, latestReview.files, latestReview.violations)
+    : { blastRadius: undefined, subgraph: { nodes: [], edges: [], layers: [] } as PrImpactSubgraph };
 
-  // 4. Compute blast radius and subgraph from KG (if available)
-  let blastRadius: PrImpactOutput["blastRadius"];
-  let subgraph: PrImpactSubgraph = { nodes: [], edges: [], layers: [] };
-  if (hasKg) {
-    const db = initDatabase(dbPath);
-    try {
-      const report = analyzeBlastRadius(db, latestReview.files, { maxDepth: 3, includeTests: false });
-      blastRadius = {
-        total_affected: report.total_affected,
-        affected_files: report.affected_files,
-        by_depth: report.by_depth,
-        affected: report.affected.map((e) => ({
-          entity_name: e.entity_name,
-          entity_kind: e.entity_kind,
-          file_path: e.file_path,
-          depth: e.depth,
-        })),
-      };
-    } catch {
-      // KG query failed — continue without blast radius
-    }
-
-    // 6. Build subgraph from KG (filtered to changed + affected files)
-    try {
-      // Build per-file violation counts from the stored review
-      const violationCountByFile = new Map<string, number>();
-      for (const v of latestReview.violations) {
-        if (v.file_path) {
-          violationCountByFile.set(v.file_path, (violationCountByFile.get(v.file_path) ?? 0) + 1);
-        }
-      }
-      subgraph = buildSubgraph(db, latestReview.files, blastRadius, violationCountByFile);
-    } catch {
-      // Subgraph build failed — continue with empty subgraph
-    }
-
-    db.close();
-  }
-
-  // 5. Build hotspot list (ranked by risk_score)
+  // 4. Build hotspot list (ranked by risk_score)
   const hotspots = buildHotspots(latestReview, blastRadius);
 
-  // 7. Detect subsystems — cross-reference review files with prep file statuses
+  // 5. Detect subsystems — cross-reference review files with prep file statuses
   const statusMap = new Map<string, string>();
   for (const prepFile of prepResult.files) {
     statusMap.set(prepFile.path, prepFile.status);
   }
   const subsystems = detectSubsystems(latestReview.files, statusMap);
 
-  // 9. Build per-file blast radius counts (top 15 by dep_count)
+  // 6. Build per-file blast radius counts (top 15 by dep_count)
   const blast_radius_by_file = buildBlastRadiusByFile(blastRadius);
 
   return {

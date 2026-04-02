@@ -14,10 +14,10 @@
  * 10. Log entry omits new fields when not provided
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -36,9 +36,9 @@ vi.mock("../orchestration/effects.ts", () => ({
 }));
 
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
+import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -152,6 +152,7 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       gate_results: gateResults,
     });
@@ -173,6 +174,7 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       postcondition_results: postconditionResults,
     });
@@ -185,6 +187,7 @@ describe("report_result: quality metrics enrichment", () => {
   // 3. discovered_gates accumulate (append, not replace)
   // -------------------------------------------------------------------------
   it("accumulates discovered_gates across multiple reports (append, not replace)", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const flow = makeMinimalFlow() as any;
 
     // First report — implementor discovers a gate
@@ -223,7 +226,7 @@ describe("report_result: quality metrics enrichment", () => {
       expect.arrayContaining([
         { command: "npm test", source: "tester" },
         { command: "npx eslint .", source: "reviewer" },
-      ])
+      ]),
     );
   });
 
@@ -231,6 +234,7 @@ describe("report_result: quality metrics enrichment", () => {
   // 4. discovered_postconditions accumulate (append, not replace)
   // -------------------------------------------------------------------------
   it("accumulates discovered_postconditions across multiple reports (append, not replace)", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const flow = makeMinimalFlow() as any;
 
     // First report
@@ -239,9 +243,7 @@ describe("report_result: quality metrics enrichment", () => {
       state_id: "impl",
       status_keyword: "done",
       flow,
-      discovered_postconditions: [
-        { type: "file_exists" as const, target: "dist/index.js" },
-      ],
+      discovered_postconditions: [{ type: "file_exists" as const, target: "dist/index.js" }],
     });
 
     const storeAfterFirst2 = getExecutionStore(workspace);
@@ -261,9 +263,7 @@ describe("report_result: quality metrics enrichment", () => {
       state_id: "impl",
       status_keyword: "done",
       flow,
-      discovered_postconditions: [
-        { type: "no_pattern" as const, target: "src/**/*.ts", pattern: "console\\.log" },
-      ],
+      discovered_postconditions: [{ type: "no_pattern" as const, target: "src/**/*.ts", pattern: "console\\.log" }],
     });
 
     const boardAfterSecond = getExecutionStore(workspace).getBoard()!;
@@ -272,7 +272,7 @@ describe("report_result: quality metrics enrichment", () => {
       expect.arrayContaining([
         { type: "file_exists", target: "dist/index.js" },
         { type: "no_pattern", target: "src/**/*.ts", pattern: "console\\.log" },
-      ])
+      ]),
     );
   });
 
@@ -284,6 +284,7 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 5000, spawns: 1, model: "claude-sonnet" },
       violation_count: 3,
@@ -311,6 +312,7 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 1000, spawns: 1, model: "claude-sonnet" },
     });
@@ -328,6 +330,7 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       artifacts: ["dist/index.js"],
     });
@@ -355,14 +358,11 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 2000, spawns: 2, model: "claude-sonnet" },
-      gate_results: [
-        { passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 },
-      ],
-      postcondition_results: [
-        { passed: true, name: "output exists", type: "file_exists", output: "found" },
-      ],
+      gate_results: [{ passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 }],
+      postcondition_results: [{ passed: true, name: "output exists", type: "file_exists", output: "found" }],
       discovered_gates: [{ command: "npm test", source: "tester" }],
       discovered_postconditions: [{ type: "file_exists" as const, target: "dist/index.js" }],
       violation_count: 0,
@@ -392,14 +392,11 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 3000, spawns: 1, model: "claude-sonnet" },
-      gate_results: [
-        { passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 },
-      ],
-      postcondition_results: [
-        { passed: true, name: "output exists", type: "file_exists", output: "found" },
-      ],
+      gate_results: [{ passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 }],
+      postcondition_results: [{ passed: true, name: "output exists", type: "file_exists", output: "found" }],
       violation_count: 2,
       violation_severities: { blocking: 1, warning: 1 },
       test_results: { passed: 8, failed: 2, skipped: 0 },
@@ -409,6 +406,7 @@ describe("report_result: quality metrics enrichment", () => {
     });
     assertOk(result);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const log_entry = result.log_entry as any;
     expect(log_entry.gate_results).toHaveLength(1);
     expect(log_entry.postcondition_results).toHaveLength(1);
@@ -428,10 +426,12 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
     });
     assertOk(result);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const log_entry = result.log_entry as any;
     expect(log_entry.gate_results).toBeUndefined();
     expect(log_entry.postcondition_results).toBeUndefined();
@@ -447,14 +447,13 @@ describe("report_result: quality metrics enrichment", () => {
   // 11. gate_results also stored in metrics
   // -------------------------------------------------------------------------
   it("stores gate_results in metrics when provided alongside regular metrics", async () => {
-    const gateResults = [
-      { passed: false, gate: "lint", command: "npx eslint .", output: "3 errors", exitCode: 1 },
-    ];
+    const gateResults = [{ passed: false, gate: "lint", command: "npx eslint .", output: "3 errors", exitCode: 1 }];
 
     const result = await reportResult({
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 1500, spawns: 1, model: "claude-sonnet" },
       gate_results: gateResults,
@@ -476,6 +475,7 @@ describe("report_result: quality metrics enrichment", () => {
       workspace,
       state_id: "impl",
       status_keyword: "done",
+      // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
       flow: makeMinimalFlow() as any,
       metrics: { duration_ms: 1000, spawns: 1, model: "claude-sonnet" },
       violation_count: 5,
@@ -483,10 +483,9 @@ describe("report_result: quality metrics enrichment", () => {
       discovered_gates: [{ command: "npm test", source: "tester" }],
     });
 
-    const stateCompletedCall = emitMock.mock.calls.find(
-      (call) => call[0] === "state_completed"
-    );
+    const stateCompletedCall = emitMock.mock.calls.find((call) => call[0] === "state_completed");
     expect(stateCompletedCall).toBeDefined();
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const eventPayload = stateCompletedCall![1] as any;
     expect(eventPayload.violation_count).toBe(5);
     expect(eventPayload.test_results).toEqual({ passed: 20, failed: 0, skipped: 1 });

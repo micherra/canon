@@ -1,8 +1,5 @@
-import { describe, it, expect } from "vitest";
-import {
-  EventPayloadSchemas,
-  validateEventPayload,
-} from "../orchestration/events.ts";
+import { describe, expect, it } from "vitest";
+import { EventPayloadSchemas, validateEventPayload } from "../orchestration/events.ts";
 
 // ---------------------------------------------------------------------------
 // Type-level check: stuck_detected is in FlowEventType
@@ -173,17 +170,74 @@ describe("correlation_id optional field", () => {
   it("each event schema accepts correlation_id as an optional string", () => {
     // Provide minimal valid payloads for each event type with correlation_id
     const minimalPayloads: Record<string, Record<string, unknown>> = {
-      state_entered: { stateId: "s", stateType: "t", timestamp: "2026-01-01T00:00:00Z", iterationCount: 0, correlation_id: "c1" },
-      state_completed: { stateId: "s", result: "DONE", duration_ms: 0, artifacts: [], timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
+      state_entered: {
+        stateId: "s",
+        stateType: "t",
+        timestamp: "2026-01-01T00:00:00Z",
+        iterationCount: 0,
+        correlation_id: "c1",
+      },
+      state_completed: {
+        stateId: "s",
+        result: "DONE",
+        duration_ms: 0,
+        artifacts: [],
+        timestamp: "2026-01-01T00:00:00Z",
+        correlation_id: "c1",
+      },
       agent_spawned: { stateId: "s", agent: "a", model: "m", timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
-      transition_evaluated: { stateId: "s", statusKeyword: "done", normalizedCondition: "done", nextState: "n", timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
+      transition_evaluated: {
+        stateId: "s",
+        statusKeyword: "done",
+        normalizedCondition: "done",
+        nextState: "n",
+        timestamp: "2026-01-01T00:00:00Z",
+        correlation_id: "c1",
+      },
       hitl_triggered: { stateId: "s", reason: "r", timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
-      flow_started: { flowName: "f", task: "t", tier: "t1", workspace: "/w", timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
-      flow_completed: { flowName: "f", task: "t", concerns: [], skipped: [], duration_ms: 0, totalSpawns: 0, timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
+      flow_started: {
+        flowName: "f",
+        task: "t",
+        tier: "t1",
+        workspace: "/w",
+        timestamp: "2026-01-01T00:00:00Z",
+        correlation_id: "c1",
+      },
+      flow_completed: {
+        flowName: "f",
+        task: "t",
+        concerns: [],
+        skipped: [],
+        duration_ms: 0,
+        totalSpawns: 0,
+        timestamp: "2026-01-01T00:00:00Z",
+        correlation_id: "c1",
+      },
       board_updated: { action: "a", timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
-      wave_event_injected: { eventId: "e", eventType: "t", workspace: "/w", timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
-      wave_event_resolved: { eventId: "e", eventType: "t", action: "apply", workspace: "/w", timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
-      stuck_detected: { stateId: "s", strategy: "st", reason: "r", iteration_count: 1, comparison: { previous: {}, current: {} }, timestamp: "2026-01-01T00:00:00Z", correlation_id: "c1" },
+      wave_event_injected: {
+        eventId: "e",
+        eventType: "t",
+        workspace: "/w",
+        timestamp: "2026-01-01T00:00:00Z",
+        correlation_id: "c1",
+      },
+      wave_event_resolved: {
+        eventId: "e",
+        eventType: "t",
+        action: "apply",
+        workspace: "/w",
+        timestamp: "2026-01-01T00:00:00Z",
+        correlation_id: "c1",
+      },
+      stuck_detected: {
+        stateId: "s",
+        strategy: "st",
+        reason: "r",
+        iteration_count: 1,
+        comparison: { previous: {}, current: {} },
+        timestamp: "2026-01-01T00:00:00Z",
+        correlation_id: "c1",
+      },
     };
 
     for (const eventType of allEventTypes) {

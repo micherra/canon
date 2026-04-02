@@ -14,12 +14,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EMBEDDING_MODEL_ID } from "../constants.ts";
+import { runPipeline } from "../graph/kg-pipeline.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
-import { runPipeline } from "../graph/kg-pipeline.ts";
 import { semanticSearch } from "../tools/semantic-search.ts";
 import { randomEmbedding } from "./embedding-test-helpers.ts";
 
@@ -27,15 +26,15 @@ import { randomEmbedding } from "./embedding-test-helpers.ts";
 // Mock EmbeddingService (shared across all describe blocks in this file)
 // ---------------------------------------------------------------------------
 
-let _mockSeed = 0;
+let mockSeed = 0;
 
 vi.mock("../graph/kg-embedding.ts", () => ({
   EmbeddingService: class MockEmbeddingService {
     async embed(texts: string[]): Promise<Float32Array[]> {
-      return texts.map((_, i) => randomEmbedding(_mockSeed + i));
+      return texts.map((_, i) => randomEmbedding(mockSeed + i));
     }
     async embedOne(_text: string): Promise<Float32Array> {
-      return randomEmbedding(_mockSeed++);
+      return randomEmbedding(mockSeed++);
     }
     dispose(): void {
       // no-op
@@ -73,7 +72,7 @@ describe("Integration: runPipeline embed phase → semanticSearch tool", () => {
   beforeEach(() => {
     projectDir = makeTempDir();
     mkdirSync(path.join(projectDir, ".canon"), { recursive: true });
-    _mockSeed = 0;
+    mockSeed = 0;
   });
 
   afterEach(() => {
@@ -96,7 +95,7 @@ describe("Integration: runPipeline embed phase → semanticSearch tool", () => {
     expect(stats.entityVectors).toBeGreaterThan(0);
 
     // Now call semanticSearch — the tool should find the entity
-    _mockSeed = 0; // reset so query vector may land near indexed vectors
+    mockSeed = 0; // reset so query vector may land near indexed vectors
     const result = await semanticSearch({ query: "authenticate user token" }, projectDir);
 
     expect(result.ok).toBe(true);
@@ -153,7 +152,7 @@ describe("KgVectorStore.cleanOrphanSummaryVectors", () => {
     db = initDatabase(":memory:");
     store = new KgStore(db);
     vectorStore = new KgVectorStore(db);
-    _mockSeed = 0;
+    mockSeed = 0;
   });
 
   afterEach(() => {
@@ -239,7 +238,7 @@ describe("KgVectorQuery threshold — positive coverage", () => {
     db = initDatabase(":memory:");
     store = new KgStore(db);
     vectorStore = new KgVectorStore(db);
-    _mockSeed = 0;
+    mockSeed = 0;
   });
 
   afterEach(() => {
@@ -281,9 +280,12 @@ describe("KgVectorQuery threshold — positive coverage", () => {
       async embedOne(_text: string): Promise<Float32Array> {
         return embedding;
       },
-      dispose() {},
+      dispose() {
+        /* noop */
+      },
     };
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, exactMatchService as any);
     const results = await query.semanticSearch("same vector query", { threshold: 1.0, scope: "entities" });
 
@@ -304,9 +306,12 @@ describe("KgVectorQuery threshold — positive coverage", () => {
       async embedOne(_text: string): Promise<Float32Array> {
         return randomEmbedding(99);
       },
-      dispose() {},
+      dispose() {
+        /* noop */
+      },
     };
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, differentVecService as any);
     const results = await query.semanticSearch("different vector", { threshold: 0.0, scope: "entities" });
 
@@ -331,7 +336,7 @@ describe("KgVectorStore.getVectorStats — combined entity and summary counts", 
     db = initDatabase(":memory:");
     store = new KgStore(db);
     vectorStore = new KgVectorStore(db);
-    _mockSeed = 0;
+    mockSeed = 0;
   });
 
   afterEach(() => {
@@ -395,7 +400,7 @@ describe("KgVectorStore.getStaleSummaryVectors — model_id mismatch", () => {
     db = initDatabase(":memory:");
     store = new KgStore(db);
     vectorStore = new KgVectorStore(db);
-    _mockSeed = 0;
+    mockSeed = 0;
   });
 
   afterEach(() => {
@@ -478,7 +483,7 @@ describe("Integration: store_summaries embedding trigger → KgVectorQuery", () 
     db = initDatabase(":memory:");
     store = new KgStore(db);
     vectorStore = new KgVectorStore(db);
-    _mockSeed = 0;
+    mockSeed = 0;
   });
 
   afterEach(() => {
@@ -518,9 +523,12 @@ describe("Integration: store_summaries embedding trigger → KgVectorQuery", () 
       async embedOne(_text: string): Promise<Float32Array> {
         return embedding;
       },
-      dispose() {},
+      dispose() {
+        /* noop */
+      },
     };
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, exactMatchService as any);
     const results = await query.semanticSearch("payment processing", { scope: "summaries" });
 

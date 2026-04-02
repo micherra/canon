@@ -1,27 +1,26 @@
-import { readFile } from "fs/promises";
-import { join, isAbsolute } from "path";
+import { readFile } from "node:fs/promises";
+import path, { isAbsolute, join } from "node:path";
 import { gitExecAsync } from "../adapters/git-adapter-async.ts";
-import { scanSourceFiles } from "../graph/scanner.ts";
-import { extractImports, resolveImport, type PathAlias } from "../graph/import-parser.ts";
-import { loadAllPrinciples } from "../matcher.ts";
+import { CANON_DIR, CANON_FILES, extractSummary } from "../constants.ts";
 import { DriftStore } from "../drift/store.ts";
-import { generateInsights, type CodebaseInsights } from "../graph/insights.ts";
-import {
-  deriveSourceDirsFromLayers,
-  loadLayerMappings,
-  loadLayerMappingsStrict,
-  buildLayerInferrer,
-  loadGraphCompositionConfig,
-} from "../utils/config.ts";
-import { isNotFound } from "../utils/errors.ts";
-import { extractSummary, CANON_DIR, CANON_FILES } from "../constants.ts";
-import { toPosix, loadPathAliases } from "../utils/paths.ts";
-import { sanitizeGitRef } from "../utils/git-ref.ts";
-import { classifyMdNode, buildNameMaps, inferMdRelations } from "../graph/md-relations.ts";
+import { extractImports, type PathAlias, resolveImport } from "../graph/import-parser.ts";
+import { type CodebaseInsights, generateInsights } from "../graph/insights.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
 import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
-import path from "path";
+import { buildNameMaps, classifyMdNode, inferMdRelations } from "../graph/md-relations.ts";
+import { scanSourceFiles } from "../graph/scanner.ts";
+import { loadAllPrinciples } from "../matcher.ts";
+import {
+  buildLayerInferrer,
+  deriveSourceDirsFromLayers,
+  loadGraphCompositionConfig,
+  loadLayerMappings,
+  loadLayerMappingsStrict,
+} from "../utils/config.ts";
+import { isNotFound } from "../utils/errors.ts";
+import { sanitizeGitRef } from "../utils/git-ref.ts";
+import { loadPathAliases, toPosix } from "../utils/paths.ts";
 
 const FALLBACK_LAYER_COLOR = "#BDC3C7";
 
@@ -104,10 +103,7 @@ async function gitRefExists(cwd: string, ref: string): Promise<boolean> {
 /** Canon directories to scan for .md nodes (agents, flows, templates, principles). */
 const CANON_SCAN_DIRS = ["agents", "flows", "templates", "principles", "commands"];
 
-async function scanProjectFiles(
-  input: CodebaseGraphInput,
-  projectDir: string,
-): Promise<string[]> {
+async function scanProjectFiles(input: CodebaseGraphInput, projectDir: string): Promise<string[]> {
   const explicitSourceDirs = input.source_dirs;
   const configSourceDirs = await deriveSourceDirsFromLayers(projectDir);
   const sourceDirs = explicitSourceDirs || configSourceDirs;
@@ -129,10 +125,8 @@ async function scanProjectFiles(
       includeExtensions: input.include_extensions,
       excludeDirs: input.exclude_dirs,
     });
-    const prefix = (input.root_dir === "." || abs) ? "" : input.root_dir;
-    baseFiles = prefix
-      ? scanned.map((f) => toPosix(join(prefix, f)))
-      : scanned.map(toPosix);
+    const prefix = input.root_dir === "." || abs ? "" : input.root_dir;
+    baseFiles = prefix ? scanned.map((f) => toPosix(join(prefix, f))) : scanned.map(toPosix);
   }
 
   // Scan Canon .md directories that may not be under source_dirs
@@ -154,17 +148,18 @@ async function scanProjectFiles(
 }
 
 /** Detect changed files via git diff or explicit input. */
-async function detectChangedFiles(
-  input: CodebaseGraphInput,
-  projectDir: string,
-): Promise<Set<string>> {
+async function detectChangedFiles(input: CodebaseGraphInput, projectDir: string): Promise<Set<string>> {
   let changedFiles = input.changed_files || [];
   if (changedFiles.length === 0) {
     const branch = await gitCurrentBranch(projectDir);
     if (branch && branch !== "main" && branch !== "master") {
-      const rawBase = input.diff_base
-        || (await gitRefExists(projectDir, "origin/main") ? "origin/main"
-        : (await gitRefExists(projectDir, "origin/master") ? "origin/master" : null));
+      const rawBase =
+        input.diff_base ||
+        ((await gitRefExists(projectDir, "origin/main"))
+          ? "origin/main"
+          : (await gitRefExists(projectDir, "origin/master"))
+            ? "origin/master"
+            : null);
       if (rawBase) {
         let base: string;
         try {
@@ -221,10 +216,12 @@ async function buildNodes(
     layerCounts.set(layer, (layerCounts.get(layer) || 0) + 1);
 
     const violations = fileViolations.get(filePath);
-    const violationCount = violations
-      ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
+    const violationCount = violations ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
     const topViolations = violations
-      ? Array.from(violations.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id)
+      ? Array.from(violations.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([id]) => id)
       : [];
 
     const node: GraphNode = {
@@ -277,11 +274,7 @@ function shouldInspectForComposition(path: string, patterns: string[]): boolean 
   return patterns.some((pattern) => lower.endsWith(pattern.toLowerCase()));
 }
 
-function resolveCompositionTarget(
-  rawRef: string,
-  sourcePath: string,
-  fileSet: Set<string>,
-): string | null {
+function resolveCompositionTarget(rawRef: string, sourcePath: string, fileSet: Set<string>): string | null {
   const normalized = toPosix(rawRef.trim().replace(/^['"]|['"]$/g, ""));
   if (!normalized) return null;
 
@@ -321,9 +314,8 @@ async function buildCompositionEdges(
   const markerAlternation = compositionConfig.markers
     .map((marker: string) => marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("|");
-  const markerRegex = markerAlternation.length > 0
-    ? new RegExp(`(?:${markerAlternation})\\s*[:=]\\s*["']?([\\w./-]+)["']?`, "gi")
-    : null;
+  const markerRegex =
+    markerAlternation.length > 0 ? new RegExp(`(?:${markerAlternation})\\s*[:=]\\s*["']?([\\w./-]+)["']?`, "gi") : null;
 
   const edgesByKey = new Map<string, GraphEdge>();
   for (const filePath of filePaths) {
@@ -454,7 +446,7 @@ function enrichNodesWithInsights(
 export async function codebaseGraph(
   input: CodebaseGraphInput,
   projectDir: string,
-  pluginDir: string
+  pluginDir: string,
 ): Promise<CodebaseGraphOutput> {
   // Load layer mappings — fall back to non-strict defaults when layers are not
   // configured so the tool always produces output instead of hanging.
@@ -496,7 +488,13 @@ export async function codebaseGraph(
 
     const db = initDatabase(dbPath);
     let rawNodes: Array<{ id: string; layer: string; extension: string }>;
-    let rawEdges: Array<{ source: string; target: string; type: GraphEdge["type"]; confidence: number; relation?: string }>;
+    let rawEdges: Array<{
+      source: string;
+      target: string;
+      type: GraphEdge["type"];
+      confidence: number;
+      relation?: string;
+    }>;
     try {
       const kgQuery = new KgQuery(db);
       const filesWithStats = kgQuery.getAllFilesWithStats();
@@ -517,12 +515,12 @@ export async function codebaseGraph(
           JOIN files tgt ON tgt.file_id = fe.target_file_id
         `)
         .all() as Array<{
-          edge_type: string;
-          confidence: number;
-          relation: string | null;
-          source_path: string;
-          target_path: string;
-        }>;
+        edge_type: string;
+        confidence: number;
+        relation: string | null;
+        source_path: string;
+        target_path: string;
+      }>;
 
       function mapEdgeType(edgeType: string): GraphEdge["type"] {
         if (edgeType === "imports") return "import";
@@ -543,15 +541,11 @@ export async function codebaseGraph(
     }
 
     // Filter DB-sourced nodes to only those within the requested scope
-    const filteredNodes = rawNodes.filter((n) =>
-      requestedFileSet.size === 0 || requestedFileSet.has(n.id),
-    );
+    const filteredNodes = rawNodes.filter((n) => requestedFileSet.size === 0 || requestedFileSet.has(n.id));
     const filteredNodeSet = new Set(filteredNodes.map((n) => n.id));
 
     // Filter edges to only those where both endpoints are in scope
-    const filteredEdges = rawEdges.filter(
-      (e) => filteredNodeSet.has(e.source) && filteredNodeSet.has(e.target),
-    );
+    const filteredEdges = rawEdges.filter((e) => filteredNodeSet.has(e.source) && filteredNodeSet.has(e.target));
 
     // Supplement pipeline edges with legacy alias-aware import resolution,
     // composition edges, and MD-relation inference. These fill in gaps the
@@ -562,7 +556,10 @@ export async function codebaseGraph(
     const supplementCompositionEdges = await buildCompositionEdges(requestedFilePaths, requestedFileSet, projectDir);
     const nameMaps = await buildNameMaps(requestedFilePaths, projectDir);
     const supplementMdEdges = await inferMdRelations(requestedFilePaths, requestedFileSet, nameMaps, projectDir);
-    const supplementEdges = mergeEdges(supplementImportEdges, mergeEdges(supplementCompositionEdges, supplementMdEdges));
+    const supplementEdges = mergeEdges(
+      supplementImportEdges,
+      mergeEdges(supplementCompositionEdges, supplementMdEdges),
+    );
 
     // Apply compliance overlay and layer colors onto DB-sourced nodes
     const store = new DriftStore(projectDir);
@@ -589,10 +586,12 @@ export async function codebaseGraph(
     nodes = filteredNodes.map((n) => {
       const layer = inferLayer(n.id) || n.layer || "unknown";
       const violations = fileViolations.get(n.id);
-      const violationCount = violations
-        ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
+      const violationCount = violations ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
       const topViolations = violations
-        ? Array.from(violations.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id)
+        ? Array.from(violations.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([id]) => id)
         : [];
 
       const node: GraphNode = {
@@ -622,7 +621,11 @@ export async function codebaseGraph(
 
     const fileSet = requestedFileSet;
     const { nodes: legacyNodes } = await buildNodes(
-      requestedFilePaths, inferLayer, layerColors, changedSet, projectDir,
+      requestedFilePaths,
+      inferLayer,
+      layerColors,
+      changedSet,
+      projectDir,
     );
     const aliases = await loadPathAliases(projectDir);
     const importEdges = await buildEdges(requestedFilePaths, fileSet, aliases, projectDir);
@@ -677,7 +680,11 @@ export async function codebaseGraph(
   }
 
   const fullGraph: CodebaseGraphOutput = {
-    nodes, edges, layers, principles, insights,
+    nodes,
+    edges,
+    layers,
+    principles,
+    insights,
     generated_at: new Date().toISOString(),
   };
 
@@ -726,6 +733,7 @@ export interface CompactGraphOutput {
   layers: CodebaseGraphOutput["layers"];
   generated_at: string;
   /** Signals this is index-encoded so the UI knows to decode. */
+  // biome-ignore lint/style/useNamingConvention: wire format discriminator for UI
   _compact: true;
 }
 
@@ -756,6 +764,7 @@ export function compactGraph(graph: CodebaseGraphOutput): CompactGraphOutput {
     edges,
     layers: graph.layers,
     generated_at: graph.generated_at,
+    // biome-ignore lint/style/useNamingConvention: wire format discriminator for UI
     _compact: true,
   };
 }

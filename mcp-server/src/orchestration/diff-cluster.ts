@@ -4,7 +4,7 @@
  * large diffs across multiple parallel agent spawns.
  */
 
-import { dirname } from "path";
+import { dirname } from "node:path";
 import { gitExec } from "../adapters/git-adapter.ts";
 import { inferLayer } from "../matcher.ts";
 

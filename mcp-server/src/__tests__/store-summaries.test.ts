@@ -15,15 +15,15 @@ import { randomEmbedding } from "./embedding-test-helpers.ts";
 // tries to download a real embedding model during the DB write path.
 // ---------------------------------------------------------------------------
 
-let _mockSeed = 0;
+let mockSeed = 0;
 
 vi.mock("../graph/kg-embedding.ts", () => ({
   EmbeddingService: class MockEmbeddingService {
     async embed(texts: string[]): Promise<Float32Array[]> {
-      return texts.map((_, i) => randomEmbedding(_mockSeed + i));
+      return texts.map((_, i) => randomEmbedding(mockSeed + i));
     }
     async embedOne(_text: string): Promise<Float32Array> {
-      return randomEmbedding(_mockSeed++);
+      return randomEmbedding(mockSeed++);
     }
     dispose(): void {
       // no-op
@@ -40,7 +40,7 @@ describe("storeSummaries", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-store-summaries-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
-    _mockSeed = 0;
+    mockSeed = 0;
   });
 
   afterEach(async () => {

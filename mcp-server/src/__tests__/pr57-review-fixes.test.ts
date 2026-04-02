@@ -10,14 +10,14 @@
  * Fix 7: verify-fix-loop.md — boolean param works now that buildEffectiveParams supports it
  */
 
-import type Database from "better-sqlite3";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
-import { KgVectorQuery } from "../graph/kg-vector-query.ts";
+import type Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
+import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { resolveFragments } from "../orchestration/flow-parser.ts";
 import type { FragmentDefinition } from "../orchestration/flow-schema.ts";
@@ -186,11 +186,7 @@ describe("resolveFragments — boolean typed param support", () => {
 
     // Should NOT throw "requires param" — false is now a valid default
     expect(() =>
-      resolveFragments(
-        baseFlow,
-        [{ definition: fragment, spawnInstructions: {} }],
-        [{ fragment: "old-frag" }],
-      ),
+      resolveFragments(baseFlow, [{ definition: fragment, spawnInstructions: {} }], [{ fragment: "old-frag" }]),
     ).not.toThrow();
   });
 });
@@ -280,7 +276,6 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
 // Verify that threshold filtering works correctly with bound params.
 // ---------------------------------------------------------------------------
 
-
 describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   let db: Database.Database;
   let store: KgStore;
@@ -331,6 +326,7 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   test("entity threshold 0 returns no results (all distances > 0)", async () => {
     seedEntityWithVector({ qualified_name: "src/A.ts::fn", name: "fn" }, 0);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "entities", threshold: 0 });
 
@@ -342,6 +338,7 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
     seedEntityWithVector({ qualified_name: "src/A.ts::fn1", name: "fn1" }, 10);
     seedEntityWithVector({ qualified_name: "src/B.ts::fn2", name: "fn2" }, 20);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "entities", threshold: 2.0 });
 
@@ -371,6 +368,7 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
     const vec = randomEmbedding(30);
     vectorStore.upsertSummaryVector(summaryRow.summary_id!, vec, KgVectorStore.textHash("A helpful file"));
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "summaries", threshold: 2.0 });
 

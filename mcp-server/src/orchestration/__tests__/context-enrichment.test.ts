@@ -14,10 +14,10 @@
  *   - Empty scope: returns empty content with warning
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board, ResolvedFlow } from "../flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -29,10 +29,9 @@ vi.mock("../../adapters/git-adapter.ts", () => ({
 }));
 
 vi.mock("../../drift/store.ts", () => ({
-  DriftStore: vi.fn(function() {
-    return {
-      getReviewsForFiles: vi.fn().mockResolvedValue([]),
-    };
+  // biome-ignore lint/complexity/useArrowFunction: constructor mock requires function() for `new` binding
+  DriftStore: vi.fn(function () {
+    return { getReviewsForFiles: vi.fn().mockResolvedValue([]) };
   }),
 }));
 
@@ -44,9 +43,9 @@ vi.mock("../scope-resolver.ts", () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
-import { assembleEnrichment, type EnrichmentInput } from "../context-enrichment.ts";
 import { gitLog } from "../../adapters/git-adapter.ts";
 import { DriftStore } from "../../drift/store.ts";
+import { assembleEnrichment, type EnrichmentInput } from "../context-enrichment.ts";
 import { resolveTaskScope } from "../scope-resolver.ts";
 
 // ---------------------------------------------------------------------------
@@ -150,23 +149,19 @@ describe("assembleEnrichment — empty scope", () => {
 
 describe("assembleEnrichment — dc-01: all sections present", () => {
   beforeEach(() => {
-    vi.mocked(resolveTaskScope).mockReturnValue([
-      "src/foo.ts",
-      "src/bar.ts",
-    ]);
+    vi.mocked(resolveTaskScope).mockReturnValue(["src/foo.ts", "src/bar.ts"]);
 
     // Git returns commit history for each file
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1234 Add feature\nbcd2345 Fix bug\ncde3456 Initial commit"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Add feature\nbcd2345 Fix bug\ncde3456 Initial commit"));
 
     // Drift returns a review with no violations
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(["src/foo.ts", "src/bar.ts"]),
-      ]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/foo.ts", "src/bar.ts"])]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
   });
 
   it("output contains Recent Changes section (git)", async () => {
@@ -196,14 +191,15 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     const fiftyFiles = Array.from({ length: 50 }, (_, i) => `src/file-${i}.ts`);
     vi.mocked(resolveTaskScope).mockReturnValue(fiftyFiles);
 
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1234 Add feature"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Add feature"));
 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("hotfix") }));
 
@@ -220,17 +216,16 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
     // Return lots of git output per file to stress budget
     const longCommitMsg = "x".repeat(200);
     vi.mocked(gitLog).mockReturnValue(
-      makeGitOk(
-        Array.from({ length: 5 }, (_, i) => `sha${i} ${longCommitMsg}`).join("\n"),
-      ),
+      makeGitOk(Array.from({ length: 5 }, (_, i) => `sha${i} ${longCommitMsg}`).join("\n")),
     );
 
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(files, 3),
-      ]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 3)]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
@@ -243,17 +238,16 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
 
     // Very long output per file
     vi.mocked(gitLog).mockReturnValue(
-      makeGitOk(
-        Array.from({ length: 5 }, (_, i) => `sha${i} ${"very long commit message ".repeat(20)}`).join("\n"),
-      ),
+      makeGitOk(Array.from({ length: 5 }, (_, i) => `sha${i} ${"very long commit message ".repeat(20)}`).join("\n")),
     );
 
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(files, 5),
-      ]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 5)]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
@@ -280,7 +274,10 @@ describe("assembleEnrichment — dc-04: graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -296,7 +293,10 @@ describe("assembleEnrichment — dc-04: graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockRejectedValue(new Error("DB not found")),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     await expect(assembleEnrichment(makeInput())).resolves.toBeDefined();
   });
@@ -307,7 +307,10 @@ describe("assembleEnrichment — dc-04: graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput());
     expect(result).toBeDefined();
@@ -320,7 +323,10 @@ describe("assembleEnrichment — dc-04: graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
     // All sections fail/empty → content should be empty string
@@ -338,14 +344,15 @@ describe("assembleEnrichment — dc-05: dollar-brace escaping", () => {
   });
 
   it("escapes ${foo} in git commit messages", async () => {
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk('abc1234 Refactor ${foo} config injection'),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Refactor ${foo} config injection"));
 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -357,14 +364,15 @@ describe("assembleEnrichment — dc-05: dollar-brace escaping", () => {
   });
 
   it("escapes multiple ${var} patterns in git output", async () => {
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk('abc1234 Replace ${bar} and ${baz} in template'),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Replace ${bar} and ${baz} in template"));
 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -385,9 +393,7 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/foo.ts"]);
 
     // Git succeeds for this file (recent commits)
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1234 Fix bug\nbcd2345 Another fix"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Fix bug\nbcd2345 Another fix"));
 
     // Drift has violations for the same file
     const mockStore = {
@@ -395,7 +401,10 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
         makeReviewEntry(["src/foo.ts"], 2), // 2 violations
       ]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -406,9 +415,7 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
   it("tensions section absent when no drift violations", async () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/foo.ts"]);
 
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1234 Fix bug"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Fix bug"));
 
     // No violations
     const mockStore = {
@@ -416,7 +423,10 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
         makeReviewEntry(["src/foo.ts"], 0), // clean
       ]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -430,11 +440,12 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
 
     // Has violations but git failed
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(["src/foo.ts"], 3),
-      ]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(["src/foo.ts"], 3)]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -446,24 +457,21 @@ describe("assembleEnrichment — dc-02: tensions section", () => {
     vi.mocked(resolveTaskScope).mockReturnValue(files);
 
     // All files have recent commits
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1234 Fix bug"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Fix bug"));
 
     // All files have violations
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(files, 2),
-      ]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 2)]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
 
     const result = await assembleEnrichment(makeInput());
 
     // Count tension entries (lines starting with "- **`")
-    const tensionLines = result.content
-      .split("\n")
-      .filter((line) => line.match(/^- \*\*`/));
+    const tensionLines = result.content.split("\n").filter((line) => line.match(/^- \*\*`/));
     expect(tensionLines.length).toBeLessThanOrEqual(3);
   });
 });
@@ -478,13 +486,14 @@ describe("assembleEnrichment — prior work section", () => {
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "enr-test-"));
     vi.mocked(resolveTaskScope).mockReturnValue(["src/foo.ts"]);
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1234 Fix bug"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Fix bug"));
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(function() { return mockStore as any; });
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return mockStore as any;
+    });
   });
 
   afterEach(() => {
@@ -511,9 +520,7 @@ describe("assembleEnrichment — prior work section", () => {
       "## Design\n\nThis design covers `src/foo.ts` and its dependencies.\n",
     );
 
-    const result = await assembleEnrichment(
-      makeInput({ workspace: currentWs }),
-    );
+    const result = await assembleEnrichment(makeInput({ workspace: currentWs }));
 
     expect(result.content).toContain("Prior Work");
     expect(result.content).toContain("sibling-ws");
@@ -527,14 +534,9 @@ describe("assembleEnrichment — prior work section", () => {
 
     mkdirSync(currentWs, { recursive: true });
     mkdirSync(siblingPlansDir, { recursive: true });
-    writeFileSync(
-      join(siblingPlansDir, "DESIGN.md"),
-      "## Design\n\nThis is about `src/unrelated.ts`.\n",
-    );
+    writeFileSync(join(siblingPlansDir, "DESIGN.md"), "## Design\n\nThis is about `src/unrelated.ts`.\n");
 
-    const result = await assembleEnrichment(
-      makeInput({ workspace: currentWs }),
-    );
+    const result = await assembleEnrichment(makeInput({ workspace: currentWs }));
 
     expect(result.content).not.toContain("sibling-ws");
   });

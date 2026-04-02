@@ -9,14 +9,13 @@
  * 5. Enter convergence exceeded: report succeeds, enter returns can_enter:false
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertOk } from "../utils/tool-result.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports

@@ -10,8 +10,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const uiDir = join(__dirname, "..");
+const Dirname = dirname(fileURLToPath(import.meta.url));
+const uiDir = join(Dirname, "..");
 
 // ── Deleted files — old split entry points must NOT exist ──
 

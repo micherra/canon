@@ -636,12 +636,8 @@ describe("computeUnifiedBlastRadius", () => {
 
     it("returns file-level blast radius when file_edges exist (not relying on any fallback)", () => {
       // Verify the primary path still works: file with KG file_edges returns affected files
-      const seedFile = store.upsertFile(
-        makeFileRow({ path: "src/core.ts", layer: "domain", language: "typescript" }),
-      );
-      const depFile = store.upsertFile(
-        makeFileRow({ path: "src/consumer.ts", layer: "api", language: "typescript" }),
-      );
+      const seedFile = store.upsertFile(makeFileRow({ path: "src/core.ts", layer: "domain", language: "typescript" }));
+      const depFile = store.upsertFile(makeFileRow({ path: "src/consumer.ts", layer: "api", language: "typescript" }));
       store.insertFileEdge({
         source_file_id: depFile.file_id!,
         target_file_id: seedFile.file_id!,

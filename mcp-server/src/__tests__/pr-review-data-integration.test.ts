@@ -247,7 +247,14 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
-    store.upsertFile({ path: "src/a.ts", mtime_ms: Date.now(), content_hash: "a", language: "typescript", layer: "tools", last_indexed_at: Date.now() - 1000 });
+    store.upsertFile({
+      path: "src/a.ts",
+      mtime_ms: Date.now(),
+      content_hash: "a",
+      language: "typescript",
+      layer: "tools",
+      last_indexed_at: Date.now() - 1000,
+    });
     db.close();
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
@@ -279,10 +286,31 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
-    const fileA = store.upsertFile({ path: "src/a.ts", mtime_ms: Date.now(), content_hash: "a", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
-    const fileB = store.upsertFile({ path: "src/b.ts", mtime_ms: Date.now(), content_hash: "b", language: "tools", layer: "tools", last_indexed_at: Date.now() });
+    const fileA = store.upsertFile({
+      path: "src/a.ts",
+      mtime_ms: Date.now(),
+      content_hash: "a",
+      language: "typescript",
+      layer: "tools",
+      last_indexed_at: Date.now(),
+    });
+    const fileB = store.upsertFile({
+      path: "src/b.ts",
+      mtime_ms: Date.now(),
+      content_hash: "b",
+      language: "tools",
+      layer: "tools",
+      last_indexed_at: Date.now(),
+    });
     // a imports b → b has in_degree=1
-    store.insertFileEdge({ source_file_id: fileA.file_id!, target_file_id: fileB.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
     db.close();
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({

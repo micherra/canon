@@ -3,20 +3,20 @@
  * Creates a new workspace directory structure or resumes an existing one.
  */
 
-import {
-  sanitizeBranch,
-  generateSlug,
-  checkSlugCollision,
-  initWorkspace as createWorkspace,
-} from "../orchestration/workspace.ts";
+import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
 import { initBoard } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, Session } from "../orchestration/flow-schema.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { existsSync } from "fs";
-import { mkdir } from "fs/promises";
-import { join } from "path";
-import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
+import {
+  checkSlugCollision,
+  initWorkspace as createWorkspace,
+  generateSlug,
+  sanitizeBranch,
+} from "../orchestration/workspace.ts";
 
 interface InitWorkspaceInput {
   flow_name: string;
@@ -56,7 +56,7 @@ export async function listBranchWorkspaces(
 
   let entries: string[];
   try {
-    const { readdir } = await import("fs/promises");
+    const { readdir } = await import("node:fs/promises");
     entries = await readdir(branchDir);
   } catch (err: any) {
     if (err.code === "ENOENT") return results;
@@ -87,11 +87,7 @@ const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
  * Run pre-flight checks: git status, lock, and stale sessions.
  * Returns an array of issue descriptions (empty if clean).
  */
-async function runPreflightChecks(
-  projectDir: string,
-  branch: string,
-  _candidateWorkspace: string,
-): Promise<string[]> {
+async function runPreflightChecks(projectDir: string, branch: string, _candidateWorkspace: string): Promise<string[]> {
   const issues: string[] = [];
 
   // 1. Check for uncommitted changes
@@ -182,7 +178,7 @@ export async function initWorkspaceFlow(
     // Only swallow expected "no existing DB" errors (file not found / can't open).
     // Rethrow unexpected errors such as permission denied or disk errors.
     const code = (err as NodeJS.ErrnoException).code;
-    const message = (err instanceof Error) ? err.message : String(err);
+    const message = err instanceof Error ? err.message : String(err);
     const isExpectedNoDb =
       code === "SQLITE_CANTOPEN" ||
       code === "ENOENT" ||
@@ -206,7 +202,14 @@ export async function initWorkspaceFlow(
   const existingSession = store.getSession();
   if (existingSession && existingSession.status === "active") {
     const existingBoard = store.getBoard()!;
-    return { workspace, slug: existingSession.slug, board: existingBoard, session: existingSession, created: false, resume_state: existingBoard.current_state };
+    return {
+      workspace,
+      slug: existingSession.slug,
+      board: existingBoard,
+      session: existingSession,
+      created: false,
+      resume_state: existingBoard.current_state,
+    };
   }
 
   // Load and resolve flow
@@ -260,13 +263,13 @@ export async function initWorkspaceFlow(
     // Another concurrent caller already inserted the execution row.
     // Treat this as a resume: read what the winner wrote and return it.
     const isConstraintError =
-      (err as { code?: string }).code === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
-      (err as { code?: string }).code === 'SQLITE_CONSTRAINT' ||
-      (err instanceof Error && err.message.includes('UNIQUE constraint'));
+      (err as { code?: string }).code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
+      (err as { code?: string }).code === "SQLITE_CONSTRAINT" ||
+      (err instanceof Error && err.message.includes("UNIQUE constraint"));
     if (!isConstraintError) throw err;
 
     const winnerSession = store.getSession();
-    if (winnerSession && winnerSession.status === 'active') {
+    if (winnerSession && winnerSession.status === "active") {
       const winnerBoard = store.getBoard()!;
       return {
         workspace,
@@ -307,7 +310,11 @@ export async function initWorkspaceFlow(
   }
 
   return {
-    workspace, slug, board, session, created: true,
+    workspace,
+    slug,
+    board,
+    session,
+    created: true,
     worktree_path: actualWorktreePath,
     worktree_branch: actualWorktreeBranch,
   };

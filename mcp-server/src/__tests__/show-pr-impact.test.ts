@@ -12,7 +12,7 @@
  *   8. diff_base and incremental params forwarded to getPrReviewData
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,8 +52,8 @@ vi.mock("../tools/pr-review-data.ts", () => ({
 import { existsSync } from "node:fs";
 import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
 import { KgQuery } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
@@ -153,7 +153,9 @@ describe("showPrImpact", () => {
     vi.mocked(KgQuery).mockReset();
     // Default KgQuery mock: getSubgraph returns empty
     // Using prototype mock pattern for class constructor mocks
-    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockReturnValue({ nodes: [], edges: [] });
+    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi
+      .fn()
+      .mockReturnValue({ nodes: [], edges: [] });
 
     // Default: getPrReviewData returns minimal prep stub
     vi.mocked(getPrReviewData).mockReset();
@@ -338,13 +340,15 @@ describe("showPrImpact", () => {
     // Mock KgQuery.getSubgraph to return nodes from SAMPLE_GRAPH_DATA for the included paths
     const allNodes = SAMPLE_GRAPH_DATA.nodes.map((n) => ({ path: n.id, layer: n.layer, file_id: 1 }));
     const allEdges = SAMPLE_GRAPH_DATA.edges.map((e) => ({ source: e.source, target: e.target }));
-    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockImplementation((paths: string[]) => {
-      const pathSet = new Set(paths);
-      const nodes = allNodes.filter((n) => pathSet.has(n.path));
-      const nodeIds = new Set(nodes.map((n) => n.path));
-      const edges = allEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
-      return { nodes, edges };
-    });
+    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi
+      .fn()
+      .mockImplementation((paths: string[]) => {
+        const pathSet = new Set(paths);
+        const nodes = allNodes.filter((n) => pathSet.has(n.path));
+        const nodeIds = new Set(nodes.map((n) => n.path));
+        const edges = allEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+        return { nodes, edges };
+      });
 
     const result = await showPrImpact(tmpDir);
 
@@ -548,6 +552,7 @@ describe("show_pr_impact registration", () => {
         title: "PR Review",
         description: "Opens the PR Review view.",
         inputSchema: {},
+        // biome-ignore lint/style/useNamingConvention: MCP SDK wire format
         _meta: { ui: { resourceUri: prReviewResourceUri } },
       },
       async () => ({ content: [{ type: "text" as const, text: "{}" }] }),

@@ -15,8 +15,8 @@ export async function report(input: ReportInput, projectDir: string): Promise<Re
     case "review":
       return recordReview(input, store);
     default: {
-      const _exhaustive: never = input.type;
-      throw new Error(`Unknown report type: ${_exhaustive}`);
+      const exhaustive: never = input.type;
+      throw new Error(`Unknown report type: ${exhaustive}`);
     }
   }
 }

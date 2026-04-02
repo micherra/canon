@@ -50,43 +50,37 @@ function severityPassesFilter(severity: string, filter?: string): boolean {
   return (SEVERITY_RANK[severity] ?? 9) <= (SEVERITY_RANK[filter] ?? 9);
 }
 
+function matchesLayers(principle: Principle, layers: string[]): boolean {
+  if (layers.length === 0 || principle.scope.layers.length === 0) return true;
+  return layers.some((l) => principle.scope.layers.includes(l));
+}
+
+function matchesFilePatterns(principle: Principle, filePath: string | undefined): boolean {
+  if (!filePath || principle.scope.file_patterns.length === 0) return true;
+  return principle.scope.file_patterns.some((pattern) => globToRegex(pattern).test(filePath));
+}
+
+function matchesTags(principle: Principle, tags: string[] | undefined): boolean {
+  if (!tags || tags.length === 0) return true;
+  return tags.some((t) => principle.tags.includes(t));
+}
+
 export function matchPrinciples(principles: Principle[], filters: MatchFilters): Principle[] {
   const layers =
     filters.layers || (filters.file_path ? ([inferLayer(filters.file_path)].filter(Boolean) as string[]) : []);
 
   return principles
     .filter((p) => {
-      // Skip archived principles unless explicitly included
       if (p.archived && !filters.include_archived) return false;
-
-      // Severity filter
       if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
-
-      // Layer filter
-      if (layers.length > 0 && p.scope.layers.length > 0) {
-        if (!layers.some((l) => p.scope.layers.includes(l))) return false;
-      }
-
-      // File pattern filter
-      if (filters.file_path && p.scope.file_patterns.length > 0) {
-        const matched = p.scope.file_patterns.some((pattern) => {
-          const regex = globToRegex(pattern);
-          return regex.test(filters.file_path!);
-        });
-        if (!matched) return false;
-      }
-
-      // Tag filter
-      if (filters.tags && filters.tags.length > 0) {
-        if (!filters.tags.some((t) => p.tags.includes(t))) return false;
-      }
-
+      if (!matchesLayers(p, layers)) return false;
+      if (!matchesFilePatterns(p, filters.file_path)) return false;
+      if (!matchesTags(p, filters.tags)) return false;
       return true;
     })
     .sort((a, b) => {
       const sevDiff = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
       if (sevDiff !== 0) return sevDiff;
-      // Tie-breaker: more specific scope (more file patterns) ranks first
       return b.scope.file_patterns.length - a.scope.file_patterns.length;
     });
 }

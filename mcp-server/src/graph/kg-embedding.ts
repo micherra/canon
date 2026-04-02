@@ -10,7 +10,7 @@
  * should catch errors and return an appropriate ToolResult.
  */
 
-import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+import { type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
 import { EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL } from "../constants.ts";
 
 // ---------------------------------------------------------------------------
@@ -30,6 +30,7 @@ const defaultPipelineFactory: PipelineFactory = (task, model, options) =>
   // The @huggingface/transformers pipeline() overloads produce a union type too complex for
   // TypeScript to represent directly. Cast via unknown to extract the concrete type.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
   pipeline(task as any, model, options as any) as unknown as Promise<FeatureExtractionPipeline>;
 
 // ---------------------------------------------------------------------------

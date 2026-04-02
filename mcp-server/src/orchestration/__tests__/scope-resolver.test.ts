@@ -7,10 +7,10 @@
  * Uses strict TDD: tests written before implementation.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Board } from "../../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -114,9 +114,7 @@ describe("resolveTaskScope — board artifact source", () => {
       },
     });
 
-    expect(() =>
-      resolveTaskScope({ workspace: tmpDir, stateId: "research", board }),
-    ).not.toThrow();
+    expect(() => resolveTaskScope({ workspace: tmpDir, stateId: "research", board })).not.toThrow();
 
     const result = resolveTaskScope({
       workspace: tmpDir,
@@ -128,8 +126,7 @@ describe("resolveTaskScope — board artifact source", () => {
 
   it("caps file reads at 50KB to avoid memory issues", () => {
     // Create a file just over 50KB
-    const bigContent =
-      "`mcp-server/src/first.ts`\n" + "x".repeat(51 * 1024) + "\n`mcp-server/src/after.ts`\n";
+    const bigContent = `\`mcp-server/src/first.ts\`\n${"x".repeat(51 * 1024)}\n\`mcp-server/src/after.ts\`\n`;
     const artifactPath = join(tmpDir, "big-analysis.md");
     writeFileSync(artifactPath, bigContent);
 
@@ -144,9 +141,7 @@ describe("resolveTaskScope — board artifact source", () => {
     });
 
     // Should not throw and should extract paths from within the cap
-    expect(() =>
-      resolveTaskScope({ workspace: tmpDir, stateId: "research", board }),
-    ).not.toThrow();
+    expect(() => resolveTaskScope({ workspace: tmpDir, stateId: "research", board })).not.toThrow();
   });
 });
 
@@ -267,10 +262,7 @@ describe("resolveTaskScope — fallback", () => {
     // Two artifact files both mention the same path — result should be deduplicated
     const artifact1 = join(tmpDir, "analysis1.md");
     const artifact2 = join(tmpDir, "analysis2.md");
-    writeFileSync(
-      artifact1,
-      "`mcp-server/src/adapters/git-adapter.ts`\n`mcp-server/src/drift/store.ts`\n",
-    );
+    writeFileSync(artifact1, "`mcp-server/src/adapters/git-adapter.ts`\n`mcp-server/src/drift/store.ts`\n");
     writeFileSync(
       artifact2,
       "`mcp-server/src/adapters/git-adapter.ts`\n`mcp-server/src/orchestration/scope-resolver.ts`\n",

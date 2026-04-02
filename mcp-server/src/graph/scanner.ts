@@ -66,14 +66,16 @@ export async function scanSourceFiles(
     }
   }
 
-  async function walk(dir: string, depth: number): Promise<void> {
-    if (depth > MAX_DEPTH) return;
-
+  async function tryEnterDir(dir: string, depth: number): Promise<import("node:fs").Dirent[] | null> {
+    if (depth > MAX_DEPTH) return null;
     const realDir = await resolveDir(dir);
-    if (!realDir || visitedDirs.has(realDir)) return;
+    if (!realDir || visitedDirs.has(realDir)) return null;
     visitedDirs.add(realDir);
+    return tryReadDir(dir);
+  }
 
-    const entries = await tryReadDir(dir);
+  async function walk(dir: string, depth: number): Promise<void> {
+    const entries = await tryEnterDir(dir, depth);
     if (!entries) return;
 
     for (const entry of entries) {

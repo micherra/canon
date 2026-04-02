@@ -8,21 +8,14 @@
  * Replaces: board.json, session.json, progress.md, messages, wave events, log.jsonl
  */
 
-import { existsSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import Database from 'better-sqlite3';
-import { join, resolve } from 'node:path';
-import type {
-  Board,
-  Session,
-  BoardStateEntry,
-  IterationEntry,
-  WaveEvent,
-  StuckWhen,
-} from './flow-schema.ts';
-import { initExecutionDb } from './execution-schema.ts';
-import { validateEventPayload } from './events.ts';
-import { CANON_FILES } from '../constants.ts';
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type Database from "better-sqlite3";
+import { CANON_FILES } from "../constants.ts";
+import { validateEventPayload } from "./events.ts";
+import { initExecutionDb } from "./execution-schema.ts";
+import type { Board, BoardStateEntry, IterationEntry, Session, StuckWhen, WaveEvent } from "./flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Row types (internal — not exported; callers receive typed objects)
@@ -37,10 +30,10 @@ interface ExecutionRow {
   base_commit: string;
   started: string;
   last_updated: string;
-  blocked: string | null;       // JSON: BlockedInfo | null
-  concerns: string;             // JSON array
-  skipped: string;              // JSON array
-  metadata: string | null;      // JSON object | null
+  blocked: string | null; // JSON: BlockedInfo | null
+  concerns: string; // JSON array
+  skipped: string; // JSON array
+  metadata: string | null; // JSON object | null
   branch: string;
   sanitized: string;
   created: string;
@@ -62,27 +55,27 @@ interface ExecutionStateRow {
   entered_at: string | null;
   completed_at: string | null;
   result: string | null;
-  artifacts: string | null;             // JSON array | null
-  artifact_history: string | null;      // JSON array | null
+  artifacts: string | null; // JSON array | null
+  artifact_history: string | null; // JSON array | null
   error: string | null;
   wave: number | null;
   wave_total: number | null;
-  wave_results: string | null;          // JSON object | null
-  metrics: string | null;               // JSON object | null
-  gate_results: string | null;          // JSON array | null
+  wave_results: string | null; // JSON object | null
+  metrics: string | null; // JSON object | null
+  gate_results: string | null; // JSON array | null
   postcondition_results: string | null; // JSON array | null
-  discovered_gates: string | null;      // JSON array | null
+  discovered_gates: string | null; // JSON array | null
   discovered_postconditions: string | null; // JSON array | null
-  parallel_results: string | null;      // JSON array | null
-  compete_results: string | null;       // JSON array | null
-  synthesized: number | null;           // 0/1 | null
+  parallel_results: string | null; // JSON array | null
+  compete_results: string | null; // JSON array | null
+  synthesized: number | null; // 0/1 | null
 }
 
 interface IterationRow {
   state_id: string;
   count: number;
   max: number;
-  history: string;    // JSON array
+  history: string; // JSON array
   cannot_fix: string; // JSON array
 }
 
@@ -103,11 +96,11 @@ interface MessageRow {
 interface WaveEventRow {
   id: string;
   type: string;
-  payload: string;      // JSON
+  payload: string; // JSON
   timestamp: string;
   status: string;
   applied_at: string | null;
-  resolution: string | null;       // JSON | null
+  resolution: string | null; // JSON | null
   rejection_reason: string | null;
 }
 
@@ -127,7 +120,7 @@ export interface InitExecutionParams {
   sanitized: string;
   created: string;
   original_task?: string;
-  tier: 'small' | 'medium' | 'large';
+  tier: "small" | "medium" | "large";
   flow_name: string;
   slug: string;
   status?: string;
@@ -138,10 +131,10 @@ export interface InitExecutionParams {
 
 export interface UpdateExecutionFields {
   current_state?: string;
-  blocked?: Board['blocked'];
-  concerns?: Board['concerns'];
+  blocked?: Board["blocked"];
+  concerns?: Board["concerns"];
   skipped?: string[];
-  metadata?: Board['metadata'];
+  metadata?: Board["metadata"];
   last_updated?: string;
   status?: string;
   completed_at?: string;
@@ -196,7 +189,7 @@ function parseJson<T>(value: string | null | undefined): T | undefined {
   return JSON.parse(value) as T;
 }
 
-function parseJsonOrDefault<T>(value: string | null | undefined, fallback: T): T {
+function _parseJsonOrDefault<T>(value: string | null | undefined, fallback: T): T {
   if (value === null || value === undefined) return fallback;
   return JSON.parse(value) as T;
 }
@@ -212,7 +205,6 @@ export class ExecutionStore {
   // ---- Execution statements ----
   private readonly stmtInitExecution: Database.Statement;
   private readonly stmtGetExecution: Database.Statement;
-  private readonly stmtUpdateExecution: Database.Statement;
 
   // ---- State statements ----
   private readonly stmtUpsertState: Database.Statement;
@@ -443,8 +435,8 @@ export class ExecutionStore {
       started: params.started,
       last_updated: params.last_updated,
       blocked: null,
-      concerns: '[]',
-      skipped: '[]',
+      concerns: "[]",
+      skipped: "[]",
       metadata: null,
       branch: params.branch,
       sanitized: params.sanitized,
@@ -453,7 +445,7 @@ export class ExecutionStore {
       tier: params.tier,
       flow_name: params.flow_name,
       slug: params.slug,
-      status: params.status ?? 'active',
+      status: params.status ?? "active",
       completed_at: params.completed_at ?? null,
       rolled_back_at: params.rolled_back_at ?? null,
       rolled_back_to: params.rolled_back_to ?? null,
@@ -461,7 +453,14 @@ export class ExecutionStore {
     });
   }
 
-  getExecution(): (ExecutionRow & { blocked: Board['blocked']; concerns: Board['concerns']; skipped: string[]; metadata: Board['metadata'] }) | null {
+  getExecution():
+    | (ExecutionRow & {
+        blocked: Board["blocked"];
+        concerns: Board["concerns"];
+        skipped: string[];
+        metadata: Board["metadata"];
+      })
+    | null {
     const row = this.stmtGetExecution.get() as ExecutionRow | undefined;
     if (!row) return null;
     return this.deserializeExecutionRow(row);
@@ -480,10 +479,10 @@ export class ExecutionStore {
       created: row.created,
       task: row.task,
       original_task: row.original_task ?? undefined,
-      tier: row.tier as 'small' | 'medium' | 'large',
+      tier: row.tier as "small" | "medium" | "large",
       flow: row.flow_name,
       slug: row.slug,
-      status: row.status as Session['status'],
+      status: row.status as Session["status"],
       completed_at: row.completed_at ?? undefined,
       rolled_back_at: row.rolled_back_at ?? undefined,
       rolled_back_to: row.rolled_back_to ?? undefined,
@@ -499,52 +498,51 @@ export class ExecutionStore {
     const params: Record<string, unknown> = {};
 
     if (fields.current_state !== undefined) {
-      parts.push('current_state = @current_state');
-      params['current_state'] = fields.current_state;
+      parts.push("current_state = @current_state");
+      params["current_state"] = fields.current_state;
     }
-    if ('blocked' in fields) {
-      parts.push('blocked = @blocked');
-      params['blocked'] = fields.blocked !== null && fields.blocked !== undefined
-        ? JSON.stringify(fields.blocked)
-        : null;
+    if ("blocked" in fields) {
+      parts.push("blocked = @blocked");
+      params["blocked"] =
+        fields.blocked !== null && fields.blocked !== undefined ? JSON.stringify(fields.blocked) : null;
     }
     if (fields.concerns !== undefined) {
-      parts.push('concerns = @concerns');
-      params['concerns'] = JSON.stringify(fields.concerns);
+      parts.push("concerns = @concerns");
+      params["concerns"] = JSON.stringify(fields.concerns);
     }
     if (fields.skipped !== undefined) {
-      parts.push('skipped = @skipped');
-      params['skipped'] = JSON.stringify(fields.skipped);
+      parts.push("skipped = @skipped");
+      params["skipped"] = JSON.stringify(fields.skipped);
     }
     if (fields.metadata !== undefined) {
-      parts.push('metadata = @metadata');
-      params['metadata'] = fields.metadata !== null ? JSON.stringify(fields.metadata) : null;
+      parts.push("metadata = @metadata");
+      params["metadata"] = fields.metadata !== null ? JSON.stringify(fields.metadata) : null;
     }
     if (fields.status !== undefined) {
-      parts.push('status = @status');
-      params['status'] = fields.status;
+      parts.push("status = @status");
+      params["status"] = fields.status;
     }
     if (fields.completed_at !== undefined) {
-      parts.push('completed_at = @completed_at');
-      params['completed_at'] = fields.completed_at;
+      parts.push("completed_at = @completed_at");
+      params["completed_at"] = fields.completed_at;
     }
     if (fields.rolled_back_at !== undefined) {
-      parts.push('rolled_back_at = @rolled_back_at');
-      params['rolled_back_at'] = fields.rolled_back_at;
+      parts.push("rolled_back_at = @rolled_back_at");
+      params["rolled_back_at"] = fields.rolled_back_at;
     }
     if (fields.rolled_back_to !== undefined) {
-      parts.push('rolled_back_to = @rolled_back_to');
-      params['rolled_back_to'] = fields.rolled_back_to;
+      parts.push("rolled_back_to = @rolled_back_to");
+      params["rolled_back_to"] = fields.rolled_back_to;
     }
 
     // Always update last_updated
     const now = fields.last_updated ?? new Date().toISOString();
-    parts.push('last_updated = @last_updated');
-    params['last_updated'] = now;
+    parts.push("last_updated = @last_updated");
+    params["last_updated"] = now;
 
     if (parts.length === 0) return;
 
-    const sql = `UPDATE execution SET ${parts.join(', ')} WHERE id = 1`;
+    const sql = `UPDATE execution SET ${parts.join(", ")} WHERE id = 1`;
     this.db.prepare(sql).run(params);
   }
 
@@ -561,14 +559,14 @@ export class ExecutionStore {
     if (!exRow) return null;
 
     const stateRows = this.stmtGetAllStates.all() as ExecutionStateRow[];
-    const iterRows = this.db.prepare('SELECT * FROM iterations').all() as IterationRow[];
+    const iterRows = this.db.prepare("SELECT * FROM iterations").all() as IterationRow[];
 
-    const states: Board['states'] = {};
+    const states: Board["states"] = {};
     for (const row of stateRows) {
       states[row.state_id] = this.deserializeStateRow(row);
     }
 
-    const iterations: Board['iterations'] = {};
+    const iterations: Board["iterations"] = {};
     for (const row of iterRows) {
       iterations[row.state_id] = {
         count: row.count,
@@ -599,7 +597,10 @@ export class ExecutionStore {
   // States
   // --------------------------------------------------------------------------
 
-  upsertState(stateId: string, fields: Partial<BoardStateEntry> & { status: BoardStateEntry['status']; entries: number }): void {
+  upsertState(
+    stateId: string,
+    fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
+  ): void {
     this.stmtUpsertState.run({
       state_id: stateId,
       status: fields.status,
@@ -615,9 +616,11 @@ export class ExecutionStore {
       wave_results: fields.wave_results !== undefined ? JSON.stringify(fields.wave_results) : null,
       metrics: fields.metrics !== undefined ? JSON.stringify(fields.metrics) : null,
       gate_results: fields.gate_results !== undefined ? JSON.stringify(fields.gate_results) : null,
-      postcondition_results: fields.postcondition_results !== undefined ? JSON.stringify(fields.postcondition_results) : null,
+      postcondition_results:
+        fields.postcondition_results !== undefined ? JSON.stringify(fields.postcondition_results) : null,
       discovered_gates: fields.discovered_gates !== undefined ? JSON.stringify(fields.discovered_gates) : null,
-      discovered_postconditions: fields.discovered_postconditions !== undefined ? JSON.stringify(fields.discovered_postconditions) : null,
+      discovered_postconditions:
+        fields.discovered_postconditions !== undefined ? JSON.stringify(fields.discovered_postconditions) : null,
       parallel_results: fields.parallel_results !== undefined ? JSON.stringify(fields.parallel_results) : null,
       compete_results: fields.compete_results !== undefined ? JSON.stringify(fields.compete_results) : null,
       synthesized: fields.synthesized !== undefined ? (fields.synthesized ? 1 : 0) : null,
@@ -632,7 +635,7 @@ export class ExecutionStore {
 
   getAllStates(): Array<BoardStateEntry & { state_id: string }> {
     const rows = this.stmtGetAllStates.all() as ExecutionStateRow[];
-    return rows.map(row => ({
+    return rows.map((row) => ({
       state_id: row.state_id,
       ...this.deserializeStateRow(row),
     }));
@@ -642,7 +645,10 @@ export class ExecutionStore {
   // Iterations
   // --------------------------------------------------------------------------
 
-  upsertIteration(stateId: string, fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] }): void {
+  upsertIteration(
+    stateId: string,
+    fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] },
+  ): void {
     this.stmtUpsertIteration.run({
       state_id: stateId,
       count: fields.count,
@@ -672,12 +678,7 @@ export class ExecutionStore {
    * `data` should contain the fields relevant to the state's `stuck_when` strategy.
    * Uses INSERT OR REPLACE — re-recording the same iteration number overwrites the previous entry.
    */
-  recordIterationResult(
-    stateId: string,
-    iteration: number,
-    status: string,
-    data: Record<string, unknown>,
-  ): void {
+  recordIterationResult(stateId: string, iteration: number, status: string, data: Record<string, unknown>): void {
     this.stmtRecordIterationResult.run({
       state_id: stateId,
       iteration,
@@ -706,28 +707,22 @@ export class ExecutionStore {
     const prevData = JSON.parse(prev.data) as Record<string, unknown>;
 
     switch (stuckWhen) {
-      case 'same_violations':
+      case "same_violations":
         return (
-          setsEqual(currData.principle_ids as string[] ?? [], prevData.principle_ids as string[] ?? []) &&
-          setsEqual(currData.file_paths as string[] ?? [], prevData.file_paths as string[] ?? [])
+          setsEqual((currData.principle_ids as string[]) ?? [], (prevData.principle_ids as string[]) ?? []) &&
+          setsEqual((currData.file_paths as string[]) ?? [], (prevData.file_paths as string[]) ?? [])
         );
-      case 'same_file_test': {
+      case "same_file_test": {
         const currPairs = (currData.pairs ?? []) as unknown[];
         const prevPairs = (prevData.pairs ?? []) as unknown[];
         return unorderedEqual(currPairs, prevPairs);
       }
-      case 'same_status':
+      case "same_status":
         return curr.status === prev.status;
-      case 'no_progress':
-        return (
-          currData.commit_sha === prevData.commit_sha &&
-          currData.artifact_count === prevData.artifact_count
-        );
-      case 'no_gate_progress':
-        return (
-          currData.gate_output_hash === prevData.gate_output_hash &&
-          !currData.passed
-        );
+      case "no_progress":
+        return currData.commit_sha === prevData.commit_sha && currData.artifact_count === prevData.artifact_count;
+      case "no_gate_progress":
+        return currData.gate_output_hash === prevData.gate_output_hash && !currData.passed;
       default:
         return false;
     }
@@ -756,8 +751,8 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetProgressAll.all() as ProgressRow[];
     }
-    if (rows.length === 0) return '';
-    return rows.map(r => r.line).join('\n');
+    if (rows.length === 0) return "";
+    return rows.map((r) => r.line).join("\n");
   }
 
   // --------------------------------------------------------------------------
@@ -783,7 +778,7 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetMessages.all(channel) as MessageRow[];
     }
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       channel: r.channel,
       sender: r.sender,
@@ -801,7 +796,13 @@ export class ExecutionStore {
   // Wave events
   // --------------------------------------------------------------------------
 
-  postWaveEvent(event: { id: string; type: string; payload: Record<string, unknown>; timestamp: string; status: string }): void {
+  postWaveEvent(event: {
+    id: string;
+    type: string;
+    payload: Record<string, unknown>;
+    timestamp: string;
+    status: string;
+  }): void {
     this.stmtPostWaveEvent.run({
       id: event.id,
       type: event.type,
@@ -818,7 +819,7 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetWaveEvents.all() as WaveEventRow[];
     }
-    return rows.map(r => this.deserializeWaveEventRow(r));
+    return rows.map((r) => this.deserializeWaveEventRow(r));
   }
 
   updateWaveEvent(id: string, fields: UpdateWaveEventFields): void {
@@ -910,7 +911,7 @@ export class ExecutionStore {
 
   /** Run a WAL passive checkpoint. Safe to call at any time. */
   walCheckpoint(): void {
-    this.db.pragma('wal_checkpoint(PASSIVE)');
+    this.db.pragma("wal_checkpoint(PASSIVE)");
   }
 
   // --------------------------------------------------------------------------
@@ -925,25 +926,25 @@ export class ExecutionStore {
     const params: unknown[] = [];
 
     if (correlation_id !== undefined) {
-      conditions.push('correlation_id = ?');
+      conditions.push("correlation_id = ?");
       params.push(correlation_id);
     }
     if (type !== undefined) {
-      conditions.push('type = ?');
+      conditions.push("type = ?");
       params.push(type);
     }
     if (since !== undefined) {
-      conditions.push('timestamp > ?');
+      conditions.push("timestamp > ?");
       params.push(since);
     }
 
-    let sql = 'SELECT * FROM events';
+    let sql = "SELECT * FROM events";
     if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ');
+      sql += ` WHERE ${conditions.join(" AND ")}`;
     }
-    sql += ' ORDER BY id ASC';
+    sql += " ORDER BY id ASC";
     if (limit !== undefined) {
-      sql += ' LIMIT ?';
+      sql += " LIMIT ?";
       params.push(limit);
     }
 
@@ -992,7 +993,7 @@ export class ExecutionStore {
 
   private deserializeStateRow(row: ExecutionStateRow): BoardStateEntry {
     return {
-      status: row.status as BoardStateEntry['status'],
+      status: row.status as BoardStateEntry["status"],
       entries: row.entries,
       entered_at: row.entered_at ?? undefined,
       completed_at: row.completed_at ?? undefined,
@@ -1017,10 +1018,10 @@ export class ExecutionStore {
   private deserializeWaveEventRow(row: WaveEventRow): WaveEvent {
     return {
       id: row.id,
-      type: row.type as WaveEvent['type'],
+      type: row.type as WaveEvent["type"],
       payload: JSON.parse(row.payload),
       timestamp: row.timestamp,
-      status: row.status as WaveEvent['status'],
+      status: row.status as WaveEvent["status"],
       applied_at: row.applied_at ?? undefined,
       resolution: row.resolution !== null ? JSON.parse(row.resolution) : undefined,
       rejection_reason: row.rejection_reason ?? undefined,
@@ -1072,19 +1073,12 @@ const storeCache = new Map<string, ExecutionStore>();
  * the `.canon/workspaces/` segment in their paths.
  */
 export function assertWorkspacePath(workspace: string): void {
-  if (
-    process.env.CANON_SKIP_WORKSPACE_VALIDATION !== 'true' &&
-    !process.env.VITEST
-  ) {
+  if (process.env.CANON_SKIP_WORKSPACE_VALIDATION !== "true" && !process.env.VITEST) {
     // Use the raw string for the segment check so Windows-style paths work
     // cross-platform (resolve() would rewrite them on macOS).
-    const hasValidSegment =
-      workspace.includes('.canon/workspaces/') ||
-      workspace.includes('.canon\\workspaces\\');
+    const hasValidSegment = workspace.includes(".canon/workspaces/") || workspace.includes(".canon\\workspaces\\");
     if (!hasValidSegment) {
-      throw new Error(
-        `Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`,
-      );
+      throw new Error(`Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`);
     }
   }
 }
@@ -1114,7 +1108,11 @@ export function getExecutionStore(workspace: string): ExecutionStore {
  */
 export function clearStoreCache(): void {
   for (const store of storeCache.values()) {
-    try { store.close(); } catch { /* ignore close errors */ }
+    try {
+      store.close();
+    } catch {
+      /* ignore close errors */
+    }
   }
   storeCache.clear();
 }

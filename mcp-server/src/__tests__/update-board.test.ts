@@ -12,11 +12,11 @@
  * - No board.json or .lock file created
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 
 // Mock analytics so appendFlowRun doesn't need drift.db during most tests
 vi.mock("../drift/analytics.ts", () => ({
@@ -35,9 +35,9 @@ vi.mock("../orchestration/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
+import { appendFlowRun } from "../drift/analytics.ts";
 import { updateBoard } from "../tools/update-board.ts";
 import { wrapHandler } from "../utils/wrap-handler.ts";
-import { appendFlowRun } from "../drift/analytics.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,11 +54,14 @@ function makeTmpDir(): string {
 /**
  * Seed a workspace with a minimal execution row + state rows.
  */
-function seedWorkspace(workspace: string, overrides: {
-  currentState?: string;
-  states?: Record<string, { status: string; entries: number }>;
-  blocked?: { state: string; reason: string; since: string } | null;
-} = {}) {
+function seedWorkspace(
+  workspace: string,
+  overrides: {
+    currentState?: string;
+    states?: Record<string, { status: string; entries: number }>;
+    blocked?: { state: string; reason: string; since: string } | null;
+  } = {},
+) {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
@@ -83,6 +86,7 @@ function seedWorkspace(workspace: string, overrides: {
     done: { status: "pending", entries: 0 },
   };
   for (const [stateId, state] of Object.entries(states)) {
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     store.upsertState(stateId, { status: state.status as any, entries: state.entries });
   }
 
@@ -452,9 +456,7 @@ describe("updateBoard — missing directory", () => {
   it("returns WORKSPACE_NOT_FOUND via wrapHandler when workspace directory does not exist", async () => {
     const missingWorkspace = join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-update-board");
 
-    const wrappedUpdateBoard = wrapHandler(async (input: Parameters<typeof updateBoard>[0]) =>
-      updateBoard(input)
-    );
+    const wrappedUpdateBoard = wrapHandler(async (input: Parameters<typeof updateBoard>[0]) => updateBoard(input));
 
     const response = await wrappedUpdateBoard({
       workspace: missingWorkspace,

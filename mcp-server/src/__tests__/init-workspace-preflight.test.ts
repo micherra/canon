@@ -145,6 +145,6 @@ describe("init_workspace — preflight checks", () => {
 
     // .lock file is ignored — SQLite WAL handles concurrency
     // The workspace may be created (no lock issues reported)
-    expect(result.preflight_issues?.some(i => i.includes("lock"))).toBeFalsy();
+    expect(result.preflight_issues?.some((i) => i.includes("lock"))).toBeFalsy();
   });
 });

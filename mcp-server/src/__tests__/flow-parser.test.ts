@@ -8,11 +8,15 @@ import {
   validateFlow,
   validateStateIdParams,
 } from "../orchestration/flow-parser.ts";
-import type { FlowDefinition, FragmentDefinition, FragmentInclude, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type {
+  FlowDefinition,
+  FragmentDefinition,
+  FragmentInclude,
+  ResolvedFlow,
+} from "../orchestration/flow-schema.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
+const testDir = dirname(fileURLToPath(import.meta.url));
+const pluginDir = resolve(testDir, "../../.."); // mcp-server/src/__tests__ → project root
 
 // ---------------------------------------------------------------------------
 // parseFlowContent

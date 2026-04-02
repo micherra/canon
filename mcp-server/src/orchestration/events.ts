@@ -1,6 +1,13 @@
 import { EventEmitter } from "node:events";
 import { z } from "zod";
-import type { HistoryEntry, ConcernEntry, GateResult, PostconditionResult, ViolationSeverities, TestResults } from "./flow-schema.ts";
+import type {
+  ConcernEntry,
+  GateResult,
+  HistoryEntry,
+  PostconditionResult,
+  TestResults,
+  ViolationSeverities,
+} from "./flow-schema.ts";
 
 export type FlowEventType =
   | "state_entered"
@@ -242,7 +249,7 @@ export const EventPayloadSchemas = {
  */
 export function validateEventPayload(
   type: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
 ): { valid: boolean; errors?: string[] } {
   const schema = EventPayloadSchemas[type as FlowEventType];
   if (!schema) return { valid: true };

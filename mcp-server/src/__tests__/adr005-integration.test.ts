@@ -21,21 +21,17 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import type { EntityRow, FileRow } from "../graph/kg-types.ts";
-import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
-import {
-  buildBlastRadiusByFile,
-  detectSubsystems,
-  type PrImpactOutput,
-} from "../tools/show-pr-impact.ts";
-import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
+import type { FileRow } from "../graph/kg-types.ts";
 import { getFileContext } from "../tools/get-file-context.ts";
+import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
+import { buildBlastRadiusByFile, detectSubsystems, type PrImpactOutput } from "../tools/show-pr-impact.ts";
 import { storeSummaries } from "../tools/store-summaries.ts";
 
 // ---------------------------------------------------------------------------
@@ -50,25 +46,6 @@ function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<Fi
     language: "typescript",
     layer: "domain",
     last_indexed_at: Date.now(),
-    ...overrides,
-  };
-}
-
-function makeEntityRow(
-  fileId: number,
-  overrides: Partial<Omit<EntityRow, "entity_id" | "file_id">> = {},
-): Omit<EntityRow, "entity_id"> {
-  return {
-    file_id: fileId,
-    name: "myFunc",
-    qualified_name: "src/A.ts::myFunc",
-    kind: "function",
-    line_start: 1,
-    line_end: 10,
-    is_exported: false,
-    is_default_export: false,
-    signature: null,
-    metadata: null,
     ...overrides,
   };
 }
@@ -192,9 +169,30 @@ describe("KgQuery.getSubgraph with duplicate edges", () => {
     const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
 
     // A → B and A → C and B → C (C appears in two edges)
-    store.insertFileEdge({ source_file_id: fileA.file_id!, target_file_id: fileB.file_id!, edge_type: "imports", confidence: 1, evidence: "", relation: null });
-    store.insertFileEdge({ source_file_id: fileA.file_id!, target_file_id: fileC.file_id!, edge_type: "imports", confidence: 1, evidence: "", relation: null });
-    store.insertFileEdge({ source_file_id: fileB.file_id!, target_file_id: fileC.file_id!, edge_type: "imports", confidence: 1, evidence: "", relation: null });
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+      edge_type: "imports",
+      confidence: 1,
+      evidence: "",
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileA.file_id!,
+      target_file_id: fileC.file_id!,
+      edge_type: "imports",
+      confidence: 1,
+      evidence: "",
+      relation: null,
+    });
+    store.insertFileEdge({
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
+      edge_type: "imports",
+      confidence: 1,
+      evidence: "",
+      relation: null,
+    });
 
     // Seed with A — subgraph includes A's neighbors (B and C)
     const subgraph = query.getSubgraph(["src/A.ts"]);
@@ -212,14 +210,23 @@ describe("KgQuery.getSubgraph with duplicate edges", () => {
     // Edges may include duplicates (not deduplicated per spec), but must not throw
     expect(subgraph.edges.length).toBeGreaterThan(0);
 
-    void fileA; void fileB; void fileC;
+    void fileA;
+    void fileB;
+    void fileC;
   });
 
   it("seed file with no edges is returned as isolated node", () => {
     store.upsertFile(makeFileRow({ path: "src/orphan.ts", layer: "domain" }));
     // Insert another file but no edges involving orphan
     store.upsertFile(makeFileRow({ path: "src/other.ts", layer: "domain" }));
-    store.insertFileEdge({ source_file_id: 2, target_file_id: 2, edge_type: "imports", confidence: 1, evidence: "", relation: null });
+    store.insertFileEdge({
+      source_file_id: 2,
+      target_file_id: 2,
+      edge_type: "imports",
+      confidence: 1,
+      evidence: "",
+      relation: null,
+    });
 
     const subgraph = query.getSubgraph(["src/orphan.ts"]);
     expect(subgraph.nodes).toHaveLength(1);
@@ -257,17 +264,21 @@ describe("KgQuery.getKgFreshnessMs — MIN semantics", () => {
     const oneDayAgo = now - 86_400_000;
 
     // File A was indexed 1 day ago (oldest)
-    store.upsertFile(makeFileRow({
-      path: "src/old.ts",
-      last_indexed_at: oneDayAgo,
-      content_hash: "old",
-    }));
+    store.upsertFile(
+      makeFileRow({
+        path: "src/old.ts",
+        last_indexed_at: oneDayAgo,
+        content_hash: "old",
+      }),
+    );
     // File B was indexed 1 hour ago (newer)
-    store.upsertFile(makeFileRow({
-      path: "src/new.ts",
-      last_indexed_at: oneHourAgo,
-      content_hash: "new",
-    }));
+    store.upsertFile(
+      makeFileRow({
+        path: "src/new.ts",
+        last_indexed_at: oneHourAgo,
+        content_hash: "new",
+      }),
+    );
 
     const freshnessMs = query.getKgFreshnessMs();
     expect(freshnessMs).not.toBeNull();
@@ -433,7 +444,8 @@ describe("computeUnifiedBlastRadius — empty result when no file_edges", () => 
     const affectedPaths = report!.affected.map((f) => f.path);
     expect(affectedPaths).toContain("src/B.ts");
 
-    void fileA; void fileB;
+    void fileA;
+    void fileB;
   });
 });
 
@@ -586,12 +598,7 @@ describe("generateNarrative — violation count fallback via f.violations", () =
 
 describe("detectSubsystems", () => {
   it("detects a new subsystem when 3+ added files share a 2-segment prefix", () => {
-    const files = [
-      "src/auth/login.ts",
-      "src/auth/register.ts",
-      "src/auth/session.ts",
-      "src/graph/query.ts",
-    ];
+    const files = ["src/auth/login.ts", "src/auth/register.ts", "src/auth/session.ts", "src/graph/query.ts"];
     const statusMap = new Map([
       ["src/auth/login.ts", "added"],
       ["src/auth/register.ts", "added"],

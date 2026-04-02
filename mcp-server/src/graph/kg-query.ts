@@ -71,22 +71,48 @@ export interface FileInsightMaps {
  */
 export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
   // ---- 1. Load all file edges ------------------------------------------------
-  const edgeRows = db
+  const edgeRows = loadFileEdgeRows(db);
+
+  // ---- 2. Hub detection via degree computation --------------------------------
+  const hubPaths = computeHubPaths(edgeRows);
+
+  // ---- 3. Cycle detection via adjacency list ----------------------------------
+  const adj = buildAdjacencyMap(edgeRows);
+  const fileRows = db.prepare(`SELECT path FROM files`).all() as Array<{ path: string }>;
+  const cycleMemberPaths = detectFileCycles(
+    fileRows.map((r) => r.path),
+    adj,
+  );
+
+  // ---- 4. Layer violations ----------------------------------------------------
+  const layerViolationsByPath = computeLayerViolations(edgeRows);
+
+  return { hubPaths, cycleMemberPaths, layerViolationsByPath };
+}
+
+/** Row type returned by the file edges query. */
+interface FileEdgeRow {
+  source_file_id: number;
+  target_file_id: number;
+  source_path: string;
+  target_path: string;
+  source_layer: string;
+  target_layer: string;
+}
+
+/** Load all file edges with joined path and layer data. */
+function loadFileEdgeRows(db: Database.Database): FileEdgeRow[] {
+  return db
     .prepare(`SELECT fe.source_file_id, fe.target_file_id, fs.path AS source_path, ft.path AS target_path,
                      fs.layer AS source_layer, ft.layer AS target_layer
               FROM file_edges fe
               JOIN files fs ON fs.file_id = fe.source_file_id
               JOIN files ft ON ft.file_id = fe.target_file_id`)
-    .all() as Array<{
-    source_file_id: number;
-    target_file_id: number;
-    source_path: string;
-    target_path: string;
-    source_layer: string;
-    target_layer: string;
-  }>;
+    .all() as FileEdgeRow[];
+}
 
-  // ---- 2. Degree computation for hub detection --------------------------------
+/** Compute the top-10 hub paths by total degree. */
+function computeHubPaths(edgeRows: FileEdgeRow[]): Set<string> {
   const inDegree = new Map<string, number>();
   const outDegree = new Map<string, number>();
 
@@ -95,15 +121,16 @@ export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
     inDegree.set(row.target_path, (inDegree.get(row.target_path) || 0) + 1);
   }
 
-  // Top 10 by total degree → hub set
   const allPaths = new Set([...inDegree.keys(), ...outDegree.keys()]);
   const sorted = [...allPaths]
     .map((p) => ({ path: p, total: (inDegree.get(p) || 0) + (outDegree.get(p) || 0) }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
-  const hubPaths = new Set(sorted.map((x) => x.path));
+  return new Set(sorted.map((x) => x.path));
+}
 
-  // ---- 3. Adjacency list for cycle detection ----------------------------------
+/** Build an adjacency map from source_path → target_path[]. */
+function buildAdjacencyMap(edgeRows: FileEdgeRow[]): Map<string, string[]> {
   const adj = new Map<string, string[]>();
   for (const row of edgeRows) {
     let neighbors = adj.get(row.source_path);
@@ -113,16 +140,12 @@ export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
     }
     neighbors.push(row.target_path);
   }
+  return adj;
+}
 
-  // Collect all file nodes
-  const fileRows = db.prepare(`SELECT path FROM files`).all() as Array<{ path: string }>;
-  const nodes = fileRows.map((r) => r.path);
-
-  const cycleMemberPaths = detectFileCycles(nodes, adj);
-
-  // ---- 4. Layer violations ----------------------------------------------------
+/** Compute layer violations from file edge rows using default layer rules. */
+function computeLayerViolations(edgeRows: FileEdgeRow[]): Map<string, LayerViolation[]> {
   const layerViolationsByPath = new Map<string, LayerViolation[]>();
-  const rules = DEFAULT_LAYER_RULES;
 
   for (const row of edgeRows) {
     const sourceLayer = row.source_layer || "unknown";
@@ -132,7 +155,7 @@ export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
       continue;
     }
 
-    const allowed = rules[sourceLayer];
+    const allowed = DEFAULT_LAYER_RULES[sourceLayer];
     if (allowed && !allowed.includes(targetLayer)) {
       let violations = layerViolationsByPath.get(row.source_path);
       if (!violations) {
@@ -147,7 +170,7 @@ export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
     }
   }
 
-  return { hubPaths, cycleMemberPaths, layerViolationsByPath };
+  return layerViolationsByPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +178,6 @@ export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
 // ---------------------------------------------------------------------------
 
 function detectFileCycles(nodes: string[], adj: Map<string, string[]>): Map<string, string[]> {
-  const cycleMembers = new Map<string, string[]>();
   const MAX_CYCLE_LEN = 5;
   const MAX_CYCLES = 20;
   const cycleSet = new Set<string>();
@@ -167,7 +189,12 @@ function detectFileCycles(nodes: string[], adj: Map<string, string[]>): Map<stri
     fileDfsComponent(startNode, adj, visited, MAX_CYCLE_LEN, cycleSet, cycles, MAX_CYCLES);
   }
 
-  // Build membership map from detected cycles
+  return buildCycleMembershipMap(cycles);
+}
+
+/** Build a map from each node to its cycle peers from a list of detected cycles. */
+function buildCycleMembershipMap(cycles: string[][]): Map<string, string[]> {
+  const cycleMembers = new Map<string, string[]>();
   for (const cycle of cycles) {
     for (const node of cycle) {
       const existing = cycleMembers.get(node) || [];
@@ -177,8 +204,27 @@ function detectFileCycles(nodes: string[], adj: Map<string, string[]>): Map<stri
       cycleMembers.set(node, existing);
     }
   }
-
   return cycleMembers;
+}
+
+/** Try to record a cycle from the current path if the neighbor is already in the stack. */
+function tryRecordCycle(
+  neighbor: string,
+  path: string[],
+  maxCycleLen: number,
+  cycleSet: Set<string>,
+  cycles: string[][],
+): void {
+  const cycleStart = path.indexOf(neighbor);
+  if (cycleStart < 0) return;
+  const cycle = path.slice(cycleStart);
+  if (cycle.length > maxCycleLen) return;
+  const normalized = fileNormalizeCycle(cycle);
+  const key = normalized.join(" -> ");
+  if (!cycleSet.has(key)) {
+    cycleSet.add(key);
+    cycles.push(normalized);
+  }
 }
 
 function fileDfsComponent(
@@ -214,19 +260,7 @@ function fileDfsComponent(
     frame.neighborIdx++;
 
     if (inStack.has(neighbor)) {
-      // Found a cycle — record it
-      const cycleStart = path.indexOf(neighbor);
-      if (cycleStart >= 0) {
-        const cycle = path.slice(cycleStart);
-        if (cycle.length <= maxCycleLen) {
-          const normalized = fileNormalizeCycle(cycle);
-          const key = normalized.join(" -> ");
-          if (!cycleSet.has(key)) {
-            cycleSet.add(key);
-            cycles.push(normalized);
-          }
-        }
-      }
+      tryRecordCycle(neighbor, path, maxCycleLen, cycleSet, cycles);
     } else if (!visited.has(neighbor)) {
       visited.add(neighbor);
       inStack.add(neighbor);
@@ -755,9 +789,7 @@ export class KgQuery {
       layerViolationsByPath?: Map<string, LayerViolation[]>;
     },
   ): FileMetrics | null {
-    const fileRow = this.stmtGetFileIdByPath.get(filePath) as
-      | { file_id: number; layer: string }
-      | undefined;
+    const fileRow = this.stmtGetFileIdByPath.get(filePath) as { file_id: number; layer: string } | undefined;
     if (!fileRow) return null;
 
     const { in_degree, out_degree } = this.getFileDegrees(fileRow.file_id);
@@ -801,13 +833,13 @@ export class KgQuery {
       epochMs = row.min_ts;
     } else if (typeof row.min_ts === "string") {
       const asNumber = Number(row.min_ts);
-      if (!isNaN(asNumber) && row.min_ts.trim() !== "") {
+      if (!Number.isNaN(asNumber) && row.min_ts.trim() !== "") {
         // Numeric string (e.g. "1712345678000")
         epochMs = asNumber;
       } else {
         // ISO string (e.g. "2024-04-05T12:34:56.000Z")
         epochMs = Date.parse(row.min_ts);
-        if (isNaN(epochMs)) return null;
+        if (Number.isNaN(epochMs)) return null;
       }
     } else {
       return null;

@@ -10,24 +10,24 @@
  * 5. Return combined result.
  */
 
-import { reportResult } from "./report-result.ts";
-import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
+import type { FileCluster } from "../orchestration/diff-cluster.ts";
 import type {
-  ResolvedFlow,
   Board,
   CannotFixItem,
-  HistoryEntry,
-  GateResult,
-  PostconditionResult,
   DiscoveredGate,
+  GateResult,
+  HistoryEntry,
   PostconditionAssertion,
-  ViolationSeverities,
+  PostconditionResult,
+  ResolvedFlow,
   TestResults,
+  ViolationSeverities,
 } from "../orchestration/flow-schema.ts";
-import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
-import type { FileCluster } from "../orchestration/diff-cluster.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
+import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
+import { reportResult } from "./report-result.ts";
 
 export interface ReportAndEnterNextStateInput {
   // All fields from ReportResultInput

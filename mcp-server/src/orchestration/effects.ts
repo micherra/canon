@@ -4,14 +4,14 @@
  * All effects are best-effort: parse failures are logged but never block the flow.
  */
 
-import { readFile, readdir } from "fs/promises";
-import { join, basename } from "path";
+import { readdir, readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { DriftStore } from "../drift/store.ts";
-import { generateId } from "../utils/id.ts";
-import type { StateDefinition, Effect } from "./flow-schema.ts";
 import type { ReviewEntry } from "../schema.ts";
+import { generateId } from "../utils/id.ts";
+import { evaluatePostconditions, resolvePostconditions } from "./contract-checker.ts";
 import { getExecutionStore } from "./execution-store.ts";
-import { resolvePostconditions, evaluatePostconditions } from "./contract-checker.ts";
+import type { Effect, StateDefinition } from "./flow-schema.ts";
 
 export interface EffectResult {
   type: string;
@@ -124,7 +124,7 @@ async function persistReview(
   const artifactName = effect.artifact ?? "REVIEW.md";
   const content = await resolveAndRead(artifactName, workspace, artifacts);
   if (!content) {
-    return { type: "persist_review", recorded: 0, errors: ["Artifact not found: " + artifactName] };
+    return { type: "persist_review", recorded: 0, errors: [`Artifact not found: ${artifactName}`] };
   }
 
   const parsed = parseReviewArtifact(content);
@@ -194,7 +194,10 @@ export function parseReviewArtifact(content: string): ParsedReview | null {
   if (violationTableMatch) {
     const rows = violationTableMatch[1].trim().split("\n");
     for (const row of rows) {
-      const cells = row.split("|").map((c) => c.trim()).filter(Boolean);
+      const cells = row
+        .split("|")
+        .map((c) => c.trim())
+        .filter(Boolean);
       if (cells.length >= 3) {
         const filePath = cells[2]?.replace(/`/g, "").split(":")[0];
         violations.push({
@@ -229,26 +232,35 @@ export function parseReviewArtifact(content: string): ParsedReview | null {
     opinions: { passed: 0, total: 0 },
     conventions: { passed: 0, total: 0 },
   };
-  const scoreTableMatch = content.match(
-    /#### Score\s*\n\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/,
-  );
+  const scoreTableMatch = content.match(/#### Score\s*\n\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/);
   if (scoreTableMatch) {
     const rows = scoreTableMatch[1].trim().split("\n");
     // Aggregate across all layer rows
-    let rulesP = 0, rulesT = 0, opinionsP = 0, opinionsT = 0, convsP = 0, convsT = 0;
+    let rulesP = 0,
+      rulesT = 0,
+      opinionsP = 0,
+      opinionsT = 0,
+      convsP = 0,
+      convsT = 0;
     for (const row of rows) {
-      const cells = row.split("|").map((c) => c.trim()).filter(Boolean);
+      const cells = row
+        .split("|")
+        .map((c) => c.trim())
+        .filter(Boolean);
       if (cells.length >= 4) {
         const parseScore = (s: string) => {
           const m = s.match(/(\d+)\s*\/\s*(\d+)/);
-          return m ? { passed: parseInt(m[1]), total: parseInt(m[2]) } : { passed: 0, total: 0 };
+          return m ? { passed: parseInt(m[1], 10), total: parseInt(m[2], 10) } : { passed: 0, total: 0 };
         };
         const r = parseScore(cells[1]);
         const o = parseScore(cells[2]);
         const c = parseScore(cells[3]);
-        rulesP += r.passed; rulesT += r.total;
-        opinionsP += o.passed; opinionsT += o.total;
-        convsP += c.passed; convsT += c.total;
+        rulesP += r.passed;
+        rulesT += r.total;
+        opinionsP += o.passed;
+        opinionsT += o.total;
+        convsP += c.passed;
+        convsT += c.total;
       }
     }
     score = {
@@ -266,11 +278,7 @@ export function parseReviewArtifact(content: string): ParsedReview | null {
 // ---------------------------------------------------------------------------
 
 /** Resolve an artifact name to a file path and read its content. */
-async function resolveAndRead(
-  artifactName: string,
-  workspace: string,
-  artifacts: string[],
-): Promise<string | null> {
+async function resolveAndRead(artifactName: string, workspace: string, artifacts: string[]): Promise<string | null> {
   // First try matching against reported artifacts list
   const match = artifacts.find((a) => basename(a) === artifactName || a.endsWith(artifactName));
   if (match) {
@@ -283,14 +291,14 @@ async function resolveAndRead(
   }
 
   // Scan common artifact locations
-  const directPaths = [
-    join(workspace, "reviews", artifactName),
-  ];
+  const directPaths = [join(workspace, "reviews", artifactName)];
 
   for (const p of directPaths) {
     try {
       return await readFile(p, "utf-8");
-    } catch { /* continue */ }
+    } catch {
+      /* continue */
+    }
   }
 
   // Search in plans subdirectories

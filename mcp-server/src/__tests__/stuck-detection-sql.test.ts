@@ -5,17 +5,17 @@
  * Each test gets a fresh DB.
  */
 
-import { describe, test, expect, beforeEach } from 'vitest';
-import Database from 'better-sqlite3';
-import { initExecutionDb, SCHEMA_VERSION, runMigrations } from '../orchestration/execution-schema.ts';
-import { ExecutionStore } from '../orchestration/execution-store.ts';
+import Database from "better-sqlite3";
+import { describe, expect, test } from "vitest";
+import { initExecutionDb, runMigrations, SCHEMA_VERSION } from "../orchestration/execution-schema.ts";
+import { ExecutionStore } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function makeStore(): ExecutionStore {
-  const db = initExecutionDb(':memory:');
+  const db = initExecutionDb(":memory:");
   return new ExecutionStore(db);
 }
 
@@ -24,11 +24,11 @@ function makeStore(): ExecutionStore {
  * The meta table records schema_version = '1'.
  */
 function makeV1Db(): Database.Database {
-  const db = new Database(':memory:');
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('synchronous = NORMAL');
-  db.pragma('busy_timeout = 5000');
+  const db = new Database(":memory:");
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.pragma("synchronous = NORMAL");
+  db.pragma("busy_timeout = 5000");
 
   db.exec(`CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
@@ -75,61 +75,57 @@ function makeV1Db(): Database.Database {
 // Migration runner
 // ---------------------------------------------------------------------------
 
-describe('runMigrations', () => {
-  test('upgrades a v1 database to v3: creates iteration_results table', () => {
+describe("runMigrations", () => {
+  test("upgrades a v1 database to v3: creates iteration_results table", () => {
     const db = makeV1Db();
 
     // Verify table does NOT exist yet
-    const beforeTables = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table'`)
-      .all() as { name: string }[];
-    expect(beforeTables.map(r => r.name)).not.toContain('iteration_results');
+    const beforeTables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all() as { name: string }[];
+    expect(beforeTables.map((r) => r.name)).not.toContain("iteration_results");
 
     // Run migrations
     runMigrations(db);
 
     // Verify iteration_results table now exists
-    const afterTables = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table'`)
-      .all() as { name: string }[];
-    expect(afterTables.map(r => r.name)).toContain('iteration_results');
+    const afterTables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all() as { name: string }[];
+    expect(afterTables.map((r) => r.name)).toContain("iteration_results");
   });
 
-  test('upgrades schema_version to 3 in meta table', () => {
+  test("upgrades schema_version to 3 in meta table", () => {
     const db = makeV1Db();
     runMigrations(db);
 
-    const row = db
-      .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-      .get() as { value: string } | undefined;
-    expect(row?.value).toBe('3');
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
+      | { value: string }
+      | undefined;
+    expect(row?.value).toBe("3");
   });
 
-  test('is idempotent: running migrations twice on v1 does not throw', () => {
+  test("is idempotent: running migrations twice on v1 does not throw", () => {
     const db = makeV1Db();
     runMigrations(db);
     // Second call should be safe (IF NOT EXISTS guards)
     expect(() => runMigrations(db)).not.toThrow();
   });
 
-  test('is a no-op on a v3 database (tables already created by initExecutionDb)', () => {
-    const db = initExecutionDb(':memory:');
+  test("is a no-op on a v3 database (tables already created by initExecutionDb)", () => {
+    const db = initExecutionDb(":memory:");
     // Already at v3 — running migrations again should not throw and keep version at 3
     expect(() => runMigrations(db)).not.toThrow();
 
-    const row = db
-      .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-      .get() as { value: string } | undefined;
-    expect(row?.value).toBe('3');
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
+      | { value: string }
+      | undefined;
+    expect(row?.value).toBe("3");
   });
 
-  test('initExecutionDb sets SCHEMA_VERSION to 3', () => {
-    const db = initExecutionDb(':memory:');
-    const row = db
-      .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-      .get() as { value: string } | undefined;
+  test("initExecutionDb sets SCHEMA_VERSION to 3", () => {
+    const db = initExecutionDb(":memory:");
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
+      | { value: string }
+      | undefined;
     expect(row?.value).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe('3');
+    expect(SCHEMA_VERSION).toBe("3");
   });
 });
 
@@ -137,44 +133,49 @@ describe('runMigrations', () => {
 // recordIterationResult
 // ---------------------------------------------------------------------------
 
-describe('ExecutionStore.recordIterationResult', () => {
-  test('stores an iteration result and it can be read back', () => {
+describe("ExecutionStore.recordIterationResult", () => {
+  test("stores an iteration result and it can be read back", () => {
     const store = makeStore();
-    store.recordIterationResult('implement', 1, 'done', { commit_sha: 'abc123', artifact_count: 3 });
+    store.recordIterationResult("implement", 1, "done", { commit_sha: "abc123", artifact_count: 3 });
 
     const db = (store as unknown as { db: Database.Database }).db;
-    const rows = db
-      .prepare(`SELECT * FROM iteration_results WHERE state_id = 'implement'`)
-      .all() as Array<{ state_id: string; iteration: number; status: string; data: string; timestamp: string }>;
+    const rows = db.prepare(`SELECT * FROM iteration_results WHERE state_id = 'implement'`).all() as Array<{
+      state_id: string;
+      iteration: number;
+      status: string;
+      data: string;
+      timestamp: string;
+    }>;
 
     expect(rows).toHaveLength(1);
-    expect(rows[0].state_id).toBe('implement');
+    expect(rows[0].state_id).toBe("implement");
     expect(rows[0].iteration).toBe(1);
-    expect(rows[0].status).toBe('done');
-    expect(JSON.parse(rows[0].data)).toEqual({ commit_sha: 'abc123', artifact_count: 3 });
+    expect(rows[0].status).toBe("done");
+    expect(JSON.parse(rows[0].data)).toEqual({ commit_sha: "abc123", artifact_count: 3 });
     expect(rows[0].timestamp).toBeTruthy();
   });
 
-  test('INSERT OR REPLACE: overwrites existing record for same state_id + iteration', () => {
+  test("INSERT OR REPLACE: overwrites existing record for same state_id + iteration", () => {
     const store = makeStore();
-    store.recordIterationResult('implement', 1, 'needs_fix', { commit_sha: 'aaa' });
-    store.recordIterationResult('implement', 1, 'done', { commit_sha: 'bbb' });
+    store.recordIterationResult("implement", 1, "needs_fix", { commit_sha: "aaa" });
+    store.recordIterationResult("implement", 1, "done", { commit_sha: "bbb" });
 
     const db = (store as unknown as { db: Database.Database }).db;
-    const rows = db
-      .prepare(`SELECT * FROM iteration_results WHERE state_id = 'implement'`)
-      .all() as Array<{ status: string; data: string }>;
+    const rows = db.prepare(`SELECT * FROM iteration_results WHERE state_id = 'implement'`).all() as Array<{
+      status: string;
+      data: string;
+    }>;
 
     expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe('done');
-    expect(JSON.parse(rows[0].data)).toEqual({ commit_sha: 'bbb' });
+    expect(rows[0].status).toBe("done");
+    expect(JSON.parse(rows[0].data)).toEqual({ commit_sha: "bbb" });
   });
 
-  test('stores multiple iterations for the same state', () => {
+  test("stores multiple iterations for the same state", () => {
     const store = makeStore();
-    store.recordIterationResult('review', 1, 'blocking', { principle_ids: ['p1'], file_paths: ['a.ts'] });
-    store.recordIterationResult('review', 2, 'blocking', { principle_ids: ['p2'], file_paths: ['b.ts'] });
-    store.recordIterationResult('review', 3, 'done', {});
+    store.recordIterationResult("review", 1, "blocking", { principle_ids: ["p1"], file_paths: ["a.ts"] });
+    store.recordIterationResult("review", 2, "blocking", { principle_ids: ["p2"], file_paths: ["b.ts"] });
+    store.recordIterationResult("review", 3, "done", {});
 
     const db = (store as unknown as { db: Database.Database }).db;
     const rows = db
@@ -182,7 +183,7 @@ describe('ExecutionStore.recordIterationResult', () => {
       .all() as Array<{ iteration: number }>;
 
     expect(rows).toHaveLength(3);
-    expect(rows.map(r => r.iteration)).toEqual([1, 2, 3]);
+    expect(rows.map((r) => r.iteration)).toEqual([1, 2, 3]);
   });
 });
 
@@ -190,163 +191,163 @@ describe('ExecutionStore.recordIterationResult', () => {
 // isStuck
 // ---------------------------------------------------------------------------
 
-describe('ExecutionStore.isStuck', () => {
+describe("ExecutionStore.isStuck", () => {
   // ---- fewer than 2 iterations ----
 
-  test('returns false when no iterations exist', () => {
+  test("returns false when no iterations exist", () => {
     const store = makeStore();
-    expect(store.isStuck('implement', 'same_status')).toBe(false);
+    expect(store.isStuck("implement", "same_status")).toBe(false);
   });
 
-  test('returns false when only one iteration exists', () => {
+  test("returns false when only one iteration exists", () => {
     const store = makeStore();
-    store.recordIterationResult('implement', 1, 'done', {});
-    expect(store.isStuck('implement', 'same_status')).toBe(false);
+    store.recordIterationResult("implement", 1, "done", {});
+    expect(store.isStuck("implement", "same_status")).toBe(false);
   });
 
   // ---- same_violations ----
 
-  test('same_violations: returns true when last two iterations have identical principle_ids and file_paths', () => {
+  test("same_violations: returns true when last two iterations have identical principle_ids and file_paths", () => {
     const store = makeStore();
-    store.recordIterationResult('review', 1, 'blocking', {
-      principle_ids: ['thin-handlers', 'errors-are-values'],
-      file_paths: ['src/foo.ts', 'src/bar.ts'],
+    store.recordIterationResult("review", 1, "blocking", {
+      principle_ids: ["thin-handlers", "errors-are-values"],
+      file_paths: ["src/foo.ts", "src/bar.ts"],
     });
-    store.recordIterationResult('review', 2, 'blocking', {
-      principle_ids: ['errors-are-values', 'thin-handlers'],
-      file_paths: ['src/bar.ts', 'src/foo.ts'],
+    store.recordIterationResult("review", 2, "blocking", {
+      principle_ids: ["errors-are-values", "thin-handlers"],
+      file_paths: ["src/bar.ts", "src/foo.ts"],
     });
 
-    expect(store.isStuck('review', 'same_violations')).toBe(true);
+    expect(store.isStuck("review", "same_violations")).toBe(true);
   });
 
-  test('same_violations: returns false when violations differ between last two iterations', () => {
+  test("same_violations: returns false when violations differ between last two iterations", () => {
     const store = makeStore();
-    store.recordIterationResult('review', 1, 'blocking', {
-      principle_ids: ['thin-handlers'],
-      file_paths: ['src/foo.ts'],
+    store.recordIterationResult("review", 1, "blocking", {
+      principle_ids: ["thin-handlers"],
+      file_paths: ["src/foo.ts"],
     });
-    store.recordIterationResult('review', 2, 'blocking', {
-      principle_ids: ['errors-are-values'],
-      file_paths: ['src/foo.ts'],
+    store.recordIterationResult("review", 2, "blocking", {
+      principle_ids: ["errors-are-values"],
+      file_paths: ["src/foo.ts"],
     });
 
-    expect(store.isStuck('review', 'same_violations')).toBe(false);
+    expect(store.isStuck("review", "same_violations")).toBe(false);
   });
 
-  test('same_violations: returns false when file_paths differ between last two iterations', () => {
+  test("same_violations: returns false when file_paths differ between last two iterations", () => {
     const store = makeStore();
-    store.recordIterationResult('review', 1, 'blocking', {
-      principle_ids: ['thin-handlers'],
-      file_paths: ['src/foo.ts'],
+    store.recordIterationResult("review", 1, "blocking", {
+      principle_ids: ["thin-handlers"],
+      file_paths: ["src/foo.ts"],
     });
-    store.recordIterationResult('review', 2, 'blocking', {
-      principle_ids: ['thin-handlers'],
-      file_paths: ['src/bar.ts'],
+    store.recordIterationResult("review", 2, "blocking", {
+      principle_ids: ["thin-handlers"],
+      file_paths: ["src/bar.ts"],
     });
 
-    expect(store.isStuck('review', 'same_violations')).toBe(false);
+    expect(store.isStuck("review", "same_violations")).toBe(false);
   });
 
-  test('same_violations: returns false when missing principle_ids/file_paths in data', () => {
+  test("same_violations: returns false when missing principle_ids/file_paths in data", () => {
     const store = makeStore();
-    store.recordIterationResult('review', 1, 'blocking', {});
-    store.recordIterationResult('review', 2, 'blocking', {});
+    store.recordIterationResult("review", 1, "blocking", {});
+    store.recordIterationResult("review", 2, "blocking", {});
     // Both have empty arrays by default — they match, should return true
-    expect(store.isStuck('review', 'same_violations')).toBe(true);
+    expect(store.isStuck("review", "same_violations")).toBe(true);
   });
 
   // ---- same_file_test ----
 
-  test('same_file_test: returns true when pairs are identical across last two iterations', () => {
+  test("same_file_test: returns true when pairs are identical across last two iterations", () => {
     const store = makeStore();
-    const pairs = [{ file: 'foo.ts', test: 'foo.test.ts' }];
-    store.recordIterationResult('test', 1, 'failing', { pairs });
-    store.recordIterationResult('test', 2, 'failing', { pairs });
+    const pairs = [{ file: "foo.ts", test: "foo.test.ts" }];
+    store.recordIterationResult("test", 1, "failing", { pairs });
+    store.recordIterationResult("test", 2, "failing", { pairs });
 
-    expect(store.isStuck('test', 'same_file_test')).toBe(true);
+    expect(store.isStuck("test", "same_file_test")).toBe(true);
   });
 
-  test('same_file_test: returns false when pairs differ', () => {
+  test("same_file_test: returns false when pairs differ", () => {
     const store = makeStore();
-    store.recordIterationResult('test', 1, 'failing', { pairs: [{ file: 'foo.ts', test: 'foo.test.ts' }] });
-    store.recordIterationResult('test', 2, 'failing', { pairs: [{ file: 'bar.ts', test: 'bar.test.ts' }] });
+    store.recordIterationResult("test", 1, "failing", { pairs: [{ file: "foo.ts", test: "foo.test.ts" }] });
+    store.recordIterationResult("test", 2, "failing", { pairs: [{ file: "bar.ts", test: "bar.test.ts" }] });
 
-    expect(store.isStuck('test', 'same_file_test')).toBe(false);
+    expect(store.isStuck("test", "same_file_test")).toBe(false);
   });
 
   // ---- same_status ----
 
-  test('same_status: returns true when status is identical in last two iterations', () => {
+  test("same_status: returns true when status is identical in last two iterations", () => {
     const store = makeStore();
-    store.recordIterationResult('implement', 1, 'needs_fix', {});
-    store.recordIterationResult('implement', 2, 'needs_fix', {});
+    store.recordIterationResult("implement", 1, "needs_fix", {});
+    store.recordIterationResult("implement", 2, "needs_fix", {});
 
-    expect(store.isStuck('implement', 'same_status')).toBe(true);
+    expect(store.isStuck("implement", "same_status")).toBe(true);
   });
 
-  test('same_status: returns false when status changes between last two iterations', () => {
+  test("same_status: returns false when status changes between last two iterations", () => {
     const store = makeStore();
-    store.recordIterationResult('implement', 1, 'needs_fix', {});
-    store.recordIterationResult('implement', 2, 'done', {});
+    store.recordIterationResult("implement", 1, "needs_fix", {});
+    store.recordIterationResult("implement", 2, "done", {});
 
-    expect(store.isStuck('implement', 'same_status')).toBe(false);
+    expect(store.isStuck("implement", "same_status")).toBe(false);
   });
 
   // ---- no_progress ----
 
-  test('no_progress: returns true when commit_sha and artifact_count are unchanged', () => {
+  test("no_progress: returns true when commit_sha and artifact_count are unchanged", () => {
     const store = makeStore();
-    store.recordIterationResult('implement', 1, 'needs_fix', { commit_sha: 'abc', artifact_count: 2 });
-    store.recordIterationResult('implement', 2, 'needs_fix', { commit_sha: 'abc', artifact_count: 2 });
+    store.recordIterationResult("implement", 1, "needs_fix", { commit_sha: "abc", artifact_count: 2 });
+    store.recordIterationResult("implement", 2, "needs_fix", { commit_sha: "abc", artifact_count: 2 });
 
-    expect(store.isStuck('implement', 'no_progress')).toBe(true);
+    expect(store.isStuck("implement", "no_progress")).toBe(true);
   });
 
-  test('no_progress: returns false when commit_sha changes', () => {
+  test("no_progress: returns false when commit_sha changes", () => {
     const store = makeStore();
-    store.recordIterationResult('implement', 1, 'needs_fix', { commit_sha: 'abc', artifact_count: 2 });
-    store.recordIterationResult('implement', 2, 'needs_fix', { commit_sha: 'def', artifact_count: 2 });
+    store.recordIterationResult("implement", 1, "needs_fix", { commit_sha: "abc", artifact_count: 2 });
+    store.recordIterationResult("implement", 2, "needs_fix", { commit_sha: "def", artifact_count: 2 });
 
-    expect(store.isStuck('implement', 'no_progress')).toBe(false);
+    expect(store.isStuck("implement", "no_progress")).toBe(false);
   });
 
   // ---- no_gate_progress ----
 
-  test('no_gate_progress: returns true when gate_output_hash matches and passed is false in latest', () => {
+  test("no_gate_progress: returns true when gate_output_hash matches and passed is false in latest", () => {
     const store = makeStore();
-    store.recordIterationResult('gate-state', 1, 'failed', { gate_output_hash: 'hash1', passed: false });
-    store.recordIterationResult('gate-state', 2, 'failed', { gate_output_hash: 'hash1', passed: false });
+    store.recordIterationResult("gate-state", 1, "failed", { gate_output_hash: "hash1", passed: false });
+    store.recordIterationResult("gate-state", 2, "failed", { gate_output_hash: "hash1", passed: false });
 
-    expect(store.isStuck('gate-state', 'no_gate_progress')).toBe(true);
+    expect(store.isStuck("gate-state", "no_gate_progress")).toBe(true);
   });
 
-  test('no_gate_progress: returns false when gate_output_hash differs', () => {
+  test("no_gate_progress: returns false when gate_output_hash differs", () => {
     const store = makeStore();
-    store.recordIterationResult('gate-state', 1, 'failed', { gate_output_hash: 'hash1', passed: false });
-    store.recordIterationResult('gate-state', 2, 'failed', { gate_output_hash: 'hash2', passed: false });
+    store.recordIterationResult("gate-state", 1, "failed", { gate_output_hash: "hash1", passed: false });
+    store.recordIterationResult("gate-state", 2, "failed", { gate_output_hash: "hash2", passed: false });
 
-    expect(store.isStuck('gate-state', 'no_gate_progress')).toBe(false);
+    expect(store.isStuck("gate-state", "no_gate_progress")).toBe(false);
   });
 
-  test('no_gate_progress: returns false when latest iteration passed (even if hash matches)', () => {
+  test("no_gate_progress: returns false when latest iteration passed (even if hash matches)", () => {
     const store = makeStore();
-    store.recordIterationResult('gate-state', 1, 'failed', { gate_output_hash: 'hash1', passed: false });
-    store.recordIterationResult('gate-state', 2, 'passed', { gate_output_hash: 'hash1', passed: true });
+    store.recordIterationResult("gate-state", 1, "failed", { gate_output_hash: "hash1", passed: false });
+    store.recordIterationResult("gate-state", 2, "passed", { gate_output_hash: "hash1", passed: true });
 
-    expect(store.isStuck('gate-state', 'no_gate_progress')).toBe(false);
+    expect(store.isStuck("gate-state", "no_gate_progress")).toBe(false);
   });
 
   // ---- isolation between states ----
 
-  test('compares only within the same state_id', () => {
+  test("compares only within the same state_id", () => {
     const store = makeStore();
-    store.recordIterationResult('state-a', 1, 'needs_fix', {});
-    store.recordIterationResult('state-a', 2, 'needs_fix', {});
-    store.recordIterationResult('state-b', 1, 'needs_fix', {});
+    store.recordIterationResult("state-a", 1, "needs_fix", {});
+    store.recordIterationResult("state-a", 2, "needs_fix", {});
+    store.recordIterationResult("state-b", 1, "needs_fix", {});
     // state-b only has 1 iteration → false
-    expect(store.isStuck('state-b', 'same_status')).toBe(false);
+    expect(store.isStuck("state-b", "same_status")).toBe(false);
     // state-a has 2 identical → true
-    expect(store.isStuck('state-a', 'same_status')).toBe(true);
+    expect(store.isStuck("state-a", "same_status")).toBe(true);
   });
 });

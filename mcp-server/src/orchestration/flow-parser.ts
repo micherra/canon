@@ -493,7 +493,7 @@ export function checkUnresolvedRefs(flow: ResolvedFlow): string[] {
   // Check spawn instructions for unknown ${...} references
   for (const [stateId, text] of Object.entries(flow.spawn_instructions)) {
     refPattern.lastIndex = 0;
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = refPattern.exec(text)) !== null) {
       if (!RUNTIME_VARIABLES.has(match[1])) {
         errors.push(`Spawn instruction "${stateId}" has unresolved reference: \${${match[1]}}`);
@@ -506,9 +506,7 @@ export function checkUnresolvedRefs(flow: ResolvedFlow): string[] {
     if (stateDef.transitions) {
       for (const [cond, target] of Object.entries(stateDef.transitions)) {
         if (/\$\{/.test(target)) {
-          errors.push(
-            `State "${stateId}" transition "${cond}" has unresolved reference in target: "${target}"`,
-          );
+          errors.push(`State "${stateId}" transition "${cond}" has unresolved reference in target: "${target}"`);
         }
       }
     }

@@ -96,36 +96,47 @@ const ESM_JS_TO_TS: Record<string, string[]> = {
   ".mjs": [".mts", ".ts"],
 };
 
-/** Try to find a file in the set with extension and index resolution */
-function tryResolve(candidate: string, allFiles: Set<string>): string | null {
-  const posix = toPosix(candidate);
+/** Try direct match or extension-appended match. */
+function tryDirectOrExtension(posix: string, allFiles: Set<string>): string | null {
   if (allFiles.has(posix)) return posix;
   for (const ext of RESOLVE_EXTENSIONS) {
     if (allFiles.has(posix + ext)) return posix + ext;
   }
-  for (const ext of RESOLVE_EXTENSIONS) {
+  return null;
+}
+
+/** Try index file resolution (e.g. dir/index.ts). */
+function tryIndexResolution(candidate: string, allFiles: Set<string>, extensions: readonly string[]): string | null {
+  for (const ext of extensions) {
     const indexPath = toPosix(join(candidate, `index${ext}`));
     if (allFiles.has(indexPath)) return indexPath;
   }
-
-  // TS execution (vitest/tsx): import specifiers use `.ts` even though source files
-  // are `.ts`. Or standard Node.js ESM convention: import specifiers use `.js`
-  // even though source files are `.ts`. Try both.
-  for (const [jsExt, tsExts] of Object.entries(ESM_JS_TO_TS)) {
-    if (posix.endsWith(jsExt)) {
-      const base = posix.slice(0, -jsExt.length);
-      for (const tsExt of tsExts) {
-        if (allFiles.has(base + tsExt)) return base + tsExt;
-      }
-      // Also try index resolution after stripping the JS extension
-      for (const tsExt of tsExts) {
-        const indexPath = toPosix(join(base, `index${tsExt}`));
-        if (allFiles.has(indexPath)) return indexPath;
-      }
-    }
-  }
-
   return null;
+}
+
+/** Try resolving a .js/.jsx/.mjs specifier to its .ts/.tsx/.mts source. */
+function tryEsmTsResolution(posix: string, allFiles: Set<string>): string | null {
+  for (const [jsExt, tsExts] of Object.entries(ESM_JS_TO_TS)) {
+    if (!posix.endsWith(jsExt)) continue;
+    const base = posix.slice(0, -jsExt.length);
+    for (const tsExt of tsExts) {
+      if (allFiles.has(base + tsExt)) return base + tsExt;
+    }
+    const indexMatch = tryIndexResolution(base, allFiles, tsExts);
+    if (indexMatch) return indexMatch;
+  }
+  return null;
+}
+
+/** Try to find a file in the set with extension and index resolution */
+function tryResolve(candidate: string, allFiles: Set<string>): string | null {
+  const posix = toPosix(candidate);
+
+  return (
+    tryDirectOrExtension(posix, allFiles) ??
+    tryIndexResolution(candidate, allFiles, RESOLVE_EXTENSIONS) ??
+    tryEsmTsResolution(posix, allFiles)
+  );
 }
 
 /**

@@ -1,13 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { reportInputSchema } from "../schema.ts";
-import { report } from "../tools/report.ts";
-import { DriftStore } from "../drift/store.ts";
-
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // Clear the DriftDb module cache between tests
 import { getDriftDb } from "../drift/drift-db.ts";
+import { DriftStore } from "../drift/store.ts";
+import { reportInputSchema } from "../schema.ts";
+import { report } from "../tools/report.ts";
 
 // --- Schema validation ---
 
@@ -51,7 +50,8 @@ describe("report()", () => {
 
   afterEach(async () => {
     // Clear DriftDb cache so each test gets a fresh DB
-    const cache = (getDriftDb as any).__cache ?? (globalThis as any).__driftDbCache;
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
+    const _cache = (getDriftDb as any).__cache ?? (globalThis as any).__driftDbCache;
     // Access the module-level cache via a side-channel approach
     // The cache is a module-scoped Map in drift-db.ts; clear it via the exported function
     // by closing the DB for this tmpDir. Since we can't directly access the cache,

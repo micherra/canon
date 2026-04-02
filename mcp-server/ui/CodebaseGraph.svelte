@@ -75,20 +75,19 @@ let filtersActive = $derived(
 
 // Build FilterOptions to pass to SubGraph whenever any filter state changes.
 // Only set when at least one filter is active (null = no filtering).
-let _filterOptions = $derived.by((): FilterOptions | null => {
-  if (!graphData) return null;
-  if (!filtersActive) return null;
-  // Build insightFilter set: only these nodes stay visible when violation/changed toggles are on
-  let insight: Set<string> | null = null;
-  if (filterViolations || filterChanged) {
-    insight = new Set<string>();
-    for (const n of graphData.nodes) {
-      if (filterViolations && (n.violation_count ?? 0) > 0) insight.add(n.id);
-      if (filterChanged && n.changed) insight.add(n.id);
-    }
+function buildInsightFilter(nodes: GraphNode[], wantViolations: boolean, wantChanged: boolean): Set<string> | null {
+  if (!wantViolations && !wantChanged) return null;
+  const insight = new Set<string>();
+  for (const n of nodes) {
+    if (wantViolations && (n.violation_count ?? 0) > 0) insight.add(n.id);
+    if (wantChanged && n.changed) insight.add(n.id);
   }
+  return insight;
+}
+
+function buildFilterOptions(layers: Set<string>, allLayers: Set<string>, insight: Set<string> | null): FilterOptions {
   return {
-    activeLayers: activeLayers.size > 0 ? activeLayers : allLayerNames,
+    activeLayers: layers.size > 0 ? layers : allLayers,
     searchQuery: "",
     parsedSearch: {
       textQuery: "",
@@ -100,6 +99,13 @@ let _filterOptions = $derived.by((): FilterOptions | null => {
     insightFilter: insight,
     showChangedOnly: false,
   };
+}
+
+let _filterOptions = $derived.by((): FilterOptions | null => {
+  if (!graphData) return null;
+  if (!filtersActive) return null;
+  const insight = buildInsightFilter(graphData.nodes, filterViolations, filterChanged);
+  return buildFilterOptions(activeLayers, allLayerNames, insight);
 });
 
 // ── Edge maps for detail panel ─────────────────────────────────────────────

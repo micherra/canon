@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -20,16 +20,11 @@ let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
 let execFileImpl: ((cb: ExecFileCallback) => void) | null = null;
 
 vi.mock("node:child_process", () => ({
-  spawnSync: (cmd: string, argsOrOpts?: unknown, opts?: unknown) => {
+  spawnSync: (_cmd: string, _argsOrOpts?: unknown, _opts?: unknown) => {
     if (spawnSyncImpl) return spawnSyncImpl();
     return { stdout: "", stderr: "", status: 0, signal: null };
   },
-  execFile: (
-    cmd: string,
-    args: string[],
-    opts: Record<string, unknown>,
-    cb: ExecFileCallback,
-  ) => {
+  execFile: (_cmd: string, _args: string[], _opts: Record<string, unknown>, cb: ExecFileCallback) => {
     if (execFileImpl) {
       execFileImpl(cb);
     } else {

@@ -1,13 +1,13 @@
-import { substituteVariables, buildTemplateInjection } from "../orchestration/variables.ts";
-import { buildMessageInstructions } from "../orchestration/messages.ts";
+import { type CompeteConfig as ExpandedCompeteConfig, expandCompetitorPrompts } from "../orchestration/compete.ts";
 import { buildDebatePrompt, debateTeamLabel, inspectDebateProgress } from "../orchestration/debate.ts";
-import { readWaveGuidance, assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
-import type { ResolvedFlow, StateDefinition, CompeteConfig } from "../orchestration/flow-schema.ts";
-import { expandCompetitorPrompts, type CompeteConfig as ExpandedCompeteConfig } from "../orchestration/compete.ts";
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { resolveContextInjections } from "../orchestration/inject-context.ts";
 import { clusterDiff, type FileCluster } from "../orchestration/diff-cluster.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { CompeteConfig, ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.ts";
+import { resolveContextInjections } from "../orchestration/inject-context.ts";
+import { buildMessageInstructions } from "../orchestration/messages.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { buildTemplateInjection, substituteVariables } from "../orchestration/variables.ts";
+import { assembleWaveBriefing, readWaveGuidance } from "../orchestration/wave-briefing.ts";
 
 /** A task item passed to wave/parallel-per states — either a name or a structured plan. */
 export type TaskItem = string | Record<string, string | number | boolean | string[]>;
@@ -34,6 +34,7 @@ interface SpawnPromptInput {
    * Use this when the caller has already read the board (e.g., enterAndPrepareState)
    * to avoid a redundant round-trip.
    */
+  // biome-ignore lint/style/useNamingConvention: internal wire property
   _board?: import("../orchestration/flow-schema.ts").Board;
 }
 
@@ -67,10 +68,7 @@ function roleName(entry: string | { name: string; optional?: boolean }): string 
 /**
  * Compute template file paths from a state's template field.
  */
-function templatePaths(
-  template: string | string[] | undefined,
-  pluginDir: string,
-): string[] {
+function templatePaths(template: string | string[] | undefined, pluginDir: string): string[] {
   if (!template) return [];
   const names = Array.isArray(template) ? template : [template];
   return names.map((name) => `${pluginDir}/templates/${name}.md`);
@@ -159,7 +157,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
     !!state.skip_when ||
     (state.inject_context != null && state.inject_context.length > 0) ||
     state.large_diff_threshold != null;
-  const board = input._board ?? (needsBoard ? getExecutionStore(input.workspace).getBoard() ?? undefined : undefined);
+  const board = input._board ?? (needsBoard ? (getExecutionStore(input.workspace).getBoard() ?? undefined) : undefined);
 
   // Evaluate skip_when condition before spawning
   if (state.skip_when) {
@@ -315,10 +313,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
           prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
         }
       } else if (competeConfig) {
-        const expanded = expandCompetitorPrompts(
-          { agent, prompt: basePrompt, template_paths: paths },
-          competeConfig,
-        );
+        const expanded = expandCompetitorPrompts({ agent, prompt: basePrompt, template_paths: paths }, competeConfig);
         for (const entry of expanded) {
           prompts.push({
             agent: entry.agent,
@@ -419,7 +414,7 @@ export async function getSpawnPrompt(input: SpawnPromptInput): Promise<SpawnProm
   if ((state.type === "wave" || state.type === "parallel-per") && input.wave != null && input.consultation_outputs) {
     const briefing = assembleWaveBriefing({
       wave: input.wave,
-      summaries: [],  // Summaries from prior agents — caller provides via separate mechanism
+      summaries: [], // Summaries from prior agents — caller provides via separate mechanism
       consultationOutputs: input.consultation_outputs,
     });
     if (briefing) {
@@ -451,9 +446,15 @@ export function parseTimeout(timeout: string): number | undefined {
     matched = true;
     const n = parseInt(num, 10);
     switch (unit.toLowerCase()) {
-      case "h": totalMs += n * 3600000; break;
-      case "m": totalMs += n * 60000; break;
-      case "s": totalMs += n * 1000; break;
+      case "h":
+        totalMs += n * 3600000;
+        break;
+      case "m":
+        totalMs += n * 60000;
+        break;
+      case "s":
+        totalMs += n * 1000;
+        break;
     }
     return "";
   });

@@ -917,21 +917,17 @@ describe("Knowledge Graph Store", () => {
     });
 
     test("initDatabase creates entity_vectors virtual table", () => {
-      const row = db
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name='entity_vectors'`,
-        )
-        .get() as { name: string } | undefined;
+      const row = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='entity_vectors'`).get() as
+        | { name: string }
+        | undefined;
       expect(row).toBeDefined();
       expect(row!.name).toBe("entity_vectors");
     });
 
     test("initDatabase creates summary_vectors virtual table", () => {
-      const row = db
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name='summary_vectors'`,
-        )
-        .get() as { name: string } | undefined;
+      const row = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='summary_vectors'`).get() as
+        | { name: string }
+        | undefined;
       expect(row).toBeDefined();
       expect(row!.name).toBe("summary_vectors");
     });
@@ -955,9 +951,9 @@ describe("Knowledge Graph Store", () => {
     });
 
     test("schema_version is '3' for new databases", () => {
-      const row = db
-        .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-        .get() as { value: string } | undefined;
+      const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
+        | { value: string }
+        | undefined;
       expect(row?.value).toBe("3");
       expect(SCHEMA_VERSION).toBe("3");
     });

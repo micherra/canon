@@ -13,14 +13,14 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  SingleStateSchema,
-  WaveStateSchema,
-  WavePolicySchema,
-  ParallelStateSchema,
-  ParallelPerStateSchema,
-  TerminalStateSchema,
-  StateDefinitionSchema,
   FragmentStateDefinitionSchema,
+  ParallelPerStateSchema,
+  ParallelStateSchema,
+  SingleStateSchema,
+  StateDefinitionSchema,
+  TerminalStateSchema,
+  WavePolicySchema,
+  WaveStateSchema,
 } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -137,9 +137,7 @@ describe("WavePolicySchema", () => {
   });
 
   it("rejects invalid isolation value", () => {
-    expect(() =>
-      WavePolicySchema.parse({ isolation: "container" }),
-    ).toThrow();
+    expect(() => WavePolicySchema.parse({ isolation: "container" })).toThrow();
   });
 });
 

@@ -33,9 +33,9 @@ import { reportResult } from "./tools/report-result.ts";
 import { resolveAfterConsultations } from "./tools/resolve-after-consultations.ts";
 import { resolveWaveEvent } from "./tools/resolve-wave-event.ts";
 import { reviewCode } from "./tools/review-code.ts";
+import { semanticSearch } from "./tools/semantic-search.ts";
 import { showPrImpact } from "./tools/show-pr-impact.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
-import { semanticSearch } from "./tools/semantic-search.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
 import { updateBoard } from "./tools/update-board.ts";
 import { writePlanIndex } from "./tools/write-plan-index.ts";
@@ -78,6 +78,7 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
       title,
       description,
       inputSchema,
+      // biome-ignore lint/style/useNamingConvention: MCP SDK wire format
       _meta: { ui: { resourceUri } },
     },
     handler,
@@ -129,7 +130,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getPrinciples(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -145,7 +146,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return listPrinciples(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -161,7 +162,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return reviewCode(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -175,7 +176,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getCompliance(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 // Tool: report (unified — decisions, patterns, and reviews)
@@ -188,7 +189,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return report(input, projectDir);
-  })
+  }),
 );
 
 registerToolWithUi(
@@ -259,7 +260,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return storeSummaries(input, projectDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -275,7 +276,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getDriftReport(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -289,13 +290,14 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return loadFlow(input, pluginDir, projectDir);
-  })
+  }),
 );
 
 server.registerTool(
   "init_workspace",
   {
-    description: "Initialize a Canon workspace for flow execution. Creates workspace directory and initializes SQLite store. Resumes from existing store if present.",
+    description:
+      "Initialize a Canon workspace for flow execution. Creates workspace directory and initializes SQLite store. Resumes from existing store if present.",
     inputSchema: {
       flow_name: z.string(),
       task: z.string(),
@@ -312,7 +314,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return initWorkspaceFlow(input, projectDir, pluginDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -333,7 +335,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getSpawnPrompt({ ...input, project_dir: projectDir });
-  })
+  }),
 );
 
 server.registerTool(
@@ -453,7 +455,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return reportResult({ ...input, project_dir: projectDir });
-  })
+  }),
 );
 
 server.registerTool(
@@ -569,7 +571,9 @@ server.registerTool(
       progress_line: z
         .string()
         .optional()
-        .describe("One-line progress entry to append to progress.md (e.g. '- [{state_id}] {status}: {one-sentence summary}')"),
+        .describe(
+          "One-line progress entry to append to progress.md (e.g. '- [{state_id}] {status}: {one-sentence summary}')",
+        ),
       // Enter-next-state fields
       variables: z.record(z.string(), z.string()),
       items: z.array(z.any()).optional(),
@@ -580,7 +584,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return reportAndEnterNextState({ ...input, project_dir: projectDir });
-  })
+  }),
 );
 
 server.registerTool(
@@ -595,7 +599,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return checkConvergence(input);
-  })
+  }),
 );
 
 server.registerTool(
@@ -631,7 +635,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return updateBoard(input);
-  })
+  }),
 );
 
 server.registerTool(
@@ -652,7 +656,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return injectWaveEvent(input);
-  })
+  }),
 );
 
 server.registerTool(
@@ -670,7 +674,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return resolveWaveEvent(input);
-  })
+  }),
 );
 
 server.registerTool(
@@ -691,7 +695,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return enterAndPrepareState({ ...input, project_dir: projectDir });
-  })
+  }),
 );
 
 server.registerTool(
@@ -708,7 +712,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return resolveAfterConsultations(input);
-  })
+  }),
 );
 
 server.registerTool(
@@ -725,7 +729,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return postMessage(input);
-  })
+  }),
 );
 
 server.registerTool(
@@ -742,7 +746,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return getMessages(input);
-  })
+  }),
 );
 
 server.registerTool(
@@ -800,7 +804,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return storePrReview(input, projectDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -824,7 +828,7 @@ server.registerTool(
   },
   wrapHandler(async (input) => {
     return graphQuery(input, projectDir);
-  })
+  }),
 );
 
 server.registerTool(
@@ -842,13 +846,7 @@ server.registerTool(
         .enum(["entities", "summaries", "both"])
         .optional()
         .describe("Search scope: entity signatures, AI summaries, or both (default: both)"),
-      limit: z
-        .number()
-        .int()
-        .min(1)
-        .max(100)
-        .optional()
-        .describe("Max results to return (default: 20)"),
+      limit: z.number().int().min(1).max(100).optional().describe("Max results to return (default: 20)"),
       threshold: z
         .number()
         .optional()
@@ -870,9 +868,7 @@ server.registerTool(
       slug: z.string(),
       tasks: z.array(
         z.object({
-          task_id: z
-            .string()
-            .describe("Task identifier — alphanumeric, hyphens, underscores only"),
+          task_id: z.string().describe("Task identifier — alphanumeric, hyphens, underscores only"),
           wave: z.number().min(1).describe("Wave number (1-based)"),
           depends_on: z.array(z.string()).optional(),
           files: z.array(z.string()).optional(),

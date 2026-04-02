@@ -9,7 +9,6 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SemanticSearchResult } from "../graph/kg-types.ts";
 import { semanticSearch } from "../tools/semantic-search.ts";
 import { randomEmbedding } from "./embedding-test-helpers.ts";
 
@@ -271,10 +270,7 @@ describe("semanticSearch", () => {
 
     mockEmbedOne.mockResolvedValue(randomEmbedding(0));
 
-    const result = await semanticSearch(
-      { query: "service", kind_filter: ["class"], scope: "entities" },
-      tmpDir,
-    );
+    const result = await semanticSearch({ query: "service", kind_filter: ["class"], scope: "entities" }, tmpDir);
 
     expect(result.ok).toBe(true);
     if (result.ok) {

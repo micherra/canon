@@ -81,8 +81,7 @@ export function walkTree(tree: Tree | null, filePath: string, config: LanguageCo
 // ---------------------------------------------------------------------------
 
 function visitNode(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
-  const { nodeKinds, hooks } = config;
-  const kind = node.type;
+  const { hooks } = config;
 
   // --- Language-specific special constructs (called for every node) ---
   // Must come before other handlers so hooks like TS interface/enum work.
@@ -90,63 +89,82 @@ function visitNode(node: Node, ctx: WalkerContext, config: LanguageConfig): void
     hooks.extractSpecial(node as unknown as SyntaxNode, ctx);
   }
 
-  // --- Import hook (called for every node; hook filters by type internally) ---
-  // This pattern supports languages like Bash where imports come from
-  // command nodes that are not in nodeKinds.importStatement.
-  if (hooks?.extractImport) {
-    if (nodeKinds.importStatement.includes(kind) || nodeKinds.importStatement.length === 0) {
-      hooks.extractImport(node as unknown as SyntaxNode, ctx);
-    }
-  }
+  // --- Import hooks and dispatch ---
+  dispatchImportHooks(node, ctx, config);
 
-  // --- Standard import statements (no custom hook) ---
-  if (nodeKinds.importStatement.includes(kind) && !hooks?.extractImport) {
-    extractDefaultImport(node, ctx);
-    return;
-  }
-
-  // --- Function definitions (top-level only, not inside class body) ---
-  if (nodeKinds.functionDef.includes(kind) && ctx.classStack.length === 0) {
-    extractFunctionEntity(node, ctx, config);
-    return; // stop recursing into function body for entity extraction
-  }
-
-  // --- Class definitions ---
-  if (nodeKinds.classDef.includes(kind)) {
-    extractClassEntity(node, ctx, config);
-    return; // class handler walks its own body
-  }
-
-  // --- Class body containers ---
-  if (nodeKinds.classBody.includes(kind)) {
-    for (const child of node.namedChildren) {
-      visitNode(child, ctx, config);
-    }
-    return;
-  }
-
-  // --- Method definitions (only when inside a class) ---
-  if (nodeKinds.methodDef.includes(kind) && ctx.classStack.length > 0) {
-    extractMethodEntity(node, ctx, config);
-    return;
-  }
-
-  // --- Export statements ---
-  if (nodeKinds.exportStatement.includes(kind)) {
-    extractExportStatement(node, ctx, config);
-    return;
-  }
-
-  // --- Variable declarations ---
-  if (nodeKinds.variableDecl.includes(kind)) {
-    extractVariableDecl(node, ctx, config);
-    // Fall through to recurse for nested structures
-  }
+  // --- Dispatch to entity-specific handlers; returns true if handled ---
+  if (dispatchEntityNode(node, ctx, config)) return;
 
   // --- Default: recurse into all named children ---
   for (const child of node.namedChildren) {
     visitNode(child, ctx, config);
   }
+}
+
+/** Run import hooks or default import extraction. Returns true if the node was consumed. */
+function dispatchImportHooks(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
+  const { nodeKinds, hooks } = config;
+  const kind = node.type;
+
+  if (hooks?.extractImport) {
+    if (nodeKinds.importStatement.includes(kind) || nodeKinds.importStatement.length === 0) {
+      hooks.extractImport(node as unknown as SyntaxNode, ctx);
+    }
+  }
+}
+
+/**
+ * Dispatch a node to the appropriate entity handler based on its type.
+ * Returns true if the node was handled (caller should not recurse further).
+ */
+function dispatchEntityNode(node: Node, ctx: WalkerContext, config: LanguageConfig): boolean {
+  const { nodeKinds, hooks } = config;
+  const kind = node.type;
+
+  // Standard import statements (no custom hook)
+  if (nodeKinds.importStatement.includes(kind) && !hooks?.extractImport) {
+    extractDefaultImport(node, ctx);
+    return true;
+  }
+
+  // Function definitions (top-level only, not inside class body)
+  if (nodeKinds.functionDef.includes(kind) && ctx.classStack.length === 0) {
+    extractFunctionEntity(node, ctx, config);
+    return true;
+  }
+
+  // Class definitions
+  if (nodeKinds.classDef.includes(kind)) {
+    extractClassEntity(node, ctx, config);
+    return true;
+  }
+
+  // Class body containers
+  if (nodeKinds.classBody.includes(kind)) {
+    for (const child of node.namedChildren) {
+      visitNode(child, ctx, config);
+    }
+    return true;
+  }
+
+  // Method definitions (only when inside a class)
+  if (nodeKinds.methodDef.includes(kind) && ctx.classStack.length > 0) {
+    extractMethodEntity(node, ctx, config);
+    return true;
+  }
+
+  // Export statements
+  if (nodeKinds.exportStatement.includes(kind)) {
+    extractExportStatement(node, ctx, config);
+    return true;
+  }
+
+  // Variable declarations — fall through to recurse for nested structures
+  if (nodeKinds.variableDecl.includes(kind)) {
+    extractVariableDecl(node, ctx, config);
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +207,7 @@ function extractFunctionEntity(node: Node, ctx: WalkerContext, config: LanguageC
 }
 
 function extractClassEntity(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
-  const { nodeKinds, hooks } = config;
+  const { hooks } = config;
   const name = hooks?.getEntityName
     ? hooks.getEntityName(node as unknown as SyntaxNode)
     : (node.childForFieldName("name")?.text ?? null);
@@ -220,9 +238,15 @@ function extractClassEntity(node: Node, ctx: WalkerContext, config: LanguageConf
 
   // Walk class body for methods
   ctx.classStack.push(name);
+  walkClassBody(node, ctx, config);
+  ctx.classStack.pop();
+}
 
-  // Find the body: prefer 'body' field, then look for classBody-typed children
+/** Find and walk the class body node. Prefers the 'body' field, then classBody-typed children. */
+function walkClassBody(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
+  const { nodeKinds } = config;
   const bodyNode = node.childForFieldName("body");
+
   if (bodyNode) {
     if (nodeKinds.classBody.includes(bodyNode.type)) {
       for (const child of bodyNode.namedChildren) {
@@ -231,18 +255,17 @@ function extractClassEntity(node: Node, ctx: WalkerContext, config: LanguageConf
     } else {
       visitNode(bodyNode, ctx, config);
     }
-  } else {
-    for (const child of node.children) {
-      if (nodeKinds.classBody.includes(child.type)) {
-        for (const bodyChild of child.namedChildren) {
-          visitNode(bodyChild, ctx, config);
-        }
-        break;
-      }
-    }
+    return;
   }
 
-  ctx.classStack.pop();
+  for (const child of node.children) {
+    if (nodeKinds.classBody.includes(child.type)) {
+      for (const bodyChild of child.namedChildren) {
+        visitNode(bodyChild, ctx, config);
+      }
+      break;
+    }
+  }
 }
 
 /**
@@ -490,32 +513,37 @@ function extractCalls(node: Node, callerQn: string, ctx: WalkerContext, config: 
  * and Bash command (name field / first command_name child).
  */
 function extractCalleeName(node: Node): string | null {
-  // TypeScript/JS: call_expression has 'function' field
+  // TypeScript/JS/Python: call_expression has 'function' field
   const fnField = node.childForFieldName("function");
-  if (fnField) {
-    if (fnField.type === "identifier") return fnField.text;
-    if (fnField.type === "member_expression" || fnField.type === "optional_chain") {
-      const object = fnField.childForFieldName("object");
-      const property = fnField.childForFieldName("property");
-      if (object && property) return `${object.text}.${property.text}`;
-      return fnField.text.slice(0, 120);
-    }
-    // Python: attribute access (obj.method)
-    if (fnField.type === "attribute") {
-      const attr = fnField.childForFieldName("attribute");
-      return attr ? attr.text : fnField.text;
-    }
-    if (fnField.type === "identifier") return fnField.text;
-    return null;
-  }
+  if (fnField) return calleeNameFromFunctionField(fnField);
 
   // Java: method_invocation has 'name' field
   const nameField = node.childForFieldName("name");
   if (nameField) return nameField.text;
 
-  // Bash: command has command_name as first child or 'name' field
+  // Bash: command has command_name as first child
   const firstChild = node.children[0];
   if (firstChild?.type === "command_name") return firstChild.text;
+
+  return null;
+}
+
+/** Resolve callee name from a call_expression 'function' field node. */
+function calleeNameFromFunctionField(fnField: Node): string | null {
+  if (fnField.type === "identifier") return fnField.text;
+
+  if (fnField.type === "member_expression" || fnField.type === "optional_chain") {
+    const object = fnField.childForFieldName("object");
+    const property = fnField.childForFieldName("property");
+    if (object && property) return `${object.text}.${property.text}`;
+    return fnField.text.slice(0, 120);
+  }
+
+  // Python: attribute access (obj.method)
+  if (fnField.type === "attribute") {
+    const attr = fnField.childForFieldName("attribute");
+    return attr ? attr.text : fnField.text;
+  }
 
   return null;
 }

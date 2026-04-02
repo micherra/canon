@@ -108,28 +108,15 @@ const DEFAULT_LAYER_RULES: Record<string, string[]> = {
   shared: [],
 };
 
-export function generateInsights(
-  nodes: NodeLike[],
-  edges: EdgeLike[],
-  layerRules?: Record<string, string[]>,
-  projectDir?: string,
-): CodebaseInsights {
-  const rules = layerRules || DEFAULT_LAYER_RULES;
-
-  // Degree maps
-  const { inDegree, outDegree } = buildDegreeMaps(
-    nodes.map((n) => n.id),
-    edges,
-  );
-
-  // Overview
+/** Build overview stats from nodes, edges, and degree maps. */
+function buildOverview(nodes: NodeLike[], edges: EdgeLike[]): CodebaseInsights["overview"] {
   const layerCounts = new Map<string, number>();
   for (const node of nodes) {
     const layer = node.layer || "unknown";
     layerCounts.set(layer, (layerCounts.get(layer) || 0) + 1);
   }
 
-  const overview = {
+  return {
     total_files: nodes.length,
     total_edges: edges.length,
     avg_dependencies_per_file: nodes.length > 0 ? Math.round((edges.length / nodes.length) * 100) / 100 : 0,
@@ -137,9 +124,15 @@ export function generateInsights(
       .map(([name, file_count]) => ({ name, file_count }))
       .sort((a, b) => b.file_count - a.file_count),
   };
+}
 
-  // Most connected (top 10 by total degree)
-  const most_connected = nodes
+/** Find the top 10 most connected nodes by total degree. */
+function findMostConnected(
+  nodes: NodeLike[],
+  inDegree: Map<string, number>,
+  outDegree: Map<string, number>,
+): CodebaseInsights["most_connected"] {
+  return nodes
     .map((n) => ({
       path: n.id,
       in_degree: inDegree.get(n.id) || 0,
@@ -149,24 +142,29 @@ export function generateInsights(
     .filter((n) => n.total > 0)
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
+}
 
-  // Orphan files (zero connections)
+/** Find orphan files (zero connections, excluding test/source pairs). */
+function findOrphanFiles(nodes: NodeLike[], inDegree: Map<string, number>, outDegree: Map<string, number>): string[] {
   const rawOrphans = nodes
     .filter((n) => (inDegree.get(n.id) || 0) === 0 && (outDegree.get(n.id) || 0) === 0)
     .map((n) => n.id);
   const nodeSet = new Set(nodes.map((n) => n.id));
-  const orphan_files = rawOrphans.filter((path) => !hasMatchedParentTestConnection(path, nodeSet)).sort();
+  return rawOrphans.filter((p) => !hasMatchedParentTestConnection(p, nodeSet)).sort();
+}
 
-  // Circular dependencies (DFS cycle detection, max cycle length 5)
-  const circular_dependencies = detectCycles(nodes, edges);
-
-  // Layer violations
+/** Detect layer violations based on allowed dependency rules. */
+function findLayerViolations(
+  nodes: NodeLike[],
+  edges: EdgeLike[],
+  rules: Record<string, string[]>,
+): CodebaseInsights["layer_violations"] {
   const nodeLayerMap = new Map<string, string>();
   for (const node of nodes) {
     nodeLayerMap.set(node.id, node.layer || "unknown");
   }
 
-  const layer_violations: CodebaseInsights["layer_violations"] = [];
+  const violations: CodebaseInsights["layer_violations"] = [];
   for (const edge of edges) {
     const sourceLayer = nodeLayerMap.get(edge.source) || "unknown";
     const targetLayer = nodeLayerMap.get(edge.target) || "unknown";
@@ -177,7 +175,7 @@ export function generateInsights(
 
     const allowed = rules[sourceLayer];
     if (allowed && !allowed.includes(targetLayer)) {
-      layer_violations.push({
+      violations.push({
         source: edge.source,
         target: edge.target,
         source_layer: sourceLayer,
@@ -186,12 +184,28 @@ export function generateInsights(
     }
   }
 
+  return violations;
+}
+
+export function generateInsights(
+  nodes: NodeLike[],
+  edges: EdgeLike[],
+  layerRules?: Record<string, string[]>,
+  projectDir?: string,
+): CodebaseInsights {
+  const rules = layerRules || DEFAULT_LAYER_RULES;
+
+  const { inDegree, outDegree } = buildDegreeMaps(
+    nodes.map((n) => n.id),
+    edges,
+  );
+
   const base: CodebaseInsights = {
-    overview,
-    most_connected,
-    orphan_files,
-    circular_dependencies,
-    layer_violations,
+    overview: buildOverview(nodes, edges),
+    most_connected: findMostConnected(nodes, inDegree, outDegree),
+    orphan_files: findOrphanFiles(nodes, inDegree, outDegree),
+    circular_dependencies: detectCycles(nodes, edges),
+    layer_violations: findLayerViolations(nodes, edges, rules),
   };
 
   return enrichWithKgInsights(base, projectDir);

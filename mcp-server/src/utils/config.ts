@@ -137,6 +137,21 @@ export function buildLayerInferrer(mappings: LayerMappings): (filePath: string) 
 }
 
 /**
+ * Extract the scan directory prefix from a single glob pattern.
+ * Returns the directory portion before the first '*' if the pattern contains
+ * a '/' before that '*'. Returns null for plain segment patterns or patterns
+ * with no rooted wildcard.
+ */
+function extractScanDir(pattern: string): string | null {
+  const starIdx = pattern.indexOf("*");
+  if (starIdx === -1) return null; // no wildcard — plain segment, skip
+  const slashBeforeStar = pattern.lastIndexOf("/", starIdx - 1);
+  if (slashBeforeStar === -1) return null; // no '/' before '*' — not a rooted path, skip
+  const dir = pattern.slice(0, starIdx).replace(/\/$/, "");
+  return dir || null;
+}
+
+/**
  * Derive scan directories from layer glob patterns in .canon/config.json.
  * For each pattern that contains a '/' before any '*', strips from the first '*'
  * character and trims trailing '/' to yield the scan directory.
@@ -152,11 +167,7 @@ export async function deriveSourceDirsFromLayers(projectDir: string): Promise<st
   for (const patterns of Object.values(config.layers as Record<string, string[]>)) {
     if (!Array.isArray(patterns)) continue;
     for (const pattern of patterns) {
-      const starIdx = pattern.indexOf("*");
-      if (starIdx === -1) continue; // no wildcard — plain segment, skip
-      const slashBeforeStar = pattern.lastIndexOf("/", starIdx - 1);
-      if (slashBeforeStar === -1) continue; // no '/' before '*' — not a rooted path, skip
-      const dir = pattern.slice(0, starIdx).replace(/\/$/, "");
+      const dir = extractScanDir(pattern);
       if (dir) dirs.add(dir);
     }
   }

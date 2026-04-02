@@ -10,28 +10,41 @@
 import { parse as parseYaml } from "yaml";
 import type { AdapterResult, LanguageAdapter } from "./kg-types.ts";
 
+/** Extract state names from a parsed YAML data object. */
+function extractStateNames(data: Record<string, unknown>): string[] {
+  return data.states && typeof data.states === "object" ? Object.keys(data.states) : [];
+}
+
+/** Build metadata for a flow entity. */
+function buildFlowMetadata(data: Record<string, unknown>): Record<string, unknown> {
+  const tier = typeof data.tier === "string" ? data.tier : undefined;
+  const states = extractStateNames(data);
+  return tier !== undefined ? { tier, states } : { states };
+}
+
+/** Build metadata for a hook entity. */
+function buildHookMetadata(data: Record<string, unknown>): Record<string, unknown> {
+  const trigger = typeof data.trigger === "string" ? data.trigger : undefined;
+  return trigger !== undefined ? { trigger } : {};
+}
+
 /** Classify entity kind and collect metadata from file path and parsed data */
 function classifyEntity(
   filePath: string,
   data: Record<string, unknown>,
 ): { kind: "flow" | "flow-fragment" | "hook" | "file"; metadata: Record<string, unknown> } {
-  // Normalize to forward slashes for pattern matching
   const normalized = filePath.replace(/\\/g, "/");
 
   if (/flows\/fragments\/[^/]+\.ya?ml$/.test(normalized)) {
-    const states = data.states && typeof data.states === "object" ? Object.keys(data.states) : [];
-    return { kind: "flow-fragment", metadata: { states } };
+    return { kind: "flow-fragment", metadata: { states: extractStateNames(data) } };
   }
 
   if (/flows\/[^/]+\.ya?ml$/.test(normalized)) {
-    const tier = typeof data.tier === "string" ? data.tier : undefined;
-    const states = data.states && typeof data.states === "object" ? Object.keys(data.states) : [];
-    return { kind: "flow", metadata: tier !== undefined ? { tier, states } : { states } };
+    return { kind: "flow", metadata: buildFlowMetadata(data) };
   }
 
   if (/hooks\/[^/]+\.ya?ml$/.test(normalized)) {
-    const trigger = typeof data.trigger === "string" ? data.trigger : undefined;
-    return { kind: "hook", metadata: trigger !== undefined ? { trigger } : {} };
+    return { kind: "hook", metadata: buildHookMetadata(data) };
   }
 
   return { kind: "file", metadata: {} };

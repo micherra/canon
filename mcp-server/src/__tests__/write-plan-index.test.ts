@@ -1,10 +1,9 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
-import { writePlanIndex } from "../tools/write-plan-index.ts";
+import { afterEach, describe, expect, it } from "vitest";
 import { parseTaskIdsForWave } from "../orchestration/wave-variables.ts";
+import { writePlanIndex } from "../tools/write-plan-index.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDir: string;

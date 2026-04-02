@@ -7,7 +7,6 @@
  */
 
 import type Database from "better-sqlite3";
-import { inferLayer } from "../matcher.ts";
 import { KgQuery } from "./kg-query.ts";
 import { KgStore } from "./kg-store.ts";
 import type { BlastRadiusResult } from "./kg-types.ts";
@@ -338,30 +337,48 @@ function looksLikeFilePath(target: string): boolean {
  *      return all entities belonging to that file.
  *   2. Otherwise — run an FTS5 search for the name and take all matching entity IDs.
  */
+/** Resolve entities from a file path and add unseen ones to the result set. */
+function resolveFilePathEntities(
+  target: string,
+  store: KgStore,
+  seen: Set<number>,
+  resolved: Array<{ id: number; name: string }>,
+): void {
+  const file = store.getFile(target);
+  if (!file || file.file_id == null) return;
+
+  const entities = store.getEntitiesByFile(file.file_id);
+  for (const ent of entities) {
+    if (ent.entity_id == null || seen.has(ent.entity_id)) continue;
+    seen.add(ent.entity_id);
+    resolved.push({ id: ent.entity_id, name: ent.name });
+  }
+}
+
+/** Resolve entities from an FTS5 name search and add unseen ones to the result set. */
+function resolveNameEntities(
+  target: string,
+  query: KgQuery,
+  seen: Set<number>,
+  resolved: Array<{ id: number; name: string }>,
+): void {
+  const results = query.search(target, 50);
+  for (const r of results) {
+    if (seen.has(r.entity_id)) continue;
+    seen.add(r.entity_id);
+    resolved.push({ id: r.entity_id, name: r.name });
+  }
+}
+
 function resolveTargets(targets: string[], store: KgStore, query: KgQuery): Array<{ id: number; name: string }> {
   const seen = new Set<number>();
   const resolved: Array<{ id: number; name: string }> = [];
 
   for (const target of targets) {
     if (looksLikeFilePath(target)) {
-      // File path resolution
-      const file = store.getFile(target);
-      if (!file || file.file_id == null) continue;
-
-      const entities = store.getEntitiesByFile(file.file_id);
-      for (const ent of entities) {
-        if (ent.entity_id == null || seen.has(ent.entity_id)) continue;
-        seen.add(ent.entity_id);
-        resolved.push({ id: ent.entity_id, name: ent.name });
-      }
+      resolveFilePathEntities(target, store, seen, resolved);
     } else {
-      // FTS5 name search
-      const results = query.search(target, 50);
-      for (const r of results) {
-        if (seen.has(r.entity_id)) continue;
-        seen.add(r.entity_id);
-        resolved.push({ id: r.entity_id, name: r.name });
-      }
+      resolveNameEntities(target, query, seen, resolved);
     }
   }
 

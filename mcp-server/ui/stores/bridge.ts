@@ -18,6 +18,28 @@ let earlyResult: { data: unknown } | { error: Error } | null = null;
 let toolResultResolve: ((data: unknown) => void) | null = null;
 let toolResultReject: ((err: Error) => void) | null = null;
 
+function handleToolResult(params: { isError?: boolean }): void {
+  let parsed: unknown;
+  let parseError: Error | null = null;
+  try {
+    parsed = params.isError
+      ? null
+      : extractToolJson(params as unknown as { content?: Array<{ type: string; text?: string }> });
+  } catch (e) {
+    parseError = e instanceof Error ? e : new Error(String(e));
+  }
+
+  if (toolResultResolve) {
+    if (parseError) toolResultReject?.(parseError);
+    else toolResultResolve(parsed);
+    toolResultResolve = null;
+    toolResultReject = null;
+  } else {
+    // Buffer for later waitForToolResult() call
+    earlyResult = parseError ? { error: parseError } : { data: parsed };
+  }
+}
+
 export const bridge = {
   async init() {
     const instance = new App({ name: "Canon", version: "0.1.0" }, {}, { autoResize: true });
@@ -28,27 +50,7 @@ export const bridge = {
       if (ctx.styles?.css?.fonts) applyHostFonts(ctx.styles.css.fonts);
     };
 
-    instance.ontoolresult = (params) => {
-      let parsed: unknown;
-      let parseError: Error | null = null;
-      try {
-        parsed = params.isError
-          ? null
-          : extractToolJson(params as unknown as { content?: Array<{ type: string; text?: string }> });
-      } catch (e) {
-        parseError = e instanceof Error ? e : new Error(String(e));
-      }
-
-      if (toolResultResolve) {
-        if (parseError) toolResultReject?.(parseError);
-        else toolResultResolve(parsed);
-        toolResultResolve = null;
-        toolResultReject = null;
-      } else {
-        // Buffer for later waitForToolResult() call
-        earlyResult = parseError ? { error: parseError } : { data: parsed };
-      }
-    };
+    instance.ontoolresult = handleToolResult;
 
     instance.onerror = console.error;
 

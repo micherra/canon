@@ -194,12 +194,12 @@ let crossLayerDependents = $derived.by(() => {
 // ── Canvas graph ──────────────────────────────────────────────────────────
 
 interface GraphLayout {
-  W: number;
-  H: number;
-  CX: number;
-  CY: number;
-  LEFT_X: number;
-  RIGHT_X: number;
+  w: number;
+  h: number;
+  cx: number;
+  cy: number;
+  left_x: number;
+  right_x: number;
   graphTop: number;
   graphH: number;
   maxLabelChars: number;
@@ -216,9 +216,9 @@ const LABEL_GAP = 10;
 const EDGE_PAD = 8;
 const HEADER_Y = 16;
 
-function computeLayout(ctx: CanvasRenderingContext2D, W: number, imports: string[], dependents: string[]): GraphLayout {
+function computeLayout(ctx: CanvasRenderingContext2D, w: number, imports: string[], dependents: string[]): GraphLayout {
   const maxNodes = Math.max(imports.length, dependents.length, 1);
-  const H = Math.max(280, maxNodes * 28 + 80);
+  const h = Math.max(280, maxNodes * 28 + 80);
   const maxLabelChars = 26;
 
   ctx.font = "10px monospace";
@@ -231,12 +231,12 @@ function computeLayout(ctx: CanvasRenderingContext2D, W: number, imports: string
     maxRightLabel = Math.max(maxRightLabel, ctx.measureText(truncate(shortName(dep), maxLabelChars)).width);
   }
 
-  const LEFT_X = Math.max(EDGE_PAD + maxLeftLabel + LABEL_GAP + NODE_R, 80);
-  const RIGHT_X = Math.min(W - EDGE_PAD - maxRightLabel - LABEL_GAP - NODE_R, W - 80);
+  const left_x = Math.max(EDGE_PAD + maxLeftLabel + LABEL_GAP + NODE_R, 80);
+  const right_x = Math.min(w - EDGE_PAD - maxRightLabel - LABEL_GAP - NODE_R, w - 80);
   const graphTop = HEADER_Y + 16;
-  const graphH = H - graphTop - 12;
+  const graphH = h - graphTop - 12;
 
-  return { W, H, CX: W / 2, CY: H / 2, LEFT_X, RIGHT_X, graphTop, graphH, maxLabelChars };
+  return { w, h, cx: w / 2, cy: h / 2, left_x, right_x, graphTop, graphH, maxLabelChars };
 }
 
 function computeNodePositions(items: string[], x: number, graphTop: number, graphH: number): NodePos[] {
@@ -312,11 +312,11 @@ function drawEdges(
 ) {
   for (const pos of importPositions) {
     const isCross = crossLayerImports.has(pos.path);
-    drawCurvedEdge(ctx, pos.x, pos.y, layout.CX, layout.CY, isCross ? "#EF9F27" : "#888780", true);
+    drawCurvedEdge(ctx, pos.x, pos.y, layout.cx, layout.cy, isCross ? "#EF9F27" : "#888780", true);
   }
   for (const pos of dependentPositions) {
     const isCross = crossLayerDependents.has(pos.path);
-    drawCurvedEdge(ctx, layout.CX, layout.CY, pos.x, pos.y, isCross ? "#EF9F27" : "#1D9E75", true);
+    drawCurvedEdge(ctx, layout.cx, layout.cy, pos.x, pos.y, isCross ? "#EF9F27" : "#1D9E75", true);
   }
 }
 
@@ -367,30 +367,30 @@ function drawCentreNode(
   exportCount: number,
   hasDependents: boolean,
 ) {
-  const { CX, CY } = layout;
+  const { cx, cy } = layout;
 
   ctx.beginPath();
-  ctx.arc(CX, CY, 16, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 16, 0, Math.PI * 2);
   ctx.strokeStyle = "rgba(127, 119, 221, 0.25)";
   ctx.lineWidth = 3;
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.arc(CX, CY, 10, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 10, 0, Math.PI * 2);
   ctx.fillStyle = "#7F77DD";
   ctx.fill();
 
   ctx.font = "11px monospace";
   ctx.fillStyle = "#e8eaf0";
   ctx.textAlign = "center";
-  ctx.fillText(truncate(fileName, 28), CX, CY + 28);
+  ctx.fillText(truncate(fileName, 28), cx, cy + 28);
 
   if (exportCount > 0 && hasDependents) {
     ctx.font = "8px monospace";
     ctx.fillStyle = "#7F77DD";
     ctx.globalAlpha = 0.7;
     ctx.textAlign = "center";
-    ctx.fillText(`${exportCount} exports`, CX, CY - 22);
+    ctx.fillText(`${exportCount} exports`, cx, cy - 22);
     ctx.globalAlpha = 1;
   }
 }
@@ -405,8 +405,8 @@ function drawColumnHeaders(
   ctx.textAlign = "center";
   ctx.letterSpacing = "0.08em";
   ctx.fillStyle = "#636a80";
-  if (hasImports) ctx.fillText("DEPENDS ON", layout.LEFT_X, HEADER_Y);
-  if (hasDependents) ctx.fillText("USED BY", layout.RIGHT_X, HEADER_Y);
+  if (hasImports) ctx.fillText("DEPENDS ON", layout.left_x, HEADER_Y);
+  if (hasDependents) ctx.fillText("USED BY", layout.right_x, HEADER_Y);
   ctx.letterSpacing = "0em";
 }
 
@@ -414,22 +414,22 @@ function drawGraph(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
   if (!data) return;
 
   const dpr = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth;
+  const canvasW = canvas.offsetWidth;
   const imports = data.imports ?? [];
   const dependents = data.imported_by ?? [];
 
-  const layout = computeLayout(ctx, W, imports, dependents);
+  const layout = computeLayout(ctx, canvasW, imports, dependents);
 
-  canvas.width = W * dpr;
-  canvas.height = layout.H * dpr;
-  canvas.style.height = `${layout.H}px`;
+  canvas.width = canvasW * dpr;
+  canvas.height = layout.h * dpr;
+  canvas.style.height = `${layout.h}px`;
   ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, W, layout.H);
+  ctx.clearRect(0, 0, canvasW, layout.h);
 
   drawColumnHeaders(ctx, layout, imports.length > 0, dependents.length > 0);
 
-  const importPositions = computeNodePositions(imports, layout.LEFT_X, layout.graphTop, layout.graphH);
-  const dependentPositions = computeNodePositions(dependents, layout.RIGHT_X, layout.graphTop, layout.graphH);
+  const importPositions = computeNodePositions(imports, layout.left_x, layout.graphTop, layout.graphH);
+  const dependentPositions = computeNodePositions(dependents, layout.right_x, layout.graphTop, layout.graphH);
 
   drawEdges(ctx, importPositions, dependentPositions, layout);
   drawImportNodes(ctx, importPositions, layout.maxLabelChars);

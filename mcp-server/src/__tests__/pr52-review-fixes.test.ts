@@ -8,10 +8,10 @@
  * Fix 5: process-adapter.ts — incorporate result.error.message into stderr when empty
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Fix 1: git-adapter-async — exitCode normalization for string err.code
@@ -22,12 +22,7 @@ type ExecFileCallback = (err: Error | null, stdout: string, stderr: string) => v
 let execFileImpl: ((cb: ExecFileCallback) => void) | null = null;
 
 vi.mock("node:child_process", () => ({
-  execFile: (
-    _cmd: string,
-    _args: string[],
-    _opts: Record<string, unknown>,
-    cb: ExecFileCallback,
-  ) => {
+  execFile: (_cmd: string, _args: string[], _opts: Record<string, unknown>, cb: ExecFileCallback) => {
     if (execFileImpl) {
       execFileImpl(cb);
     } else {
@@ -176,10 +171,7 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-graph-fix2-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
     await mkdir(join(tmpDir, "src"), { recursive: true });
-    await writeFile(
-      join(tmpDir, ".canon", "config.json"),
-      JSON.stringify({ layers: { api: ["src"] } }),
-    );
+    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { api: ["src"] } }));
     await writeFile(join(tmpDir, "src", "handler.ts"), `export function handler() {}`);
   });
 
@@ -193,7 +185,8 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
     // subsequent calls (rev-parse --verify for origin/main) return ok:true,
     // and the final diff call returns ok:true empty.
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi.fn()
+      gitExecAsync: vi
+        .fn()
         .mockResolvedValueOnce({ ok: true, stdout: "feat/test\n", stderr: "", exitCode: 0, timedOut: false })
         .mockResolvedValueOnce({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false })
         .mockResolvedValue({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false }),
@@ -208,18 +201,15 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
 
   it("returns graph nodes when diff_base is invalid (graceful fallback, no changed files marked)", async () => {
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi.fn()
+      gitExecAsync: vi
+        .fn()
         .mockResolvedValueOnce({ ok: true, stdout: "feat/test\n", stderr: "", exitCode: 0, timedOut: false })
         .mockResolvedValueOnce({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false })
         .mockResolvedValue({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false }),
     }));
 
     const { codebaseGraph } = await import("../tools/codebase-graph.ts");
-    const result = await codebaseGraph(
-      { diff_base: "$(bad-command)", source_dirs: ["src"] },
-      tmpDir,
-      "/nonexistent",
-    );
+    const result = await codebaseGraph({ diff_base: "$(bad-command)", source_dirs: ["src"] }, tmpDir, "/nonexistent");
     // Should return graph data; invalid diff_base means no changed-file detection
     expect(result.nodes).toBeDefined();
     expect(Array.isArray(result.nodes)).toBe(true);
@@ -290,7 +280,8 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
     expect(capturedCommand).toBeDefined();
     // After fix: args like 'pr', 'diff', '42', '--name-only' should be quoted
     // The presence of single quotes around at least one arg verifies the fix
-    const hasSingleQuotedArgs = capturedCommand!.includes("'pr'") ||
+    const hasSingleQuotedArgs =
+      capturedCommand!.includes("'pr'") ||
       capturedCommand!.includes("'diff'") ||
       capturedCommand!.includes("'42'") ||
       capturedCommand!.includes("'--name-only'");

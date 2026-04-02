@@ -8,11 +8,11 @@
  * 4. enrichment variable is merged after reviewScopeVars (so it doesn't clobber review_scope)
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ExecutionStore, getExecutionStore } from "../execution-store.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearStoreCache, type ExecutionStore, getExecutionStore } from "../execution-store.ts";
 import type { Board, ResolvedFlow } from "../flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -56,9 +56,9 @@ vi.mock("../context-enrichment.ts", () => ({
   }),
 }));
 
-import { assembleEnrichment } from "../context-enrichment.ts";
 import { enterAndPrepareState } from "../../tools/enter-and-prepare-state.ts";
 import { assertOk } from "../../utils/tool-result.ts";
+import { assembleEnrichment } from "../context-enrichment.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,8 +118,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 }
 
 afterEach(() => {
-  const cache = (getExecutionStore as unknown as { __cache?: Map<unknown, unknown> }).__cache;
-  if (cache instanceof Map) cache.clear();
+  clearStoreCache();
 
   for (const d of tmpDirs) {
     rmSync(d, { recursive: true, force: true });

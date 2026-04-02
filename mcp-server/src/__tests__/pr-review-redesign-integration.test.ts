@@ -33,7 +33,7 @@ import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 
 // ── helpers ──
 
-function makeMockExecFile(stdout: string, err: Error | null = null) {
+function _makeMockExecFile(stdout: string, err: Error | null = null) {
   return (
     _cmd: string,
     _args: string[],
@@ -125,7 +125,11 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
         { principle_id: "p3", severity: "strong-opinion", file_path: "src/tools/bad.ts" },
       ],
       honored: [],
-      score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 1 } },
+      score: {
+        rules: { passed: 0, total: 1 },
+        opinions: { passed: 0, total: 1 },
+        conventions: { passed: 0, total: 1 },
+      },
     });
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
@@ -230,7 +234,11 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
         { principle_id: "p2", severity: "convention", file_path: "src/tools/bad.ts" },
       ],
       honored: [],
-      score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 1 } },
+      score: {
+        rules: { passed: 0, total: 1 },
+        opinions: { passed: 0, total: 0 },
+        conventions: { passed: 0, total: 1 },
+      },
     });
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
@@ -294,11 +302,32 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
-    const hubFile = store.upsertFile({ path: "src/hub.ts", mtime_ms: 1, content_hash: "h", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+    const hubFile = store.upsertFile({
+      path: "src/hub.ts",
+      mtime_ms: 1,
+      content_hash: "h",
+      language: "typescript",
+      layer: "tools",
+      last_indexed_at: Date.now(),
+    });
     for (let i = 1; i <= 4; i++) {
-      const c = store.upsertFile({ path: `src/consumer${i}.ts`, mtime_ms: 1, content_hash: `c${i}`, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+      const c = store.upsertFile({
+        path: `src/consumer${i}.ts`,
+        mtime_ms: 1,
+        content_hash: `c${i}`,
+        language: "typescript",
+        layer: "tools",
+        last_indexed_at: Date.now(),
+      });
       // consumerX imports hub → file_edge source=consumer, target=hub
-      store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+      store.insertFileEdge({
+        source_file_id: c.file_id!,
+        target_file_id: hubFile.file_id!,
+        edge_type: "imports",
+        confidence: 1.0,
+        evidence: null,
+        relation: null,
+      });
     }
     db.close();
 
@@ -327,10 +356,31 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
-    const hubFile = store.upsertFile({ path: "src/hub.ts", mtime_ms: 1, content_hash: "h", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+    const hubFile = store.upsertFile({
+      path: "src/hub.ts",
+      mtime_ms: 1,
+      content_hash: "h",
+      language: "typescript",
+      layer: "tools",
+      last_indexed_at: Date.now(),
+    });
     for (let i = 0; i < 15; i++) {
-      const c = store.upsertFile({ path: `src/consumer${i}.ts`, mtime_ms: 1, content_hash: `c${i}`, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
-      store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+      const c = store.upsertFile({
+        path: `src/consumer${i}.ts`,
+        mtime_ms: 1,
+        content_hash: `c${i}`,
+        language: "typescript",
+        layer: "tools",
+        last_indexed_at: Date.now(),
+      });
+      store.insertFileEdge({
+        source_file_id: c.file_id!,
+        target_file_id: hubFile.file_id!,
+        edge_type: "imports",
+        confidence: 1.0,
+        evidence: null,
+        relation: null,
+      });
     }
     db.close();
 
@@ -361,11 +411,32 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     }));
 
     for (const hub of hubs) {
-      const hubFile = store.upsertFile({ path: hub.name, mtime_ms: 1, content_hash: hub.name, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+      const hubFile = store.upsertFile({
+        path: hub.name,
+        mtime_ms: 1,
+        content_hash: hub.name,
+        language: "typescript",
+        layer: "tools",
+        last_indexed_at: Date.now(),
+      });
       for (let j = 0; j < hub.consumers; j++) {
         const cPath = `src/c_${hub.name.replace(/\W/g, "_")}_${j}.ts`;
-        const c = store.upsertFile({ path: cPath, mtime_ms: 1, content_hash: cPath, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
-        store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+        const c = store.upsertFile({
+          path: cPath,
+          mtime_ms: 1,
+          content_hash: cPath,
+          language: "typescript",
+          layer: "tools",
+          last_indexed_at: Date.now(),
+        });
+        store.insertFileEdge({
+          source_file_id: c.file_id!,
+          target_file_id: hubFile.file_id!,
+          edge_type: "imports",
+          confidence: 1.0,
+          evidence: null,
+          relation: null,
+        });
       }
     }
     db.close();
@@ -901,8 +972,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join as pathJoin } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const uiDir = pathJoin(__dirname, "../../ui");
+const testDir = dirname(fileURLToPath(import.meta.url));
+const uiDir = pathJoin(testDir, "../../ui");
 
 describe("PrReview.svelte — v2 container structural contract", () => {
   // Updated 2026-03-25: PrReviewPrep.svelte merged into PrReview.svelte (unified view)

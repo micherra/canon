@@ -1,7 +1,5 @@
-import { describe, it, expect } from "vitest";
-import {
-  createMetricsAccumulator,
-} from "../orchestration/events.ts";
+import { describe, expect, it } from "vitest";
+import { createMetricsAccumulator } from "../orchestration/events.ts";
 
 describe("createMetricsAccumulator", () => {
   it("tracks spawns on agent_spawned events", () => {

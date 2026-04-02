@@ -15,8 +15,8 @@ import { describe, expect, it } from "vitest";
 import { SEVERITY_COLORS } from "../lib/constants.ts";
 import { getSeverityColor } from "../lib/utils.ts";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const uiDir = join(__dirname, "..");
+const Dirname = dirname(fileURLToPath(import.meta.url));
+const uiDir = join(Dirname, "..");
 const libDir = join(uiDir, "lib");
 
 // =============================================================================

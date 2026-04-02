@@ -7,8 +7,8 @@
  * convergence detection, and summary building.
  */
 
-import { readChannelAsContext, readMessages, type Message } from "./messages.ts";
 import { getExecutionStore } from "./execution-store.ts";
+import { type Message, readChannelAsContext, readMessages } from "./messages.ts";
 
 export interface DebateConfig {
   /** Number of competing teams (default 3) */
@@ -72,10 +72,7 @@ function debateSender(roundNumber: number, teamLabel: string, agent: string): st
   return `round-${roundNumber}-${teamSlug}-${agentSlug}`;
 }
 
-export async function inspectDebateProgress(
-  workspace: string,
-  config: DebateConfig,
-): Promise<DebateProgress> {
+export async function inspectDebateProgress(workspace: string, config: DebateConfig): Promise<DebateProgress> {
   // Discover populated debate-round-N channels from the SQLite messages table
   let roundNumbers: number[] = [];
 

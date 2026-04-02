@@ -257,7 +257,13 @@ describe("evaluateSkipWhen — no_open_questions", () => {
 
 describe("evaluateSkipWhen — no_contract_changes", () => {
   it("returns skip: true when only non-contract files changed", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "src/some-internal.ts\nsrc/utils/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      ok: true,
+      stdout: "src/some-internal.ts\nsrc/utils/helper.ts\n",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -266,7 +272,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when API files changed", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "src/api/users.ts\nsrc/internal/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      ok: true,
+      stdout: "src/api/users.ts\nsrc/internal/helper.ts\n",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 

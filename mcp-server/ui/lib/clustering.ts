@@ -347,6 +347,44 @@ function mergeSmallClusters(clusters: Cluster[], orphans: ClusterInput[]): Clust
   return [...large, otherCluster];
 }
 
+function splitBySubdirectory(cluster: Cluster, bySubdir: Map<string, ClusterInput[]>): Cluster[] {
+  const out: Cluster[] = [];
+  for (const [subdir, subdirFiles] of bySubdir) {
+    const label = subdir.split("/").pop() ?? subdir;
+    const sub: Cluster = {
+      id: slugify(`${cluster.id}-${label}`),
+      title: `${cluster.title} / ${label}`,
+      type: cluster.type,
+      description: synthesizeDescription(subdirFiles),
+      files: subdirFiles,
+    };
+    if (subdirFiles.length > 30) {
+      out.push(...splitLargeClusters([sub]));
+    } else {
+      out.push(sub);
+    }
+  }
+  return out;
+}
+
+function chunkCluster(cluster: Cluster): Cluster[] {
+  const chunkSize = 30;
+  const out: Cluster[] = [];
+  let part = 1;
+  for (let i = 0; i < cluster.files.length; i += chunkSize) {
+    const chunk = cluster.files.slice(i, i + chunkSize);
+    out.push({
+      id: slugify(`${cluster.id}-part-${part}`),
+      title: `${cluster.title} (${part})`,
+      type: cluster.type,
+      description: synthesizeDescription(chunk),
+      files: chunk,
+    });
+    part++;
+  }
+  return out;
+}
+
 /**
  * Step 6: Split large clusters (> 30 files) by subdirectory.
  * If all files share the same directory (no subdirectory variation), splits
@@ -361,42 +399,11 @@ function splitLargeClusters(clusters: Cluster[]): Cluster[] {
       continue;
     }
 
-    // Try to split by subdirectory
     const bySubdir = groupByDirectory(cluster.files);
-
     if (bySubdir.size > 1) {
-      // Multiple subdirectories — split by subdirectory
-      for (const [subdir, subdirFiles] of bySubdir) {
-        const label = subdir.split("/").pop() ?? subdir;
-        // Recursively split if a subdirectory chunk is also > 30
-        const sub: Cluster = {
-          id: slugify(`${cluster.id}-${label}`),
-          title: `${cluster.title} / ${label}`,
-          type: cluster.type,
-          description: synthesizeDescription(subdirFiles),
-          files: subdirFiles,
-        };
-        if (subdirFiles.length > 30) {
-          result.push(...splitLargeClusters([sub]));
-        } else {
-          result.push(sub);
-        }
-      }
+      result.push(...splitBySubdirectory(cluster, bySubdir));
     } else {
-      // All in one directory — split into chunks of 30
-      const chunkSize = 30;
-      let part = 1;
-      for (let i = 0; i < cluster.files.length; i += chunkSize) {
-        const chunk = cluster.files.slice(i, i + chunkSize);
-        result.push({
-          id: slugify(`${cluster.id}-part-${part}`),
-          title: `${cluster.title} (${part})`,
-          type: cluster.type,
-          description: synthesizeDescription(chunk),
-          files: chunk,
-        });
-        part++;
-      }
+      result.push(...chunkCluster(cluster));
     }
   }
 

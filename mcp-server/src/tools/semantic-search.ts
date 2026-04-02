@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
-import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import type { EntityKind, SemanticSearchResult } from "../graph/kg-types.ts";
-import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
+import { KgVectorQuery } from "../graph/kg-vector-query.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 export interface SemanticSearchInput {
   query: string;

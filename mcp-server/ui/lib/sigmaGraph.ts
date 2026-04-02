@@ -309,13 +309,18 @@ export function buildSigmaGraph(
     return true;
   }
 
-  function nodeVisible(nodeId: string, f: FilterOptions): boolean {
-    const gn = nodeIndex.get(nodeId);
-    if (!gn) return false;
+  function passesFilterChecks(nodeId: string, gn: GraphNode, f: FilterOptions): boolean {
     if (!f.activeLayers.has(gn.layer)) return false;
     if (f.showChangedOnly && !gn.changed) return false;
     if (f.prReviewFiles !== null && !f.prReviewFiles.has(nodeId)) return false;
     if (f.insightFilter !== null && !f.insightFilter.has(nodeId)) return false;
+    return true;
+  }
+
+  function nodeVisible(nodeId: string, f: FilterOptions): boolean {
+    const gn = nodeIndex.get(nodeId);
+    if (!gn) return false;
+    if (!passesFilterChecks(nodeId, gn, f)) return false;
     const parsed = f.parsedSearch;
     const q = (parsed.textQuery || "").toLowerCase();
     const hasSearch = q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;

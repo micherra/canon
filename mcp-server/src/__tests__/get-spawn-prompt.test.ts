@@ -7,10 +7,10 @@
  * 3. getSpawnPrompt — wave briefing injection via consultation_outputs
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Mock execution-store so tests don't need a real SQLite DB
@@ -37,9 +37,9 @@ vi.mock("../orchestration/wave-briefing.ts", () => ({
 }));
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,6 +154,7 @@ describe("getSpawnPrompt — board state from ExecutionStore", () => {
       state_id: "implement",
       flow,
       variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      // biome-ignore lint/style/useNamingConvention: matches SpawnPromptInput._board
       _board: board,
     });
 
@@ -249,7 +250,9 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     const workspace = makeTmpDir();
     mockStore.getBoard.mockReturnValue(makeBoard());
     mockStore.getProgress.mockReturnValue("");
-    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\n### Security\nUse parameterized queries.");
+    vi.mocked(assembleWaveBriefing).mockReturnValue(
+      "## Wave Briefing (from wave 1)\n\n### Security\nUse parameterized queries.",
+    );
 
     const flow = makeWaveFlow();
 
@@ -330,7 +333,9 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     mockStore.getProgress.mockReturnValue("");
 
     const escapedSummary = "Use \\${PARAM} in queries.";
-    vi.mocked(assembleWaveBriefing).mockReturnValue(`## Wave Briefing (from wave 1)\n\n### Security\n${escapedSummary}`);
+    vi.mocked(assembleWaveBriefing).mockReturnValue(
+      `## Wave Briefing (from wave 1)\n\n### Security\n${escapedSummary}`,
+    );
 
     const flow = makeWaveFlow();
 

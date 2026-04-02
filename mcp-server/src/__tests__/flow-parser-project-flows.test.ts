@@ -13,10 +13,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadAndResolveFlow, loadFragment, resolveFragments } from "../orchestration/flow-parser.ts";
 import type { FragmentDefinition } from "../orchestration/flow-schema.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const testDir = dirname(fileURLToPath(import.meta.url));
 // pluginDir points to the project root (canon/), which contains flows/ and flows/fragments/
-const pluginDir = resolve(__dirname, "../../..");
+const pluginDir = resolve(testDir, "../../..");
 
 // ---------------------------------------------------------------------------
 // Test fixtures

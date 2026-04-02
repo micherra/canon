@@ -99,126 +99,122 @@ function isRelativePath(url: string): boolean {
 // Adapter implementation
 // ---------------------------------------------------------------------------
 
+/** Build the primary entity descriptor for a markdown file. */
+function buildFileEntity(
+  filePath: string,
+  content: string,
+  frontmatterData: Record<string, unknown>,
+): AdapterResult["entities"][number] {
+  const kind = classifyEntityKind(filePath, frontmatterData);
+  const metadata = extractMetadata(kind, frontmatterData);
+
+  const pathParts = filePath.replace(/\\/g, "/").split("/");
+  const basename = pathParts[pathParts.length - 1] ?? filePath;
+  const name = (frontmatterData["title"] as string | undefined) ?? basename.replace(/\.md$/, "");
+  const lineCount = content.split("\n").length;
+  const entityKind: EntityKind = kind ?? "file";
+
+  return {
+    name,
+    qualified_name: filePath,
+    kind: entityKind,
+    line_start: 1,
+    line_end: lineCount,
+    is_exported: true,
+    is_default_export: false,
+    signature: null,
+    metadata: metadata ? JSON.stringify(metadata) : null,
+  };
+}
+
+/** Extract relative link URLs and backtick references from the markdown AST. */
+function extractBodyRefs(content: string): { backtickRefs: string[]; linkUrls: string[] } {
+  const processor = unified().use(remarkParse).use(remarkFrontmatter).use(remarkGfm);
+  const tree = processor.parse(content);
+
+  const backtickRefs: string[] = [];
+  const linkUrls: string[] = [];
+
+  visit(tree, (node) => {
+    if (node.type === "link") {
+      const url = (node as { type: "link"; url: string }).url;
+      if (url && isRelativePath(url)) {
+        linkUrls.push(url);
+      }
+    }
+    if (node.type === "inlineCode") {
+      const val = (node as { type: "inlineCode"; value: string }).value.trim();
+      if (val.length > 0) {
+        backtickRefs.push(val);
+      }
+    }
+  });
+
+  return { backtickRefs, linkUrls };
+}
+
+/** Extract import specifiers from frontmatter reference fields and link URLs. */
+function extractMdImportSpecifiers(frontmatterData: Record<string, unknown>, linkUrls: string[]): ImportSpecifier[] {
+  const specifiers: ImportSpecifier[] = [];
+
+  const fmRefFields = ["includes", "template", "agent", "extends", "inherits"];
+  for (const field of fmRefFields) {
+    const val = frontmatterData[field];
+    if (typeof val === "string" && isRelativePath(val)) {
+      specifiers.push({ specifier: val, names: [] });
+    } else if (Array.isArray(val)) {
+      for (const item of val) {
+        if (typeof item === "string" && isRelativePath(item)) {
+          specifiers.push({ specifier: item, names: [] });
+        }
+      }
+    }
+  }
+
+  for (const url of linkUrls) {
+    specifiers.push({ specifier: url, names: [] });
+  }
+
+  return specifiers;
+}
+
+/** Build intra-file doc:references edges from backtick refs and link URLs. */
+function buildDocReferenceEdges(qualifiedName: string, backtickRefs: string[], linkUrls: string[]): IntraFileEdge[] {
+  const edges: IntraFileEdge[] = [];
+
+  for (const ref of backtickRefs) {
+    edges.push({
+      source_qualified: qualifiedName,
+      target_qualified: ref,
+      edge_type: "doc:references",
+      confidence: 0.6,
+    });
+  }
+
+  for (const url of linkUrls) {
+    edges.push({
+      source_qualified: qualifiedName,
+      target_qualified: url,
+      edge_type: "doc:references",
+      confidence: 0.8,
+    });
+  }
+
+  return edges;
+}
+
 export const markdownAdapter: LanguageAdapter = {
   extensions: [".md"],
 
   parse(filePath: string, content: string): AdapterResult {
-    // -------------------------------------------------------------------------
-    // Phase 1: Frontmatter extraction (gray-matter)
-    // -------------------------------------------------------------------------
     const parsed = matter(content);
     const frontmatterData = parsed.data as Record<string, unknown>;
 
-    const kind = classifyEntityKind(filePath, frontmatterData);
-    const metadata = extractMetadata(kind, frontmatterData);
+    const entity = buildFileEntity(filePath, content, frontmatterData);
+    const { backtickRefs, linkUrls } = extractBodyRefs(content);
+    const importSpecifiers = extractMdImportSpecifiers(frontmatterData, linkUrls);
+    const intraFileEdges = buildDocReferenceEdges(filePath, backtickRefs, linkUrls);
 
-    // Derive a display name from the file path (basename without extension)
-    const pathParts = filePath.replace(/\\/g, "/").split("/");
-    const basename = pathParts[pathParts.length - 1] ?? filePath;
-    const name = (frontmatterData["title"] as string | undefined) ?? basename.replace(/\.md$/, "");
-
-    // The qualified name is the file path itself (unique per file)
-    const qualifiedName = filePath;
-
-    const entities: AdapterResult["entities"] = [];
-    const intraFileEdges: IntraFileEdge[] = [];
-    const importSpecifiers: ImportSpecifier[] = [];
-
-    // Count lines in content so we can set line_end
-    const lineCount = content.split("\n").length;
-
-    // Emit the canonical entity for this file
-    const entityKind: EntityKind = kind ?? "file";
-    entities.push({
-      name,
-      qualified_name: qualifiedName,
-      kind: entityKind,
-      line_start: 1,
-      line_end: lineCount,
-      is_exported: true,
-      is_default_export: false,
-      signature: null,
-      metadata: metadata ? JSON.stringify(metadata) : null,
-    });
-
-    // -------------------------------------------------------------------------
-    // Phase 2: Body parsing (remark)
-    // -------------------------------------------------------------------------
-    const processor = unified().use(remarkParse).use(remarkFrontmatter).use(remarkGfm);
-
-    const tree = processor.parse(content);
-
-    // Track backtick references for doc:references edges
-    const backtickRefs: string[] = [];
-    // Track link URLs for import specifiers and doc:references edges
-    const linkUrls: string[] = [];
-
-    visit(tree, (node) => {
-      // Links: extract URL for relative file references
-      if (node.type === "link") {
-        const linkNode = node as { type: "link"; url: string };
-        const url = linkNode.url;
-        if (url && isRelativePath(url)) {
-          linkUrls.push(url);
-        }
-      }
-
-      // Inline code spans: record raw name for doc:references
-      if (node.type === "inlineCode") {
-        const codeNode = node as { type: "inlineCode"; value: string };
-        const val = codeNode.value.trim();
-        if (val.length > 0) {
-          backtickRefs.push(val);
-        }
-      }
-    });
-
-    // -------------------------------------------------------------------------
-    // Frontmatter field references (includes, template, agent, etc.)
-    // -------------------------------------------------------------------------
-    const fmRefFields = ["includes", "template", "agent", "extends", "inherits"];
-    for (const field of fmRefFields) {
-      const val = frontmatterData[field];
-      if (typeof val === "string" && isRelativePath(val)) {
-        importSpecifiers.push({ specifier: val, names: [] });
-      } else if (Array.isArray(val)) {
-        for (const item of val) {
-          if (typeof item === "string" && isRelativePath(item)) {
-            importSpecifiers.push({ specifier: item, names: [] });
-          }
-        }
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // Import specifiers from relative links
-    // -------------------------------------------------------------------------
-    for (const url of linkUrls) {
-      importSpecifiers.push({ specifier: url, names: [] });
-    }
-
-    // -------------------------------------------------------------------------
-    // Intra-file edges: doc:references for backtick references
-    // -------------------------------------------------------------------------
-    for (const ref of backtickRefs) {
-      intraFileEdges.push({
-        source_qualified: qualifiedName,
-        target_qualified: ref,
-        edge_type: "doc:references",
-        confidence: 0.6,
-      });
-    }
-
-    // doc:references for relative link targets (non-duplicate with importSpecifiers)
-    for (const url of linkUrls) {
-      intraFileEdges.push({
-        source_qualified: qualifiedName,
-        target_qualified: url,
-        edge_type: "doc:references",
-        confidence: 0.8,
-      });
-    }
-
-    return { entities, intraFileEdges, importSpecifiers };
+    return { entities: [entity], intraFileEdges, importSpecifiers };
   },
 };

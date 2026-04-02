@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks before module imports
@@ -43,7 +43,7 @@ vi.mock("node:child_process", () => ({
 // Import after mocks
 // ---------------------------------------------------------------------------
 
-import { gitExec, gitDiff, gitStatus, gitLog } from "../adapters/git-adapter.ts";
+import { gitDiff, gitExec, gitLog, gitStatus } from "../adapters/git-adapter.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;
@@ -264,15 +264,7 @@ describe("gitStatus — convenience wrapper", () => {
 describe("gitLog — convenience wrapper", () => {
   it("passes correct args for git log with file paths", () => {
     gitLog(["file1.ts", "file2.ts"], 5, "/project");
-    expect(spawnSyncCalls[0].args).toEqual([
-      "log",
-      "--oneline",
-      "-n",
-      "5",
-      "--",
-      "file1.ts",
-      "file2.ts",
-    ]);
+    expect(spawnSyncCalls[0].args).toEqual(["log", "--oneline", "-n", "5", "--", "file1.ts", "file2.ts"]);
   });
 
   it("calls spawnSync with 'git' as command", () => {

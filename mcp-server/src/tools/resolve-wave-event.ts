@@ -1,6 +1,6 @@
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { resolveEventAgents } from "../orchestration/wave-events.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 
 export interface ResolveWaveEventInput {
   workspace: string;
@@ -18,9 +18,7 @@ export interface ResolveWaveEventResult {
   pending_count: number;
 }
 
-export async function resolveWaveEvent(
-  input: ResolveWaveEventInput,
-): Promise<ResolveWaveEventResult> {
+export async function resolveWaveEvent(input: ResolveWaveEventInput): Promise<ResolveWaveEventResult> {
   // Validate: reject requires reason
   if (input.action === "reject" && !input.reason) {
     throw new Error("reason is required when action is reject");
@@ -62,10 +60,12 @@ export async function resolveWaveEvent(
   const pending = store.getWaveEvents({ status: "pending" });
 
   // Emit wave_event_resolved (best-effort — same pattern as inject-wave-event.ts)
-  const onWaveEventResolved = (
-    e: import("../orchestration/events.js").FlowEventMap["wave_event_resolved"],
-  ) => {
-    try { store.appendEvent("wave_event_resolved", e as Record<string, unknown>); } catch { /* best-effort */ }
+  const onWaveEventResolved = (e: import("../orchestration/events.js").FlowEventMap["wave_event_resolved"]) => {
+    try {
+      store.appendEvent("wave_event_resolved", e as Record<string, unknown>);
+    } catch {
+      /* best-effort */
+    }
   };
   flowEventBus.once("wave_event_resolved", onWaveEventResolved);
   try {

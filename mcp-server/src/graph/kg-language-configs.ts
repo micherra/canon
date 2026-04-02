@@ -118,22 +118,33 @@ export interface LanguageConfig {
 // Derived from kg-adapter-typescript.ts (typescript grammar only)
 // ---------------------------------------------------------------------------
 
+/** Collect the resolved name from a single named_import specifier. */
+function resolvedNameFromImportSpec(spec: SyntaxNode): string | null {
+  const aliasNode = spec.childForFieldName("alias");
+  const nameNode = spec.childForFieldName("name") ?? spec.namedChildren[0];
+  const resolved = aliasNode ?? nameNode;
+  return resolved ? resolved.text : null;
+}
+
 /** Collect import names from a TS import_clause node. */
 function collectTsImportNames(clause: SyntaxNode, names: string[]): void {
   for (const child of clause.namedChildren) {
     if (child.type === "identifier") {
       names.push(child.text);
     } else if (child.type === "named_imports") {
-      for (const spec of child.namedChildren) {
-        const aliasNode = spec.childForFieldName("alias");
-        const nameNode = spec.childForFieldName("name") ?? spec.namedChildren[0];
-        const resolved = aliasNode ?? nameNode;
-        if (resolved) names.push(resolved.text);
-      }
+      collectNamedImports(child, names);
     } else if (child.type === "namespace_import") {
       const nsName = child.namedChildren[0];
       if (nsName) names.push(`* as ${nsName.text}`);
     }
+  }
+}
+
+/** Collect names from a named_imports node (e.g. `{ foo, bar as baz }`). */
+function collectNamedImports(namedImportsNode: SyntaxNode, names: string[]): void {
+  for (const spec of namedImportsNode.namedChildren) {
+    const resolved = resolvedNameFromImportSpec(spec);
+    if (resolved) names.push(resolved);
   }
 }
 
@@ -277,6 +288,17 @@ function collectPyImportStatement(node: SyntaxNode, ctx: WalkerContext): void {
   }
 }
 
+/** Extract the imported name from a single Python import child node. */
+function pyImportChildName(child: SyntaxNode): string | null {
+  if (child.type === "wildcard_import") return "*";
+  if (child.type === "dotted_name") return child.text;
+  if (child.type === "aliased_import") {
+    const nameNode = child.childForFieldName("name");
+    return nameNode ? nameNode.text : null;
+  }
+  return null;
+}
+
 /** Collect specifiers from a Python `from foo import bar, baz` statement. */
 function collectPyImportFromStatement(node: SyntaxNode, ctx: WalkerContext): void {
   const moduleNode = node.childForFieldName("module_name");
@@ -285,14 +307,8 @@ function collectPyImportFromStatement(node: SyntaxNode, ctx: WalkerContext): voi
 
   for (const child of node.namedChildren) {
     if (child === moduleNode) continue;
-    if (child.type === "wildcard_import") {
-      names.push("*");
-    } else if (child.type === "dotted_name") {
-      names.push(child.text);
-    } else if (child.type === "aliased_import") {
-      const nameNode = child.childForFieldName("name");
-      if (nameNode) names.push(nameNode.text);
-    }
+    const name = pyImportChildName(child);
+    if (name) names.push(name);
   }
 
   if (specifier) {
@@ -451,6 +467,42 @@ const bashConfig: LanguageConfig = {
 };
 
 // ---------------------------------------------------------------------------
+// Java import helpers
+// ---------------------------------------------------------------------------
+
+/** Collect scoped_identifier, identifier, and asterisk parts from a Java import_declaration. */
+function collectJavaImportParts(node: SyntaxNode): string[] {
+  const parts: string[] = [];
+  for (const child of node.namedChildren) {
+    if (child.type === "scoped_identifier" || child.type === "identifier") {
+      parts.push(child.text);
+    } else if (child.type === "asterisk") {
+      parts.push("*");
+    }
+  }
+  return parts;
+}
+
+/** Split a dotted import path into { specifier, name } at the last dot. */
+function splitJavaImportPath(fullPath: string): { specifier: string; name: string } {
+  const lastDot = fullPath.lastIndexOf(".");
+  const specifier = lastDot >= 0 ? fullPath.slice(0, lastDot) : fullPath;
+  const name = lastDot >= 0 ? fullPath.slice(lastDot + 1) : fullPath;
+  return { specifier, name };
+}
+
+/** Fallback: parse a Java import from raw node text when no structured parts found. */
+function pushJavaImportFallback(node: SyntaxNode, ctx: WalkerContext): void {
+  const raw = node.text
+    .replace(/^import\s+/, "")
+    .replace(/;$/, "")
+    .trim();
+  if (!raw) return;
+  const { specifier, name } = splitJavaImportPath(raw);
+  ctx.importSpecifiers.push({ specifier, names: [name] });
+}
+
+// ---------------------------------------------------------------------------
 // Java config
 // ---------------------------------------------------------------------------
 
@@ -478,36 +530,15 @@ const javaConfig: LanguageConfig = {
     extractImport(node: SyntaxNode, ctx: WalkerContext): void {
       if (node.type !== "import_declaration") return;
 
-      // The scoped_identifier or asterisk child holds the import target
-      // tree-sitter-java: import_declaration children include the package path
-      const parts: string[] = [];
-      for (const child of node.namedChildren) {
-        if (child.type === "scoped_identifier" || child.type === "identifier") {
-          parts.push(child.text);
-        } else if (child.type === "asterisk") {
-          parts.push("*");
-        }
-      }
+      const parts = collectJavaImportParts(node);
 
       if (parts.length === 0) {
-        // Fallback: strip semicolon from raw text
-        const raw = node.text
-          .replace(/^import\s+/, "")
-          .replace(/;$/, "")
-          .trim();
-        if (raw) {
-          const lastDot = raw.lastIndexOf(".");
-          const specifier = lastDot >= 0 ? raw.slice(0, lastDot) : raw;
-          const name = lastDot >= 0 ? raw.slice(lastDot + 1) : raw;
-          ctx.importSpecifiers.push({ specifier, names: [name] });
-        }
+        pushJavaImportFallback(node, ctx);
         return;
       }
 
       const fullPath = parts.join(".");
-      const lastDot = fullPath.lastIndexOf(".");
-      const specifier = lastDot >= 0 ? fullPath.slice(0, lastDot) : fullPath;
-      const name = lastDot >= 0 ? fullPath.slice(lastDot + 1) : fullPath;
+      const { specifier, name } = splitJavaImportPath(fullPath);
       ctx.importSpecifiers.push({ specifier, names: [name] });
     },
 

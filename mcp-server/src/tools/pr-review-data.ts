@@ -1,15 +1,15 @@
-import { join } from "path";
-import { existsSync } from "fs";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { gitExecAsync } from "../adapters/git-adapter-async.ts";
 import { runShell } from "../adapters/process-adapter.ts";
-import { DriftStore } from "../drift/store.ts";
-import type { FilePriorityScore } from "../graph/priority.ts";
 import { CANON_DIR, CANON_FILES, LAYER_CENTRALITY } from "../constants.ts";
-import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
-import type { ReviewEntry } from "../schema.ts";
+import { DriftStore } from "../drift/store.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
+import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
-import { KgQuery, computeFileInsightMaps } from "../graph/kg-query.ts";
+import type { FilePriorityScore } from "../graph/priority.ts";
+import type { ReviewEntry } from "../schema.ts";
+import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
 import { sanitizeGitRef } from "../utils/git-ref.ts";
 
 export interface PrReviewDataInput {
@@ -77,9 +77,10 @@ export interface PrReviewDataOutput {
  *   worth-a-look:    priority_score >= 5 (but not needs-attention)
  *   low-risk:        everything else
  */
-export function classifyFile(
-  file: Omit<PrFileInfo, "bucket" | "reason">,
-): { bucket: PrFileInfo["bucket"]; reason: string } {
+export function classifyFile(file: Omit<PrFileInfo, "bucket" | "reason">): {
+  bucket: PrFileInfo["bucket"];
+  reason: string;
+} {
   const factors = file.priority_factors;
 
   // needs-attention: violations
@@ -117,6 +118,48 @@ export function classifyFile(
   };
 }
 
+/** Build the "top layer" sentence for the narrative. */
+function buildTopLayerSentence(layers: Array<{ name: string; file_count: number }>): string {
+  const topLayer = layers.length > 0 ? layers.reduce((a, b) => (b.file_count > a.file_count ? b : a)).name : "unknown";
+  const topLayerCount = layers.find((l) => l.name === topLayer)?.file_count ?? 0;
+  const layerDesc = topLayerCount === 1 ? `with ${topLayerCount} file changed` : `with ${topLayerCount} files changed`;
+  return `This PR primarily touches the ${topLayer} layer — ${layerDesc}.`;
+}
+
+/** Build the "totals" sentence for the narrative. */
+function buildTotalsSentence(fileCount: number, layerCount: number): string {
+  const layerWord = layerCount === 1 ? "layer" : "layers";
+  return `${fileCount} ${fileCount === 1 ? "file" : "files"} across ${layerCount} ${layerWord}.`;
+}
+
+/** Build the "most consequential file" sentence for the narrative. */
+function buildConsequentialSentence(files: Array<Omit<PrFileInfo, "bucket" | "reason">>): string {
+  let maxInDegree = -1;
+  let consequentialFile: string | undefined;
+  for (const f of files) {
+    const deg = f.priority_factors?.in_degree;
+    if (deg !== undefined && deg > maxInDegree) {
+      maxInDegree = deg;
+      consequentialFile = f.path;
+    }
+  }
+  if (consequentialFile === undefined || maxInDegree <= 0) return "";
+  const basename = consequentialFile.split("/").pop() ?? consequentialFile;
+  const depWord = maxInDegree === 1 ? "file depends" : "files depend";
+  return `The most consequential change is ${basename} (${maxInDegree} ${depWord} on it).`;
+}
+
+/** Build the "violations" sentence for the narrative. */
+function buildViolationSentence(files: Array<Omit<PrFileInfo, "bucket" | "reason">>): string {
+  let totalViolations = 0;
+  for (const f of files) {
+    totalViolations += f.priority_factors?.violation_count ?? f.violations?.length ?? 0;
+  }
+  if (totalViolations <= 0) return "";
+  const vWord = totalViolations === 1 ? "violation" : "violations";
+  return `There ${totalViolations === 1 ? "is" : "are"} ${totalViolations} principle ${vWord} to address.`;
+}
+
 /**
  * Generate a 3-4 sentence plain-English narrative summary for the PR.
  * Pure function — no side effects.
@@ -129,55 +172,12 @@ export function generateNarrative(
     return "This PR has no changed files.";
   }
 
-  // Determine top layer (most files)
-  const topLayer = layers.length > 0
-    ? layers.reduce((a, b) => (b.file_count > a.file_count ? b : a)).name
-    : "unknown";
-
-  // Sentence 1: top layer + description
-  const topLayerCount = layers.find((l) => l.name === topLayer)?.file_count ?? 0;
-  const layerDesc =
-    topLayerCount === 1
-      ? `with ${topLayerCount} file changed`
-      : `with ${topLayerCount} files changed`;
-  const sentence1 = `This PR primarily touches the ${topLayer} layer — ${layerDesc}.`;
-
-  // Sentence 2: totals
-  const totalFiles = files.length;
-  const layerCount = layers.length;
-  const layerWord = layerCount === 1 ? "layer" : "layers";
-  const sentence2 = `${totalFiles} ${totalFiles === 1 ? "file" : "files"} across ${layerCount} ${layerWord}.`;
-
-  // Find most consequential changed file (highest in_degree)
-  let sentence3 = "";
-  let maxInDegree = -1;
-  let consequentialFile: string | undefined;
-  for (const f of files) {
-    const deg = f.priority_factors?.in_degree;
-    if (deg !== undefined && deg > maxInDegree) {
-      maxInDegree = deg;
-      consequentialFile = f.path;
-    }
-  }
-  if (consequentialFile !== undefined && maxInDegree > 0) {
-    // Use the basename for readability in narrative
-    const basename = consequentialFile.split("/").pop() ?? consequentialFile;
-    const depWord = maxInDegree === 1 ? "file depends" : "files depend";
-    sentence3 = `The most consequential change is ${basename} (${maxInDegree} ${depWord} on it).`;
-  }
-
-  // Violation sentence: prefer KG-computed violation_count, fall back to DriftStore violations
-  let sentence4 = "";
-  let totalViolations = 0;
-  for (const f of files) {
-    totalViolations += f.priority_factors?.violation_count ?? f.violations?.length ?? 0;
-  }
-  if (totalViolations > 0) {
-    const vWord = totalViolations === 1 ? "violation" : "violations";
-    sentence4 = `There ${totalViolations === 1 ? "is" : "are"} ${totalViolations} principle ${vWord} to address.`;
-  }
-
-  return [sentence1, sentence2, sentence3, sentence4]
+  return [
+    buildTopLayerSentence(layers),
+    buildTotalsSentence(files.length, layers.length),
+    buildConsequentialSentence(files),
+    buildViolationSentence(files),
+  ]
     .filter(Boolean)
     .join(" ");
 }
@@ -192,9 +192,7 @@ export function generateNarrative(
  *
  * Violations accumulate across reviews — later reviews do not overwrite earlier ones.
  */
-export function buildFileViolationMap(
-  reviews: ReviewEntry[],
-): Map<string, PrViolation[]> {
+export function buildFileViolationMap(reviews: ReviewEntry[]): Map<string, PrViolation[]> {
   const map = new Map<string, PrViolation[]>();
 
   for (const review of reviews) {
@@ -220,161 +218,138 @@ export function buildFileViolationMap(
   return map;
 }
 
-/**
- * Get PR review data — file list grouped by layer with diff command.
- *
- * Runs the git diff command server-side, parses the output, infers layers,
- * and merges priority scores from graph data. The caller (UI) gets everything
- * in one call.
- */
-export async function getPrReviewData(
-  input: PrReviewDataInput,
-  projectDir: string
-): Promise<PrReviewDataOutput> {
-  const driftStore = new DriftStore(projectDir);
-
-  // Determine whether this is a gh pr diff (name-only) or git diff (name-status)
-  const isPrNumberMode = input.pr_number !== undefined;
-
-  // Build structured command — never string-split later
-  let diffCmd: DiffCommand;
-  if (isPrNumberMode) {
-    if (!Number.isInteger(input.pr_number) || input.pr_number! <= 0) {
+/** Build the diff command from input parameters. */
+function buildDiffCommand(input: PrReviewDataInput): DiffCommand {
+  if (input.pr_number !== undefined) {
+    if (!Number.isInteger(input.pr_number) || input.pr_number <= 0) {
       throw new Error("pr_number must be a positive integer");
     }
-    diffCmd = { cmd: "gh", args: ["pr", "diff", String(input.pr_number), "--name-only"] };
-  } else if (input.branch) {
+    return { cmd: "gh", args: ["pr", "diff", String(input.pr_number), "--name-only"] };
+  }
+  if (input.branch) {
     const base = sanitizeGitRef(input.diff_base || "main");
     const branch = sanitizeGitRef(input.branch);
-    diffCmd = { cmd: "git", args: ["diff", `${base}..${branch}`, "--name-status"] };
-  } else {
-    const base = sanitizeGitRef(input.diff_base || "main");
-    diffCmd = { cmd: "git", args: ["diff", `${base}..HEAD`, "--name-status"] };
+    return { cmd: "git", args: ["diff", `${base}..${branch}`, "--name-status"] };
   }
+  const base = sanitizeGitRef(input.diff_base || "main");
+  return { cmd: "git", args: ["diff", `${base}..HEAD`, "--name-status"] };
+}
 
-  // Check for incremental review
-  let lastReviewedSha: string | undefined;
-  if (input.incremental && input.pr_number !== undefined) {
-    const lastReview = await driftStore.getLastReviewForPr(input.pr_number);
-    if (lastReview?.last_reviewed_sha) {
-      lastReviewedSha = sanitizeGitRef(lastReview.last_reviewed_sha);
-      diffCmd = { cmd: "git", args: ["diff", `${lastReviewedSha}..HEAD`, "--name-status"] };
-    }
+/** Check for incremental review and override the diff command if applicable. */
+async function resolveIncrementalDiff(
+  input: PrReviewDataInput,
+  driftStore: DriftStore,
+  diffCmd: DiffCommand,
+): Promise<{ diffCmd: DiffCommand; lastReviewedSha: string | undefined }> {
+  if (!input.incremental || input.pr_number === undefined) {
+    return { diffCmd, lastReviewedSha: undefined };
   }
+  const lastReview = await driftStore.getLastReviewForPr(input.pr_number);
+  if (!lastReview?.last_reviewed_sha) {
+    return { diffCmd, lastReviewedSha: undefined };
+  }
+  const sha = sanitizeGitRef(lastReview.last_reviewed_sha);
+  return {
+    diffCmd: { cmd: "git", args: ["diff", `${sha}..HEAD`, "--name-status"] },
+    lastReviewedSha: sha,
+  };
+}
 
-  // Human-readable command string for display
-  const diffCommand = `${diffCmd.cmd} ${diffCmd.args.join(" ")}`;
-
-  // Open KG DB once for priority enrichment, freshness, and blast radius
-  let kgFreshnessMs: number | undefined;
-  const priorityMap = new Map<string, FilePriorityScore>();
+/** Open the KG database and read freshness. Returns db handle or undefined. */
+function openKgDatabase(projectDir: string): {
+  kgDb: ReturnType<typeof initDatabase> | undefined;
+  kgFreshnessMs: number | undefined;
+} {
   const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-  let kgDb: ReturnType<typeof initDatabase> | undefined;
-  if (existsSync(kgDbPath)) {
-    try {
-      kgDb = initDatabase(kgDbPath);
-      const query = new KgQuery(kgDb);
-
-      // Freshness: age of oldest indexed file
-      const freshness = query.getKgFreshnessMs();
-      if (freshness !== null) kgFreshnessMs = freshness;
-
-      // Priority scoring: get all files with degrees, compute scores
-      // Note: changed files come from the diff (not stored in DB)
-      // We'll re-populate after parsing the diff — store the query instance for later
-    } catch {
-      // KG unavailable — skip priority enrichment and freshness
-      if (kgDb) {
-        kgDb.close();
-      }
-      kgDb = undefined;
-    }
+  if (!existsSync(kgDbPath)) {
+    return { kgDb: undefined, kgFreshnessMs: undefined };
   }
-
-  // Load layer inferrer
-  const layerMappings = await loadLayerMappings(projectDir);
-  const inferLayer = buildLayerInferrer(layerMappings);
-
-  // Run the diff command and parse the output
-  let files: PrFileInfo[] = [];
-  let execError: string | undefined;
-
   try {
-    const stdout = await runDiffCommand(diffCmd, projectDir);
-    // Parse without priority map first — we need the changed file set to build priorities
-    files = parseDiffOutput(stdout, isPrNumberMode, inferLayer, new Map());
-  } catch (err) {
-    execError = err instanceof Error ? err.message : String(err);
+    const kgDb = initDatabase(kgDbPath);
+    const query = new KgQuery(kgDb);
+    const freshness = query.getKgFreshnessMs();
+    return { kgDb, kgFreshnessMs: freshness ?? undefined };
+  } catch {
+    return { kgDb: undefined, kgFreshnessMs: undefined };
   }
+}
 
-  // Priority scoring from KG: now that we have the diff file list, we know which are changed
-  if (kgDb) {
-    try {
-      const query = new KgQuery(kgDb);
-      const changedPaths = new Set(files.map(f => f.path));
-      const allFiles = query.getAllFilesWithStats();
-      const degreeMap = query.getAllFileDegrees();
-      const insightMaps = computeFileInsightMaps(kgDb);
+/** Compute a single priority entry from a KG file row. */
+function computeFilePriority(
+  path: string,
+  layer: string,
+  degrees: { in_degree: number; out_degree: number },
+  violationCount: number,
+  isChanged: boolean,
+): FilePriorityScore {
+  const layerCentrality = LAYER_CENTRALITY[layer] ?? 0;
+  const score = degrees.in_degree * 3 + violationCount * 2 + (isChanged ? 1 : 0) + layerCentrality;
+  return {
+    path,
+    priority_score: Math.round(score * 100) / 100,
+    factors: {
+      in_degree: degrees.in_degree,
+      violation_count: violationCount,
+      is_changed: isChanged,
+      layer,
+      layer_centrality: layerCentrality,
+    },
+  };
+}
 
-      for (const fileRow of allFiles) {
-        const fileId = fileRow.file_id;
-        if (fileId == null) continue;
-        const degrees = degreeMap.get(fileId) ?? { in_degree: 0, out_degree: 0 };
-        const path = fileRow.path;
-        const layer = fileRow.layer ?? "unknown";
-        const isChanged = changedPaths.has(path);
-        const layerViolations = insightMaps.layerViolationsByPath.get(path) ?? [];
-        const violationCount = layerViolations.length;
+/** Enrich files with KG priority data. Mutates the files array. */
+function enrichWithKgPriorities(files: PrFileInfo[], kgDb: ReturnType<typeof initDatabase>): void {
+  try {
+    const query = new KgQuery(kgDb);
+    const changedPaths = new Set(files.map((f) => f.path));
+    const allFiles = query.getAllFilesWithStats();
+    const degreeMap = query.getAllFileDegrees();
+    const insightMaps = computeFileInsightMaps(kgDb);
 
-        // Compute priority score using the same formula as computeFilePriorities:
-        // score = (in_degree × 3) + (violation_count × 2) + (changed ? 1 : 0) + layer_centrality
-        const layerCentrality = LAYER_CENTRALITY[layer] ?? 0;
-        const score = degrees.in_degree * 3 + violationCount * 2 + (isChanged ? 1 : 0) + layerCentrality;
-
-        priorityMap.set(path, {
-          path,
-          priority_score: Math.round(score * 100) / 100,
-          factors: {
-            in_degree: degrees.in_degree,
-            violation_count: violationCount,
-            is_changed: isChanged,
-            layer,
-            layer_centrality: layerCentrality,
-          },
-        });
-      }
-
-      // Merge priority data into the parsed file entries
-      for (const file of files) {
-        const priority = priorityMap.get(file.path);
-        if (priority) {
-          file.priority_score = priority.priority_score;
-          file.priority_factors = priority.factors;
-        }
-      }
-    } catch {
-      // Priority computation failed — continue without priority data
+    const priorityMap = new Map<string, FilePriorityScore>();
+    for (const fileRow of allFiles) {
+      const fileId = fileRow.file_id;
+      if (fileId == null) continue;
+      const degrees = degreeMap.get(fileId) ?? { in_degree: 0, out_degree: 0 };
+      const path = fileRow.path;
+      const layer = fileRow.layer ?? "unknown";
+      const isChanged = changedPaths.has(path);
+      const layerViolations = insightMaps.layerViolationsByPath.get(path) ?? [];
+      priorityMap.set(path, computeFilePriority(path, layer, degrees, layerViolations.length, isChanged));
     }
-  }
 
-  // Build layer grouping
+    for (const file of files) {
+      const priority = priorityMap.get(file.path);
+      if (priority) {
+        file.priority_score = priority.priority_score;
+        file.priority_factors = priority.factors;
+      }
+    }
+  } catch {
+    // Priority computation failed — continue without priority data
+  }
+}
+
+/** Build layer grouping from file list. */
+function buildLayerGroups(files: PrFileInfo[]): Array<{ name: string; file_count: number }> {
   const layerCounts = new Map<string, number>();
   for (const f of files) {
     layerCounts.set(f.layer, (layerCounts.get(f.layer) || 0) + 1);
   }
-  const layers = Array.from(layerCounts.entries()).map(([name, file_count]) => ({
-    name,
-    file_count,
-  }));
+  return Array.from(layerCounts.entries()).map(([name, file_count]) => ({ name, file_count }));
+}
 
-  // Classify each file into a bucket with a human-readable reason
+/** Classify files into buckets and attach violations. Mutates the files array. */
+function classifyAndAttachBuckets(files: PrFileInfo[]): void {
   for (const file of files) {
     const { bucket, reason } = classifyFile(file);
     file.bucket = bucket;
     file.reason = reason;
   }
+}
 
-  // Attach per-file violations from DriftStore general reviews
+/** Attach per-file violations from DriftStore. Mutates the files array. */
+async function attachDriftViolations(files: PrFileInfo[], driftStore: DriftStore): Promise<void> {
   try {
     const reviews = await driftStore.getReviews();
     const fileViolationMap = buildFileViolationMap(reviews);
@@ -382,47 +357,36 @@ export async function getPrReviewData(
       file.violations = fileViolationMap.get(file.path) ?? [];
     }
   } catch {
-    // DriftStore unavailable — violations skipped, each file gets empty array
     for (const file of files) {
       file.violations = [];
     }
   }
+}
 
-  // Generate plain-English narrative
-  const narrative = generateNarrative(files, layers);
-
-  // Compute blast radius from KG only — no JSON fallback
-  let blastRadius: BlastRadiusEntry[] = [];
-  if (kgDb) {
-    try {
-      blastRadius = computeBlastRadiusFromKg(files, kgDb);
-    } catch {
-      // KG blast radius failed — return empty
-    }
-  }
-
-  // Split files: lightweight summaries for clustering, full entries only for impactful files
-  const fileSummaries: PrFileSummary[] = files.map(f => ({
+/** Build the final output object from processed files. */
+function buildOutput(
+  files: PrFileInfo[],
+  layers: Array<{ name: string; file_count: number }>,
+  narrative: string,
+  blastRadius: BlastRadiusEntry[],
+  lastReviewedSha: string | undefined,
+  diffCommand: string,
+  kgFreshnessMs: number | undefined,
+  execError: string | undefined,
+): PrReviewDataOutput {
+  const fileSummaries: PrFileSummary[] = files.map((f) => ({
     path: f.path,
     layer: f.layer,
     status: f.status,
   }));
 
-  const impactFiles = files.filter(f =>
-    f.bucket === "needs-attention" ||
-    (f.priority_score ?? 0) >= 15 ||
-    (f.violations && f.violations.length > 0),
+  const impactFiles = files.filter(
+    (f) => f.bucket === "needs-attention" || (f.priority_score ?? 0) >= 15 || (f.violations && f.violations.length > 0),
   );
 
-  // Pre-compute aggregates so the UI doesn't need the full list
-  const totalViolations = files.reduce(
-    (sum, f) => sum + (f.violations?.length ?? 0), 0,
-  );
-  const added = files.filter(f => f.status === "added").length;
-  const deleted = files.filter(f => f.status === "deleted").length;
-
-  // Close KG DB
-  kgDb?.close();
+  const totalViolations = files.reduce((sum, f) => sum + (f.violations?.length ?? 0), 0);
+  const added = files.filter((f) => f.status === "added").length;
+  const deleted = files.filter((f) => f.status === "deleted").length;
 
   return {
     files: fileSummaries,
@@ -442,25 +406,73 @@ export async function getPrReviewData(
 }
 
 /**
+ * Get PR review data — file list grouped by layer with diff command.
+ *
+ * Runs the git diff command server-side, parses the output, infers layers,
+ * and merges priority scores from graph data. The caller (UI) gets everything
+ * in one call.
+ */
+export async function getPrReviewData(input: PrReviewDataInput, projectDir: string): Promise<PrReviewDataOutput> {
+  const driftStore = new DriftStore(projectDir);
+  const isPrNumberMode = input.pr_number !== undefined;
+
+  let diffCmd = buildDiffCommand(input);
+  const incremental = await resolveIncrementalDiff(input, driftStore, diffCmd);
+  diffCmd = incremental.diffCmd;
+  const lastReviewedSha = incremental.lastReviewedSha;
+
+  const diffCommand = `${diffCmd.cmd} ${diffCmd.args.join(" ")}`;
+  const { kgDb, kgFreshnessMs } = openKgDatabase(projectDir);
+
+  const layerMappings = await loadLayerMappings(projectDir);
+  const inferLayer = buildLayerInferrer(layerMappings);
+
+  let files: PrFileInfo[] = [];
+  let execError: string | undefined;
+  try {
+    const stdout = await runDiffCommand(diffCmd, projectDir);
+    files = parseDiffOutput(stdout, isPrNumberMode, inferLayer, new Map());
+  } catch (err) {
+    execError = err instanceof Error ? err.message : String(err);
+  }
+
+  if (kgDb) {
+    enrichWithKgPriorities(files, kgDb);
+  }
+
+  const layers = buildLayerGroups(files);
+  classifyAndAttachBuckets(files);
+  await attachDriftViolations(files, driftStore);
+
+  const narrative = generateNarrative(files, layers);
+
+  let blastRadius: BlastRadiusEntry[] = [];
+  if (kgDb) {
+    try {
+      blastRadius = computeBlastRadiusFromKg(files, kgDb);
+    } catch {
+      // KG blast radius failed — return empty
+    }
+  }
+
+  kgDb?.close();
+
+  return buildOutput(files, layers, narrative, blastRadius, lastReviewedSha, diffCommand, kgFreshnessMs, execError);
+}
+
+/**
  * Compute blast radius for top high-impact changed files using the KG database.
  * Uses `computeUnifiedBlastRadius()` and converts to the `BlastRadiusEntry` format
  * for backward compatibility with the PR output shape.
  * Takes top 2-3 files by in_degree (minimum threshold: 3).
  */
-function computeBlastRadiusFromKg(
-  files: PrFileInfo[],
-  db: ReturnType<typeof initDatabase>,
-): BlastRadiusEntry[] {
+function computeBlastRadiusFromKg(files: PrFileInfo[], db: ReturnType<typeof initDatabase>): BlastRadiusEntry[] {
   const IN_DEGREE_THRESHOLD = 3;
   const MAX_SEEDS = 3;
   const MAX_AFFECTED_PER_SEED = 10;
 
   const candidates = files
-    .filter(
-      (f) =>
-        f.priority_factors?.is_changed &&
-        (f.priority_factors?.in_degree ?? 0) >= IN_DEGREE_THRESHOLD,
-    )
+    .filter((f) => f.priority_factors?.is_changed && (f.priority_factors?.in_degree ?? 0) >= IN_DEGREE_THRESHOLD)
     .sort((a, b) => (b.priority_factors?.in_degree ?? 0) - (a.priority_factors?.in_degree ?? 0))
     .slice(0, MAX_SEEDS);
 
@@ -468,9 +480,7 @@ function computeBlastRadiusFromKg(
 
   return candidates.map((seed) => {
     const report = computeUnifiedBlastRadius(db, seed.path, { maxDepth: 1 });
-    const affected = report.affected
-      .slice(0, MAX_AFFECTED_PER_SEED)
-      .map((f) => ({ path: f.path, depth: f.depth }));
+    const affected = report.affected.slice(0, MAX_AFFECTED_PER_SEED).map((f) => ({ path: f.path, depth: f.depth }));
     return { file: seed.path, affected };
   });
 }
@@ -508,9 +518,12 @@ type StatusLetter = "A" | "M" | "D" | "R" | string;
 function mapStatus(letter: StatusLetter): PrFileInfo["status"] {
   if (letter.startsWith("R")) return "renamed";
   switch (letter) {
-    case "A": return "added";
-    case "D": return "deleted";
-    default: return "modified";
+    case "A":
+      return "added";
+    case "D":
+      return "deleted";
+    default:
+      return "modified";
   }
 }
 
@@ -529,7 +542,10 @@ function parseDiffOutput(
   inferLayer: (path: string) => string,
   priorityMap: Map<string, FilePriorityScore>,
 ): PrFileInfo[] {
-  const lines = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+  const lines = stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
   const results: PrFileInfo[] = [];
 
   for (const line of lines) {
@@ -565,4 +581,3 @@ function parseDiffOutput(
 
   return results;
 }
-

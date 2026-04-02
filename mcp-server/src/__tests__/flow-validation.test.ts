@@ -13,17 +13,16 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  analyzeReachability,
+  checkUnresolvedRefs,
   loadAndResolveFlow,
   validateFlow,
   validateSpawnCoverage,
-  analyzeReachability,
-  checkUnresolvedRefs,
 } from "../orchestration/flow-parser.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
+const testDir = dirname(fileURLToPath(import.meta.url));
+const pluginDir = resolve(testDir, "../../.."); // mcp-server/src/__tests__ → project root
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -333,7 +332,9 @@ describe("validateFlow — new passes", () => {
     });
     // analyzeReachability returns warnings — they appear in validateFlow output
     const result = validateFlow(flow);
-    const hasReachabilityWarning = result.some((msg) => msg.includes("ghost") && msg.toLowerCase().includes("unreachable"));
+    const hasReachabilityWarning = result.some(
+      (msg) => msg.includes("ghost") && msg.toLowerCase().includes("unreachable"),
+    );
     expect(hasReachabilityWarning).toBe(true);
   });
 

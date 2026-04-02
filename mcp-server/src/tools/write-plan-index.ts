@@ -1,6 +1,6 @@
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 export interface WritePlanIndexInput {
   workspace: string;
@@ -23,30 +23,19 @@ export interface WritePlanIndexResult {
 const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]*$/;
 
-export async function writePlanIndex(
-  input: WritePlanIndexInput,
-): Promise<ToolResult<WritePlanIndexResult>> {
+export async function writePlanIndex(input: WritePlanIndexInput): Promise<ToolResult<WritePlanIndexResult>> {
   // Validate slug (path traversal prevention)
   if (!SLUG_PATTERN.test(input.slug)) {
-    return toolError(
-      "INVALID_INPUT",
-      `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]*$/`,
-    );
+    return toolError("INVALID_INPUT", `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]*$/`);
   }
 
   // Validate task IDs and wave numbers
   for (const task of input.tasks) {
     if (!TASK_ID_PATTERN.test(task.task_id)) {
-      return toolError(
-        "INVALID_INPUT",
-        `Invalid task_id "${task.task_id}": must match /^[a-zA-Z0-9_-]+$/`,
-      );
+      return toolError("INVALID_INPUT", `Invalid task_id "${task.task_id}": must match /^[a-zA-Z0-9_-]+$/`);
     }
     if (task.wave < 1) {
-      return toolError(
-        "INVALID_INPUT",
-        `Task "${task.task_id}" has invalid wave ${task.wave}: must be >= 1`,
-      );
+      return toolError("INVALID_INPUT", `Task "${task.task_id}" has invalid wave ${task.wave}: must be >= 1`);
     }
   }
 
@@ -54,10 +43,7 @@ export async function writePlanIndex(
   const ids = input.tasks.map((t) => t.task_id);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
   if (dupes.length > 0) {
-    return toolError(
-      "INVALID_INPUT",
-      `Duplicate task IDs: ${[...new Set(dupes)].join(", ")}`,
-    );
+    return toolError("INVALID_INPUT", `Duplicate task IDs: ${[...new Set(dupes)].join(", ")}`);
   }
 
   // Build normalized markdown table

@@ -106,12 +106,9 @@ function getSchemaKeys(inputSchema: unknown): string[] | null {
   if (entries.length === 0) return [];
 
   // Check if it looks like a raw shape (all values are Zod schemas)
-  const isRawShape = entries.every(
-    ([, v]) =>
-      typeof v === "object" &&
-      v !== null &&
-      ((v as { _def?: unknown })._def !== undefined || typeof (v as { parse?: unknown }).parse === "function"),
-  );
+  const looksLikeZodSchema = (v: unknown): boolean =>
+    typeof v === "object" && v !== null && ("_def" in v || typeof (v as { parse?: unknown }).parse === "function");
+  const isRawShape = entries.every(([, v]) => looksLikeZodSchema(v));
   if (isRawShape) {
     return entries.map(([k]) => k);
   }

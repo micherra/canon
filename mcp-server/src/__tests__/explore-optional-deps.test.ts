@@ -14,9 +14,8 @@ import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { RoleEntry } from "../orchestration/flow-schema.ts";
 import { isRoleOptional } from "../orchestration/transitions.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
+const testDir = dirname(fileURLToPath(import.meta.url));
+const pluginDir = resolve(testDir, "../../.."); // mcp-server/src/__tests__ → project root
 
 // ---------------------------------------------------------------------------
 // Parse explore.md and verify role structure

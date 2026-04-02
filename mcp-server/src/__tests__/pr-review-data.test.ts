@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -293,10 +293,31 @@ describe("getPrReviewData — priority score merging", () => {
     const store = new KgStore(db);
 
     // Insert files — pr-review-data.ts has in_degree=1 (scanner imports it)
-    const prFile = store.upsertFile({ path: "src/tools/pr-review-data.ts", mtime_ms: Date.now(), content_hash: "a", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
-    const scannerFile = store.upsertFile({ path: "src/graph/scanner.ts", mtime_ms: Date.now(), content_hash: "b", language: "typescript", layer: "graph", last_indexed_at: Date.now() });
+    const prFile = store.upsertFile({
+      path: "src/tools/pr-review-data.ts",
+      mtime_ms: Date.now(),
+      content_hash: "a",
+      language: "typescript",
+      layer: "tools",
+      last_indexed_at: Date.now(),
+    });
+    const scannerFile = store.upsertFile({
+      path: "src/graph/scanner.ts",
+      mtime_ms: Date.now(),
+      content_hash: "b",
+      language: "typescript",
+      layer: "graph",
+      last_indexed_at: Date.now(),
+    });
     // scanner imports pr-review-data → pr-review-data has in_degree=1
-    store.insertFileEdge({ source_file_id: scannerFile.file_id!, target_file_id: prFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+    store.insertFileEdge({
+      source_file_id: scannerFile.file_id!,
+      target_file_id: prFile.file_id!,
+      edge_type: "imports",
+      confidence: 1.0,
+      evidence: null,
+      relation: null,
+    });
     db.close();
 
     const output = ["M\tsrc/tools/pr-review-data.ts", "M\tsrc/graph/scanner.ts"].join("\n");
@@ -597,12 +618,47 @@ describe("getPrReviewData — blast radius from KG", () => {
     const store = new KgStore(db);
 
     // handler.ts is imported by 3 service files (in_degree=3, meets blast radius threshold)
-    const handler = store.upsertFile({ path: "src/api/handler.ts", mtime_ms: Date.now(), content_hash: "h", language: "typescript", layer: "api", last_indexed_at: Date.now() });
-    const svc1 = store.upsertFile({ path: "src/services/svc1.ts", mtime_ms: Date.now(), content_hash: "s1", language: "typescript", layer: "services", last_indexed_at: Date.now() });
-    const svc2 = store.upsertFile({ path: "src/services/svc2.ts", mtime_ms: Date.now(), content_hash: "s2", language: "typescript", layer: "services", last_indexed_at: Date.now() });
-    const svc3 = store.upsertFile({ path: "src/services/svc3.ts", mtime_ms: Date.now(), content_hash: "s3", language: "typescript", layer: "services", last_indexed_at: Date.now() });
+    const handler = store.upsertFile({
+      path: "src/api/handler.ts",
+      mtime_ms: Date.now(),
+      content_hash: "h",
+      language: "typescript",
+      layer: "api",
+      last_indexed_at: Date.now(),
+    });
+    const svc1 = store.upsertFile({
+      path: "src/services/svc1.ts",
+      mtime_ms: Date.now(),
+      content_hash: "s1",
+      language: "typescript",
+      layer: "services",
+      last_indexed_at: Date.now(),
+    });
+    const svc2 = store.upsertFile({
+      path: "src/services/svc2.ts",
+      mtime_ms: Date.now(),
+      content_hash: "s2",
+      language: "typescript",
+      layer: "services",
+      last_indexed_at: Date.now(),
+    });
+    const svc3 = store.upsertFile({
+      path: "src/services/svc3.ts",
+      mtime_ms: Date.now(),
+      content_hash: "s3",
+      language: "typescript",
+      layer: "services",
+      last_indexed_at: Date.now(),
+    });
     for (const svc of [svc1, svc2, svc3]) {
-      store.insertFileEdge({ source_file_id: svc.file_id!, target_file_id: handler.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+      store.insertFileEdge({
+        source_file_id: svc.file_id!,
+        target_file_id: handler.file_id!,
+        edge_type: "imports",
+        confidence: 1.0,
+        evidence: null,
+        relation: null,
+      });
     }
     db.close();
 

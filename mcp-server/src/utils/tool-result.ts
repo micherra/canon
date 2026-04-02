@@ -20,12 +20,12 @@ export interface CanonToolError {
 export type ToolResult<T> = ({ ok: true } & T) | CanonToolError;
 
 export function toolError(
-  error_code: CanonErrorCode,
+  errorCode: CanonErrorCode,
   message: string,
   recoverable = false,
   context?: Record<string, unknown>,
 ): CanonToolError {
-  return { ok: false, error_code, message, recoverable, context };
+  return { ok: false, error_code: errorCode, message, recoverable, context };
 }
 
 export function toolOk<T extends Record<string, unknown>>(data: T): { ok: true } & T {

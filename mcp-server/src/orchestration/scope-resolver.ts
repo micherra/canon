@@ -93,7 +93,7 @@ function resolveFromBoardArtifacts(board: Board, stateId: string, workspace: str
     try {
       // Guard: reject artifact paths that escape the workspace root
       const resolvedArtifact = resolve(artifactFile);
-      if (!resolvedArtifact.startsWith(resolvedWorkspace + "/") && resolvedArtifact !== resolvedWorkspace) {
+      if (!resolvedArtifact.startsWith(`${resolvedWorkspace}/`) && resolvedArtifact !== resolvedWorkspace) {
         continue;
       }
 
@@ -119,11 +119,7 @@ function resolveFromBoardArtifacts(board: Board, stateId: string, workspace: str
  * Uses simple regex parsing (no gray-matter dependency).
  * Returns deduplicated paths.
  */
-function resolveFromTaskPlan(
-  workspace: string,
-  planSlug: string,
-  taskId: string,
-): string[] {
+function resolveFromTaskPlan(workspace: string, planSlug: string, taskId: string): string[] {
   const planPath = join(workspace, "plans", planSlug, `${taskId}-PLAN.md`);
 
   try {

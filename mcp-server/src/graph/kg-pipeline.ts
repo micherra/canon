@@ -21,8 +21,8 @@ import { getAdapter, getLanguage } from "./kg-adapter-registry.ts";
 import { EmbeddingService } from "./kg-embedding.ts";
 import { initDatabase } from "./kg-schema.ts";
 import { KgStore } from "./kg-store.ts";
-import { KgVectorStore } from "./kg-vector-store.ts";
 import type { AdapterResult, EdgeType, EntityRow } from "./kg-types.ts";
+import { KgVectorStore } from "./kg-vector-store.ts";
 import { initParsers } from "./kg-wasm-parser.ts";
 import { scanSourceFiles } from "./scanner.ts";
 
@@ -404,11 +404,7 @@ async function runEmbedPhase(
       const store = new KgStore(db);
       store.transaction(() => {
         for (let i = 0; i < staleEntities.length; i++) {
-          vectorStore.upsertEntityVector(
-            staleEntities[i].entity_id,
-            embeddings[i],
-            staleEntities[i].current_hash,
-          );
+          vectorStore.upsertEntityVector(staleEntities[i].entity_id, embeddings[i], staleEntities[i].current_hash);
         }
       });
     }
@@ -421,11 +417,7 @@ async function runEmbedPhase(
       const store = new KgStore(db);
       store.transaction(() => {
         for (let i = 0; i < staleSummaries.length; i++) {
-          vectorStore.upsertSummaryVector(
-            staleSummaries[i].summary_id,
-            embeddings[i],
-            staleSummaries[i].current_hash,
-          );
+          vectorStore.upsertSummaryVector(staleSummaries[i].summary_id, embeddings[i], staleSummaries[i].current_hash);
         }
       });
     }

@@ -7,13 +7,13 @@
  */
 
 import type Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { EMBEDDING_MODEL_ID } from "../constants.ts";
-import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import type { EntityRow } from "../graph/kg-types.ts";
+import { KgVectorQuery } from "../graph/kg-vector-query.ts";
+import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { MockEmbeddingService, randomEmbedding } from "./embedding-test-helpers.ts";
 
 // ---------------------------------------------------------------------------
@@ -127,9 +127,9 @@ describe("KgVectorStore upsertEntityVector", () => {
     vectorStore.upsertEntityVector(entityId, embedding, hash);
 
     // Verify meta row was inserted
-    const meta = db
-      .prepare("SELECT * FROM entity_vector_meta WHERE entity_id = ?")
-      .get(entityId) as { text_hash: string; model_id: string } | undefined;
+    const meta = db.prepare("SELECT * FROM entity_vector_meta WHERE entity_id = ?").get(entityId) as
+      | { text_hash: string; model_id: string }
+      | undefined;
     expect(meta).toBeDefined();
     expect(meta!.text_hash).toBe(hash);
     expect(meta!.model_id).toBe(EMBEDDING_MODEL_ID);
@@ -145,9 +145,9 @@ describe("KgVectorStore upsertEntityVector", () => {
     vectorStore.upsertEntityVector(entityId, embedding1, hash1);
     vectorStore.upsertEntityVector(entityId, embedding2, hash2);
 
-    const meta = db
-      .prepare("SELECT * FROM entity_vector_meta WHERE entity_id = ?")
-      .get(entityId) as { text_hash: string } | undefined;
+    const meta = db.prepare("SELECT * FROM entity_vector_meta WHERE entity_id = ?").get(entityId) as
+      | { text_hash: string }
+      | undefined;
     expect(meta!.text_hash).toBe(hash2);
 
     // Only one vec row should exist
@@ -208,9 +208,9 @@ describe("KgVectorStore upsertSummaryVector", () => {
 
     vectorStore.upsertSummaryVector(summaryId, embedding, hash);
 
-    const meta = db
-      .prepare("SELECT * FROM summary_vector_meta WHERE summary_id = ?")
-      .get(summaryId) as { text_hash: string; model_id: string } | undefined;
+    const meta = db.prepare("SELECT * FROM summary_vector_meta WHERE summary_id = ?").get(summaryId) as
+      | { text_hash: string; model_id: string }
+      | undefined;
     expect(meta).toBeDefined();
     expect(meta!.text_hash).toBe(hash);
     expect(meta!.model_id).toBe(EMBEDDING_MODEL_ID);
@@ -289,9 +289,11 @@ describe("KgVectorStore.getStaleEntityVectors", () => {
 
   test("excludes already-embedded entities with matching hash and model", () => {
     const { entityId } = seedEntity(store, { kind: "function", signature: "function myFunc(): void" });
-    const { qualified_name, kind, signature } = store.getEntitiesByFile(
-      (db.prepare("SELECT file_id FROM entities WHERE entity_id = ?").get(entityId) as { file_id: number }).file_id,
-    ).find((e) => e.entity_id === entityId)!;
+    const { qualified_name, kind, signature } = store
+      .getEntitiesByFile(
+        (db.prepare("SELECT file_id FROM entities WHERE entity_id = ?").get(entityId) as { file_id: number }).file_id,
+      )
+      .find((e) => e.entity_id === entityId)!;
     const filePath = "src/A.ts";
     const compositeText = KgVectorStore.compositeEntityText({
       kind,
@@ -412,7 +414,7 @@ describe("KgVectorStore.cleanOrphanEntityVectors", () => {
   });
 
   test("removes vectors for deleted entities", () => {
-    const { entityId, fileId } = seedEntity(store, { kind: "function" });
+    const { entityId } = seedEntity(store, { kind: "function" });
     vectorStore.upsertEntityVector(entityId, randomEmbedding(1), "hash1");
 
     // Delete the entity (CASCADE removes entity_vector_meta but NOT entity_vectors)
@@ -532,6 +534,7 @@ describe("KgVectorQuery.semanticSearch", () => {
   test("returns entity results when scope=entities", async () => {
     seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::funcA", name: "funcA" }, 10);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("find a function", { scope: "entities" });
 
@@ -543,6 +546,7 @@ describe("KgVectorQuery.semanticSearch", () => {
   test("returns summary results when scope=summaries", async () => {
     seedSummaryWithVector("src/B.ts", "This file manages auth", 200);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("authentication", { scope: "summaries" });
 
@@ -555,6 +559,7 @@ describe("KgVectorQuery.semanticSearch", () => {
     seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::funcA", name: "funcA" }, 10);
     seedSummaryWithVector("src/C.ts", "Handles logging", 200);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("something", { scope: "both" });
 
@@ -568,6 +573,7 @@ describe("KgVectorQuery.semanticSearch", () => {
     seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::fn", name: "fn" }, 10);
     seedEntityWithVector({ kind: "class", qualified_name: "src/B.ts::Cls", name: "Cls" }, 20);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("code", { scope: "entities", kind_filter: ["function"] });
 
@@ -576,12 +582,10 @@ describe("KgVectorQuery.semanticSearch", () => {
 
   test("respects limit parameter", async () => {
     for (let i = 0; i < 5; i++) {
-      seedEntityWithVector(
-        { kind: "function", qualified_name: `src/F${i}.ts::fn${i}`, name: `fn${i}` },
-        i * 10,
-      );
+      seedEntityWithVector({ kind: "function", qualified_name: `src/F${i}.ts::fn${i}`, name: `fn${i}` }, i * 10);
     }
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("code", { limit: 3 });
     expect(results.length).toBeLessThanOrEqual(3);
@@ -590,6 +594,7 @@ describe("KgVectorQuery.semanticSearch", () => {
   test("applies threshold to filter by distance", async () => {
     seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::fn", name: "fn" }, 0);
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     // Very strict threshold — most random vectors won't be within 0.001
     const results = await query.semanticSearch("code", { threshold: 0.001 });
@@ -598,14 +603,9 @@ describe("KgVectorQuery.semanticSearch", () => {
   });
 
   test("deduplicates by entity_id (lower distance wins)", async () => {
-    const { entityId } = seedEntityWithVector(
-      { kind: "function", qualified_name: "src/A.ts::fn", name: "fn" },
-      0,
-    );
+    const { entityId } = seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::fn", name: "fn" }, 0);
     // Also seed a summary for the same entity
-    const fileRow = db
-      .prepare("SELECT file_id FROM entities WHERE entity_id = ?")
-      .get(entityId) as { file_id: number };
+    const fileRow = db.prepare("SELECT file_id FROM entities WHERE entity_id = ?").get(entityId) as { file_id: number };
     const summaryRow = store.upsertSummary({
       file_id: fileRow.file_id,
       entity_id: entityId,
@@ -621,6 +621,7 @@ describe("KgVectorQuery.semanticSearch", () => {
       KgVectorStore.textHash("Function summary"),
     );
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("code", { scope: "both" });
 
@@ -632,12 +633,10 @@ describe("KgVectorQuery.semanticSearch", () => {
 
   test("returns results sorted by distance (ascending)", async () => {
     for (let i = 0; i < 3; i++) {
-      seedEntityWithVector(
-        { kind: "function", qualified_name: `src/X${i}.ts::fn${i}`, name: `fn${i}` },
-        i * 7,
-      );
+      seedEntityWithVector({ kind: "function", qualified_name: `src/X${i}.ts::fn${i}`, name: `fn${i}` }, i * 7);
     }
 
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("code", { scope: "entities" });
 
@@ -647,6 +646,7 @@ describe("KgVectorQuery.semanticSearch", () => {
   });
 
   test("returns empty array when no vectors exist", async () => {
+    // biome-ignore lint/suspicious/noExplicitAny: partial mock for test
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("code");
     expect(results).toEqual([]);
@@ -720,8 +720,6 @@ describe("KgVectorStore integer validation guards", () => {
       updated_at: new Date().toISOString(),
     });
     // Should not throw
-    expect(() =>
-      vectorStore.upsertSummaryVector(summaryRow.summary_id!, randomEmbedding(0), "hash"),
-    ).not.toThrow();
+    expect(() => vectorStore.upsertSummaryVector(summaryRow.summary_id!, randomEmbedding(0), "hash")).not.toThrow();
   });
 });

@@ -15,7 +15,7 @@
  * All DB-bound tests use in-memory SQLite (:memory:).
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
@@ -28,10 +28,10 @@ import { runPipeline } from "../graph/kg-pipeline.ts";
 import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import type { EdgeType, EntityRow, FileRow } from "../graph/kg-types.ts";
+import type { EntityRow, FileRow } from "../graph/kg-types.ts";
 import { initParsers } from "../graph/kg-wasm-parser.ts";
-import { graphQuery } from "../tools/graph-query.ts";
 import { getFileContext } from "../tools/get-file-context.ts";
+import { graphQuery } from "../tools/graph-query.ts";
 import { storeSummaries } from "../tools/store-summaries.ts";
 
 // ---------------------------------------------------------------------------
@@ -582,11 +582,11 @@ describe("graphQuery tool dispatch", () => {
     return dbPath;
   }
 
-  test('throws when DB does not exist', () => {
-    const result = graphQuery({ query_type: 'search', target: 'funcA' }, projectDir);
+  test("throws when DB does not exist", () => {
+    const result = graphQuery({ query_type: "search", target: "funcA" }, projectDir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe('KG_NOT_INDEXED');
+      expect(result.error_code).toBe("KG_NOT_INDEXED");
       expect(result.recoverable).toBe(true);
       expect(result.message).toMatch(/knowledge graph database not found/i);
     }
@@ -594,9 +594,9 @@ describe("graphQuery tool dispatch", () => {
 
   test("search query returns matching entities", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'search', target: 'funcA' }, projectDir);
+    const result = graphQuery({ query_type: "search", target: "funcA" }, projectDir);
     if (!result.ok) throw new Error(result.message);
-    expect(result.query_type).toBe('search');
+    expect(result.query_type).toBe("search");
     expect(result.count).toBeGreaterThanOrEqual(1);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
     expect(names).toContain("funcA");
@@ -604,9 +604,9 @@ describe("graphQuery tool dispatch", () => {
 
   test("dead_code query returns unexported unreferenced entities", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'dead_code' }, projectDir);
+    const result = graphQuery({ query_type: "dead_code" }, projectDir);
     if (!result.ok) throw new Error(result.message);
-    expect(result.query_type).toBe('dead_code');
+    expect(result.query_type).toBe("dead_code");
     expect(result.count).toBeGreaterThanOrEqual(1);
     // funcD is dead code
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -615,7 +615,7 @@ describe("graphQuery tool dispatch", () => {
 
   test("callers query returns callers of funcB", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'callers', target: 'funcB' }, projectDir);
+    const result = graphQuery({ query_type: "callers", target: "funcB" }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.count).toBeGreaterThanOrEqual(1);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -624,7 +624,7 @@ describe("graphQuery tool dispatch", () => {
 
   test("callees query returns callees of funcA", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'callees', target: 'funcA' }, projectDir);
+    const result = graphQuery({ query_type: "callees", target: "funcA" }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.count).toBeGreaterThanOrEqual(1);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -634,7 +634,7 @@ describe("graphQuery tool dispatch", () => {
   test("blast_radius query returns reachable entities", () => {
     seedDb(projectDir);
     // seed = funcC (funcB calls funcC, funcA calls funcB); reverse blast radius includes funcB and funcA
-    const result = graphQuery({ query_type: 'blast_radius', target: 'funcC', options: { max_depth: 3 } }, projectDir);
+    const result = graphQuery({ query_type: "blast_radius", target: "funcC", options: { max_depth: 3 } }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.count).toBeGreaterThanOrEqual(2);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -668,7 +668,7 @@ describe("graphQuery tool dispatch", () => {
     });
     store.close();
 
-    const result = graphQuery({ query_type: 'ancestors', target: 'funcA' }, projectDir);
+    const result = graphQuery({ query_type: "ancestors", target: "funcA" }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.count).toBeGreaterThanOrEqual(1);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -677,10 +677,7 @@ describe("graphQuery tool dispatch", () => {
 
   test("entity-not-found returns empty result set instead of throwing", () => {
     seedDb(projectDir);
-    const result = graphQuery(
-      { query_type: 'callers', target: 'nonexistent_entity_xyz' },
-      projectDir,
-    );
+    const result = graphQuery({ query_type: "callers", target: "nonexistent_entity_xyz" }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.results).toHaveLength(0);
     expect(result.count).toBe(0);
@@ -688,30 +685,27 @@ describe("graphQuery tool dispatch", () => {
 
   test("search requires target — throws when missing", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'search' }, projectDir);
+    const result = graphQuery({ query_type: "search" }, projectDir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe('INVALID_INPUT');
+      expect(result.error_code).toBe("INVALID_INPUT");
       expect(result.message).toMatch(/requires a target/i);
     }
   });
 
   test("callers requires target — throws when missing", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'callers' }, projectDir);
+    const result = graphQuery({ query_type: "callers" }, projectDir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe('INVALID_INPUT');
+      expect(result.error_code).toBe("INVALID_INPUT");
       expect(result.message).toMatch(/requires a target/i);
     }
   });
 
   test("search respects options.limit", () => {
     seedDb(projectDir);
-    const result = graphQuery(
-      { query_type: 'search', target: 'func*', options: { limit: 2 } },
-      projectDir,
-    );
+    const result = graphQuery({ query_type: "search", target: "func*", options: { limit: 2 } }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.results.length).toBeLessThanOrEqual(2);
   });
@@ -1247,10 +1241,7 @@ describe("DB-only workflow — get_file_context + store_summaries without JSON a
     expect(before.summary).toBe("DB-only summary for handler");
 
     // Write a new summary via storeSummaries
-    await storeSummaries(
-      { summaries: [{ file_path: "src/api/handler.ts", summary: "Refreshed summary" }] },
-      tmpDir,
-    );
+    await storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Refreshed summary" }] }, tmpDir);
 
     // Second read reflects the updated summary
     const after = await getFileContext({ file_path: "src/api/handler.ts" }, tmpDir);

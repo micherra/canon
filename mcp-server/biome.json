@@ -21,7 +21,7 @@
       "complexity": {
         "noExcessiveCognitiveComplexity": {
           "level": "warn",
-          "options": { "maxAllowedComplexity": 25 }
+          "options": { "maxAllowedComplexity": 15 }
         },
         "noForEach": "off",
         "useLiteralKeys": "off"
@@ -38,7 +38,22 @@
         "useImportType": "error",
         "useNodejsImportProtocol": "error",
         "useTemplate": "error",
-        "noParameterAssign": "off"
+        "noParameterAssign": "off",
+        "useNamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": false,
+            "conventions": [
+              { "selector": { "kind": "function" }, "formats": ["camelCase", "PascalCase"] },
+              { "selector": { "kind": "functionParameter" }, "formats": ["camelCase", "PascalCase", "snake_case"] },
+              { "selector": { "kind": "variable" }, "formats": ["camelCase", "PascalCase", "CONSTANT_CASE", "snake_case"] },
+              { "selector": { "kind": "typeLike" }, "formats": ["PascalCase"] },
+              { "selector": { "kind": "objectLiteralMember" }, "formats": ["camelCase", "snake_case", "CONSTANT_CASE", "PascalCase"] },
+              { "selector": { "kind": "typeProperty" }, "formats": ["camelCase", "snake_case"] },
+              { "selector": { "kind": "enumMember" }, "formats": ["PascalCase", "CONSTANT_CASE"] }
+            ]
+          }
+        }
       },
       "suspicious": {
         "noExplicitAny": "warn",

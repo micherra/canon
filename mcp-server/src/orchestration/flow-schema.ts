@@ -291,13 +291,7 @@ export const TypedParamSchema = z.object({
  * Fragment param value: accepts both old (value | null) and new (typed) formats.
  * Backward compat: null means required param (old marker syntax).
  */
-export const FragmentParamValueSchema = z.union([
-  TypedParamSchema,
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.null(),
-]);
+export const FragmentParamValueSchema = z.union([TypedParamSchema, z.string(), z.number(), z.boolean(), z.null()]);
 
 export type TypedParam = z.infer<typeof TypedParamSchema>;
 export type FragmentParamValue = z.infer<typeof FragmentParamValueSchema>;

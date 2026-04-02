@@ -18,28 +18,24 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import Database from "better-sqlite3";
+import { initExecutionDb, runMigrations } from "../orchestration/execution-schema.ts";
+import { ExecutionStore } from "../orchestration/execution-store.ts";
 import {
+  checkUnresolvedRefs,
   loadAndResolveFlow,
+  RUNTIME_VARIABLES,
+  VIRTUAL_SINKS,
   validateFlow,
   validateSpawnCoverage,
-  checkUnresolvedRefs,
   validateStateIdParams,
-  VIRTUAL_SINKS,
-  RUNTIME_VARIABLES,
 } from "../orchestration/flow-parser.ts";
-import {
-  StateDefinitionSchema,
-  FragmentStateDefinitionSchema,
-} from "../orchestration/flow-schema.ts";
-import { initExecutionDb, runMigrations, SCHEMA_VERSION } from "../orchestration/execution-schema.ts";
-import { ExecutionStore } from "../orchestration/execution-store.ts";
-import type { ResolvedFlow, FragmentDefinition, FragmentInclude } from "../orchestration/flow-schema.ts";
+import type { FragmentDefinition, FragmentInclude, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { FragmentStateDefinitionSchema, StateDefinitionSchema } from "../orchestration/flow-schema.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
+const testDir = dirname(fileURLToPath(import.meta.url));
+const pluginDir = resolve(testDir, "../../.."); // mcp-server/src/__tests__ → project root
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -66,9 +62,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 describe("loadAndResolveFlow — hard-blocking error message content", () => {
   it("throws with the flow name in the error message", async () => {
     // Path-traversal check: error includes the flow name in its message
-    await expect(loadAndResolveFlow(pluginDir, "no-such-flow-x1x2")).rejects.toThrow(
-      /no-such-flow-x1x2/,
-    );
+    await expect(loadAndResolveFlow(pluginDir, "no-such-flow-x1x2")).rejects.toThrow(/no-such-flow-x1x2/);
   });
 
   it("throws with 'validation failed' prefix when spawn coverage or refs fail", async () => {
@@ -160,8 +154,16 @@ describe("RUNTIME_VARIABLES export", () => {
 
   it("contains all item.* sub-variants used in parallel-per spawn instructions", () => {
     // These are the item.* variables from the RUNTIME_VARIABLES set
-    const itemVars = ["item.principle_id", "item.severity", "item.file_path", "item.detail",
-      "item.test_file", "item.test_name", "item.error_message", "item.source_file"];
+    const itemVars = [
+      "item.principle_id",
+      "item.severity",
+      "item.file_path",
+      "item.detail",
+      "item.test_file",
+      "item.test_name",
+      "item.error_message",
+      "item.source_file",
+    ];
     for (const v of itemVars) {
       expect(RUNTIME_VARIABLES.has(v), `Expected RUNTIME_VARIABLES to contain "${v}"`).toBe(true);
     }
@@ -319,9 +321,7 @@ describe("validateStateIdParams — edge cases", () => {
 
 describe("StateDefinitionSchema — malformed state edge cases", () => {
   it("rejects an object with no type field", () => {
-    expect(() =>
-      StateDefinitionSchema.parse({ agent: "some-agent" }),
-    ).toThrow();
+    expect(() => StateDefinitionSchema.parse({ agent: "some-agent" })).toThrow();
   });
 
   it("rejects null input", () => {
@@ -368,9 +368,7 @@ describe("FragmentStateDefinitionSchema — malformed state edge cases", () => {
   });
 
   it("rejects unknown type in fragment schema same as regular schema", () => {
-    expect(() =>
-      FragmentStateDefinitionSchema.parse({ type: "job", agent: "a" }),
-    ).toThrow();
+    expect(() => FragmentStateDefinitionSchema.parse({ type: "job", agent: "a" })).toThrow();
   });
 });
 
@@ -408,9 +406,9 @@ describe("runMigrations — data preservation during upgrade", () => {
 
     runMigrations(db);
 
-    const row = db
-      .prepare("SELECT status FROM execution_states WHERE state_id = 'implement'")
-      .get() as { status: string } | undefined;
+    const row = db.prepare("SELECT status FROM execution_states WHERE state_id = 'implement'").get() as
+      | { status: string }
+      | undefined;
     expect(row?.status).toBe("active");
   });
 
@@ -418,9 +416,7 @@ describe("runMigrations — data preservation during upgrade", () => {
     const db = makeV1DbFromFull();
     runMigrations(db);
 
-    const info = db
-      .prepare(`PRAGMA table_info(iteration_results)`)
-      .all() as Array<{ name: string }>;
+    const info = db.prepare(`PRAGMA table_info(iteration_results)`).all() as Array<{ name: string }>;
     const columns = info.map((c) => c.name);
     expect(columns).toContain("state_id");
     expect(columns).toContain("iteration");
@@ -448,9 +444,9 @@ describe("runMigrations — data preservation during upgrade", () => {
     const store = new ExecutionStore(db);
     store.recordIterationResult("implement", 1, "done", { commit_sha: "abc" });
 
-    const rows = db
-      .prepare("SELECT * FROM iteration_results WHERE state_id = 'implement'")
-      .all() as Array<{ status: string }>;
+    const rows = db.prepare("SELECT * FROM iteration_results WHERE state_id = 'implement'").all() as Array<{
+      status: string;
+    }>;
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe("done");
   });
@@ -459,9 +455,9 @@ describe("runMigrations — data preservation during upgrade", () => {
     const db = makeV1DbFromFull();
     runMigrations(db);
 
-    const row = db
-      .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-      .get() as { value: string } | undefined;
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
+      | { value: string }
+      | undefined;
     expect(row?.value).toBe("3");
   });
 
@@ -547,7 +543,6 @@ describe("resolveFragments — boolean typed param (write_tests pattern)", () =>
     const flow = await loadAndResolveFlow(pluginDir, "feature");
     expect(flow).toBeDefined();
     // The feature flow includes verify-fix-loop; check that no ${write_tests} refs remain
-    const allSpawnText = Object.values(flow.spawn_instructions).join("\n");
     // write_tests should be substituted (either "false" literal or absent as a runtime var)
     // RUNTIME_VARIABLES includes write_tests, so it may appear there — but should not appear
     // as an unresolved fragment param reference
@@ -640,10 +635,9 @@ describe("validateSpawnCoverage — parallel state type", () => {
 // 11. write_plan_index empty slug edge case
 // ---------------------------------------------------------------------------
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
 import { assertOk } from "../utils/tool-result.ts";
 

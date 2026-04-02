@@ -22,15 +22,14 @@ import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { normalizeStatus } from "../orchestration/transitions.ts";
 import { loadFlow } from "../tools/load-flow.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const testDir = dirname(fileURLToPath(import.meta.url));
 
 // pluginDir must point to a directory that has flows/ with all standard flows and fragments,
 // including epic.md, test-fix-loop.md, and targeted-research.md.
 // Use CANON_PLUGIN_DIR env var if set (e.g. in CI), otherwise fall back to the project root.
 const pluginCacheDir = process.env.CANON_PLUGIN_DIR
   ? resolve(process.env.CANON_PLUGIN_DIR)
-  : resolve(__dirname, "../../..");
+  : resolve(testDir, "../../..");
 
 // ---------------------------------------------------------------------------
 // Helpers

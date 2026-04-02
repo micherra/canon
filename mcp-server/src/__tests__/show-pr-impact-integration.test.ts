@@ -18,7 +18,7 @@
  *   - Bridge argument contract: show_pr_impact called with empty arguments object
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,8 +55,8 @@ vi.mock("../tools/pr-review-data.ts", () => ({
 import { existsSync } from "node:fs";
 import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
 import { KgQuery } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
@@ -304,7 +304,9 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(analyzeBlastRadius).mockReset();
     vi.mocked(KgQuery).mockReset();
     // Default KgQuery mock: getSubgraph returns empty
-    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockReturnValue({ nodes: [], edges: [] });
+    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi
+      .fn()
+      .mockReturnValue({ nodes: [], edges: [] });
     vi.mocked(getPrReviewData).mockReset();
     vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
@@ -315,14 +317,19 @@ describe("showPrImpact — subgraph building gaps", () => {
   });
 
   // Helper to configure KgQuery to return the given nodes/edges for paths in the inclusion set
-  function mockKgSubgraph(nodes: Array<{ path: string; layer: string }>, edges: Array<{ source: string; target: string }> = []) {
-    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockImplementation((paths: string[]) => {
-      const pathSet = new Set(paths);
-      const filteredNodes = nodes.filter((n) => pathSet.has(n.path)).map((n) => ({ ...n, file_id: 1 }));
-      const nodeIds = new Set(filteredNodes.map((n) => n.path));
-      const filteredEdges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
-      return { nodes: filteredNodes, edges: filteredEdges };
-    });
+  function mockKgSubgraph(
+    nodes: Array<{ path: string; layer: string }>,
+    edges: Array<{ source: string; target: string }> = [],
+  ) {
+    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi
+      .fn()
+      .mockImplementation((paths: string[]) => {
+        const pathSet = new Set(paths);
+        const filteredNodes = nodes.filter((n) => pathSet.has(n.path)).map((n) => ({ ...n, file_id: 1 }));
+        const nodeIds = new Set(filteredNodes.map((n) => n.path));
+        const filteredEdges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+        return { nodes: filteredNodes, edges: filteredEdges };
+      });
   }
 
   // -------------------------------------------------------------------------
@@ -342,7 +349,13 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
-    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    vi.mocked(analyzeBlastRadius).mockReturnValue({
+      seed_entities: [],
+      total_affected: 0,
+      affected_files: 0,
+      by_depth: {},
+      affected: [],
+    });
     mockKgSubgraph([{ path: "src/exotic.ts", layer: "custom-exotic-layer" }]);
 
     const result = await showPrImpact(tmpDir);
@@ -373,7 +386,13 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
-    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    vi.mocked(analyzeBlastRadius).mockReturnValue({
+      seed_entities: [],
+      total_affected: 0,
+      affected_files: 0,
+      by_depth: {},
+      affected: [],
+    });
     mockKgSubgraph([
       { path: "src/tools/foo.ts", layer: "tools" },
       { path: "src/utils/bar.ts", layer: "utils" },
@@ -449,7 +468,13 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
-    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    vi.mocked(analyzeBlastRadius).mockReturnValue({
+      seed_entities: [],
+      total_affected: 0,
+      affected_files: 0,
+      by_depth: {},
+      affected: [],
+    });
     // KgQuery returns src/a.ts in the subgraph; src/b.ts is not in paths so it's excluded
     mockKgSubgraph(
       [
@@ -512,7 +537,13 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
-    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    vi.mocked(analyzeBlastRadius).mockReturnValue({
+      seed_entities: [],
+      total_affected: 0,
+      affected_files: 0,
+      by_depth: {},
+      affected: [],
+    });
     mockKgSubgraph([
       { path: "src/a.ts", layer: "tools" },
       { path: "src/b.ts", layer: "tools" },

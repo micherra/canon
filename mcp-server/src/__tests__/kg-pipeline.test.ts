@@ -23,15 +23,15 @@ import { randomEmbedding } from "./embedding-test-helpers.ts";
 // Mock EmbeddingService — fast random vectors, no model download
 // ---------------------------------------------------------------------------
 
-let _mockSeed = 0;
+let mockSeed = 0;
 
 vi.mock("../graph/kg-embedding.ts", () => ({
   EmbeddingService: class MockEmbeddingService {
     async embed(texts: string[]): Promise<Float32Array[]> {
-      return texts.map((_, i) => randomEmbedding(_mockSeed + i));
+      return texts.map((_, i) => randomEmbedding(mockSeed + i));
     }
     async embedOne(_text: string): Promise<Float32Array> {
-      return randomEmbedding(_mockSeed++);
+      return randomEmbedding(mockSeed++);
     }
     dispose(): void {
       // no-op
@@ -218,7 +218,7 @@ describe("runPipeline embed phase", () => {
 
   beforeEach(() => {
     projectDir = makeTempProject();
-    _mockSeed = 0;
+    mockSeed = 0;
   });
 
   afterEach(() => {
@@ -266,7 +266,7 @@ describe("runPipeline embed phase", () => {
     const dbPath = path.join(projectDir, "test.db");
 
     // First run — embeds everything
-    const result1 = await runPipeline(projectDir, { dbPath, incremental: true });
+    const _result1 = await runPipeline(projectDir, { dbPath, incremental: true });
 
     const db1 = new Database(dbPath);
     const vectorStore1 = new KgVectorStore(db1);

@@ -239,7 +239,7 @@ export interface SummaryRow {
 
 /** Matches the entity_vector_meta / summary_vector_meta tables */
 export interface VectorMetaRow {
-  entity_id?: number;    // or summary_id for summary vectors
+  entity_id?: number; // or summary_id for summary vectors
   summary_id?: number;
   text_hash: string;
   model_id: string;

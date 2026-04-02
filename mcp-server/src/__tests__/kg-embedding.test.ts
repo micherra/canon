@@ -168,10 +168,7 @@ describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
 
   test("batch processing respects EMBEDDING_BATCH_SIZE boundary", async () => {
     // Create texts that exceed one batch
-    const texts = Array.from(
-      { length: EMBEDDING_BATCH_SIZE + 2 },
-      (_, i) => `sentence number ${i}`,
-    );
+    const texts = Array.from({ length: EMBEDDING_BATCH_SIZE + 2 }, (_, i) => `sentence number ${i}`);
     const results = await service.embed(texts);
     expect(results).toHaveLength(EMBEDDING_BATCH_SIZE + 2);
     for (const r of results) {

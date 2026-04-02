@@ -21,9 +21,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
+const testDir = dirname(fileURLToPath(import.meta.url));
+const pluginDir = resolve(testDir, "../../.."); // mcp-server/src/__tests__ → project root
 
 // ---------------------------------------------------------------------------
 // Mocks for enterAndPrepareState tests
@@ -67,14 +66,14 @@ vi.mock("node:child_process", () => ({
   spawnSync: vi.fn(),
 }));
 
+import { spawnSync } from "node:child_process";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import { loadFlow } from "../tools/load-flow.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import { spawnSync } from "node:child_process";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -296,14 +295,17 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
     });
 
     const workspace = makeTmpDir();
-    seedBoard(workspace, makeBoard({
-      entry: "checkpoint",
-      current_state: "checkpoint",
-      states: {
-        checkpoint: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        entry: "checkpoint",
+        current_state: "checkpoint",
+        states: {
+          checkpoint: { status: "pending", entries: 0 },
+          done: { status: "pending", entries: 0 },
+        },
+      }),
+    );
 
     const flow = makeCheckpointFlow();
     const result = await enterAndPrepareState({
@@ -327,14 +329,17 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
 
     const workspace = makeTmpDir();
-    seedBoard(workspace, makeBoard({
-      entry: "checkpoint",
-      current_state: "checkpoint",
-      states: {
-        checkpoint: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        entry: "checkpoint",
+        current_state: "checkpoint",
+        states: {
+          checkpoint: { status: "pending", entries: 0 },
+          done: { status: "pending", entries: 0 },
+        },
+      }),
+    );
 
     const flow = makeCheckpointFlow();
     const result = await enterAndPrepareState({
@@ -356,14 +361,17 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
 
     const workspace = makeTmpDir();
-    seedBoard(workspace, makeBoard({
-      entry: "checkpoint",
-      current_state: "checkpoint",
-      states: {
-        checkpoint: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        entry: "checkpoint",
+        current_state: "checkpoint",
+        states: {
+          checkpoint: { status: "pending", entries: 0 },
+          done: { status: "pending", entries: 0 },
+        },
+      }),
+    );
 
     const flow = makeCheckpointFlow();
     await enterAndPrepareState({
@@ -433,15 +441,18 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
     const workspace = makeTmpDir();
     // entries=1 in pre-enter → after enterState: entries=2 (re-entry triggers git diff)
     // wave_total=1 → min_waves:2 consultation should be skipped
-    seedBoard(workspace, makeBoard({
-      base_commit: "abc1234",
-      entry: "implement",
-      current_state: "implement",
-      states: {
-        implement: { status: "done", entries: 1, wave_total: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        base_commit: "abc1234",
+        entry: "implement",
+        current_state: "implement",
+        states: {
+          implement: { status: "done", entries: 1, wave_total: 1 },
+          done: { status: "pending", entries: 0 },
+        },
+      }),
+    );
 
     // git diff returns some files
     vi.mocked(spawnSync).mockReturnValue({
@@ -483,15 +494,18 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
     const workspace = makeTmpDir();
     // entries=1 in pre-enter → after enterState: entries=2 (re-entry triggers git diff)
     // wave_total=2 → min_waves:2 consultation should be included
-    seedBoard(workspace, makeBoard({
-      base_commit: "abc1234",
-      entry: "implement",
-      current_state: "implement",
-      states: {
-        implement: { status: "done", entries: 1, wave_total: 2 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        base_commit: "abc1234",
+        entry: "implement",
+        current_state: "implement",
+        states: {
+          implement: { status: "done", entries: 1, wave_total: 2 },
+          done: { status: "pending", entries: 0 },
+        },
+      }),
+    );
 
     vi.mocked(spawnSync).mockReturnValue({
       status: 0,
@@ -533,15 +547,18 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
     const workspace = makeTmpDir();
     // entries=1 in pre-enter → after enterState: entries=2 (re-entry)
     // wave_total not set → fail-open for min_waves (include consultation)
-    seedBoard(workspace, makeBoard({
-      base_commit: "abc1234",
-      entry: "implement",
-      current_state: "implement",
-      states: {
-        implement: { status: "done", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        base_commit: "abc1234",
+        entry: "implement",
+        current_state: "implement",
+        states: {
+          implement: { status: "done", entries: 1 },
+          done: { status: "pending", entries: 0 },
+        },
+      }),
+    );
 
     // git diff fails — review_scope degrades to empty
     vi.mocked(spawnSync).mockReturnValue({

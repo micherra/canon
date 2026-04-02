@@ -222,9 +222,9 @@ const MIGRATIONS: Migration[] = [
  * Exported for direct testing of upgrade scenarios.
  */
 export function runMigrations(db: Database.Database): void {
-  const currentRow = db
-    .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-    .get() as { value: string } | undefined;
+  const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+    | { value: string }
+    | undefined;
   let version = currentRow?.value ?? "1";
 
   for (const migration of MIGRATIONS) {

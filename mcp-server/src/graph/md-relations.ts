@@ -233,6 +233,45 @@ function extractPathEdges(filePath: string, content: string, fileSet: Set<string
 
 // ── Main inference function ──
 
+/** Read a markdown file, returning null if not found. */
+async function readMdFile(fp: string, projectDir: string): Promise<string | null> {
+  try {
+    return await readFile(join(projectDir, fp), "utf-8");
+  } catch (err: unknown) {
+    if (isNotFound(err)) return null;
+    throw err;
+  }
+}
+
+/** Extract all edges from a single markdown file's content. */
+function extractEdgesFromFile(fp: string, content: string, nameMaps: MdNameMaps, fileSet: Set<string>): GraphEdge[] {
+  const edges: GraphEdge[] = [];
+  const { body } = parseFrontmatter(content);
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  const frontmatterText = fmMatch ? fmMatch[1] : "";
+
+  if (frontmatterText) {
+    edges.push(...extractFrontmatterEdges(fp, frontmatterText, nameMaps, fileSet));
+  }
+  edges.push(...extractBacktickEdges(fp, body, nameMaps));
+  edges.push(...extractPathEdges(fp, content, fileSet));
+
+  return edges;
+}
+
+/** Deduplicate edges, keeping highest confidence per source|target|relation. */
+function deduplicateEdges(allEdges: GraphEdge[]): GraphEdge[] {
+  const byKey = new Map<string, GraphEdge>();
+  for (const edge of allEdges) {
+    const key = `${edge.source}|${edge.target}|${edge.relation}`;
+    const existing = byKey.get(key);
+    if (!existing || (edge.confidence || 0) > (existing.confidence || 0)) {
+      byKey.set(key, edge);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
 export async function inferMdRelations(
   filePaths: string[],
   fileSet: Set<string>,
@@ -245,35 +284,11 @@ export async function inferMdRelations(
     if (!fp.endsWith(".md") || isExcludedDoc(fp)) continue;
     if (!classifyMdNode(fp)) continue;
 
-    let content: string;
-    try {
-      content = await readFile(join(projectDir, fp), "utf-8");
-    } catch (err: unknown) {
-      if (isNotFound(err)) continue;
-      throw err;
-    }
+    const content = await readMdFile(fp, projectDir);
+    if (!content) continue;
 
-    const { body } = parseFrontmatter(content);
-    const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    const frontmatterText = fmMatch ? fmMatch[1] : "";
-
-    // Three generic passes — same for all .md file types
-    if (frontmatterText) {
-      allEdges.push(...extractFrontmatterEdges(fp, frontmatterText, nameMaps, fileSet));
-    }
-    allEdges.push(...extractBacktickEdges(fp, body, nameMaps));
-    allEdges.push(...extractPathEdges(fp, content, fileSet));
+    allEdges.push(...extractEdgesFromFile(fp, content, nameMaps, fileSet));
   }
 
-  // Deduplicate: keep highest confidence per source|target|relation
-  const byKey = new Map<string, GraphEdge>();
-  for (const edge of allEdges) {
-    const key = `${edge.source}|${edge.target}|${edge.relation}`;
-    const existing = byKey.get(key);
-    if (!existing || (edge.confidence || 0) > (existing.confidence || 0)) {
-      byKey.set(key, edge);
-    }
-  }
-
-  return Array.from(byKey.values());
+  return deduplicateEdges(allEdges);
 }
