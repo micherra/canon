@@ -578,19 +578,15 @@ async function reportResultLocked(
       return { board, condition, nextState, stuck, stuck_reason, hitl_required, hitl_reason };
     });
 
-  // Persist transcript path (ADR-015 — best-effort, never blocks the flow)
+  // Persist transcript path (ADR-015) — path validation is pure, setTranscriptPath
+  // returns boolean (errors-are-values). No try/catch needed; if the DB is broken,
+  // let it propagate to wrapHandler.
   if (input.transcript_path) {
-    try {
-      // Path traversal guard: only store paths that resolve under ${workspace}/transcripts/
-      const transcriptsDir = resolve(input.workspace, "transcripts");
-      const resolvedPath = resolve(input.transcript_path);
-      const rel = relative(transcriptsDir, resolvedPath);
-      if (!rel.startsWith("..") && resolve(transcriptsDir, rel) === resolvedPath) {
-        store.setTranscriptPath(input.state_id, input.transcript_path);
-      }
-      // Silently skip paths outside the expected directory (best-effort, never blocks the flow)
-    } catch (err) {
-      console.error(`[report_result] transcript_path persistence failed for state '${input.state_id}':`, err);
+    const transcriptsDir = resolve(input.workspace, "transcripts");
+    const resolvedPath = resolve(input.transcript_path);
+    const rel = relative(transcriptsDir, resolvedPath);
+    if (!rel.startsWith("..") && resolve(transcriptsDir, rel) === resolvedPath) {
+      store.setTranscriptPath(input.state_id, input.transcript_path);
     }
   }
 
