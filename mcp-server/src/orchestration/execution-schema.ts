@@ -22,8 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-// Note: v4 is reserved for cache_prefix (ADR-006a). This PR must merge after ADR-006a.
-export const SCHEMA_VERSION = '5';
+export const SCHEMA_VERSION = '4';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -241,8 +240,7 @@ const MIGRATIONS: Migration[] = [
   },
   {
     // transcript_path column on execution_states (ADR-015)
-    // Note: v4 is reserved for cache_prefix (ADR-006a). This PR must merge after ADR-006a.
-    version: '5',
+    version: '4',
     up: (db) => {
       // Guard: only ALTER TABLE if execution_states exists and the column is absent.
       // columnExists returns false for both non-existent tables and non-existent columns,
@@ -253,7 +251,7 @@ const MIGRATIONS: Migration[] = [
       if (tableRow && !columnExists(db, 'execution_states', 'transcript_path')) {
         db.exec(`ALTER TABLE execution_states ADD COLUMN transcript_path TEXT`);
       }
-      db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
+      db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
     },
   },
 ];

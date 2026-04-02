@@ -102,7 +102,7 @@ describe('runMigrations', () => {
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe('5');
+    expect(row?.value).toBe('4');
   });
 
   test('is idempotent: running migrations twice on v1 does not throw', () => {
@@ -120,16 +120,16 @@ describe('runMigrations', () => {
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe('5');
+    expect(row?.value).toBe('4');
   });
 
-  test('initExecutionDb sets SCHEMA_VERSION to 5', () => {
+  test('initExecutionDb sets SCHEMA_VERSION to 4', () => {
     const db = initExecutionDb(':memory:');
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
     expect(row?.value).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe('5');
+    expect(SCHEMA_VERSION).toBe('4');
   });
 });
 

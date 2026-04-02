@@ -78,7 +78,7 @@ describe('initExecutionDb', () => {
     const db = makeDb();
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
     expect(row?.value).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe('5');
+    expect(SCHEMA_VERSION).toBe('4');
     db.close();
   });
 

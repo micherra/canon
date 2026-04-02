@@ -137,7 +137,7 @@ For each `.jsonl` file, count entries:
 
 For each workspace in `.canon/workspaces/`:
 - Read `orchestration.db` and query `execution_states` for rows where `status = 'failed'` or `result` contains 'error' or 'stuck'
-- Use try/catch around all SQLite queries — gracefully skip workspaces that predate the `transcript_path` column (migration v4) or have no `orchestration.db`
+- Use try/catch around all SQLite queries — gracefully skip workspaces that predate the `transcript_path` column (migration v4, schema version 4) or have no `orchestration.db`
 - For each failed state, check if `transcript_path` is set and the file exists
 - If a failed state has a transcript, show the last 5 assistant-role entries as diagnostic context
 

@@ -10,12 +10,15 @@
  * The function never throws for expected error conditions.
  */
 
-import { readFile, access } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, realpath } from "node:fs/promises";
+import { resolve, relative } from "node:path";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { toolError, toolOk } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
-import type { TranscriptEntry } from "../orchestration/flow-schema.ts";
+import {
+  TranscriptEntrySchema,
+  type TranscriptEntry,
+} from "../orchestration/flow-schema.ts";
 
 export interface GetTranscriptInput {
   workspace: string;
@@ -56,7 +59,8 @@ export async function getTranscript(
   // Path traversal guard: transcript must resolve under ${workspace}/transcripts/
   const transcriptsDir = resolve(input.workspace, "transcripts");
   const resolvedTranscriptPath = resolve(transcriptPath);
-  if (!resolvedTranscriptPath.startsWith(transcriptsDir + "/")) {
+  const rel = relative(transcriptsDir, resolvedTranscriptPath);
+  if (rel.startsWith("..") || resolve(transcriptsDir, rel) !== resolvedTranscriptPath) {
     return toolError(
       "TRANSCRIPT_NOT_FOUND",
       `Transcript path is outside the expected transcripts directory for workspace '${input.workspace}'`,
@@ -64,8 +68,19 @@ export async function getTranscript(
     );
   }
 
+  // Symlink escape guard: resolve real paths to ensure the file doesn't escape via symlink
+  let realReadPath: string;
   try {
-    await access(transcriptPath);
+    const realTranscriptsDir = await realpath(transcriptsDir);
+    realReadPath = await realpath(resolvedTranscriptPath);
+    const realRel = relative(realTranscriptsDir, realReadPath);
+    if (realRel.startsWith("..") || resolve(realTranscriptsDir, realRel) !== realReadPath) {
+      return toolError(
+        "TRANSCRIPT_NOT_FOUND",
+        `Transcript path is outside the expected transcripts directory for workspace '${input.workspace}'`,
+        false,
+      );
+    }
   } catch {
     return toolError(
       "TRANSCRIPT_NOT_FOUND",
@@ -74,15 +89,28 @@ export async function getTranscript(
     );
   }
 
-  const raw = await readFile(transcriptPath, "utf-8");
+  let raw: string;
+  try {
+    raw = await readFile(realReadPath, "utf-8");
+  } catch {
+    return toolError(
+      "TRANSCRIPT_NOT_FOUND",
+      `Transcript file could not be read for state '${input.state_id}' in workspace '${input.workspace}': ${transcriptPath}`,
+      false,
+    );
+  }
   const lines = raw.trim().split("\n").filter(Boolean);
 
   let entries: TranscriptEntry[] = [];
   for (const line of lines) {
     try {
-      entries.push(JSON.parse(line) as TranscriptEntry);
+      const parsed = TranscriptEntrySchema.safeParse(JSON.parse(line));
+      if (parsed.success) {
+        entries.push(parsed.data);
+      }
+      // Skip lines that fail schema validation (best-effort)
     } catch {
-      // Skip corrupt lines (best-effort — large transcripts should not fail entirely)
+      // Skip corrupt JSON lines (best-effort — large transcripts should not fail entirely)
     }
   }
 
