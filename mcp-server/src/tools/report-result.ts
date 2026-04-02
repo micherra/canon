@@ -4,6 +4,7 @@
  * and board state updates.
  */
 
+import { resolve } from "node:path";
 import {
   normalizeStatus,
   evaluateTransition,
@@ -580,7 +581,13 @@ async function reportResultLocked(
   // Persist transcript path (ADR-015 — best-effort, never blocks the flow)
   if (input.transcript_path) {
     try {
-      store.setTranscriptPath(input.state_id, input.transcript_path);
+      // Path traversal guard: only store paths that resolve under ${workspace}/transcripts/
+      const transcriptsDir = resolve(input.workspace, "transcripts");
+      const resolvedPath = resolve(input.transcript_path);
+      if (resolvedPath.startsWith(transcriptsDir + "/")) {
+        store.setTranscriptPath(input.state_id, input.transcript_path);
+      }
+      // Silently skip paths outside the expected directory (best-effort, never blocks the flow)
     } catch {
       // best-effort — never blocks the flow
     }

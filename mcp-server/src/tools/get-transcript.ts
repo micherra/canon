@@ -12,6 +12,7 @@
 
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { toolError, toolOk } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
@@ -37,7 +38,7 @@ export interface GetTranscriptResult {
  *
  * Reads the JSONL file at the path stored in execution_states.transcript_path.
  * Returns a typed error when no path is recorded or the file does not exist.
- * Corrupt JSONL lines are skipped with a best-effort warning in entry content.
+ * Corrupt JSONL lines are skipped silently (best-effort — large transcripts should not fail entirely).
  */
 export async function getTranscript(
   input: GetTranscriptInput,
@@ -47,16 +48,27 @@ export async function getTranscript(
 
   if (!transcriptPath) {
     return toolError(
-      "WORKSPACE_NOT_FOUND",
-      `No transcript recorded for state '${input.state_id}'`,
+      "INVALID_INPUT",
+      `No transcript recorded for state '${input.state_id}' in workspace '${input.workspace}'`,
+      false,
+    );
+  }
+
+  // Path traversal guard: transcript must resolve under ${workspace}/transcripts/
+  const transcriptsDir = resolve(input.workspace, "transcripts");
+  const resolvedTranscriptPath = resolve(transcriptPath);
+  if (!resolvedTranscriptPath.startsWith(transcriptsDir + "/")) {
+    return toolError(
+      "INVALID_INPUT",
+      `Transcript path is outside the expected transcripts directory for workspace '${input.workspace}'`,
       false,
     );
   }
 
   if (!existsSync(transcriptPath)) {
     return toolError(
-      "WORKSPACE_NOT_FOUND",
-      `Transcript file not found: ${transcriptPath}`,
+      "INVALID_INPUT",
+      `Transcript file not found for state '${input.state_id}' in workspace '${input.workspace}': ${transcriptPath}`,
       false,
     );
   }

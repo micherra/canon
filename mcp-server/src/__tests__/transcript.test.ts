@@ -271,7 +271,7 @@ describe("getTranscript — summary mode", () => {
 // ---------------------------------------------------------------------------
 
 describe("getTranscript — error cases", () => {
-  it("returns WORKSPACE_NOT_FOUND error when no transcript_path recorded for state", async () => {
+  it("returns INVALID_INPUT error when no transcript_path recorded for state", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     setupWorkspace(workspace, flow);
@@ -283,18 +283,19 @@ describe("getTranscript — error cases", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+      expect(result.error_code).toBe("INVALID_INPUT");
       expect(result.message).toContain("build");
     }
   });
 
-  it("returns WORKSPACE_NOT_FOUND error when transcript file does not exist on disk", async () => {
+  it("returns INVALID_INPUT error when transcript file does not exist on disk", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow();
     setupWorkspace(workspace, flow);
 
     const store = getExecutionStore(workspace);
-    store.setTranscriptPath("build", "/nonexistent/path/transcript.jsonl");
+    const transcriptPath = join(workspace, "transcripts", "build-001.jsonl");
+    store.setTranscriptPath("build", transcriptPath);
 
     const result = await getTranscript({
       workspace,
@@ -303,8 +304,31 @@ describe("getTranscript — error cases", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
-      expect(result.message).toContain("/nonexistent/path/transcript.jsonl");
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("build");
+      expect(result.message).toContain(workspace);
+    }
+  });
+
+  it("returns INVALID_INPUT error when transcript path is outside the transcripts directory", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    setupWorkspace(workspace, flow);
+
+    // Directly set a path that is outside workspace/transcripts/
+    const store = getExecutionStore(workspace);
+    const maliciousPath = join(workspace, "..", "etc", "passwd");
+    store.setTranscriptPath("build", maliciousPath);
+
+    const result = await getTranscript({
+      workspace,
+      state_id: "build",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("outside the expected transcripts directory");
     }
   });
 });
@@ -368,15 +392,41 @@ describe("reportResult — transcript_path persistence", () => {
     const flow = makeMinimalFlow();
     setupWorkspace(workspace, flow);
 
+    const transcriptPath = join(workspace, "transcripts", "build-001.jsonl");
+
     const result = await reportResult({
       workspace,
       state_id: "build",
       status_keyword: "done",
       flow,
-      transcript_path: "/some/path.jsonl",
+      transcript_path: transcriptPath,
     });
 
     // report_result should succeed regardless
     assertOk(result);
+  });
+
+  it("silently rejects transcript_path outside workspace/transcripts/ (path traversal guard)", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    setupWorkspace(workspace, flow);
+
+    // Attempt path traversal — path escapes the transcripts directory
+    const maliciousPath = join(workspace, "..", "etc", "passwd");
+
+    const result = await reportResult({
+      workspace,
+      state_id: "build",
+      status_keyword: "done",
+      flow,
+      transcript_path: maliciousPath,
+    });
+
+    // report_result must still succeed (best-effort, never blocks)
+    assertOk(result);
+
+    // But the malicious path must NOT have been stored
+    const store = getExecutionStore(workspace);
+    expect(store.getTranscriptPath("build")).toBeNull();
   });
 });
