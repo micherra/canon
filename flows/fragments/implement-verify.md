@@ -44,6 +44,8 @@ Direct mode — no plan file. Task: ${task}. Treat the task description as your 
 
 ${progress}
 
+${enrichment}
+
 ### verify
 Lightweight verification gate — run the project test suite only (do NOT write new tests). Check ${WORKSPACE}/plans/${slug}/SUMMARY.md for implementation context. Save report to ${WORKSPACE}/plans/${slug}/TEST-REPORT.md. Report all_passing or implementation_issue.
 

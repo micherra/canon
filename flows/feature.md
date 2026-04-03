@@ -56,3 +56,5 @@ Design the technical approach for: ${task}. Save design to ${WORKSPACE}/plans/${
 Execute task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
 
 ${wave_briefing}
+
+${enrichment}

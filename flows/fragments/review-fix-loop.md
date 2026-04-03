@@ -47,6 +47,8 @@ Review changes via `git diff ${base_commit}..HEAD` (scoped to file list if provi
 
 ${review_scope}
 
+${enrichment}
+
 ${progress}
 
 ### fix-violations

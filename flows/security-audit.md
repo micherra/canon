@@ -30,3 +30,5 @@ Scan for security vulnerabilities. Save to ${WORKSPACE}/plans/${slug}/SECURITY.m
 
 ### review
 Review all code for Canon principle compliance via `git diff ${base_commit}..HEAD`. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.
+
+${enrichment}
