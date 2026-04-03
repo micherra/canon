@@ -138,11 +138,26 @@ describe('Schema v7 migration — worktree columns on execution', () => {
   });
 
   test('worktree columns are nullable and default to null', () => {
-    // Verify columns can hold null values
+    // Verify columns hold null when not supplied during insert
     const db = initExecutionDb(':memory:');
-    const row = db.prepare(`SELECT worktree_path, worktree_branch FROM execution WHERE id = 1`).get() as { worktree_path: string | null; worktree_branch: string | null } | undefined;
-    // No execution row yet — query runs fine, returns undefined
-    expect(row).toBeUndefined();
+
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO execution
+        (id, flow, task, entry, current_state, base_commit, started, last_updated,
+         branch, sanitized, created, tier, flow_name, slug)
+       VALUES (1, 'fast-path', 'test task', 'build', 'build', 'deadbeef',
+               ?, ?, 'main', 'main', ?, 'small', 'fast-path', 'test-task')`
+    ).run(now, now, now);
+
+    const row = db.prepare(
+      `SELECT worktree_path, worktree_branch FROM execution WHERE id = 1`
+    ).get() as { worktree_path: string | null; worktree_branch: string | null } | undefined;
+
+    expect(row).toBeDefined();
+    expect(row?.worktree_path).toBeNull();
+    expect(row?.worktree_branch).toBeNull();
+
     db.close();
   });
 });

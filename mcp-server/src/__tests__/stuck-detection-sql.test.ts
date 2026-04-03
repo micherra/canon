@@ -112,9 +112,9 @@ describe('runMigrations', () => {
     expect(() => runMigrations(db)).not.toThrow();
   });
 
-  test('is a no-op on a v6 database (tables already created by initExecutionDb)', () => {
+  test('is a no-op on a v7 database (tables already created by initExecutionDb)', () => {
     const db = initExecutionDb(':memory:');
-    // Already at v6 — running migrations again should not throw and keep version at 6
+    // Already at v7 — running migrations again should not throw and keep version at 7
     expect(() => runMigrations(db)).not.toThrow();
 
     const row = db
@@ -123,7 +123,7 @@ describe('runMigrations', () => {
     expect(row?.value).toBe('7');
   });
 
-  test('initExecutionDb sets SCHEMA_VERSION to 6', () => {
+  test('initExecutionDb sets SCHEMA_VERSION to 7', () => {
     const db = initExecutionDb(':memory:');
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)

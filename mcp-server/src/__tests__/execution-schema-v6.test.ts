@@ -30,7 +30,7 @@ const BASE_INIT_PARAMS = {
 };
 
 describe('Schema v6 migration — agent session columns', () => {
-  test('SCHEMA_VERSION is 6', () => {
+  test('SCHEMA_VERSION is 7', () => {
     expect(SCHEMA_VERSION).toBe('7');
   });
 
@@ -46,7 +46,7 @@ describe('Schema v6 migration — agent session columns', () => {
     db.close();
   });
 
-  test('fresh DB schema_version is 6', () => {
+  test('fresh DB schema_version is 7', () => {
     const db = initExecutionDb(':memory:');
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
     expect(row?.value).toBe('7');

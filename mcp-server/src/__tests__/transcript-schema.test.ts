@@ -171,7 +171,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("schema version", () => {
-  it("SCHEMA_VERSION is '6'", () => {
+  it("SCHEMA_VERSION is '7'", () => {
     expect(SCHEMA_VERSION).toBe("7");
   });
 });
@@ -190,7 +190,7 @@ describe("migration v5 — fresh DB", () => {
     db.close();
   });
 
-  it("fresh DB meta table has schema_version '6'", () => {
+  it("fresh DB meta table has schema_version '7'", () => {
     const dbPath = makeTmpDb();
     const db = initExecutionDb(dbPath);
 
