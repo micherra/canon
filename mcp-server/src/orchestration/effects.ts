@@ -188,8 +188,11 @@ interface ParsedReview {
 /**
  * Parse a REVIEW.md following the review-checklist template.
  * Extracts: YAML frontmatter verdict, violations table, honored list, score table.
+ *
+ * Exported for backward compat tests — internal callers prefer the .meta.json
+ * structured path in persistReview.
  */
-function parseReviewArtifact(content: string): ParsedReview | null {
+export function parseReviewArtifact(content: string): ParsedReview | null {
   // Parse YAML frontmatter for verdict
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
   let verdict: ParsedReview["verdict"] = "CLEAN";
