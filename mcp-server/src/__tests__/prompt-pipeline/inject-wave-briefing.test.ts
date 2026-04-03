@@ -350,6 +350,7 @@ describe("injectWaveBriefing — KG summary injection", () => {
 
   function makeMockKgStore(summaryText: string | null = "A summary of the file") {
     return {
+      getFile: vi.fn().mockReturnValue({ file_id: 42, path: "src/tools/my-tool.ts", mtime_ms: 0 }),
       getSummaryByFile: vi.fn().mockReturnValue(
         summaryText !== null ? { summary: summaryText } : undefined,
       ),
@@ -377,12 +378,7 @@ describe("injectWaveBriefing — KG summary injection", () => {
     } as unknown as ReturnType<typeof getExecutionStore>);
 
     if (dbExists) {
-      // Mock DB with prepare() that returns a statement-like object
-      const mockDb = {
-        prepare: vi.fn().mockReturnValue({
-          get: vi.fn().mockReturnValue({ file_id: 42 }),
-        }),
-      };
+      const mockDb = { close: vi.fn() };
       vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
       vi.mocked(computeFileInsightMaps).mockReturnValue({
         hubPaths: new Set(),

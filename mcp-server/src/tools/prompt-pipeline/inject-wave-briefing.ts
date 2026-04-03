@@ -139,8 +139,9 @@ function injectKgSection(
     return { section: "", warnings };
   }
 
+  let db: ReturnType<typeof initDatabase> | undefined;
   try {
-    const db = initDatabase(dbPath);
+    db = initDatabase(dbPath);
     const kgQuery = new KgQuery(db);
     const kgStore = new KgStore(db);
 
@@ -172,17 +173,10 @@ function injectKgSection(
       // Get summary from files table via KgStore
       let summary: string | null = null;
       if (metrics !== null) {
-        // Look up file_id via a direct query, then load the file-scoped summary
-        try {
-          const fileRow = (db as import("better-sqlite3").Database)
-            .prepare("SELECT file_id FROM files WHERE path = ?")
-            .get(filePath) as { file_id: number } | undefined;
-          if (fileRow) {
-            const summaryRow = kgStore.getSummaryByFile(fileRow.file_id);
-            summary = summaryRow?.summary ?? null;
-          }
-        } catch {
-          // Summary unavailable — continue without it
+        const fileRow = kgStore.getFile(filePath);
+        if (fileRow?.file_id !== undefined) {
+          const summaryRow = kgStore.getSummaryByFile(fileRow.file_id);
+          summary = summaryRow?.summary ?? null;
         }
 
         fileEntries.push({
@@ -214,6 +208,15 @@ function injectKgSection(
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(`KG injection skipped due to error: ${msg}`);
     return { section: "", warnings };
+  } finally {
+    // better-sqlite3 databases should be closed when done
+    if (db !== undefined) {
+      try {
+        db.close();
+      } catch {
+        // ignore close errors
+      }
+    }
   }
 }
 

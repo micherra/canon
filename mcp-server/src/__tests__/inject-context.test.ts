@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board, ContextInjection } from "../orchestration/flow-schema.ts";
 import { extractSection, resolveContextInjections } from "../orchestration/inject-context.ts";
+import type { LayerViolation } from "../graph/kg-types.ts";
 
 // ---------------------------------------------------------------------------
 // Mocks for file_context tests
@@ -55,7 +56,7 @@ vi.mock("../graph/kg-query.ts", () => ({
   computeFileInsightMaps: vi.fn().mockReturnValue({
     hubPaths: new Set<string>(),
     cycleMemberPaths: new Map<string, string[]>(),
-    layerViolationsByPath: new Map<string, unknown[]>(),
+    layerViolationsByPath: new Map<string, LayerViolation[]>(),
   }),
 }));
 
@@ -443,7 +444,7 @@ describe("resolveContextInjections — file_context source", () => {
     vi.mocked(computeFileInsightMaps).mockReturnValue({
       hubPaths: new Set<string>(),
       cycleMemberPaths: new Map<string, string[]>(),
-      layerViolationsByPath: new Map<string, unknown[]>(),
+      layerViolationsByPath: new Map<string, LayerViolation[]>(),
     });
   });
 
