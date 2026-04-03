@@ -180,7 +180,7 @@ describe("v1 to v2 migration", () => {
     db.close();
   });
 
-  it("migrates v1 DB to v6: schema_version updated to '6' in meta table", () => {
+  it("migrates v1 DB to v7: schema_version updated to '7' in meta table", () => {
     const dbPath = makeTmpDb();
     const v1db = createV1Db(dbPath);
     v1db.close();
@@ -353,7 +353,7 @@ describe("migration idempotency", () => {
     }).not.toThrow();
   });
 
-  it("schema_version is still '6' after two consecutive inits", () => {
+  it("schema_version is still '7' after two consecutive inits", () => {
     const dbPath = makeTmpDb();
 
     const db1 = initExecutionDb(dbPath);

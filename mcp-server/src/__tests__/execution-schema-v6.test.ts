@@ -122,7 +122,7 @@ describe('Schema v6 migration — agent session columns', () => {
     expect(columnExists(db, 'execution_states', 'agent_session_id')).toBe(false);
     expect(columnExists(db, 'execution_states', 'last_agent_activity')).toBe(false);
 
-    // Run migrations (should upgrade to v6)
+    // Run migrations (should upgrade to v7 — runs v6 then v7)
     runMigrations(db);
 
     // Now v6 columns should exist
@@ -145,7 +145,7 @@ describe('Schema v6 migration — agent session columns', () => {
     // Running migrations again should not throw
     expect(() => runMigrations(db)).not.toThrow();
 
-    // Columns still exist and schema_version is still 6
+    // Columns still exist and schema_version is still 7
     expect(columnExists(db, 'execution_states', 'agent_session_id')).toBe(true);
     expect(columnExists(db, 'execution_states', 'last_agent_activity')).toBe(true);
 

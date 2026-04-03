@@ -220,7 +220,7 @@ describe("migration v5 — idempotency", () => {
     }).not.toThrow();
   });
 
-  it("schema_version is still '6' after two consecutive inits", () => {
+  it("schema_version is still '7' after two consecutive inits", () => {
     const dbPath = makeTmpDb();
 
     const db1 = initExecutionDb(dbPath);
@@ -263,7 +263,7 @@ describe("migration v5 — v3 to v5 upgrade", () => {
     db.close();
   });
 
-  it("migrates v3 DB: schema_version updated to '6'", () => {
+  it("migrates v3 DB: schema_version updated to '7'", () => {
     const dbPath = makeTmpDb();
     const v3db = createV3Db(dbPath);
     v3db.close();

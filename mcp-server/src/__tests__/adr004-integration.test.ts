@@ -455,7 +455,7 @@ describe("runMigrations — data preservation during upgrade", () => {
     expect(rows[0].status).toBe("done");
   });
 
-  it("upgrades schema_version to 6 in meta table", () => {
+  it("upgrades schema_version to 7 in meta table", () => {
     const db = makeV1DbFromFull();
     runMigrations(db);
 

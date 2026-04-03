@@ -95,7 +95,7 @@ describe('runMigrations', () => {
     expect(afterTables.map(r => r.name)).toContain('iteration_results');
   });
 
-  test('upgrades schema_version to 6 in meta table', () => {
+  test('upgrades schema_version to 7 in meta table', () => {
     const db = makeV1Db();
     runMigrations(db);
 

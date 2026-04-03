@@ -128,8 +128,8 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("schema migration v4 — cache_prefix column", () => {
-  it("SCHEMA_VERSION is '7' (v4 adds cache_prefix, v5 adds transcript_path, v6 adds agent session columns, v7 adds worktree columns)", () => {
-    expect(SCHEMA_VERSION).toBe("7");
+  it("SCHEMA_VERSION is '8' (v4 adds cache_prefix, v5 adds transcript_path, v6 adds agent session columns, v7 adds worktree columns, v8 adds jobs tables)", () => {
+    expect(SCHEMA_VERSION).toBe("8");
   });
 
   it("fresh DB has cache_prefix column on execution table", () => {
