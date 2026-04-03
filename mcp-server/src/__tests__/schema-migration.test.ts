@@ -99,8 +99,8 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("fresh database v2 schema", () => {
-  it("SCHEMA_VERSION is '7'", () => {
-    expect(SCHEMA_VERSION).toBe("7");
+  it("SCHEMA_VERSION is '8'", () => {
+    expect(SCHEMA_VERSION).toBe("8");
   });
 
   it("fresh DB has correlation_id column on execution table", () => {
@@ -136,7 +136,7 @@ describe("fresh database v2 schema", () => {
     db.close();
   });
 
-  it("fresh DB meta table has schema_version '7'", () => {
+  it("fresh DB meta table has schema_version '8'", () => {
     const dbPath = makeTmpDb();
     const db = initExecutionDb(dbPath);
 
@@ -144,7 +144,7 @@ describe("fresh database v2 schema", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
 
     db.close();
   });
@@ -180,7 +180,7 @@ describe("v1 to v2 migration", () => {
     db.close();
   });
 
-  it("migrates v1 DB to v7: schema_version updated to '7' in meta table", () => {
+  it("migrates v1 DB to v8: schema_version updated to '8' in meta table", () => {
     const dbPath = makeTmpDb();
     const v1db = createV1Db(dbPath);
     v1db.close();
@@ -191,7 +191,7 @@ describe("v1 to v2 migration", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
 
     db.close();
   });
@@ -353,7 +353,7 @@ describe("migration idempotency", () => {
     }).not.toThrow();
   });
 
-  it("schema_version is still '7' after two consecutive inits", () => {
+  it("schema_version is still '8' after two consecutive inits", () => {
     const dbPath = makeTmpDb();
 
     const db1 = initExecutionDb(dbPath);
@@ -365,7 +365,7 @@ describe("migration idempotency", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
 
     db2.close();
   });
@@ -446,15 +446,15 @@ describe("schema version comparison uses integer parsing", () => {
     v1db.close();
 
     // Opening with initExecutionDb triggers migration — should NOT throw
-    // and should produce schema version '2'
+    // and should produce the current SCHEMA_VERSION
     const db = initExecutionDb(dbPath);
 
     const row = db
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    // Migrations ran — version upgraded to 7
-    expect(row?.value).toBe("7");
+    // Migrations ran — version upgraded to 8
+    expect(row?.value).toBe("8");
     db.close();
   });
 

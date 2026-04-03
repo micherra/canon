@@ -3,9 +3,9 @@
  *
  * Tests that:
  * 1. Fresh DB gets v7 columns (worktree_path, worktree_branch) on execution table
- * 2. Existing v6 DB migrates to v7
+ * 2. Existing v6 DB migrates to v8
  * 3. Double migration (running v7 twice) is safe (idempotent)
- * 4. SCHEMA_VERSION is '7'
+ * 4. SCHEMA_VERSION is '8'
  */
 
 import { describe, test, expect } from 'vitest';
@@ -13,8 +13,8 @@ import Database from 'better-sqlite3';
 import { initExecutionDb, runMigrations, SCHEMA_VERSION, columnExists } from '../orchestration/execution-schema.ts';
 
 describe('SCHEMA_VERSION', () => {
-  test('is 7', () => {
-    expect(SCHEMA_VERSION).toBe('7');
+  test('is 8', () => {
+    expect(SCHEMA_VERSION).toBe('8');
   });
 });
 
@@ -31,14 +31,14 @@ describe('Schema v7 migration — worktree columns on execution', () => {
     db.close();
   });
 
-  test('fresh DB schema_version is 7', () => {
+  test('fresh DB schema_version is 8', () => {
     const db = initExecutionDb(':memory:');
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('7');
+    expect(row?.value).toBe('8');
     db.close();
   });
 
-  test('existing v6 DB migrates to v7 with worktree columns', () => {
+  test('existing v6 DB migrates to v8 with worktree columns', () => {
     const db = new Database(':memory:');
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -112,7 +112,7 @@ describe('Schema v7 migration — worktree columns on execution', () => {
     expect(columnExists(db, 'execution', 'worktree_branch')).toBe(true);
 
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('7');
+    expect(row?.value).toBe('8');
 
     db.close();
   });
@@ -127,12 +127,12 @@ describe('Schema v7 migration — worktree columns on execution', () => {
     // Running migrations again should not throw
     expect(() => runMigrations(db)).not.toThrow();
 
-    // Columns still exist and schema_version is still 7
+    // Columns still exist and schema_version is still 8
     expect(columnExists(db, 'execution', 'worktree_path')).toBe(true);
     expect(columnExists(db, 'execution', 'worktree_branch')).toBe(true);
 
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('7');
+    expect(row?.value).toBe('8');
 
     db.close();
   });

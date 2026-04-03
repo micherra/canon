@@ -171,8 +171,8 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("schema version", () => {
-  it("SCHEMA_VERSION is '7'", () => {
-    expect(SCHEMA_VERSION).toBe("7");
+  it("SCHEMA_VERSION is '8'", () => {
+    expect(SCHEMA_VERSION).toBe("8");
   });
 });
 
@@ -190,7 +190,7 @@ describe("migration v5 — fresh DB", () => {
     db.close();
   });
 
-  it("fresh DB meta table has schema_version '7'", () => {
+  it("fresh DB meta table has schema_version '8'", () => {
     const dbPath = makeTmpDb();
     const db = initExecutionDb(dbPath);
 
@@ -198,7 +198,7 @@ describe("migration v5 — fresh DB", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
 
     db.close();
   });
@@ -220,7 +220,7 @@ describe("migration v5 — idempotency", () => {
     }).not.toThrow();
   });
 
-  it("schema_version is still '7' after two consecutive inits", () => {
+  it("schema_version is still '8' after two consecutive inits", () => {
     const dbPath = makeTmpDb();
 
     const db1 = initExecutionDb(dbPath);
@@ -232,7 +232,7 @@ describe("migration v5 — idempotency", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
     db2.close();
   });
 
@@ -263,7 +263,7 @@ describe("migration v5 — v3 to v5 upgrade", () => {
     db.close();
   });
 
-  it("migrates v3 DB: schema_version updated to '7'", () => {
+  it("migrates v3 DB: schema_version updated to '8'", () => {
     const dbPath = makeTmpDb();
     const v3db = createV3Db(dbPath);
     v3db.close();
@@ -274,7 +274,7 @@ describe("migration v5 — v3 to v5 upgrade", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
 
     db.close();
   });

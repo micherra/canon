@@ -2,11 +2,11 @@
  * execution-schema.ts — SQLite schema migration tests
  *
  * Tests cover:
- * - Migration v7 creates jobs and job_cache tables
- * - SCHEMA_VERSION is '7'
- * - Migration v7 creates expected indexes
+ * - Migration v8 creates jobs and job_cache tables
+ * - SCHEMA_VERSION is '8'
+ * - Migration v8 creates expected indexes
  * - Migration is idempotent (safe to re-run)
- * - Upgrade from v6 DB to v7
+ * - Upgrade from v6 DB to v8
  */
 
 import { describe, test, expect } from 'vitest';
@@ -41,8 +41,8 @@ function getSchemaVersion(db: ReturnType<typeof initExecutionDb>): string {
 // ---------------------------------------------------------------------------
 
 describe('SCHEMA_VERSION', () => {
-  test('is "7"', () => {
-    expect(SCHEMA_VERSION).toBe('7');
+  test('is "8"', () => {
+    expect(SCHEMA_VERSION).toBe('8');
   });
 });
 
@@ -50,7 +50,7 @@ describe('SCHEMA_VERSION', () => {
 // Migration v7 — jobs and job_cache tables
 // ---------------------------------------------------------------------------
 
-describe('migration v7 — jobs table', () => {
+describe('migration v8 — jobs table', () => {
   test('creates jobs table on fresh DB', () => {
     const db = initExecutionDb(':memory:');
     const tables = getTableNames(db);
@@ -85,7 +85,7 @@ describe('migration v7 — jobs table', () => {
   });
 });
 
-describe('migration v7 — job_cache table', () => {
+describe('migration v8 — job_cache table', () => {
   test('creates job_cache table on fresh DB', () => {
     const db = initExecutionDb(':memory:');
     const tables = getTableNames(db);
@@ -103,25 +103,25 @@ describe('migration v7 — job_cache table', () => {
   });
 });
 
-describe('migration v7 — schema version', () => {
-  test('schema_version is "7" after init', () => {
+describe('migration v8 — schema version', () => {
+  test('schema_version is "8" after init', () => {
     const db = initExecutionDb(':memory:');
-    expect(getSchemaVersion(db)).toBe('7');
+    expect(getSchemaVersion(db)).toBe('8');
   });
 });
 
-describe('migration v7 — upgrade from v6', () => {
+describe('migration v8 — upgrade from v6', () => {
   test('upgrades existing v6 DB to v7', () => {
     // Simulate a v6 DB by initializing then manually setting version back to '6'
     // and dropping the v7 tables (they were created by the fresh init)
     // Instead: use a real in-memory DB initialized without v7 tables
     const db = initExecutionDb(':memory:');
 
-    // Verify that v7 tables exist after migration
+    // Verify that v8 tables exist after migration
     const tables = getTableNames(db);
     expect(tables).toContain('jobs');
     expect(tables).toContain('job_cache');
-    expect(getSchemaVersion(db)).toBe('7');
+    expect(getSchemaVersion(db)).toBe('8');
   });
 
   test('runMigrations is idempotent — safe to call twice', () => {
@@ -134,7 +134,7 @@ describe('migration v7 — upgrade from v6', () => {
     const tables = getTableNames(db);
     expect(tables).toContain('jobs');
     expect(tables).toContain('job_cache');
-    expect(getSchemaVersion(db)).toBe('7');
+    expect(getSchemaVersion(db)).toBe('8');
   });
 
   test('can insert a row into jobs table', () => {

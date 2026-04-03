@@ -30,8 +30,8 @@ const BASE_INIT_PARAMS = {
 };
 
 describe('Schema v6 migration — agent session columns', () => {
-  test('SCHEMA_VERSION is 7', () => {
-    expect(SCHEMA_VERSION).toBe('7');
+  test('SCHEMA_VERSION is 8', () => {
+    expect(SCHEMA_VERSION).toBe('8');
   });
 
   test('fresh DB has agent_session_id column on execution_states', () => {
@@ -46,10 +46,10 @@ describe('Schema v6 migration — agent session columns', () => {
     db.close();
   });
 
-  test('fresh DB schema_version is 7', () => {
+  test('fresh DB schema_version is 8', () => {
     const db = initExecutionDb(':memory:');
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('7');
+    expect(row?.value).toBe('8');
     db.close();
   });
 
@@ -122,7 +122,7 @@ describe('Schema v6 migration — agent session columns', () => {
     expect(columnExists(db, 'execution_states', 'agent_session_id')).toBe(false);
     expect(columnExists(db, 'execution_states', 'last_agent_activity')).toBe(false);
 
-    // Run migrations (should upgrade to v7 — runs v6 then v7)
+    // Run migrations (should upgrade to v8 — runs v6, v7, then v8)
     runMigrations(db);
 
     // Now v6 columns should exist
@@ -130,7 +130,7 @@ describe('Schema v6 migration — agent session columns', () => {
     expect(columnExists(db, 'execution_states', 'last_agent_activity')).toBe(true);
 
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('7');
+    expect(row?.value).toBe('8');
 
     db.close();
   });
@@ -145,12 +145,12 @@ describe('Schema v6 migration — agent session columns', () => {
     // Running migrations again should not throw
     expect(() => runMigrations(db)).not.toThrow();
 
-    // Columns still exist and schema_version is still 7
+    // Columns still exist and schema_version is still 8
     expect(columnExists(db, 'execution_states', 'agent_session_id')).toBe(true);
     expect(columnExists(db, 'execution_states', 'last_agent_activity')).toBe(true);
 
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('7');
+    expect(row?.value).toBe('8');
 
     db.close();
   });
