@@ -989,7 +989,7 @@ server.registerTool(
             .optional()
             .describe("Task ID within a wave state (required for wave task results)"),
         })
-        .passthrough()
+        .strip()
         .optional()
         .describe("Result from the most recently completed agent. Omit on the first call."),
     },

@@ -526,10 +526,10 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
 // ---------------------------------------------------------------------------
 
 describe("categorizeFailures — uncategorized count boundary", () => {
-  it("needs_refinement is false when exactly 1 uncategorized failure remains", async () => {
-    // One unique failure with no peer = singleton category at 0.95, NOT uncategorized
-    // After all tiers, any remaining are singletonized. So uncategorized.length should always be 0.
-    // This tests that the singleton fallback (Step 5) prevents uncategorized from ever reaching 2.
+  it("needs_refinement is true when 2+ failures have no partial signal (truly uncategorized)", async () => {
+    // Two unique failures with no peer and no error_type have no partial signal —
+    // they are truly uncategorized and do NOT become singleton categories.
+    // uncategorized.length > 1 → needs_refinement true.
     const result = await categorizeFailures({
       workspace: "/tmp/test",
       failures: [
@@ -540,12 +540,11 @@ describe("categorizeFailures — uncategorized count boundary", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // Both should be singletonized (exact_error, confidence 0.95)
-    expect(result.uncategorized).toHaveLength(0);
-    // Both should be in categories
-    expect(result.categories).toHaveLength(2);
-    // All at 0.95 = needs_refinement false (no low-confidence groups, no uncategorized > 1)
-    expect(result.needs_refinement).toBe(false);
+    // No partial signal → both are truly uncategorized
+    expect(result.uncategorized).toHaveLength(2);
+    expect(result.categories).toHaveLength(0);
+    // uncategorized > 1 → needs_refinement true
+    expect(result.needs_refinement).toBe(true);
   });
 
   it("needs_refinement flag is driven by confidence < 0.8, not uncategorized count (singletons prevent accumulation)", async () => {

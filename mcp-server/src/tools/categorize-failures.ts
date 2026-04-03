@@ -235,17 +235,21 @@ export async function categorizeFailures(
     }
   }
 
-  // Step 5: Singleton exact-error groups — remaining unassigned failures each get their own
-  // exact-error group at confidence 0.95 (no peer means the error is unique but still classified).
+  // Step 5: Singleton groups for failures with partial signal (has error_type but no peer).
+  // Failures with no signal at all are left unassigned and collected as truly uncategorized.
   for (let i = 0; i < failures.length; i++) {
     if (assigned.has(i)) continue;
     const entry = failures[i];
-    const { category, description } = makeCategoryLabel("exact_error", entry);
-    categories.push({ category, description, confidence: 0.95, files: [entry.file], entries: [entry] });
-    assigned.add(i);
+    // Only create a singleton category when there is some partial signal (error_type present).
+    // Without any signal, the failure is truly uncategorized and should surface for LLM refinement.
+    if (entry.error_type) {
+      const { category, description } = makeCategoryLabel("error_type", entry);
+      categories.push({ category, description, confidence: 0.6, files: [entry.file], entries: [entry] });
+      assigned.add(i);
+    }
   }
 
-  // Collect uncategorized — failures not assigned to any group
+  // Collect uncategorized — failures not assigned to any group (no error_type, no peer signal)
   const uncategorized: FailureEntry[] = failures.filter((_, i) => !assigned.has(i));
 
   // Evaluate needs_refinement

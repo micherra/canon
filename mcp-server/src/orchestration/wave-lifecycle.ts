@@ -55,12 +55,21 @@ export interface CleanupResult {
  * If the canonical suffix is not found, returns the workspace path unchanged.
  */
 export function getProjectDir(workspace: string): string {
-  const marker = "/.canon/workspaces/";
-  const idx = workspace.indexOf(marker);
-  if (idx === -1) {
-    return workspace;
+  // Check both POSIX and Windows path separators for cross-platform support.
+  const posixMarker = "/.canon/workspaces/";
+  const windowsMarker = "\\.canon\\workspaces\\";
+
+  let idx = workspace.indexOf(posixMarker);
+  if (idx !== -1) {
+    return workspace.slice(0, idx);
   }
-  return workspace.slice(0, idx);
+
+  idx = workspace.indexOf(windowsMarker);
+  if (idx !== -1) {
+    return workspace.slice(0, idx);
+  }
+
+  return workspace;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +84,18 @@ export function getProjectDir(workspace: string): string {
  *
  * Throws on git failure so the caller can surface the error immediately.
  */
+/**
+ * Sanitize a task_id for safe use in filesystem paths and git branch names.
+ * Strips path separators (/ \), null bytes, and other shell metacharacters
+ * that could enable path traversal or command injection.
+ */
+function sanitizeTaskId(taskId: string): string {
+  // Replace path separators, null bytes, and shell metacharacters with dashes.
+  // Allowed characters: alphanumeric, hyphens, underscores, and dots (safe in
+  // both filesystem paths and git branch names).
+  return taskId.replace(/[/\\\x00$`&|;(){}<>!?*[\]"' \t\n\r]/g, "-");
+}
+
 export async function createWaveWorktrees(
   tasks: WaveTask[],
   projectDir: string
@@ -82,8 +103,9 @@ export async function createWaveWorktrees(
   const results: WaveWorktreeResult[] = [];
 
   for (const task of tasks) {
-    const worktreePath = join(projectDir, ".canon", "worktrees", task.task_id);
-    const branchName = `canon-wave/${task.task_id}`;
+    const safeTaskId = sanitizeTaskId(task.task_id);
+    const worktreePath = join(projectDir, ".canon", "worktrees", safeTaskId);
+    const branchName = `canon-wave/${safeTaskId}`;
 
     const result = await gitExecAsync(
       ["worktree", "add", worktreePath, "-b", branchName, "HEAD"],
