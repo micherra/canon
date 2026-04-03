@@ -91,7 +91,8 @@ async function resolveFileContextInjection(
   const cappedFiles = filePaths.slice(0, cap);
 
   // --- 3. Open KG DB ---
-  const dbPath = path.join(workspace, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  const projectDir = process.env["CANON_PROJECT_DIR"] ?? process.cwd();
+  const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   if (!existsSync(dbPath)) {
     warnings.push("file_context: KG database unavailable — skipping file context injection");
     return { warnings };

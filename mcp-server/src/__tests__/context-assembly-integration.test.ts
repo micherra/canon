@@ -70,14 +70,14 @@ describe("PIPELINE_ALLOWED_VARIABLES superset relationship", () => {
     expect(PIPELINE_ALLOWED_VARIABLES.has("enrichment")).toBe(true);
   });
 
-  it("project_structure is in PIPELINE_ALLOWED_VARIABLES (ctx-01 addition)", async () => {
+  it("project_structure is NOT in PIPELINE_ALLOWED_VARIABLES (injected via cache prefix, not substitution)", async () => {
     const { PIPELINE_ALLOWED_VARIABLES } = await import("../tools/prompt-pipeline/validate.ts");
-    expect(PIPELINE_ALLOWED_VARIABLES.has("project_structure")).toBe(true);
+    expect(PIPELINE_ALLOWED_VARIABLES.has("project_structure")).toBe(false);
   });
 
-  it("conventions is in PIPELINE_ALLOWED_VARIABLES (ctx-01 addition)", async () => {
+  it("conventions is NOT in PIPELINE_ALLOWED_VARIABLES (injected via cache prefix, not substitution)", async () => {
     const { PIPELINE_ALLOWED_VARIABLES } = await import("../tools/prompt-pipeline/validate.ts");
-    expect(PIPELINE_ALLOWED_VARIABLES.has("conventions")).toBe(true);
+    expect(PIPELINE_ALLOWED_VARIABLES.has("conventions")).toBe(false);
   });
 });
 

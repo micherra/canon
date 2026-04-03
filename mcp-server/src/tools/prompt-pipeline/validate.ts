@@ -29,8 +29,6 @@ export const PIPELINE_ALLOWED_VARIABLES: Set<string> = new Set([
   ...RUNTIME_VARIABLES,
   // New variables populated by pipeline stages
   "enrichment",         // Spawn enrichment context injection
-  "project_structure",  // Project topology summary computed at workspace init
-  "conventions",        // Project conventions from .canon/CONVENTIONS.md computed at workspace init
   // Additional runtime variables not in RUNTIME_VARIABLES
   "item",          // Exact ${item} (covered by item.* pattern too, but be explicit)
   "review_scope",  // Review scope filter
