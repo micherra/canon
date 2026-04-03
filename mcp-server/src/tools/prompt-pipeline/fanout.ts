@@ -1,5 +1,5 @@
 /**
- * Stage 7: fanout
+ * Stage 8: fanout
  *
  * Expands a single base prompt into N fanned-out prompt entries based on
  * the state type.
@@ -112,7 +112,7 @@ export function parseTimeout(timeout: string): number | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Stage 7: Expand ctx.basePrompt into ctx.prompts[] based on state type.
+ * Stage 8: Expand ctx.basePrompt into ctx.prompts[] based on state type.
  */
 export async function fanout(ctx: PromptContext): Promise<PromptContext> {
   const { state } = ctx;
@@ -217,7 +217,7 @@ export async function fanout(ctx: PromptContext): Promise<PromptContext> {
             file_count: cluster.files.length,
           };
           const prompt = substituteItem(basePrompt, clusterItem);
-          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
+          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths, isolation: "worktree" });
         }
       } else if (competeConfig) {
         const expanded = expandCompetitorPrompts(
@@ -229,10 +229,11 @@ export async function fanout(ctx: PromptContext): Promise<PromptContext> {
             agent: entry.agent,
             prompt: entry.prompt,
             template_paths: entry.template_paths,
+            isolation: "worktree",
           });
         }
       } else {
-        prompts.push({ agent, prompt: basePrompt, template_paths: paths });
+        prompts.push({ agent, prompt: basePrompt, template_paths: paths, isolation: "worktree" });
       }
       break;
     }
@@ -247,12 +248,12 @@ export async function fanout(ctx: PromptContext): Promise<PromptContext> {
         for (const roleEntry of roles) {
           const rName = roleName(roleEntry as string | { name: string; optional?: boolean });
           const prompt = substituteVariables(basePrompt, { role: rName });
-          prompts.push({ agent, prompt, role: rName, template_paths: paths });
+          prompts.push({ agent, prompt, role: rName, template_paths: paths, isolation: "worktree" });
         }
       } else {
         // One prompt per agent
         for (const agent of agents) {
-          prompts.push({ agent, prompt: basePrompt, template_paths: paths });
+          prompts.push({ agent, prompt: basePrompt, template_paths: paths, isolation: "worktree" });
         }
       }
       break;

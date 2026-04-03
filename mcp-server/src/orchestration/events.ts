@@ -13,7 +13,8 @@ export type FlowEventType =
   | "board_updated"
   | "wave_event_injected"
   | "wave_event_resolved"
-  | "stuck_detected";
+  | "stuck_detected"
+  | "handoff_missing";
 
 export interface FlowEventMap {
   state_entered: {
@@ -111,6 +112,13 @@ export interface FlowEventMap {
       previous: Record<string, unknown>;
       current: Record<string, unknown>;
     };
+    timestamp: string;
+    correlation_id?: string;
+  };
+  handoff_missing: {
+    stateId: string;
+    expectedFile: string;
+    agentType: string;
     timestamp: string;
     correlation_id?: string;
   };
@@ -229,6 +237,14 @@ export const EventPayloadSchemas = {
       previous: z.record(z.string(), z.unknown()),
       current: z.record(z.string(), z.unknown()),
     }),
+    timestamp: z.string(),
+    correlation_id: correlationId,
+  }),
+
+  handoff_missing: z.object({
+    stateId: z.string(),
+    expectedFile: z.string(),
+    agentType: z.string(),
     timestamp: z.string(),
     correlation_id: correlationId,
   }),

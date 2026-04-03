@@ -1,5 +1,5 @@
 /**
- * Stage 8: inject-coordination
+ * Stage 9: inject-coordination
  *
  * Applies three types of coordination injection to fanned-out prompts:
  *
@@ -48,7 +48,7 @@ record_agent_metrics({
 }
 
 /**
- * Stage 8: Inject role substitution, messaging instructions, and metrics footer.
+ * Stage 9: Inject role substitution, messaging instructions, and metrics footer.
  */
 export async function injectCoordination(ctx: PromptContext): Promise<PromptContext> {
   const { state } = ctx;

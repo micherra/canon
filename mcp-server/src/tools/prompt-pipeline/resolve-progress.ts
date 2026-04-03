@@ -1,5 +1,5 @@
 /**
- * Stage 2 — Resolve progress variable.
+ * Stage 3 — Resolve progress variable.
  *
  * Reads the last N progress entries from ExecutionStore and sets
  * ctx.mergedVariables.progress. Calls escapeDollarBrace at the read
@@ -13,7 +13,7 @@ import { escapeDollarBrace } from "../../orchestration/wave-variables.ts";
 import type { PromptContext } from "./types.ts";
 
 /**
- * Stage 2: Resolve the ${progress} variable.
+ * Stage 3: Resolve the ${progress} variable.
  *
  * Only runs when input.flow.progress is truthy (a non-empty string path).
  * Reads progress entries from ExecutionStore (max 8 entries) and escapes

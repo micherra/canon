@@ -1,5 +1,5 @@
 /**
- * Stage 9 — Unresolved variable validation.
+ * Stage 10 — Unresolved variable validation.
  *
  * Scans all assembled prompts for ${...} patterns that are not in the
  * PIPELINE_ALLOWED_VARIABLES allowlist. Each unresolved pattern is added
@@ -28,6 +28,7 @@ import type { PromptContext } from "./types.ts";
 export const PIPELINE_ALLOWED_VARIABLES: Set<string> = new Set([
   ...RUNTIME_VARIABLES,
   // New variables populated by pipeline stages
+  "handoff_context",    // Handoff file content injected by injectHandoffs stage
   "enrichment",         // Spawn enrichment context injection
   // Additional runtime variables not in RUNTIME_VARIABLES
   "item",          // Exact ${item} (covered by item.* pattern too, but be explicit)
@@ -53,7 +54,7 @@ function isAllowed(name: string): boolean {
 }
 
 /**
- * Stage 9: Validate assembled prompts for unresolved variable references.
+ * Stage 10: Validate assembled prompts for unresolved variable references.
  *
  * Scans ctx.prompts[].prompt (or ctx.basePrompt when prompts is empty).
  * For each ${...} pattern not in the allowlist, appends an ERROR: warning.

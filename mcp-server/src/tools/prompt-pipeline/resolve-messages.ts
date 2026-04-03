@@ -1,5 +1,5 @@
 /**
- * Stage 3 — Resolve channel messages (inject_messages opt-in).
+ * Stage 4 — Resolve channel messages (inject_messages opt-in).
  *
  * When state.inject_messages is true, reads messages from the channel
  * named after the current state_id and sets ctx.mergedVariables.messages.
@@ -15,7 +15,7 @@ import { escapeDollarBrace } from "../../orchestration/wave-variables.ts";
 import type { PromptContext } from "./types.ts";
 
 /**
- * Stage 3: Resolve ${messages} from channel context.
+ * Stage 4: Resolve ${messages} from channel context.
  *
  * Opt-in: only runs when state.inject_messages === true.
  * Channel name = state_id (convention: agents post to a channel named after their state).

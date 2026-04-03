@@ -1,5 +1,5 @@
 /**
- * Stage 6: inject-wave-briefing
+ * Stage 7: inject-wave-briefing
  *
  * Assembles and appends wave briefing content to the basePrompt.
  *
@@ -10,7 +10,7 @@
  * each summary before passing to assembleWaveBriefing, and on the entire KG
  * section before appending to basePrompt.
  *
- * This stage operates on ctx.basePrompt (pre-fanout). The fanout stage (7)
+ * This stage operates on ctx.basePrompt (pre-fanout). The fanout stage (8)
  * will copy basePrompt into each fanned-out prompt entry, so every agent
  * receives the briefing identically. This is equivalent to the original code
  * that appended briefing per-entry after fanout.
@@ -19,7 +19,7 @@
  * not at the caller.
  * Canon: graceful-degradation — missing KG, unavailable DB, DB errors skip
  * injection with warnings rather than failing the pipeline.
- * Canon: deep-modules — KG injection hidden inside existing stage 6; no new
+ * Canon: deep-modules — KG injection hidden inside existing stage 7; no new
  * pipeline stage added.
  */
 
@@ -222,7 +222,7 @@ function injectKgSection(
 }
 
 // ---------------------------------------------------------------------------
-// Stage 6: injectWaveBriefing
+// Stage 7: injectWaveBriefing
 // ---------------------------------------------------------------------------
 
 /**

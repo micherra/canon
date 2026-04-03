@@ -40,6 +40,7 @@ import { semanticSearch } from "./tools/semantic-search.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
 import { updateBoard } from "./tools/update-board.ts";
 import { writePlanIndex } from "./tools/write-plan-index.ts";
+import { writeHandoff } from "./tools/write-handoff.ts";
 import { recordAgentMetrics } from "./tools/record-agent-metrics.ts";
 import { driveFlow } from "./tools/drive-flow.ts";
 import { categorizeFailures } from "./tools/categorize-failures.ts";
@@ -954,6 +955,33 @@ server.registerTool(
     },
   },
   wrapHandler(async (input) => writePlanIndex(input)),
+);
+
+server.registerTool(
+  "write_handoff",
+  {
+    description:
+      "Write a structured handoff markdown file to {workspace}/handoffs/{type}.md. Each content field becomes a ## section. Supports 4 handoff types: research-synthesis, design-brief, impl-handoff, test-findings.",
+    inputSchema: {
+      workspace: z.string().describe("Workspace directory path"),
+      type: z
+        .enum(["research-synthesis", "design-brief", "impl-handoff", "test-findings"])
+        .describe("Handoff type — selects the content validation schema"),
+      // Passthrough object: MCP Zod schemas don't support discriminated unions cleanly,
+      // so type-specific field validation happens inside writeHandoff() at runtime.
+      content: z
+        .object({})
+        .passthrough()
+        .describe("Type-specific content fields (validated inside writeHandoff)"),
+    },
+  },
+  wrapHandler(async (input) =>
+    writeHandoff({
+      workspace: input.workspace,
+      type: input.type,
+      content: input.content as object,
+    }),
+  ),
 );
 
 server.registerTool(

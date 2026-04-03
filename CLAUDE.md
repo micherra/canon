@@ -112,6 +112,8 @@ Read `agents/canon-orchestrator.md` for the full protocol. The key loop:
 | Writer | `canon:canon-writer` | Principle authoring |
 | Learner | `canon:canon-learner` | Pattern analysis |
 
+**Isolation requirement:** Every `Agent` tool call for a specialist agent MUST include `isolation: "worktree"`. This gives each agent an isolated copy of the repo for safe file access and enables parallel agents to work without conflicts. No exceptions — even single-agent spawns use worktree isolation.
+
 ## Agent Spawn Error Handling
 
 When any agent spawn fails, detect the error type and retry:

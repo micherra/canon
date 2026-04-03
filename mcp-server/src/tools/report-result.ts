@@ -4,6 +4,7 @@
  * and board state updates.
  */
 
+import { existsSync } from "node:fs";
 import { resolve, relative } from "node:path";
 import {
   normalizeStatus,
@@ -28,6 +29,7 @@ import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { executeEffects } from "../orchestration/effects.ts";
 import { inspectDebateProgress } from "../orchestration/debate.ts";
+import { HANDOFF_PRODUCER_MAP } from "./handoff-types.ts";
 
 interface ReportResultInput {
   workspace: string;
@@ -578,6 +580,32 @@ async function reportResultLocked(
   if (stateDef?.effects?.length && input.artifacts?.length) {
     const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
     await executeEffects(stateDef, input.workspace, input.artifacts, projectDir).catch(() => {});
+  }
+
+  // Check expected handoff file existence (best-effort — never blocks the flow)
+  if (stateDef?.agent) {
+    const expectedHandoff = HANDOFF_PRODUCER_MAP[stateDef.agent];
+    if (expectedHandoff) {
+      try {
+        const handoffPath = resolve(input.workspace, "handoffs", expectedHandoff);
+        if (!existsSync(handoffPath)) {
+          const correlationId = store.getCorrelationId();
+          const handoffMissingPayload = {
+            stateId: input.state_id,
+            expectedFile: expectedHandoff,
+            agentType: stateDef.agent,
+            timestamp: new Date().toISOString(),
+            ...(correlationId ? { correlation_id: correlationId } : {}),
+          };
+          try {
+            store.appendEvent("handoff_missing", handoffMissingPayload, correlationId ?? undefined);
+          } catch { /* best-effort */ }
+          try {
+            flowEventBus.emit("handoff_missing", handoffMissingPayload);
+          } catch { /* best-effort */ }
+        }
+      } catch (err) { console.debug("handoff check failed:", err); /* best-effort — never blocks the flow */ }
+    }
   }
 
   // Emit stuck_detected event (best-effort — follows established best-effort pattern).
