@@ -979,7 +979,7 @@ function buildSpawnRequests(
   const requests: SpawnRequest[] = prompts.map((entry) => ({
     agent_type: entry.agent,
     prompt: entry.prompt,
-    isolation: (entry.isolation ?? "none") as SpawnRequest["isolation"],
+    isolation: (entry.isolation ?? "worktree") as SpawnRequest["isolation"],
     ...(entry.role !== undefined ? { role: entry.role } : {}),
     ...(entry.item !== undefined
       ? {
