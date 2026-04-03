@@ -86,6 +86,17 @@ export async function enterAndPrepareState(
     return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${workspace}`);
   }
 
+  // Step 1.5: Inject session branch variables into the variables map.
+  // These are resolved from the persisted execution row so agents always have access
+  // to the branch, worktree_branch, and worktree_path regardless of orchestrator state.
+  const session = store.getSession();
+  const sessionVars: Record<string, string> = {};
+  if (session) {
+    sessionVars.branch = session.branch;
+    if (session.worktree_branch) sessionVars.worktree_branch = session.worktree_branch;
+    if (session.worktree_path) sessionVars.worktree_path = session.worktree_path;
+  }
+
   // Step 2: Check convergence — bail early if max iterations reached.
   const { allowed, reason } = canEnterState(board, state_id);
   const iteration = board.iterations[state_id];
@@ -311,7 +322,7 @@ export async function enterAndPrepareState(
     workspace,
     state_id,
     flow,
-    variables: { ...input.variables, ...reviewScopeVars, ...enrichmentVars },
+    variables: { ...sessionVars, ...input.variables, ...reviewScopeVars, ...enrichmentVars },
     items: input.items,
     role: input.role,
     wave: input.wave,

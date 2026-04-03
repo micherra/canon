@@ -4,11 +4,11 @@
  * Expands a single base prompt into N fanned-out prompt entries based on
  * the state type.
  *
- * State type dispatch:
- * - single: clusters, compete, or single prompt
- * - parallel: agents-based or roles-based fanout
- * - wave: iterate items with ${item} substitution, isolation: "worktree"
- * - parallel-per: clusters or items with isolation: "worktree"
+ * State type dispatch (all types get isolation: "worktree"; consultations remain "none"):
+ * - single: clusters, compete, or single prompt — isolation: "worktree"
+ * - parallel: agents-based or roles-based fanout — isolation: "worktree"
+ * - wave: iterate items with ${item} substitution — isolation: "worktree"
+ * - parallel-per: clusters or items — isolation: "worktree"
  *
  * Also handles debate detection (when flow.debate is set on the entry state):
  * - Active debate: produces per-team prompts and marks ctx.fanned_out = true
@@ -217,7 +217,7 @@ export async function fanout(ctx: PromptContext): Promise<PromptContext> {
             file_count: cluster.files.length,
           };
           const prompt = substituteItem(basePrompt, clusterItem);
-          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths });
+          prompts.push({ agent, prompt, item: clusterItem, template_paths: paths, isolation: "worktree" });
         }
       } else if (competeConfig) {
         const expanded = expandCompetitorPrompts(
@@ -229,10 +229,11 @@ export async function fanout(ctx: PromptContext): Promise<PromptContext> {
             agent: entry.agent,
             prompt: entry.prompt,
             template_paths: entry.template_paths,
+            isolation: "worktree",
           });
         }
       } else {
-        prompts.push({ agent, prompt: basePrompt, template_paths: paths });
+        prompts.push({ agent, prompt: basePrompt, template_paths: paths, isolation: "worktree" });
       }
       break;
     }
@@ -247,12 +248,12 @@ export async function fanout(ctx: PromptContext): Promise<PromptContext> {
         for (const roleEntry of roles) {
           const rName = roleName(roleEntry as string | { name: string; optional?: boolean });
           const prompt = substituteVariables(basePrompt, { role: rName });
-          prompts.push({ agent, prompt, role: rName, template_paths: paths });
+          prompts.push({ agent, prompt, role: rName, template_paths: paths, isolation: "worktree" });
         }
       } else {
         // One prompt per agent
         for (const agent of agents) {
-          prompts.push({ agent, prompt: basePrompt, template_paths: paths });
+          prompts.push({ agent, prompt: basePrompt, template_paths: paths, isolation: "worktree" });
         }
       }
       break;

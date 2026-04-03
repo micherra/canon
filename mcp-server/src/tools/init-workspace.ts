@@ -416,6 +416,18 @@ export async function initWorkspaceFlow(
     actualWorktreeBranch = worktreeBranch;
     session.worktree_path = worktreePath;
     session.worktree_branch = worktreeBranch;
+    // Persist worktree info to the execution row so enterAndPrepareState can inject
+    // ${branch}, ${worktree_branch}, and ${worktree_path} into spawn prompt variables.
+    // Best-effort: a transient SQLite error must not fail initWorkspaceFlow after the
+    // worktree has already been created successfully.
+    try {
+      store.updateExecution({
+        worktree_path: worktreePath,
+        worktree_branch: worktreeBranch,
+      });
+    } catch (err) {
+      console.warn("[init-workspace] Failed to persist worktree info to execution row:", err);
+    }
   }
 
   return {
