@@ -8,7 +8,7 @@
  * 2. write_handoff → reportResult: file written by tool suppresses handoff_missing
  *    event (producer tool → report-result event check boundary)
  * 3. assemblePrompt end-to-end with ${handoff_context} substituted into prompt
- * 4. Multiple handoff files concatenated with separator (declared known gap)
+ * 4. (removed — separator test was not exercising production code)
  * 5. writeHandoff idempotency — overwriting an existing file succeeds
  * 6. initWorkspace → writeHandoff — pre-existing handoffs/ dir works (idempotent mkdir)
  */
@@ -476,36 +476,7 @@ describe("ADR-018 integration — multiple handoff file concatenation (known gap
     expect(result.mergedVariables.handoff_context).not.toContain("---");
   });
 
-  it("two files in handoff_context are joined with the \\n\\n---\\n\\n separator", async () => {
-    // Simulate a future multi-file entry by directly testing the separator logic
-    // via the pipeline stage with a manually crafted context that has two entries.
-    // Since the current map has single-file entries, we test the concatenation
-    // by writing two real files and verifying the separator appears when both exist.
-    // We do this by temporarily patching the context to simulate a two-file map.
-    //
-    // The separator is "\n\n---\n\n" — exercise the join path with two real reads.
-    const workspace = makeTmpWorkspace();
-    mkdirSync(join(workspace, "handoffs"), { recursive: true });
 
-    // Write both files that the architect map would consume if extended
-    await writeFile(join(workspace, "handoffs", "file-a.md"), "Content A", "utf-8");
-    await writeFile(join(workspace, "handoffs", "file-b.md"), "Content B", "utf-8");
-
-    // Directly test the join path via injectHandoffs by injecting a context
-    // that reads from two files using a workaround: provide a ctx whose workspace
-    // has two files named after what a two-file map would include.
-    //
-    // Since HANDOFF_CONSUMER_MAP is a private const, we verify the separator via
-    // the concatenation contract by checking the stage source directly.
-    // Per ADR-018 design: contents.join("\n\n---\n\n") — this is the contract.
-    //
-    // The implementation uses: contents.join("\n\n---\n\n")
-    // We verify this by reading two handoff files directly and confirming the join.
-    const c1 = "Content A";
-    const c2 = "Content B";
-    const joined = [c1, c2].join("\n\n---\n\n");
-    expect(joined).toBe("Content A\n\n---\n\nContent B");
-  });
 });
 
 // ---------------------------------------------------------------------------

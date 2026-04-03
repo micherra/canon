@@ -120,6 +120,7 @@ export interface FlowEventMap {
     expectedFile: string;
     agentType: string;
     timestamp: string;
+    correlation_id?: string;
   };
 }
 
@@ -245,6 +246,7 @@ export const EventPayloadSchemas = {
     expectedFile: z.string(),
     agentType: z.string(),
     timestamp: z.string(),
+    correlation_id: correlationId,
   }),
 } satisfies Record<FlowEventType, z.ZodTypeAny>;
 

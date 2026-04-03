@@ -1,7 +1,8 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { z } from "zod";
 import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+import { atomicWriteFile } from "../utils/atomic-write.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,6 +113,16 @@ export async function writeHandoff(
     );
   }
 
+  // Ensure handoffs directory exists (handles older workspaces missing the subdir)
+  try {
+    await mkdir(handoffsRoot, { recursive: true });
+  } catch (err: unknown) {
+    return toolError(
+      "INVALID_INPUT",
+      `Cannot create handoffs directory at "${handoffsRoot}": ${(err as Error).message}`,
+    );
+  }
+
   // Render content fields as markdown sections
   const fields = parseResult.data as Record<string, string>;
   const sections = Object.entries(fields)
@@ -119,7 +130,14 @@ export async function writeHandoff(
     .join("\n\n");
   const markdown = `# ${input.type}\n\n${sections}\n`;
 
-  await writeFile(resolvedPath, markdown, "utf-8");
+  try {
+    await atomicWriteFile(resolvedPath, markdown);
+  } catch (err: unknown) {
+    return toolError(
+      "INVALID_INPUT",
+      `Failed to write handoff file "${resolvedPath}": ${(err as Error).message}`,
+    );
+  }
 
   return toolOk({ path: resolvedPath, type: input.type });
 }

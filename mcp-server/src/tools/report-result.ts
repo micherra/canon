@@ -596,14 +596,19 @@ async function reportResultLocked(
       try {
         const handoffPath = resolve(input.workspace, "handoffs", expectedHandoff);
         if (!existsSync(handoffPath)) {
-          // Emit warning via event bus — same pattern as stuck_detected
+          const correlationId = store.getCorrelationId();
+          const handoffMissingPayload = {
+            stateId: input.state_id,
+            expectedFile: expectedHandoff,
+            agentType: stateDef.agent,
+            timestamp: new Date().toISOString(),
+            ...(correlationId ? { correlation_id: correlationId } : {}),
+          };
           try {
-            flowEventBus.emit("handoff_missing", {
-              stateId: input.state_id,
-              expectedFile: expectedHandoff,
-              agentType: stateDef.agent,
-              timestamp: new Date().toISOString(),
-            });
+            store.appendEvent("handoff_missing", handoffMissingPayload, correlationId ?? undefined);
+          } catch { /* best-effort */ }
+          try {
+            flowEventBus.emit("handoff_missing", handoffMissingPayload);
           } catch { /* best-effort */ }
         }
       } catch { /* best-effort — never blocks the flow */ }

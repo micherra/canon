@@ -183,12 +183,7 @@ describe("injectHandoffs pipeline stage", () => {
   // Multiple handoff files
   // -------------------------------------------------------------------------
 
-  it("multiple handoff files are concatenated with separator", async () => {
-    // Architect gets only research-synthesis.md — single file. Use a mock
-    // consumer that needs two files by testing the separator logic indirectly.
-    // Since current HANDOFF_CONSUMER_MAP entries are single-file, we verify
-    // the pattern by checking that the content is present and the stage doesn't
-    // add extra separators when there's only one file.
+  it("single handoff file is injected without extra separators", async () => {
     const content = "Single file content.";
     await writeHandoff(tmpDir, "research-synthesis.md", content);
 
