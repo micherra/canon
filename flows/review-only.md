@@ -23,3 +23,5 @@ states:
 
 ### review
 Review code changes via `git diff ${base_commit}..HEAD`. Scope: ${review_scope}. Save to ${WORKSPACE}/plans/${slug}/REVIEW.md and ${WORKSPACE}/reviews/. Template: ${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md.
+
+${enrichment}

@@ -1,6 +1,12 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
+import { KgStore } from "../graph/kg-store.ts";
+import { getItemCountCap } from "./context-budget.ts";
+import { getExecutionStore } from "./execution-store.ts";
 import type { Board, ContextInjection } from "./flow-schema.ts";
 
 interface InjectionResult {
@@ -24,6 +30,15 @@ export async function resolveContextInjections(
       continue;
     }
 
+    if (injection.from === "file_context") {
+      const resolved = await resolveFileContextInjection(injection, board, workspace);
+      warnings.push(...resolved.warnings);
+      if (resolved.value !== undefined) {
+        variables[injection.as] = resolved.value;
+      }
+      continue;
+    }
+
     const resolved = await resolveStateInjection(injection, board, workspace);
     warnings.push(...resolved.warnings);
     if (resolved.value !== undefined) {
@@ -32,6 +47,129 @@ export async function resolveContextInjections(
   }
 
   return { variables, hitl, warnings };
+}
+
+/**
+ * Resolve a file_context injection by reading file summaries and graph metrics
+ * from the KG database for the files listed in board.metadata.affected_files.
+ *
+ * Gracefully degrades on all failure modes — missing metadata, parse errors,
+ * unavailable KG DB, or missing KG entries all produce warnings and return
+ * no value rather than throwing.
+ */
+async function resolveFileContextInjection(
+  _injection: ContextInjection,
+  board: Board,
+  workspace: string,
+): Promise<{ value?: string; warnings: string[] }> {
+  const warnings: string[] = [];
+
+  // --- 1. Read affected_files from board metadata ---
+  const rawAffectedFiles = board.metadata?.affected_files;
+  if (rawAffectedFiles === undefined || rawAffectedFiles === null) {
+    warnings.push("file_context: board metadata missing affected_files — skipping injection");
+    return { warnings };
+  }
+
+  let filePaths: string[];
+  try {
+    const parsed = JSON.parse(String(rawAffectedFiles));
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      warnings.push("file_context: affected_files is empty — skipping injection");
+      return { warnings };
+    }
+    filePaths = parsed.filter((x: unknown): x is string => typeof x === "string");
+    if (filePaths.length === 0) {
+      warnings.push("file_context: affected_files contains no valid string entries — skipping injection");
+      return { warnings };
+    }
+  } catch {
+    warnings.push("file_context: affected_files contains malformed JSON — skipping injection");
+    return { warnings };
+  }
+
+  // --- 2. Determine tier and cap file list ---
+  let tier: "small" | "medium" | "large" = "medium";
+  try {
+    const session = getExecutionStore(workspace).getSession();
+    tier = session?.tier ?? "medium";
+  } catch {
+    warnings.push("file_context: execution store unavailable — defaulting to medium tier");
+  }
+  const cap = getItemCountCap(tier);
+  const cappedFiles = filePaths.slice(0, cap);
+
+  // --- 3. Open KG DB ---
+  const projectDir = process.env["CANON_PROJECT_DIR"] ?? process.cwd();
+  const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  if (!existsSync(dbPath)) {
+    warnings.push("file_context: KG database unavailable — skipping file context injection");
+    return { warnings };
+  }
+
+  let db: ReturnType<typeof initDatabase> | undefined;
+  try {
+    db = initDatabase(dbPath);
+  } catch {
+    warnings.push("file_context: failed to open KG database — skipping file context injection");
+    return { warnings };
+  }
+
+  try {
+    const kgQuery = new KgQuery(db);
+    const kgStore = new KgStore(db);
+
+    // --- 4. Check KG staleness ---
+    const freshnessMs = kgQuery.getKgFreshnessMs();
+    if (freshnessMs !== null && freshnessMs > 3_600_000) {
+      warnings.push(
+        `file_context: KG data is stale (${Math.round(freshnessMs / 60_000)} minutes old) — context may be outdated`,
+      );
+    }
+
+    // --- 5. Compute insight maps ONCE for all files ---
+    const insightMaps = computeFileInsightMaps(db);
+
+    // --- 6. Build file context entries ---
+    const lines: string[] = [`### File Context (${cappedFiles.length} files)`, ""];
+
+    for (const filePath of cappedFiles) {
+      const metrics = kgQuery.getFileMetrics(filePath, {
+        hubPaths: insightMaps.hubPaths,
+        cycleMemberPaths: insightMaps.cycleMemberPaths,
+        layerViolationsByPath: insightMaps.layerViolationsByPath,
+      });
+
+      if (metrics) {
+        const hubLabel = metrics.is_hub ? "yes" : "no";
+        lines.push(
+          `**${filePath}** (layer: ${metrics.layer}, in_degree: ${metrics.in_degree}, out_degree: ${metrics.out_degree}, hub: ${hubLabel})`,
+        );
+      } else {
+        lines.push(`**${filePath}** (not indexed)`);
+      }
+
+      // Try to get summary from KG
+      const fileRow = kgStore.getFile(filePath);
+      if (fileRow?.file_id !== undefined) {
+        const summaryRow = kgStore.getSummaryByFile(fileRow.file_id);
+        if (summaryRow?.summary) {
+          lines.push(`Summary: ${summaryRow.summary}`);
+        }
+      }
+
+      lines.push("");
+    }
+
+    return { value: lines.join("\n").trimEnd(), warnings };
+  } finally {
+    // better-sqlite3 databases should be closed when done
+    try {
+      db.close();
+    } catch {
+      // ignore close errors
+    }
+  }
 }
 
 async function resolveStateInjection(

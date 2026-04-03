@@ -18,6 +18,9 @@ import { mkdir, readFile } from "fs/promises";
 import { join } from "path";
 import { createHash } from "node:crypto";
 import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { KgQuery } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 
 interface InitWorkspaceInput {
   flow_name: string;
@@ -315,6 +318,79 @@ export async function initWorkspaceFlow(
   prefixParts.push(
     `## Workspace\n\n- Task: ${input.task}\n- Branch: ${input.branch}\n- Slug: ${slug}\n- Base commit: ${input.base_commit}`,
   );
+
+  // 4. Project structure from KG (graceful degradation — skip if KG absent or fails)
+  try {
+    const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+    if (existsSync(kgDbPath)) {
+      const db = initDatabase(kgDbPath);
+      try {
+        const kgQuery = new KgQuery(db);
+
+        // Get all files with layer info
+        const allFiles = kgQuery.getAllFilesWithStats();
+        const totalFiles = allFiles.length;
+
+        // Layer breakdown: count files per layer
+        const layerCounts = new Map<string, number>();
+        const fileIdToPath = new Map<number, string>();
+        for (const file of allFiles) {
+          if (file.file_id !== undefined) {
+            fileIdToPath.set(file.file_id, file.path);
+          }
+          const layer = file.layer || "unknown";
+          layerCounts.set(layer, (layerCounts.get(layer) ?? 0) + 1);
+        }
+
+        // Layer breakdown string: "api (12 files), domain (8 files), ..."
+        const layerBreakdown = [...layerCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([layer, count]) => `${layer} (${count} file${count === 1 ? "" : "s"})`)
+          .join(", ");
+
+        // Top 5 hub files by in_degree
+        const allDegrees = kgQuery.getAllFileDegrees();
+        const hubEntries: Array<{ path: string; in_degree: number }> = [];
+        for (const [fileId, degrees] of allDegrees) {
+          const path = fileIdToPath.get(fileId);
+          if (path !== undefined && degrees.in_degree > 0) {
+            hubEntries.push({ path, in_degree: degrees.in_degree });
+          }
+        }
+        hubEntries.sort((a, b) => b.in_degree - a.in_degree);
+        const top5 = hubEntries.slice(0, 5);
+
+        const hubLine = top5.length > 0
+          ? `Hub files (high in-degree): ${top5.map((h) => `${h.path} (${h.in_degree})`).join(", ")}`
+          : "Hub files (high in-degree): none";
+
+        const projectStructure = [
+          "## Project Structure",
+          "",
+          `Layers: ${layerBreakdown || "none"}`,
+          hubLine,
+          `Total files in graph: ${totalFiles}`,
+        ].join("\n");
+
+        prefixParts.push(projectStructure);
+      } finally {
+        db.close();
+      }
+    }
+  } catch {
+    // Graceful degradation — KG unavailable or query failed; skip project_structure
+  }
+
+  // 5. Project conventions from .canon/CONVENTIONS.md (graceful degradation — skip if absent)
+  try {
+    const conventionsPath = join(projectDir, CANON_DIR, "CONVENTIONS.md");
+    if (existsSync(conventionsPath)) {
+      const content = await readFile(conventionsPath, "utf-8");
+      prefixParts.push(`## Conventions\n\n${content}`);
+    }
+  } catch {
+    // Graceful degradation — CONVENTIONS.md unreadable; skip conventions
+  }
 
   const cachePrefix = prefixParts.join("\n\n---\n\n");
   store.setCachePrefix(cachePrefix);

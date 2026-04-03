@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '5';
+export const SCHEMA_VERSION = '6';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -259,6 +259,27 @@ const MIGRATIONS: Migration[] = [
         db.exec(`ALTER TABLE execution_states ADD COLUMN transcript_path TEXT`);
       }
       db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // agent_session_id and last_agent_activity columns on execution_states (ADR-009a)
+    // These support session continuation: agent_session_id stores the agentId returned
+    // by Claude Code's Agent tool, used with SendMessage({ to: agentId }) to resume.
+    // last_agent_activity enables timestamp-based eviction (10-min idle threshold).
+    version: '6',
+    up: (db) => {
+      const tableRow = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='execution_states'`)
+        .get() as { name: string } | undefined;
+      if (tableRow) {
+        if (!columnExists(db, 'execution_states', 'agent_session_id')) {
+          db.exec(`ALTER TABLE execution_states ADD COLUMN agent_session_id TEXT`);
+        }
+        if (!columnExists(db, 'execution_states', 'last_agent_activity')) {
+          db.exec(`ALTER TABLE execution_states ADD COLUMN last_agent_activity TEXT`);
+        }
+      }
+      db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
     },
   },
 ];

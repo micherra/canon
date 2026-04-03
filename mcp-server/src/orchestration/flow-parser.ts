@@ -410,6 +410,8 @@ export const RUNTIME_VARIABLES = new Set([
   // Verify flow variables
   "user_write_tests",
   "write_tests",
+  // Context enrichment (implementor and reviewer only — selective exposure)
+  "enrichment",
 ]);
 
 // ---------------------------------------------------------------------------

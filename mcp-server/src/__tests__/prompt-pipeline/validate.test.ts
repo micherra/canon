@@ -222,6 +222,22 @@ describe("validatePrompts (Stage 9)", () => {
     expect(errorWarnings).toHaveLength(0);
   });
 
+  it("flags ${project_structure} as unresolved (injected via cache prefix, not substitution)", async () => {
+    const ctx = makeCtx([makePromptEntry("Project layout: ${project_structure}")]);
+    const result = await validatePrompts(ctx);
+    const errorWarnings = result.warnings.filter(w => w.startsWith("ERROR:"));
+    expect(errorWarnings).toHaveLength(1);
+    expect(errorWarnings[0]).toContain("project_structure");
+  });
+
+  it("flags ${conventions} as unresolved (injected via cache prefix, not substitution)", async () => {
+    const ctx = makeCtx([makePromptEntry("Project conventions: ${conventions}")]);
+    const result = await validatePrompts(ctx);
+    const errorWarnings = result.warnings.filter(w => w.startsWith("ERROR:"));
+    expect(errorWarnings).toHaveLength(1);
+    expect(errorWarnings[0]).toContain("conventions");
+  });
+
   // ---------------------------------------------------------------------------
   // Known limitation documentation
   // ---------------------------------------------------------------------------

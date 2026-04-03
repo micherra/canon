@@ -2,9 +2,74 @@ import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Board, ContextInjection } from "../orchestration/flow-schema.ts";
 import { extractSection, resolveContextInjections } from "../orchestration/inject-context.ts";
+import type { LayerViolation } from "../graph/kg-types.ts";
+
+// ---------------------------------------------------------------------------
+// Mocks for file_context tests
+// Use vi.hoisted so mock factory functions can reference these variables
+// even after vi.mock() is hoisted to the top of the module by vitest.
+// ---------------------------------------------------------------------------
+
+const {
+  mockGetFileMetrics,
+  mockGetKgFreshnessMs,
+  mockGetFile,
+  mockGetSummaryByFile,
+  mockStore,
+  mockDb,
+} = vi.hoisted(() => {
+  const mockGetFileMetrics = vi.fn();
+  const mockGetKgFreshnessMs = vi.fn().mockReturnValue(1000);
+  const mockGetFile = vi.fn();
+  const mockGetSummaryByFile = vi.fn();
+  const mockStore = {
+    getSession: vi.fn().mockReturnValue({ tier: "medium" }),
+  };
+  const mockDb = { close: vi.fn() };
+  return { mockGetFileMetrics, mockGetKgFreshnessMs, mockGetFile, mockGetSummaryByFile, mockStore, mockDb };
+});
+
+vi.mock("../orchestration/execution-store.ts", () => ({
+  getExecutionStore: vi.fn(() => mockStore),
+}));
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    existsSync: vi.fn(actual.existsSync),
+  };
+});
+
+vi.mock("../graph/kg-schema.ts", () => ({
+  initDatabase: vi.fn(() => mockDb),
+}));
+
+vi.mock("../graph/kg-query.ts", () => ({
+  KgQuery: class MockKgQuery {
+    getFileMetrics = mockGetFileMetrics;
+    getKgFreshnessMs = mockGetKgFreshnessMs;
+  },
+  computeFileInsightMaps: vi.fn().mockReturnValue({
+    hubPaths: new Set<string>(),
+    cycleMemberPaths: new Map<string, string[]>(),
+    layerViolationsByPath: new Map<string, LayerViolation[]>(),
+  }),
+}));
+
+vi.mock("../graph/kg-store.ts", () => ({
+  KgStore: class MockKgStore {
+    getFile = mockGetFile;
+    getSummaryByFile = mockGetSummaryByFile;
+  },
+}));
+
+import { existsSync } from "node:fs";
+import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -334,5 +399,213 @@ describe("resolveContextInjections", () => {
     expect(result.variables["GOOD"]).toContain("Good content.");
     expect(result.variables).not.toHaveProperty("MISSING");
     expect(result.warnings.some((w) => w.includes("missing_state"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// file_context injection source
+// ---------------------------------------------------------------------------
+
+function makeBoardWithMetadata(metadata?: Record<string, string | number | boolean>): Board {
+  return {
+    flow: "test",
+    task: "test task",
+    entry: "start",
+    current_state: "start",
+    base_commit: "abc123",
+    started: new Date().toISOString(),
+    last_updated: new Date().toISOString(),
+    states: {},
+    iterations: {},
+    blocked: null,
+    concerns: [],
+    skipped: [],
+    ...(metadata !== undefined ? { metadata } : {}),
+  };
+}
+
+describe("resolveContextInjections — file_context source", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "inject-ctx-kg-test-"));
+    // Reset mocks to clean state
+    vi.mocked(existsSync).mockImplementation((p) => {
+      // Default: KG DB exists
+      const strPath = String(p);
+      if (strPath.endsWith("knowledge-graph.db")) return true;
+      return false;
+    });
+    mockStore.getSession.mockReturnValue({ tier: "medium" });
+    mockGetFileMetrics.mockReturnValue(null);
+    mockGetSummaryByFile.mockReturnValue(undefined);
+    mockGetFile.mockReturnValue(undefined);
+    mockGetKgFreshnessMs.mockReturnValue(1000); // fresh by default
+    vi.mocked(computeFileInsightMaps).mockReturnValue({
+      hubPaths: new Set<string>(),
+      cycleMemberPaths: new Map<string, string[]>(),
+      layerViolationsByPath: new Map<string, LayerViolation[]>(),
+    });
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it("resolves file summaries from KG for valid affected_files in board metadata", async () => {
+    const board = makeBoardWithMetadata({
+      affected_files: JSON.stringify(["src/api/handler.ts", "src/domain/service.ts"]),
+    });
+    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+
+    // Set up KG mocks: metrics and summaries for both files
+    mockGetFileMetrics
+      .mockReturnValueOnce({
+        in_degree: 5,
+        out_degree: 3,
+        is_hub: false,
+        in_cycle: false,
+        cycle_peers: [],
+        layer: "api",
+        layer_violation_count: 0,
+        layer_violations: [],
+        impact_score: 16,
+      })
+      .mockReturnValueOnce({
+        in_degree: 2,
+        out_degree: 8,
+        is_hub: false,
+        in_cycle: false,
+        cycle_peers: [],
+        layer: "domain",
+        layer_violation_count: 0,
+        layer_violations: [],
+        impact_score: 8,
+      });
+
+    mockGetFile
+      .mockReturnValueOnce({ file_id: 1, path: "src/api/handler.ts" })
+      .mockReturnValueOnce({ file_id: 2, path: "src/domain/service.ts" });
+
+    mockGetSummaryByFile
+      .mockReturnValueOnce({ summary: "Handles HTTP API requests" })
+      .mockReturnValueOnce({ summary: "Domain service layer" });
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings).toHaveLength(0);
+    expect(result.variables["FILE_CONTEXT"]).toBeDefined();
+    const value = result.variables["FILE_CONTEXT"]!;
+    expect(value).toContain("### File Context");
+    expect(value).toContain("src/api/handler.ts");
+    expect(value).toContain("src/domain/service.ts");
+    expect(value).toContain("in_degree: 5");
+    expect(value).toContain("in_degree: 2");
+    expect(value).toContain("Handles HTTP API requests");
+    expect(value).toContain("Domain service layer");
+  });
+
+  it("produces warning and no value when affected_files is missing from board metadata", async () => {
+    const board = makeBoardWithMetadata(); // no metadata
+    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.some((w) => w.includes("affected_files"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("FILE_CONTEXT");
+  });
+
+  it("produces warning and no value when affected_files is empty array", async () => {
+    const board = makeBoardWithMetadata({
+      affected_files: JSON.stringify([]),
+    });
+    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.some((w) => w.includes("affected_files"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("FILE_CONTEXT");
+  });
+
+  it("produces warning and no value when affected_files contains malformed JSON", async () => {
+    const board = makeBoardWithMetadata({
+      affected_files: "not-valid-json[",
+    });
+    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.some((w) => w.includes("affected_files"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("FILE_CONTEXT");
+  });
+
+  it("respects item count cap: small tier with 10 files only processes 5", async () => {
+    mockStore.getSession.mockReturnValue({ tier: "small" }); // cap = 5
+
+    const tenFiles = Array.from({ length: 10 }, (_, i) => `src/file${i}.ts`);
+    const board = makeBoardWithMetadata({
+      affected_files: JSON.stringify(tenFiles),
+    });
+    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+
+    // All files return null metrics (no KG entry)
+    mockGetFileMetrics.mockReturnValue(null);
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    // computeFileInsightMaps called once
+    expect(computeFileInsightMaps).toHaveBeenCalledTimes(1);
+    // KgQuery.getFileMetrics called at most 5 times (capped)
+    expect(mockGetFileMetrics).toHaveBeenCalledTimes(5);
+    // Result should reference only the first 5 files
+    const value = result.variables["FILE_CONTEXT"];
+    expect(value).toContain("src/file0.ts");
+    expect(value).not.toContain("src/file5.ts");
+  });
+
+  it("produces warning and no value when KG DB is unavailable", async () => {
+    vi.mocked(existsSync).mockReturnValue(false); // KG DB missing
+
+    const board = makeBoardWithMetadata({
+      affected_files: JSON.stringify(["src/api/handler.ts"]),
+    });
+    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.some((w) => w.includes("KG") || w.includes("knowledge") || w.includes("database") || w.includes("unavailable"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("FILE_CONTEXT");
+  });
+
+  it("emits staleness warning but still returns value when KG is stale (>1h)", async () => {
+    mockGetKgFreshnessMs.mockReturnValue(4_000_000); // ~1.1 hours — stale
+
+    const board = makeBoardWithMetadata({
+      affected_files: JSON.stringify(["src/api/handler.ts"]),
+    });
+    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+
+    mockGetFileMetrics.mockReturnValue({
+      in_degree: 1,
+      out_degree: 1,
+      is_hub: false,
+      in_cycle: false,
+      cycle_peers: [],
+      layer: "api",
+      layer_violation_count: 0,
+      layer_violations: [],
+      impact_score: 4,
+    });
+    mockGetFile.mockReturnValue({ file_id: 1, path: "src/api/handler.ts" });
+    mockGetSummaryByFile.mockReturnValue(undefined); // no summary
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    // Should have a staleness warning
+    expect(result.warnings.some((w) => w.includes("stale") || w.includes("KG") || w.includes("hour"))).toBe(true);
+    // But still returns a value
+    expect(result.variables["FILE_CONTEXT"]).toBeDefined();
+    expect(result.variables["FILE_CONTEXT"]).toContain("src/api/handler.ts");
   });
 });

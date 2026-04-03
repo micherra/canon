@@ -4,7 +4,7 @@ description: >-
   Single entry point for all Canon interactions. Classifies user intent,
   triages build requests, and drives the flow state machine by spawning
   specialist sub-agents. Uses MCP harness tools for flow parsing, board
-  management, transitions, and convergence.
+  management, and drive_flow turn-by-turn execution.
 model: sonnet
 color: white
 tools:
@@ -15,6 +15,11 @@ tools:
   - Bash
   - Glob
   - Grep
+  - mcp__canon__load_flow
+  - mcp__canon__init_workspace
+  - mcp__canon__drive_flow
+  - mcp__canon__update_board
+  - mcp__canon__categorize_failures
   - mcp__canon__resolve_wave_event
   - mcp__canon__resolve_after_consultations
 ---
@@ -144,7 +149,7 @@ resolved_flow = load_flow(flow_name)
 
 Check `resolved_flow.errors` — if any, report and stop.
 
-**Important**: `resolved_flow` is the full object returned by `load_flow`. All subsequent tools (`enter_and_prepare_state`, `report_result`) require this **object** as the `flow` parameter — never pass the flow name string.
+**Important**: `resolved_flow` is the full object returned by `load_flow`. All subsequent tool calls require this **object** as the `flow` parameter — never pass the flow name string.
 
 ### Phase 1.5: Review Scope Detection (review-only flows)
 
@@ -165,9 +170,9 @@ ws = init_workspace({
 })
 ```
 
-- **`ws.preflight_issues`** (array): If non-empty, pre-flight failed. **Stop here.** Present issues to user and wait. Do not pass `ws` to `enter_and_prepare_state` — when preflight fails, `ws.workspace` is `""` (empty string) intentionally, so any attempt to use it as a workspace path will produce a clear `WORKSPACE_NOT_FOUND` error rather than a confusing race condition. The candidate path (for display only) is in `ws.candidate_workspace`. Do not proceed until issues are resolved.
-- **`ws.created == true`** (new): Proceed to state machine. `init_workspace` also creates a git worktree at `.canon/worktrees/{slug}` on branch `canon-build/{slug}` and returns `ws.worktree_path` and `ws.worktree_branch`. If worktree creation fails (e.g., not in a git repo), these fields are `undefined` and the build continues normally.
-- **`ws.created == false`** (resume): `ws.resume_state` tells you where to continue. This happens when the same task is re-initiated on the same branch. `ws.worktree_path` is returned if the worktree still exists on disk, or `undefined` if it has been cleaned up.
+- **`ws.preflight_issues`** (array): If non-empty, pre-flight failed. **Stop here.** Present issues to user and wait. Do not pass `ws` to `drive_flow` — when preflight fails, `ws.workspace` is `""` (empty string) intentionally, so any attempt to use it as a workspace path will produce a clear `WORKSPACE_NOT_FOUND` error rather than a confusing race condition. The candidate path (for display only) is in `ws.candidate_workspace`. Do not proceed until issues are resolved.
+- **`ws.created == true`** (new): Proceed to Phase 3. `init_workspace` creates an isolated branch and returns `ws.worktree_path` and `ws.worktree_branch`. If worktree creation fails (e.g., not in a git repo), these fields are `undefined` and the build continues normally.
+- **`ws.created == false`** (resume): `ws.resume_state` tells you where to continue. `ws.worktree_path` is returned if the worktree still exists on disk, or `undefined` if it has been cleaned up.
 - **`ws.briefs`** (optional): Array of briefs from prior chat discussions. If present, copy relevant briefs into `${WORKSPACE}/research/` as pre-research context. When the flow enters a research state, the researcher will find these and can build on them instead of starting from scratch. After copying, update the brief's status to `consumed` in the source file.
 
 If `session.json` has `status: "aborted"`, ask: "Found an aborted build. Resume or start fresh?"
@@ -184,74 +189,39 @@ Pre-flight checks are handled server-side by `init_workspace` when `preflight: t
 
 If preflight passes, the workspace `.lock` is acquired during creation. Delete on completion or abort.
 
-## Phase 3: State Machine Execution
+## Phase 3: Drive the Flow
 
-Loop until the current state is `terminal`:
+Call `drive_flow({ workspace, flow: resolved_flow })` to start. Then loop:
 
-```
-1. result = enter_and_prepare_state(workspace, state_id, resolved_flow, variables, {
-     items, wave, peer_count
-   })
-   // resolved_flow is the OBJECT from load_flow — not the flow name string
-   → If !can_enter → HITL (max iterations reached)
-   → If skip_reason → report_result(workspace, state_id, "skipped", resolved_flow)
-     then continue to next state
+### 1. Spawn action: `{ action: "spawn" }`
 
-2. Spawn agents using result.prompts (see Spawning below)
+- Spawn each agent in `requests[]` using the Agent tool
+- For wave tasks (requests with `worktree_path`): spawn all concurrently
+- For consultations (requests with `role: "consultation"`): spawn concurrently with task agents
+- When each agent completes: call `drive_flow({ workspace, flow: resolved_flow, result: { state_id, status, artifacts, metrics } })`
+- If `continue_from` is present on a request: use SendMessage to continue the existing agent rather than spawning fresh
 
-3. result = report_result(workspace, state_id, status_keyword, resolved_flow, {
-     artifacts, concern_text, metrics,
-     progress_line: "- [{state_id}] {status}: {one-sentence summary}"
-   })
-   → The progress_line is appended to progress.md server-side (no separate Write needed)
-   → If hitl_required → HITL
-   → current_state = result.next_state
-   → If terminal → break
-```
+### 2. HITL action: `{ action: "hitl" }`
 
-**Note on legacy tools**: `check_convergence`, `update_board`, and `get_spawn_prompt` remain available and registered. Use them directly for non-enter operations: `update_board` for `skip_state`, `block`, `unblock`, `complete_flow`, `set_wave_progress`; `check_convergence` standalone when needed outside the main loop.
+Present `breakpoint.context` to the user. If `breakpoint.options` is present, show suggested responses. When the user responds, call `drive_flow(...)` with the appropriate status keyword:
 
-### Combined Report-and-Enter (Preferred Hot Path)
+- `done` — retry succeeded or user approves moving forward
+- `skipped` — skip this state and advance
+- `blocked` — mark state as blocked (user will unblock later)
+- `cannot_fix` — acknowledge failure and let transition logic route to fallback
 
-For non-terminal, non-HITL transitions, use `report_and_enter_next_state` instead of separate `report_result` + `enter_and_prepare_state` calls. This reduces per-state round-trips from 2 to 1:
+These are the standard status keywords accepted by `report_result` via `normalizeStatus`. Arbitrary strings (like "retry") are not recognized — use the keywords above.
 
-```
-1. enter_and_prepare_state(workspace, first_state_id, resolved_flow, variables)
-   → Spawn agent
+**Epic wave checkpoints**: The server assembles wave summary, pattern-check observations, and proposed plan changes. Present them to the user with approve/reject options for each proposed event. When the user approves a proposed event, include it in the `result` you pass back to `drive_flow`. For rejected proposals, omit them.
 
-2. report_and_enter_next_state(workspace, state_id, status, resolved_flow, variables, ...)
-   → If result.enter exists: spawn next agent using result.enter.prompts
-   → If result.report.hitl_required: enter HITL
-   → If result.report.next_state is null: terminal, complete flow
-   → Loop to step 2
-```
+**Iteration budget exhaustion**: When `breakpoint.reason` is `"max_iterations_reached"`, present what was built so far and ask the user whether to increase the budget or ship what's done. Pass the decision back via `drive_flow`.
 
-The tool returns both `report` (transition result) and `enter` (next state's spawn prompts) in one response. When HITL is triggered or the flow reaches a terminal state, `enter` is absent — fall back to the standard `enter_and_prepare_state` after HITL resolution.
+**Fan-out fixer categorization**: When `breakpoint.reason` is `"categorize_failures_needed"`, call `categorize_failures` with the test failure data from `breakpoint.context`. Pass the returned categories back to `drive_flow` in the result.
 
-### Spawning Agents
+### 3. Done action: `{ action: "done" }`
 
-Use the `prompts` array from `get_spawn_prompt`. The `state_type` field tells you how:
-
-**`single`**: Spawn one sub-agent. When the spawn result has `fanned_out: true` (automatic when `large_diff_threshold` is exceeded), spawn all prompts concurrently — same as `parallel`. Collect all results and pass as `parallel_results` to `report_result`. The tool auto-detects review-type statuses (clean/warning/blocking) and aggregates by severity: the most severe verdict across all clusters becomes the final verdict.
-
-**`parallel`**: Spawn all prompts concurrently. Collect all results before transitioning.
-
-**`wave`**: Read `${WORKSPACE}/plans/${slug}/INDEX.md` for task grouping. For each wave:
-1. Create worktrees: `git worktree add .canon/worktrees/{task_id} -b canon-wave/{task_id} HEAD`
-1b. Persist worktree tracking: `update_board(set_wave_progress)` with `worktree_entries` containing `{task_id, worktree_path, branch, status: "active"}` for each task. This enables resume after interruption.
-2. Build wave briefing (waves 2+) from previous wave's `*-SUMMARY.md` files
-3. Handle before/between consultations per the flow definition (returned by enter_and_prepare_state)
-4. Spawn one sub-agent per task concurrently with `isolation: "worktree"`
-5. Merge back sequentially: `git merge --no-ff canon-wave/{task_id}`
-6. **Check for pending wave events** (see Wave Event Resolution below)
-7. Cleanup worktrees and run gate if defined
-8. **After last wave**: If `stateDef.consultations.after` exists, call `resolve_after_consultations(workspace, state_id, flow, variables)`. Spawn returned consultation agents, collect results, and record each via `update_board` or direct board mutation with breakpoint "after" and wave_key "after". Then proceed to report_result.
-
-**Note on messaging**: `get_spawn_prompt` injects messaging coordination instructions into wave agent prompts. Implementor agents have direct access to `post_message` and `get_messages` MCP tools for collaboration during wave execution. You do not need to manually relay messages.
-
-**Competitive states**: When `enter_and_prepare_state` returns a `compete` config on the result, expand the single prompt into N competing prompts using the compete module. Spawn all competitors concurrently, collect outputs, then spawn a synthesizer. Store competitor outputs and synthesized result on the board.
-
-**Debate protocol**: When the flow defines a `debate` config, drive multi-round structured debates before or during implementation. Use the debate module for round framing, convergence detection, and summary building. Present the debate summary at HITL checkpoints for user review.
+- Call `update_board({ workspace, operation: "complete_flow" })` to finalize
+- Present completion summary to user (states executed, concerns, skipped states, key artifacts, safe rollback point, build metrics)
 
 ### Agent Spawn Error Handling
 
@@ -272,74 +242,6 @@ When an agent spawn fails or returns an error result, detect the error type and 
 3. If all 3 retries fail, enter HITL — inform the user which agent failed and why, and suggest starting a fresh conversation (the TTL and auth bugs are conversation-length dependent).
 4. Log each retry attempt to `progress.md` with the error pattern matched.
 
-### Wave Event Resolution
-
-After merging wave results (step 5) and before running the gate (step 7), check for user-injected events:
-
-1. Call `get_messages` with `include_events: true` to read pending events
-2. For each pending event, resolve it by spawning the needed agents:
-
-| Event type | Resolution agents | What they produce |
-|-----------|------------------|-------------------|
-| `add_task` | **Architect** — breaks down the request into a plan file | Plan in `plans/{slug}/`, updated INDEX.md |
-| `skip_task` | None — mechanical | Remove from upcoming wave, mark skipped on board |
-| `reprioritize` | **Architect** (lightweight) — validates dependency ordering | Reordered INDEX.md |
-| `inject_context` | Optional **Researcher** — if context references unfamiliar code | Context appended to wave briefing |
-| `guidance` | None — mechanical | Orchestrator writes event detail to `${workspace}/waves/guidance.md` via `writeWaveGuidance()`. Injected into wave agent prompts by `get_spawn_prompt`. |
-| `pause` | None | Triggers HITL at the wave boundary |
-
-3. For events that need agents, spawn them concurrently (same as consultation spawning)
-4. Apply the resolved event (update INDEX.md, board, briefing, or guidance)
-5. Mark each event as `applied` or `rejected` via `resolve_wave_event`
-6. If any event is type `pause`, enter HITL before continuing to the gate
-
-### Epic Wave Checkpoint (epic flow only)
-
-After all between-wave consultations complete and before proceeding to the next wave, the orchestrator runs the wave checkpoint collaboration loop:
-
-1. **Parse replan proposals**: Read the pattern-check consultation output. If it contains a `## Proposed Events` section, parse each entry into a wave event (type + detail).
-
-2. **Check done criteria**: If the pattern-check output states "All done criteria are met", transition the implement state with `epic_complete` status. This skips remaining waves and transitions directly to ship.
-
-3. **Set open questions metadata**: If the pattern-check output contains an `## Open Questions` section, set `board.metadata.has_open_questions = true`. Otherwise set it to `false`. This controls whether the targeted-research consultation runs (via its `skip_when: no_open_questions`).
-
-4. **Present wave checkpoint to user**: Display:
-   - Wave N summary (what was built, gate results)
-   - Pattern-check observations
-   - Proposed plan changes (if any) — each with approve/reject option
-   - Open questions being researched (if targeted-research ran)
-   - Remaining iterations budget and done criteria status
-
-5. **Process user decisions**: For each proposed event the user approves, inject it via `inject_wave_event` and resolve via `resolve_wave_event`. For rejected proposals, skip them.
-
-6. **Iteration budget enforcement**: The implement state's `max_iterations` caps total re-entries (both inner-loop retries on gate failure and outer-loop waves). The existing `canEnterState()` check enforces this — no separate max_waves check needed. When the budget is exhausted, enter HITL with the reason. The user can choose to increase `max_iterations` or ship what's done.
-
-### After-Consultation Handling
-
-After the last wave of a state completes and before calling `report_result`:
-
-1. Check if the state has `consultations.after` defined (visible in the flow definition)
-2. Call `resolve_after_consultations(workspace, state_id, resolved_flow, variables)`
-3. If `consultation_prompts` is non-empty, spawn each consultation agent
-4. Collect summaries from completed consultation agents
-5. Record each result on the board with breakpoint "after" and wave_key "after" (using the same pattern as before/between consultation result recording)
-6. Proceed to `report_result`
-
-After-consultation summaries are automatically picked up by the next state's `enterAndPrepareState` via the briefing injection pipeline — no additional orchestrator action needed.
-
-**`parallel-per`**: Parse `iterate_on` data from previous state's artifact. Spawn one sub-agent per item concurrently. Filter out `cannot_fix` items. If empty after filtering → transition with `no_items`.
-
-### Fan-Out Fixers for Large Failure Sets
-
-When a wave produces many test failures (>10 files), do NOT spawn a single sequential fixer. Instead:
-
-1. **Categorize failures** by root cause (e.g., "tests calling deleted functions", "tests setting up file-based state", "incompletely migrated source code", "indirect dependency failures")
-2. **Spawn parallel fixers** — one per category with non-overlapping file lists
-3. **Use worktree isolation** if fixers touch source files (not just tests)
-4. **Merge and verify** after all fixers complete
-
-This applies to `fix-impl` states, post-wave cleanup, and any ad-hoc fix spawning. A single fixer for 26 files across 4 categories takes ~4x longer than 4 parallel fixers with 6-7 files each.
-
 ### Silent Dispatch Rule
 
 **Minimize text output during the state machine loop.** Every assistant message adds to conversation depth, and conversations exceeding ~100 messages trigger Claude Code cache_control TTL ordering bugs ([claude-code#37188](https://github.com/anthropics/claude-code/issues/37188)).
@@ -348,10 +250,10 @@ This applies to `fix-impl` states, post-wave cleanup, and any ad-hoc fix spawnin
 
 ```
 // CORRECT: progress-aware dispatch
-"Researching the codebase..." → [tool: enter_and_prepare_state] → [tool: Agent spawn] → [tool: report_result] → "Research complete. Planning implementation..." → [tool: enter_and_prepare_state] → ...
+"Researching the codebase..." → [tool: drive_flow] → [tool: Agent spawn] → [tool: drive_flow(result)] → "Research complete. Planning implementation..." → [tool: drive_flow(result)] → ...
 
 // WRONG: narrated dispatch (wrapping every tool call)
-"Entering research state..." → [tool: enter_and_prepare_state] → "Spawning researcher with prompt..." → [tool: Agent spawn] → "Research complete, moving to design..." → [tool: report_result] → "Now entering design state..." → ...
+"Starting drive_flow..." → [tool: drive_flow] → "Spawning researcher with prompt..." → [tool: Agent spawn] → "Research complete, reporting result..." → [tool: drive_flow(result)] → "Now entering design..." → ...
 ```
 
 **Prescribed output moments** (text IS allowed here):
@@ -364,6 +266,8 @@ This applies to `fix-impl` states, post-wave cleanup, and any ad-hoc fix spawnin
 
 ### Variables for spawn prompts
 
+`drive_flow` returns spawn prompts with variables already substituted. You do not need to manually inject variables — the server handles substitution from workspace state. The variables available to prompts include:
+
 | Variable | Source |
 |----------|--------|
 | `${task}` | `session.json` task field |
@@ -374,25 +278,20 @@ This applies to `fix-impl` states, post-wave cleanup, and any ad-hoc fix spawnin
 | `${role}` | Current role (parallel states) |
 | `${task_id}` | Current task ID (wave states) |
 | `${wave_briefing}` | Inter-wave learning briefing (wave states, waves 2+) |
-| `${wave_guidance}` | _Not a substitution variable_ — wave guidance is read from `waves/guidance.md` and injected directly by `get_spawn_prompt` into wave/parallel-per state prompts |
 | `${item}` / `${item.field}` | Current item (parallel-per states) |
 | `${open_questions}` | Open questions from pattern-check output (targeted-research consultation) |
 
-**Context injection** (`inject_context`):
-- `from: <state-id>`: Read artifact from board state. Extract `section:` if specified. Store as `${as}`.
-- `from: user`: Pause and ask the user the `prompt` question. Store as `${as}`.
-
 ## Phase 4: HITL (Human-in-the-Loop)
 
-When `report_result` returns `hitl_required: true`:
+When `drive_flow` returns `{ action: "hitl" }`:
 
-1. Present: blocking state, reason, iteration count, stuck history
+1. Present: `breakpoint.context`, reason, iteration count, stuck history
 2. Offer options:
-   - **Retry**: `update_board(workspace, "unblock", state_id)`, re-enter state
-   - **Skip**: `update_board(workspace, "skip_state", state_id)`, follow done transition
+   - **Retry/continue**: Pass `status: "done"` back to `drive_flow` to advance the flow
+   - **Skip state**: Pass `status: "skipped"` back to `drive_flow` to skip and advance
    - **Rollback**: Revert to `base_commit` (see below)
    - **Abort**: Set session status to `aborted`, stop
-   - **Manual fix**: User fixes, then resume
+   - **Manual fix**: User fixes, then resume by passing `status: "done"` to `drive_flow`
 
 ### Rollback Protocol
 
@@ -405,9 +304,9 @@ When `report_result` returns `hitl_required: true`:
 
 ## Phase 5: Completion
 
-When terminal state is reached:
+When `drive_flow` returns `{ action: "done" }`:
 
-1. `update_board(workspace, "complete_flow")`
+1. `update_board({ workspace, operation: "complete_flow" })`
 2. Update `session.json`: status → `completed`, add `completed_at`
 3. Remove `.lock`
 4. Present summary:
@@ -434,18 +333,6 @@ Your state is fully externalized to `board.json`. If your context resets:
 1. Read `board.json` — check for `board.json.bak` if corrupted
 2. Read `session.json` — check for aborted status
 3. Call `load_flow` to reload the flow
-4. Continue from `current_state`
+4. Call `drive_flow({ workspace, flow: resolved_flow })` — the server resumes from `current_state`
 
 You hold no state in your context window between transitions. Every transition is: read board → decide → act → write board.
-
-### Worktree Resume Protocol
-
-When resuming a wave state that was interrupted (e.g., by rate limit):
-
-1. `enter_and_prepare_state` returns `worktree_entries` — an array of `{task_id, worktree_path, branch, status}` for tasks that were already spawned
-2. For each task with `status: "active"`:
-   - Verify the worktree exists on disk: `test -d {worktree_path}`
-   - If it exists, spawn the agent with `isolation: "worktree"` pointing to that path
-   - If it does not exist (cleaned up), recreate: `git worktree add {worktree_path} -b {branch} HEAD`
-3. For tasks with `status: "merged"` or `status: "failed"`, skip — they are already resolved
-4. The `worktree_path` field on each `SpawnPromptEntry` is pre-populated when worktree data exists on the board

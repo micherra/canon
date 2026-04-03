@@ -89,10 +89,14 @@ Design the technical approach for: ${task}. Read research from ${WORKSPACE}/rese
 
 Use the North Star template section in the design document. Include machine-readable done criteria in the DESIGN.md frontmatter.
 
+After producing plans, write affected files to board metadata: call `update_board({ workspace: "${WORKSPACE}", action: "set_metadata", metadata: { affected_files: "<JSON array of all files from task plans>" } })`. The value must be a JSON-stringified array of file path strings (e.g., `'["src/foo.ts","src/bar.ts"]'`).
+
 ### implement
 Execute task plan at ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
 
 ${wave_briefing}
+
+${enrichment}
 
 ### security
 Scan implemented code for vulnerabilities. File list from ${WORKSPACE}/plans/${slug}/*-SUMMARY.md. Save to ${WORKSPACE}/plans/${slug}/SECURITY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/security-assessment.md.
