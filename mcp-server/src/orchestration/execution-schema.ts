@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '6';
+export const SCHEMA_VERSION = '7';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -280,6 +280,40 @@ const MIGRATIONS: Migration[] = [
         }
       }
       db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // jobs and job_cache tables for background job tracking (ADR-007)
+    version: '7',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS jobs (
+          job_id        TEXT PRIMARY KEY,
+          job_type      TEXT NOT NULL,
+          fingerprint   TEXT NOT NULL,
+          status        TEXT NOT NULL DEFAULT 'pending',
+          pid           INTEGER,
+          progress      TEXT,
+          error         TEXT,
+          started_at    TEXT NOT NULL,
+          completed_at  TEXT,
+          timeout_ms    INTEGER NOT NULL DEFAULT 300000
+        )
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs(fingerprint)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)`);
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS job_cache (
+          fingerprint    TEXT PRIMARY KEY,
+          job_type       TEXT NOT NULL,
+          result_summary TEXT NOT NULL,
+          cached_at      TEXT NOT NULL,
+          expires_at     TEXT
+        )
+      `);
+
+      db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
     },
   },
 ];
