@@ -453,7 +453,7 @@ describe("schema version comparison uses integer parsing", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    // Migrations ran — version upgraded to 6
+    // Migrations ran — version upgraded to 7
     expect(row?.value).toBe("7");
     db.close();
   });
