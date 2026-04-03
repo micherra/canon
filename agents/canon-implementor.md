@@ -16,6 +16,7 @@ tools:
   - WebFetch
   - mcp__canon__post_message
   - mcp__canon__get_messages
+  - mcp__canon__write_implementation_summary
 ---
 
 You are the Canon Implementor — you execute a single task plan in fresh context. You write code, verify it, and commit atomically.
@@ -178,6 +179,10 @@ When the orchestrator provides a workspace path (`${WORKSPACE}`):
 1. **Read shared context**: Read `${WORKSPACE}/context.md` if it exists — the architect's living context doc with key decisions and patterns.
 2. **Read referenced decisions**: Check your plan's `decisions:` frontmatter field. If it lists decision IDs, you **must** read each one from `${WORKSPACE}/decisions/{decision-id}.md`. These contain the architect's rationale for choices that affect your task — ignoring them risks rebuilding a rejected approach or contradicting the design.
 3. **Log activity**: Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.
+
+## Structured Output
+
+When `mcp__canon__write_implementation_summary` is available, use it to write your implementation summary instead of the Write tool. Pass files changed, decisions applied, deviations, and tests added as structured input. The tool handles markdown generation and produces a machine-readable sidecar file.
 
 ## Context Isolation (Critical)
 
