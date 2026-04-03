@@ -242,22 +242,17 @@ describe("validatePrompts (Stage 9)", () => {
   // Known limitation documentation
   // ---------------------------------------------------------------------------
 
-  it("documents known limitation: substituteVariables expands \\${x} when x is a known variable", async () => {
-    // This is a known gap: substituteVariables regex matches \${var} even with
-    // backslash prefix, so escaped variables with known names still get expanded.
-    // The fix to substituteVariables regex is out of scope for ADR-006.
-    // This test documents the behavior so it can't accidentally be "fixed" silently.
+  it("does not expand \\${x} even when x is a known variable (escape boundary fix)", async () => {
+    // substituteVariables now skips \${...} patterns and unescapes them to ${...}.
+    // This prevents KG summaries containing ${role} or similar from being expanded.
     const { substituteVariables } = await import("../../orchestration/variables.ts");
 
-    // ${WORKSPACE} is a known variable — even with backslash prefix, it gets expanded
+    // ${WORKSPACE} is a known variable — but with backslash prefix it must NOT expand
     const result = substituteVariables("Use \\${WORKSPACE} here", {
       WORKSPACE: "/my/workspace",
     });
 
-    // KNOWN LIMITATION: backslash-escaped ${var} is still substituted when var is known
-    // This means escaped patterns in injected content could still be expanded if
-    // the variable name happens to match a runtime variable.
-    // The correct fix is to update substituteVariables regex to skip \${...} patterns.
-    expect(result).toBe("Use \\/my/workspace here");
+    // Escaped pattern is preserved as literal ${WORKSPACE} (backslash stripped)
+    expect(result).toBe("Use ${WORKSPACE} here");
   });
 });
