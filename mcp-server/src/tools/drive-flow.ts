@@ -135,7 +135,13 @@ export async function driveFlow(
       return reportOut;
     }
 
-    const { next_state, hitl_required, hitl_reason, stuck, stuck_reason } = reportOut;
+    // Re-read board after reportResult so HITL/done context reflects updated state
+    const freshBoard = store.getBoard();
+    if (!freshBoard) {
+      return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
+    }
+
+    const { next_state, hitl_required, hitl_reason, stuck_reason } = reportOut;
 
     // HITL required (stuck, no transition, debate checkpoint, etc.)
     if (hitl_required) {
@@ -144,7 +150,7 @@ export async function driveFlow(
         action: "hitl",
         breakpoint: {
           reason: hitl_reason ?? stuck_reason ?? "HITL required",
-          context: buildHitlContext(board, state_id, reportOut),
+          context: buildHitlContext(freshBoard, state_id, reportOut),
         },
       };
     }
@@ -166,7 +172,7 @@ export async function driveFlow(
         ok: true as const,
         action: "done",
         terminal_state: state_id,
-        summary: buildDoneSummary(board, state_id),
+        summary: buildDoneSummary(freshBoard, state_id),
       };
     }
 
@@ -177,7 +183,7 @@ export async function driveFlow(
         ok: true as const,
         action: "done",
         terminal_state: next_state,
-        summary: buildDoneSummary(board, next_state),
+        summary: buildDoneSummary(freshBoard, next_state),
       };
     }
 
@@ -229,7 +235,7 @@ interface WaveTaskResultInput {
 async function handleWaveTaskResult(
   input: WaveTaskResultInput,
 ): Promise<ToolResult<DriveFlowAction>> {
-  const { workspace, flow, state_id, task_id, task_status, task_artifacts, store } = input;
+  const { workspace, flow, state_id, task_id, task_status, store } = input;
 
   // Atomically append the task result to wave_results (sqlite-transactions)
   store.transaction(() => {
@@ -315,16 +321,29 @@ async function completeWave(
   const mergeResult = await mergeWaveResults(worktreeResults, projectDir, mergeStrategy);
 
   if (!mergeResult.ok) {
-    // Merge conflict — handle per on_conflict policy (no-silent-failures)
-    return handleMergeConflict({
-      conflictTask: mergeResult.conflict_task,
-      conflictDetail: mergeResult.conflict_detail,
-      onConflict,
-      workspace,
-      flow,
-      state_id,
-      store,
-    });
+    const conflictTask = typeof mergeResult.conflict_task === "string" ? mergeResult.conflict_task.trim() : "";
+
+    if (conflictTask) {
+      // Merge conflict — handle per on_conflict policy (no-silent-failures)
+      return handleMergeConflict({
+        conflictTask,
+        conflictDetail: mergeResult.conflict_detail,
+        onConflict,
+        workspace,
+        flow,
+        state_id,
+        store,
+      });
+    }
+
+    // Empty conflict_task means an unimplemented merge strategy was requested
+    const detail = typeof mergeResult.conflict_detail === "string" && mergeResult.conflict_detail.trim()
+      ? ` Details: ${mergeResult.conflict_detail.trim()}`
+      : "";
+    return toolError(
+      "UNEXPECTED",
+      `Wave merge failed for state '${state_id}' with strategy '${mergeStrategy}', but no conflicting task was reported. The merge strategy may be unsupported or not yet implemented.${detail}`,
+    );
   }
 
   // Cleanup worktrees (best-effort — errors don't fail the flow)
@@ -560,12 +579,12 @@ async function resolveNextWaveTaskIds(
   const indexContent = await readFile(indexPath, "utf-8");
   let taskIds = parseTaskIdsForWave(indexContent, nextWave);
 
-  // Filter out tasks targeted by pending skip_task events
-  const allPendingNow = store.getWaveEvents({ status: "pending" });
+  // Filter out tasks targeted by applied or pending skip_task events.
+  // skip_task events may already be marked "applied" by handlePendingWaveEvents,
+  // so we look at ALL skip_task events regardless of status.
+  const allSkipEvents = store.getWaveEvents({}).filter((e) => e.type === "skip_task");
   const skipIds = new Set(
-    allPendingNow
-      .filter((e) => e.type === "skip_task")
-      .map((e) => String(e.payload["task_id"] ?? "")),
+    allSkipEvents.map((e) => String(e.payload["task_id"] ?? "")),
   );
   taskIds = taskIds.filter((tid) => !skipIds.has(tid));
 
@@ -679,11 +698,15 @@ async function enterStateAndBuildSpawn(
     // Check if current state is terminal before entering
     const stateDef = flow.states[currentStateId];
     if (stateDef?.type === "terminal") {
+      const board = store.getBoard();
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
+      }
       return {
         ok: true as const,
         action: "done",
         terminal_state: currentStateId,
-        summary: buildDoneSummary(store.getBoard()!, currentStateId),
+        summary: buildDoneSummary(board, currentStateId),
       };
     }
 

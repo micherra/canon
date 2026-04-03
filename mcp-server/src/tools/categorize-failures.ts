@@ -76,15 +76,18 @@ function dirOf(filePath: string): string {
  */
 function longestCommonSubstring(messages: string[]): string | null {
   if (messages.length === 0) return null;
+  // Cap message length to bound cubic worst-case complexity
+  const MAX_MSG_LEN = 200;
+  const capped = messages.map((m) => m.slice(0, MAX_MSG_LEN));
   // Safe: we checked messages.length > 0 above
-  const first: string = messages[0] as string;
+  const first: string = capped[0] as string;
   let best: string | null = null;
 
   // Enumerate substrings of the first message (longest first)
   for (let len = first.length; len > SUBSTRING_BOOST_LENGTH; len--) {
     for (let start = 0; start <= first.length - len; start++) {
       const candidate = first.slice(start, start + len);
-      if (messages.every((m) => m.includes(candidate))) {
+      if (capped.every((m) => m.includes(candidate))) {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (best === null || candidate.length > (best as string).length) {
           best = candidate;
