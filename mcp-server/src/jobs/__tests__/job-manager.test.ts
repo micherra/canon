@@ -52,7 +52,7 @@ import { computeJobFingerprint } from '../../jobs/job-fingerprint.ts';
 import { forkJob, sendWorkerInput, killJob } from '../../adapters/job-adapter.ts';
 import { isSyncMode } from '../../utils/env.ts';
 import { runPipeline } from '../../graph/kg-pipeline.ts';
-import { JobManager } from '../job-manager.ts';
+import { JobManager, getOrCreateJobManager, _resetJobManagerSingleton } from '../job-manager.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -187,6 +187,20 @@ describe('JobManager', () => {
   // submit — cache hit
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // Comment #3: _forkJob forwards CodebaseGraphInput to worker
+  // -------------------------------------------------------------------------
+
+  it('submit forwards include_extensions and exclude_dirs to sendWorkerInput', async () => {
+    await manager.submit(
+      { root_dir: '/fake/project', include_extensions: ['.ts'], exclude_dirs: ['node_modules'] },
+    );
+    expect(sendWorkerInput).toHaveBeenCalledOnce();
+    const sentInput = vi.mocked(sendWorkerInput).mock.calls[0][1];
+    expect(sentInput.include_extensions).toEqual(['.ts']);
+    expect(sentInput.exclude_dirs).toEqual(['node_modules']);
+  });
+
   it('submit with cached fingerprint returns cached result', async () => {
     // Prime the cache by running once and completing
     const r1 = await manager.submit({ root_dir: '/fake/project' });
@@ -207,6 +221,9 @@ describe('JobManager', () => {
 
     expect(r2.cached).toBe(true);
     expect(r2.result).toEqual({ filesScanned: 99 });
+    // Cache-hit must return a usable job_id (comment #1 fix)
+    expect(r2.job_id).toBeTruthy();
+    expect(r2.job_id).toMatch(/^[0-9a-f-]{36}$/);
     // No additional fork
     expect(forkJob).not.toHaveBeenCalled();
   });
@@ -475,5 +492,41 @@ describe('JobManager', () => {
     if (!pollResult.ok) return;
 
     expect(pollResult.status).toBe('complete');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getOrCreateJobManager — Comment #4 fixes
+// ---------------------------------------------------------------------------
+
+describe('getOrCreateJobManager', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _resetJobManagerSingleton();
+  });
+
+  afterEach(() => {
+    _resetJobManagerSingleton();
+  });
+
+  it('creates a JobManager using orchestration.db path (not knowledge-graph.db)', async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'getorcreate-test-'));
+    // Create the .canon directory so initExecutionDb can write the DB
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(path.join(tmpDir, '.canon'), { recursive: true });
+
+    // Should not throw — uses dynamic import of better-sqlite3 and orchestration.db
+    const manager = await getOrCreateJobManager(tmpDir, '/fake/plugin');
+    expect(manager).toBeInstanceOf(JobManager);
+  });
+
+  it('returns the same instance on second call (singleton)', async () => {
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'getorcreate-singleton-'));
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(path.join(tmpDir, '.canon'), { recursive: true });
+
+    const m1 = await getOrCreateJobManager(tmpDir, '/fake/plugin');
+    const m2 = await getOrCreateJobManager(tmpDir, '/fake/plugin');
+    expect(m1).toBe(m2);
   });
 });

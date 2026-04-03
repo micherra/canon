@@ -14,11 +14,13 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import type { Database } from 'better-sqlite3';
 
 import { JobStore, type JobStatus } from './job-store.ts';
+import { initExecutionDb } from '../orchestration/execution-schema.ts';
 import { computeJobFingerprint } from './job-fingerprint.ts';
 import { forkJob, sendWorkerInput, killJob, type JobMessage } from '../adapters/job-adapter.ts';
 import { isSyncMode } from '../utils/env.ts';
@@ -57,7 +59,7 @@ export interface PollResult {
 // We resolve relative to this file so it works when bundled/run from dist/.
 // ---------------------------------------------------------------------------
 
-const WORKER_PATH = new URL('../workers/graph-worker.ts', import.meta.url).pathname;
+const WORKER_PATH = fileURLToPath(new URL('../workers/graph-worker.ts', import.meta.url));
 
 // ---------------------------------------------------------------------------
 // JobManager
@@ -113,7 +115,7 @@ export class JobManager {
     const cached = this.store.getCache(fingerprint);
     if (cached) {
       return toolOk<SubmitResult>({
-        job_id: '',
+        job_id: randomUUID(),
         status: 'complete',
         fingerprint,
         deduplicated: false,
@@ -297,7 +299,7 @@ export class JobManager {
 
   private _forkJob(
     fingerprint: string,
-    _input: CodebaseGraphInput,
+    input: CodebaseGraphInput,
     sourceDirs?: string[],
   ): ToolResult<SubmitResult> {
     const jobId = randomUUID();
@@ -326,12 +328,14 @@ export class JobManager {
     this.activeJobs.set(jobId, child);
     this.store.updateJobStatus(jobId, 'running', { pid: child.pid ?? undefined });
 
-    // Send start command to worker
+    // Send start command to worker — forward all relevant CodebaseGraphInput fields
     sendWorkerInput(child, {
       type: 'start',
       projectDir: this.projectDir,
       dbPath,
       sourceDirs,
+      include_extensions: input.include_extensions,
+      exclude_dirs: input.exclude_dirs,
     });
 
     // Start timeout watchdog
@@ -448,23 +452,21 @@ export function initJobManager(
 }
 
 /**
- * Get the singleton JobManager, creating it lazily using an in-memory SQLite DB.
+ * Get the singleton JobManager, creating it lazily.
+ * Uses initExecutionDb to open orchestration.db (where jobs/job_cache tables live).
  * Suitable for use from tool handlers where the DB path is computed inside JobManager.
  *
  * NOTE: In production use, prefer calling initJobManager() at startup with the
  * shared DB so all tools share the same state.
  */
-export function getOrCreateJobManager(
+export async function getOrCreateJobManager(
   projectDir: string,
   pluginDir: string,
   timeoutMs?: number,
-): JobManager {
+): Promise<JobManager> {
   if (!_instance) {
-    // Import BetterSqlite3 lazily — it may not be available in all environments.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Database = require('better-sqlite3') as typeof import('better-sqlite3');
-    const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-    const db = new Database(dbPath);
+    const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.ORCHESTRATION_DB);
+    const db = initExecutionDb(dbPath);
     _instance = new JobManager(db, projectDir, pluginDir, timeoutMs);
   }
   return _instance;
