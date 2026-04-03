@@ -5,7 +5,7 @@
  */
 
 import Database from 'better-sqlite3';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { JobStore, type JobRow, type JobCacheRow } from '../job-store.ts';
 import { initExecutionDb } from '../../orchestration/execution-schema.ts';
 import { randomUUID } from 'node:crypto';
@@ -338,6 +338,64 @@ describe('JobStore', () => {
     const timedOut = store.getTimedOutJobs();
     const ids = timedOut.map((j) => j.job_id);
     expect(ids).not.toContain('fresh-job');
+  });
+
+  // -------------------------------------------------------------------------
+  // Prepared statement caching (Comment #12)
+  // -------------------------------------------------------------------------
+
+  it('db.prepare is called only once per statement across multiple getJob calls', () => {
+    const prepareSpy = vi.spyOn(db, 'prepare');
+
+    const job = makeJobRow({ job_id: 'cache-test-1' });
+    store.createJob(job);
+
+    // Call getJob multiple times — the prepared statement should be cached
+    store.getJob('cache-test-1');
+    store.getJob('cache-test-1');
+    store.getJob('nonexistent');
+
+    // Count calls that contain the getJob query
+    const getJobPrepares = prepareSpy.mock.calls.filter((args) =>
+      (args[0] as string).includes('WHERE job_id = ?') &&
+      (args[0] as string).includes('SELECT job_id'),
+    );
+    // Should only prepare once despite 3 calls
+    expect(getJobPrepares.length).toBe(1);
+
+    prepareSpy.mockRestore();
+  });
+
+  it('db.prepare is called only once per statement across multiple updateJobProgress calls', () => {
+    const prepareSpy = vi.spyOn(db, 'prepare');
+
+    const job = makeJobRow({ job_id: 'cache-test-2' });
+    store.createJob(job);
+
+    store.updateJobProgress('cache-test-2', JSON.stringify({ phase: 'scan', current: 1, total: 10 }));
+    store.updateJobProgress('cache-test-2', JSON.stringify({ phase: 'parse', current: 5, total: 10 }));
+
+    const progressPrepares = prepareSpy.mock.calls.filter((args) =>
+      (args[0] as string).includes('SET progress = ?'),
+    );
+    expect(progressPrepares.length).toBe(1);
+
+    prepareSpy.mockRestore();
+  });
+
+  it('db.prepare is called only once per statement across multiple markStaleJobsFailed calls', () => {
+    const prepareSpy = vi.spyOn(db, 'prepare');
+
+    store.markStaleJobsFailed('restart-1');
+    store.markStaleJobsFailed('restart-2');
+
+    const stalePrepares = prepareSpy.mock.calls.filter((args) =>
+      (args[0] as string).includes("status = 'failed'") &&
+      (args[0] as string).includes("IN ('pending', 'running')"),
+    );
+    expect(stalePrepares.length).toBe(1);
+
+    prepareSpy.mockRestore();
   });
 
   it('getTimedOutJobs does not return completed or failed jobs', () => {

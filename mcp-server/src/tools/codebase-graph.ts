@@ -684,6 +684,223 @@ export async function codebaseGraph(
   return fullGraph;
 }
 
+/**
+ * Read and format the codebase graph from an existing KG DB without re-running the pipeline.
+ *
+ * This is the read-only path used by codebase_graph_materialize after the background job
+ * has already populated the DB. Skips runPipeline — assumes the DB is current.
+ *
+ * Steps: load layer config → scan requested files → detect changed files →
+ *        read nodes/edges from DB → apply compliance overlay → load principles →
+ *        generate insights → return CodebaseGraphOutput.
+ */
+export async function readGraphFromDb(
+  input: CodebaseGraphInput,
+  projectDir: string,
+  pluginDir: string,
+): Promise<CodebaseGraphOutput> {
+  // Load layer mappings
+  let layerMappings: Awaited<ReturnType<typeof loadLayerMappingsStrict>>;
+  try {
+    layerMappings = await loadLayerMappingsStrict(projectDir);
+  } catch {
+    layerMappings = await loadLayerMappings(projectDir);
+  }
+  const layerEntries = Object.keys(layerMappings);
+  const layerColors: Record<string, string> = {};
+  for (const layer of layerEntries) {
+    layerColors[layer] = colorFromLayerName(layer);
+  }
+  layerColors.unknown = FALLBACK_LAYER_COLOR;
+  const inferLayer = buildLayerInferrer(layerMappings);
+
+  // Determine requested file scope
+  const requestedFilePaths = await scanProjectFiles(input, projectDir);
+  const requestedFileSet = new Set(requestedFilePaths);
+
+  // Detect changed files (for highlighting)
+  const changedSet = await detectChangedFiles(input, projectDir);
+
+  let nodes: GraphNode[];
+  let edges: GraphEdge[];
+
+  const dbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+
+  // Read from the existing KG DB — no pipeline run
+  try {
+    const db = initDatabase(dbPath);
+    let rawNodes: Array<{ id: string; layer: string; extension: string }>;
+    let rawEdges: Array<{ source: string; target: string; type: GraphEdge["type"]; confidence: number; relation?: string }>;
+    try {
+      const kgQuery = new KgQuery(db);
+      const filesWithStats = kgQuery.getAllFilesWithStats();
+      rawNodes = filesWithStats
+        .filter((f) => f.file_id !== undefined)
+        .map((f) => ({
+          id: f.path,
+          layer: f.layer || "unknown",
+          extension: path.extname(f.path).replace(".", "") || "",
+        }));
+
+      const fileEdgeRows = db
+        .prepare(`
+          SELECT fe.edge_type, fe.confidence, fe.relation,
+                 src.path AS source_path, tgt.path AS target_path
+          FROM file_edges fe
+          JOIN files src ON src.file_id = fe.source_file_id
+          JOIN files tgt ON tgt.file_id = fe.target_file_id
+        `)
+        .all() as Array<{
+          edge_type: string;
+          confidence: number;
+          relation: string | null;
+          source_path: string;
+          target_path: string;
+        }>;
+
+      function mapEdgeType(edgeType: string): GraphEdge["type"] {
+        if (edgeType === "imports") return "import";
+        if (edgeType === "re-exports") return "re-export";
+        if (edgeType === "composition") return "composition";
+        return "import";
+      }
+
+      rawEdges = fileEdgeRows.map((row) => ({
+        source: row.source_path,
+        target: row.target_path,
+        type: mapEdgeType(row.edge_type),
+        confidence: row.confidence,
+        relation: row.relation ?? undefined,
+      }));
+    } finally {
+      db.close();
+    }
+
+    // Filter DB-sourced nodes to only those within the requested scope
+    const filteredNodes = rawNodes.filter((n) =>
+      requestedFileSet.size === 0 || requestedFileSet.has(n.id),
+    );
+    const filteredNodeSet = new Set(filteredNodes.map((n) => n.id));
+
+    // Filter edges to only those where both endpoints are in scope
+    const filteredEdges = rawEdges.filter(
+      (e) => filteredNodeSet.has(e.source) && filteredNodeSet.has(e.target),
+    );
+
+    // Apply compliance overlay and layer colors onto DB-sourced nodes
+    const store = new DriftStore(projectDir);
+    const reviews = await store.getReviews();
+
+    const fileViolations = new Map<string, Map<string, number>>();
+    const fileVerdicts = new Map<string, { timestamp: string; verdict: string }>();
+    for (const review of reviews) {
+      for (const file of review.files) {
+        const existing = fileVerdicts.get(file);
+        if (!existing || review.timestamp > existing.timestamp) {
+          fileVerdicts.set(file, { timestamp: review.timestamp, verdict: review.verdict });
+        }
+      }
+      for (const v of review.violations) {
+        const targetFile = v.file_path || review.files[0];
+        if (!targetFile) continue;
+        if (!fileViolations.has(targetFile)) fileViolations.set(targetFile, new Map());
+        const counts = fileViolations.get(targetFile)!;
+        counts.set(v.principle_id, (counts.get(v.principle_id) || 0) + 1);
+      }
+    }
+
+    nodes = filteredNodes.map((n) => {
+      const layer = inferLayer(n.id) || n.layer || "unknown";
+      const violations = fileViolations.get(n.id);
+      const violationCount = violations
+        ? Array.from(violations.values()).reduce((a, b) => a + b, 0) : 0;
+      const topViolations = violations
+        ? Array.from(violations.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => id)
+        : [];
+
+      const node: GraphNode = {
+        id: n.id,
+        layer,
+        color: layerColors[layer] || FALLBACK_LAYER_COLOR,
+        extension: n.extension || n.id.split(".").pop() || "",
+        violation_count: violationCount,
+        top_violations: topViolations,
+        last_verdict: fileVerdicts.get(n.id)?.verdict || null,
+        compliance_score: null,
+        changed: changedSet.has(n.id),
+      };
+
+      const kind = classifyMdNode(n.id);
+      if (kind) node.kind = kind;
+
+      return node;
+    });
+
+    edges = filteredEdges;
+  } catch {
+    // DB unavailable or empty — fall back to legacy scanner
+    const fileSet = requestedFileSet;
+    const { nodes: legacyNodes } = await buildNodes(
+      requestedFilePaths, inferLayer, layerColors, changedSet, projectDir,
+    );
+    const aliases = await loadPathAliases(projectDir);
+    const importEdges = await buildEdges(requestedFilePaths, fileSet, aliases, projectDir);
+    const compositionEdges = await buildCompositionEdges(requestedFilePaths, fileSet, projectDir);
+    const nameMaps = await buildNameMaps(requestedFilePaths, projectDir);
+    const mdEdges = await inferMdRelations(requestedFilePaths, fileSet, nameMaps, projectDir);
+
+    nodes = legacyNodes;
+    edges = mergeEdges(importEdges, mergeEdges(compositionEdges, mdEdges));
+  }
+
+  // Load principles and derive structural violation IDs
+  const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
+
+  const boundaryPrinciple = allPrinciples.find((p) => p.tags.includes("boundaries"));
+  const cyclePrinciple = allPrinciples.find((p) => p.tags.includes("architecture"));
+  const structuralIds: StructuralPrincipleIds = {
+    layerBoundary: boundaryPrinciple?.id ?? "layer-boundary-crossing",
+    circularDep: cyclePrinciple?.id ?? "circular-dependency",
+  };
+
+  // Generate insights and enrich nodes with structural violations
+  const insights = generateInsights(
+    nodes.map((n) => ({ id: n.id, layer: n.layer })),
+    edges.map((e) => ({ source: e.source, target: e.target })),
+  );
+  enrichNodesWithInsights(nodes, insights, structuralIds);
+
+  // Build layer metadata
+  const layerCounts = new Map<string, number>();
+  for (const node of nodes) {
+    layerCounts.set(node.layer, (layerCounts.get(node.layer) || 0) + 1);
+  }
+
+  const layerIndex = new Map<string, number>();
+  for (const [idx, layer] of layerEntries.entries()) layerIndex.set(layer, idx);
+  if (layerCounts.has("unknown")) {
+    layerIndex.set("unknown", layerEntries.length);
+  }
+  const layers = Array.from(layerCounts.entries())
+    .map(([name, file_count]) => ({
+      name,
+      color: layerColors[name] || FALLBACK_LAYER_COLOR,
+      file_count,
+      index: layerIndex.get(name) ?? Number.MAX_SAFE_INTEGER,
+    }))
+    .sort((a, b) => a.index - b.index || b.file_count - a.file_count);
+
+  const principles: Record<string, { title: string; severity: string; summary: string }> = {};
+  for (const p of allPrinciples) {
+    principles[p.id] = { title: p.title, severity: p.severity, summary: extractSummary(p.body) };
+  }
+
+  return {
+    nodes, edges, layers, principles, insights,
+    generated_at: new Date().toISOString(),
+  };
+}
+
 /** Compact summary for MCP response — full graph is on disk. */
 export function summarizeGraph(graph: CodebaseGraphOutput) {
   const violationFiles = graph.nodes

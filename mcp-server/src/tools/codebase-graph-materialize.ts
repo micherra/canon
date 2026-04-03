@@ -4,19 +4,19 @@
  * Reads the KG from a completed job, runs post-pipeline steps (compliance overlay,
  * insights, layer enrichment), and returns CompactGraphOutput.
  *
- * This extracts the post-pipeline portion of codebaseGraph() for use after
- * background job completion.
+ * The background worker already ran runPipeline and populated the KG DB.
+ * Materialize reads directly from that DB — no pipeline re-run.
  *
  * Canon principles:
  * - errors-are-values: returns ToolResult, INVALID_INPUT when job not complete
  * - no-hidden-side-effects: callers know the job must be complete before calling
- * - deep-modules: delegates graph building to codebaseGraph()
+ * - deep-modules: delegates graph reading to readGraphFromDb()
  */
 
 import type { ToolResult } from '../utils/tool-result.ts';
 import { toolError, toolOk } from '../utils/tool-result.ts';
 import { getJobManager } from '../jobs/job-manager.ts';
-import { codebaseGraph, compactGraph, type CompactGraphOutput } from './codebase-graph.ts';
+import { readGraphFromDb, compactGraph, type CompactGraphOutput } from './codebase-graph.ts';
 import type { CodebaseGraphInput } from './codebase-graph.ts';
 
 export interface GraphMaterializeInput {
@@ -30,7 +30,7 @@ export interface GraphMaterializeInput {
  * Materialize the results of a completed codebase graph job.
  *
  * 1. Polls the job — returns INVALID_INPUT if not complete.
- * 2. Runs codebaseGraph to rebuild the full in-memory graph (reads KG from SQLite DB).
+ * 2. Reads the KG from the DB the background worker already populated (no pipeline re-run).
  * 3. Returns compactGraph(result) with the job_id attached.
  */
 export async function codebaseGraphMaterialize(
@@ -59,7 +59,8 @@ export async function codebaseGraphMaterialize(
     );
   }
 
-  // Step 2: Read KG from DB and build full graph
+  // Step 2: Read from the KG DB the background job already populated.
+  // readGraphFromDb skips runPipeline — the worker already ran the heavy pipeline work.
   const graphInput: CodebaseGraphInput = {
     diff_base: input.diff_base,
     changed_files: input.changed_files,
@@ -67,7 +68,7 @@ export async function codebaseGraphMaterialize(
   };
 
   try {
-    const fullGraph = await codebaseGraph(graphInput, projectDir, pluginDir);
+    const fullGraph = await readGraphFromDb(graphInput, projectDir, pluginDir);
 
     // Step 3: Compact and return with job_id attached
     const compact = compactGraph(fullGraph);

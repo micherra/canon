@@ -21,12 +21,15 @@ vi.mock('../../jobs/job-manager.ts', () => {
   };
 });
 
-// Mock the codebaseGraph function so materialize can call it
+// Mock readGraphFromDb (and compactGraph) so materialize doesn't hit real DB.
+// Comment #10: materialize now calls readGraphFromDb instead of codebaseGraph.
 vi.mock('../codebase-graph.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../codebase-graph.ts')>();
   return {
     ...actual,
-    codebaseGraph: vi.fn(),
+    readGraphFromDb: vi.fn(),
+    // Keep codebaseGraph so TypeScript compile succeeds, but it should NOT be called
+    codebaseGraph: vi.fn().mockRejectedValue(new Error('codebaseGraph must not be called from materialize')),
   };
 });
 
@@ -36,7 +39,7 @@ import * as codebaseGraphModule from '../codebase-graph.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockManager = (jobManagerModule as any)._mockManager;
-const mockCodebaseGraph = vi.mocked(codebaseGraphModule.codebaseGraph);
+const mockReadGraphFromDb = vi.mocked(codebaseGraphModule.readGraphFromDb);
 
 const makeCompleteGraph = (): CodebaseGraphOutput => ({
   nodes: [
@@ -87,7 +90,7 @@ describe('codebaseGraphMaterialize', () => {
       error: null,
     });
 
-    mockCodebaseGraph.mockResolvedValue(makeCompleteGraph());
+    mockReadGraphFromDb.mockResolvedValue(makeCompleteGraph());
 
     const result = await codebaseGraphMaterialize(
       { job_id: 'job-complete' },
@@ -105,6 +108,34 @@ describe('codebaseGraphMaterialize', () => {
       expect(result.edges).toHaveLength(0);
       expect(result.layers).toHaveLength(1);
     }
+  });
+
+  it('calls readGraphFromDb, not codebaseGraph (Comment #10)', async () => {
+    // Ensures materialize uses the read-only path, not the pipeline-running path.
+    mockManager.poll.mockReturnValue({
+      ok: true,
+      job_id: 'job-no-pipeline',
+      status: 'complete',
+      progress: null,
+      started_at: '2026-04-03T10:00:00.000Z',
+      completed_at: '2026-04-03T10:01:00.000Z',
+      duration_ms: 60000,
+      error: null,
+    });
+
+    mockReadGraphFromDb.mockResolvedValue(makeCompleteGraph());
+
+    const result = await codebaseGraphMaterialize(
+      { job_id: 'job-no-pipeline' },
+      '/fake/project',
+      '/fake/plugin',
+    );
+
+    expect(result.ok).toBe(true);
+    // readGraphFromDb was called
+    expect(mockReadGraphFromDb).toHaveBeenCalledTimes(1);
+    // codebaseGraph was NOT called (it would throw if it were)
+    expect(codebaseGraphModule.codebaseGraph).not.toHaveBeenCalled();
   });
 
   it('returns INVALID_INPUT error when job is not complete (running)', async () => {
@@ -130,7 +161,7 @@ describe('codebaseGraphMaterialize', () => {
       expect(result.error_code).toBe('INVALID_INPUT');
       expect(result.message).toContain('not complete');
     }
-    expect(mockCodebaseGraph).not.toHaveBeenCalled();
+    expect(mockReadGraphFromDb).not.toHaveBeenCalled();
   });
 
   it('returns INVALID_INPUT error when job is failed', async () => {
@@ -177,7 +208,7 @@ describe('codebaseGraphMaterialize', () => {
     }
   });
 
-  it('passes diff_base and changed_files to codebaseGraph', async () => {
+  it('passes diff_base and changed_files to readGraphFromDb', async () => {
     mockManager.poll.mockReturnValue({
       ok: true,
       job_id: 'job-diff',
@@ -189,7 +220,7 @@ describe('codebaseGraphMaterialize', () => {
       error: null,
     });
 
-    mockCodebaseGraph.mockResolvedValue(makeCompleteGraph());
+    mockReadGraphFromDb.mockResolvedValue(makeCompleteGraph());
 
     await codebaseGraphMaterialize(
       {
@@ -201,7 +232,7 @@ describe('codebaseGraphMaterialize', () => {
       '/fake/plugin',
     );
 
-    expect(mockCodebaseGraph).toHaveBeenCalledWith(
+    expect(mockReadGraphFromDb).toHaveBeenCalledWith(
       expect.objectContaining({
         diff_base: 'main',
         changed_files: ['src/index.ts'],
@@ -211,7 +242,7 @@ describe('codebaseGraphMaterialize', () => {
     );
   });
 
-  it('returns UNEXPECTED error when codebaseGraph throws', async () => {
+  it('returns UNEXPECTED error when readGraphFromDb throws', async () => {
     mockManager.poll.mockReturnValue({
       ok: true,
       job_id: 'job-err',
@@ -223,7 +254,7 @@ describe('codebaseGraphMaterialize', () => {
       error: null,
     });
 
-    mockCodebaseGraph.mockRejectedValue(new Error('DB read failed'));
+    mockReadGraphFromDb.mockRejectedValue(new Error('DB read failed'));
 
     const result = await codebaseGraphMaterialize(
       { job_id: 'job-err' },

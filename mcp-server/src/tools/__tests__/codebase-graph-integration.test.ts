@@ -180,9 +180,12 @@ afterEach(() => {
   } else {
     process.env.CANON_SYNC_JOBS = originalSyncJobs;
   }
-  // Force CI off so isSyncMode() doesn't activate for async tests
-  // (We restore original value — if CI was set it means we're running in CI,
-  //  but each test should control sync mode via CANON_SYNC_JOBS explicitly)
+  // Restore CI after each test that may have modified it
+  if (originalCI === undefined) {
+    delete process.env.CI;
+  } else {
+    process.env.CI = originalCI;
+  }
 });
 
 // ---------------------------------------------------------------------------

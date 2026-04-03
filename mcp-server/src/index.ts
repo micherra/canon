@@ -1068,7 +1068,6 @@ server.registerTool(
         .describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
       diff_base: z.string().optional().describe("Git ref to diff against — marks changed files in the graph"),
       changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
-      force: z.boolean().optional().describe("Skip cache, force new run"),
     },
   },
   wrapHandler(async (input) => codebaseGraphSubmit(input, projectDir, pluginDir)),

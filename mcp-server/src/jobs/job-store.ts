@@ -2,16 +2,18 @@
  * JobStore — SQLite CRUD for jobs and job_cache tables.
  *
  * Accepts a Database handle (from initExecutionDb / better-sqlite3).
- * All methods use prepared statements. Single-row operations are auto-committed.
+ * All methods use prepared statements cached as private class fields.
+ * Single-row operations are auto-committed.
  * markStaleJobsFailed uses a single UPDATE with no explicit transaction needed.
  *
  * Design notes:
  * - No transactions for single-row ops (SQLite auto-commits each statement).
- * - Prepared statements are created lazily to avoid overhead at import time.
+ * - Prepared statements are cached lazily on first use (Comment #12).
  * - getTimedOutJobs uses SQLite datetime arithmetic to avoid loading all jobs.
+ * - updateJobStatus builds SQL dynamically based on optional fields — not cached.
  */
 
-import type { Database } from 'better-sqlite3';
+import type { Database, Statement } from 'better-sqlite3';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -53,14 +55,95 @@ export interface JobCacheRow {
 export class JobStore {
   constructor(private db: Database) {}
 
+  // ---------------------------------------------------------------------------
+  // Cached prepared statements (Comment #12: lazily initialized on first use)
+  // ---------------------------------------------------------------------------
+
+  private _createJobStmt?: Statement;
+  private get createJobStmt(): Statement {
+    return (this._createJobStmt ??= this.db.prepare(`
+      INSERT INTO jobs (job_id, job_type, fingerprint, status, pid, progress, error, started_at, completed_at, timeout_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+    `));
+  }
+
+  private _getJobStmt?: Statement;
+  private get getJobStmt(): Statement {
+    return (this._getJobStmt ??= this.db.prepare(`
+      SELECT job_id, job_type, fingerprint, status, pid, progress, error,
+             started_at, completed_at, timeout_ms
+      FROM jobs
+      WHERE job_id = ?
+    `));
+  }
+
+  private _getRunningJobByFingerprintStmt?: Statement;
+  private get getRunningJobByFingerprintStmt(): Statement {
+    return (this._getRunningJobByFingerprintStmt ??= this.db.prepare(`
+      SELECT job_id, job_type, fingerprint, status, pid, progress, error,
+             started_at, completed_at, timeout_ms
+      FROM jobs
+      WHERE fingerprint = ?
+        AND status IN ('pending', 'running')
+      ORDER BY started_at DESC
+      LIMIT 1
+    `));
+  }
+
+  private _updateJobProgressStmt?: Statement;
+  private get updateJobProgressStmt(): Statement {
+    return (this._updateJobProgressStmt ??= this.db.prepare(
+      `UPDATE jobs SET progress = ? WHERE job_id = ?`,
+    ));
+  }
+
+  private _getCacheStmt?: Statement;
+  private get getCacheStmt(): Statement {
+    return (this._getCacheStmt ??= this.db.prepare(`
+      SELECT fingerprint, job_type, result_summary, cached_at, expires_at
+      FROM job_cache
+      WHERE fingerprint = ?
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
+    `));
+  }
+
+  private _setCacheStmt?: Statement;
+  private get setCacheStmt(): Statement {
+    return (this._setCacheStmt ??= this.db.prepare(`
+      INSERT OR REPLACE INTO job_cache (fingerprint, job_type, result_summary, cached_at, expires_at)
+      VALUES (?, ?, ?, ?, ?)
+    `));
+  }
+
+  private _markStaleJobsFailedStmt?: Statement;
+  private get markStaleJobsFailedStmt(): Statement {
+    return (this._markStaleJobsFailedStmt ??= this.db.prepare(`
+      UPDATE jobs
+      SET status = 'failed', error = ?
+      WHERE status IN ('pending', 'running')
+    `));
+  }
+
+  private _getTimedOutJobsStmt?: Statement;
+  private get getTimedOutJobsStmt(): Statement {
+    return (this._getTimedOutJobsStmt ??= this.db.prepare(`
+      SELECT job_id, job_type, fingerprint, status, pid, progress, error,
+             started_at, completed_at, timeout_ms
+      FROM jobs
+      WHERE status = 'running'
+        AND datetime(started_at, '+' || (timeout_ms / 1000) || ' seconds') < datetime('now')
+    `));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public methods
+  // ---------------------------------------------------------------------------
+
   /**
    * Insert a new job row. started_at is required; completed_at defaults to NULL.
    */
   createJob(job: Omit<JobRow, 'completed_at'>): void {
-    this.db.prepare(`
-      INSERT INTO jobs (job_id, job_type, fingerprint, status, pid, progress, error, started_at, completed_at, timeout_ms)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-    `).run(
+    this.createJobStmt.run(
       job.job_id,
       job.job_type,
       job.fingerprint,
@@ -77,12 +160,7 @@ export class JobStore {
    * Retrieve a job by ID. Returns null if not found.
    */
   getJob(jobId: string): JobRow | null {
-    const row = this.db.prepare(`
-      SELECT job_id, job_type, fingerprint, status, pid, progress, error,
-             started_at, completed_at, timeout_ms
-      FROM jobs
-      WHERE job_id = ?
-    `).get(jobId) as JobRow | undefined;
+    const row = this.getJobStmt.get(jobId) as JobRow | undefined;
     return row ?? null;
   }
 
@@ -91,21 +169,16 @@ export class JobStore {
    * Returns null if no such job exists.
    */
   getRunningJobByFingerprint(fingerprint: string): JobRow | null {
-    const row = this.db.prepare(`
-      SELECT job_id, job_type, fingerprint, status, pid, progress, error,
-             started_at, completed_at, timeout_ms
-      FROM jobs
-      WHERE fingerprint = ?
-        AND status IN ('pending', 'running')
-      ORDER BY started_at DESC
-      LIMIT 1
-    `).get(fingerprint) as JobRow | undefined;
+    const row = this.getRunningJobByFingerprintStmt.get(fingerprint) as JobRow | undefined;
     return row ?? null;
   }
 
   /**
    * Update a job's status plus optional fields (pid, error, completed_at).
    * Fields not provided in `extra` remain unchanged.
+   *
+   * Note: This method builds SQL dynamically based on provided fields, so
+   * prepared statement caching is not applicable here.
    */
   updateJobStatus(
     jobId: string,
@@ -137,7 +210,7 @@ export class JobStore {
    * Update the progress JSON blob for a job (e.g., from IPC progress messages).
    */
   updateJobProgress(jobId: string, progress: string): void {
-    this.db.prepare(`UPDATE jobs SET progress = ? WHERE job_id = ?`).run(progress, jobId);
+    this.updateJobProgressStmt.run(progress, jobId);
   }
 
   /**
@@ -145,12 +218,7 @@ export class JobStore {
    * Returns null if not found or if the entry has expired.
    */
   getCache(fingerprint: string): JobCacheRow | null {
-    const row = this.db.prepare(`
-      SELECT fingerprint, job_type, result_summary, cached_at, expires_at
-      FROM job_cache
-      WHERE fingerprint = ?
-        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
-    `).get(fingerprint) as JobCacheRow | undefined;
+    const row = this.getCacheStmt.get(fingerprint) as JobCacheRow | undefined;
     return row ?? null;
   }
 
@@ -158,10 +226,7 @@ export class JobStore {
    * Insert or replace a cache entry. Uses INSERT OR REPLACE for idempotency.
    */
   setCache(entry: JobCacheRow): void {
-    this.db.prepare(`
-      INSERT OR REPLACE INTO job_cache (fingerprint, job_type, result_summary, cached_at, expires_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
+    this.setCacheStmt.run(
       entry.fingerprint,
       entry.job_type,
       entry.result_summary,
@@ -178,11 +243,7 @@ export class JobStore {
    * Single UPDATE statement — no explicit transaction needed.
    */
   markStaleJobsFailed(errorMessage: string): number {
-    const result = this.db.prepare(`
-      UPDATE jobs
-      SET status = 'failed', error = ?
-      WHERE status IN ('pending', 'running')
-    `).run(errorMessage);
+    const result = this.markStaleJobsFailedStmt.run(errorMessage);
     return result.changes;
   }
 
@@ -200,12 +261,6 @@ export class JobStore {
     // We compute expiry = started_at + timeout_ms/1000 seconds and compare to 'now'.
     // Note: integer division in SQLite truncates fractional seconds, acceptable for
     // job timeout detection (sub-second precision is not required here).
-    return this.db.prepare(`
-      SELECT job_id, job_type, fingerprint, status, pid, progress, error,
-             started_at, completed_at, timeout_ms
-      FROM jobs
-      WHERE status = 'running'
-        AND datetime(started_at, '+' || (timeout_ms / 1000) || ' seconds') < datetime('now')
-    `).all() as JobRow[];
+    return this.getTimedOutJobsStmt.all() as JobRow[];
   }
 }

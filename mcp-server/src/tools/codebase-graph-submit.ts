@@ -17,10 +17,7 @@ import { getOrCreateJobManager } from '../jobs/job-manager.ts';
 import { deriveSourceDirsFromLayers } from '../utils/config.ts';
 import type { CodebaseGraphInput } from './codebase-graph.ts';
 
-export interface GraphSubmitInput extends CodebaseGraphInput {
-  /** Skip cache, force new run (not yet implemented — reserved). */
-  force?: boolean;
-}
+export type GraphSubmitInput = CodebaseGraphInput;
 
 /**
  * Submit a codebase graph job.

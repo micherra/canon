@@ -404,15 +404,10 @@ describe('isSyncMode() with CANON_SYNC_JOBS="" (Known Gap: Task-01)', () => {
   // We test the live implementation by calling it after env manipulation.
 
   it('isSyncMode() with CANON_SYNC_JOBS="" falls through to isCI() check', async () => {
-    // We must test the real implementation — import it directly without the vi.mock above.
-    // Since vi.mock is hoisted, we use a workaround: create an inline implementation
-    // that mirrors the contract and verify the documented behavior.
-    //
-    // The documented behavior: CANON_SYNC_JOBS="" is defined (not undefined),
-    // so the explicit check applies: '' !== '1' and ''.toLowerCase() !== 'true'
-    // → returns false regardless of CI env var.
-    //
-    // This test verifies the contract without re-testing the already-mocked module.
+    // Use vi.importActual to get the real isSyncMode implementation,
+    // bypassing the vi.mock('../utils/env.ts') hoisted at file level.
+    const { isSyncMode: realIsSyncMode } = await vi.importActual<typeof import('../utils/env.ts')>('../utils/env.ts');
+
     const savedEnv = process.env.CANON_SYNC_JOBS;
     const savedCI = process.env.CI;
 
@@ -420,14 +415,10 @@ describe('isSyncMode() with CANON_SYNC_JOBS="" (Known Gap: Task-01)', () => {
       process.env.CANON_SYNC_JOBS = '';
       process.env.CI = 'true';
 
-      // Inline implementation mirrors env.ts contract
-      const explicit = process.env.CANON_SYNC_JOBS;
-      const syncMode = explicit !== undefined
-        ? (explicit === '1' || explicit.toLowerCase() === 'true')
-        : process.env.CI !== undefined;
-
-      // Empty string is defined, so explicit branch runs: '' !== '1' and '' !== 'true'
-      expect(syncMode).toBe(false);
+      // The documented behavior: CANON_SYNC_JOBS="" is defined (not undefined),
+      // so the explicit check applies: '' !== '1' and ''.toLowerCase() !== 'true'
+      // → returns false regardless of CI env var.
+      expect(realIsSyncMode()).toBe(false);
     } finally {
       if (savedEnv === undefined) {
         delete process.env.CANON_SYNC_JOBS;
