@@ -4,7 +4,6 @@ import { join } from "path";
 import { tmpdir } from "os";
 import {
   executeEffects,
-  parseReviewArtifact,
 } from "../orchestration/effects.ts";
 import type { StateDefinition } from "../orchestration/flow-schema.ts";
 import { DriftStore } from "../drift/store.ts";
@@ -46,75 +45,158 @@ principles-checked: 5
 - **Readability**: Consider extracting the order validation into a separate function
 `;
 
-describe("parseReviewArtifact", () => {
-  it("extracts verdict from frontmatter", () => {
-    const result = parseReviewArtifact(SAMPLE_REVIEW);
-    expect(result).not.toBeNull();
-    expect(result!.verdict).toBe("WARNING");
+// ---------------------------------------------------------------------------
+// persist_review — structured .meta.json path and legacy fallback
+// ---------------------------------------------------------------------------
+
+describe("persistReview via executeEffects — structured .meta.json path", () => {
+  let tmpDir: string;
+  let workspace: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "canon-effects-meta-test-"));
+    workspace = join(tmpDir, "workspace");
+    await mkdir(join(tmpDir, ".canon"), { recursive: true });
+    await mkdir(join(workspace, "reviews"), { recursive: true });
+    await mkdir(join(workspace, "plans", "test-task"), { recursive: true });
   });
 
-  it("extracts verdict from heading as fallback", () => {
-    const noFrontmatter = SAMPLE_REVIEW.replace(/---\n[\s\S]*?\n---/, "");
-    const result = parseReviewArtifact(noFrontmatter);
-    expect(result).not.toBeNull();
-    expect(result!.verdict).toBe("WARNING");
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("parses violations table", () => {
-    const result = parseReviewArtifact(SAMPLE_REVIEW)!;
-    expect(result.violations).toHaveLength(2);
-    expect(result.violations[0]).toEqual({
-      principle_id: "thin-handlers",
-      severity: "strong-opinion",
-      file_path: "src/api/orders.ts",
-    });
-    expect(result.violations[1]).toEqual({
-      principle_id: "validate-at-boundaries",
-      severity: "rule",
-      file_path: "src/api/orders.ts",
-    });
+  it("reads structured data from .meta.json when it exists", async () => {
+    const meta = {
+      _type: "review",
+      _version: 1,
+      verdict: "BLOCKING",
+      verdict_original: "blocked",
+      violations: [{ principle_id: "secrets-never-in-code", severity: "rule", file_path: "src/auth.ts" }],
+      honored: ["thin-handlers"],
+      score: {
+        rules: { passed: 1, total: 2 },
+        opinions: { passed: 2, total: 3 },
+        conventions: { passed: 1, total: 1 },
+      },
+      files: ["src/auth.ts"],
+    };
+    await writeFile(join(workspace, "reviews", "REVIEW.meta.json"), JSON.stringify(meta));
+
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].type).toBe("persist_review");
+    expect(results[0].recorded).toBe(1);
+    expect(results[0].errors).toHaveLength(0);
+
+    const entries = await new DriftStore(tmpDir).getReviews();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].verdict).toBe("BLOCKING");
+    expect(entries[0].violations).toHaveLength(1);
+    expect(entries[0].violations[0].principle_id).toBe("secrets-never-in-code");
+    expect(entries[0].honored).toEqual(["thin-handlers"]);
   });
 
-  it("parses honored list", () => {
-    const result = parseReviewArtifact(SAMPLE_REVIEW)!;
-    expect(result.honored).toEqual(["naming-reveals-intent", "errors-are-values"]);
+  it("verdict from .meta.json is stored correctly in DriftStore", async () => {
+    const meta = {
+      _type: "review",
+      _version: 1,
+      verdict: "WARNING",
+      verdict_original: "approved_with_concerns",
+      violations: [],
+      honored: ["errors-are-values"],
+      score: { rules: { passed: 2, total: 2 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 0, total: 0 } },
+      files: [],
+    };
+    await writeFile(join(workspace, "reviews", "REVIEW.meta.json"), JSON.stringify(meta));
+
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+
+    expect(results[0].recorded).toBe(1);
+    const entries = await new DriftStore(tmpDir).getReviews();
+    expect(entries[0].verdict).toBe("WARNING");
+    expect(entries[0].honored).toEqual(["errors-are-values"]);
   });
 
-  it("parses and aggregates score table", () => {
-    const result = parseReviewArtifact(SAMPLE_REVIEW)!;
-    expect(result.score).toEqual({
-      rules: { passed: 3, total: 4 },
-      opinions: { passed: 3, total: 4 },
-      conventions: { passed: 1, total: 1 },
-    });
+  it("falls back to legacy REVIEW.md parsing when .meta.json is absent", async () => {
+    const reviewPath = join(workspace, "reviews", "REVIEW.md");
+    await writeFile(reviewPath, SAMPLE_REVIEW);
+
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+
+    expect(results[0].recorded).toBe(1);
+    expect(results[0].errors).toHaveLength(0);
+
+    const entries = await new DriftStore(tmpDir).getReviews();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].verdict).toBe("WARNING");
+    expect(entries[0].violations).toHaveLength(2);
+    expect(entries[0].honored).toEqual(["naming-reveals-intent", "errors-are-values"]);
   });
 
-  it("returns default score when no score table", () => {
-    const noScore = SAMPLE_REVIEW.replace(/#### Score[\s\S]*?(?=###|$)/, "");
-    const result = parseReviewArtifact(noScore)!;
-    expect(result.score).toEqual({
-      rules: { passed: 0, total: 0 },
-      opinions: { passed: 0, total: 0 },
-      conventions: { passed: 0, total: 0 },
-    });
+  it("falls back to legacy parse when .meta.json has wrong _type", async () => {
+    // .meta.json exists but _type is wrong — should fall through to legacy REVIEW.md parse
+    const badMeta = { _type: "summary", _version: 1, verdict: "BLOCKING" };
+    await writeFile(join(workspace, "reviews", "REVIEW.meta.json"), JSON.stringify(badMeta));
+    // Provide a valid REVIEW.md for the fallback
+    await writeFile(join(workspace, "reviews", "REVIEW.md"), SAMPLE_REVIEW);
+
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+
+    expect(results[0].recorded).toBe(1);
+    // Should have fallen back to REVIEW.md which has verdict WARNING
+    const entries = await new DriftStore(tmpDir).getReviews();
+    expect(entries[0].verdict).toBe("WARNING");
   });
 
-  it("handles CLEAN review with no violations", () => {
-    const clean = `---
-verdict: "CLEAN"
----
+  it("falls back to legacy parse when .meta.json has wrong _version", async () => {
+    // .meta.json exists but _version is wrong — should fall through to legacy REVIEW.md parse
+    const badMeta = { _type: "review", _version: 2, verdict: "CLEAN" };
+    await writeFile(join(workspace, "reviews", "REVIEW.meta.json"), JSON.stringify(badMeta));
+    await writeFile(join(workspace, "reviews", "REVIEW.md"), SAMPLE_REVIEW);
 
-## Canon Review — Verdict: CLEAN
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
+    };
 
-### Principle Compliance
+    const results = await executeEffects(stateDef, workspace, [], tmpDir);
 
-#### Honored
-- **thin-handlers**: Handlers are thin
-`;
-    const result = parseReviewArtifact(clean)!;
-    expect(result.verdict).toBe("CLEAN");
-    expect(result.violations).toHaveLength(0);
-    expect(result.honored).toEqual(["thin-handlers"]);
+    expect(results[0].recorded).toBe(1);
+    const entries = await new DriftStore(tmpDir).getReviews();
+    expect(entries[0].verdict).toBe("WARNING"); // from legacy parse of REVIEW.md
+  });
+
+  it("returns error when neither .meta.json nor .md artifact is found", async () => {
+    const stateDef: StateDefinition = {
+      type: "single",
+      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
+    };
+
+    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+
+    expect(results[0].recorded).toBe(0);
+    expect(results[0].errors.length).toBeGreaterThan(0);
   });
 });
 
