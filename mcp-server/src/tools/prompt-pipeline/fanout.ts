@@ -4,11 +4,11 @@
  * Expands a single base prompt into N fanned-out prompt entries based on
  * the state type.
  *
- * State type dispatch:
- * - single: clusters, compete, or single prompt
- * - parallel: agents-based or roles-based fanout
- * - wave: iterate items with ${item} substitution, isolation: "worktree"
- * - parallel-per: clusters or items with isolation: "worktree"
+ * State type dispatch (all types get isolation: "worktree"; consultations remain "none"):
+ * - single: clusters, compete, or single prompt — isolation: "worktree"
+ * - parallel: agents-based or roles-based fanout — isolation: "worktree"
+ * - wave: iterate items with ${item} substitution — isolation: "worktree"
+ * - parallel-per: clusters or items — isolation: "worktree"
  *
  * Also handles debate detection (when flow.debate is set on the entry state):
  * - Active debate: produces per-team prompts and marks ctx.fanned_out = true

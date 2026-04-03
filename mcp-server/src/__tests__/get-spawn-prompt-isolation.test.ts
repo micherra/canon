@@ -3,7 +3,7 @@
  *
  * Covers:
  * - Wave state prompts include isolation: "worktree" on all entries
- * - Non-wave state prompts (single) do NOT include isolation field
+ * - Single state prompts include isolation: "worktree" on all entries
  * - parallel-per state prompts include isolation: "worktree"
  * - SpawnPromptEntry.worktree_path field is present as optional (not set by getSpawnPrompt itself)
  */
