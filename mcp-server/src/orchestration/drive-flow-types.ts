@@ -65,7 +65,7 @@ export interface ApprovalBreakpoint {
   /** Summary of what was produced */
   summary: string;
   /** Available response options */
-  options: readonly ["approve", "revise", "reject"];
+  options: readonly ["approved", "revise", "reject"];
 }
 
 // ---------------------------------------------------------------------------

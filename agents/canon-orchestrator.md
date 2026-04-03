@@ -316,7 +316,7 @@ When `drive_flow` returns `{ action: "approval" }`:
 2. Handle user response:
    - **approve**: Call `drive_flow` with `{ result: { state_id: breakpoint.state_id, status: "approved" } }` — the flow transitions normally
    - **revise**: Collect feedback from the user. Write feedback to `${WORKSPACE}/plans/${slug}/REVISION-NOTES.md`. Call `drive_flow` with `{ result: { state_id: breakpoint.state_id, status: "revise" } }` — the agent re-enters the state with revision context
-   - **reject**: Call `drive_flow` with `{ result: { state_id: breakpoint.state_id, status: "reject" } }` — routes to `rejection_target` or falls to HITL
+   - **reject**: Call `drive_flow` with `{ result: { state_id: breakpoint.state_id, status: "reject" } }` — the next step follows the flow's configured `reject` transition for that state (for example, to HITL if `transitions.reject` points there)
 
 3. Wave boundary approvals: Between waves in epic flows, `drive_flow` returns an approval breakpoint showing wave progress. Present the completed wave summary and upcoming wave tasks. Same approve/revise/reject options apply.
 

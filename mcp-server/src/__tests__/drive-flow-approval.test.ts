@@ -59,6 +59,7 @@ function makeFlow(tier: "small" | "medium" | "large" | undefined, stateOverrides
       design: {
         type: "single",
         agent: "canon-architect",
+        transitions: { approved: "implement", revise: "design", reject: "terminal" },
       },
       implement: {
         type: "single",
@@ -98,30 +99,42 @@ describe("shouldApprovalGate", () => {
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
-  it("returns true for architect agent on medium tier (tier default)", () => {
-    const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
+  it("returns true for architect agent on medium tier with approval transitions (tier default)", () => {
+    const stateDef: StateDefinition = {
+      type: "single", agent: "canon-architect",
+      transitions: { approved: "implement", revise: "design" },
+    };
     const flow = makeFlow("medium");
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
-  it("returns true for architect agent on medium tier (second check)", () => {
-    const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
+  it("returns true for architect agent on medium tier with reject transition (second check)", () => {
+    const stateDef: StateDefinition = {
+      type: "single", agent: "canon-architect",
+      transitions: { reject: "hitl" },
+    };
     const flow = makeFlow("medium");
     const board = makeBoard();
-    // medium tier should gate architect states
+    // medium tier should gate architect states when approval transitions exist
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
-  it("returns true for architect agent on large tier (tier default)", () => {
-    const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
+  it("returns true for architect agent on large tier with approval transitions (tier default)", () => {
+    const stateDef: StateDefinition = {
+      type: "single", agent: "canon-architect",
+      transitions: { approved: "implement", revise: "design", reject: "hitl" },
+    };
     const flow = makeFlow("large");
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
-  it("returns true for architect agent on large tier (second check — explicit)", () => {
-    const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
+  it("returns true for architect agent on large tier with revise transition (second check)", () => {
+    const stateDef: StateDefinition = {
+      type: "single", agent: "canon-architect",
+      transitions: { revise: "design" },
+    };
     const flow = makeFlow("large");
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
@@ -160,6 +173,40 @@ describe("shouldApprovalGate", () => {
     const flow = makeFlow("large");
     const board = makeBoard();
     expect(shouldApprovalGate(undefined, flow, board)).toBe(false);
+  });
+
+  it("returns false for architect agent on medium tier when transitions lack approval keys", () => {
+    // Simulates flows like migrate.md where design only has done/has_questions
+    const stateDef: StateDefinition = {
+      type: "single",
+      agent: "canon-architect",
+      transitions: { done: "implement", has_questions: "hitl" },
+    };
+    const flow = makeFlow("medium");
+    const board = makeBoard();
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
+  });
+
+  it("returns false for architect agent on large tier when transitions are empty", () => {
+    const stateDef: StateDefinition = {
+      type: "single",
+      agent: "canon-architect",
+      transitions: {},
+    };
+    const flow = makeFlow("large");
+    const board = makeBoard();
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
+  });
+
+  it("returns true for architect agent on medium tier when transitions include 'approved'", () => {
+    const stateDef: StateDefinition = {
+      type: "single",
+      agent: "canon-architect",
+      transitions: { approved: "implement", revise: "design" },
+    };
+    const flow = makeFlow("medium");
+    const board = makeBoard();
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
   it("auto_approve false does not override explicit approval_gate: true", () => {
@@ -228,6 +275,20 @@ describe("shouldApprovalGateWaveBoundary", () => {
     const flow = makeFlow("large");
     const board = makeBoard();
     expect(shouldApprovalGateWaveBoundary(undefined, flow, board)).toBe(false);
+  });
+
+  it("returns false for non-wave state type on large tier (type guard)", () => {
+    const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
+    const flow = makeFlow("large");
+    const board = makeBoard();
+    expect(shouldApprovalGateWaveBoundary(stateDef, flow, board)).toBe(false);
+  });
+
+  it("returns false for parallel state type on large tier (type guard)", () => {
+    const stateDef: StateDefinition = { type: "parallel" };
+    const flow = makeFlow("large");
+    const board = makeBoard();
+    expect(shouldApprovalGateWaveBoundary(stateDef, flow, board)).toBe(false);
   });
 });
 
@@ -474,7 +535,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     expect(result.action).toBe("approval");
     if (result.action !== "approval") return;
     expect(result.breakpoint.state_id).toBe("design");
-    expect(result.breakpoint.options).toEqual(["approve", "revise", "reject"]);
+    expect(result.breakpoint.options).toEqual(["approved", "revise", "reject"]);
     expect(result.breakpoint.artifacts).toEqual(["/workspace/plan.md"]);
     expect(result.breakpoint.summary).toContain("design");
     expect(result.breakpoint.summary).toContain("done");
@@ -820,5 +881,77 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
     // Should have spawned something (re-entered design), not returned empty waiting list
     expect(result.requests.length).toBeGreaterThan(0);
     expect(result.requests[0]?.agent_type).toContain("architect");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix 4: STATUS_ALIASES — "approve" maps to "approved"
+// ---------------------------------------------------------------------------
+
+import { STATUS_ALIASES } from "../orchestration/flow-schema.ts";
+
+describe("STATUS_ALIASES — approve alias", () => {
+  it("'approve' maps to 'approved'", () => {
+    expect(STATUS_ALIASES["approve"]).toBe("approved");
+  });
+
+  it("existing aliases are preserved", () => {
+    expect(STATUS_ALIASES["fixed"]).toBe("done");
+    expect(STATUS_ALIASES["needs_context"]).toBe("hitl");
+    expect(STATUS_ALIASES["epic_complete"]).toBe("epic_complete");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix 5: init-workspace iteration persistence for max_revisions
+// ---------------------------------------------------------------------------
+
+describe("init-workspace — iteration persistence matches initBoard for approval gates", () => {
+  it("initBoard creates iteration from max_revisions (not just max_iterations)", () => {
+    const flow = {
+      name: "test-flow",
+      description: "test",
+      entry: "design",
+      spawn_instructions: {},
+      states: {
+        design: { type: "single" as const, max_revisions: 5 },
+        terminal: { type: "terminal" as const },
+      },
+    } as ResolvedFlow;
+    const board = initBoard(flow, "task", "abc");
+    expect(board.iterations.design).toBeDefined();
+    expect(board.iterations.design!.max).toBe(5);
+  });
+
+  it("initBoard creates default iteration (max: 3) for approval_gate: true without explicit limits", () => {
+    const flow = {
+      name: "test-flow",
+      description: "test",
+      entry: "design",
+      spawn_instructions: {},
+      states: {
+        design: { type: "single" as const, approval_gate: true },
+        terminal: { type: "terminal" as const },
+      },
+    } as ResolvedFlow;
+    const board = initBoard(flow, "task", "abc");
+    expect(board.iterations.design).toBeDefined();
+    expect(board.iterations.design!.max).toBe(3);
+    expect(board.iterations.design!.count).toBe(0);
+  });
+
+  it("initBoard does NOT create iteration for terminal state with approval_gate", () => {
+    const flow = {
+      name: "test-flow",
+      description: "test",
+      entry: "start",
+      spawn_instructions: {},
+      states: {
+        start: { type: "single" as const },
+        terminal: { type: "terminal" as const, approval_gate: true },
+      },
+    } as ResolvedFlow;
+    const board = initBoard(flow, "task", "abc");
+    expect(board.iterations.terminal).toBeUndefined();
   });
 });

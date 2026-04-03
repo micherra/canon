@@ -83,7 +83,13 @@ export function shouldApprovalGate(
   if (tier === "medium" || tier === "large") {
     // Default gate on design states (agent is canon-architect, with or without prefix)
     const isArchitect = stateDef.agent === "canon-architect" || stateDef.agent === "canon:canon-architect";
-    return isArchitect;
+    if (!isArchitect) return false;
+    // Only apply default gate when the state's transitions include approval-related keys.
+    // This prevents gating flows like migrate.md where design only has done/has_questions.
+    const transitions = stateDef.transitions ?? {};
+    const hasApprovalTransitions =
+      "approved" in transitions || "revise" in transitions || "reject" in transitions;
+    return hasApprovalTransitions;
   }
 
   return false;
@@ -99,6 +105,7 @@ export function shouldApprovalGateWaveBoundary(
   board: Board,
 ): boolean {
   if (!stateDef) return false;
+  if (stateDef.type !== "wave") return false;
   if (board.metadata?.auto_approve === true) return false;
   if (stateDef.approval_gate === false) return false;
 
@@ -257,7 +264,7 @@ export async function driveFlow(
           agent_type: completedStateDef?.agent ?? completedStateDef?.type ?? "unknown",
           artifacts: (artifacts as string[] | undefined) ?? [],
           summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
-          options: ["approve", "revise", "reject"] as const,
+          options: ["approved", "revise", "reject"] as const,
         },
       };
     }
@@ -572,7 +579,7 @@ async function completeWave(
         agent_type: stateDef?.agent ?? "wave",
         artifacts: [],
         summary: `Wave ${currentWave} completed. ${nextWaveTaskIds.length} tasks in next wave. Awaiting approval to proceed.`,
-        options: ["approve", "revise", "reject"] as const,
+        options: ["approved", "revise", "reject"] as const,
       },
     };
   }

@@ -43,6 +43,7 @@ export const STATUS_ALIASES: Record<string, string> = {
   needs_context: "hitl",
   has_questions: "has_questions",
   epic_complete: "epic_complete",
+  approve: "approved",
 };
 
 // ---------------------------------------------------------------------------

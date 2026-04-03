@@ -173,10 +173,10 @@ describe("ApprovalBreakpoint interface", () => {
       agent_type: "canon:canon-implementor",
       artifacts: ["/workspace/plans/task-01-SUMMARY.md"],
       summary: "Implemented approval gate schema fields",
-      options: ["approve", "revise", "reject"],
+      options: ["approved", "revise", "reject"],
     };
     expect(breakpoint.state_id).toBe("implement");
-    expect(breakpoint.options).toEqual(["approve", "revise", "reject"]);
+    expect(breakpoint.options).toEqual(["approved", "revise", "reject"]);
   });
 });
 
@@ -193,7 +193,7 @@ describe("DriveFlowAction approval variant", () => {
         agent_type: "canon:canon-architect",
         artifacts: [],
         summary: "Design complete",
-        options: ["approve", "revise", "reject"],
+        options: ["approved", "revise", "reject"],
       },
     };
     expect(action.action).toBe("approval");
