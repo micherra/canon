@@ -4,6 +4,7 @@
  * and board state updates.
  */
 
+import { existsSync } from "node:fs";
 import { resolve, relative } from "node:path";
 import {
   normalizeStatus,
@@ -28,6 +29,14 @@ import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { executeEffects } from "../orchestration/effects.ts";
 import { inspectDebateProgress } from "../orchestration/debate.ts";
+
+/** Maps producer agent type to the handoff file they should write. */
+const HANDOFF_PRODUCER_MAP: Record<string, string> = {
+  "canon:canon-researcher": "research-synthesis.md",
+  "canon:canon-architect": "design-brief.md",
+  "canon:canon-implementor": "impl-handoff.md",
+  "canon:canon-tester": "test-findings.md",
+};
 
 interface ReportResultInput {
   workspace: string;
@@ -578,6 +587,27 @@ async function reportResultLocked(
   if (stateDef?.effects?.length && input.artifacts?.length) {
     const projectDir = input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd();
     await executeEffects(stateDef, input.workspace, input.artifacts, projectDir).catch(() => {});
+  }
+
+  // Check expected handoff file existence (best-effort — never blocks the flow)
+  if (stateDef?.agent) {
+    const expectedHandoff = HANDOFF_PRODUCER_MAP[stateDef.agent];
+    if (expectedHandoff) {
+      try {
+        const handoffPath = resolve(input.workspace, "handoffs", expectedHandoff);
+        if (!existsSync(handoffPath)) {
+          // Emit warning via event bus — same pattern as stuck_detected
+          try {
+            flowEventBus.emit("handoff_missing", {
+              stateId: input.state_id,
+              expectedFile: expectedHandoff,
+              agentType: stateDef.agent,
+              timestamp: new Date().toISOString(),
+            });
+          } catch { /* best-effort */ }
+        }
+      } catch { /* best-effort — never blocks the flow */ }
+    }
   }
 
   // Emit stuck_detected event (best-effort — follows established best-effort pattern).

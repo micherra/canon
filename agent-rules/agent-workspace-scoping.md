@@ -31,7 +31,13 @@ Agents operate within a **branch-scoped workspace** at `.canon/workspaces/{branc
 │       ├── TEST-REPORT.md
 │       └── SECURITY.md
 ├── reviews/                  # Review outputs
-└── notes/                    # Freeform notes from agents or users
+├── transcripts/              # Agent execution transcripts
+│   └── {state_id}--{agent_type}--{ts}.jsonl
+└── handoffs/                 # Structured cross-agent communication
+    ├── research-synthesis.md
+    ├── design-brief.md
+    ├── impl-handoff.md
+    └── test-findings.md
 ```
 
 ## Branch Name Sanitization
@@ -51,22 +57,39 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 |-------|------|-------|
 | **intake** | board.json, session.json (read-only for status) | — (no workspace writes; spawns orchestrator) |
 | **orchestrator** | board.json, session.json, flow templates | board.json, session.json, progress.md, log.jsonl |
-| **researcher** | templates/, session.json | research/, log.jsonl |
-| **architect** | research/, templates/, session.json, context.md | decisions/, plans/, log.jsonl, context.md |
-| **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md, log.jsonl |
-| **tester** | plans/{slug}/*-SUMMARY.md, context.md | plans/{slug}/TEST-REPORT.md, log.jsonl |
-| **security** | plans/{slug}/*-SUMMARY.md | plans/{slug}/SECURITY.md, log.jsonl |
-| **reviewer** | plans/{slug}/*-SUMMARY.md (post-Stage-2 cross-check only) | plans/{slug}/REVIEW.md, reviews/, log.jsonl |
+| **researcher** | templates/, session.json | research/, handoffs/research-synthesis.md, log.jsonl |
+| **architect** | research/, templates/, session.json, context.md, handoffs/research-synthesis.md | decisions/, plans/, handoffs/design-brief.md, log.jsonl, context.md |
+| **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/, handoffs/design-brief.md | plans/{slug}/{task}-SUMMARY.md, handoffs/impl-handoff.md, log.jsonl |
+| **tester** | plans/{slug}/*-SUMMARY.md, context.md, handoffs/impl-handoff.md | plans/{slug}/TEST-REPORT.md, handoffs/test-findings.md, log.jsonl |
+| **fixer** | plans/{slug}/*-SUMMARY.md, handoffs/test-findings.md | log.jsonl |
+| **security** | plans/{slug}/*-SUMMARY.md, handoffs/ (read all) | plans/{slug}/SECURITY.md, log.jsonl |
+| **reviewer** | plans/{slug}/*-SUMMARY.md (post-Stage-2 cross-check only), handoffs/ (read all) | plans/{slug}/REVIEW.md, reviews/, log.jsonl |
 | **scribe** | plans/{slug}/*-SUMMARY.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md | plans/{slug}/CONTEXT-SYNC.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md, log.jsonl |
 | **refactorer** | reviews/, decisions/, context.md | log.jsonl |
-| **learner** | everything in workspace | notes/, log.jsonl |
-| **writer** | everything in workspace | notes/ |
+| **learner** | everything in workspace | log.jsonl |
+| **writer** | everything in workspace | — |
 
 Key constraints:
 - **Build lock**: `.lock` prevents concurrent builds. Stale locks (>2 hours) are auto-removed.
 - **Board backup**: `board.json.bak` written before every update for crash recovery.
 - Only the orchestrator reads/writes `board.json`
 - All agents append to `log.jsonl`
+- **Handoff injection**: Handoff reads listed above are auto-injected by the pipeline — agents do not need to manually read handoff files. The pipeline injects the relevant handoff as `${handoff_context}` in the consuming agent's spawn prompt.
+
+## Handoff Files
+
+Handoff files in `handoffs/` provide structured cross-agent communication. Each handoff is:
+- **Written** by the producing agent via the `write_handoff` MCP tool
+- **Read** automatically by the prompt pipeline and injected into the consuming agent's spawn prompt as `${handoff_context}`
+
+Agents do not need to manually read handoff files — the pipeline handles injection. The `write_handoff` tool validates content structure per handoff type.
+
+| Handoff | Producer | Consumer | Content |
+|---------|----------|----------|---------|
+| research-synthesis.md | Researcher | Architect | Key findings, affected subsystems, risk areas, open questions |
+| design-brief.md | Architect | Implementor | Approach, file targets, constraints, test expectations |
+| impl-handoff.md | Implementor | Tester | Files changed, coverage notes, risk areas, compliance status |
+| test-findings.md | Tester | Fixer | Failure details, reproduction steps, affected files, categories |
 
 ## Log Entry Format
 
