@@ -92,6 +92,18 @@ export const EffectSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Required artifact contract schemas (ADR-010)
+// ---------------------------------------------------------------------------
+
+/** A required artifact declaration on a state definition. */
+export const RequiredArtifactSchema = z.object({
+  name: z.string(),   // base name of the artifact file (without extension)
+  type: z.string(),   // expected _type value in the .meta.json sidecar
+});
+
+export type RequiredArtifact = z.infer<typeof RequiredArtifactSchema>;
+
+// ---------------------------------------------------------------------------
 // Compete & Debate config schemas
 // ---------------------------------------------------------------------------
 
@@ -199,6 +211,7 @@ const BaseStateFields = {
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   inject_messages: z.boolean().optional(),
+  required_artifacts: z.array(RequiredArtifactSchema).optional(),
 };
 
 export const SingleStateSchema = z.object({
@@ -333,6 +346,7 @@ const FragmentBaseStateFields = {
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   inject_messages: z.boolean().optional(),
+  required_artifacts: z.array(RequiredArtifactSchema).optional(),
 };
 
 const FragmentSingleStateSchema = z.object({
