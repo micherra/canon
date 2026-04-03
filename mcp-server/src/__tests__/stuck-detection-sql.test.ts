@@ -95,14 +95,14 @@ describe('runMigrations', () => {
     expect(afterTables.map(r => r.name)).toContain('iteration_results');
   });
 
-  test('upgrades schema_version to 6 in meta table', () => {
+  test('upgrades schema_version to 7 in meta table', () => {
     const db = makeV1Db();
     runMigrations(db);
 
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe('6');
+    expect(row?.value).toBe('7');
   });
 
   test('is idempotent: running migrations twice on v1 does not throw', () => {
@@ -112,24 +112,24 @@ describe('runMigrations', () => {
     expect(() => runMigrations(db)).not.toThrow();
   });
 
-  test('is a no-op on a v6 database (tables already created by initExecutionDb)', () => {
+  test('is a no-op on a v7 database (tables already created by initExecutionDb)', () => {
     const db = initExecutionDb(':memory:');
-    // Already at v6 — running migrations again should not throw and keep version at 6
+    // Already at v7 — running migrations again should not throw and keep version at 7
     expect(() => runMigrations(db)).not.toThrow();
 
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe('6');
+    expect(row?.value).toBe('7');
   });
 
-  test('initExecutionDb sets SCHEMA_VERSION to 6', () => {
+  test('initExecutionDb sets SCHEMA_VERSION to 7', () => {
     const db = initExecutionDb(':memory:');
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
     expect(row?.value).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe('6');
+    expect(SCHEMA_VERSION).toBe('7');
   });
 });
 
