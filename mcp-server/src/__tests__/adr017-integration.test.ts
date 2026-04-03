@@ -164,7 +164,7 @@ describe("shouldApprovalGate — additional edge cases", () => {
     // The function checks stateDef.type === "terminal" for early exit,
     // but parallel states with explicit approval_gate: true WILL return true
     // because the function only special-cases "terminal". This verifies the actual behavior.
-    const result = shouldApprovalGate(stateDef, "parallel-state", flow, board);
+    const result = shouldApprovalGate(stateDef, flow, board);
     // Parallel with explicit approval_gate: true — explicit opt-in wins
     expect(result).toBe(true);
   });
@@ -175,7 +175,7 @@ describe("shouldApprovalGate — additional edge cases", () => {
     const flow = makeFlow("medium");
     const board = makeBoard();
     // No agent field at top level on parallel — tier default checks stateDef.agent, which is undefined
-    const result = shouldApprovalGate(stateDef, "parallel-state", flow, board);
+    const result = shouldApprovalGate(stateDef, flow, board);
     expect(result).toBe(false);
   });
 
@@ -183,21 +183,21 @@ describe("shouldApprovalGate — additional edge cases", () => {
     const stateDef: StateDefinition = { type: "wave", approval_gate: true };
     const flow = makeFlow("small");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "implement", flow, board)).toBe(true);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
   it("wave state with approval_gate: false returns false even on large tier (shouldApprovalGate, not wave boundary)", () => {
     const stateDef: StateDefinition = { type: "wave", approval_gate: false };
     const flow = makeFlow("large");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "implement", flow, board)).toBe(false);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("undefined tier (no tier set) with architect agent returns false", () => {
     const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
     const flow = makeFlow(undefined);
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(false);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 });
 
@@ -277,7 +277,7 @@ describe("initBoard with approval gate fields — wave state", () => {
     });
   });
 
-  it("terminal state does not create IterationEntry even with approval_gate: true", () => {
+  it("terminal state does NOT create IterationEntry even with approval_gate: true", () => {
     const flow = {
       name: "test-flow",
       description: "test",
@@ -285,19 +285,14 @@ describe("initBoard with approval gate fields — wave state", () => {
       spawn_instructions: {},
       states: {
         implement: { type: "wave" as const, agent: "canon:canon-implementor" },
-        // Terminal with approval_gate — semantically nonsensical but schema-valid
+        // Terminal with approval_gate — semantically nonsensical but the terminal guard
+        // in initBoard prevents creating an iteration entry (fix #5).
         terminal: { type: "terminal" as const, approval_gate: true },
       },
     } as ResolvedFlow;
     const board = initBoard(flow, "task", "abc");
-    // Terminal state approval_gate: true creates an IterationEntry (board.ts doesn't special-case
-    // terminal type — only drive-flow does). Verify the actual behavior.
-    expect(board.iterations["terminal"]).toEqual({
-      count: 0,
-      max: 3,
-      history: [],
-      cannot_fix: [],
-    });
+    // Terminal states are skipped by the approval_gate iteration entry guard.
+    expect(board.iterations["terminal"]).toBeUndefined();
   });
 });
 

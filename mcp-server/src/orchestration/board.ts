@@ -28,7 +28,7 @@ export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string):
         history: [],
         cannot_fix: [],
       };
-    } else if (stateDef.approval_gate === true) {
+    } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
       // Default revision budget for explicitly gated states without explicit limit
       iterations[key] = {
         count: 0,

@@ -81,28 +81,28 @@ describe("shouldApprovalGate", () => {
     const stateDef: StateDefinition = { type: "single", approval_gate: true };
     const flow = makeFlow("small");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "some-state", flow, board)).toBe(true);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
   it("returns false for explicit approval_gate: false", () => {
     const stateDef: StateDefinition = { type: "single", approval_gate: false };
     const flow = makeFlow("medium");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(false);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("returns false for terminal states", () => {
     const stateDef: StateDefinition = { type: "terminal" };
     const flow = makeFlow("large");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "terminal", flow, board)).toBe(false);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("returns true for architect agent on medium tier (tier default)", () => {
     const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
     const flow = makeFlow("medium");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(true);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
   it("returns true for architect agent on medium tier (second check)", () => {
@@ -110,35 +110,35 @@ describe("shouldApprovalGate", () => {
     const flow = makeFlow("medium");
     const board = makeBoard();
     // medium tier should gate architect states
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(true);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
   it("returns true for architect agent on large tier (tier default)", () => {
     const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
     const flow = makeFlow("large");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(true);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
   it("returns true for architect agent on large tier (second check — explicit)", () => {
     const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
     const flow = makeFlow("large");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(true);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
   it("returns false for non-architect agent on medium tier", () => {
     const stateDef: StateDefinition = { type: "single", agent: "canon:canon-implementor" };
     const flow = makeFlow("medium");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "implement", flow, board)).toBe(false);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("returns false for small tier (no tier defaults)", () => {
     const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
     const flow = makeFlow("small");
     const board = makeBoard();
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(false);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("returns false for small tier with architect agent (no tier defaults)", () => {
@@ -146,27 +146,27 @@ describe("shouldApprovalGate", () => {
     const flow = makeFlow("small");
     const board = makeBoard();
     // small has no tier defaults
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(false);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("returns false when auto_approve metadata is true", () => {
     const stateDef: StateDefinition = { type: "single", approval_gate: true };
     const flow = makeFlow("large");
     const board = makeBoard({ auto_approve: true });
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(false);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("returns false when stateDef is undefined", () => {
     const flow = makeFlow("large");
     const board = makeBoard();
-    expect(shouldApprovalGate(undefined, "missing", flow, board)).toBe(false);
+    expect(shouldApprovalGate(undefined, flow, board)).toBe(false);
   });
 
   it("auto_approve false does not override explicit approval_gate: true", () => {
     const stateDef: StateDefinition = { type: "single", approval_gate: true };
     const flow = makeFlow("large");
     const board = makeBoard({ auto_approve: false });
-    expect(shouldApprovalGate(stateDef, "design", flow, board)).toBe(true);
+    expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 });
 
@@ -480,21 +480,36 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     expect(result.breakpoint.summary).toContain("done");
   });
 
-  it("approval gate does NOT fire when next_state === state_id (parallel wait)", async () => {
+  it("approval gate does NOT fire when next_state === state_id on a parallel-type state (parallel wait)", async () => {
     const workspace = makeTmpWorkspace();
     makeStore(workspace);
 
     vi.mocked(reportResult).mockResolvedValue(
-      makeReportResult("design") as any,
+      makeReportResult("parallel-review") as any,
     );
 
-    const flow = makeApprovalFlow("medium");
+    // Build a flow where the state with same next_state is type: parallel
+    const flowWithParallel: ResolvedFlow = {
+      name: "test-flow",
+      description: "test",
+      entry: "parallel-review",
+      tier: "medium",
+      spawn_instructions: { "parallel-review": "Review in parallel" },
+      states: {
+        "parallel-review": {
+          type: "parallel",
+          approval_gate: true,
+          transitions: { done: "terminal" },
+        },
+        terminal: { type: "terminal" },
+      },
+    } as unknown as ResolvedFlow;
 
     const result = await driveFlow({
       workspace,
-      flow,
+      flow: flowWithParallel,
       result: {
-        state_id: "design",
+        state_id: "parallel-review",
         status: "done",
       },
     });
@@ -655,5 +670,155 @@ describe("driveFlow Branch A — approval gate intercept", () => {
     expect(result.action).toBe("spawn");
     if (result.action !== "spawn") return;
     expect(result.requests[0]?.agent_type).toBe("canon:canon-implementor");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Infinite loop fix: approval decision statuses skip the gate (fix #1)
+// ---------------------------------------------------------------------------
+
+describe("driveFlow — approval decision statuses do NOT re-trigger the gate", () => {
+  it("'approved' status on an approval_gate: true state skips the gate (no infinite loop)", async () => {
+    const workspace = makeTmpWorkspace();
+    makeStore(workspace);
+
+    vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult({
+      prompts: [{ agent: "canon:canon-implementor", prompt: "Implement", template_paths: [], role: "main" }],
+    }));
+    vi.mocked(reportResult).mockResolvedValue(
+      makeReportResult("implement", { transition_condition: "approved" }) as any,
+    );
+
+    // approval_gate: true on design — but status is "approved", so gate must NOT fire again
+    const flow = makeApprovalFlow("medium");
+
+    const result = await driveFlow({
+      workspace,
+      flow,
+      result: {
+        state_id: "design",
+        status: "approved",
+      },
+    });
+
+    // Must advance to implement — NOT produce another "approval" breakpoint
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).not.toBe("approval");
+    expect(result.action).toBe("spawn");
+    if (result.action !== "spawn") return;
+    expect(result.requests[0]?.agent_type).toBe("canon:canon-implementor");
+  });
+
+  it("'revise' status on an approval_gate: true state skips the gate", async () => {
+    const workspace = makeTmpWorkspace();
+    makeStore(workspace);
+
+    vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult());
+    vi.mocked(reportResult).mockResolvedValue(
+      makeReportResult("design", { transition_condition: "revise" }) as any,
+    );
+
+    const flow = makeApprovalFlow("medium");
+
+    const result = await driveFlow({
+      workspace,
+      flow,
+      result: {
+        state_id: "design",
+        status: "revise",
+      },
+    });
+
+    // "revise" is an approval decision — gate must not re-fire
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).not.toBe("approval");
+  });
+
+  it("'reject' status on an approval_gate: true state skips the gate", async () => {
+    const workspace = makeTmpWorkspace();
+    makeStore(workspace);
+
+    vi.mocked(reportResult).mockResolvedValue(
+      makeReportResult(null, {
+        hitl_required: true,
+        hitl_reason: "Design rejected",
+        transition_condition: "reject",
+      }) as any,
+    );
+
+    const flow = makeApprovalFlow("medium");
+
+    const result = await driveFlow({
+      workspace,
+      flow,
+      result: {
+        state_id: "design",
+        status: "reject",
+      },
+    });
+
+    // "reject" is an approval decision — gate must not re-fire (hitl comes from report_result)
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).not.toBe("approval");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Self-transition: revise: design re-enters the same state (fix #2)
+// ---------------------------------------------------------------------------
+
+describe("driveFlow — self-transition on single state (revise: design)", () => {
+  it("'revise' self-transition on a single state re-enters same state (not empty spawn)", async () => {
+    const workspace = makeTmpWorkspace();
+    makeStore(workspace);
+
+    vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult());
+    // report-result says next_state === state_id (self-transition: revise: design)
+    vi.mocked(reportResult).mockResolvedValue(
+      makeReportResult("design", { transition_condition: "revise" }) as any,
+    );
+
+    // Flow where design is a single state with a self-transition on revise
+    const flowWithSelfTransition: ResolvedFlow = {
+      name: "test-flow",
+      description: "test",
+      entry: "design",
+      tier: "medium",
+      spawn_instructions: { design: "Design something" },
+      states: {
+        design: {
+          type: "single",
+          agent: "canon-architect",
+          // Explicit approval_gate: false so only the revise path is tested
+          approval_gate: false,
+          transitions: {
+            revise: "design",  // self-transition
+            done: "terminal",
+          },
+        },
+        terminal: { type: "terminal" },
+      },
+    } as unknown as ResolvedFlow;
+
+    const result = await driveFlow({
+      workspace,
+      flow: flowWithSelfTransition,
+      result: {
+        state_id: "design",
+        status: "revise",
+      },
+    });
+
+    // Self-transition on a single state should re-enter and spawn (not return empty [])
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).toBe("spawn");
+    if (result.action !== "spawn") return;
+    // Should have spawned something (re-entered design), not returned empty waiting list
+    expect(result.requests.length).toBeGreaterThan(0);
+    expect(result.requests[0]?.agent_type).toContain("architect");
   });
 });

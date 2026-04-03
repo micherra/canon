@@ -63,7 +63,6 @@ const AGENT_SESSION_EVICTION_MS = 600_000; // 10 minutes
  */
 export function shouldApprovalGate(
   stateDef: StateDefinition | undefined,
-  stateId: string,
   flow: DriveFlowInput["flow"],
   board: Board,
 ): boolean {
@@ -82,8 +81,9 @@ export function shouldApprovalGate(
   // Tier-based defaults (approval_gate is undefined — apply defaults)
   const tier = flow.tier;
   if (tier === "medium" || tier === "large") {
-    // Default gate on design states (agent is canon-architect)
-    return stateDef.agent === "canon-architect";
+    // Default gate on design states (agent is canon-architect, with or without prefix)
+    const isArchitect = stateDef.agent === "canon-architect" || stateDef.agent === "canon:canon-architect";
+    return isArchitect;
   }
 
   return false;
@@ -221,10 +221,13 @@ export async function driveFlow(
       };
     }
 
-    // Parallel state: check if all roles are done
+    // Parallel/parallel-per state: check if all roles are done.
     // When next_state loops back to the same state, it means we're waiting for
     // more parallel results. Return empty spawn to signal "waiting".
-    if (next_state === state_id) {
+    // Note: for non-parallel states, same-state transitions (e.g. revise: design) must NOT be
+    // short-circuited here — they are legitimate self-transitions that should proceed normally.
+    const completedDef = flow.states[state_id];
+    if (next_state === state_id && (completedDef?.type === "parallel" || completedDef?.type === "parallel-per")) {
       return {
         ok: true as const,
         action: "spawn",
@@ -234,9 +237,18 @@ export async function driveFlow(
 
     // Approval gate check (ADR-017) — fires on the COMPLETED state, not the next state.
     // Placed AFTER the parallel-wait guard so it only fires when all roles are done.
-    // Note: effects may re-execute on revision re-entry (same as fix loops — known limitation).
+    // Skip the gate when the orchestrator is re-submitting an approval decision — otherwise
+    // the gate would fire again, creating an infinite loop.
+    const normalizedStatus = String(status ?? "").trim().toLowerCase();
+    const isApprovalDecision =
+      normalizedStatus === "approved" ||
+      normalizedStatus === "approve" ||
+      normalizedStatus === "revise" ||
+      normalizedStatus === "reject" ||
+      normalizedStatus === "rejected";
+
     const completedStateDef = flow.states[state_id];
-    if (shouldApprovalGate(completedStateDef, state_id, flow, freshBoard)) {
+    if (!isApprovalDecision && shouldApprovalGate(completedStateDef, flow, freshBoard)) {
       return {
         ok: true as const,
         action: "approval" as const,
