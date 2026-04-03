@@ -120,6 +120,14 @@ export async function driveFlow(
       });
     }
 
+    // Guard: wave state results MUST include task_id
+    if (stateDef?.type === "wave" && !task_id) {
+      return toolError(
+        "INVALID_INPUT",
+        `Wave state '${state_id}' received a result without task_id. Wave results must include task_id to identify which task completed.`,
+      );
+    }
+
     // Report the result and evaluate transition (non-wave states)
     const reportOut = await reportResult({
       workspace,
@@ -237,13 +245,24 @@ async function handleWaveTaskResult(
 ): Promise<ToolResult<DriveFlowAction>> {
   const { workspace, flow, state_id, task_id, task_status, store } = input;
 
+  // Derive convention-based worktree info for this task so it is persisted
+  // alongside the result — completeWave can read it back without reconstructing.
+  const projectDir = getProjectDir(workspace);
+  const conventionWorktreePath = join(projectDir, ".canon", "worktrees", task_id);
+  const conventionBranch = `canon-wave/${task_id}`;
+
   // Atomically append the task result to wave_results (sqlite-transactions)
   store.transaction(() => {
     const existing = store.getState(state_id);
-    const waveResults: Record<string, WaveResult> = (existing?.wave_results as Record<string, WaveResult>) ?? {};
+    const waveResults: Record<string, WaveResult & { worktree_path?: string; branch?: string }> =
+      (existing?.wave_results as Record<string, WaveResult & { worktree_path?: string; branch?: string }>) ?? {};
+    // Prefer already-persisted worktree metadata; fall back to convention
+    const existingEntry = waveResults[task_id];
     waveResults[task_id] = {
       tasks: [task_id],
       status: task_status,
+      worktree_path: existingEntry?.worktree_path ?? conventionWorktreePath,
+      branch: existingEntry?.branch ?? conventionBranch,
     };
     const currentEntries = existing?.entries ?? 0;
     store.upsertState(state_id, {
@@ -260,6 +279,14 @@ async function handleWaveTaskResult(
   const waveResults: Record<string, WaveResult> = (stateEntry?.wave_results as Record<string, WaveResult>) ?? {};
   const waveTotal = stateEntry?.wave_total ?? 0;
   const currentWave = stateEntry?.wave ?? 1;
+
+  // Guard: wave_total must be a positive integer before allowing completion
+  if (!waveTotal || waveTotal <= 0) {
+    return toolError(
+      "UNEXPECTED",
+      `Wave state '${state_id}' has invalid wave_total (${waveTotal}). Wave total must be set to a positive integer when entering the wave state.`,
+    );
+  }
 
   // Not all tasks done yet — return waiting signal (empty requests)
   if (Object.keys(waveResults).length < waveTotal) {
@@ -308,14 +335,18 @@ async function completeWave(
   // We reconstruct task IDs for this wave from the stored wave_results keys.
   const stateEntry = store.getState(state_id);
   const waveResults: Record<string, WaveResult> = (stateEntry?.wave_results as Record<string, WaveResult>) ?? {};
-  const taskIds = Object.keys(waveResults);
+  const taskIds = Object.keys(waveResults).sort();
 
-  // Build WaveWorktreeResult array from task IDs (worktree paths follow the convention)
-  const worktreeResults: WaveWorktreeResult[] = taskIds.map((tid) => ({
-    task_id: tid,
-    worktree_path: join(projectDir, ".canon", "worktrees", tid),
-    branch: `canon-wave/${tid}`,
-  }));
+  // Build WaveWorktreeResult array from task IDs.
+  // Prefer worktree metadata persisted during wave entry; fall back to convention.
+  const worktreeResults: WaveWorktreeResult[] = taskIds.map((tid) => {
+    const entry = waveResults[tid] as (WaveResult & { worktree_path?: string; branch?: string }) | undefined;
+    return {
+      task_id: tid,
+      worktree_path: typeof entry?.worktree_path === "string" ? entry.worktree_path : join(projectDir, ".canon", "worktrees", tid),
+      branch: typeof entry?.branch === "string" ? entry.branch : `canon-wave/${tid}`,
+    };
+  });
 
   // Merge worktrees
   const mergeResult = await mergeWaveResults(worktreeResults, projectDir, mergeStrategy);
@@ -969,6 +1000,12 @@ async function applySessionContinuation(
 
   const now = Date.now();
   const lastActivity = new Date(session.last_agent_activity).getTime();
+
+  if (!Number.isFinite(lastActivity)) {
+    // Invalid timestamp — treat session as stale
+    return requests;
+  }
+
   const idleMs = now - lastActivity;
 
   if (idleMs >= AGENT_SESSION_EVICTION_MS) {

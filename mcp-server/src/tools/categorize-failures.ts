@@ -69,10 +69,12 @@ function dirOf(filePath: string): string {
  * Find the longest common substring shared across all messages.
  * Only considers substrings longer than SUBSTRING_BOOST_LENGTH chars.
  *
- * Time complexity: O(n*m) where n = length of the first message and m = number
- * of messages. In practice this is bounded tightly because error messages are
- * short (typically < 200 chars) and the outer loop exits early on the first
- * match, so the worst-case quadratic behaviour is never reached.
+ * Worst-case time complexity: O(n^2 * m), where n = length of the first
+ * message and m = number of messages, because the implementation enumerates
+ * substrings of the first message and checks each candidate against every
+ * message. In practice this is tightly bounded because messages are capped
+ * at MAX_MSG_LEN characters and the search exits early once the first
+ * longest match is found.
  */
 function longestCommonSubstring(messages: string[]): string | null {
   if (messages.length === 0) return null;

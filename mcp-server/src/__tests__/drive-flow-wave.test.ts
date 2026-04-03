@@ -206,7 +206,7 @@ afterEach(() => {
 describe("driveFlow — wave entry", () => {
   it("creates worktrees for each task in the current wave and populates worktree_path on SpawnRequests", async () => {
     const workspace = makeTmpWorkspace();
-    const store = makeStore(workspace);
+    makeStore(workspace);
     writeIndexMd(workspace, "epic-slug", [
       { task_id: "task-01", wave: 1 },
       { task_id: "task-02", wave: 1 },
@@ -308,6 +308,9 @@ describe("driveFlow — wave result accumulation", () => {
       wave_total: 2,
       wave_results: {},
     });
+
+    // getProjectDir is needed to derive convention-based worktree paths in handleWaveTaskResult
+    vi.mocked(getProjectDir).mockReturnValue("/project");
 
     // Submit result for task-01 only
     const flow = makeWaveFlow();

@@ -203,7 +203,14 @@ Call `drive_flow({ workspace, flow: resolved_flow })` to start. Then loop:
 
 ### 2. HITL action: `{ action: "hitl" }`
 
-Present `breakpoint.context` to the user. If `breakpoint.options` is present, show suggested responses. When the user responds: call `drive_flow({ workspace, flow: resolved_flow, result: { state_id, status: user_decision } })`.
+Present `breakpoint.context` to the user. If `breakpoint.options` is present, show suggested responses. When the user responds, call `drive_flow(...)` with the appropriate status keyword:
+
+- `done` — retry succeeded or user approves moving forward
+- `skipped` — skip this state and advance
+- `blocked` — mark state as blocked (user will unblock later)
+- `cannot_fix` — acknowledge failure and let transition logic route to fallback
+
+These are the standard status keywords accepted by `report_result` via `normalizeStatus`. Arbitrary strings (like "retry") are not recognized — use the keywords above.
 
 **Epic wave checkpoints**: The server assembles wave summary, pattern-check observations, and proposed plan changes. Present them to the user with approve/reject options for each proposed event. When the user approves a proposed event, include it in the `result` you pass back to `drive_flow`. For rejected proposals, omit them.
 

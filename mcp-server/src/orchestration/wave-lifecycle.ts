@@ -158,7 +158,7 @@ export async function mergeWaveResults(
       return {
         ok: false,
         merged_count: mergedCount,
-        conflict_task: task.task_id,
+        conflict_task: isConflict ? task.task_id : "",
         conflict_detail: mergeResult.stderr || mergeResult.stdout,
       };
     }
