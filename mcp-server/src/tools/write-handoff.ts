@@ -3,6 +3,7 @@ import { join, resolve, sep } from "node:path";
 import { z } from "zod";
 import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
 import { atomicWriteFile } from "../utils/atomic-write.ts";
+import { assertWorkspacePath } from "../orchestration/execution-store.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,6 +84,16 @@ export interface WriteHandoffInput {
 export async function writeHandoff(
   input: WriteHandoffInput,
 ): Promise<ToolResult<WriteHandoffResult>> {
+  // Validate workspace path
+  try {
+    assertWorkspacePath(input.workspace);
+  } catch {
+    return toolError(
+      "WORKSPACE_NOT_FOUND",
+      `Invalid workspace path: "${input.workspace}". Expected a path containing ".canon/workspaces/".`,
+    );
+  }
+
   // Validate type against allowed values
   if (!ALLOWED_TYPES.includes(input.type as HandoffType)) {
     return toolError(
@@ -118,7 +129,7 @@ export async function writeHandoff(
     await mkdir(handoffsRoot, { recursive: true });
   } catch (err: unknown) {
     return toolError(
-      "INVALID_INPUT",
+      "WORKSPACE_NOT_FOUND",
       `Cannot create handoffs directory at "${handoffsRoot}": ${(err as Error).message}`,
     );
   }
@@ -134,7 +145,7 @@ export async function writeHandoff(
     await atomicWriteFile(resolvedPath, markdown);
   } catch (err: unknown) {
     return toolError(
-      "INVALID_INPUT",
+      "UNEXPECTED",
       `Failed to write handoff file "${resolvedPath}": ${(err as Error).message}`,
     );
   }

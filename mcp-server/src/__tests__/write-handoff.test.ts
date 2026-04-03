@@ -214,3 +214,64 @@ describe("writeHandoff — path traversal rejection", () => {
     expect(result.error_code).toBe("INVALID_INPUT");
   });
 });
+
+describe("writeHandoff — workspace path validation", () => {
+  it("returns WORKSPACE_NOT_FOUND for invalid workspace path when validation is active", async () => {
+    const orig = process.env.VITEST;
+    delete process.env.VITEST;
+    try {
+      const result = await writeHandoff({
+        workspace: "/tmp/not-a-workspace",
+        type: "research-synthesis",
+        content: {
+          key_findings: "x", affected_subsystems: "y",
+          risk_areas: "z", open_questions: "q",
+        },
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+    } finally {
+      process.env.VITEST = orig;
+    }
+  });
+});
+
+describe("writeHandoff — filesystem write error", () => {
+  it("returns UNEXPECTED error code when atomicWriteFile fails", async () => {
+    // Use a workspace path that passes assertWorkspacePath (has .canon/workspaces/ segment)
+    // but point it to a directory that doesn't exist so mkdir succeeds but write fails
+    // We'll use a valid-looking workspace path and make the handoffs dir a file (not a dir)
+    // so mkdir fails, which now returns WORKSPACE_NOT_FOUND.
+    // For UNEXPECTED from atomicWriteFile, we need mkdir to succeed but write to fail.
+    // We simulate this by making the target path (research-synthesis.md) a directory.
+    const { mkdtemp, mkdir: fsMkdir, rm: fsRm } = await import("fs/promises");
+    const os = await import("os");
+    const path = await import("path");
+
+    const fakeWorkspace = await mkdtemp(path.join(os.tmpdir(), "write-handoff-unexpected-"));
+    // Create handoffs/ and then create research-synthesis.md as a directory
+    // so the write will fail (can't write a file where a directory exists)
+    await fsMkdir(path.join(fakeWorkspace, "handoffs", "research-synthesis.md"), { recursive: true });
+
+    const orig = process.env.VITEST;
+    delete process.env.VITEST;
+    // Temporarily set the env var that skips workspace validation
+    process.env.CANON_SKIP_WORKSPACE_VALIDATION = "true";
+    try {
+      const result = await writeHandoff({
+        workspace: fakeWorkspace,
+        type: "research-synthesis",
+        content: {
+          key_findings: "x", affected_subsystems: "y",
+          risk_areas: "z", open_questions: "q",
+        },
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error_code).toBe("UNEXPECTED");
+    } finally {
+      process.env.VITEST = orig;
+      delete process.env.CANON_SKIP_WORKSPACE_VALIDATION;
+      await fsRm(fakeWorkspace, { recursive: true, force: true });
+    }
+  });
+});
