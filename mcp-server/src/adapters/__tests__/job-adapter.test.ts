@@ -81,6 +81,7 @@ describe("forkJob — spawns a child process", () => {
   it("returns a ChildProcess handle", () => {
     const child = forkJob({
       workerPath: "/path/to/worker.ts",
+      cwd: "/mock/cwd",
       onMessage: vi.fn(),
       onExit: vi.fn(),
     });
@@ -97,6 +98,7 @@ describe("forkJob — spawns a child process", () => {
 
     forkJob({
       workerPath: "/workers/graph-worker.ts",
+      cwd: "/mock/cwd",
       onMessage: vi.fn(),
       onExit: vi.fn(),
     });
@@ -113,6 +115,7 @@ describe("forkJob — spawns a child process", () => {
 
     forkJob({
       workerPath: "/workers/graph-worker.ts",
+      cwd: "/mock/cwd",
       onMessage: vi.fn(),
       onExit: vi.fn(),
     });
@@ -125,6 +128,7 @@ describe("forkJob — spawns a child process", () => {
     const onMessage = vi.fn();
     forkJob({
       workerPath: "/worker.ts",
+      cwd: "/mock/cwd",
       onMessage,
       onExit: vi.fn(),
     });
@@ -139,6 +143,7 @@ describe("forkJob — spawns a child process", () => {
     const onExit = vi.fn();
     forkJob({
       workerPath: "/worker.ts",
+      cwd: "/mock/cwd",
       onMessage: vi.fn(),
       onExit,
     });
@@ -151,6 +156,7 @@ describe("forkJob — spawns a child process", () => {
   it("registers drain handlers on stdout and stderr to prevent pipe backpressure", () => {
     forkJob({
       workerPath: "/worker.ts",
+      cwd: "/mock/cwd",
       onMessage: vi.fn(),
       onExit: vi.fn(),
     });
@@ -164,6 +170,7 @@ describe("forkJob — spawns a child process", () => {
     const onMessage = vi.fn();
     forkJob({
       workerPath: "/worker.ts",
+      cwd: "/mock/cwd",
       onMessage,
       onExit: vi.fn(),
     });
@@ -185,6 +192,7 @@ describe("sendWorkerInput — delivers message to child", () => {
   it("sends the WorkerInput to the child via IPC", () => {
     forkJob({
       workerPath: "/worker.ts",
+      cwd: "/mock/cwd",
       onMessage: vi.fn(),
       onExit: vi.fn(),
     });
@@ -214,6 +222,7 @@ describe("killJob — terminates child process", () => {
   it("kills the child with SIGTERM when not already killed", () => {
     forkJob({
       workerPath: "/worker.ts",
+      cwd: "/mock/cwd",
       onMessage: vi.fn(),
       onExit: vi.fn(),
     });
@@ -226,6 +235,7 @@ describe("killJob — terminates child process", () => {
   it("does not kill an already-killed child", () => {
     forkJob({
       workerPath: "/worker.ts",
+      cwd: "/mock/cwd",
       onMessage: vi.fn(),
       onExit: vi.fn(),
     });
