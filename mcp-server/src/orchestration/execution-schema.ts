@@ -195,7 +195,7 @@ interface Migration {
 /**
  * Ordered list of schema migrations.
  * Each migration runs only when the stored schema version is less than migration.version.
- * Versions are compared as strings — use zero-padded integers if > 9.
+ * Versions are compared as integers to ensure correct ordering beyond v9.
  */
 const MIGRATIONS: Migration[] = [
   {
@@ -310,7 +310,7 @@ export function runMigrations(db: Database.Database): void {
   let version = currentRow?.value ?? '1';
 
   for (const migration of MIGRATIONS) {
-    if (migration.version > version) {
+    if (parseInt(migration.version, 10) > parseInt(version, 10)) {
       const run = db.transaction(() => migration.up(db));
       run();
       version = migration.version;
