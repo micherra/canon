@@ -1,18 +1,19 @@
 /**
- * Pipeline runner — wires all 9 prompt assembly stages.
+ * Pipeline runner — wires all 10 prompt assembly stages.
  *
  * Handles early returns before the pipeline (terminal state, missing state,
  * missing rawInstruction, skip_when), then iterates through all stages in
  * order. Each stage receives a PromptContext and returns a new one.
  *
  * Canon: deep-modules — assemblePrompt is the single deep interface hiding
- * 9-stage complexity. Callers see one function, not nine.
+ * 10-stage complexity. Callers see one function, not ten.
  */
 
 import { getExecutionStore } from "../../orchestration/execution-store.ts";
 import { evaluateSkipWhen } from "../../orchestration/skip-when.ts";
 import type { PromptContext, PromptStage, SpawnPromptInput, SpawnPromptResult } from "./types.ts";
 import { resolveContext } from "./resolve-context.ts";
+import { injectHandoffs } from "./inject-handoffs.ts";
 import { resolveProgress } from "./resolve-progress.ts";
 import { resolveMessages } from "./resolve-messages.ts";
 import { substituteVariablesStage } from "./substitute-variables.ts";
@@ -23,20 +24,21 @@ import { injectCoordination } from "./inject-coordination.ts";
 import { validatePrompts } from "./validate.ts";
 
 /**
- * The prompt assembly pipeline: 9 stages applied in sequence.
+ * The prompt assembly pipeline: 10 stages applied in sequence.
  * Each stage transforms PromptContext. Stages short-circuit by setting
  * ctx.skip_reason — the runner breaks the loop on first skip.
  */
 const PIPELINE: PromptStage[] = [
-  resolveContext,         // 1: inject_context injections → mergedVariables
-  resolveProgress,        // 2: ${progress} variable → mergedVariables
-  resolveMessages,        // 3: ${messages} from channel → mergedVariables
-  substituteVariablesStage, // 4: substitute vars → basePrompt (+ cache prefix)
-  injectTemplates,        // 5: append template instructions → basePrompt
-  injectWaveBriefing,     // 6: append wave guidance + briefing → basePrompt
-  fanout,                 // 7: expand basePrompt → prompts[]
-  injectCoordination,     // 8: role sub + messaging + metrics footer → prompts[]
-  validatePrompts,        // 9: scan for unresolved ${...} → warnings
+  resolveContext,           // 1: inject_context injections → mergedVariables
+  injectHandoffs,           // 2: handoff file injection → mergedVariables
+  resolveProgress,          // 3: ${progress} variable → mergedVariables
+  resolveMessages,          // 4: ${messages} from channel → mergedVariables
+  substituteVariablesStage, // 5: substitute vars → basePrompt (+ cache prefix)
+  injectTemplates,          // 6: append template instructions → basePrompt
+  injectWaveBriefing,       // 7: append wave guidance + briefing → basePrompt
+  fanout,                   // 8: expand basePrompt → prompts[]
+  injectCoordination,       // 9: role sub + messaging + metrics footer → prompts[]
+  validatePrompts,          // 10: scan for unresolved ${...} → warnings
 ];
 
 /**
