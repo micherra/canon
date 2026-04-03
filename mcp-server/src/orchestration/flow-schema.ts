@@ -199,6 +199,10 @@ const BaseStateFields = {
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   inject_messages: z.boolean().optional(),
+  required_artifacts: z.array(z.object({
+    name: z.string(),
+    type: z.enum(["test_report", "review", "implementation_summary"]),
+  })).optional(),
 };
 
 export const SingleStateSchema = z.object({
@@ -333,6 +337,10 @@ const FragmentBaseStateFields = {
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   inject_messages: z.boolean().optional(),
+  required_artifacts: z.array(z.object({
+    name: z.string(),
+    type: z.enum(["test_report", "review", "implementation_summary"]),
+  })).optional(),
 };
 
 const FragmentSingleStateSchema = z.object({
@@ -674,6 +682,7 @@ export type Session = z.infer<typeof SessionSchema>;
 export type CompeteConfigObject = z.infer<typeof CompeteConfigObjectSchema>;
 export type CompeteConfig = z.infer<typeof CompeteConfigSchema>;
 export type DebateConfig = z.infer<typeof DebateConfigSchema>;
+export type RequiredArtifact = { name: string; type: "test_report" | "review" | "implementation_summary" };
 
 // ---------------------------------------------------------------------------
 // Transcript types (ADR-015)
