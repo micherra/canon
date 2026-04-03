@@ -38,6 +38,6 @@ export async function codebaseGraphSubmit(
   const configSourceDirs = await deriveSourceDirsFromLayers(projectDir);
   const sourceDirs = explicitSourceDirs || configSourceDirs || undefined;
 
-  const manager = getOrCreateJobManager(projectDir, pluginDir);
+  const manager = await getOrCreateJobManager(projectDir, pluginDir);
   return manager.submit(input, sourceDirs ?? undefined);
 }

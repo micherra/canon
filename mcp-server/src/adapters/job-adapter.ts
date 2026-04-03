@@ -27,6 +27,10 @@ export interface WorkerInput {
   projectDir: string;
   dbPath: string;
   sourceDirs?: string[];
+  /** File extensions to include when scanning (forwarded from CodebaseGraphInput). */
+  include_extensions?: string[];
+  /** Directories to exclude when scanning (forwarded from CodebaseGraphInput). */
+  exclude_dirs?: string[];
 }
 
 export interface ForkJobOptions {
@@ -48,6 +52,11 @@ export function forkJob(options: ForkJobOptions): ChildProcess {
     // Ensure the child can resolve TypeScript modules
     execArgv: ["--import", "tsx"],
   });
+
+  // Drain stdout/stderr to prevent pipe backpressure from blocking the child
+  // (stdio is ['ignore','pipe','pipe','ipc'], so pipes must be consumed).
+  child.stdout?.on("data", () => {});
+  child.stderr?.on("data", () => {});
 
   child.on("message", (msg: unknown) => {
     options.onMessage(msg as JobMessage);

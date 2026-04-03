@@ -148,6 +148,18 @@ describe("forkJob — spawns a child process", () => {
     expect(onExit).toHaveBeenCalledWith(0, null);
   });
 
+  it("registers drain handlers on stdout and stderr to prevent pipe backpressure", () => {
+    forkJob({
+      workerPath: "/worker.ts",
+      onMessage: vi.fn(),
+      onExit: vi.fn(),
+    });
+
+    // stdout.on and stderr.on should each be called with 'data' and a noop handler
+    expect(lastChild!.stdout.on).toHaveBeenCalledWith('data', expect.any(Function));
+    expect(lastChild!.stderr.on).toHaveBeenCalledWith('data', expect.any(Function));
+  });
+
   it("calls onMessage with error message when child emits error", () => {
     const onMessage = vi.fn();
     forkJob({
