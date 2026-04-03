@@ -1,5 +1,5 @@
 /**
- * Stage 9 — Unresolved variable validation.
+ * Stage 10 — Unresolved variable validation.
  *
  * Scans all assembled prompts for ${...} patterns that are not in the
  * PIPELINE_ALLOWED_VARIABLES allowlist. Each unresolved pattern is added
@@ -53,7 +53,7 @@ function isAllowed(name: string): boolean {
 }
 
 /**
- * Stage 9: Validate assembled prompts for unresolved variable references.
+ * Stage 10: Validate assembled prompts for unresolved variable references.
  *
  * Scans ctx.prompts[].prompt (or ctx.basePrompt when prompts is empty).
  * For each ${...} pattern not in the allowlist, appends an ERROR: warning.

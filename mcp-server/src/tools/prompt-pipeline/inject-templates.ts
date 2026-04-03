@@ -1,5 +1,5 @@
 /**
- * Stage 5 — Template injection.
+ * Stage 6 — Template injection.
  *
  * Appends template usage instructions to ctx.basePrompt when the state
  * declares a template. Uses buildTemplateInjection from variables.ts.
@@ -12,7 +12,7 @@ import { buildTemplateInjection } from "../../orchestration/variables.ts";
 import type { PromptContext } from "./types.ts";
 
 /**
- * Stage 5: Inject template usage instructions into basePrompt.
+ * Stage 6: Inject template usage instructions into basePrompt.
  *
  * When state.template is declared and CANON_PLUGIN_ROOT is available,
  * appends the template injection string to basePrompt.

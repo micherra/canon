@@ -292,7 +292,7 @@ src/
 | `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
 | `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
 | `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
-| `write_handoff` | Write a structured handoff file to `{workspace}/handoffs/{type}.md`; validates content structure by selecting the Zod schema for the given handoff type and parsing the provided object; returns `{ path, type }` |
+| `write_handoff` | Write a structured handoff file to `{workspace}/handoffs/{type}.md`; validates content against a per-type Zod schema selected from a schema map (CONTENT_SCHEMAS) via safeParse; returns `{ path, type }` |
 
 ## Dependencies
 <!-- last-updated: 2026-03-26 -->

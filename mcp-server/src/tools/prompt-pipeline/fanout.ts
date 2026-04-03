@@ -1,5 +1,5 @@
 /**
- * Stage 7: fanout
+ * Stage 8: fanout
  *
  * Expands a single base prompt into N fanned-out prompt entries based on
  * the state type.
@@ -112,7 +112,7 @@ export function parseTimeout(timeout: string): number | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Stage 7: Expand ctx.basePrompt into ctx.prompts[] based on state type.
+ * Stage 8: Expand ctx.basePrompt into ctx.prompts[] based on state type.
  */
 export async function fanout(ctx: PromptContext): Promise<PromptContext> {
   const { state } = ctx;

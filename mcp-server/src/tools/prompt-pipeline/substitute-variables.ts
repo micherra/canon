@@ -1,5 +1,5 @@
 /**
- * Stage 4 — Variable substitution and cache prefix prepend.
+ * Stage 5 — Variable substitution and cache prefix prepend.
  *
  * Calls substituteVariables on rawInstruction using mergedVariables and
  * sets ctx.basePrompt. Also reads the cache prefix from ExecutionStore
@@ -14,9 +14,9 @@ import { getExecutionStore } from "../../orchestration/execution-store.ts";
 import type { PromptContext } from "./types.ts";
 
 /**
- * Stage 4: Substitute variables and prepend cache prefix.
+ * Stage 5: Substitute variables and prepend cache prefix.
  *
- * Uses ctx.mergedVariables (which includes injected context from stages 1-3)
+ * Uses ctx.mergedVariables (which includes injected context from stages 1-4)
  * for substitution. Unknown ${...} patterns are left unchanged.
  */
 export async function substituteVariablesStage(ctx: PromptContext): Promise<PromptContext> {
