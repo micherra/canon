@@ -209,7 +209,7 @@ describe('ExecutionStore — updateAgentSession / getAgentSession', () => {
   test('getAgentSession returns null when no session set', () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState('research', { status: 'active', entries: 1 });
+    store.upsertState('research', { status: 'in_progress', entries: 1 });
 
     const result = store.getAgentSession('research');
     expect(result).toBeNull();
@@ -218,7 +218,7 @@ describe('ExecutionStore — updateAgentSession / getAgentSession', () => {
   test('updateAgentSession stores session ID and activity timestamp', () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState('research', { status: 'active', entries: 1 });
+    store.upsertState('research', { status: 'in_progress', entries: 1 });
 
     store.updateAgentSession('research', 'agent-sess-xyz');
 
@@ -231,7 +231,7 @@ describe('ExecutionStore — updateAgentSession / getAgentSession', () => {
   test('updateAgentSession sets last_agent_activity to current ISO timestamp', () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState('research', { status: 'active', entries: 1 });
+    store.upsertState('research', { status: 'in_progress', entries: 1 });
 
     const before = new Date().toISOString();
     store.updateAgentSession('research', 'agent-sess-abc');
@@ -246,7 +246,7 @@ describe('ExecutionStore — updateAgentSession / getAgentSession', () => {
   test('updateAgentSession replaces existing session', () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState('research', { status: 'active', entries: 1 });
+    store.upsertState('research', { status: 'in_progress', entries: 1 });
 
     store.updateAgentSession('research', 'agent-sess-v1');
     store.updateAgentSession('research', 'agent-sess-v2');
@@ -266,8 +266,8 @@ describe('ExecutionStore — updateAgentSession / getAgentSession', () => {
   test('agent session IDs are independent per state', () => {
     const store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
-    store.upsertState('research', { status: 'active', entries: 1 });
-    store.upsertState('implement', { status: 'active', entries: 1 });
+    store.upsertState('research', { status: 'in_progress', entries: 1 });
+    store.upsertState('implement', { status: 'in_progress', entries: 1 });
 
     store.updateAgentSession('research', 'sess-research');
     store.updateAgentSession('implement', 'sess-implement');

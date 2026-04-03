@@ -124,6 +124,16 @@ export async function mergeWaveResults(
   projectDir: string,
   mergeStrategy: MergeStrategy
 ): Promise<MergeWaveResult> {
+  // Guard: only "sequential" is implemented; other strategies are future work
+  if (mergeStrategy === "rebase" || mergeStrategy === "squash") {
+    return {
+      ok: false,
+      merged_count: 0,
+      conflict_task: "",
+      conflict_detail: `Merge strategy "${mergeStrategy}" is not yet implemented. Only "sequential" is supported.`,
+    };
+  }
+
   let mergedCount = 0;
 
   for (const task of tasks) {

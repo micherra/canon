@@ -68,24 +68,32 @@ describe('syncBoardToStore', () => {
 
   test('updates blocked on execution', () => {
     const board = makeBoard({
-      blocked: { state_id: 'research', reason: 'Needs clarification', timestamp: '2026-01-01T00:00:00.000Z' },
+      blocked: { state: 'research', reason: 'Needs clarification', since: '2026-01-01T00:00:00.000Z' },
     });
     syncBoardToStore(store, board);
 
     const exec = store.getExecution();
     expect(exec?.blocked).toEqual({
-      state_id: 'research',
+      state: 'research',
       reason: 'Needs clarification',
-      timestamp: '2026-01-01T00:00:00.000Z',
+      since: '2026-01-01T00:00:00.000Z',
     });
   });
 
   test('updates concerns on execution', () => {
-    const board = makeBoard({ concerns: ['test concern 1', 'test concern 2'] });
+    const board = makeBoard({
+      concerns: [
+        { state_id: 'research', agent: 'canon-reviewer', message: 'test concern 1', timestamp: '2026-01-01T00:00:00.000Z' },
+        { state_id: 'implement', agent: 'canon-reviewer', message: 'test concern 2', timestamp: '2026-01-01T00:00:00.000Z' },
+      ],
+    });
     syncBoardToStore(store, board);
 
     const exec = store.getExecution();
-    expect(exec?.concerns).toEqual(['test concern 1', 'test concern 2']);
+    expect(exec?.concerns).toEqual([
+      { state_id: 'research', agent: 'canon-reviewer', message: 'test concern 1', timestamp: '2026-01-01T00:00:00.000Z' },
+      { state_id: 'implement', agent: 'canon-reviewer', message: 'test concern 2', timestamp: '2026-01-01T00:00:00.000Z' },
+    ]);
   });
 
   test('syncs board states to store', () => {
@@ -114,7 +122,7 @@ describe('syncBoardToStore', () => {
         implement: {
           count: 2,
           max: 3,
-          history: ['done', 'done_with_concerns'],
+          history: [{ status: 'done' }, { status: 'done_with_concerns' }],
           cannot_fix: [],
         },
       },
@@ -124,21 +132,21 @@ describe('syncBoardToStore', () => {
     const iter = store.getIteration('implement');
     expect(iter?.count).toBe(2);
     expect(iter?.max).toBe(3);
-    expect(iter?.history).toEqual(['done', 'done_with_concerns']);
+    expect(iter?.history).toEqual([{ status: 'done' }, { status: 'done_with_concerns' }]);
   });
 
   test('syncs multiple states in one call', () => {
     const board = makeBoard({
       states: {
         research: { status: 'done', entries: 1 },
-        implement: { status: 'active', entries: 1 },
+        implement: { status: 'in_progress', entries: 1 },
         test: { status: 'pending', entries: 0 },
       },
     });
     syncBoardToStore(store, board);
 
     expect(store.getState('research')?.status).toBe('done');
-    expect(store.getState('implement')?.status).toBe('active');
+    expect(store.getState('implement')?.status).toBe('in_progress');
     expect(store.getState('test')?.status).toBe('pending');
   });
 

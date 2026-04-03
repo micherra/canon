@@ -144,9 +144,6 @@ export async function categorizeFailures(
     return applyRefinedCategories(failures, refined_categories);
   }
 
-  // Collect all file paths in a set for reference
-  const failureFileSet = new Set(failures.map((f) => f.file));
-
   // Track which failure entries have been assigned to a group already
   const assigned = new Set<number>();
   const categories: FailureCategory[] = [];

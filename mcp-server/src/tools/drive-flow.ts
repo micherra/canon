@@ -330,8 +330,13 @@ async function completeWave(
   // Cleanup worktrees (best-effort — errors don't fail the flow)
   await cleanupWorktrees(worktreeResults, projectDir);
 
+  // Guard: stateDef must exist (it was validated when entering the wave state)
+  if (!stateDef) {
+    return toolError("UNEXPECTED", `State definition not found for state '${state_id}' during wave completion`);
+  }
+
   // Run gates
-  const gateResults = runGates(stateDef!, flow, projectDir, stateEntry ?? undefined);
+  const gateResults = runGates(stateDef, flow, projectDir, stateEntry ?? undefined);
   const gateFailed = gateResults.some((g) => !g.passed);
 
   // Determine the status keyword to report

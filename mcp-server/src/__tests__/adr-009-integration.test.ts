@@ -698,7 +698,7 @@ describe("syncBoardToStore — metadata field", () => {
     const store = makeStore(workspace);
 
     const board = makeBoard({
-      metadata: { discovered_gates: [{ command: "npm test", source: "tester" }] },
+      metadata: { test_gate: "npm test" },
     });
     syncBoardToStore(store, board);
 
