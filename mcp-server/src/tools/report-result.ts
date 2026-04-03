@@ -30,7 +30,8 @@ import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { executeEffects } from "../orchestration/effects.ts";
 import { inspectDebateProgress } from "../orchestration/debate.ts";
 
-/** Maps producer agent type to the handoff file they should write. */
+/** Maps producer agent type to the handoff file they should write.
+ * NOTE: must stay in sync with HANDOFF_CONSUMER_MAP in prompt-pipeline/inject-handoffs.ts */
 const HANDOFF_PRODUCER_MAP: Record<string, string> = {
   "canon:canon-researcher": "research-synthesis.md",
   "canon:canon-architect": "design-brief.md",
@@ -611,7 +612,7 @@ async function reportResultLocked(
             flowEventBus.emit("handoff_missing", handoffMissingPayload);
           } catch { /* best-effort */ }
         }
-      } catch { /* best-effort — never blocks the flow */ }
+      } catch (err) { console.debug("handoff check failed:", err); /* best-effort — never blocks the flow */ }
     }
   }
 

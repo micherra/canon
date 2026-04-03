@@ -106,7 +106,7 @@ export async function writeHandoff(
   const handoffsRoot = resolve(join(input.workspace, "handoffs"));
   const resolvedPath = resolve(join(input.workspace, "handoffs", `${input.type}.md`));
 
-  if (!resolvedPath.startsWith(handoffsRoot + sep)) {
+  if (!resolvedPath.startsWith(handoffsRoot + sep) && resolvedPath !== handoffsRoot) {
     return toolError(
       "INVALID_INPUT",
       `Resolved path "${resolvedPath}" is outside the handoffs directory`,

@@ -28,6 +28,7 @@ import type { PromptContext } from "./types.ts";
  *
  * Each entry is a list of filenames to look up in {workspace}/handoffs/.
  * The values are the full filenames produced by write_handoff (type → filename).
+ * NOTE: must stay in sync with HANDOFF_PRODUCER_MAP in report-result.ts
  */
 const HANDOFF_CONSUMER_MAP: Record<string, string[]> = {
   "canon:canon-architect": ["research-synthesis.md"],

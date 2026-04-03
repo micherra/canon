@@ -454,10 +454,10 @@ describe("ADR-018 integration — assemblePrompt substitutes handoff_context int
 });
 
 // ---------------------------------------------------------------------------
-// 4. Multiple handoff files concatenated with separator (declared known gap)
+// 4. Single handoff file — no separator
 // ---------------------------------------------------------------------------
 
-describe("ADR-018 integration — multiple handoff file concatenation (known gap)", () => {
+describe("ADR-018 integration — single handoff file injection", () => {
   it("when HANDOFF_CONSUMER_MAP has one entry, no separator is added", async () => {
     const workspace = makeTmpWorkspace();
     mkdirSync(join(workspace, "handoffs"), { recursive: true });

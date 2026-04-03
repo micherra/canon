@@ -967,6 +967,8 @@ server.registerTool(
       type: z
         .enum(["research-synthesis", "design-brief", "impl-handoff", "test-findings"])
         .describe("Handoff type — selects the content validation schema"),
+      // Passthrough object: MCP Zod schemas don't support discriminated unions cleanly,
+      // so type-specific field validation happens inside writeHandoff() at runtime.
       content: z
         .object({})
         .passthrough()
