@@ -82,8 +82,8 @@ Ask the user: "Create a PR with this description?"
 
 If yes:
 1. Detect the default branch: `git remote show origin | grep 'HEAD branch'` (fallback to `main`)
-2. Push the current branch if not already pushed: `git push -u origin HEAD`
-3. Create the PR: `gh pr create --title "{task description, truncated to 70 chars}" --body "{PR description}"`
+2. Push the build branch: `git push -u origin HEAD:${branch}` (uses the session branch variable injected at spawn time; avoids blindly pushing whatever HEAD points to in a worktree)
+3. Create the PR: `gh pr create --base main --head ${branch} --title "{task description, truncated to 70 chars}" --body "{PR description}"`
 4. Report the PR URL
 
 If no, save the PR description to `${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md` and tell the user where to find it.

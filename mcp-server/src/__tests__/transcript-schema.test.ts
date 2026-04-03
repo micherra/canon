@@ -172,7 +172,7 @@ afterEach(() => {
 
 describe("schema version", () => {
   it("SCHEMA_VERSION is '6'", () => {
-    expect(SCHEMA_VERSION).toBe("6");
+    expect(SCHEMA_VERSION).toBe("7");
   });
 });
 
@@ -198,7 +198,7 @@ describe("migration v5 — fresh DB", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("6");
+    expect(row?.value).toBe("7");
 
     db.close();
   });
@@ -232,7 +232,7 @@ describe("migration v5 — idempotency", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("6");
+    expect(row?.value).toBe("7");
     db2.close();
   });
 
@@ -274,7 +274,7 @@ describe("migration v5 — v3 to v5 upgrade", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("6");
+    expect(row?.value).toBe("7");
 
     db.close();
   });

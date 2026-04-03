@@ -411,6 +411,12 @@ export async function initWorkspaceFlow(
     actualWorktreeBranch = worktreeBranch;
     session.worktree_path = worktreePath;
     session.worktree_branch = worktreeBranch;
+    // Persist worktree info to the execution row so enterAndPrepareState can inject
+    // ${branch}, ${worktree_branch}, and ${worktree_path} into spawn prompt variables.
+    store.updateExecution({
+      worktree_path: worktreePath,
+      worktree_branch: worktreeBranch,
+    });
   }
 
   return {

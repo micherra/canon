@@ -701,6 +701,149 @@ describe("enterAndPrepareState", () => {
   });
 });
 
+describe("enterAndPrepareState — session branch variable injection", () => {
+  it("injects branch from session into spawn prompt variables", async () => {
+    const workspace = makeTmpDir();
+    seedStore(workspace); // seeds with branch: "feat/test"
+
+    const flow = makeFlow({
+      spawn_instructions: { implement: "Branch is ${branch}." },
+    });
+
+    const result = await enterAndPrepareState({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+    });
+    assertOk(result);
+
+    expect(result.prompts).toHaveLength(1);
+    expect(result.prompts[0].prompt).toContain("Branch is feat/test.");
+  });
+
+  it("injects worktree_branch when persisted in session", async () => {
+    const workspace = makeTmpDir();
+    const store = getExecutionStore(workspace);
+    const now = new Date().toISOString();
+    store.initExecution({
+      flow: "test-flow",
+      task: "test task",
+      entry: "implement",
+      current_state: "implement",
+      base_commit: "abc1234",
+      started: now,
+      last_updated: now,
+      branch: "feat/my-feature",
+      sanitized: "feat-my-feature",
+      created: now,
+      tier: "medium",
+      flow_name: "test-flow",
+      slug: "my-slug",
+      worktree_branch: "canon-build/my-slug",
+      worktree_path: "/tmp/worktrees/my-slug",
+    });
+    store.upsertState("implement", { status: "pending", entries: 0 });
+    store.upsertState("done", { status: "pending", entries: 0 });
+
+    const flow = makeFlow({
+      spawn_instructions: { implement: "Worktree: ${worktree_branch}" },
+    });
+
+    const result = await enterAndPrepareState({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+    });
+    assertOk(result);
+
+    expect(result.prompts[0].prompt).toContain("Worktree: canon-build/my-slug");
+  });
+
+  it("injects worktree_path when persisted in session", async () => {
+    const workspace = makeTmpDir();
+    const store = getExecutionStore(workspace);
+    const now = new Date().toISOString();
+    store.initExecution({
+      flow: "test-flow",
+      task: "test task",
+      entry: "implement",
+      current_state: "implement",
+      base_commit: "abc1234",
+      started: now,
+      last_updated: now,
+      branch: "feat/my-feature",
+      sanitized: "feat-my-feature",
+      created: now,
+      tier: "medium",
+      flow_name: "test-flow",
+      slug: "my-slug",
+      worktree_path: "/tmp/worktrees/my-slug",
+    });
+    store.upsertState("implement", { status: "pending", entries: 0 });
+    store.upsertState("done", { status: "pending", entries: 0 });
+
+    const flow = makeFlow({
+      spawn_instructions: { implement: "Path: ${worktree_path}" },
+    });
+
+    const result = await enterAndPrepareState({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+    });
+    assertOk(result);
+
+    expect(result.prompts[0].prompt).toContain("Path: /tmp/worktrees/my-slug");
+  });
+
+  it("caller-provided variables override session branch variables", async () => {
+    const workspace = makeTmpDir();
+    seedStore(workspace); // seeds with branch: "feat/test"
+
+    const flow = makeFlow({
+      spawn_instructions: { implement: "Branch: ${branch}" },
+    });
+
+    const result = await enterAndPrepareState({
+      workspace,
+      state_id: "implement",
+      flow,
+      // Caller explicitly overrides branch
+      variables: { task: "test", CANON_PLUGIN_ROOT: "", branch: "override/branch" },
+    });
+    assertOk(result);
+
+    expect(result.prompts[0].prompt).toContain("Branch: override/branch");
+  });
+
+  it("omits worktree_branch and worktree_path when not set in session", async () => {
+    const workspace = makeTmpDir();
+    seedStore(workspace); // no worktree_branch/worktree_path set
+
+    const flow = makeFlow({
+      spawn_instructions: {
+        implement: "Branch: ${branch}, Worktree: ${worktree_branch}, Path: ${worktree_path}",
+      },
+    });
+
+    const result = await enterAndPrepareState({
+      workspace,
+      state_id: "implement",
+      flow,
+      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+    });
+    assertOk(result);
+
+    // branch is substituted, but worktree_branch and worktree_path are not (no values set)
+    expect(result.prompts[0].prompt).toContain("Branch: feat/test");
+    expect(result.prompts[0].prompt).toContain("${worktree_branch}");
+    expect(result.prompts[0].prompt).toContain("${worktree_path}");
+  });
+});
+
 describe("enterAndPrepareState — missing directory", () => {
   it("returns WORKSPACE_NOT_FOUND via wrapHandler when workspace directory does not exist", async () => {
     const missingWorkspace = join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-eaps");

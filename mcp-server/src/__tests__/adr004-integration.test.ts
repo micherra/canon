@@ -462,7 +462,7 @@ describe("runMigrations — data preservation during upgrade", () => {
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe("6");
+    expect(row?.value).toBe("7");
   });
 
   it("is idempotent: second call on an already-migrated v1→v2 DB does not throw", () => {

@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '6';
+export const SCHEMA_VERSION = '7';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -280,6 +280,20 @@ const MIGRATIONS: Migration[] = [
         }
       }
       db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // worktree_path and worktree_branch columns on execution (branch variable injection)
+    // Enables spawn prompts to reference ${branch}, ${worktree_branch}, ${worktree_path}.
+    version: '7',
+    up: (db) => {
+      if (!columnExists(db, 'execution', 'worktree_path')) {
+        db.exec(`ALTER TABLE execution ADD COLUMN worktree_path TEXT`);
+      }
+      if (!columnExists(db, 'execution', 'worktree_branch')) {
+        db.exec(`ALTER TABLE execution ADD COLUMN worktree_branch TEXT`);
+      }
+      db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
     },
   },
 ];

@@ -100,7 +100,7 @@ afterEach(() => {
 
 describe("fresh database v2 schema", () => {
   it("SCHEMA_VERSION is '6'", () => {
-    expect(SCHEMA_VERSION).toBe("6");
+    expect(SCHEMA_VERSION).toBe("7");
   });
 
   it("fresh DB has correlation_id column on execution table", () => {
@@ -144,7 +144,7 @@ describe("fresh database v2 schema", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("6");
+    expect(row?.value).toBe("7");
 
     db.close();
   });
@@ -191,7 +191,7 @@ describe("v1 to v2 migration", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("6");
+    expect(row?.value).toBe("7");
 
     db.close();
   });
@@ -365,7 +365,7 @@ describe("migration idempotency", () => {
       .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
       .get() as { value: string } | undefined;
 
-    expect(row?.value).toBe("6");
+    expect(row?.value).toBe("7");
 
     db2.close();
   });
@@ -454,7 +454,7 @@ describe("schema version comparison uses integer parsing", () => {
       .get() as { value: string } | undefined;
 
     // Migrations ran — version upgraded to 6
-    expect(row?.value).toBe("6");
+    expect(row?.value).toBe("7");
     db.close();
   });
 

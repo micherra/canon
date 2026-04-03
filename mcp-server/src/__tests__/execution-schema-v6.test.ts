@@ -31,7 +31,7 @@ const BASE_INIT_PARAMS = {
 
 describe('Schema v6 migration — agent session columns', () => {
   test('SCHEMA_VERSION is 6', () => {
-    expect(SCHEMA_VERSION).toBe('6');
+    expect(SCHEMA_VERSION).toBe('7');
   });
 
   test('fresh DB has agent_session_id column on execution_states', () => {
@@ -49,7 +49,7 @@ describe('Schema v6 migration — agent session columns', () => {
   test('fresh DB schema_version is 6', () => {
     const db = initExecutionDb(':memory:');
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('6');
+    expect(row?.value).toBe('7');
     db.close();
   });
 
@@ -130,7 +130,7 @@ describe('Schema v6 migration — agent session columns', () => {
     expect(columnExists(db, 'execution_states', 'last_agent_activity')).toBe(true);
 
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('6');
+    expect(row?.value).toBe('7');
 
     db.close();
   });
@@ -150,7 +150,7 @@ describe('Schema v6 migration — agent session columns', () => {
     expect(columnExists(db, 'execution_states', 'last_agent_activity')).toBe(true);
 
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string } | undefined;
-    expect(row?.value).toBe('6');
+    expect(row?.value).toBe('7');
 
     db.close();
   });
