@@ -180,7 +180,7 @@ describe("injectHandoffs pipeline stage", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Multiple handoff files
+  // Single handoff file — no separator
   // -------------------------------------------------------------------------
 
   it("single handoff file is injected without extra separators", async () => {

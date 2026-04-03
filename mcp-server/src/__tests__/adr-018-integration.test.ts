@@ -8,7 +8,7 @@
  * 2. write_handoff → reportResult: file written by tool suppresses handoff_missing
  *    event (producer tool → report-result event check boundary)
  * 3. assemblePrompt end-to-end with ${handoff_context} substituted into prompt
- * 4. (removed — separator test was not exercising production code)
+ * 4. injectHandoffs single-file injection — no separator added when HANDOFF_CONSUMER_MAP has one entry
  * 5. writeHandoff idempotency — overwriting an existing file succeeds
  * 6. initWorkspace → writeHandoff — pre-existing handoffs/ dir works (idempotent mkdir)
  */
