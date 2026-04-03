@@ -41,6 +41,9 @@ import { storeSummaries } from "./tools/store-summaries.ts";
 import { updateBoard } from "./tools/update-board.ts";
 import { writePlanIndex } from "./tools/write-plan-index.ts";
 import { recordAgentMetrics } from "./tools/record-agent-metrics.ts";
+import { driveFlow } from "./tools/drive-flow.ts";
+import { categorizeFailures } from "./tools/categorize-failures.ts";
+import type { FailureEntry } from "./tools/categorize-failures.ts";
 import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
 import { wrapHandler } from "./utils/wrap-handler.ts";
 
@@ -951,6 +954,84 @@ server.registerTool(
     },
   },
   wrapHandler(async (input) => writePlanIndex(input)),
+);
+
+server.registerTool(
+  "drive_flow",
+  {
+    description:
+      "Drive the Canon state machine loop server-side. Turn-by-turn protocol: first call (no result) enters the current state and returns SpawnRequest[]; subsequent calls (with result) report the agent's result, advance the loop, and return the next action. Returns spawn, hitl, or done.",
+    inputSchema: {
+      workspace: z.string().describe("Workspace directory path"),
+      flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
+      result: z
+        .object({
+          state_id: z.string().describe("State ID that just completed"),
+          status: z.string().describe("Agent status keyword (e.g. DONE, DONE_WITH_CONCERNS, BLOCKED)"),
+          artifacts: z.array(z.string()).optional().describe("Artifact paths produced by the agent"),
+          parallel_results: z
+            .array(
+              z.object({
+                item: z.string(),
+                status: z.string(),
+                artifacts: z.array(z.string()).optional(),
+              }),
+            )
+            .optional()
+            .describe("Results from parallel-per execution"),
+          metrics: z.record(z.string(), z.unknown()).optional().describe("Agent performance metrics"),
+          agent_session_id: z
+            .string()
+            .optional()
+            .describe("Agent session ID for ADR-009a continue_from support"),
+          task_id: z
+            .string()
+            .optional()
+            .describe("Task ID within a wave state (required for wave task results)"),
+        })
+        .passthrough()
+        .optional()
+        .describe("Result from the most recently completed agent. Omit on the first call."),
+    },
+  },
+  wrapHandler(async (input) => driveFlow(input)),
+);
+
+const FailureEntrySchema = z.object({
+  file: z.string().describe("Test file path"),
+  test_name: z.string().optional().describe("Test name"),
+  error_message: z.string().describe("Error message from the failure"),
+  error_type: z.string().optional().describe("Error type or class (e.g. TypeError, AssertionError)"),
+});
+
+server.registerTool(
+  "categorize_failures",
+  {
+    description:
+      "Group test failures by root cause using pattern matching with confidence scoring. Returns categorized failures and a needs_refinement flag indicating whether LLM review is needed for low-confidence groupings.",
+    inputSchema: {
+      workspace: z.string().describe("Workspace directory path"),
+      failures: z
+        .array(FailureEntrySchema)
+        .min(1)
+        .describe("Array of test failure entries to categorize"),
+      refined_categories: z
+        .array(
+          z.object({
+            category: z.string().describe("Category label"),
+            description: z.string().describe("Category description"),
+            files: z.array(z.string()).describe("File paths in this category"),
+          }),
+        )
+        .optional()
+        .describe(
+          "LLM-provided refined categories. When present, skips pattern matching and applies these groupings directly (confidence 1.0).",
+        ),
+    },
+  },
+  wrapHandler(async (input) =>
+    categorizeFailures(input as { workspace: string; failures: FailureEntry[]; refined_categories?: Array<{ category: string; description: string; files: string[] }> }),
+  ),
 );
 
 // Start the server
