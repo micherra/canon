@@ -539,54 +539,70 @@ export class ExecutionStore {
   /**
    * Targeted UPDATE for execution-level fields.
    * Only the provided fields are changed.
+   *
+   * Security: column names are programmer-controlled (not user input), but we
+   * validate each name against an explicit allowlist before embedding it in SQL
+   * to prevent future misuse if callers evolve.
    */
   updateExecution(fields: UpdateExecutionFields): void {
+    // Allowlist of columns this method is permitted to SET
+    const ALLOWED_COLUMNS = new Set([
+      'current_state',
+      'blocked',
+      'concerns',
+      'skipped',
+      'metadata',
+      'status',
+      'completed_at',
+      'rolled_back_at',
+      'rolled_back_to',
+      'last_updated',
+    ]);
+
     const parts: string[] = [];
     const params: Record<string, unknown> = {};
 
+    const addColumn = (col: string, value: unknown): void => {
+      if (!ALLOWED_COLUMNS.has(col)) {
+        throw new Error(`updateExecution: column '${col}' is not in the allowed list`);
+      }
+      parts.push(`${col} = @${col}`);
+      params[col] = value;
+    };
+
     if (fields.current_state !== undefined) {
-      parts.push('current_state = @current_state');
-      params['current_state'] = fields.current_state;
+      addColumn('current_state', fields.current_state);
     }
     if ('blocked' in fields) {
-      parts.push('blocked = @blocked');
-      params['blocked'] = fields.blocked !== null && fields.blocked !== undefined
+      addColumn('blocked', fields.blocked !== null && fields.blocked !== undefined
         ? JSON.stringify(fields.blocked)
-        : null;
+        : null);
     }
     if (fields.concerns !== undefined) {
-      parts.push('concerns = @concerns');
-      params['concerns'] = JSON.stringify(fields.concerns);
+      addColumn('concerns', JSON.stringify(fields.concerns));
     }
     if (fields.skipped !== undefined) {
-      parts.push('skipped = @skipped');
-      params['skipped'] = JSON.stringify(fields.skipped);
+      addColumn('skipped', JSON.stringify(fields.skipped));
     }
     if (fields.metadata !== undefined) {
-      parts.push('metadata = @metadata');
-      params['metadata'] = fields.metadata !== null ? JSON.stringify(fields.metadata) : null;
+      addColumn('metadata', fields.metadata !== null ? JSON.stringify(fields.metadata) : null);
     }
     if (fields.status !== undefined) {
-      parts.push('status = @status');
-      params['status'] = fields.status;
+      addColumn('status', fields.status);
     }
     if (fields.completed_at !== undefined) {
-      parts.push('completed_at = @completed_at');
-      params['completed_at'] = fields.completed_at;
+      addColumn('completed_at', fields.completed_at);
     }
     if (fields.rolled_back_at !== undefined) {
-      parts.push('rolled_back_at = @rolled_back_at');
-      params['rolled_back_at'] = fields.rolled_back_at;
+      addColumn('rolled_back_at', fields.rolled_back_at);
     }
     if (fields.rolled_back_to !== undefined) {
-      parts.push('rolled_back_to = @rolled_back_to');
-      params['rolled_back_to'] = fields.rolled_back_to;
+      addColumn('rolled_back_to', fields.rolled_back_to);
     }
 
     // Always update last_updated
     const now = fields.last_updated ?? new Date().toISOString();
-    parts.push('last_updated = @last_updated');
-    params['last_updated'] = now;
+    addColumn('last_updated', now);
 
     if (parts.length === 0) return;
 

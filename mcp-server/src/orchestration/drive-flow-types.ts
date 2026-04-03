@@ -81,7 +81,8 @@ export interface DriveFlowInput {
     }>;
     metrics?: Record<string, unknown>;
     agent_session_id?: string;
-    [key: string]: unknown;
+    /** Optional task ID for wave implementors. */
+    task_id?: string;
   };
 }
 
@@ -100,7 +101,9 @@ export const DriveFlowResultSchema = z.object({
   })).optional(),
   metrics: z.record(z.string(), z.unknown()).optional(),
   agent_session_id: z.string().optional(),
-}).passthrough();
+  /** Optional task ID for wave implementors — typed here so callers don't need a type assertion. */
+  task_id: z.string().optional(),
+});
 
 export const DriveFlowInputSchema = z.object({
   workspace: z.string().min(1),
