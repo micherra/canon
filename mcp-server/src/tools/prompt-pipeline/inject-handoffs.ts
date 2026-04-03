@@ -65,10 +65,16 @@ export async function injectHandoffs(ctx: PromptContext): Promise<PromptContext>
     }
   }
 
-  // No content was successfully read — return ctx with warnings but no variable
+  // No content was successfully read — agent type IS mapped but files are missing or
+  // unreadable. Set handoff_context to empty string so ${handoff_context} resolves
+  // cleanly in downstream templates rather than leaking raw placeholder text.
   if (contents.length === 0) {
     return {
       ...ctx,
+      mergedVariables: {
+        ...ctx.mergedVariables,
+        handoff_context: "",
+      },
       warnings: newWarnings,
     };
   }

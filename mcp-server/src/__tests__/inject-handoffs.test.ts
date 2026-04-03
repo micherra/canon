@@ -141,26 +141,43 @@ describe("injectHandoffs pipeline stage", () => {
   // Graceful degradation
   // -------------------------------------------------------------------------
 
-  it("missing handoff file produces a warning and returns ctx without handoff_context", async () => {
+  it("missing handoff file produces a warning and sets handoff_context to empty string", async () => {
     // Create handoffs dir but do NOT write the file
     await mkdir(join(tmpDir, "handoffs"), { recursive: true });
 
     const ctx = makeCtx("canon:canon-implementor", tmpDir);
     const result = await injectHandoffs(ctx);
 
-    expect(result.mergedVariables.handoff_context).toBeUndefined();
+    // handoff_context must be set to "" so ${handoff_context} resolves cleanly in templates
+    expect(result.mergedVariables.handoff_context).toBe("");
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toMatch(/design-brief\.md/);
   });
 
-  it("handoffs directory does not exist — produces a warning, no throw", async () => {
+  it("handoffs directory does not exist — produces a warning, sets handoff_context to empty string, no throw", async () => {
     // tmpDir exists but has no handoffs/ subdirectory
     const ctx = makeCtx("canon:canon-architect", tmpDir);
     const result = await injectHandoffs(ctx);
 
-    expect(result.mergedVariables.handoff_context).toBeUndefined();
+    // handoff_context must be set to "" so ${handoff_context} resolves cleanly in templates
+    expect(result.mergedVariables.handoff_context).toBe("");
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toMatch(/research-synthesis\.md/);
+  });
+
+  it("mapped agent type with missing files sets handoff_context to empty string (regression guard)", async () => {
+    // Specifically tests the early-return path: agent IS mapped, but handoff dir is empty
+    await mkdir(join(tmpDir, "handoffs"), { recursive: true });
+    // No files written
+
+    const ctx = makeCtx("canon:canon-fixer", tmpDir);
+    const result = await injectHandoffs(ctx);
+
+    // Must be "" not undefined — so ${handoff_context} never leaks raw into templates
+    expect(result.mergedVariables.handoff_context).toBe("");
+    expect(typeof result.mergedVariables.handoff_context).toBe("string");
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toMatch(/test-findings\.md/);
   });
 
   // -------------------------------------------------------------------------

@@ -408,7 +408,7 @@ describe("ADR-018 integration — assemblePrompt substitutes handoff_context int
     expect(prompt).not.toContain("${handoff_context}");
   });
 
-  it("when no handoff file exists, ${handoff_context} produces a warning and the variable is unresolved", async () => {
+  it("when no handoff file exists, ${handoff_context} resolves to empty string and a warning is emitted", async () => {
     const { workspace, flow } = seedAssembleWorkspace("canon:canon-implementor");
     // No handoffs/ dir — design-brief.md is absent
 
@@ -423,6 +423,12 @@ describe("ADR-018 integration — assemblePrompt substitutes handoff_context int
 
     // Stage 2 (injectHandoffs) should have emitted a warning for missing design-brief.md
     expect(result.warnings?.some((w) => w.includes("design-brief.md"))).toBe(true);
+    // ${handoff_context} must be resolved (not left as raw placeholder) — no ERROR warnings
+    expect(result.warnings?.some((w) => w.startsWith("ERROR:") && w.includes("handoff_context"))).toBe(false);
+    // The assembled prompt must not contain the raw template variable
+    if (result.prompts && result.prompts.length > 0) {
+      expect(result.prompts[0].prompt).not.toContain("${handoff_context}");
+    }
   });
 
   it("handoff content with special chars is escaped before substitution — no variable expansion", async () => {
