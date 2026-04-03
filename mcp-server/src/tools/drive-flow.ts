@@ -36,7 +36,7 @@ import {
   getProjectDir,
 } from "../orchestration/wave-lifecycle.ts";
 import type { WaveWorktreeResult } from "../orchestration/wave-lifecycle.ts";
-import type { WaveResult } from "../orchestration/flow-schema.ts";
+import type { WaveResult, StateDefinition, Board } from "../orchestration/flow-schema.ts";
 import { runGates } from "../orchestration/gate-runner.ts";
 import { resolveAfterConsultations } from "./resolve-after-consultations.ts";
 import { parseTaskIdsForWave } from "../orchestration/wave-variables.ts";
@@ -51,6 +51,64 @@ export type { DriveFlowAction, DriveFlowInput, SpawnRequest };
 // ---------------------------------------------------------------------------
 
 const AGENT_SESSION_EVICTION_MS = 600_000; // 10 minutes
+
+// ---------------------------------------------------------------------------
+// Approval gate helpers (ADR-017)
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine if a state should trigger an approval gate.
+ * Checks explicit approval_gate field first, then applies tier-based defaults.
+ * Returns false if auto_approve bypass is active.
+ */
+export function shouldApprovalGate(
+  stateDef: StateDefinition | undefined,
+  stateId: string,
+  flow: DriveFlowInput["flow"],
+  board: Board,
+): boolean {
+  if (!stateDef) return false;
+  if (stateDef.type === "terminal") return false;
+
+  // Explicit opt-out
+  if (stateDef.approval_gate === false) return false;
+
+  // Check auto_approve skip
+  if (board.metadata?.auto_approve === true) return false;
+
+  // Explicit opt-in
+  if (stateDef.approval_gate === true) return true;
+
+  // Tier-based defaults (approval_gate is undefined — apply defaults)
+  const tier = flow.tier;
+  if (tier === "medium" || tier === "large") {
+    // Default gate on design states (agent is canon-architect)
+    return stateDef.agent === "canon-architect";
+  }
+
+  return false;
+}
+
+/**
+ * Determine if a wave boundary should trigger an approval gate.
+ * Only applies to epic/large tier flows with more waves remaining.
+ */
+export function shouldApprovalGateWaveBoundary(
+  stateDef: StateDefinition | undefined,
+  flow: DriveFlowInput["flow"],
+  board: Board,
+): boolean {
+  if (!stateDef) return false;
+  if (board.metadata?.auto_approve === true) return false;
+  if (stateDef.approval_gate === false) return false;
+
+  // Explicit opt-in on the wave state
+  if (stateDef.approval_gate === true) return true;
+
+  // Tier default: large gets wave boundary gates
+  const tier = flow.tier;
+  return tier === "large";
+}
 
 // ---------------------------------------------------------------------------
 // driveFlow
@@ -171,6 +229,24 @@ export async function driveFlow(
         ok: true as const,
         action: "spawn",
         requests: [],
+      };
+    }
+
+    // Approval gate check (ADR-017) — fires on the COMPLETED state, not the next state.
+    // Placed AFTER the parallel-wait guard so it only fires when all roles are done.
+    // Note: effects may re-execute on revision re-entry (same as fix loops — known limitation).
+    const completedStateDef = flow.states[state_id];
+    if (shouldApprovalGate(completedStateDef, state_id, flow, freshBoard)) {
+      return {
+        ok: true as const,
+        action: "approval" as const,
+        breakpoint: {
+          state_id,
+          agent_type: completedStateDef?.agent ?? completedStateDef?.type ?? "unknown",
+          artifacts: (artifacts as string[] | undefined) ?? [],
+          summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
+          options: ["approve", "revise", "reject"] as const,
+        },
       };
     }
 
@@ -473,7 +549,22 @@ async function completeWave(
     return enterStateAndBuildSpawn(workspace, flow, next_state, store);
   }
 
-  // More waves — start next wave
+  // More waves — check for wave boundary approval gate before starting next wave
+  const freshBoardForApproval = store.getBoard();
+  if (freshBoardForApproval && shouldApprovalGateWaveBoundary(stateDef, flow, freshBoardForApproval)) {
+    return {
+      ok: true as const,
+      action: "approval" as const,
+      breakpoint: {
+        state_id,
+        agent_type: stateDef?.agent ?? "wave",
+        artifacts: [],
+        summary: `Wave ${currentWave} completed. ${nextWaveTaskIds.length} tasks in next wave. Awaiting approval to proceed.`,
+        options: ["approve", "revise", "reject"] as const,
+      },
+    };
+  }
+
   return startNextWave({
     workspace,
     flow,
