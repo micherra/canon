@@ -24,6 +24,7 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
 import { toolError } from "../utils/tool-result.ts";
 import type { DriveFlowAction, DriveFlowInput, SpawnRequest } from "../orchestration/drive-flow-types.ts";
+import { DriveFlowInputSchema } from "../orchestration/drive-flow-types.ts";
 import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 import { reportResult } from "./report-result.ts";
@@ -64,7 +65,13 @@ const AGENT_SESSION_EVICTION_MS = 600_000; // 10 minutes
 export async function driveFlow(
   input: DriveFlowInput,
 ): Promise<ToolResult<DriveFlowAction>> {
-  const { workspace, flow } = input;
+  // Validate at trust boundary (validate-at-trust-boundaries)
+  const parseResult = DriveFlowInputSchema.safeParse(input);
+  if (!parseResult.success) {
+    return toolError("INVALID_INPUT", parseResult.error.message);
+  }
+
+  const { workspace, flow } = parseResult.data;
 
   // Guard: workspace must exist on disk (getExecutionStore throws otherwise)
   if (!existsSync(resolve(workspace))) {
@@ -89,8 +96,8 @@ export async function driveFlow(
   // Branch A: result provided — report it, then determine next action
   // ---------------------------------------------------------------------------
 
-  if (input.result) {
-    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id, ...rest } = input.result as DriveFlowInput["result"] & { task_id?: string };
+  if (parseResult.data.result) {
+    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id, ...rest } = parseResult.data.result as DriveFlowInput["result"] & { task_id?: string };
 
     // Store agent session ID for ADR-009a continue_from support
     if (agent_session_id) {
