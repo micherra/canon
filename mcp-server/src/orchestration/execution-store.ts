@@ -197,10 +197,23 @@ function parseJson<T>(value: string | null | undefined): T | undefined {
   return JSON.parse(value) as T;
 }
 
-function parseJsonOrDefault<T>(value: string | null | undefined, fallback: T): T {
-  if (value === null || value === undefined) return fallback;
-  return JSON.parse(value) as T;
-}
+// ---------------------------------------------------------------------------
+// Module-level constants
+// ---------------------------------------------------------------------------
+
+/** Allowlist of columns updateExecution is permitted to SET. Hoisted to avoid recreation per call. */
+const ALLOWED_UPDATE_EXECUTION_COLUMNS = new Set([
+  'current_state',
+  'blocked',
+  'concerns',
+  'skipped',
+  'metadata',
+  'status',
+  'completed_at',
+  'rolled_back_at',
+  'rolled_back_to',
+  'last_updated',
+]);
 
 // ---------------------------------------------------------------------------
 // ExecutionStore
@@ -213,7 +226,6 @@ export class ExecutionStore {
   // ---- Execution statements ----
   private readonly stmtInitExecution: Database.Statement;
   private readonly stmtGetExecution: Database.Statement;
-  private readonly stmtUpdateExecution: Database.Statement;
 
   // ---- State statements ----
   private readonly stmtUpsertState: Database.Statement;
@@ -288,12 +300,6 @@ export class ExecutionStore {
 
     this.stmtGetExecution = db.prepare(`
       SELECT * FROM execution WHERE id = 1
-    `);
-
-    // Dynamic update — we build SET clauses at runtime for the fields provided
-    // This single-column statement is unused; updateExecution builds statements dynamically
-    this.stmtUpdateExecution = db.prepare(`
-      UPDATE execution SET last_updated = @last_updated WHERE id = 1
     `);
 
     // States
@@ -545,25 +551,11 @@ export class ExecutionStore {
    * to prevent future misuse if callers evolve.
    */
   updateExecution(fields: UpdateExecutionFields): void {
-    // Allowlist of columns this method is permitted to SET
-    const ALLOWED_COLUMNS = new Set([
-      'current_state',
-      'blocked',
-      'concerns',
-      'skipped',
-      'metadata',
-      'status',
-      'completed_at',
-      'rolled_back_at',
-      'rolled_back_to',
-      'last_updated',
-    ]);
-
     const parts: string[] = [];
     const params: Record<string, unknown> = {};
 
     const addColumn = (col: string, value: unknown): void => {
-      if (!ALLOWED_COLUMNS.has(col)) {
+      if (!ALLOWED_UPDATE_EXECUTION_COLUMNS.has(col)) {
         throw new Error(`updateExecution: column '${col}' is not in the allowed list`);
       }
       parts.push(`${col} = @${col}`);

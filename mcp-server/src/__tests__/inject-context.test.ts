@@ -443,7 +443,7 @@ describe("resolveContextInjections — file_context source", () => {
     vi.mocked(computeFileInsightMaps).mockReturnValue({
       hubPaths: new Set<string>(),
       cycleMemberPaths: new Map<string, string[]>(),
-      layerViolationsByPath: new Map<string, unknown[]>(),
+      layerViolationsByPath: new Map(),
     });
   });
 

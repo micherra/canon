@@ -5,14 +5,13 @@
  * Each describe block gets a fresh DB via beforeEach.
  */
 
-import { describe, test, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initExecutionDb, SCHEMA_VERSION } from '../orchestration/execution-schema.ts';
 import { ExecutionStore, getExecutionStore } from '../orchestration/execution-store.ts';
-import type { Board, Session, BoardStateEntry, IterationEntry, WaveEvent } from '../orchestration/flow-schema.ts';
 import { BoardSchema } from '../orchestration/flow-schema.ts';
 
 // ---------------------------------------------------------------------------

@@ -287,11 +287,11 @@ When `drive_flow` returns `{ action: "hitl" }`:
 
 1. Present: `breakpoint.context`, reason, iteration count, stuck history
 2. Offer options:
-   - **Retry**: Pass `status: "retry"` back to `drive_flow`
-   - **Skip**: Pass `status: "skip"` back to `drive_flow`
+   - **Retry/continue**: Pass `status: "done"` back to `drive_flow` to advance the flow
+   - **Skip state**: Pass `status: "skipped"` back to `drive_flow` to skip and advance
    - **Rollback**: Revert to `base_commit` (see below)
    - **Abort**: Set session status to `aborted`, stop
-   - **Manual fix**: User fixes, then resume by passing `status: "retry"` to `drive_flow`
+   - **Manual fix**: User fixes, then resume by passing `status: "done"` to `drive_flow`
 
 ### Rollback Protocol
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { categorizeFailures } from "../tools/categorize-failures.ts";
+import { isToolError } from "../utils/tool-result.ts";
 import type { CategorizeFailuresInput } from "../tools/categorize-failures.ts";
 
 // ---------------------------------------------------------------------------
@@ -21,8 +22,8 @@ function makeInput(overrides: Partial<CategorizeFailuresInput> = {}): Categorize
 describe("categorize_failures — edge cases", () => {
   it("returns INVALID_INPUT error for empty failures array", async () => {
     const result = await categorizeFailures(makeInput({ failures: [] }));
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
       expect(result.error_code).toBe("INVALID_INPUT");
     }
   });
@@ -347,8 +348,8 @@ describe("categorize_failures — LLM refinement pass-through", () => {
         ],
       }),
     );
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
+    expect(isToolError(result)).toBe(true);
+    if (isToolError(result)) {
       expect(result.error_code).toBe("INVALID_INPUT");
     }
   });

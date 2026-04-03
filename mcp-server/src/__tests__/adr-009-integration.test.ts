@@ -21,6 +21,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { isToolError } from "../utils/tool-result.ts";
 
 // Mock I/O boundaries
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
@@ -327,8 +328,8 @@ describe("driveFlow — workspace exists but no board execution", () => {
 
     const result = await driveFlow({ workspace, flow });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    expect(isToolError(result)).toBe(true);
+    if (!isToolError(result)) return;
     expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
     expect(result.message).toContain("No execution found");
   });

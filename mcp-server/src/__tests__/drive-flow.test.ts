@@ -41,6 +41,7 @@ import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import { ExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
+import { isToolError } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
 
 // ---------------------------------------------------------------------------
@@ -705,8 +706,8 @@ describe("driveFlow — error handling", () => {
       flow,
     });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    expect(isToolError(result)).toBe(true);
+    if (!isToolError(result)) return;
     expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
   });
 
@@ -724,8 +725,8 @@ describe("driveFlow — error handling", () => {
     const flow = makeFlow();
     const result = await driveFlow({ workspace, flow });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    expect(isToolError(result)).toBe(true);
+    if (!isToolError(result)) return;
     expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
   });
 
@@ -747,8 +748,8 @@ describe("driveFlow — error handling", () => {
       result: { state_id: "research", status: "done" },
     });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    expect(isToolError(result)).toBe(true);
+    if (!isToolError(result)) return;
     expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
   });
 });

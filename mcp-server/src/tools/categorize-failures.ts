@@ -280,6 +280,24 @@ function applyRefinedCategories(
     }
   }
 
+  // Validate file sets are disjoint across refined categories (issue #23).
+  // A file appearing in multiple categories would cause duplicate fixing and confuse fan-out.
+  const seenFiles = new Map<string, string>(); // file → first category that claimed it
+  for (const rc of refinedCategories) {
+    for (const f of rc.files) {
+      const prior = seenFiles.get(f);
+      if (prior !== undefined) {
+        return toolError(
+          "INVALID_INPUT",
+          `refined_categories contains overlapping file sets: file "${f}" appears in both "${prior}" and "${rc.category}"`,
+          false,
+          { duplicate_file: f, first_category: prior, second_category: rc.category },
+        );
+      }
+      seenFiles.set(f, rc.category);
+    }
+  }
+
   // Build categories from refined_categories with confidence 1.0
   const categories: FailureCategory[] = refinedCategories.map((rc) => {
     const entries = failures.filter((f) => rc.files.includes(f.file));

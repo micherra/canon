@@ -140,7 +140,7 @@ export async function driveFlow(
     });
 
     if (!reportOut.ok) {
-      return reportOut;
+      return reportOut as ToolResult<DriveFlowAction>;
     }
 
     // Re-read board after reportResult so HITL/done context reflects updated state
@@ -243,7 +243,7 @@ interface WaveTaskResultInput {
 async function handleWaveTaskResult(
   input: WaveTaskResultInput,
 ): Promise<ToolResult<DriveFlowAction>> {
-  const { workspace, flow, state_id, task_id, task_status, store } = input;
+  const { workspace, flow, state_id, task_id, task_status, task_artifacts, store } = input;
 
   // Derive convention-based worktree info for this task so it is persisted
   // alongside the result — completeWave can read it back without reconstructing.
@@ -254,8 +254,8 @@ async function handleWaveTaskResult(
   // Atomically append the task result to wave_results (sqlite-transactions)
   store.transaction(() => {
     const existing = store.getState(state_id);
-    const waveResults: Record<string, WaveResult & { worktree_path?: string; branch?: string }> =
-      (existing?.wave_results as Record<string, WaveResult & { worktree_path?: string; branch?: string }>) ?? {};
+    const waveResults: Record<string, WaveResult & { worktree_path?: string; branch?: string; artifacts?: string[] }> =
+      (existing?.wave_results as Record<string, WaveResult & { worktree_path?: string; branch?: string; artifacts?: string[] }>) ?? {};
     // Prefer already-persisted worktree metadata; fall back to convention
     const existingEntry = waveResults[task_id];
     waveResults[task_id] = {
@@ -263,6 +263,8 @@ async function handleWaveTaskResult(
       status: task_status,
       worktree_path: existingEntry?.worktree_path ?? conventionWorktreePath,
       branch: existingEntry?.branch ?? conventionBranch,
+      // Persist artifacts if provided (issue #22: task_artifacts previously silently dropped)
+      ...(task_artifacts && task_artifacts.length > 0 ? { artifacts: task_artifacts } : {}),
     };
     const currentEntries = existing?.entries ?? 0;
     store.upsertState(state_id, {
@@ -352,15 +354,16 @@ async function completeWave(
   const mergeResult = await mergeWaveResults(worktreeResults, projectDir, mergeStrategy);
 
   if (!mergeResult.ok) {
-    const conflictTask = typeof mergeResult.conflict_task === "string" ? mergeResult.conflict_task.trim() : "";
+    type MergeFailure = { ok: false; merged_count: number; conflict_task: string; conflict_detail: string };
+    const failMerge = mergeResult as MergeFailure;
+    const conflictTask = failMerge.conflict_task.trim();
 
     if (conflictTask) {
       // Merge conflict — handle per on_conflict policy (no-silent-failures)
       return handleMergeConflict({
         conflictTask,
-        conflictDetail: mergeResult.conflict_detail,
+        conflictDetail: failMerge.conflict_detail,
         onConflict,
-        workspace,
         flow,
         state_id,
         store,
@@ -368,8 +371,8 @@ async function completeWave(
     }
 
     // Empty conflict_task means an unimplemented merge strategy was requested
-    const detail = typeof mergeResult.conflict_detail === "string" && mergeResult.conflict_detail.trim()
-      ? ` Details: ${mergeResult.conflict_detail.trim()}`
+    const detail = failMerge.conflict_detail.trim()
+      ? ` Details: ${failMerge.conflict_detail.trim()}`
       : "";
     return toolError(
       "UNEXPECTED",
@@ -435,7 +438,7 @@ async function completeWave(
       gate_results: gateResults,
     });
 
-    if (!reportOut.ok) return reportOut;
+    if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
 
     const { next_state, hitl_required, hitl_reason, stuck_reason } = reportOut;
 
@@ -486,7 +489,6 @@ interface HandleMergeConflictInput {
   conflictTask: string;
   conflictDetail: string;
   onConflict: "hitl" | "replan" | "retry-single";
-  workspace: string;
   flow: DriveFlowInput["flow"];
   state_id: string;
   store: ReturnType<typeof getExecutionStore>;
@@ -499,7 +501,7 @@ interface HandleMergeConflictInput {
 async function handleMergeConflict(
   input: HandleMergeConflictInput,
 ): Promise<ToolResult<DriveFlowAction>> {
-  const { conflictTask, conflictDetail, onConflict, workspace, flow, state_id, store } = input;
+  const { conflictTask, conflictDetail, onConflict, flow, state_id, store } = input;
 
   if (onConflict === "hitl") {
     return {
@@ -525,9 +527,15 @@ async function handleMergeConflict(
     };
   }
 
-  // retry-single: return a SpawnRequest for the conflicting task only
+  // retry-single: return a SpawnRequest for the conflicting task only.
+  // Look up the persisted worktree path from wave_results so the agent lands in
+  // the correct worktree — the server owns the worktree lifecycle (dd-009-02).
   const stateDef = flow.states[state_id];
   const spawnInstruction = flow.spawn_instructions[state_id] ?? "Retry task";
+
+  const stateEntry = store.getState(state_id);
+  const waveResults = stateEntry?.wave_results as Record<string, { worktree_path?: string }> | undefined;
+  const worktreePath = waveResults?.[conflictTask]?.worktree_path;
 
   return {
     ok: true as const,
@@ -538,6 +546,7 @@ async function handleMergeConflict(
         prompt: `${spawnInstruction}\n\nNote: This is a retry for task '${conflictTask}' after a merge conflict. Conflict detail:\n${conflictDetail}`,
         isolation: "worktree",
         task_id: conflictTask,
+        ...(worktreePath ? { worktree_path: worktreePath } : {}),
       },
     ],
   };
@@ -671,7 +680,7 @@ async function startNextWave(
     peer_count: nextWaveTaskIds.length,
   });
 
-  if (!enterOut.ok) return enterOut;
+  if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
 
   if (!enterOut.can_enter) {
     return {
@@ -756,7 +765,7 @@ async function enterStateAndBuildSpawn(
     });
 
     if (!enterOut.ok) {
-      return enterOut;
+      return enterOut as ToolResult<DriveFlowAction>;
     }
 
     // Convergence exhausted — cannot enter state
@@ -783,7 +792,7 @@ async function enterStateAndBuildSpawn(
       });
 
       if (!reportOut.ok) {
-        return reportOut;
+        return reportOut as ToolResult<DriveFlowAction>;
       }
 
       // If HITL or no next state after skip, return done
@@ -827,7 +836,7 @@ async function enterStateAndBuildSpawn(
     const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
 
     // Apply ADR-009a continue_from for fix-loop states
-    const requestsWithSession = await applySessionContinuation(requests, workspace, currentStateId, store);
+    const requestsWithSession = await applySessionContinuation(requests, currentStateId, store);
 
     return {
       ok: true as const,
@@ -876,15 +885,33 @@ async function enterWaveState(
 
   const waveTotal = waveTaskIds.length;
 
-  // Create worktrees for this wave's tasks (subprocess-isolation rule)
-  const worktreeResults = await createWaveWorktrees(
-    waveTaskIds.map((tid) => ({ task_id: tid })),
-    projectDir,
-  );
+  // Guard: waveTotal=0 means INDEX.md is missing or has no tasks for this wave.
+  // Proceeding with zero tasks would cause a deadlock — return a structured error (issue #10).
+  if (waveTotal === 0) {
+    return toolError(
+      "INVALID_INPUT",
+      `Wave state '${stateId}' has no tasks for wave ${currentWave}. INDEX.md is missing or contains no tasks for this wave. Ensure write_plan_index was called before entering the wave state.`,
+    );
+  }
 
+  // Create worktrees for tasks that don't already have one persisted.
+  // On restart/resume, some worktrees may already exist from a previous entry —
+  // only create worktrees for tasks without an existing entry (dd-009-02, issue #14).
+  const existingWaveResults = (existingState?.wave_results ?? {}) as Record<string, { worktree_path?: string; branch?: string }>;
+  const tasksNeedingWorktrees = waveTaskIds.filter((tid) => !existingWaveResults[tid]?.worktree_path);
+  const worktreeResults = tasksNeedingWorktrees.length > 0
+    ? await createWaveWorktrees(tasksNeedingWorktrees.map((tid) => ({ task_id: tid })), projectDir)
+    : [];
+
+  // Build worktree map: newly-created worktrees + already-persisted worktrees from prior entry
   const worktreeMap = new Map<string, string>(
     worktreeResults.map((r) => [r.task_id, r.worktree_path]),
   );
+  for (const [tid, entry] of Object.entries(existingWaveResults)) {
+    if (entry.worktree_path && !worktreeMap.has(tid)) {
+      worktreeMap.set(tid, entry.worktree_path);
+    }
+  }
 
   // Persist wave tracking metadata atomically (sqlite-transactions)
   store.transaction(() => {
@@ -907,7 +934,7 @@ async function enterWaveState(
     peer_count: waveTotal,
   });
 
-  if (!enterOut.ok) return enterOut;
+  if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
 
   if (!enterOut.can_enter) {
     return {
@@ -989,10 +1016,16 @@ function buildSpawnRequests(
  */
 async function applySessionContinuation(
   requests: SpawnRequest[],
-  workspace: string,
   stateId: string,
   store: ReturnType<typeof getExecutionStore>,
 ): Promise<SpawnRequest[]> {
+  // Only apply continue_from for single-agent states (issue #20).
+  // Parallel/wave states have multiple requests with different task IDs —
+  // injecting continue_from into the first request could resume the wrong agent.
+  if (requests.length !== 1) {
+    return requests;
+  }
+
   const session = store.getAgentSession(stateId);
   if (!session) {
     return requests;
@@ -1013,19 +1046,16 @@ async function applySessionContinuation(
     return requests;
   }
 
-  // Fresh session — inject continue_from into the primary (first) spawn request
-  return requests.map((req, idx) => {
-    if (idx === 0) {
-      return {
-        ...req,
-        continue_from: {
-          agent_id: session.agent_session_id,
-          context_summary: `Continuing agent session for state '${stateId}'`,
-        },
-      };
-    }
-    return req;
-  });
+  // Fresh session — inject continue_from into the single spawn request
+  return [
+    {
+      ...requests[0],
+      continue_from: {
+        agent_id: session.agent_session_id,
+        context_summary: `Continuing agent session for state '${stateId}'`,
+      },
+    },
+  ];
 }
 
 // ---------------------------------------------------------------------------

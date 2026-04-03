@@ -232,10 +232,10 @@ describe("mergeWaveResults — conflict detection", () => {
 
     const result = await mergeWaveResults(worktrees, projectDir, "sequential");
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if ("conflict_task" in result) {
       expect(result.conflict_task).toBe("conflict-b");
       expect(typeof result.conflict_detail).toBe("string");
-      expect(result.conflict_detail!.length).toBeGreaterThan(0);
+      expect(result.conflict_detail.length).toBeGreaterThan(0);
     }
   });
 

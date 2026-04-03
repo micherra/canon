@@ -629,7 +629,7 @@ describe("driveFlow — gate failure after merge", () => {
       },
     });
 
-    const result = await driveFlow({
+    await driveFlow({
       workspace,
       flow,
       result: {
