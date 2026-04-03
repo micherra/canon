@@ -29,15 +29,7 @@ import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { executeEffects } from "../orchestration/effects.ts";
 import { inspectDebateProgress } from "../orchestration/debate.ts";
-
-/** Maps producer agent type to the handoff file they should write.
- * NOTE: must stay in sync with HANDOFF_CONSUMER_MAP in prompt-pipeline/inject-handoffs.ts */
-const HANDOFF_PRODUCER_MAP: Record<string, string> = {
-  "canon:canon-researcher": "research-synthesis.md",
-  "canon:canon-architect": "design-brief.md",
-  "canon:canon-implementor": "impl-handoff.md",
-  "canon:canon-tester": "test-findings.md",
-};
+import { HANDOFF_PRODUCER_MAP } from "./handoff-types.ts";
 
 interface ReportResultInput {
   workspace: string;

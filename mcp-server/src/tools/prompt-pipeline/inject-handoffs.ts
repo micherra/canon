@@ -22,20 +22,7 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { escapeDollarBrace } from "../../orchestration/wave-variables.ts";
 import type { PromptContext } from "./types.ts";
-
-/**
- * Maps consuming agent subagent_type to the handoff files it should receive.
- *
- * Each entry is a list of filenames to look up in {workspace}/handoffs/.
- * The values are the full filenames produced by write_handoff (type → filename).
- * NOTE: must stay in sync with HANDOFF_PRODUCER_MAP in report-result.ts
- */
-const HANDOFF_CONSUMER_MAP: Record<string, string[]> = {
-  "canon:canon-architect": ["research-synthesis.md"],
-  "canon:canon-implementor": ["design-brief.md"],
-  "canon:canon-tester": ["impl-handoff.md"],
-  "canon:canon-fixer": ["test-findings.md"],
-};
+import { HANDOFF_CONSUMER_MAP } from "../handoff-types.ts";
 
 /**
  * Stage 2: Inject handoff files as ${handoff_context}.
