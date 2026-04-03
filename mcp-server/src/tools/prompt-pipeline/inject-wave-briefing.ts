@@ -129,8 +129,9 @@ function injectKgSection(
     // Execution store unavailable — proceed with medium defaults
   }
 
+  const uniquePaths = [...new Set(filePaths)];
   const cap = getItemCountCap(tier);
-  const cappedPaths = filePaths.slice(0, cap);
+  const cappedPaths = uniquePaths.slice(0, cap);
 
   // Check KG DB availability
   const dbPath = join(resolvedProjectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);

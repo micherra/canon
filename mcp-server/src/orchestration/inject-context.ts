@@ -58,7 +58,7 @@ export async function resolveContextInjections(
  * no value rather than throwing.
  */
 async function resolveFileContextInjection(
-  injection: ContextInjection,
+  _injection: ContextInjection,
   board: Board,
   workspace: string,
 ): Promise<{ value?: string; warnings: string[] }> {
@@ -78,15 +78,24 @@ async function resolveFileContextInjection(
       warnings.push("file_context: affected_files is empty — skipping injection");
       return { warnings };
     }
-    filePaths = parsed as string[];
+    filePaths = parsed.filter((x: unknown): x is string => typeof x === "string");
+    if (filePaths.length === 0) {
+      warnings.push("file_context: affected_files contains no valid string entries — skipping injection");
+      return { warnings };
+    }
   } catch {
     warnings.push("file_context: affected_files contains malformed JSON — skipping injection");
     return { warnings };
   }
 
   // --- 2. Determine tier and cap file list ---
-  const session = getExecutionStore(workspace).getSession();
-  const tier = session?.tier ?? "medium";
+  let tier: "small" | "medium" | "large" = "medium";
+  try {
+    const session = getExecutionStore(workspace).getSession();
+    tier = session?.tier ?? "medium";
+  } catch {
+    warnings.push("file_context: execution store unavailable — defaulting to medium tier");
+  }
   const cap = getItemCountCap(tier);
   const cappedFiles = filePaths.slice(0, cap);
 
