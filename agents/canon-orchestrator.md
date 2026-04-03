@@ -195,6 +195,7 @@ Call `drive_flow({ workspace, flow: resolved_flow })` to start. Then loop:
 
 ### 1. Spawn action: `{ action: "spawn" }`
 
+- **Every `Agent` tool call MUST include `isolation: "worktree"`.** This gives each agent an isolated copy of the repo for safe file access and enables parallel agents to work without conflicts. No exceptions.
 - Spawn each agent in `requests[]` using the Agent tool
 - For wave tasks (requests with `worktree_path`): spawn all concurrently
 - For consultations (requests with `role: "consultation"`): spawn concurrently with task agents
