@@ -1,6 +1,11 @@
 import { writeFile, mkdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, relative, isAbsolute } from "node:path";
 import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+
+/** Escape a value for safe inclusion in a markdown table cell. */
+function escapeMdCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
 
 export interface WriteReviewInput {
   workspace: string;
@@ -71,7 +76,7 @@ function generateMarkdown(input: WriteReviewInput, mappedVerdict: "BLOCKING" | "
   lines.push("|-----------|----------|----------|");
   for (const v of input.violations) {
     const filePath = v.file_path ?? "";
-    lines.push(`| ${v.principle_id} | ${v.severity} | ${filePath} |`);
+    lines.push(`| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} |`);
   }
   lines.push("");
 
@@ -115,7 +120,8 @@ export async function writeReview(
   // Validate path traversal safety
   const reviewsDir = resolve(join(input.workspace, "reviews"));
   const workspaceResolved = resolve(input.workspace);
-  if (!reviewsDir.startsWith(workspaceResolved + "/") && reviewsDir !== workspaceResolved) {
+  const rel = relative(workspaceResolved, reviewsDir);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
     return toolError(
       "INVALID_INPUT",
       `Workspace resolves outside expected path`,

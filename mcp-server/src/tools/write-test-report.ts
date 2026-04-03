@@ -1,6 +1,11 @@
 import { writeFile, mkdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, relative, isAbsolute } from "node:path";
 import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+
+/** Escape a value for safe inclusion in a markdown table cell. */
+function escapeMdCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
 
 export interface WriteTestReportInput {
   workspace: string;
@@ -40,11 +45,22 @@ export async function writeTestReport(
   // Validate path traversal
   const plansDir = resolve(join(input.workspace, "plans", input.slug));
   const plansRoot = resolve(join(input.workspace, "plans"));
-  if (!plansDir.startsWith(plansRoot + "/")) {
+  const rel = relative(plansRoot, plansDir);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
     return toolError(
       "INVALID_INPUT",
       `Slug "${input.slug}" resolves outside workspace plans directory`,
     );
+  }
+
+  // Validate passed/failed/skipped are non-negative integers
+  for (const [field, value] of [["passed", input.passed], ["failed", input.failed], ["skipped", input.skipped]] as const) {
+    if (!Number.isInteger(value) || value < 0) {
+      return toolError(
+        "INVALID_INPUT",
+        `"${field}" must be a non-negative integer, got ${value}`,
+      );
+    }
   }
 
   // Compute derived fields
@@ -68,7 +84,7 @@ export async function writeTestReport(
     const issueRows = issues.map((issue) => {
       const category = issue.category ?? "—";
       const file = issue.file ?? "—";
-      return `| ${issue.test} | ${issue.error} | ${category} | ${file} |`;
+      return `| ${escapeMdCell(issue.test)} | ${escapeMdCell(issue.error)} | ${escapeMdCell(category)} | ${escapeMdCell(file)} |`;
     });
     content += `\n### Issues\n\n${issuesHeader}\n${issuesSeparator}\n${issueRows.join("\n")}\n`;
   }

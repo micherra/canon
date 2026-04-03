@@ -1,6 +1,11 @@
 import { writeFile, mkdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, relative, isAbsolute } from "node:path";
 import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+
+/** Escape a value for safe inclusion in a markdown table cell. */
+function escapeMdCell(value: string): string {
+  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
 
 export interface WriteImplementationSummaryInput {
   workspace: string;
@@ -48,7 +53,8 @@ export async function writeImplementationSummary(
   // Validate path traversal safety
   const plansDir = resolve(join(input.workspace, "plans", input.slug));
   const plansRoot = resolve(join(input.workspace, "plans"));
-  if (!plansDir.startsWith(plansRoot + "/")) {
+  const rel = relative(plansRoot, plansDir);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
     return toolError(
       "INVALID_INPUT",
       `Slug "${input.slug}" resolves outside workspace plans directory`,
@@ -66,7 +72,7 @@ export async function writeImplementationSummary(
   lines.push("| Path | Action |");
   lines.push("|------|--------|");
   for (const file of input.files_changed) {
-    lines.push(`| ${file.path} | ${file.action} |`);
+    lines.push(`| ${escapeMdCell(file.path)} | ${escapeMdCell(file.action)} |`);
   }
   lines.push("");
 
@@ -75,7 +81,7 @@ export async function writeImplementationSummary(
     lines.push("### Decisions Applied");
     lines.push("");
     for (const dec of input.decisions_applied) {
-      lines.push(`- ${dec}`);
+      lines.push(`- ${escapeMdCell(dec)}`);
     }
     lines.push("");
   }
@@ -85,7 +91,7 @@ export async function writeImplementationSummary(
     lines.push("### Deviations");
     lines.push("");
     for (const dev of input.deviations) {
-      lines.push(`- **${dev.decision_id}**: ${dev.reason}`);
+      lines.push(`- **${escapeMdCell(dev.decision_id)}**: ${escapeMdCell(dev.reason)}`);
     }
     lines.push("");
   }

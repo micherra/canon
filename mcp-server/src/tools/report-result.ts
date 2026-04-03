@@ -4,7 +4,7 @@
  * and board state updates.
  */
 
-import { resolve, relative, join, basename } from "node:path";
+import { resolve, relative, join, basename, isAbsolute } from "node:path";
 import { readFile, readdir } from "node:fs/promises";
 import {
   normalizeStatus,
@@ -57,15 +57,33 @@ export async function validateRequiredArtifacts(
 ): Promise<ToolResult<void> | null> {
   for (const req of required) {
     const metaName = `${req.name}.meta.json`;
+    const primaryExtensions = [".md", ".txt", ".json"];
 
-    // First, check if the meta file appears in the reported artifacts list
+    // First, check if the meta or primary artifact file appears in the reported artifacts list
     const match = artifacts.find(
-      (a) => basename(a) === metaName || a.endsWith(metaName),
+      (a) => {
+        const b = basename(a);
+        if (b === metaName || a.endsWith(metaName)) return true;
+        // Also match primary artifact files like {name}.md, {name}.txt, {name}.json
+        for (const ext of primaryExtensions) {
+          if (b === `${req.name}${ext}` || a.endsWith(`${req.name}${ext}`)) return true;
+        }
+        return false;
+      },
     );
 
     if (match) {
       // Found in artifacts list — read and validate
-      const fullPath = match.startsWith("/") ? match : join(workspace, match);
+      const fullPath = isAbsolute(match) ? match : join(workspace, match);
+
+      // Path traversal guard: ensure resolved path stays within workspace
+      const resolvedPath = resolve(fullPath);
+      const resolvedWorkspace = resolve(workspace);
+      if (!resolvedPath.startsWith(resolvedWorkspace + "/") && resolvedPath !== resolvedWorkspace) {
+        return toolError("INVALID_INPUT", `Artifact path "${match}" resolves outside workspace`);
+      }
+
+      // Derive meta path: if match is a primary artifact, derive sidecar path from it
       const metaPath = fullPath.endsWith(".meta.json")
         ? fullPath
         : fullPath.replace(/\.(md|txt|json)$/, ".meta.json");
@@ -252,10 +270,10 @@ async function reportResultLocked(
   // synchronous SQLite transaction). When required_artifacts is absent or empty
   // on the state definition, validation is skipped for backward compatibility.
   const stateDef = input.flow.states[input.state_id];
-  if (stateDef?.required_artifacts?.length && input.artifacts?.length) {
+  if (stateDef?.required_artifacts?.length) {
     const validationError = await validateRequiredArtifacts(
       input.workspace,
-      input.artifacts,
+      input.artifacts ?? [],
       stateDef.required_artifacts,
     );
     if (validationError) return validationError;

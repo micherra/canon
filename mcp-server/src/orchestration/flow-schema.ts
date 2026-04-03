@@ -97,7 +97,7 @@ export const EffectSchema = z.object({
 
 /** A required artifact declaration on a state definition. */
 export const RequiredArtifactSchema = z.object({
-  name: z.string(),   // base name of the artifact file (without extension)
+  name: z.string().regex(/^(?!\.{1,2}$)[A-Za-z0-9._-]+$/, "name must be a safe base filename without path separators"),
   type: z.string(),   // expected _type value in the .meta.json sidecar
 });
 
