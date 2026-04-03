@@ -6,9 +6,17 @@
  * Replace all `${key}` patterns in the template with values from vars.
  * If a key has no value in vars, the `${key}` pattern is left unchanged.
  * Supports nested patterns like `${item.field}` by looking up "item.field" as the key.
+ *
+ * Escaped patterns `\${key}` are skipped during substitution and unescaped to
+ * `${key}` in the output. This allows KG summaries and other injected content
+ * to contain literal `${...}` text without triggering variable expansion.
  */
 export function substituteVariables(template: string, vars: Record<string, string>): string {
-  return template.replace(/\$\{([^}]+)\}/g, (match, key: string) => {
+  return template.replace(/(\\?)\$\{([^}]+)\}/g, (match, prefix: string, key: string) => {
+    // Escaped pattern \${...} — strip the backslash and return the literal ${...}
+    if (prefix === "\\") {
+      return `\${${key}}`;
+    }
     return key in vars ? vars[key] : match;
   });
 }
