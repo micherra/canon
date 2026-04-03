@@ -117,7 +117,8 @@ describe("forkJob — spawns a child process", () => {
       onExit: vi.fn(),
     });
 
-    expect(capturedOpts?.stdio).toContain("ipc");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((capturedOpts as any)?.stdio).toContain("ipc");
   });
 
   it("calls onMessage when child emits a message", () => {

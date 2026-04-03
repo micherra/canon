@@ -38,6 +38,7 @@ export interface SubmitResult {
   deduplicated: boolean;
   cached: boolean;
   result?: Record<string, unknown>;  // Present if cached or sync mode
+  [key: string]: unknown;
 }
 
 export interface PollResult {
@@ -48,6 +49,7 @@ export interface PollResult {
   completed_at: string | null;
   duration_ms: number;
   error: string | null;
+  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -413,4 +415,62 @@ export class JobManager {
       this.timeouts.delete(jobId);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Singleton accessor
+// ---------------------------------------------------------------------------
+
+let _instance: JobManager | null = null;
+
+/**
+ * Get or create the singleton JobManager instance.
+ * Returns null if called before initJobManager().
+ */
+export function getJobManager(): JobManager | null {
+  return _instance;
+}
+
+/**
+ * Initialize the singleton JobManager.
+ * Must be called before getJobManager() or getOrCreateJobManager() can return an instance.
+ */
+export function initJobManager(
+  db: Database,
+  projectDir: string,
+  pluginDir: string,
+  timeoutMs?: number,
+): JobManager {
+  if (!_instance) {
+    _instance = new JobManager(db, projectDir, pluginDir, timeoutMs);
+  }
+  return _instance;
+}
+
+/**
+ * Get the singleton JobManager, creating it lazily using an in-memory SQLite DB.
+ * Suitable for use from tool handlers where the DB path is computed inside JobManager.
+ *
+ * NOTE: In production use, prefer calling initJobManager() at startup with the
+ * shared DB so all tools share the same state.
+ */
+export function getOrCreateJobManager(
+  projectDir: string,
+  pluginDir: string,
+  timeoutMs?: number,
+): JobManager {
+  if (!_instance) {
+    // Import BetterSqlite3 lazily — it may not be available in all environments.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Database = require('better-sqlite3') as typeof import('better-sqlite3');
+    const dbPath = path.join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+    const db = new Database(dbPath);
+    _instance = new JobManager(db, projectDir, pluginDir, timeoutMs);
+  }
+  return _instance;
+}
+
+/** Reset the singleton (test only). */
+export function _resetJobManagerSingleton(): void {
+  _instance = null;
 }
