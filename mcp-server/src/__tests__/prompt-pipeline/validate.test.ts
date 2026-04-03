@@ -222,6 +222,20 @@ describe("validatePrompts (Stage 9)", () => {
     expect(errorWarnings).toHaveLength(0);
   });
 
+  it("does not flag ${project_structure} (in allowlist)", async () => {
+    const ctx = makeCtx([makePromptEntry("Project layout: ${project_structure}")]);
+    const result = await validatePrompts(ctx);
+    const errorWarnings = result.warnings.filter(w => w.startsWith("ERROR:"));
+    expect(errorWarnings).toHaveLength(0);
+  });
+
+  it("does not flag ${conventions} (in allowlist)", async () => {
+    const ctx = makeCtx([makePromptEntry("Project conventions: ${conventions}")]);
+    const result = await validatePrompts(ctx);
+    const errorWarnings = result.warnings.filter(w => w.startsWith("ERROR:"));
+    expect(errorWarnings).toHaveLength(0);
+  });
+
   // ---------------------------------------------------------------------------
   // Known limitation documentation
   // ---------------------------------------------------------------------------
