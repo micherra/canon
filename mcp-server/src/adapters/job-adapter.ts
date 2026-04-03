@@ -35,6 +35,13 @@ export interface WorkerInput {
 
 export interface ForkJobOptions {
   workerPath: string;
+  /**
+   * Working directory for the forked process.
+   * Must be set to the directory containing node_modules so that
+   * `--import tsx` (and any other package imports) can be resolved.
+   * Typically the mcp-server/ root directory.
+   */
+  cwd: string;
   onMessage: (msg: JobMessage) => void;
   onExit: (code: number | null, signal: string | null) => void;
 }
@@ -48,8 +55,10 @@ export interface ForkJobOptions {
  */
 export function forkJob(options: ForkJobOptions): ChildProcess {
   const child = fork(options.workerPath, [], {
+    cwd: options.cwd,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
-    // Ensure the child can resolve TypeScript modules
+    // Ensure the child can resolve TypeScript modules.
+    // cwd must point to the directory containing node_modules (mcp-server/).
     execArgv: ["--import", "tsx"],
   });
 

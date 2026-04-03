@@ -55,11 +55,20 @@ export interface PollResult {
 }
 
 // ---------------------------------------------------------------------------
-// Worker path — graph-worker.ts lives at src/workers/graph-worker.ts
+// Worker path and working directory.
+//
+// graph-worker.ts lives at src/workers/graph-worker.ts.
 // We resolve relative to this file so it works when bundled/run from dist/.
+//
+// WORKER_CWD is the mcp-server/ root — the directory that contains
+// node_modules. The forked child process must inherit this as its cwd so that
+// `--import tsx` (and any other packages the worker imports) can be resolved
+// regardless of what directory the parent process is running from.
 // ---------------------------------------------------------------------------
 
 const WORKER_PATH = fileURLToPath(new URL('../workers/graph-worker.ts', import.meta.url));
+// job-manager.ts is at src/jobs/, so ../../ resolves to mcp-server/
+const WORKER_CWD = fileURLToPath(new URL('../../', import.meta.url));
 
 // ---------------------------------------------------------------------------
 // JobManager
@@ -320,6 +329,7 @@ export class JobManager {
 
     const child = forkJob({
       workerPath: WORKER_PATH,
+      cwd: WORKER_CWD,
       onMessage: (msg: JobMessage) => this._handleMessage(jobId, fingerprint, msg),
       onExit: (code, signal) => this._handleExit(jobId, code, signal),
     });
