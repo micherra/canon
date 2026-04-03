@@ -19,10 +19,20 @@ export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string):
   for (const [key, stateDef] of Object.entries(flow.states)) {
     states[key] = { status: "pending", entries: 0 };
 
-    if (stateDef.max_iterations !== undefined) {
+    // max_revisions (ADR-017) takes precedence over max_iterations for revision budget
+    const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
+    if (maxIter !== undefined) {
       iterations[key] = {
         count: 0,
-        max: stateDef.max_iterations,
+        max: maxIter,
+        history: [],
+        cannot_fix: [],
+      };
+    } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
+      // Default revision budget for explicitly gated states without explicit limit
+      iterations[key] = {
+        count: 0,
+        max: 3,
         history: [],
         cannot_fix: [],
       };
