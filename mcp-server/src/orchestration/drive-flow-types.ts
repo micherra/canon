@@ -52,12 +52,30 @@ export interface HitlBreakpoint {
 }
 
 // ---------------------------------------------------------------------------
+// ApprovalBreakpoint — approval gate pause point (ADR-017)
+// ---------------------------------------------------------------------------
+
+export interface ApprovalBreakpoint {
+  /** Which state just completed and requires approval */
+  state_id: string;
+  /** Agent type that produced the work */
+  agent_type: string;
+  /** Artifact paths produced by the agent */
+  artifacts: string[];
+  /** Summary of what was produced */
+  summary: string;
+  /** Available response options */
+  options: readonly ["approve", "revise", "reject"];
+}
+
+// ---------------------------------------------------------------------------
 // DriveFlowAction — discriminated union: what drive_flow does next
 // ---------------------------------------------------------------------------
 
 export type DriveFlowAction =
   | { action: 'spawn'; requests: SpawnRequest[] }
   | { action: 'hitl'; breakpoint: HitlBreakpoint }
+  | { action: 'approval'; breakpoint: ApprovalBreakpoint }
   | { action: 'done'; terminal_state: string; summary: string };
 
 // ---------------------------------------------------------------------------
