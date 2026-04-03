@@ -4,7 +4,8 @@
  * and board state updates.
  */
 
-import { resolve, relative } from "node:path";
+import { resolve, relative, join, basename } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
 import {
   normalizeStatus,
   evaluateTransition,
@@ -23,11 +24,113 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { syncBoardToStore } from "../orchestration/board-sync.ts";
 import { toolError } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
-import type { Board, ResolvedFlow, CannotFixItem, GateResult, PostconditionResult, DiscoveredGate, PostconditionAssertion, ViolationSeverities, TestResults } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow, CannotFixItem, GateResult, PostconditionResult, DiscoveredGate, PostconditionAssertion, ViolationSeverities, TestResults, RequiredArtifact } from "../orchestration/flow-schema.ts";
 import { STATUS_KEYWORDS, STATUS_ALIASES } from "../orchestration/flow-schema.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { executeEffects } from "../orchestration/effects.ts";
 import { inspectDebateProgress } from "../orchestration/debate.ts";
+
+// ---------------------------------------------------------------------------
+// Artifact validation (ADR-010)
+// ---------------------------------------------------------------------------
+
+interface MetaJson {
+  _type: string;
+  _version: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Validates that all required artifacts exist and have the correct _type in
+ * their .meta.json sidecar files. Searches both the reported artifacts list
+ * and common locations (reviews/ and plans/ subdirectories).
+ *
+ * Returns toolError("INVALID_INPUT") when any required artifact is missing
+ * or has the wrong type. Returns null when all artifacts are valid.
+ *
+ * Honors errors-are-values: never throws; all errors returned as ToolResult.
+ */
+export async function validateRequiredArtifacts(
+  workspace: string,
+  artifacts: string[],
+  required: RequiredArtifact[],
+): Promise<ToolResult<void> | null> {
+  for (const req of required) {
+    const metaName = `${req.name}.meta.json`;
+
+    // First, check if the meta file appears in the reported artifacts list
+    const match = artifacts.find(
+      (a) => basename(a) === metaName || a.endsWith(metaName),
+    );
+
+    if (match) {
+      // Found in artifacts list — read and validate
+      const fullPath = match.startsWith("/") ? match : join(workspace, match);
+      const metaPath = fullPath.endsWith(".meta.json")
+        ? fullPath
+        : fullPath.replace(/\.(md|txt|json)$/, ".meta.json");
+      try {
+        const content = await readFile(metaPath, "utf-8");
+        const meta: MetaJson = JSON.parse(content);
+        if (meta._type !== req.type) {
+          return toolError(
+            "INVALID_INPUT",
+            `Artifact "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
+          );
+        }
+      } catch {
+        return toolError(
+          "INVALID_INPUT",
+          `Required artifact "${req.name}" meta file not readable at "${metaPath}"`,
+        );
+      }
+    } else {
+      // Not in artifacts list — search common locations
+      let found = false;
+
+      // Search reviews/ directory
+      try {
+        const content = await readFile(join(workspace, "reviews", metaName), "utf-8");
+        const meta: MetaJson = JSON.parse(content);
+        if (meta._type !== req.type) {
+          return toolError(
+            "INVALID_INPUT",
+            `Artifact "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
+          );
+        }
+        found = true;
+      } catch { /* not found here — continue */ }
+
+      // Search plans/*/ subdirectories
+      if (!found) {
+        const plansDir = join(workspace, "plans");
+        const subdirs = await readdir(plansDir).catch(() => [] as string[]);
+        for (const sub of subdirs) {
+          try {
+            const content = await readFile(join(plansDir, sub, metaName), "utf-8");
+            const meta: MetaJson = JSON.parse(content);
+            if (meta._type !== req.type) {
+              return toolError(
+                "INVALID_INPUT",
+                `Artifact "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
+              );
+            }
+            found = true;
+            break;
+          } catch { /* not found here — continue */ }
+        }
+      }
+
+      if (!found) {
+        return toolError(
+          "INVALID_INPUT",
+          `Required artifact "${req.name}" not found. Expected .meta.json sidecar with type "${req.type}"`,
+        );
+      }
+    }
+  }
+  return null; // All valid
+}
 
 interface ReportResultInput {
   workspace: string;
@@ -145,13 +248,25 @@ async function reportResultLocked(
     return toolError("WORKSPACE_NOT_FOUND", `No execution found in workspace: ${input.workspace}`);
   }
 
+  // Validate required artifacts (pre-transaction — async file I/O before the
+  // synchronous SQLite transaction). When required_artifacts is absent or empty
+  // on the state definition, validation is skipped for backward compatibility.
+  const stateDef = input.flow.states[input.state_id];
+  if (stateDef?.required_artifacts?.length && input.artifacts?.length) {
+    const validationError = await validateRequiredArtifacts(
+      input.workspace,
+      input.artifacts,
+      stateDef.required_artifacts,
+    );
+    if (validationError) return validationError;
+  }
+
   // Pre-fetch debate progress asynchronously before entering the synchronous
   // transaction. inspectDebateProgress reads separate message/event tables
   // and does not depend on board state, so fetching it here is safe.
   // better-sqlite3 transactions must be fully synchronous; any await inside
   // db.transaction() is not allowed.
   let debateResult: Awaited<ReturnType<typeof inspectDebateProgress>> | undefined;
-  const stateDef = input.flow.states[input.state_id];
   if (input.state_id === input.flow.entry && input.flow.debate) {
     debateResult = await inspectDebateProgress(input.workspace, input.flow.debate);
   }

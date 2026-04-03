@@ -111,7 +111,7 @@ async function checkPostconditions(
 }
 
 // ---------------------------------------------------------------------------
-// persist_review — parse REVIEW.md → DriftStore (SQLite)
+// persist_review — read REVIEW.meta.json first, fall back to REVIEW.md regex
 // ---------------------------------------------------------------------------
 
 async function persistReview(
@@ -120,8 +120,31 @@ async function persistReview(
   workspace: string,
   artifacts: string[],
 ): Promise<EffectResult> {
-  const errors: string[] = [];
   const artifactName = effect.artifact ?? "REVIEW.md";
+  const metaName = artifactName.replace(/\.md$/i, ".meta.json");
+
+  // Try structured read first
+  const metaContent = await resolveAndRead(metaName, workspace, artifacts);
+  if (metaContent) {
+    try {
+      const meta = JSON.parse(metaContent);
+      if (meta._type === "review" && meta._version === 1) {
+        const entry: ReviewEntry = {
+          review_id: generateId("rev"),
+          timestamp: new Date().toISOString(),
+          verdict: meta.verdict,
+          files: meta.files ?? [],
+          violations: meta.violations ?? [],
+          honored: meta.honored ?? [],
+          score: meta.score ?? { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } },
+        };
+        await store.appendReview(entry);
+        return { type: "persist_review", recorded: 1, errors: [] };
+      }
+    } catch { /* fall through to legacy parse */ }
+  }
+
+  // Legacy fallback: regex parse REVIEW.md
   const content = await resolveAndRead(artifactName, workspace, artifacts);
   if (!content) {
     return { type: "persist_review", recorded: 0, errors: ["Artifact not found: " + artifactName] };
@@ -143,10 +166,10 @@ async function persistReview(
   };
 
   await store.appendReview(entry);
-  return { type: "persist_review", recorded: 1, errors };
+  return { type: "persist_review", recorded: 1, errors: [] };
 }
 
-export interface ParsedReview {
+interface ParsedReview {
   verdict: "BLOCKING" | "WARNING" | "CLEAN";
   files: string[];
   violations: Array<{
@@ -166,7 +189,7 @@ export interface ParsedReview {
  * Parse a REVIEW.md following the review-checklist template.
  * Extracts: YAML frontmatter verdict, violations table, honored list, score table.
  */
-export function parseReviewArtifact(content: string): ParsedReview | null {
+function parseReviewArtifact(content: string): ParsedReview | null {
   // Parse YAML frontmatter for verdict
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
   let verdict: ParsedReview["verdict"] = "CLEAN";

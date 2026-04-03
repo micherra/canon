@@ -257,6 +257,9 @@ export function initDatabase(dbPath: string): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("synchronous = NORMAL");
+  // Busy timeout: wait up to 5s on write contention instead of failing immediately
+  // Prevents SQLITE_BUSY errors when child process writes concurrently with parent reads
+  db.pragma("busy_timeout = 5000");
 
   // Load sqlite-vec extension BEFORE DDL — vec0 tables require it
   sqliteVec.load(db);
