@@ -97,7 +97,7 @@ export async function driveFlow(
   // ---------------------------------------------------------------------------
 
   if (parseResult.data.result) {
-    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id, ...rest } = parseResult.data.result as DriveFlowInput["result"] & { task_id?: string };
+    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id } = parseResult.data.result;
 
     // Store agent session ID for ADR-009a continue_from support
     if (agent_session_id) {
@@ -342,58 +342,13 @@ async function completeWave(
   // Determine the status keyword to report
   const statusKeyword = gateFailed ? "gate_failed" : "done";
 
-  // Check for pending wave events between waves (before advancing)
-  const pendingEvents = store.getWaveEvents({ status: "pending" });
-  if (pendingEvents.length > 0) {
-    const pauseEvent = pendingEvents.find((e) => e.type === "pause");
-    if (pauseEvent) {
-      return {
-        ok: true as const,
-        action: "hitl",
-        breakpoint: {
-          reason: `pause: wave execution paused — ${String(pauseEvent.payload["reason"] ?? "user requested pause")}`,
-          context: `Wave ${currentWave} merged successfully. Pause event ID: ${pauseEvent.id}`,
-        },
-      };
-    }
+  // Handle pending wave events between waves (before advancing)
+  const eventResult = handlePendingWaveEvents(store, currentWave);
+  if (eventResult !== null) return eventResult;
 
-    // Handle skip_task events mechanically
-    const skipTaskEvents = pendingEvents.filter((e) => e.type === "skip_task");
-    for (const evt of skipTaskEvents) {
-      // Mark the event as applied
-      try {
-        store.updateWaveEvent(evt.id, {
-          status: "applied",
-          applied_at: new Date().toISOString(),
-          resolution: { skipped_by: "drive_flow" },
-        });
-      } catch {
-        // Already applied — ignore
-      }
-    }
-  }
-
-  // Check if there are more waves
-  const slug = store.getSession()?.slug;
+  // Resolve next-wave task IDs from INDEX.md (filtering applied skip_task events)
   const nextWave = currentWave + 1;
-  let nextWaveTaskIds: string[] = [];
-
-  if (slug) {
-    const indexPath = join(workspace, "plans", slug, "INDEX.md");
-    if (existsSync(indexPath)) {
-      const indexContent = await readFile(indexPath, "utf-8");
-      nextWaveTaskIds = parseTaskIdsForWave(indexContent, nextWave);
-
-      // Filter out tasks marked for skip by skip_task events
-      const allPendingNow = store.getWaveEvents({ status: "pending" });
-      const skipIds = new Set(
-        allPendingNow
-          .filter((e) => e.type === "skip_task")
-          .map((e) => String(e.payload["task_id"] ?? "")),
-      );
-      nextWaveTaskIds = nextWaveTaskIds.filter((tid) => !skipIds.has(tid));
-    }
-  }
+  const nextWaveTaskIds = await resolveNextWaveTaskIds(workspace, store, nextWave);
 
   const hasMoreWaves = nextWaveTaskIds.length > 0;
 
@@ -435,7 +390,10 @@ async function completeWave(
     const { next_state, hitl_required, hitl_reason, stuck_reason } = reportOut;
 
     if (hitl_required) {
-      const board = store.getBoard()!;
+      const board = store.getBoard();
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
+      }
       return {
         ok: true as const,
         action: "hitl",
@@ -447,7 +405,10 @@ async function completeWave(
     }
 
     if (!next_state || flow.states[next_state]?.type === "terminal") {
-      const board = store.getBoard()!;
+      const board = store.getBoard();
+      if (!board) {
+        return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
+      }
       return {
         ok: true as const,
         action: "done",
@@ -530,6 +491,85 @@ async function handleMergeConflict(
       },
     ],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Wave event and next-wave helpers (extracted from completeWave for testability)
+// ---------------------------------------------------------------------------
+
+/**
+ * Handle pending wave events between waves.
+ *
+ * - `pause` event  → returns a HITL breakpoint immediately (non-null)
+ * - `skip_task` events → applied mechanically; returns null (proceed)
+ * - No pending events  → returns null (proceed)
+ */
+function handlePendingWaveEvents(
+  store: ReturnType<typeof getExecutionStore>,
+  currentWave: number,
+): ToolResult<DriveFlowAction> | null {
+  const pendingEvents = store.getWaveEvents({ status: "pending" });
+  if (pendingEvents.length === 0) return null;
+
+  const pauseEvent = pendingEvents.find((e) => e.type === "pause");
+  if (pauseEvent) {
+    return {
+      ok: true as const,
+      action: "hitl",
+      breakpoint: {
+        reason: `pause: wave execution paused — ${String(pauseEvent.payload["reason"] ?? "user requested pause")}`,
+        context: `Wave ${currentWave} merged successfully. Pause event ID: ${pauseEvent.id}`,
+      },
+    };
+  }
+
+  // Handle skip_task events mechanically
+  const skipTaskEvents = pendingEvents.filter((e) => e.type === "skip_task");
+  for (const evt of skipTaskEvents) {
+    try {
+      store.updateWaveEvent(evt.id, {
+        status: "applied",
+        applied_at: new Date().toISOString(),
+        resolution: { skipped_by: "drive_flow" },
+      });
+    } catch {
+      // Already applied — ignore
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolve the task IDs for the next wave by reading INDEX.md and filtering
+ * out any tasks targeted by pending skip_task events.
+ *
+ * Returns an empty array when no tasks exist for that wave or INDEX.md is absent.
+ */
+async function resolveNextWaveTaskIds(
+  workspace: string,
+  store: ReturnType<typeof getExecutionStore>,
+  nextWave: number,
+): Promise<string[]> {
+  const slug = store.getSession()?.slug;
+  if (!slug) return [];
+
+  const indexPath = join(workspace, "plans", slug, "INDEX.md");
+  if (!existsSync(indexPath)) return [];
+
+  const indexContent = await readFile(indexPath, "utf-8");
+  let taskIds = parseTaskIdsForWave(indexContent, nextWave);
+
+  // Filter out tasks targeted by pending skip_task events
+  const allPendingNow = store.getWaveEvents({ status: "pending" });
+  const skipIds = new Set(
+    allPendingNow
+      .filter((e) => e.type === "skip_task")
+      .map((e) => String(e.payload["task_id"] ?? "")),
+  );
+  taskIds = taskIds.filter((tid) => !skipIds.has(tid));
+
+  return taskIds;
 }
 
 interface StartNextWaveInput {
