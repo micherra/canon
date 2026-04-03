@@ -28,7 +28,10 @@ describe("categorize_failures — edge cases", () => {
     }
   });
 
-  it("single failure → 1 category, confidence 0.95, needs_refinement false", async () => {
+  it("single failure with no error_type → 0 categories, 1 uncategorized, needs_refinement false", async () => {
+    // A single failure with no peer and no error_type has no partial signal — it is truly
+    // uncategorized. However needs_refinement is only true when uncategorized.length > 1,
+    // so a single uncategorized failure does NOT trigger LLM refinement.
     const result = await categorizeFailures(
       makeInput({
         failures: [
@@ -38,10 +41,9 @@ describe("categorize_failures — edge cases", () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.categories).toHaveLength(1);
-    expect(result.categories[0].confidence).toBe(0.95);
+    expect(result.categories).toHaveLength(0);
+    expect(result.uncategorized).toHaveLength(1);
     expect(result.needs_refinement).toBe(false);
-    expect(result.uncategorized).toHaveLength(0);
   });
 });
 
@@ -268,8 +270,8 @@ describe("categorize_failures — mixed signals", () => {
 describe("categorize_failures — needs_refinement trigger", () => {
   it("unique failures each become singleton exact-error groups (0.95), needs_refinement false", async () => {
     // Failures in different files, different dirs, different errors, no error_type.
-    // Each is unique — they become singleton exact-error groups at 0.95.
-    // All groups are above threshold → needs_refinement false.
+    // Each is unique with no partial signal — they are truly uncategorized.
+    // uncategorized.length > 1 → needs_refinement true.
     const result = await categorizeFailures(
       makeInput({
         failures: [
@@ -281,13 +283,10 @@ describe("categorize_failures — needs_refinement trigger", () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    // Each unique failure becomes its own singleton exact-error group
-    expect(result.categories).toHaveLength(3);
-    for (const cat of result.categories) {
-      expect(cat.confidence).toBe(0.95);
-    }
-    expect(result.uncategorized).toHaveLength(0);
-    expect(result.needs_refinement).toBe(false);
+    // No partial signal → all three are truly uncategorized, not singletonized
+    expect(result.categories).toHaveLength(0);
+    expect(result.uncategorized).toHaveLength(3);
+    expect(result.needs_refinement).toBe(true);
   });
 
   it("directory-prefix group with no common substring triggers needs_refinement (confidence 0.7 < 0.8)", async () => {

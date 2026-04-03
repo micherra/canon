@@ -2,7 +2,7 @@
  * board-sync — Shared utility for syncing a Board object back to ExecutionStore.
  *
  * Extracted from report-result.ts so that drive_flow can also call it without
- * duplicating logic. See ADR dd-009-01 (composition over inline).
+ * duplicating logic. See ADR-009a (composition over inline).
  */
 
 import { getExecutionStore } from './execution-store.ts';
