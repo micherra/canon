@@ -1015,9 +1015,9 @@ server.registerTool(
       ),
       honored: z.array(z.string()),
       score: z.object({
-        rules: z.object({ passed: z.number(), total: z.number() }),
-        opinions: z.object({ passed: z.number(), total: z.number() }),
-        conventions: z.object({ passed: z.number(), total: z.number() }),
+        rules: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+        opinions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+        conventions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
       }),
       files: z.array(z.string()),
     },

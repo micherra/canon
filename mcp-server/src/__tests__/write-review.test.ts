@@ -47,8 +47,8 @@ describe("writeReview — file output", () => {
     const result = await writeReview(makeInput());
 
     assertOk(result);
-    expect(result.path).toContain("reviews/REVIEW.md");
-    expect(result.meta_path).toContain("reviews/REVIEW.meta.json");
+    expect(result.path.replaceAll("\\", "/")).toContain("reviews/REVIEW.md");
+    expect(result.meta_path.replaceAll("\\", "/")).toContain("reviews/REVIEW.meta.json");
 
     // Verify files exist
     const md = await readFile(result.path, "utf-8");

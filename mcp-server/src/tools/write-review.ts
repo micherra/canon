@@ -4,7 +4,7 @@ import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  return value.replace(/\|/g, "&#124;").replace(/\r\n?|\n/g, " ");
 }
 
 export interface WriteReviewInput {
@@ -75,7 +75,7 @@ function generateMarkdown(input: WriteReviewInput, mappedVerdict: "BLOCKING" | "
   lines.push("| Principle | Severity | Location |");
   lines.push("|-----------|----------|----------|");
   for (const v of input.violations) {
-    const filePath = v.file_path ?? "";
+    const filePath = v.file_path ?? "(none)";
     lines.push(`| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} |`);
   }
   lines.push("");
@@ -130,6 +130,17 @@ export async function writeReview(
 
   // Map verdict
   const mappedVerdict = VERDICT_MAP[input.verdict];
+
+  // Validate honored entries — reject IDs that would break markdown pattern
+  const PRINCIPLE_ID_PATTERN = /^[a-zA-Z0-9_\-/.]+$/;
+  for (const id of input.honored) {
+    if (!PRINCIPLE_ID_PATTERN.test(id)) {
+      return toolError(
+        "INVALID_INPUT",
+        `Invalid honored principle ID "${id}": must match /^[a-zA-Z0-9_\\-/.]+$/`,
+      );
+    }
+  }
 
   // Generate markdown
   const markdown = generateMarkdown(input, mappedVerdict);

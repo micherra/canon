@@ -79,7 +79,13 @@ export async function validateRequiredArtifacts(
       // Path traversal guard: ensure resolved path stays within workspace
       const resolvedPath = resolve(fullPath);
       const resolvedWorkspace = resolve(workspace);
-      if (!resolvedPath.startsWith(resolvedWorkspace + "/") && resolvedPath !== resolvedWorkspace) {
+      const workspaceRelativePath = relative(resolvedWorkspace, resolvedPath);
+      if (
+        isAbsolute(workspaceRelativePath) ||
+        workspaceRelativePath === ".." ||
+        workspaceRelativePath.startsWith("../") ||
+        workspaceRelativePath.startsWith("..\\")
+      ) {
         return toolError("INVALID_INPUT", `Artifact path "${match}" resolves outside workspace`);
       }
 
@@ -109,15 +115,22 @@ export async function validateRequiredArtifacts(
       // Search reviews/ directory
       try {
         const content = await readFile(join(workspace, "reviews", metaName), "utf-8");
-        const meta: MetaJson = JSON.parse(content);
-        if (meta._type !== req.type) {
+        try {
+          const meta: MetaJson = JSON.parse(content);
+          if (meta._type !== req.type) {
+            return toolError(
+              "INVALID_INPUT",
+              `Artifact "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
+            );
+          }
+          found = true;
+        } catch {
           return toolError(
             "INVALID_INPUT",
-            `Artifact "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
+            `Artifact "${req.name}" found at reviews/${metaName} but contains malformed JSON`,
           );
         }
-        found = true;
-      } catch { /* not found here — continue */ }
+      } catch { /* file not found — continue */ }
 
       // Search plans/*/ subdirectories
       if (!found) {
@@ -126,16 +139,23 @@ export async function validateRequiredArtifacts(
         for (const sub of subdirs) {
           try {
             const content = await readFile(join(plansDir, sub, metaName), "utf-8");
-            const meta: MetaJson = JSON.parse(content);
-            if (meta._type !== req.type) {
+            try {
+              const meta: MetaJson = JSON.parse(content);
+              if (meta._type !== req.type) {
+                return toolError(
+                  "INVALID_INPUT",
+                  `Artifact "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
+                );
+              }
+              found = true;
+              break;
+            } catch {
               return toolError(
                 "INVALID_INPUT",
-                `Artifact "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
+                `Artifact "${req.name}" found at plans/${sub}/${metaName} but contains malformed JSON`,
               );
             }
-            found = true;
-            break;
-          } catch { /* not found here — continue */ }
+          } catch { /* file not found — continue */ }
         }
       }
 

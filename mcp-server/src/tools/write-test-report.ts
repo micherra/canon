@@ -4,7 +4,7 @@ import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
-  return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  return value.replace(/\|/g, "&#124;").replace(/\r\n?|\n/g, " ");
 }
 
 export interface WriteTestReportInput {
