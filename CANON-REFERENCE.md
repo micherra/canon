@@ -6,10 +6,14 @@
 
 ```
 canon/
-├── agents/               # Agent definitions (YAML frontmatter + markdown instructions)
+├── .claude/              # Claude Code integration
+│   ├── subagents/        # Agent definitions (YAML frontmatter + markdown instructions)
+│   ├── rules/            # Universal agent behavioral rules (principle schema)
+│   └── settings.json     # Claude Code plugin settings
+├── domain-primers/       # Built-in domain priming files (one per domain, raw markdown)
 ├── flows/                # Flow state machine definitions (YAML frontmatter + spawn instructions)
 │   └── fragments/        # Reusable state groups included by flows
-├── hooks/                # Pre/post tool-use interceptor scripts + hooks.json registry
+├── hooks/                # Pre/post tool-use interceptor scripts
 ├── mcp-server/           # TypeScript MCP server (Canon harness tools)
 │   └── src/
 │       ├── orchestration/  # Flow runtime: board, messaging, convergence, events, gate-runner, etc.
@@ -18,10 +22,9 @@ canon/
 │       └── graph/          # Dependency graph scanner and priority scoring
 ├── principles/           # Canonical engineering principles (markdown)
 ├── skills/canon/         # Canon skill definition (entry point for Claude Code)
-│   └── references/       # Skill reference fragments loaded on demand
+│   ├── commands/         # CLI command definitions (doctor, init, learn, pr-review, etc.)
+│   └── references/       # Skill reference fragments loaded on demand (includes canon-orchestrator.md)
 ├── templates/            # Artifact templates agents must follow
-├── mcp-server/src/ui/    # Svelte/Sigma.js dashboard UI (builds to single HTML for MCP App)
-├── commands/             # CLI command definitions
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
     └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)
 ```
