@@ -59,7 +59,7 @@ vi.mock("../context-enrichment.ts", () => ({
 }));
 
 import { enterAndPrepareState } from "../../tools/enter-and-prepare-state.ts";
-import { assertOk } from "../../utils/tool-result.ts";
+import { assertOk } from "../../shared/lib/tool-result.ts";
 import { assembleEnrichment } from "../context-enrichment.ts";
 
 let tmpDirs: string[] = [];

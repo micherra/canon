@@ -10,7 +10,7 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import type { FilePriorityScore } from "../graph/priority.ts";
 import type { ReviewEntry } from "../shared/schema.ts";
 import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
-import { sanitizeGitRef } from "../utils/git-ref.ts";
+import { sanitizeGitRef } from "../shared/lib/git-ref.ts";
 
 export type PrReviewDataInput = {
   pr_number?: number;

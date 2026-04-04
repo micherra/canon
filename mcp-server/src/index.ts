@@ -52,8 +52,8 @@ import { writePlanIndex } from "./tools/write-plan-index.ts";
 import { writeResearchSynthesis } from "./tools/write-research-synthesis.ts";
 import { writeReview } from "./tools/write-review.ts";
 import { writeTestReport } from "./tools/write-test-report.ts";
-import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
-import { wrapHandler } from "./utils/wrap-handler.ts";
+import { installFuzzyValidation } from "./shared/lib/fuzzy-field-validation.ts";
+import { wrapHandler } from "./shared/lib/wrap-handler.ts";
 
 // Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
 // Falls back to cwd which is typically set by Claude Code to the user's project root.

@@ -32,7 +32,7 @@ import { reportResult, validateRequiredArtifacts } from "../tools/report-result.
 import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
 import { writeReview } from "../tools/write-review.ts";
 import { writeTestReport } from "../tools/write-test-report.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

@@ -1,6 +1,6 @@
 import { buildStateGraph, loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 export type LoadFlowInput = {
   flow_name: string;

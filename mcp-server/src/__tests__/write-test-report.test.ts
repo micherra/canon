@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { writeTestReport } from "../tools/write-test-report.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDir: string;
 

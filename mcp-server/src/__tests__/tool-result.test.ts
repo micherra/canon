@@ -5,7 +5,7 @@ import {
   type ToolResult,
   toolError,
   toolOk,
-} from "../utils/tool-result.ts";
+} from "../shared/lib/tool-result.ts";
 
 // toolError()
 

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {

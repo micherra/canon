@@ -26,8 +26,8 @@ import type {
   ResolvedFlow,
 } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
-import { toolError } from "../utils/tool-result.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
+import { toolError } from "../shared/lib/tool-result.ts";
 import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
 import { getSpawnPrompt } from "./get-spawn-prompt.ts";
 

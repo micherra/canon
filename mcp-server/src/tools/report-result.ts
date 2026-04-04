@@ -37,8 +37,8 @@ import {
   isStuck,
   normalizeStatus,
 } from "../orchestration/transitions.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
-import { toolError } from "../utils/tool-result.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
+import { toolError } from "../shared/lib/tool-result.ts";
 
 // Artifact validation (ADR-010)
 

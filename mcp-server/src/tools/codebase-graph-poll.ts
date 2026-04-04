@@ -11,8 +11,8 @@
 
 import type { PollResult } from "../jobs/job-manager.ts";
 import { getJobManager } from "../jobs/job-manager.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
-import { toolError } from "../utils/tool-result.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
+import { toolError } from "../shared/lib/tool-result.ts";
 
 export type GraphPollInput = {
   job_id: string;

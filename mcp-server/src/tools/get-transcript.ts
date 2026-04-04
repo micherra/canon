@@ -14,8 +14,8 @@ import { readFile, realpath } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { type TranscriptEntry, TranscriptEntrySchema } from "../orchestration/flow-schema.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
-import { toolError, toolOk } from "../utils/tool-result.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
+import { toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 export type GetTranscriptInput = {
   workspace: string;

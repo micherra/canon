@@ -72,8 +72,8 @@ import {
   type ToolResult,
   toolError,
   toolOk,
-} from "../utils/tool-result.ts";
-import { wrapHandler } from "../utils/wrap-handler.ts";
+} from "../shared/lib/tool-result.ts";
+import { wrapHandler } from "../shared/lib/wrap-handler.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;

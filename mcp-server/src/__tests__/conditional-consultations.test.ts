@@ -40,7 +40,7 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { ConsultationFragmentSchema } from "../orchestration/flow-schema.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

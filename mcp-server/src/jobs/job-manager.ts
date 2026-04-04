@@ -23,8 +23,8 @@ import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "../shared/constants.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import type { CodebaseGraphInput } from "../tools/codebase-graph.ts";
-import { isSyncMode } from "../utils/env.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { isSyncMode } from "../shared/lib/env.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 import { computeJobFingerprint } from "./job-fingerprint.ts";
 import { type JobStatus, JobStore } from "./job-store.ts";
 

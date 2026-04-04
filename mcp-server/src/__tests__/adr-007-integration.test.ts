@@ -29,7 +29,7 @@ vi.mock("../adapters/job-adapter.ts", () => ({
   sendWorkerInput: vi.fn(),
 }));
 
-vi.mock("../utils/env.ts", () => ({
+vi.mock("../shared/lib/env.ts", () => ({
   isCI: vi.fn().mockReturnValue(false),
   isSyncMode: vi.fn().mockReturnValue(false),
 }));
@@ -91,7 +91,7 @@ import { _resetJobManagerSingleton, JobManager } from "../jobs/job-manager.ts";
 import { JobStore } from "../jobs/job-store.ts";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import { codebaseGraphPoll } from "../tools/codebase-graph-poll.ts";
-import { isSyncMode } from "../utils/env.ts";
+import { isSyncMode } from "../shared/lib/env.ts";
 
 // Note: codebaseGraphMaterialize requires codebase-graph mock — tested in separate describe
 
@@ -400,9 +400,9 @@ describe('isSyncMode() with CANON_SYNC_JOBS="" (Known Gap: Task-01)', () => {
 
   it('isSyncMode() with CANON_SYNC_JOBS="" falls through to isCI() check', async () => {
     // Use vi.importActual to get the real isSyncMode implementation,
-    // bypassing the vi.mock('../utils/env.ts') hoisted at file level.
+    // bypassing the vi.mock('../shared/lib/env.ts') hoisted at file level.
     const { isSyncMode: realIsSyncMode } =
-      await vi.importActual<typeof import("../utils/env.ts")>("../utils/env.ts");
+      await vi.importActual<typeof import("../shared/lib/env.ts")>("../shared/lib/env.ts");
 
     const savedEnv = process.env.CANON_SYNC_JOBS;
     const savedCI = process.env.CI;

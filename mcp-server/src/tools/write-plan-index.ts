@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 export type WritePlanIndexInput = {
   workspace: string;
