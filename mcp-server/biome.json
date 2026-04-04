@@ -146,7 +146,11 @@
         "rules": {
           "complexity": {
             "noExcessiveCognitiveComplexity": "off",
-            "noExcessiveLinesPerFunction": "off"
+            "noExcessiveLinesPerFunction": "off",
+            "useArrowFunction": "off"
+          },
+          "performance": {
+            "noDelete": "off"
           },
           "suspicious": {
             "noExplicitAny": "off"
