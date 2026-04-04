@@ -58,6 +58,9 @@ export const EMBEDDING_DIM = 384;
 export const EMBEDDING_BATCH_SIZE = 64;
 export const EMBEDDING_MODEL_ID = "all-MiniLM-L6-v2"; // short ID for meta tables
 
+/** Default timeout for background jobs (5 minutes). */
+export const JOB_TIMEOUT_MS = 300_000;
+
 /** Extract the first paragraph from a principle body as its summary. */
 export function extractSummary(body: string): string {
   return body.split(/\n\n/)[0]?.trim() || body;

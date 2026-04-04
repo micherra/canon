@@ -290,8 +290,13 @@ export async function initWorkspaceFlow(
   for (const [stateId] of Object.entries(flow.states)) {
     store.upsertState(stateId, { status: "pending", entries: 0 });
     const stateDef = flow.states[stateId];
-    if (stateDef.max_iterations !== undefined) {
-      store.upsertIteration(stateId, { count: 0, max: stateDef.max_iterations, history: [], cannot_fix: [] });
+    // max_revisions (ADR-017) takes precedence over max_iterations, matching initBoard logic
+    const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
+    if (maxIter !== undefined) {
+      store.upsertIteration(stateId, { count: 0, max: maxIter, history: [], cannot_fix: [] });
+    } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
+      // Default revision budget for explicitly gated states without explicit limit
+      store.upsertIteration(stateId, { count: 0, max: 3, history: [], cannot_fix: [] });
     }
   }
 
@@ -411,6 +416,18 @@ export async function initWorkspaceFlow(
     actualWorktreeBranch = worktreeBranch;
     session.worktree_path = worktreePath;
     session.worktree_branch = worktreeBranch;
+    // Persist worktree info to the execution row so enterAndPrepareState can inject
+    // ${branch}, ${worktree_branch}, and ${worktree_path} into spawn prompt variables.
+    // Best-effort: a transient SQLite error must not fail initWorkspaceFlow after the
+    // worktree has already been created successfully.
+    try {
+      store.updateExecution({
+        worktree_path: worktreePath,
+        worktree_branch: worktreeBranch,
+      });
+    } catch (err) {
+      console.warn("[init-workspace] Failed to persist worktree info to execution row:", err);
+    }
   }
 
   return {

@@ -32,8 +32,14 @@ states:
     type: single
     agent: canon-architect
     template: [design-decision, session-context]
+    approval_gate: true
+    max_revisions: 3
     transitions:
+      # done: checkpoint preserved for backward compat (fires when auto_approve is true)
       done: checkpoint
+      approved: implement
+      revise: design
+      reject: hitl
       has_questions: hitl
 
   implement:

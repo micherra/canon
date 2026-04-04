@@ -22,7 +22,7 @@ import { randomUUID } from 'node:crypto';
 // Schema version — increment when DDL changes require a migration
 // ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '6';
+export const SCHEMA_VERSION = '8';
 
 // ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
@@ -195,7 +195,7 @@ interface Migration {
 /**
  * Ordered list of schema migrations.
  * Each migration runs only when the stored schema version is less than migration.version.
- * Versions are compared as strings — use zero-padded integers if > 9.
+ * Versions are compared as integers to ensure correct ordering beyond v9.
  */
 const MIGRATIONS: Migration[] = [
   {
@@ -282,6 +282,54 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
     },
   },
+  {
+    // worktree_path and worktree_branch columns on execution (branch variable injection)
+    // Enables spawn prompts to reference ${branch}, ${worktree_branch}, ${worktree_path}.
+    version: '7',
+    up: (db) => {
+      if (!columnExists(db, 'execution', 'worktree_path')) {
+        db.exec(`ALTER TABLE execution ADD COLUMN worktree_path TEXT`);
+      }
+      if (!columnExists(db, 'execution', 'worktree_branch')) {
+        db.exec(`ALTER TABLE execution ADD COLUMN worktree_branch TEXT`);
+      }
+      db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
+    },
+  },
+  {
+    // jobs and job_cache tables for background job tracking (ADR-007)
+    version: '8',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS jobs (
+          job_id        TEXT PRIMARY KEY,
+          job_type      TEXT NOT NULL,
+          fingerprint   TEXT NOT NULL,
+          status        TEXT NOT NULL DEFAULT 'pending',
+          pid           INTEGER,
+          progress      TEXT,
+          error         TEXT,
+          started_at    TEXT NOT NULL,
+          completed_at  TEXT,
+          timeout_ms    INTEGER NOT NULL DEFAULT 300000
+        )
+      `);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint ON jobs(fingerprint)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)`);
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS job_cache (
+          fingerprint    TEXT PRIMARY KEY,
+          job_type       TEXT NOT NULL,
+          result_summary TEXT NOT NULL,
+          cached_at      TEXT NOT NULL,
+          expires_at     TEXT
+        )
+      `);
+
+      db.exec(`UPDATE meta SET value = '8' WHERE key = 'schema_version'`);
+    },
+  },
 ];
 
 /**
@@ -296,7 +344,7 @@ export function runMigrations(db: Database.Database): void {
   let version = currentRow?.value ?? '1';
 
   for (const migration of MIGRATIONS) {
-    if (migration.version > version) {
+    if (parseInt(migration.version, 10) > parseInt(version, 10)) {
       const run = db.transaction(() => migration.up(db));
       run();
       version = migration.version;

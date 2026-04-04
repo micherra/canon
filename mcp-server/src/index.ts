@@ -13,6 +13,10 @@ import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
 import { reportInputSchema } from "./schema.ts";
 import { checkConvergence } from "./tools/check-convergence.ts";
 import { codebaseGraph, compactGraph } from "./tools/codebase-graph.ts";
+import { codebaseGraphSubmit } from "./tools/codebase-graph-submit.ts";
+import { codebaseGraphPoll } from "./tools/codebase-graph-poll.ts";
+import { codebaseGraphMaterialize } from "./tools/codebase-graph-materialize.ts";
+import { getJobManager } from "./jobs/job-manager.ts";
 import { enterAndPrepareState } from "./tools/enter-and-prepare-state.ts";
 import { getCompliance } from "./tools/get-compliance.ts";
 
@@ -70,6 +74,8 @@ const server = new McpServer({
 installFuzzyValidation(server);
 
 /** Helper to register a tool + resource pair for an MCP App UI. */
+const registeredResources = new Set<string>();
+
 function registerToolWithUi<Schema extends ZodRawShapeCompat>(
   toolName: string,
   resourceUri: string,
@@ -91,10 +97,13 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
     handler,
   );
 
-  registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
-    const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
-    return { contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }] };
-  });
+  if (!registeredResources.has(resourceUri)) {
+    registeredResources.add(resourceUri);
+    registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
+      const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
+      return { contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }] };
+    });
+  }
 }
 
 // --- MCP App tool UIs ---
@@ -1124,10 +1133,96 @@ server.registerTool(
   ),
 );
 
+// --- Background job tools ---
+
+server.registerTool(
+  "codebase_graph_submit",
+  {
+    description:
+      "Submit a background codebase graph generation job. Returns immediately with a job_id for polling. In CI mode (process.env.CI or CANON_SYNC_JOBS=1), runs synchronously and returns a complete result.",
+    inputSchema: {
+      root_dir: z
+        .string()
+        .optional()
+        .describe(
+          "Fallback root directory to scan when no source directories are configured. Ignored if source_dirs are provided in input or derived from layers in .canon/config.json.",
+        ),
+      source_dirs: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Directories to scan (e.g. ['src', 'lib']). Overrides directories derived from layers in .canon/config.json.",
+        ),
+      include_extensions: z
+        .array(z.string())
+        .optional()
+        .describe("File extensions to include (default: ts, js, py, go, rs)"),
+      exclude_dirs: z
+        .array(z.string())
+        .optional()
+        .describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
+      diff_base: z.string().optional().describe("Git ref to diff against — marks changed files in the graph"),
+      changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
+      force: z.boolean().optional().describe("Skip cache, force new run"),
+    },
+  },
+  wrapHandler(async (input) => codebaseGraphSubmit(input, projectDir, pluginDir)),
+);
+
+server.registerTool(
+  "codebase_graph_poll",
+  {
+    description:
+      "Poll the status of a background codebase graph job. Returns job_id, status (pending/running/complete/failed/timed_out/cancelled), progress, and error.",
+    inputSchema: {
+      job_id: z.string().describe("Job ID returned by codebase_graph_submit"),
+    },
+  },
+  wrapHandler(async (input) => codebaseGraphPoll(input)),
+);
+
+registerToolWithUi(
+  "codebase_graph_materialize",
+  "ui://canon/codebase-graph",
+  "Codebase Graph",
+  "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
+  {
+    job_id: z.string().describe("Job ID of a completed codebase graph job"),
+    diff_base: z.string().optional().describe("Git ref to diff against — marks changed files in the graph"),
+    changed_files: z.array(z.string()).optional().describe("Explicit list of changed files to highlight"),
+    detail_level: z.enum(["file", "entity"]).optional().describe("Graph resolution: file (default) or entity"),
+  },
+  "codebase-graph.html",
+  wrapHandler(async (input) => codebaseGraphMaterialize(input, projectDir, pluginDir)),
+);
+
+// --- Signal handlers for child process cleanup ---
+
+function cleanupAndExit(signal: string): void {
+  try {
+    const manager = getJobManager();
+    if (manager) manager.cleanup();
+  } catch {
+    // Best-effort cleanup — do not let errors prevent shutdown
+  }
+  process.exit(signal === "SIGTERM" ? 0 : 1);
+}
+
+process.on("SIGTERM", () => cleanupAndExit("SIGTERM"));
+process.on("SIGINT", () => cleanupAndExit("SIGINT"));
+
 // Start the server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Mark any leftover running jobs from a previous crashed session as failed
+  try {
+    const manager = getJobManager();
+    if (manager) manager.cleanup();
+  } catch {
+    // Best-effort — do not fail startup if cleanup errors
+  }
 }
 
 main().catch((error) => {

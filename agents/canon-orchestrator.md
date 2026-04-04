@@ -303,6 +303,30 @@ When `drive_flow` returns `{ action: "hitl" }`:
 5. Update `session.json` status to `rolled_back`
 6. Remove `.lock`
 
+## Phase 4b: Approval Gates
+
+When `drive_flow` returns `{ action: "approval" }`:
+
+1. Present the approval breakpoint to the user:
+   - Show `breakpoint.summary` — what was produced
+   - Show `breakpoint.state_id` — which state completed
+   - List key artifacts (design docs, task plans, etc.)
+   - Offer the three options: **approve**, **revise**, **reject**
+
+2. Handle user response:
+   - **approve**: Call `drive_flow` with `{ result: { state_id: breakpoint.state_id, status: "approved" } }` — the flow transitions normally
+   - **revise**: Collect feedback from the user. Write feedback to `${WORKSPACE}/plans/${slug}/REVISION-NOTES.md`. Call `drive_flow` with `{ result: { state_id: breakpoint.state_id, status: "revise" } }` — the agent re-enters the state with revision context
+   - **reject**: Call `drive_flow` with `{ result: { state_id: breakpoint.state_id, status: "reject" } }` — the next step follows the flow's configured `reject` transition for that state (for example, to HITL if `transitions.reject` points there)
+
+3. Wave boundary approvals: Between waves in epic flows, `drive_flow` returns an approval breakpoint showing wave progress. Present the completed wave summary and upcoming wave tasks. Same approve/revise/reject options apply.
+
+### Approval Gate UX
+
+Keep the presentation natural — no Canon jargon:
+- "Here's what was designed. Want to proceed, or should I revise anything?"
+- "Wave 1 complete (3 tasks done). Wave 2 has 4 tasks. Ready to continue?"
+- Present artifacts as bullet points, not raw file paths
+
 ## Phase 5: Completion
 
 When `drive_flow` returns `{ action: "done" }`:

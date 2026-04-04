@@ -29,6 +29,9 @@ export const STATUS_KEYWORDS = [
   "updated",
   "no_updates",
   "epic_complete",
+  "approved",
+  "revise",
+  "reject",
 ] as const;
 
 /** Maps agent-reported statuses to transition conditions. */
@@ -40,6 +43,7 @@ export const STATUS_ALIASES: Record<string, string> = {
   needs_context: "hitl",
   has_questions: "has_questions",
   epic_complete: "epic_complete",
+  approve: "approved",
 };
 
 // ---------------------------------------------------------------------------
@@ -211,6 +215,12 @@ const BaseStateFields = {
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   inject_messages: z.boolean().optional(),
+  // Approval gate fields (ADR-017)
+  // Note: approval_gate on a terminal state is semantically nonsensical — terminal states
+  // short-circuit in drive-flow before any gate check, so no runtime error occurs.
+  approval_gate: z.boolean().optional(),
+  max_revisions: z.coerce.number().optional(),
+  rejection_target: z.string().optional(),
   required_artifacts: z.array(RequiredArtifactSchema).optional(),
 };
 
@@ -346,6 +356,10 @@ const FragmentBaseStateFields = {
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   consultations: ConsultationsMapSchema.optional(),
   inject_messages: z.boolean().optional(),
+  // Approval gate fields — relaxed for param placeholders (ADR-017)
+  approval_gate: z.union([z.boolean(), z.string()]).optional(),
+  max_revisions: z.union([z.coerce.number(), z.string()]).optional(),
+  rejection_target: z.string().optional(),
   required_artifacts: z.array(RequiredArtifactSchema).optional(),
 };
 

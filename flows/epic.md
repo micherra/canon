@@ -54,12 +54,18 @@ states:
     type: single
     agent: canon-architect
     template: [design-decision, session-context]
+    approval_gate: true
+    max_revisions: 3
     inject_context:
       - from: research
         section: risk
         as: risk_findings
     transitions:
+      # done: checkpoint preserved for backward compat (fires when auto_approve is true)
       done: checkpoint
+      approved: implement
+      revise: design
+      reject: hitl
       has_questions: hitl
 
   implement:

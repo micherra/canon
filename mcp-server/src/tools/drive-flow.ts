@@ -36,7 +36,7 @@ import {
   getProjectDir,
 } from "../orchestration/wave-lifecycle.ts";
 import type { WaveWorktreeResult } from "../orchestration/wave-lifecycle.ts";
-import type { WaveResult } from "../orchestration/flow-schema.ts";
+import type { WaveResult, StateDefinition, Board } from "../orchestration/flow-schema.ts";
 import { runGates } from "../orchestration/gate-runner.ts";
 import { resolveAfterConsultations } from "./resolve-after-consultations.ts";
 import { parseTaskIdsForWave } from "../orchestration/wave-variables.ts";
@@ -51,6 +51,71 @@ export type { DriveFlowAction, DriveFlowInput, SpawnRequest };
 // ---------------------------------------------------------------------------
 
 const AGENT_SESSION_EVICTION_MS = 600_000; // 10 minutes
+
+// ---------------------------------------------------------------------------
+// Approval gate helpers (ADR-017)
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine if a state should trigger an approval gate.
+ * Checks explicit approval_gate field first, then applies tier-based defaults.
+ * Returns false if auto_approve bypass is active.
+ */
+export function shouldApprovalGate(
+  stateDef: StateDefinition | undefined,
+  flow: DriveFlowInput["flow"],
+  board: Board,
+): boolean {
+  if (!stateDef) return false;
+  if (stateDef.type === "terminal") return false;
+
+  // Explicit opt-out
+  if (stateDef.approval_gate === false) return false;
+
+  // Check auto_approve skip
+  if (board.metadata?.auto_approve === true) return false;
+
+  // Explicit opt-in
+  if (stateDef.approval_gate === true) return true;
+
+  // Tier-based defaults (approval_gate is undefined — apply defaults)
+  const tier = flow.tier;
+  if (tier === "medium" || tier === "large") {
+    // Default gate on design states (agent is canon-architect, with or without prefix)
+    const isArchitect = stateDef.agent === "canon-architect" || stateDef.agent === "canon:canon-architect";
+    if (!isArchitect) return false;
+    // Only apply default gate when the state's transitions include approval-related keys.
+    // This prevents gating flows like migrate.md where design only has done/has_questions.
+    const transitions = stateDef.transitions ?? {};
+    const hasApprovalTransitions =
+      "approved" in transitions || "revise" in transitions || "reject" in transitions;
+    return hasApprovalTransitions;
+  }
+
+  return false;
+}
+
+/**
+ * Determine if a wave boundary should trigger an approval gate.
+ * Only applies to epic/large tier flows with more waves remaining.
+ */
+export function shouldApprovalGateWaveBoundary(
+  stateDef: StateDefinition | undefined,
+  flow: DriveFlowInput["flow"],
+  board: Board,
+): boolean {
+  if (!stateDef) return false;
+  if (stateDef.type !== "wave") return false;
+  if (board.metadata?.auto_approve === true) return false;
+  if (stateDef.approval_gate === false) return false;
+
+  // Explicit opt-in on the wave state
+  if (stateDef.approval_gate === true) return true;
+
+  // Tier default: large gets wave boundary gates
+  const tier = flow.tier;
+  return tier === "large";
+}
 
 // ---------------------------------------------------------------------------
 // driveFlow
@@ -163,14 +228,44 @@ export async function driveFlow(
       };
     }
 
-    // Parallel state: check if all roles are done
+    // Parallel/parallel-per state: check if all roles are done.
     // When next_state loops back to the same state, it means we're waiting for
     // more parallel results. Return empty spawn to signal "waiting".
-    if (next_state === state_id) {
+    // Note: for non-parallel states, same-state transitions (e.g. revise: design) must NOT be
+    // short-circuited here — they are legitimate self-transitions that should proceed normally.
+    const completedDef = flow.states[state_id];
+    if (next_state === state_id && (completedDef?.type === "parallel" || completedDef?.type === "parallel-per")) {
       return {
         ok: true as const,
         action: "spawn",
         requests: [],
+      };
+    }
+
+    // Approval gate check (ADR-017) — fires on the COMPLETED state, not the next state.
+    // Placed AFTER the parallel-wait guard so it only fires when all roles are done.
+    // Skip the gate when the orchestrator is re-submitting an approval decision — otherwise
+    // the gate would fire again, creating an infinite loop.
+    const normalizedStatus = String(status ?? "").trim().toLowerCase();
+    const isApprovalDecision =
+      normalizedStatus === "approved" ||
+      normalizedStatus === "approve" ||
+      normalizedStatus === "revise" ||
+      normalizedStatus === "reject" ||
+      normalizedStatus === "rejected";
+
+    const completedStateDef = flow.states[state_id];
+    if (!isApprovalDecision && shouldApprovalGate(completedStateDef, flow, freshBoard)) {
+      return {
+        ok: true as const,
+        action: "approval" as const,
+        breakpoint: {
+          state_id,
+          agent_type: completedStateDef?.agent ?? completedStateDef?.type ?? "unknown",
+          artifacts: (artifacts as string[] | undefined) ?? [],
+          summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
+          options: ["approved", "revise", "reject"] as const,
+        },
       };
     }
 
@@ -473,7 +568,22 @@ async function completeWave(
     return enterStateAndBuildSpawn(workspace, flow, next_state, store);
   }
 
-  // More waves — start next wave
+  // More waves — check for wave boundary approval gate before starting next wave
+  const freshBoardForApproval = store.getBoard();
+  if (freshBoardForApproval && shouldApprovalGateWaveBoundary(stateDef, flow, freshBoardForApproval)) {
+    return {
+      ok: true as const,
+      action: "approval" as const,
+      breakpoint: {
+        state_id,
+        agent_type: stateDef?.agent ?? "wave",
+        artifacts: [],
+        summary: `Wave ${currentWave} completed. ${nextWaveTaskIds.length} tasks in next wave. Awaiting approval to proceed.`,
+        options: ["approved", "revise", "reject"] as const,
+      },
+    };
+  }
+
   return startNextWave({
     workspace,
     flow,
