@@ -132,6 +132,32 @@ async function pollUntilTerminal(
   return { status: finalPoll.status, error: finalPoll.error };
 }
 
+/**
+ * Poll a JobManager until the job reaches 'running' status (or any terminal
+ * status indicating it moved through running). This replaces raw sleeps before
+ * cancel calls: rather than waiting a fixed wall-clock interval, we wait for a
+ * known state transition, which is deterministic regardless of CPU load.
+ *
+ * Returns when status is 'running' or any terminal status. Throws if the job
+ * cannot be found or the max attempts are exhausted without reaching running.
+ */
+async function pollUntilRunning(
+  manager: JobManager,
+  jobId: string,
+  opts = { maxAttempts: 80, intervalMs: 50 },
+): Promise<void> {
+  const RUNNING_OR_TERMINAL = new Set(['running', 'complete', 'failed', 'cancelled', 'timed_out']);
+  for (let i = 0; i < opts.maxAttempts; i++) {
+    const poll = manager.poll(jobId);
+    if (!poll.ok) throw new Error(`poll failed: ${poll.message}`);
+    if (RUNNING_OR_TERMINAL.has(poll.status)) {
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, opts.intervalMs));
+  }
+  throw new Error(`Job ${jobId} did not reach running status within ${opts.maxAttempts * opts.intervalMs}ms`);
+}
+
 // ---------------------------------------------------------------------------
 // Global temp dirs to clean up
 // ---------------------------------------------------------------------------
@@ -180,9 +206,12 @@ afterEach(() => {
   } else {
     process.env.CANON_SYNC_JOBS = originalSyncJobs;
   }
-  // Force CI off so isSyncMode() doesn't activate for async tests
-  // (We restore original value — if CI was set it means we're running in CI,
-  //  but each test should control sync mode via CANON_SYNC_JOBS explicitly)
+  // Restore CI after each test that may have modified it
+  if (originalCI === undefined) {
+    delete process.env.CI;
+  } else {
+    process.env.CI = originalCI;
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -346,8 +375,10 @@ describe('Integration: cancel', () => {
 
     const jobId = submitResult.job_id;
 
-    // Wait a short time to ensure the process is started
-    await new Promise<void>((resolve) => setTimeout(resolve, 200));
+    // Wait for the job to reach running status before cancelling.
+    // Polling until a known state is deterministic — unlike a fixed sleep it
+    // does not depend on wall-clock execution speed.
+    await pollUntilRunning(manager, jobId);
 
     // Cancel
     const cancelResult = manager.cancel(jobId);
