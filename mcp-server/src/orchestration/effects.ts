@@ -5,7 +5,7 @@
  */
 
 import { readFile, readdir } from "fs/promises";
-import { join, basename, isAbsolute } from "path";
+import { join, basename, isAbsolute, resolve, relative } from "path";
 import { z } from "zod";
 import { DriftStore } from "../drift/store.ts";
 import { generateId } from "../utils/id.ts";
@@ -320,14 +320,23 @@ async function resolveAndRead(
   workspace: string,
   artifacts: string[],
 ): Promise<string | null> {
+  const resolvedWorkspace = resolve(workspace);
+
   // First try matching against reported artifacts list
   const match = artifacts.find((a) => basename(a) === artifactName || a.endsWith(artifactName));
   if (match) {
     const fullPath = isAbsolute(match) ? match : join(workspace, match);
-    try {
-      return await readFile(fullPath, "utf-8");
-    } catch {
-      // fall through to directory scan
+    const resolvedPath = resolve(fullPath);
+    // Workspace containment check — prevent path traversal via crafted artifacts
+    const rel = relative(resolvedWorkspace, resolvedPath);
+    if (isAbsolute(rel) || rel === ".." || rel.startsWith("../") || rel.startsWith("..\\")) {
+      // Path escapes workspace — skip this match
+    } else {
+      try {
+        return await readFile(resolvedPath, "utf-8");
+      } catch {
+        // fall through to directory scan
+      }
     }
   }
 
