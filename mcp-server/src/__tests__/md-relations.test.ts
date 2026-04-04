@@ -9,17 +9,17 @@ describe("classifyMdNode", () => {
   it("classifies by directory prefix", () => {
     expect(classifyMdNode("flows/feature.md")).toBe("flow");
     expect(classifyMdNode("flows/fragments/context-sync.md")).toBe("fragment");
-    expect(classifyMdNode("agents/canon-architect.md")).toBe("agent");
+    expect(classifyMdNode(".claude/subagents/canon-architect.md")).toBe("agent");
     expect(classifyMdNode("templates/design-decision.md")).toBe("template");
     expect(classifyMdNode("principles/rules/fail-closed.md")).toBe("principle");
     expect(classifyMdNode("skills/canon/SKILL.md")).toBe("skill");
-    expect(classifyMdNode("commands/pr-review.md")).toBe("command");
+    expect(classifyMdNode("skills/canon/commands/pr-review.md")).toBe("command");
   });
 
   it("excludes doc files", () => {
     expect(classifyMdNode("flows/.claude/CLAUDE.md")).toBeUndefined();
     expect(classifyMdNode("flows/SCHEMA.md")).toBeUndefined();
-    expect(classifyMdNode("agents/.claude/CLAUDE.md")).toBeUndefined();
+    expect(classifyMdNode(".claude/subagents/.claude/CLAUDE.md")).toBeUndefined();
   });
 
   it("returns undefined for non-md files", () => {
@@ -91,7 +91,7 @@ describe("inferMdRelations", () => {
     await mkdir(join(tmpDir, "flows", "fragments"), { recursive: true });
     await mkdir(join(tmpDir, "templates"), { recursive: true });
     await mkdir(join(tmpDir, "principles", "rules"), { recursive: true });
-    await mkdir(join(tmpDir, "commands"), { recursive: true });
+    await mkdir(join(tmpDir, "skills", "canon", "commands"), { recursive: true });
   });
 
   afterEach(async () => {
@@ -212,41 +212,46 @@ describe("inferMdRelations", () => {
   });
 
   it("infers edges from file path references", async () => {
+    await mkdir(join(tmpDir, ".claude", "subagents"), { recursive: true });
     await writeFile(
-      join(tmpDir, "agents", "canon-reviewer.md"),
-      "---\nname: canon-reviewer\n---\n\nLoad per `${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md`. Also see agents/canon-guide.md.",
+      join(tmpDir, ".claude", "subagents", "canon-reviewer.md"),
+      "---\nname: canon-reviewer\n---\n\nLoad per `${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md`. Also see principles/rules/fail-closed.md.",
+    );
+    await writeFile(
+      join(tmpDir, "principles", "rules", "fail-closed.md"),
+      "---\nid: fail-closed\n---\nBody.",
     );
 
     const filePaths = [
-      "agents/canon-reviewer.md",
+      ".claude/subagents/canon-reviewer.md",
       "templates/review-checklist.md",
-      "agents/canon-guide.md",
+      "principles/rules/fail-closed.md",
     ];
     const fileSet = new Set(filePaths);
     const maps = await buildNameMaps(filePaths, tmpDir);
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
 
     const pathEdges = edges.filter(
-      (e) => e.source === "agents/canon-reviewer.md" && e.relation === "ref:path",
+      (e) => e.source === ".claude/subagents/canon-reviewer.md" && e.relation === "ref:path",
     );
     expect(pathEdges).toHaveLength(2);
   });
 
   it("infers command → flow and command → command edges via generic resolution", async () => {
     await writeFile(
-      join(tmpDir, "commands", "pr-review.md"),
+      join(tmpDir, "skills", "canon", "commands", "pr-review.md"),
       "---\ndescription: Review a PR\n---\n\nLaunch `review-only` flow. See also `/canon:edit-principle`.",
     );
     await writeFile(join(tmpDir, "flows", "review-only.md"), "---\nname: review-only\n---\n");
     await writeFile(
-      join(tmpDir, "commands", "edit-principle.md"),
+      join(tmpDir, "skills", "canon", "commands", "edit-principle.md"),
       "---\ndescription: Edit principle\n---\n",
     );
 
     const filePaths = [
-      "commands/pr-review.md",
+      "skills/canon/commands/pr-review.md",
       "flows/review-only.md",
-      "commands/edit-principle.md",
+      "skills/canon/commands/edit-principle.md",
     ];
     const fileSet = new Set(filePaths);
     const maps = await buildNameMaps(filePaths, tmpDir);
@@ -254,7 +259,8 @@ describe("inferMdRelations", () => {
 
     // "review-only" resolves via stem/id to the flow file
     const flowEdge = edges.find(
-      (e) => e.source === "commands/pr-review.md" && e.target === "flows/review-only.md",
+      (e) =>
+        e.source === "skills/canon/commands/pr-review.md" && e.target === "flows/review-only.md",
     );
     expect(flowEdge).toBeDefined();
   });
@@ -290,7 +296,7 @@ describe("codebaseGraph with md-relations", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-graph-md-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
-    await mkdir(join(tmpDir, "agents"), { recursive: true });
+    await mkdir(join(tmpDir, ".claude", "subagents"), { recursive: true });
     await mkdir(join(tmpDir, "flows", "fragments"), { recursive: true });
     await mkdir(join(tmpDir, "templates"), { recursive: true });
     await mkdir(join(tmpDir, "principles", "rules"), { recursive: true });
@@ -299,7 +305,7 @@ describe("codebaseGraph with md-relations", () => {
       JSON.stringify({
         layers: {
           docs: ["templates", "principles"],
-          orchestration: ["flows", "agents"],
+          orchestration: ["flows", ".claude/subagents"],
         },
       }),
     );
@@ -319,10 +325,13 @@ describe("codebaseGraph with md-relations", () => {
       "---\nname: context-sync\nstates:\n  sync:\n    type: single\n    agent: canon-scribe\n---\n",
     );
     await writeFile(
-      join(tmpDir, "agents", "canon-architect.md"),
+      join(tmpDir, ".claude", "subagents", "canon-architect.md"),
       "---\nname: canon-architect\n---\n",
     );
-    await writeFile(join(tmpDir, "agents", "canon-scribe.md"), "---\nname: canon-scribe\n---\n");
+    await writeFile(
+      join(tmpDir, ".claude", "subagents", "canon-scribe.md"),
+      "---\nname: canon-scribe\n---\n",
+    );
 
     const result = await codebaseGraph({}, tmpDir, "/nonexistent");
 
@@ -331,7 +340,7 @@ describe("codebaseGraph with md-relations", () => {
     expect(flowNode).toBeDefined();
     expect(flowNode?.kind).toBe("flow");
 
-    const agentNode = result.nodes.find((n) => n.id === "agents/canon-architect.md");
+    const agentNode = result.nodes.find((n) => n.id === ".claude/subagents/canon-architect.md");
     expect(agentNode).toBeDefined();
     expect(agentNode?.kind).toBe("agent");
 

@@ -35,12 +35,12 @@ function isExcludedDoc(filePath: string): boolean {
 const DEFAULT_KIND_RULES: MdKindRule[] = [
   { kind: "fragment", prefix: "flows/fragments/" },
   { kind: "flow", prefix: "flows/" },
-  { kind: "agent", prefix: "agents/" },
+  { kind: "agent", prefix: ".claude/subagents/" },
   { kind: "template", prefix: "templates/" },
   { kind: "principle", prefix: "principles/" },
   { kind: "principle", prefix: ".canon/principles/" },
+  { kind: "command", prefix: "skills/canon/commands/" },
   { kind: "skill", prefix: "skills/" },
-  { kind: "command", prefix: "commands/" },
 ];
 
 // ── Node classification ──

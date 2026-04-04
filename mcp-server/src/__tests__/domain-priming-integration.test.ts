@@ -24,9 +24,9 @@ import { describe, expect, it } from "vitest";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../../..");
 
-const DOMAINS_DIR = join(REPO_ROOT, "domains");
-const ARCHITECT_MD = join(REPO_ROOT, "agents", "canon-architect.md");
-const IMPLEMENTOR_MD = join(REPO_ROOT, "agents", "canon-implementor.md");
+const DOMAINS_DIR = join(REPO_ROOT, "domain-primers");
+const ARCHITECT_MD = join(REPO_ROOT, ".claude", "subagents", "canon-architect.md");
+const IMPLEMENTOR_MD = join(REPO_ROOT, ".claude", "subagents", "canon-implementor.md");
 const TASK_PLAN_TEMPLATE = join(REPO_ROOT, "templates", "task-plan.md");
 
 function readFile(path: string): string {
@@ -172,9 +172,9 @@ describe("canon-implementor.md — Step 2 domain priming", () => {
     expect(content).toContain(".canon/domains/");
   });
 
-  it("Step 2 specifies built-in fallback path (CLAUDE_PLUGIN_ROOT/domains/)", () => {
+  it("Step 2 specifies built-in fallback path (CLAUDE_PLUGIN_ROOT/domain-primers/)", () => {
     const content = readFile(IMPLEMENTOR_MD);
-    expect(content).toContain("${CLAUDE_PLUGIN_ROOT}/domains/");
+    expect(content).toContain("${CLAUDE_PLUGIN_ROOT}/domain-primers/");
   });
 
   it("Step 2 instructs silent skip when domain file is missing (no NEEDS_CONTEXT)", () => {
