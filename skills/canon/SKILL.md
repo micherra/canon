@@ -53,7 +53,7 @@ If you find yourself composing a substantive answer without having spawned an ag
 
 ## Driving the Pipeline
 
-For build/review/security/explore/test intents, follow the orchestrator protocol in `${CLAUDE_PLUGIN_ROOT}/agents/canon-orchestrator.md`. The key loop:
+For build/review/security/explore/test intents, follow the orchestrator protocol in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/canon-orchestrator.md`. The key loop:
 
 1. `load_flow(flow_name)` → get flow definition
 2. `init_workspace(...)` → create or resume workspace

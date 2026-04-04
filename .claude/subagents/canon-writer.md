@@ -37,7 +37,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md
 
 Read 2-3 existing entries as examples:
 - For **new-principle**: Read from `${CLAUDE_PLUGIN_ROOT}/principles/` — pick entries from different severity subdirectories (`rules/`, `strong-opinions/`, `conventions/`)
-- For **new-agent-rule**: Read from `${CLAUDE_PLUGIN_ROOT}/agent-rules/` — pick 2-3 examples
+- For **new-agent-rule**: Read from `${CLAUDE_PLUGIN_ROOT}/.claude/rules/` — pick 2-3 examples
 
 ### Step 2: Interview the user (if needed)
 
@@ -101,7 +101,7 @@ Read the complete worked example at `${CLAUDE_PLUGIN_ROOT}/skills/canon/referenc
 
 Use the `list_principles` MCP tool to load the index of all existing entries (metadata only — id, title, severity, tags, scope). This avoids loading full bodies into context.
 
-For agent-rules, also glob `.canon/agent-rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/agent-rules/*.md` and read only their frontmatter.
+For agent-rules, also glob `.canon/rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/.claude/rules/*.md` and read only their frontmatter.
 
 Check for:
 
@@ -120,7 +120,7 @@ Present findings and ask whether to proceed, adjust, or cancel.
 ### Step 6: Save the file
 
 - **Principles**: Save to `.canon/principles/{severity-subdir}/{id}.md` where `severity-subdir` is `rules/`, `strong-opinions/`, or `conventions/`. Create directory if needed.
-- **Agent-rules**: Ask the user: plugin-level (`${CLAUDE_PLUGIN_ROOT}/agent-rules/{id}.md`) or project-local (`.canon/agent-rules/{id}.md`)?
+- **Agent-rules**: Ask the user: plugin-level (`${CLAUDE_PLUGIN_ROOT}/.claude/rules/{id}.md`) or project-local (`.canon/rules/{id}.md`)?
 
 ### Step 7: Validate
 
@@ -148,8 +148,8 @@ ${CLAUDE_PLUGIN_ROOT}/skills/canon/references/principle-format.md
 Search for the entry by ID in:
 1. `.canon/principles/**/*.md` (project-local principles)
 2. `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md` (built-in principles)
-3. `.canon/agent-rules/*.md` (project-local agent-rules)
-4. `${CLAUDE_PLUGIN_ROOT}/agent-rules/*.md` (built-in agent-rules)
+3. `.canon/rules/*.md` (project-local agent-rules)
+4. `${CLAUDE_PLUGIN_ROOT}/.claude/rules/*.md` (built-in agent-rules)
 
 Present its current state:
 - Frontmatter fields (id, title, severity, scope, tags)

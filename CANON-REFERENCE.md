@@ -6,10 +6,12 @@
 
 ```
 canon/
-├── agents/               # Agent definitions (YAML frontmatter + markdown instructions)
+├── .claude/
+│   ├── subagents/        # Agent definitions (YAML frontmatter + markdown instructions)
+│   └── rules/            # Agent-behavior rules (agent-rules, loaded per agent)
 ├── flows/                # Flow state machine definitions (YAML frontmatter + spawn instructions)
 │   └── fragments/        # Reusable state groups included by flows
-├── hooks/                # Pre/post tool-use interceptor scripts + hooks.json registry
+├── hooks/                # Pre/post tool-use interceptor scripts
 ├── mcp-server/           # TypeScript MCP server (Canon harness tools)
 │   └── src/
 │       ├── orchestration/  # Flow runtime: board, messaging, convergence, events, gate-runner, etc.
@@ -17,11 +19,12 @@ canon/
 │       ├── drift/          # JSONL-backed drift tracking (reviews)
 │       └── graph/          # Dependency graph scanner and priority scoring
 ├── principles/           # Canonical engineering principles (markdown)
+├── domain-primers/       # Domain-specific priming context for implementors and architects
 ├── skills/canon/         # Canon skill definition (entry point for Claude Code)
+│   ├── commands/         # CLI command definitions (e.g., /canon:init, /canon:doctor)
 │   └── references/       # Skill reference fragments loaded on demand
 ├── templates/            # Artifact templates agents must follow
 ├── mcp-server/src/ui/    # Svelte/Sigma.js dashboard UI (builds to single HTML for MCP App)
-├── commands/             # CLI command definitions
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
     └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)
 ```
@@ -97,4 +100,4 @@ This project uses Canon for engineering principles. Before writing or modifying 
 
 ## Hooks
 
-`hooks/hooks.json` registers pre/post tool-use interceptors that run automatically. Key hooks: `destructive-guard.sh` (blocks dangerous git ops), `workspace-lock-guard.sh` (prevents concurrent builds), `pre-commit-check.sh` (secrets + compliance), `principle-inject.sh` (injects principle summaries into prompts). See `hooks/.claude/CLAUDE.md` for the full registry.
+Hooks are pre/post tool-use interceptor scripts in `hooks/`. Key hooks: `destructive-guard.sh` (blocks dangerous git ops), `workspace-lock-guard.sh` (prevents concurrent builds), `pre-commit-check.sh` (secrets + compliance), `principle-inject.sh` (injects principle summaries into prompts).

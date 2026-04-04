@@ -37,7 +37,7 @@
 
 **Default to action.** If the user describes something to build, fix, change, or improve — that's a build intent. Natural requests like "the search is broken", "add dark mode", "clean up the API layer" are all build intents.
 
-**Before classifying each message independently, check conversation continuity.** If the previous turn spawned a specialist agent and the user's follow-up continues the same topic, route to the same agent type again. Break signals: explicit topic change, build directive, active pipeline, or clearly different intent. See **Conversation Continuity** in `agents/canon-orchestrator.md` for the full rules.
+**Before classifying each message independently, check conversation continuity.** If the previous turn spawned a specialist agent and the user's follow-up continues the same topic, route to the same agent type again. Break signals: explicit topic change, build directive, active pipeline, or clearly different intent. See **Conversation Continuity** in `skills/canon/references/canon-orchestrator.md` for the full rules.
 
 | Intent | Action |
 |--------|--------|
@@ -86,7 +86,7 @@ The orchestrator MUST minimize text output during the state machine loop. Every 
 
 ## Driving the State Machine
 
-Read `agents/canon-orchestrator.md` for the full protocol. The key loop:
+Read `skills/canon/references/canon-orchestrator.md` for the full protocol. The key loop:
 
 1. `resolved_flow = load_flow(flow_name)` → get flow definition **object**
 2. `init_workspace(...)` → create or resume workspace
