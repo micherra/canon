@@ -20,7 +20,7 @@ canon/
 ├── skills/canon/         # Canon skill definition (entry point for Claude Code)
 │   └── references/       # Skill reference fragments loaded on demand
 ├── templates/            # Artifact templates agents must follow
-├── mcp-server/ui/        # Svelte/Sigma.js dashboard UI (builds to single HTML for MCP App)
+├── mcp-server/src/ui/    # Svelte/Sigma.js dashboard UI (builds to single HTML for MCP App)
 ├── commands/             # CLI command definitions
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
     └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)

@@ -12,19 +12,19 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export interface ClusterInput {
+export type ClusterInput = {
   path: string;
   status: "added" | "modified" | "deleted" | "renamed";
   layer: string;
-}
+};
 
-export interface Cluster {
+export type Cluster = {
   id: string;
   title: string;
   type: "new-feature" | "removal" | "prefix-group" | "layer-group" | "other";
   description: string;
   files: ClusterInput[];
-}
+};
 
 // ---------------------------------------------------------------------------
 // Helpers — each does one thing
@@ -167,7 +167,10 @@ export function clusterIcon(type: Cluster["type"]): string {
  * Groups files by directory. If ALL files in that directory have status "added",
  * creates a "new-feature" cluster.
  */
-function clusterNewFeatures(files: ClusterInput[]): { clusters: Cluster[]; remaining: ClusterInput[] } {
+function clusterNewFeatures(files: ClusterInput[]): {
+  clusters: Cluster[];
+  remaining: ClusterInput[];
+} {
   const byDir = groupByDirectory(files);
   const clusters: Cluster[] = [];
   const clustered = new Set<string>();
@@ -195,7 +198,10 @@ function clusterNewFeatures(files: ClusterInput[]): { clusters: Cluster[]; remai
  * Groups files by directory. If ALL files in that directory have status "deleted",
  * creates a "removal" cluster.
  */
-function clusterRemovals(files: ClusterInput[]): { clusters: Cluster[]; remaining: ClusterInput[] } {
+function clusterRemovals(files: ClusterInput[]): {
+  clusters: Cluster[];
+  remaining: ClusterInput[];
+} {
   const byDir = groupByDirectory(files);
   const clusters: Cluster[] = [];
   const clustered = new Set<string>();
@@ -248,7 +254,10 @@ function buildPrefixMap(unclustered: ClusterInput[]): Map<string, ClusterInput[]
 }
 
 /** Find the prefix covering the most files in the map. Returns empty string if none found. */
-function findBestPrefix(prefixMap: Map<string, ClusterInput[]>): { prefix: string; group: ClusterInput[] } {
+function findBestPrefix(prefixMap: Map<string, ClusterInput[]>): {
+  prefix: string;
+  group: ClusterInput[];
+} {
   let bestPrefix = "";
   let bestGroup: ClusterInput[] = [];
   for (const [prefix, group] of prefixMap) {
@@ -260,7 +269,10 @@ function findBestPrefix(prefixMap: Map<string, ClusterInput[]>): { prefix: strin
   return { prefix: bestPrefix, group: bestGroup };
 }
 
-function clusterByPrefix(files: ClusterInput[]): { clusters: Cluster[]; remaining: ClusterInput[] } {
+function clusterByPrefix(files: ClusterInput[]): {
+  clusters: Cluster[];
+  remaining: ClusterInput[];
+} {
   const byDir = groupByDirectory(files);
   const clusters: Cluster[] = [];
   const clustered = new Set<string>();
@@ -352,6 +364,44 @@ function mergeSmallClusters(clusters: Cluster[], orphans: ClusterInput[]): Clust
  * If all files share the same directory (no subdirectory variation), splits
  * into chunks of 30 files each.
  */
+function splitBySubdirectory(cluster: Cluster, bySubdir: Map<string, ClusterInput[]>): Cluster[] {
+  const result: Cluster[] = [];
+  for (const [subdir, subdirFiles] of bySubdir) {
+    const label = subdir.split("/").pop() ?? subdir;
+    const sub: Cluster = {
+      id: slugify(`${cluster.id}-${label}`),
+      title: `${cluster.title} / ${label}`,
+      type: cluster.type,
+      description: synthesizeDescription(subdirFiles),
+      files: subdirFiles,
+    };
+    if (subdirFiles.length > 30) {
+      result.push(...splitLargeClusters([sub]));
+    } else {
+      result.push(sub);
+    }
+  }
+  return result;
+}
+
+function splitIntoChunks(cluster: Cluster): Cluster[] {
+  const chunkSize = 30;
+  const result: Cluster[] = [];
+  let part = 1;
+  for (let i = 0; i < cluster.files.length; i += chunkSize) {
+    const chunk = cluster.files.slice(i, i + chunkSize);
+    result.push({
+      id: slugify(`${cluster.id}-part-${part}`),
+      title: `${cluster.title} (${part})`,
+      type: cluster.type,
+      description: synthesizeDescription(chunk),
+      files: chunk,
+    });
+    part++;
+  }
+  return result;
+}
+
 function splitLargeClusters(clusters: Cluster[]): Cluster[] {
   const result: Cluster[] = [];
 
@@ -361,42 +411,12 @@ function splitLargeClusters(clusters: Cluster[]): Cluster[] {
       continue;
     }
 
-    // Try to split by subdirectory
     const bySubdir = groupByDirectory(cluster.files);
 
     if (bySubdir.size > 1) {
-      // Multiple subdirectories — split by subdirectory
-      for (const [subdir, subdirFiles] of bySubdir) {
-        const label = subdir.split("/").pop() ?? subdir;
-        // Recursively split if a subdirectory chunk is also > 30
-        const sub: Cluster = {
-          id: slugify(`${cluster.id}-${label}`),
-          title: `${cluster.title} / ${label}`,
-          type: cluster.type,
-          description: synthesizeDescription(subdirFiles),
-          files: subdirFiles,
-        };
-        if (subdirFiles.length > 30) {
-          result.push(...splitLargeClusters([sub]));
-        } else {
-          result.push(sub);
-        }
-      }
+      result.push(...splitBySubdirectory(cluster, bySubdir));
     } else {
-      // All in one directory — split into chunks of 30
-      const chunkSize = 30;
-      let part = 1;
-      for (let i = 0; i < cluster.files.length; i += chunkSize) {
-        const chunk = cluster.files.slice(i, i + chunkSize);
-        result.push({
-          id: slugify(`${cluster.id}-part-${part}`),
-          title: `${cluster.title} (${part})`,
-          type: cluster.type,
-          description: synthesizeDescription(chunk),
-          files: chunk,
-        });
-        part++;
-      }
+      result.push(...splitIntoChunks(cluster));
     }
   }
 

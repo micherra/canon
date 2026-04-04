@@ -75,15 +75,21 @@ installFuzzyValidation(server);
 /** Helper to register a tool + resource pair for an MCP App UI. */
 const registeredResources = new Set<string>();
 
+/** Options for registering a tool with an MCP App UI. */
+type RegisterToolWithUiOptions<Schema extends ZodRawShapeCompat> = {
+  resourceUri: string;
+  title: string;
+  description: string;
+  inputSchema: Schema;
+  htmlFile: string;
+  handler: ToolCallback<Schema>;
+};
+
 function registerToolWithUi<Schema extends ZodRawShapeCompat>(
   toolName: string,
-  resourceUri: string,
-  title: string,
-  description: string,
-  inputSchema: Schema,
-  htmlFile: string,
-  handler: ToolCallback<Schema>,
+  options: RegisterToolWithUiOptions<Schema>,
 ) {
+  const { resourceUri, title, description, inputSchema, htmlFile, handler } = options;
   registerAppTool(
     server,
     toolName,
@@ -99,7 +105,7 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
   if (!registeredResources.has(resourceUri)) {
     registeredResources.add(resourceUri);
     registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
-      const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
+      const html = await readFile(join(mcpServerRoot, "dist", "src", "ui", htmlFile), "utf-8");
       return {
         contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }],
       };
@@ -109,19 +115,19 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
 
 // --- MCP App tool UIs ---
 
-registerToolWithUi(
-  "show_pr_impact",
-  "ui://canon/pr-review",
-  "PR Review",
-  "Opens the PR Review view — change analysis, impact assessment, and review violations for a pull request or branch.",
-  {
+registerToolWithUi("show_pr_impact", {
+  resourceUri: "ui://canon/pr-review",
+  title: "PR Review",
+  description:
+    "Opens the PR Review view — change analysis, impact assessment, and review violations for a pull request or branch.",
+  inputSchema: {
     branch: z.string().optional().describe("Filter to reviews for this branch"),
     pr_number: z.number().optional().describe("Filter to reviews for this PR number"),
     diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
     incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
   },
-  "pr-review.html",
-  wrapHandler(async (input) => {
+  htmlFile: "pr-review.html",
+  handler: wrapHandler(async (input) => {
     return showPrImpact(projectDir, {
       branch: input.branch,
       pr_number: input.pr_number,
@@ -129,7 +135,7 @@ registerToolWithUi(
       incremental: input.incremental,
     });
   }),
-);
+});
 
 server.registerTool(
   "get_principles",
@@ -222,12 +228,12 @@ server.registerTool(
   }),
 );
 
-registerToolWithUi(
-  "codebase_graph",
-  "ui://canon/codebase-graph",
-  "Codebase Graph",
-  "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
-  {
+registerToolWithUi("codebase_graph", {
+  resourceUri: "ui://canon/codebase-graph",
+  title: "Codebase Graph",
+  description:
+    "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
+  inputSchema: {
     root_dir: z
       .string()
       .optional()
@@ -257,26 +263,26 @@ registerToolWithUi(
       .optional()
       .describe("Explicit list of changed files to highlight"),
   },
-  "codebase-graph.html",
-  wrapHandler(async (input) => {
+  htmlFile: "codebase-graph.html",
+  handler: wrapHandler(async (input) => {
     const result = await codebaseGraph(input, projectDir, pluginDir);
     return compactGraph(result);
   }),
-);
+});
 
-registerToolWithUi(
-  "get_file_context",
-  "ui://canon/file-context",
-  "File Context",
-  "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data.",
-  {
+registerToolWithUi("get_file_context", {
+  resourceUri: "ui://canon/file-context",
+  title: "File Context",
+  description:
+    "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data.",
+  inputSchema: {
     file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
   },
-  "file-context.html",
-  wrapHandler(async (input) => {
+  htmlFile: "file-context.html",
+  handler: wrapHandler(async (input) => {
     return getFileContext(input, projectDir);
   }),
-);
+});
 
 server.registerTool(
   "store_summaries",
@@ -354,7 +360,6 @@ server.registerTool(
     return initWorkspaceFlow(input, projectDir, pluginDir);
   }),
 );
-
 
 server.registerTool(
   "report_result",
@@ -510,8 +515,6 @@ server.registerTool(
   }),
 );
 
-
-
 server.registerTool(
   "record_agent_metrics",
   {
@@ -653,7 +656,6 @@ server.registerTool(
     return resolveWaveEvent(input);
   }),
 );
-
 
 server.registerTool(
   "resolve_after_consultations",
@@ -1123,12 +1125,12 @@ server.registerTool(
   wrapHandler(async (input) => codebaseGraphPoll(input)),
 );
 
-registerToolWithUi(
-  "codebase_graph_materialize",
-  "ui://canon/codebase-graph",
-  "Codebase Graph",
-  "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
-  {
+registerToolWithUi("codebase_graph_materialize", {
+  resourceUri: "ui://canon/codebase-graph",
+  title: "Codebase Graph",
+  description:
+    "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
+  inputSchema: {
     job_id: z.string().describe("Job ID of a completed codebase graph job"),
     diff_base: z
       .string()
@@ -1143,9 +1145,9 @@ registerToolWithUi(
       .optional()
       .describe("Graph resolution: file (default) or entity"),
   },
-  "codebase-graph.html",
-  wrapHandler(async (input) => codebaseGraphMaterialize(input, projectDir, pluginDir)),
-);
+  htmlFile: "codebase-graph.html",
+  handler: wrapHandler(async (input) => codebaseGraphMaterialize(input, projectDir, pluginDir)),
+});
 
 // --- Signal handlers for child process cleanup ---
 

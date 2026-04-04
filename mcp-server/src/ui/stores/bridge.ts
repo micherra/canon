@@ -1,4 +1,9 @@
-import { App, applyDocumentTheme, applyHostFonts, applyHostStyleVariables } from "@modelcontextprotocol/ext-apps";
+import {
+  App,
+  applyDocumentTheme,
+  applyHostFonts,
+  applyHostStyleVariables,
+} from "@modelcontextprotocol/ext-apps";
 
 let app: App | null = null;
 
@@ -12,8 +17,32 @@ function extractToolJson(result: { content?: Array<{ type: string; text?: string
   return text ? JSON.parse(text) : null;
 }
 
+type ParsedToolResult = { data: unknown } | { error: Error };
+
+function parseToolResultParams(params: { isError?: boolean }): ParsedToolResult {
+  try {
+    const parsed = params.isError
+      ? null
+      : extractToolJson(params as unknown as { content?: Array<{ type: string; text?: string }> });
+    return { data: parsed };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)) };
+  }
+}
+
+function dispatchToolResult(
+  result: ParsedToolResult,
+  resolve: ((data: unknown) => void) | null,
+  reject: ((err: Error) => void) | null,
+): void {
+  if (resolve) {
+    if ("error" in result) reject?.(result.error);
+    else resolve(result.data);
+  }
+}
+
 /** Buffered early result (if ontoolresult fires before waitForToolResult is called). */
-let earlyResult: { data: unknown } | { error: Error } | null = null;
+let earlyResult: ParsedToolResult | null = null;
 /** Pending tool-result promise resolved by ontoolresult notification. */
 let toolResultResolve: ((data: unknown) => void) | null = null;
 let toolResultReject: ((err: Error) => void) | null = null;
@@ -29,24 +58,13 @@ export const bridge = {
     };
 
     instance.ontoolresult = (params) => {
-      let parsed: unknown;
-      let parseError: Error | null = null;
-      try {
-        parsed = params.isError
-          ? null
-          : extractToolJson(params as unknown as { content?: Array<{ type: string; text?: string }> });
-      } catch (e) {
-        parseError = e instanceof Error ? e : new Error(String(e));
-      }
-
+      const result = parseToolResultParams(params);
       if (toolResultResolve) {
-        if (parseError) toolResultReject?.(parseError);
-        else toolResultResolve(parsed);
+        dispatchToolResult(result, toolResultResolve, toolResultReject);
         toolResultResolve = null;
         toolResultReject = null;
       } else {
-        // Buffer for later waitForToolResult() call
-        earlyResult = parseError ? { error: parseError } : { data: parsed };
+        earlyResult = result;
       }
     };
 

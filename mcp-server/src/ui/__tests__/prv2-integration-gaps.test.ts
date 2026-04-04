@@ -36,9 +36,9 @@ const uiDir = join(__dirname, "..");
 
 // ── Pure function imports ────────────────────────────────────────────────────
 
-import type { ReviewEntry } from "../../src/schema.ts";
+import type { ReviewEntry } from "../../schema.ts";
 // buildFileViolationMap lives in src/ — import via relative path from ui/__tests__
-import { buildFileViolationMap } from "../../src/tools/pr-review-data.ts";
+import { buildFileViolationMap } from "../../tools/pr-review-data.ts";
 import {
   type Cluster,
   type ClusterInput,
@@ -50,7 +50,11 @@ import { SEVERITY_COLORS } from "../lib/constants.ts";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
-function makeClusterInput(path: string, status: ClusterInput["status"], layer: string): ClusterInput {
+function makeClusterInput(
+  path: string,
+  status: ClusterInput["status"],
+  layer: string,
+): ClusterInput {
   return { path, status, layer };
 }
 
@@ -80,7 +84,13 @@ describe("clusterIcon() — direct unit tests (prv2-02 declared gap)", () => {
   });
 
   it("all 5 cluster types return a non-empty string", () => {
-    const types: Cluster["type"][] = ["new-feature", "removal", "prefix-group", "layer-group", "other"];
+    const types: Cluster["type"][] = [
+      "new-feature",
+      "removal",
+      "prefix-group",
+      "layer-group",
+      "other",
+    ];
     for (const type of types) {
       expect(clusterIcon(type).length).toBeGreaterThan(0);
     }
@@ -97,13 +107,19 @@ describe("synthesizeDescription() — exact string content (prv2-02 declared gap
   });
 
   it("counts added files correctly in the string", () => {
-    const files = [makeClusterInput("src/a.ts", "added", "tools"), makeClusterInput("src/b.ts", "added", "tools")];
+    const files = [
+      makeClusterInput("src/a.ts", "added", "tools"),
+      makeClusterInput("src/b.ts", "added", "tools"),
+    ];
     const result = synthesizeDescription(files);
     expect(result).toContain("2 files added");
   });
 
   it("counts modified files correctly; renamed counts as modified", () => {
-    const files = [makeClusterInput("src/a.ts", "modified", "tools"), makeClusterInput("src/b.ts", "renamed", "tools")];
+    const files = [
+      makeClusterInput("src/a.ts", "modified", "tools"),
+      makeClusterInput("src/b.ts", "renamed", "tools"),
+    ];
     const result = synthesizeDescription(files);
     expect(result).toContain("2 files modified");
   });
@@ -215,7 +231,10 @@ describe("clusterFiles() — renamed status handling (prv2-02 declared gap)", ()
   });
 
   it("synthesizeDescription counts renamed files in the modified count", () => {
-    const files = [makeClusterInput("src/a.ts", "renamed", "tools"), makeClusterInput("src/b.ts", "modified", "tools")];
+    const files = [
+      makeClusterInput("src/a.ts", "renamed", "tools"),
+      makeClusterInput("src/b.ts", "modified", "tools"),
+    ];
     // renamed and modified are both counted as "modified" in synthesizeDescription
     const desc = synthesizeDescription(files);
     expect(desc).toContain("2 files modified");
@@ -571,19 +590,19 @@ describe("DepRow riskAnnotation conditional render (prv2-04 declared gap)", () =
 
 describe("ImpactTabs Tab C — criticalDeps excludes files in diff (prv2-05 declared gap)", () => {
   // Mirror of the criticalDeps computation in ImpactTabs.svelte
-  interface ImpactFile {
+  type ImpactFile = {
     path: string;
     bucket: string;
     violations?: unknown[];
-  }
-  interface BlastEntry {
+  };
+  type BlastEntry = {
     file: string;
     affected: Array<{ path: string; depth: number }>;
-  }
-  interface CriticalDep {
+  };
+  type CriticalDep = {
     path: string;
     changedFileDependents: string[];
-  }
+  };
 
   function computeCriticalDeps(files: ImpactFile[], blastRadius: BlastEntry[]): CriticalDep[] {
     const changedFilePaths = new Set(files.map((f) => f.path));
@@ -679,10 +698,10 @@ describe("ImpactTabs Tab C — criticalDeps excludes files in diff (prv2-05 decl
 // =============================================================================
 
 describe("ImpactTabs depRiskAnnotation and depRelationship (prv2-05 declared gap)", () => {
-  interface CriticalDep {
+  type CriticalDep = {
     path: string;
     changedFileDependents: string[];
-  }
+  };
 
   function depRiskAnnotation(dep: CriticalDep): string | undefined {
     return dep.changedFileDependents.length > 1
@@ -701,13 +720,15 @@ describe("ImpactTabs depRiskAnnotation and depRelationship (prv2-05 declared gap
   }
 
   it("depRiskAnnotation returns undefined for exactly 1 dependent", () => {
-    expect(depRiskAnnotation({ path: "src/x.ts", changedFileDependents: ["src/a.ts"] })).toBeUndefined();
+    expect(
+      depRiskAnnotation({ path: "src/x.ts", changedFileDependents: ["src/a.ts"] }),
+    ).toBeUndefined();
   });
 
   it("depRiskAnnotation returns 'affects 2 changed files' for 2 dependents", () => {
-    expect(depRiskAnnotation({ path: "src/x.ts", changedFileDependents: ["src/a.ts", "src/b.ts"] })).toBe(
-      "affects 2 changed files",
-    );
+    expect(
+      depRiskAnnotation({ path: "src/x.ts", changedFileDependents: ["src/a.ts", "src/b.ts"] }),
+    ).toBe("affects 2 changed files");
   });
 
   it("depRiskAnnotation returns 'affects 3 changed files' for 3 dependents", () => {
@@ -750,11 +771,11 @@ describe("ImpactTabs depRiskAnnotation and depRelationship (prv2-05 declared gap
 // =============================================================================
 
 describe("ImpactTabs Tab A — highImpactFiles filter and maxScore (prv2-05 declared gap)", () => {
-  interface ImpactFile {
+  type ImpactFile = {
     path: string;
     priority_score?: number;
     bucket: string;
-  }
+  };
 
   function computeHighImpact(files: ImpactFile[]): ImpactFile[] {
     return files
@@ -763,12 +784,16 @@ describe("ImpactTabs Tab A — highImpactFiles filter and maxScore (prv2-05 decl
   }
 
   it("includes files with priority_score exactly 15 (boundary — inclusive)", () => {
-    const files: ImpactFile[] = [{ path: "src/a.ts", priority_score: 15, bucket: "needs-attention" }];
+    const files: ImpactFile[] = [
+      { path: "src/a.ts", priority_score: 15, bucket: "needs-attention" },
+    ];
     expect(computeHighImpact(files)).toHaveLength(1);
   });
 
   it("excludes files with priority_score of 14 (just below threshold)", () => {
-    const files: ImpactFile[] = [{ path: "src/a.ts", priority_score: 14, bucket: "needs-attention" }];
+    const files: ImpactFile[] = [
+      { path: "src/a.ts", priority_score: 14, bucket: "needs-attention" },
+    ];
     expect(computeHighImpact(files)).toHaveLength(0);
   });
 
@@ -795,7 +820,8 @@ describe("ImpactTabs Tab A — highImpactFiles filter and maxScore (prv2-05 decl
       { path: "src/b.ts", priority_score: 30, bucket: "needs-attention" },
     ];
     const highImpact = computeHighImpact(files);
-    const maxScore = highImpact.length > 0 ? Math.max(...highImpact.map((f) => f.priority_score ?? 0)) : 1;
+    const maxScore =
+      highImpact.length > 0 ? Math.max(...highImpact.map((f) => f.priority_score ?? 0)) : 1;
     expect(maxScore).toBe(30);
   });
 
@@ -828,11 +854,11 @@ describe("ImpactTabs Tab A — highImpactFiles filter and maxScore (prv2-05 decl
 // =============================================================================
 
 describe("ImpactTabs Tab B — violation sort order (prv2-05 declared gap)", () => {
-  interface FlatViolation {
+  type FlatViolation = {
     filePath: string;
     inDegree: number;
     violation: { principle_id: string; severity: "rule" | "strong-opinion" | "convention" };
-  }
+  };
 
   const SEVERITY_ORDER: Record<string, number> = {
     rule: 0,
@@ -842,7 +868,8 @@ describe("ImpactTabs Tab B — violation sort order (prv2-05 declared gap)", () 
 
   function sortViolations(violations: FlatViolation[]): FlatViolation[] {
     return [...violations].sort((a, b) => {
-      const severityDiff = (SEVERITY_ORDER[a.violation.severity] ?? 99) - (SEVERITY_ORDER[b.violation.severity] ?? 99);
+      const severityDiff =
+        (SEVERITY_ORDER[a.violation.severity] ?? 99) - (SEVERITY_ORDER[b.violation.severity] ?? 99);
       if (severityDiff !== 0) return severityDiff;
       return b.inDegree - a.inDegree;
     });
@@ -850,7 +877,11 @@ describe("ImpactTabs Tab B — violation sort order (prv2-05 declared gap)", () 
 
   it("rule violations sort before strong-opinion", () => {
     const violations: FlatViolation[] = [
-      { filePath: "src/a.ts", inDegree: 3, violation: { principle_id: "p1", severity: "strong-opinion" } },
+      {
+        filePath: "src/a.ts",
+        inDegree: 3,
+        violation: { principle_id: "p1", severity: "strong-opinion" },
+      },
       { filePath: "src/b.ts", inDegree: 3, violation: { principle_id: "p2", severity: "rule" } },
     ];
     const sorted = sortViolations(violations);
@@ -860,8 +891,16 @@ describe("ImpactTabs Tab B — violation sort order (prv2-05 declared gap)", () 
 
   it("strong-opinion violations sort before convention", () => {
     const violations: FlatViolation[] = [
-      { filePath: "src/a.ts", inDegree: 3, violation: { principle_id: "p1", severity: "convention" } },
-      { filePath: "src/b.ts", inDegree: 3, violation: { principle_id: "p2", severity: "strong-opinion" } },
+      {
+        filePath: "src/a.ts",
+        inDegree: 3,
+        violation: { principle_id: "p1", severity: "convention" },
+      },
+      {
+        filePath: "src/b.ts",
+        inDegree: 3,
+        violation: { principle_id: "p2", severity: "strong-opinion" },
+      },
     ];
     const sorted = sortViolations(violations);
     expect(sorted[0].violation.severity).toBe("strong-opinion");
@@ -870,9 +909,17 @@ describe("ImpactTabs Tab B — violation sort order (prv2-05 declared gap)", () 
 
   it("full severity order: rule → strong-opinion → convention", () => {
     const violations: FlatViolation[] = [
-      { filePath: "src/a.ts", inDegree: 0, violation: { principle_id: "p1", severity: "convention" } },
+      {
+        filePath: "src/a.ts",
+        inDegree: 0,
+        violation: { principle_id: "p1", severity: "convention" },
+      },
       { filePath: "src/b.ts", inDegree: 0, violation: { principle_id: "p2", severity: "rule" } },
-      { filePath: "src/c.ts", inDegree: 0, violation: { principle_id: "p3", severity: "strong-opinion" } },
+      {
+        filePath: "src/c.ts",
+        inDegree: 0,
+        violation: { principle_id: "p3", severity: "strong-opinion" },
+      },
     ];
     const sorted = sortViolations(violations);
     expect(sorted[0].violation.severity).toBe("rule");
@@ -894,8 +941,16 @@ describe("ImpactTabs Tab B — violation sort order (prv2-05 declared gap)", () 
 
   it("violations with same severity and same in_degree are not lost", () => {
     const violations: FlatViolation[] = [
-      { filePath: "src/a.ts", inDegree: 5, violation: { principle_id: "p1", severity: "convention" } },
-      { filePath: "src/b.ts", inDegree: 5, violation: { principle_id: "p2", severity: "convention" } },
+      {
+        filePath: "src/a.ts",
+        inDegree: 5,
+        violation: { principle_id: "p1", severity: "convention" },
+      },
+      {
+        filePath: "src/b.ts",
+        inDegree: 5,
+        violation: { principle_id: "p2", severity: "convention" },
+      },
     ];
     const sorted = sortViolations(violations);
     expect(sorted).toHaveLength(2);
@@ -1001,7 +1056,9 @@ describe("Cross-task: buildFileViolationMap → ImpactTabs violation flattening 
         review_id: "rev_b",
         timestamp: "2026-03-25T10:00:00Z",
         files: ["src/shared.ts"],
-        violations: [{ principle_id: "p-convention", severity: "convention", file_path: "src/shared.ts" }],
+        violations: [
+          { principle_id: "p-convention", severity: "convention", file_path: "src/shared.ts" },
+        ],
         honored: [],
         score: {
           rules: { passed: 0, total: 0 },

@@ -232,7 +232,9 @@ describe("clusterFiles() — layer grouping (fallthrough)", () => {
     ];
     const result = clusterFiles(files);
     expect(result.length).toBeGreaterThan(0);
-    const hasLayerOrPrefix = result.some((c) => c.type === "layer-group" || c.type === "prefix-group");
+    const hasLayerOrPrefix = result.some(
+      (c) => c.type === "layer-group" || c.type === "prefix-group",
+    );
     expect(hasLayerOrPrefix).toBe(true);
   });
 });
@@ -244,7 +246,10 @@ describe("clusterFiles() — layer grouping (fallthrough)", () => {
 describe("clusterFiles() — small cluster merge", () => {
   it("merges 1-file clusters into 'other' cluster", () => {
     // Different directories, no common prefix, different layers -> many tiny clusters
-    const files = [makeFile("src/a/one.ts", "modified", "tools"), makeFile("src/b/two.ts", "modified", "graph")];
+    const files = [
+      makeFile("src/a/one.ts", "modified", "tools"),
+      makeFile("src/b/two.ts", "modified", "graph"),
+    ];
     const result = clusterFiles(files);
     // Each 1-file group should merge — result should contain an 'other' cluster
     const other = result.find((c) => c.type === "other" || c.title.toLowerCase().includes("other"));

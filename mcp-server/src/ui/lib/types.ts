@@ -1,12 +1,12 @@
-export interface EntityInfo {
+export type EntityInfo = {
   name: string;
   kind: string;
   is_exported: boolean;
   line_start?: number;
   line_end?: number;
-}
+};
 
-export interface GraphNode {
+export type GraphNode = {
   id: string;
   layer: string;
   color?: string;
@@ -21,33 +21,33 @@ export interface GraphNode {
   dead_code_count?: number;
   community?: number;
   entities?: EntityInfo[];
-}
+};
 
-export interface GraphEdge {
+export type GraphEdge = {
   source: string | { id: string };
   target: string | { id: string };
   kind?: string;
   relation?: string;
   confidence?: number;
   type?: string;
-}
+};
 
-export interface PrincipleInfo {
+export type PrincipleInfo = {
   title: string;
   severity: string;
   summary: string;
-}
+};
 
-export interface GraphData {
+export type GraphData = {
   nodes: GraphNode[];
   edges: GraphEdge[];
   layers?: Array<{ name: string; color: string; file_count: number; index?: number }>;
   insights?: unknown;
   principles?: Record<string, PrincipleInfo>;
-}
+};
 
 /** Index-encoded compact graph from the MCP tool. */
-export interface CompactGraphData {
+export type CompactGraphData = {
   _compact: true;
   node_ids: string[];
   nodes: Array<{
@@ -60,7 +60,7 @@ export interface CompactGraphData {
   edges: [number, number][];
   layers: GraphData["layers"];
   generated_at: string;
-}
+};
 
 /** Decode a compact graph into the standard GraphData the UI expects. */
 export function decodeCompactGraph(compact: CompactGraphData): GraphData {

@@ -1,57 +1,118 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
+
   "vcs": {
-    "enabled": false,
+    "enabled": true,
     "clientKind": "git",
-    "useIgnoreFile": false
+    "useIgnoreFile": true,
+    "defaultBranch": "main",
+    "root": ".."
   },
+
   "files": {
-    "includes": ["src/**", "ui/**"]
+    "maxSize": 400000,
+    "ignoreUnknown": true,
+    "includes": [
+      "src/**/*.{ts,tsx,js,jsx,mts,cts,cjs,mjs,json,jsonc}",
+
+      "!**/*.generated.*",
+      "!**/*.min.*",
+
+      "!!dist",
+      "!!build",
+      "!!.next",
+      "!!coverage",
+      "!!.turbo",
+      "!!tmp",
+      "!!.cache"
+    ]
   },
+
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2,
-    "lineWidth": 120
+    "lineWidth": 100
   },
+
   "linter": {
     "enabled": true,
     "rules": {
       "recommended": true,
+
       "complexity": {
         "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 12 }
+        },
+        "noExcessiveLinesPerFunction": {
           "level": "warn",
-          "options": { "maxAllowedComplexity": 25 }
+          "options": { "maxLines": 60 }
+        },
+        "useMaxParams": {
+          "level": "warn",
+          "options": { "max": 4 }
         },
         "noForEach": "off",
         "useLiteralKeys": "off"
       },
+
       "correctness": {
-        "noUnusedVariables": "warn",
+        "noUnusedVariables": "error",
         "noUnusedImports": "error",
         "noUnusedFunctionParameters": "warn",
+        "noUndeclaredDependencies": {
+          "level": "error",
+          "options": {
+            "devDependencies": [
+              "**/*.test.*",
+              "**/*.spec.*",
+              "**/test/**",
+              "**/tests/**",
+              "**/vitest.setup.*",
+              "**/vite.config.*",
+              "**/vitest.config.*",
+              "**/jest.config.*",
+              "**/playwright.config.*",
+              "**/storybook/**",
+              "**/*.stories.*",
+              "**/.storybook/**",
+              "**/scripts/**"
+            ],
+            "peerDependencies": true,
+            "optionalDependencies": true
+          }
+        },
         "useExhaustiveDependencies": "off"
       },
+
       "style": {
         "noNonNullAssertion": "off",
         "useConst": "error",
         "useImportType": "error",
         "useNodejsImportProtocol": "error",
         "useTemplate": "error",
-        "noParameterAssign": "off"
+        "noParameterAssign": "off",
+        "useConsistentTypeDefinitions": {
+          "level": "warn",
+          "options": { "style": "type" }
+        }
       },
+
       "suspicious": {
-        "noExplicitAny": "warn",
-        "noEmptyBlockStatements": "warn",
+        "noExplicitAny": "error",
+        "noEmptyBlockStatements": "error",
         "noConsole": "off",
         "noTemplateCurlyInString": "off",
         "noAssignInExpressions": "off"
       },
+
       "performance": {
         "noDelete": "off"
       }
     }
   },
+
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
@@ -59,6 +120,7 @@
       "semicolons": "always"
     }
   },
+
   "assist": {
     "enabled": true,
     "actions": {
@@ -66,5 +128,46 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+
+  "overrides": [
+    {
+      "includes": [
+        "src/**/*.test.{ts,tsx,js,jsx}",
+        "src/**/*.spec.{ts,tsx,js,jsx}"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off",
+            "noExcessiveLinesPerFunction": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.d.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "off",
+            "noUnusedFunctionParameters": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/**/*.{ts,tsx,js,jsx}"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUndeclaredDependencies": "off"
+          }
+        }
+      }
+    }
+  ]
 }

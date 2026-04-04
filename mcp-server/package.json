@@ -6,8 +6,8 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc",
-    "lint": "biome check src/ ui/",
-    "lint:fix": "biome check --write src/ ui/",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
     "lint:types": "tsc -p tsconfig.lint.json",
     "start": "tsx src/index.ts",
     "test": "vitest run"

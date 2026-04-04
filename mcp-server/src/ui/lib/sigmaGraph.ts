@@ -18,7 +18,7 @@ import type { GraphData, GraphNode } from "./types";
 
 // ── Filter options (mirrors GraphApi's FilterOptions) ────────────────────────
 
-export interface FilterOptions {
+export type FilterOptions = {
   activeLayers: Set<string>;
   searchQuery: string;
   parsedSearch: {
@@ -30,11 +30,11 @@ export interface FilterOptions {
   prReviewFiles: Set<string> | null;
   insightFilter: Set<string> | null;
   showChangedOnly: boolean;
-}
+};
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export interface SigmaGraphApi {
+export type SigmaGraphApi = {
   applyFilters(opts: FilterOptions): void;
   /** Reset all filters and cascade state — returns graph to default view. */
   resetView(): void;
@@ -44,11 +44,11 @@ export interface SigmaGraphApi {
   highlightCascade(nodeId: string, cascadeFiles: Set<string>): void;
   clearHighlight(): void;
   destroy(): void;
-}
+};
 
 // ── Internal node attribute shape ─────────────────────────────────────────────
 
-interface NodeAttrs {
+type NodeAttrs = {
   label: string;
   x: number;
   y: number;
@@ -62,14 +62,14 @@ interface NodeAttrs {
   community: number;
   // Rendering state
   hidden: boolean;
-}
+};
 
-interface EdgeAttrs {
+type EdgeAttrs = {
   color: string;
   size: number;
   hidden: boolean;
   confidence: number;
-}
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -90,43 +90,61 @@ function safeKey(id: string): string {
 
 // ── Graph construction helpers ─────────────────────────────────────────────────
 
+function initialNodeColor(node: GraphNode): string {
+  if ((node.violation_count ?? 0) > 0) return NODE_VIOLATION;
+  if (node.changed) return NODE_CHANGED;
+  return NODE_DEFAULT;
+}
+
+function buildNodeAttrs(node: GraphNode): NodeAttrs {
+  return {
+    label: node.id.split("/").pop() || node.id,
+    x: Math.random() * 1000,
+    y: Math.random() * 1000,
+    size: nodeSize(node),
+    color: initialNodeColor(node),
+    layer: node.layer || "unknown",
+    changed: node.changed || false,
+    violation_count: node.violation_count || 0,
+    dead_code_count: node.dead_code_count || 0,
+    community: node.community ?? -1,
+    hidden: false,
+  };
+}
+
 function populateNodes(graph: Graph, nodes: GraphNode[]): void {
   for (const node of nodes) {
-    graph.addNode(safeKey(node.id), {
-      label: node.id.split("/").pop() || node.id,
-      x: Math.random() * 1000,
-      y: Math.random() * 1000,
-      size: nodeSize(node),
-      color: (node.violation_count ?? 0) > 0 ? NODE_VIOLATION : node.changed ? NODE_CHANGED : NODE_DEFAULT,
-      layer: node.layer || "unknown",
-      changed: node.changed || false,
-      violation_count: node.violation_count || 0,
-      dead_code_count: node.dead_code_count || 0,
-      community: node.community ?? -1,
+    graph.addNode(safeKey(node.id), buildNodeAttrs(node));
+  }
+}
+
+function resolveEdgeEndpoint(endpoint: string | { id: string }): string {
+  return typeof endpoint === "string" ? endpoint : endpoint.id;
+}
+
+function tryAddEdge(graph: Graph, s: string, t: string, confidence?: number): void {
+  try {
+    graph.addEdge(safeKey(s), safeKey(t), {
+      color: EDGE_DEFAULT,
+      size: edgeSize(confidence),
       hidden: false,
-    } satisfies NodeAttrs);
+      confidence: confidence ?? 1,
+    } satisfies EdgeAttrs);
+  } catch (_err) {
+    // ignore rare duplicate-edge errors in multi: false mode
   }
 }
 
 function populateEdges(graph: Graph, edges: GraphData["edges"]): void {
   const seenEdges = new Set<string>();
   for (const edge of edges) {
-    const s = typeof edge.source === "string" ? edge.source : edge.source.id;
-    const t = typeof edge.target === "string" ? edge.target : edge.target.id;
+    const s = resolveEdgeEndpoint(edge.source);
+    const t = resolveEdgeEndpoint(edge.target);
     if (!graph.hasNode(s) || !graph.hasNode(t)) continue;
     const key = `${s}-->${t}`;
     if (seenEdges.has(key)) continue;
     seenEdges.add(key);
-    try {
-      graph.addEdge(safeKey(s), safeKey(t), {
-        color: EDGE_DEFAULT,
-        size: edgeSize(edge.confidence),
-        hidden: false,
-        confidence: edge.confidence ?? 1,
-      } satisfies EdgeAttrs);
-    } catch (_err) {
-      // ignore rare duplicate-edge errors in multi: false mode
-    }
+    tryAddEdge(graph, s, t, edge.confidence);
   }
 }
 
@@ -143,10 +161,45 @@ function applyLayout(graph: Graph, iterations: number): void {
 
 function applyCommunityDetection(graph: Graph): void {
   try {
-    louvain.assign(graph as Parameters<typeof louvain.assign>[0], { nodeCommunityAttribute: "community" });
+    louvain.assign(graph as Parameters<typeof louvain.assign>[0], {
+      nodeCommunityAttribute: "community",
+    });
   } catch (_err) {
     // Community detection is optional — non-fatal
   }
+}
+
+// ── Filter logic (module-scope to avoid nesting penalty) ─────────────────────
+
+function matchesSearchFilter(
+  gn: GraphNode,
+  parsed: FilterOptions["parsedSearch"],
+  q: string,
+): boolean {
+  if (parsed.filterLayer && !gn.layer.toLowerCase().includes(parsed.filterLayer)) return false;
+  if (parsed.filterChanged && !gn.changed) return false;
+  if (parsed.filterViolation && !(gn.violation_count && gn.violation_count > 0)) return false;
+  if (q.length >= 2 && !gn.id.toLowerCase().includes(q)) return false;
+  return true;
+}
+
+function isNodeVisible(
+  nodeId: string,
+  f: FilterOptions,
+  nodeIndex: Map<string, GraphNode>,
+): boolean {
+  const gn = nodeIndex.get(nodeId);
+  if (!gn) return false;
+  if (!f.activeLayers.has(gn.layer)) return false;
+  if (f.showChangedOnly && !gn.changed) return false;
+  if (f.prReviewFiles !== null && !f.prReviewFiles.has(nodeId)) return false;
+  if (f.insightFilter !== null && !f.insightFilter.has(nodeId)) return false;
+  const parsed = f.parsedSearch;
+  const q = (parsed.textQuery || "").toLowerCase();
+  const hasSearch =
+    q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
+  if (hasSearch && !matchesSearchFilter(gn, parsed, q)) return false;
+  return true;
 }
 
 // ── Reducer helpers ───────────────────────────────────────────────────────────
@@ -200,18 +253,29 @@ function reduceNodeFilter(
 
   const parsed = f.parsedSearch;
   const q = (parsed.textQuery || "").toLowerCase();
-  const hasSearch = q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
+  const hasSearch =
+    q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
   if (hasSearch && !matchesSearch(gn, parsed, q)) return { ...data, hidden: true };
 
   return { ...data, hidden: false, color: nodeBaseColor(gn), size: nodeSize(gn) };
 }
 
-function reduceEdgeCascade(s: string, t: string, data: EdgeAttrs, cascadeFiles: Set<string>): Partial<EdgeAttrs> {
+function reduceEdgeCascade(
+  s: string,
+  t: string,
+  data: EdgeAttrs,
+  cascadeFiles: Set<string>,
+): Partial<EdgeAttrs> {
   const bothIn = cascadeFiles.has(s) && cascadeFiles.has(t);
   return { ...data, color: bothIn ? EDGE_HIGHLIGHTED : EDGE_VERY_DIM };
 }
 
-function reduceEdgeFocus(s: string, t: string, data: EdgeAttrs, focusedNodeId: string): Partial<EdgeAttrs> {
+function reduceEdgeFocus(
+  s: string,
+  t: string,
+  data: EdgeAttrs,
+  focusedNodeId: string,
+): Partial<EdgeAttrs> {
   const adjacent = s === focusedNodeId || t === focusedNodeId;
   return { ...data, color: adjacent ? EDGE_ADJACENT_FOCUS : EDGE_DIM, size: adjacent ? 0.8 : 0.2 };
 }
@@ -239,7 +303,8 @@ function resolveEdgeFilterColor(
 
   const parsed = f.parsedSearch;
   const q = (parsed.textQuery || "").toLowerCase();
-  const hasSearch = q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
+  const hasSearch =
+    q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
   if (!hasSearch) return EDGE_DEFAULT;
 
   const sGn = nodeIndex.get(s);
@@ -302,25 +367,11 @@ export function buildSigmaGraph(
   // ── Helpers for filter logic ──────────────────────────────────────────────
 
   function matchesSearch(gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string): boolean {
-    if (parsed.filterLayer && !gn.layer.toLowerCase().includes(parsed.filterLayer)) return false;
-    if (parsed.filterChanged && !gn.changed) return false;
-    if (parsed.filterViolation && !(gn.violation_count && gn.violation_count > 0)) return false;
-    if (q.length >= 2 && !gn.id.toLowerCase().includes(q)) return false;
-    return true;
+    return matchesSearchFilter(gn, parsed, q);
   }
 
   function nodeVisible(nodeId: string, f: FilterOptions): boolean {
-    const gn = nodeIndex.get(nodeId);
-    if (!gn) return false;
-    if (!f.activeLayers.has(gn.layer)) return false;
-    if (f.showChangedOnly && !gn.changed) return false;
-    if (f.prReviewFiles !== null && !f.prReviewFiles.has(nodeId)) return false;
-    if (f.insightFilter !== null && !f.insightFilter.has(nodeId)) return false;
-    const parsed = f.parsedSearch;
-    const q = (parsed.textQuery || "").toLowerCase();
-    const hasSearch = q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
-    if (hasSearch && !matchesSearch(gn, parsed, q)) return false;
-    return true;
+    return isNodeVisible(nodeId, f, nodeIndex);
   }
 
   function nodeBaseColor(gn: GraphNode): string {
@@ -374,8 +425,14 @@ export function buildSigmaGraph(
     labelSize: 11,
     labelColor: { color: "#9ca3af" },
     defaultNodeColor: NODE_DEFAULT,
-    nodeReducer: nodeReducer as unknown as (node: string, data: Record<string, unknown>) => Record<string, unknown>,
-    edgeReducer: edgeReducer as unknown as (edge: string, data: Record<string, unknown>) => Record<string, unknown>,
+    nodeReducer: nodeReducer as unknown as (
+      node: string,
+      data: Record<string, unknown>,
+    ) => Record<string, unknown>,
+    edgeReducer: edgeReducer as unknown as (
+      edge: string,
+      data: Record<string, unknown>,
+    ) => Record<string, unknown>,
   });
 
   // ── 5. Drag support ────────────────────────────────────────────────────
@@ -439,7 +496,9 @@ export function buildSigmaGraph(
     // Animate camera to node
     const nodeDisplayData = sigma.getNodeDisplayData(node.id);
     if (nodeDisplayData) {
-      sigma.getCamera().animate({ x: nodeDisplayData.x, y: nodeDisplayData.y, ratio: 0.4 }, { duration: 400 });
+      sigma
+        .getCamera()
+        .animate({ x: nodeDisplayData.x, y: nodeDisplayData.y, ratio: 0.4 }, { duration: 400 });
     }
   }
 
@@ -454,7 +513,9 @@ export function buildSigmaGraph(
     if (!gn || !graph.hasNode(nodeId)) return null;
     const nodeDisplayData = sigma.getNodeDisplayData(nodeId);
     if (!nodeDisplayData) return null;
-    sigma.getCamera().animate({ x: nodeDisplayData.x, y: nodeDisplayData.y, ratio: 0.2 }, { duration: 500 });
+    sigma
+      .getCamera()
+      .animate({ x: nodeDisplayData.x, y: nodeDisplayData.y, ratio: 0.2 }, { duration: 500 });
     return gn;
   }
 
@@ -502,7 +563,12 @@ export function buildSigmaGraph(
   // This allows tests to inspect node display data, colors, and hidden state
   // without trying to read WebGL pixel colors from the canvas.
   if (typeof window !== "undefined") {
-    (window as unknown as Record<string, unknown>).__SIGMA_GRAPH__ = { graph, sigma, api, nodeIndex };
+    (window as unknown as Record<string, unknown>).__SIGMA_GRAPH__ = {
+      graph,
+      sigma,
+      api,
+      nodeIndex,
+    };
   }
 
   return api;

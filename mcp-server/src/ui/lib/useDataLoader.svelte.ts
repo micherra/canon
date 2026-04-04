@@ -42,28 +42,22 @@ export function useDataLoader<T>(loader: () => Promise<T>): DataLoaderState<T> {
   let data = $state<T | null>(null);
   let errorMsg = $state<string>("");
 
-  // $effect manages the loader lifecycle: kicks off on mount, cancels on unmount.
-  // The AbortController signal guards against writing stale results when the
-  // component unmounts before the in-flight Promise resolves.
+  async function runLoader(signal: AbortSignal): Promise<void> {
+    try {
+      const result = await loader();
+      if (signal.aborted) return;
+      data = result;
+      status = "done";
+    } catch (err: unknown) {
+      if (signal.aborted) return;
+      errorMsg = err instanceof Error ? err.message : String(err);
+      status = "error";
+    }
+  }
+
   $effect(() => {
     const controller = new AbortController();
-
-    (async () => {
-      try {
-        const result = await loader();
-        if (!controller.signal.aborted) {
-          data = result;
-          status = "done";
-        }
-      } catch (err: unknown) {
-        if (!controller.signal.aborted) {
-          errorMsg = err instanceof Error ? err.message : String(err);
-          status = "error";
-        }
-      }
-    })();
-
-    // Cleanup: abort on unmount so stale results are never written to state
+    runLoader(controller.signal);
     return () => controller.abort();
   });
 

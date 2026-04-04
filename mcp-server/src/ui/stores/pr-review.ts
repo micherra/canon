@@ -6,7 +6,7 @@
  * Replaces stores/pr-impact.ts (deleted 2026-03-25 — merged into unified show_pr_impact).
  */
 
-export interface PrFileInfo {
+export type PrFileInfo = {
   path: string;
   layer: string;
   status: "added" | "modified" | "deleted" | "renamed";
@@ -25,31 +25,31 @@ export interface PrFileInfo {
     severity: "rule" | "strong-opinion" | "convention";
     message?: string;
   }>;
-}
+};
 
-export interface BlastRadiusEntry {
+export type BlastRadiusEntry = {
   file: string;
   affected: Array<{ path: string; depth: number }>;
-}
+};
 
-export interface Subsystem {
+export type Subsystem = {
   directory: string;
   label: "new" | "removed";
   file_count: number;
-}
+};
 
-export interface BlastRadiusFileEntry {
+export type BlastRadiusFileEntry = {
   file: string;
   dep_count: number;
-}
+};
 
-export interface PrFileSummary {
+export type PrFileSummary = {
   path: string;
   layer: string;
   status: "added" | "modified" | "deleted" | "renamed";
-}
+};
 
-export interface PrepData {
+export type PrepData = {
   /** Lightweight file list for clustering (path, status, layer only). */
   files: PrFileSummary[];
   /** Files with full detail — violations, high priority, or needs-attention. */
@@ -65,43 +65,43 @@ export interface PrepData {
   blast_radius: BlastRadiusEntry[];
   graph_data_age_ms?: number;
   error?: string;
-}
+};
 
-export interface PrImpactHotspot {
+export type PrImpactHotspot = {
   file: string;
   blast_radius_count: number;
   violation_count: number;
   risk_score: number;
   violations: Array<{ principle_id: string; severity: string; message?: string }>;
-}
+};
 
-export interface PrImpactSubgraphNode {
+export type PrImpactSubgraphNode = {
   id: string;
   layer: string;
   changed?: boolean;
   violation_count?: number;
-}
+};
 
-export interface PrImpactSubgraphEdge {
+export type PrImpactSubgraphEdge = {
   source: string;
   target: string;
   confidence?: number;
-}
+};
 
-export interface PrImpactSubgraph {
+export type PrImpactSubgraph = {
   nodes: PrImpactSubgraphNode[];
   edges: PrImpactSubgraphEdge[];
   layers: Array<{ name: string; color: string; file_count: number }>;
-}
+};
 
-export interface PrRecommendation {
+export type PrRecommendation = {
   file_path?: string;
   title: string;
   message: string;
   source: "principle" | "holistic";
-}
+};
 
-export interface UnifiedPrOutput {
+export type UnifiedPrOutput = {
   status: "ok" | "no_diff_error";
   prep: PrepData;
   review?: {
@@ -136,4 +136,4 @@ export interface UnifiedPrOutput {
   subsystems: Subsystem[];
   blast_radius_by_file: BlastRadiusFileEntry[];
   recommendations?: PrRecommendation[];
-}
+};
