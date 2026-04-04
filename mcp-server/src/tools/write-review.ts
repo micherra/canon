@@ -155,6 +155,7 @@ export async function writeReview(
   const meta = {
     _type: "review" as const,
     _version: 1,
+    slug: input.slug,
     verdict_original: input.verdict,
     verdict: mappedVerdict,
     violations: input.violations,
