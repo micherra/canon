@@ -25,29 +25,37 @@ const JS_EXPORT_RES = [
   { re: /export\s+default\s+class\s+(\w+)/g, type: "defaultClass" },
 ];
 
-function extractJsExports(content: string): string[] {
-  const exports = new Set<string>();
-
-  for (const { re } of JS_EXPORT_RES) {
-    let match = re.exec(content);
-    while (match !== null) {
-      if (match[1]) exports.add(match[1].trim());
-      match = re.exec(content);
-    }
+function collectRegexMatches(re: RegExp, content: string, exports: Set<string>): void {
+  let match = re.exec(content);
+  while (match !== null) {
+    if (match[1]) exports.add(match[1].trim());
+    match = re.exec(content);
   }
+}
 
-  // Named exports: export { a, b, c }
+function resolveExportedName(rawName: string): string {
+  const parts = rawName.trim().split(/\s+as\s+/);
+  return (parts.length > 1 ? parts[1] : parts[0]).trim();
+}
+
+function collectNamedExports(content: string, exports: Set<string>): void {
   const namedRe = /export\s*\{([^}]+)\}/g;
   let match = namedRe.exec(content);
   while (match !== null) {
     for (const name of match[1].split(",")) {
-      const parts = name.trim().split(/\s+as\s+/);
-      const exported = (parts.length > 1 ? parts[1] : parts[0]).trim();
+      const exported = resolveExportedName(name);
       if (exported) exports.add(exported);
     }
     match = namedRe.exec(content);
   }
+}
 
+function extractJsExports(content: string): string[] {
+  const exports = new Set<string>();
+  for (const { re } of JS_EXPORT_RES) {
+    collectRegexMatches(re, content, exports);
+  }
+  collectNamedExports(content, exports);
   return Array.from(exports);
 }
 

@@ -31,6 +31,7 @@ export async function resolveContextInjections(
     }
 
     if (injection.from === "file_context") {
+      // biome-ignore lint/performance/noAwaitInLoops: each injection resolves independently; refactoring to Promise.all requires restructuring hitl detection
       const resolved = await resolveFileContextInjection(injection, board, workspace);
       warnings.push(...resolved.warnings);
       if (resolved.value !== undefined) {
@@ -233,33 +234,45 @@ async function readArtifacts(
   workspace: string,
   stateName: string,
 ): Promise<{ contents: string[]; anyFound: boolean; warnings: string[] }> {
-  const contents: string[] = [];
-  const warnings: string[] = [];
-  let anyFound = false;
   const workspaceRoot = path.resolve(workspace);
 
-  for (const artifactPath of artifacts) {
-    const fullPath = path.resolve(workspace, artifactPath);
-    if (!fullPath.startsWith(workspaceRoot + path.sep) && fullPath !== workspaceRoot) {
-      warnings.push(`inject_context: artifact path "${artifactPath}" escapes workspace — blocked`);
-      continue;
-    }
-    if (!existsSync(fullPath)) {
-      warnings.push(
-        `inject_context: artifact "${artifactPath}" from state "${stateName}" not found on disk`,
-      );
-      continue;
-    }
-    try {
-      const content = await readFile(fullPath, "utf-8");
-      contents.push(content);
-      anyFound = true;
-    } catch {
-      warnings.push(`inject_context: failed to read artifact "${artifactPath}"`);
-    }
+  type ArtifactResult = { content: string | null; warning: string | null };
+
+  const results = await Promise.all(
+    artifacts.map(async (artifactPath): Promise<ArtifactResult> => {
+      const fullPath = path.resolve(workspace, artifactPath);
+      if (!fullPath.startsWith(workspaceRoot + path.sep) && fullPath !== workspaceRoot) {
+        return {
+          content: null,
+          warning: `inject_context: artifact path "${artifactPath}" escapes workspace — blocked`,
+        };
+      }
+      if (!existsSync(fullPath)) {
+        return {
+          content: null,
+          warning: `inject_context: artifact "${artifactPath}" from state "${stateName}" not found on disk`,
+        };
+      }
+      try {
+        const content = await readFile(fullPath, "utf-8");
+        return { content, warning: null };
+      } catch {
+        return {
+          content: null,
+          warning: `inject_context: failed to read artifact "${artifactPath}"`,
+        };
+      }
+    }),
+  );
+
+  const contents: string[] = [];
+  const warnings: string[] = [];
+  for (const r of results) {
+    if (r.warning) warnings.push(r.warning);
+    if (r.content !== null) contents.push(r.content);
   }
 
-  return { anyFound, contents, warnings };
+  return { anyFound: contents.length > 0, contents, warnings };
 }
 
 /**

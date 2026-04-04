@@ -198,14 +198,10 @@ async function readAllSummaries(plansDir: string): Promise<string> {
     return "";
   }
 
-  const contents: string[] = [];
-  for (const taskId of taskIds) {
-    const summaryPath = path.join(plansDir, `${taskId}-SUMMARY.md`);
-    const content = await safeReadFile(summaryPath, null); // silent — not all may be done
-    if (content !== null) {
-      contents.push(content);
-    }
-  }
+  const summaryResults = await Promise.all(
+    taskIds.map((taskId) => safeReadFile(path.join(plansDir, `${taskId}-SUMMARY.md`), null)),
+  );
+  const contents = summaryResults.filter((c): c is string => c !== null);
 
   return escapeDollarBrace(contents.join("\n\n"));
 }
@@ -297,21 +293,24 @@ export function extractFilePaths(content: string): string[] {
 
   // Match backtick-quoted paths: `src/foo/bar.ts`
   const backtickPattern = /`([a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})`/g;
-  let m: RegExpExecArray | null;
-  while ((m = backtickPattern.exec(content)) !== null) {
+  let m = backtickPattern.exec(content);
+  while (m !== null) {
     const candidate = m[1];
     if (looksLikeFilePath(candidate)) {
       paths.add(candidate);
     }
+    m = backtickPattern.exec(content);
   }
 
   // Match lines that start with a path-like token (e.g., in "| `path` | created |" table rows)
   const linePattern = /\|\s*`?([a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})`?\s*\|/g;
-  while ((m = linePattern.exec(content)) !== null) {
-    const candidate = m[1].trim();
+  let m2 = linePattern.exec(content);
+  while (m2 !== null) {
+    const candidate = m2[1].trim();
     if (looksLikeFilePath(candidate)) {
       paths.add(candidate);
     }
+    m2 = linePattern.exec(content);
   }
 
   return Array.from(paths);

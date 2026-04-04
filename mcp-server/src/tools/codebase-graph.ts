@@ -105,16 +105,17 @@ async function scanFromSourceDirs(
   projectDir: string,
   input: CodebaseGraphInput,
 ): Promise<string[]> {
-  const files: string[] = [];
-  for (const dir of sourceDirs) {
-    const absDir = join(projectDir, dir);
-    const scanned = await scanSourceFiles(absDir, {
-      excludeDirs: input.exclude_dirs,
-      includeExtensions: input.include_extensions,
-    });
-    for (const f of scanned) files.push(toPosix(join(dir, f)));
-  }
-  return files;
+  const dirResults = await Promise.all(
+    sourceDirs.map(async (dir) => {
+      const absDir = join(projectDir, dir);
+      const scanned = await scanSourceFiles(absDir, {
+        excludeDirs: input.exclude_dirs,
+        includeExtensions: input.include_extensions,
+      });
+      return scanned.map((f) => toPosix(join(dir, f)));
+    }),
+  );
+  return dirResults.flat();
 }
 
 /** Scan files from a root directory fallback. */
@@ -135,18 +136,20 @@ async function scanFromRootDir(
 
 /** Scan Canon .md directories not covered by source dirs. */
 async function scanCanonDirs(coveredDirs: Set<string>, projectDir: string): Promise<string[]> {
-  const files: string[] = [];
-  for (const canonDir of CANON_SCAN_DIRS) {
-    if (coveredDirs.has(canonDir)) continue;
-    try {
-      const absDir = join(projectDir, canonDir);
-      const scanned = await scanSourceFiles(absDir, { includeExtensions: [".md"] });
-      for (const f of scanned) files.push(toPosix(join(canonDir, f)));
-    } catch {
-      /* Directory may not exist */
-    }
-  }
-  return files;
+  const activeDirs = CANON_SCAN_DIRS.filter((d) => !coveredDirs.has(d));
+  const dirResults = await Promise.all(
+    activeDirs.map(async (canonDir) => {
+      try {
+        const absDir = join(projectDir, canonDir);
+        const scanned = await scanSourceFiles(absDir, { includeExtensions: [".md"] });
+        return scanned.map((f) => toPosix(join(canonDir, f)));
+      } catch {
+        /* Directory may not exist */
+        return [];
+      }
+    }),
+  );
+  return dirResults.flat();
 }
 
 async function scanProjectFiles(input: CodebaseGraphInput, projectDir: string): Promise<string[]> {
@@ -333,23 +336,22 @@ async function buildEdges(
   aliases: PathAlias[],
   projectDir: string,
 ): Promise<GraphEdge[]> {
-  const edges: GraphEdge[] = [];
-  for (const filePath of filePaths) {
-    try {
-      const content = await readFile(join(projectDir, filePath), "utf-8");
-      const imports = extractImports(content, filePath);
-      for (const imp of imports) {
-        const resolved = resolveImport(imp, filePath, fileSet, aliases);
-        if (resolved && resolved !== filePath) {
-          edges.push({ source: filePath, target: resolved, type: "import" });
-        }
+  const fileEdges = await Promise.all(
+    filePaths.map(async (filePath): Promise<GraphEdge[]> => {
+      try {
+        const content = await readFile(join(projectDir, filePath), "utf-8");
+        const imports = extractImports(content, filePath);
+        return imports
+          .map((imp) => resolveImport(imp, filePath, fileSet, aliases))
+          .filter((resolved): resolved is string => resolved !== null && resolved !== filePath)
+          .map((resolved) => ({ source: filePath, target: resolved, type: "import" as const }));
+      } catch (err: unknown) {
+        if (isNotFound(err)) return [];
+        throw err;
       }
-    } catch (err: unknown) {
-      if (isNotFound(err)) continue;
-      throw err;
-    }
-  }
-  return edges;
+    }),
+  );
+  return fileEdges.flat();
 }
 
 function shouldInspectForComposition(path: string, patterns: string[]): boolean {
@@ -442,8 +444,8 @@ function extractCompositionEdgesFromContent(
 
   if (markerRegex) {
     markerRegex.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = markerRegex.exec(content)) !== null) {
+    let match = markerRegex.exec(content);
+    while (match !== null) {
       if (refCount >= maxRefs) return;
       refCount += 1;
       upsertCompositionEdge(edgesByKey, filePath, match[1], {
@@ -452,12 +454,13 @@ function extractCompositionEdgesFromContent(
         fileSet,
         minConfidence,
       });
+      match = markerRegex.exec(content);
     }
   }
 
   const interpolationRegex = /\{\{\s*([\w./-]+)\s*\}\}/g;
-  let interpolationMatch: RegExpExecArray | null;
-  while ((interpolationMatch = interpolationRegex.exec(content)) !== null) {
+  let interpolationMatch = interpolationRegex.exec(content);
+  while (interpolationMatch !== null) {
     if (refCount >= maxRefs) return;
     refCount += 1;
     upsertCompositionEdge(edgesByKey, filePath, interpolationMatch[1], {
@@ -466,6 +469,7 @@ function extractCompositionEdgesFromContent(
       fileSet,
       minConfidence,
     });
+    interpolationMatch = interpolationRegex.exec(content);
   }
 }
 
@@ -485,27 +489,38 @@ async function buildCompositionEdges(
       ? new RegExp(`(?:${markerAlternation})\\s*[:=]\\s*["']?([\\w./-]+)["']?`, "gi")
       : null;
 
-  const edgesByKey = new Map<string, GraphEdge>();
-  for (const filePath of filePaths) {
-    if (!shouldInspectForComposition(filePath, compositionConfig.file_patterns)) continue;
+  const activePaths = filePaths.filter((fp) =>
+    shouldInspectForComposition(fp, compositionConfig.file_patterns),
+  );
 
-    let content = "";
-    try {
-      content = await readFile(join(projectDir, filePath), "utf-8");
-    } catch (err: unknown) {
-      if (isNotFound(err)) continue;
-      throw err;
+  const perFileEdges = await Promise.all(
+    activePaths.map(async (filePath) => {
+      let content = "";
+      try {
+        content = await readFile(join(projectDir, filePath), "utf-8");
+      } catch (err: unknown) {
+        if (isNotFound(err)) return new Map<string, GraphEdge>();
+        throw err;
+      }
+      const edgesByKey = new Map<string, GraphEdge>();
+      extractCompositionEdgesFromContent(filePath, content, {
+        edgesByKey,
+        fileSet,
+        markerRegex,
+        maxRefs: compositionConfig.max_refs_per_file,
+        minConfidence: compositionConfig.min_confidence,
+      });
+      return edgesByKey;
+    }),
+  );
+
+  const merged = new Map<string, GraphEdge>();
+  for (const fileMap of perFileEdges) {
+    for (const [key, edge] of fileMap) {
+      if (!merged.has(key)) merged.set(key, edge);
     }
-
-    extractCompositionEdgesFromContent(filePath, content, {
-      edgesByKey,
-      fileSet,
-      markerRegex,
-      maxRefs: compositionConfig.max_refs_per_file,
-      minConfidence: compositionConfig.min_confidence,
-    });
   }
-  return Array.from(edgesByKey.values());
+  return Array.from(merged.values());
 }
 
 function mergeEdges(baseEdges: GraphEdge[], inferredEdges: GraphEdge[]): GraphEdge[] {

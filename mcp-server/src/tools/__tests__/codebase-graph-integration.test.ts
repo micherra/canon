@@ -112,6 +112,7 @@ async function pollUntilTerminal(
     if (TERMINAL.has(poll.status)) {
       return { error: poll.error, status: poll.status };
     }
+    // biome-ignore lint/performance/noAwaitInLoops: sequential polling loop; each iteration waits before checking again
     await new Promise<void>((resolve) => setTimeout(resolve, opts.intervalMs));
   }
   const finalPoll = manager.poll(jobId);
@@ -140,6 +141,7 @@ async function pollUntilRunning(
     if (RUNNING_OR_TERMINAL.has(poll.status)) {
       return;
     }
+    // biome-ignore lint/performance/noAwaitInLoops: sequential polling loop; each iteration waits before checking again
     await new Promise<void>((resolve) => setTimeout(resolve, opts.intervalMs));
   }
   throw new Error(

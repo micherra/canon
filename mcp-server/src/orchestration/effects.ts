@@ -71,6 +71,7 @@ export async function executeEffects(
 
   for (const effect of stateDef.effects) {
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: effects execute sequentially; each may have side effects that later effects depend on
       const result = await executeOneEffect(effect, store, {
         artifacts,
         projectDir,
@@ -405,11 +406,11 @@ async function resolveAndRead(
   // Search in plans subdirectories
   const plansDir = join(workspace, "plans");
   const subdirs = await readdir(plansDir).catch(() => []);
-  for (const sub of subdirs) {
-    const candidate = join(plansDir, sub, artifactName);
-    const content = await readFile(candidate, "utf-8").catch(() => null);
-    if (content) return content;
-  }
+  const candidates = await Promise.all(
+    subdirs.map((sub) => readFile(join(plansDir, sub, artifactName), "utf-8").catch(() => null)),
+  );
+  const found = candidates.find((c) => c !== null);
+  if (found) return found;
 
   return null;
 }

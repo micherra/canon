@@ -182,15 +182,15 @@ async function readFileContent(
 /** Scan all project source files and return their paths. */
 async function scanAllProjectFiles(projectDir: string): Promise<string[]> {
   const sourceDirs = await deriveSourceDirsFromLayers(projectDir);
-  const allFiles: string[] = [];
-  if (sourceDirs && sourceDirs.length > 0) {
-    for (const dir of sourceDirs) {
+  if (!sourceDirs || sourceDirs.length === 0) return [];
+  const dirResults = await Promise.all(
+    sourceDirs.map(async (dir) => {
       const absDir = join(projectDir, dir);
       const files = await scanSourceFiles(absDir, {});
-      for (const f of files) allFiles.push(toPosix(join(dir, f)));
-    }
-  }
-  return allFiles;
+      return files.map((f) => toPosix(join(dir, f)));
+    }),
+  );
+  return dirResults.flat();
 }
 
 /** Load compliance data (violations, verdicts) for a file from DriftStore. */
@@ -391,23 +391,24 @@ async function scanImportedByFallback(
   allFiles: string[],
   options: ImportScanOptions,
 ): Promise<string[]> {
-  const imported_by: string[] = [];
   try {
-    for (const otherFile of allFiles) {
-      if (otherFile === filePath) continue;
-      try {
-        if (await fileImportsTarget(otherFile, filePath, options)) {
-          imported_by.push(otherFile);
+    const otherFiles = allFiles.filter((f) => f !== filePath);
+    const results = await Promise.all(
+      otherFiles.map(async (otherFile) => {
+        try {
+          const imports = await fileImportsTarget(otherFile, filePath, options);
+          return imports ? otherFile : null;
+        } catch (err: unknown) {
+          if (isNotFound(err)) return null;
+          throw err;
         }
-      } catch (err: unknown) {
-        if (isNotFound(err)) continue;
-        throw err;
-      }
-    }
+      }),
+    );
+    return results.filter((f): f is string => f !== null);
   } catch {
     /* fallback failed */
+    return [];
   }
-  return imported_by;
 }
 
 /** Group paths by their inferred layer. */

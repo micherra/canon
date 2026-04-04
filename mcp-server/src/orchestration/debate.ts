@@ -97,6 +97,7 @@ async function buildTranscriptSections(
   const transcriptSections: string[] = [];
   for (const round of roundNumbers) {
     const channel = debateChannel(round);
+    // biome-ignore lint/performance/noAwaitInLoops: sequential per-round reads with conditional early-exit between awaits
     const messages = await readMessages(workspace, channel);
     if (messages.length === 0) continue;
     populatedRounds.push(round);

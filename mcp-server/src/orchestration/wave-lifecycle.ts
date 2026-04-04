@@ -100,6 +100,7 @@ export async function createWaveWorktrees(
     const worktreePath = join(projectDir, ".canon", "worktrees", safeTaskId);
     const branchName = `canon-wave/${safeTaskId}`;
 
+    // biome-ignore lint/performance/noAwaitInLoops: worktrees must be created sequentially; each creates a new git branch from HEAD which is updated by previous iterations
     const result = await gitExecAsync(
       ["worktree", "add", worktreePath, "-b", branchName, "HEAD"],
       projectDir,
@@ -159,6 +160,7 @@ export async function mergeWaveResults(
   let mergedCount = 0;
 
   for (const task of tasks) {
+    // biome-ignore lint/performance/noAwaitInLoops: git merges must be sequential; each merge updates HEAD which subsequent merges build on
     const mergeResult = await gitExecAsync(["merge", "--no-ff", task.branch], projectDir);
     if (mergeResult.ok) {
       mergedCount++;
@@ -198,6 +200,7 @@ export async function cleanupWorktrees(
 
   for (const task of tasks) {
     // Remove the worktree directory
+    // biome-ignore lint/performance/noAwaitInLoops: best-effort cleanup with per-task error accumulation; sequential to avoid git lock contention
     const removeResult = await gitExecAsync(
       ["worktree", "remove", task.worktree_path, "--force"],
       projectDir,

@@ -58,6 +58,7 @@ export async function checkSlugCollision(parentDir: string, slug: string): Promi
   if (!(await exists(slug))) return slug;
 
   let counter = 2;
+  // biome-ignore lint/performance/noAwaitInLoops: sequential slug collision resolution; each check depends on the previous result
   while (await exists(`${slug}-${counter}`)) {
     if (counter > 999) {
       throw new Error(`Slug collision limit exceeded for "${slug}"`);

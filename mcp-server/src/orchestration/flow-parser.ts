@@ -538,11 +538,12 @@ function checkSpawnInstructionRefs(spawnInstructions: Record<string, string>): s
   const refPattern = /\$\{([^}]+)\}/g;
   for (const [stateId, text] of Object.entries(spawnInstructions)) {
     refPattern.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = refPattern.exec(text)) !== null) {
+    let match = refPattern.exec(text);
+    while (match !== null) {
       if (!RUNTIME_VARIABLES.has(match[1])) {
         errors.push(`Spawn instruction "${stateId}" has unresolved reference: \${${match[1]}}`);
       }
+      match = refPattern.exec(text);
     }
   }
   return errors;

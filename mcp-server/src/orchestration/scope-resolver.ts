@@ -153,13 +153,14 @@ function parseFrontmatterFiles(content: string): string[] {
   // Extract list items: "  - path/to/file.ts"
   const paths: string[] = [];
   const itemRegex = /^[ \t]+-\s+(.+)$/gm;
-  let m: RegExpExecArray | null;
+  let m = itemRegex.exec(filesSection);
 
-  while ((m = itemRegex.exec(filesSection)) !== null) {
+  while (m !== null) {
     const filePath = m[1].trim();
     if (filePath.length > 0) {
       paths.push(filePath);
     }
+    m = itemRegex.exec(filesSection);
   }
 
   // Deduplicate

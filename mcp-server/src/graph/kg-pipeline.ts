@@ -332,6 +332,7 @@ async function scanPhase(projectDir: string, sourceDirs?: string[]): Promise<str
     const absDir = path.resolve(projectDir, dir);
     if (!absDir.startsWith(projectDir + path.sep) && absDir !== projectDir) continue;
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: sequential scan with per-directory error handling; each directory is isolated
       const files = await scanSourceFiles(absDir);
       for (const f of files) {
         allFiles.push(path.posix.join(dir.replace(/\\/g, "/"), f.replace(/\\/g, "/")));
