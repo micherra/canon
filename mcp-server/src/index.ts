@@ -71,6 +71,8 @@ const server = new McpServer({
 installFuzzyValidation(server);
 
 /** Helper to register a tool + resource pair for an MCP App UI. */
+const registeredResources = new Set<string>();
+
 function registerToolWithUi<Schema extends ZodRawShapeCompat>(
   toolName: string,
   resourceUri: string,
@@ -92,10 +94,13 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
     handler,
   );
 
-  registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
-    const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
-    return { contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }] };
-  });
+  if (!registeredResources.has(resourceUri)) {
+    registeredResources.add(resourceUri);
+    registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
+      const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
+      return { contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }] };
+    });
+  }
 }
 
 // --- MCP App tool UIs ---
