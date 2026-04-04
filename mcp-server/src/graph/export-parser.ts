@@ -25,20 +25,6 @@ const JS_EXPORT_RES = [
   { re: /export\s+default\s+class\s+(\w+)/g, type: "defaultClass" },
 ];
 
-/** Extract named export identifiers from `export { a, b as c }` blocks. */
-function extractNamedExports(content: string, exports: Set<string>): void {
-  const namedRe = /export\s*\{([^}]+)\}/g;
-  let match = namedRe.exec(content);
-  while (match !== null) {
-    for (const name of match[1].split(",")) {
-      const parts = name.trim().split(/\s+as\s+/);
-      const exported = (parts.length > 1 ? parts[1] : parts[0]).trim();
-      if (exported) exports.add(exported);
-    }
-    match = namedRe.exec(content);
-  }
-}
-
 function extractJsExports(content: string): string[] {
   const exports = new Set<string>();
 
@@ -50,7 +36,17 @@ function extractJsExports(content: string): string[] {
     }
   }
 
-  extractNamedExports(content, exports);
+  // Named exports: export { a, b, c }
+  const namedRe = /export\s*\{([^}]+)\}/g;
+  let match = namedRe.exec(content);
+  while (match !== null) {
+    for (const name of match[1].split(",")) {
+      const parts = name.trim().split(/\s+as\s+/);
+      const exported = (parts.length > 1 ? parts[1] : parts[0]).trim();
+      if (exported) exports.add(exported);
+    }
+    match = namedRe.exec(content);
+  }
 
   return Array.from(exports);
 }
