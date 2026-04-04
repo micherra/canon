@@ -225,13 +225,13 @@ describe("domain priming pipeline coherence", () => {
     }
   });
 
-  it("implementor fallback path matches actual domains/ directory name", () => {
-    // The implementor references CLAUDE_PLUGIN_ROOT/domains/{name}.md
-    // The actual directory is named "domains" at repo root
+  it("implementor fallback path matches actual domain-primers/ directory name", () => {
+    // The implementor references CLAUDE_PLUGIN_ROOT/domain-primers/{name}.md
+    // The actual directory is named "domain-primers" at repo root
     expect(existsSync(DOMAINS_DIR)).toBe(true);
-    // And the implementor file must reference this directory name
+    // And the implementor file must reference the plugin-level domain-primers/ directory
     const implementorContent = readFile(IMPLEMENTOR_MD);
-    expect(implementorContent).toContain("/domains/");
+    expect(implementorContent).toContain("/domain-primers/");
   });
 
   it("task-plan template domains: field example uses a built-in domain name", () => {
