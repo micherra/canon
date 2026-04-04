@@ -277,6 +277,7 @@ describe("ExecutionStore — updateAgentSession / getAgentSession", () => {
     const after = new Date().toISOString();
 
     const result = store.getAgentSession("research");
+    expect(result).not.toBeNull();
     // ISO strings compare correctly as strings (YYYY-MM-DD lexicographic order)
     expect(result!.last_agent_activity >= before).toBe(true);
     expect(result!.last_agent_activity <= after).toBe(true);

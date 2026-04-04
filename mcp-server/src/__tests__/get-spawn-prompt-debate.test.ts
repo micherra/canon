@@ -13,7 +13,7 @@ vi.mock("../orchestration/diff-cluster.ts", () => ({
 }));
 
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { writeMessage } from "../orchestration/messages.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
@@ -25,23 +25,6 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function _makeBoard(overrides: Record<string, unknown> = {}): Board {
-  return {
-    base_commit: "abc1234",
-    blocked: null,
-    concerns: [],
-    current_state: "research",
-    entry: "research",
-    flow: "debate-flow",
-    iterations: {},
-    last_updated: new Date().toISOString(),
-    skipped: [],
-    started: new Date().toISOString(),
-    states: {},
-    task: "test task",
-    ...overrides,
-  } as Board;
-}
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {

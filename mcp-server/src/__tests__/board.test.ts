@@ -1,7 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   completeState,
   enterState,
@@ -31,20 +28,6 @@ function makeBoard(): Board {
   return initBoard(makeMinimalFlow(), "build feature X", "abc123");
 }
 
-let tmpDirs: string[] = [];
-
-function _makeTmpDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "board-test-"));
-  tmpDirs.push(dir);
-  return dir;
-}
-
-afterEach(() => {
-  for (const d of tmpDirs) {
-    rmSync(d, { force: true, recursive: true });
-  }
-  tmpDirs = [];
-});
 
 // initBoard
 

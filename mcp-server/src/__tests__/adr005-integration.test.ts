@@ -28,7 +28,7 @@ import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import type { EntityRow, FileRow } from "../graph/kg-types.ts";
+import type { FileRow } from "../graph/kg-types.ts";
 import { getFileContext } from "../tools/get-file-context.ts";
 import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 import {
@@ -50,24 +50,6 @@ function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<Fi
   };
 }
 
-function _makeEntityRow(
-  fileId: number,
-  overrides: Partial<Omit<EntityRow, "entity_id" | "file_id">> = {},
-): Omit<EntityRow, "entity_id"> {
-  return {
-    file_id: fileId,
-    is_default_export: false,
-    is_exported: false,
-    kind: "function",
-    line_end: 10,
-    line_start: 1,
-    metadata: null,
-    name: "myFunc",
-    qualified_name: "src/A.ts::myFunc",
-    signature: null,
-    ...overrides,
-  };
-}
 
 // 1. KgQuery.getFileMetrics with changedFiles option
 //

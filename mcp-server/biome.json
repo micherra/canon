@@ -18,13 +18,13 @@
       "!**/*.generated.*",
       "!**/*.min.*",
 
-      "!!dist",
-      "!!build",
-      "!!.next",
-      "!!coverage",
-      "!!.turbo",
-      "!!tmp",
-      "!!.cache"
+      "!dist/**",
+      "!build/**",
+      "!.next/**",
+      "!coverage/**",
+      "!.turbo/**",
+      "!tmp/**",
+      "!.cache/**"
     ]
   },
 

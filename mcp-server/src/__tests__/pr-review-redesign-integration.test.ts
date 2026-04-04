@@ -31,14 +31,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
 import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 
-function _makeMockExecFile(stdout: string, err: Error | null = null) {
-  return (
-    _cmd: string,
-    _args: string[],
-    _opts: unknown,
-    cb: (err: Error | null, stdout: string, stderr: string) => void,
-  ) => cb(err, err ? "" : stdout, "");
-}
 
 /** Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout. */
 function mockGitExecAsyncOk(stdout: string) {

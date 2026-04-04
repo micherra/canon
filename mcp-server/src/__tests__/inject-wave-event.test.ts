@@ -40,14 +40,6 @@ function setupStoreWithWave(workspace: string, stateId = "implement"): void {
   });
 }
 
-function _setupStoreWithNoWave(workspace: string): void {
-  const store = getExecutionStore(workspace);
-  store.initExecution(BASE_EXECUTION);
-  store.upsertState("research", {
-    entries: 0,
-    status: "pending",
-  });
-}
 
 let workspace: string;
 
