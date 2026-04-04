@@ -721,7 +721,7 @@ describe("assertWorkspacePath validation", () => {
   it("throws for a project root path without .canon/workspaces/", () => {
     // We temporarily unset VITEST to test the production guard
     const orig = process.env.VITEST;
-    process.env.VITEST = undefined;
+    delete process.env.VITEST;
     try {
       expect(() => assertWorkspacePath("/home/user/project")).toThrow(
         /Invalid workspace path.*\.canon\/workspaces\//,
@@ -733,7 +733,7 @@ describe("assertWorkspacePath validation", () => {
 
   it("throws for a temp dir path without .canon/workspaces/", () => {
     const orig = process.env.VITEST;
-    process.env.VITEST = undefined;
+    delete process.env.VITEST;
     try {
       expect(() => assertWorkspacePath("/tmp/some-temp-dir")).toThrow(/Invalid workspace path/);
     } finally {

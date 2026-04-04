@@ -959,7 +959,7 @@ import { dirname, join as pathJoin } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const uiDir = pathJoin(__dirname, "../../ui");
+const uiDir = pathJoin(__dirname, "../ui");
 
 describe("PrReview.svelte — v2 container structural contract", () => {
   // Updated 2026-03-25: PrReviewPrep.svelte merged into PrReview.svelte (unified view)

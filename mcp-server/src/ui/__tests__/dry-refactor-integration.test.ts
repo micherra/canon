@@ -49,7 +49,7 @@ describe("Cross-wave: useDataLoader composable (Wave 2) consumed by Wave 5 views
   it("useDataLoader.svelte.ts exports the DataLoaderState interface", () => {
     const content = readFileSync(join(libDir, "useDataLoader.svelte.ts"), "utf-8");
     expect(content).toContain("DataLoaderState");
-    expect(content).toContain("export interface DataLoaderState");
+    expect(content).toContain("export type DataLoaderState");
   });
 
   it("useDataLoader.svelte.ts exports LoaderStatus type", () => {

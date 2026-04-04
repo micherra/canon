@@ -180,7 +180,7 @@ describe("resolveWaveVariables — cwd is passed to git spawnSync", () => {
 
     // No projectDir passed → should fall back to process.cwd() or CANON_PROJECT_DIR
     const originalEnv = process.env.CANON_PROJECT_DIR;
-    process.env.CANON_PROJECT_DIR = undefined;
+    delete process.env.CANON_PROJECT_DIR;
 
     await resolveWaveVariables(tmpDir, { slug: "my-slug", totalWaves: 1, wave: 1 });
 

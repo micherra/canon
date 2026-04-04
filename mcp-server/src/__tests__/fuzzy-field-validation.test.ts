@@ -75,7 +75,7 @@ describe("checkUnknownFields", () => {
       REPORT_RESULT_KEYS,
     );
     expect(errors).toHaveLength(2);
-    expect(errors[0]).toContain('"status"');
-    expect(errors[1]).toContain('"stateId"');
+    expect(errors[0]).toContain('"stateId"');
+    expect(errors[1]).toContain('"status"');
   });
 });

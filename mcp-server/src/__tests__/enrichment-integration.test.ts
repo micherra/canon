@@ -35,9 +35,11 @@ vi.mock("../adapters/git-adapter.ts", () => ({
 }));
 
 vi.mock("../drift/store.ts", () => ({
-  DriftStore: vi.fn(() => ({
-    getReviewsForFiles: vi.fn().mockResolvedValue([]),
-  })),
+  DriftStore: vi.fn(function () {
+    return {
+      getReviewsForFiles: vi.fn().mockResolvedValue([]),
+    };
+  }),
 }));
 
 vi.mock("../orchestration/scope-resolver.ts", () => ({
@@ -161,7 +163,7 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
   });
 
   afterEach(() => {
@@ -250,7 +252,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
           makeReviewEntry(files.slice(5, 10), 3, "WARNING"),
         ]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
@@ -270,7 +272,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 10, "BLOCKING")]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
@@ -292,7 +294,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput({ flow: makeFlow("feature") }));
 
@@ -320,7 +322,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
         .fn()
         .mockResolvedValue([makeReviewEntry(["src/foo.ts"], 4, "BLOCKING")]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -342,7 +344,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
         .fn()
         .mockResolvedValue([makeReviewEntry(["src/foo.ts"], 4, "BLOCKING", true)]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -362,7 +364,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
         .fn()
         .mockResolvedValue([makeReviewEntry(["src/no-git.ts"], 3, "WARNING")]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -379,7 +381,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 2, "WARNING")]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -399,7 +401,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
         .fn()
         .mockResolvedValue([makeReviewEntry(["src/a.ts", "src/b.ts"], 0, "CLEAN")]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -430,7 +432,7 @@ describe("enrichment integration — graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -452,7 +454,7 @@ describe("enrichment integration — graceful degradation", () => {
         .fn()
         .mockResolvedValue([makeReviewEntry(["src/foo.ts"], 2, "WARNING")]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput());
 
@@ -468,7 +470,7 @@ describe("enrichment integration — graceful degradation", () => {
     vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Add feature"));
 
     // DriftStore constructor itself throws
-    vi.mocked(DriftStore).mockImplementation(() => {
+    vi.mocked(DriftStore).mockImplementation(function () {
       throw new Error("Cannot open drift DB");
     });
 
@@ -486,7 +488,7 @@ describe("enrichment integration — graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -507,7 +509,7 @@ describe("enrichment integration — graceful degradation", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     let result: Awaited<ReturnType<typeof assembleEnrichment>> | undefined;
     try {
@@ -540,7 +542,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -560,7 +562,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -581,7 +583,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
 
     const result = await assembleEnrichment(makeInput({ projectDir: undefined }));
 
@@ -659,7 +661,7 @@ describe("enrichment integration — workspace section edge cases", () => {
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(DriftStore).mockImplementation(() => mockStore as any);
+    vi.mocked(DriftStore).mockImplementation(function () { return mockStore as any; });
   });
 
   afterEach(() => {

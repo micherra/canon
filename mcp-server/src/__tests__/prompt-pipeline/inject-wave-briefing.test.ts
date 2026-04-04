@@ -391,14 +391,16 @@ describe("injectWaveBriefing — KG summary injection", () => {
         out_degree: 3,
       };
 
-      vi.mocked(KgQuery).mockImplementation((() =>
-        makeMockKgQuery({
+      vi.mocked(KgQuery).mockImplementation(function () {
+        return makeMockKgQuery({
           getFileMetrics: fileMetrics ?? vi.fn().mockReturnValue(defaultMetrics),
           getKgFreshnessMs: vi.fn().mockReturnValue(kgFreshnessMs),
-        })) as unknown as typeof KgQuery);
+        });
+      } as unknown as typeof KgQuery);
 
-      vi.mocked(KgStore).mockImplementation((() =>
-        makeMockKgStore(summaryText)) as unknown as typeof KgStore);
+      vi.mocked(KgStore).mockImplementation(function () {
+        return makeMockKgStore(summaryText);
+      } as unknown as typeof KgStore);
     }
   }
 

@@ -22,14 +22,16 @@ vi.mock("../graph/kg-schema.ts", () => ({
 }));
 
 vi.mock("../graph/kg-query.ts", () => ({
-  KgQuery: vi.fn(() => ({
-    findDeadCode: vi.fn().mockReturnValue([{ entity_id: 1, kind: "function", name: "orphan" }]),
-    getAncestors: vi.fn().mockReturnValue([{ depth: 1, entity_id: 5, name: "ancestor" }]),
-    getBlastRadius: vi.fn().mockReturnValue([{ depth: 1, entity_id: 4, name: "dep" }]),
-    getCallees: vi.fn().mockReturnValue([{ entity_id: 3, kind: "function", name: "callee" }]),
-    getCallers: vi.fn().mockReturnValue([{ entity_id: 2, kind: "function", name: "caller" }]),
-    search: vi.fn().mockReturnValue([]),
-  })),
+  KgQuery: vi.fn(function () {
+    return {
+      findDeadCode: vi.fn().mockReturnValue([{ entity_id: 1, kind: "function", name: "orphan" }]),
+      getAncestors: vi.fn().mockReturnValue([{ depth: 1, entity_id: 5, name: "ancestor" }]),
+      getBlastRadius: vi.fn().mockReturnValue([{ depth: 1, entity_id: 4, name: "dep" }]),
+      getCallees: vi.fn().mockReturnValue([{ entity_id: 3, kind: "function", name: "callee" }]),
+      getCallers: vi.fn().mockReturnValue([{ entity_id: 2, kind: "function", name: "caller" }]),
+      search: vi.fn().mockReturnValue([]),
+    };
+  }),
 }));
 
 import { KgQuery } from "../graph/kg-query.ts";
@@ -141,14 +143,16 @@ describe("graphQuery — success cases", () => {
 
   it("returns ok: true with results for 'search' query", () => {
     // Mock search to return a hit so we can verify the result shape
-    vi.mocked(KgQuery).mockImplementationOnce((() => ({
-      findDeadCode: vi.fn().mockReturnValue([]),
-      getAncestors: vi.fn().mockReturnValue([]),
-      getBlastRadius: vi.fn().mockReturnValue([]),
-      getCallees: vi.fn().mockReturnValue([]),
-      getCallers: vi.fn().mockReturnValue([]),
-      search: vi.fn().mockReturnValue([{ entity_id: 1, kind: "function", name: "myFunc" }]),
-    })) as any);
+    vi.mocked(KgQuery).mockImplementationOnce(function () {
+      return {
+        findDeadCode: vi.fn().mockReturnValue([]),
+        getAncestors: vi.fn().mockReturnValue([]),
+        getBlastRadius: vi.fn().mockReturnValue([]),
+        getCallees: vi.fn().mockReturnValue([]),
+        getCallers: vi.fn().mockReturnValue([]),
+        search: vi.fn().mockReturnValue([{ entity_id: 1, kind: "function", name: "myFunc" }]),
+      };
+    } as any);
 
     const result = graphQuery({ query_type: "search", target: "myFunc" }, tmpDir);
 
@@ -161,14 +165,16 @@ describe("graphQuery — success cases", () => {
 
   it("returns ok: true with empty results when entity not found for 'callers'", () => {
     // search returns empty → entity not found → empty callers
-    vi.mocked(KgQuery).mockImplementationOnce((() => ({
-      findDeadCode: vi.fn().mockReturnValue([]),
-      getAncestors: vi.fn().mockReturnValue([]),
-      getBlastRadius: vi.fn().mockReturnValue([]),
-      getCallees: vi.fn().mockReturnValue([]),
-      getCallers: vi.fn().mockReturnValue([]),
-      search: vi.fn().mockReturnValue([]), // no entity found
-    })) as any);
+    vi.mocked(KgQuery).mockImplementationOnce(function () {
+      return {
+        findDeadCode: vi.fn().mockReturnValue([]),
+        getAncestors: vi.fn().mockReturnValue([]),
+        getBlastRadius: vi.fn().mockReturnValue([]),
+        getCallees: vi.fn().mockReturnValue([]),
+        getCallers: vi.fn().mockReturnValue([]),
+        search: vi.fn().mockReturnValue([]), // no entity found
+      };
+    } as any);
 
     const result = graphQuery({ query_type: "callers", target: "unknownFunc" }, tmpDir);
 
