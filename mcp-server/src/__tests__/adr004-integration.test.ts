@@ -455,14 +455,14 @@ describe("runMigrations — data preservation during upgrade", () => {
     expect(rows[0].status).toBe("done");
   });
 
-  it("upgrades schema_version to 7 in meta table", () => {
+  it("upgrades schema_version to 8 in meta table", () => {
     const db = makeV1DbFromFull();
     runMigrations(db);
 
     const row = db
       .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
       .get() as { value: string } | undefined;
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
   });
 
   it("is idempotent: second call on an already-migrated v1→v2 DB does not throw", () => {

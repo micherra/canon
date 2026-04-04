@@ -128,8 +128,8 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("schema migration v4 — cache_prefix column", () => {
-  it("SCHEMA_VERSION is '7' (v4 adds cache_prefix, v5 adds transcript_path, v6 adds agent session columns, v7 adds jobs tables)", () => {
-    expect(SCHEMA_VERSION).toBe("7");
+  it("SCHEMA_VERSION is '8' (v4 adds cache_prefix, v5 adds transcript_path, v6 adds agent session columns, v7 adds worktree columns, v8 adds jobs tables)", () => {
+    expect(SCHEMA_VERSION).toBe("8");
   });
 
   it("fresh DB has cache_prefix column on execution table", () => {
@@ -138,10 +138,10 @@ describe("schema migration v4 — cache_prefix column", () => {
     db.close();
   });
 
-  it("fresh DB meta has schema_version '7'", () => {
+  it("fresh DB meta has schema_version '8'", () => {
     const db = initExecutionDb(":memory:");
     const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
     db.close();
   });
 
@@ -155,14 +155,14 @@ describe("schema migration v4 — cache_prefix column", () => {
     db.close();
   });
 
-  it("v3 DB migrates to v7: schema_version updated to '7'", () => {
+  it("v3 DB migrates to v8: schema_version updated to '8'", () => {
     const dbPath = join(makeTmpDir(), "orchestration.db");
     const v3db = createV3Db(dbPath);
     v3db.close();
 
     const db = initExecutionDb(dbPath);
     const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-    expect(row?.value).toBe("7");
+    expect(row?.value).toBe("8");
     db.close();
   });
 
