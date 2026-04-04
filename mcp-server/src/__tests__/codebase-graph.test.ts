@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { codebaseGraph } from "../tools/codebase-graph.ts";
 
 describe("codebaseGraph", () => {
@@ -26,7 +26,7 @@ describe("codebaseGraph", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("scans files and creates nodes with layer inference", async () => {
@@ -34,7 +34,10 @@ describe("codebaseGraph", () => {
       join(tmpDir, "src", "api", "orders.ts"),
       `import { OrderService } from '../services/order-service';\nexport function handler() {}`,
     );
-    await writeFile(join(tmpDir, "src", "services", "order-service.ts"), `export class OrderService {}`);
+    await writeFile(
+      join(tmpDir, "src", "services", "order-service.ts"),
+      `export class OrderService {}`,
+    );
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
@@ -45,13 +48,18 @@ describe("codebaseGraph", () => {
   });
 
   it("creates edges from imports", async () => {
-    await writeFile(join(tmpDir, "src", "api", "orders.ts"), `import { helper } from '../utils/helper';`);
+    await writeFile(
+      join(tmpDir, "src", "api", "orders.ts"),
+      `import { helper } from '../utils/helper';`,
+    );
     await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     expect(result.edges.length).toBeGreaterThanOrEqual(1);
-    const edge = result.edges.find((e) => e.source.includes("orders") && e.target.includes("helper"));
+    const edge = result.edges.find(
+      (e) => e.source.includes("orders") && e.target.includes("helper"),
+    );
     expect(edge).toBeDefined();
     expect(edge!.type).toBe("import");
   });
@@ -75,7 +83,7 @@ describe("codebaseGraph", () => {
     await writeFile(join(tmpDir, "src", "api", "orders.ts"), `export const x = 1;`);
 
     const result = await codebaseGraph(
-      { source_dirs: ["src"], changed_files: ["src/api/orders.ts"] },
+      { changed_files: ["src/api/orders.ts"], source_dirs: ["src"] },
       tmpDir,
       "/nonexistent",
     );
@@ -98,7 +106,7 @@ describe("codebaseGraph", () => {
     expect(result.nodes).toHaveLength(0);
     expect(result.edges).toHaveLength(0);
 
-    await rm(emptyDir, { recursive: true, force: true });
+    await rm(emptyDir, { force: true, recursive: true });
   });
 
   it("derives scan dirs from layers in .canon/config.json", async () => {
@@ -151,13 +159,18 @@ describe("codebaseGraph", () => {
         },
       }),
     );
-    await writeFile(join(tmpDir, "src", "api", "handler.ts"), `import { helper } from '@/utils/helper';`);
+    await writeFile(
+      join(tmpDir, "src", "api", "handler.ts"),
+      `import { helper } from '@/utils/helper';`,
+    );
     await writeFile(join(tmpDir, "src", "utils", "helper.ts"), `export function helper() {}`);
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
     expect(result.nodes).toHaveLength(2);
-    const edge = result.edges.find((e) => e.source.includes("handler") && e.target.includes("helper"));
+    const edge = result.edges.find(
+      (e) => e.source.includes("handler") && e.target.includes("helper"),
+    );
     expect(edge).toBeDefined();
   });
 
@@ -167,12 +180,15 @@ describe("codebaseGraph", () => {
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
         layers: {
-          ui: ["app"],
           shared: ["utils"],
+          ui: ["app"],
         },
       }),
     );
-    await writeFile(join(tmpDir, "src", "app", "page.tsx"), `export default function Page() { return <div/>; }`);
+    await writeFile(
+      join(tmpDir, "src", "app", "page.tsx"),
+      `export default function Page() { return <div/>; }`,
+    );
 
     const result = await codebaseGraph({ source_dirs: ["src"] }, tmpDir, "/nonexistent");
 
@@ -206,7 +222,6 @@ describe("codebaseGraph", () => {
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
-        layers: { llm: ["src/templates/**"] },
         graph: {
           composition: {
             enabled: true,
@@ -214,6 +229,7 @@ describe("codebaseGraph", () => {
             min_confidence: 0.7,
           },
         },
+        layers: { llm: ["src/templates/**"] },
       }),
     );
     await writeFile(join(tmpDir, "src", "templates", "planner.md"), "uses: ./summarizer.md\n");
@@ -236,13 +252,13 @@ describe("codebaseGraph", () => {
     await writeFile(
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
-        layers: { llm: ["src/templates/**"] },
         graph: {
           composition: {
             enabled: false,
             file_patterns: [".md"],
           },
         },
+        layers: { llm: ["src/templates/**"] },
       }),
     );
     await writeFile(join(tmpDir, "src", "templates", "planner.md"), "uses: ./summarizer.md\n");
@@ -253,8 +269,6 @@ describe("codebaseGraph", () => {
     expect(compositionEdge).toBeUndefined();
   });
 });
-
-// ── git-adapter-async integration (adr002-05) ──
 
 describe("codebaseGraph — git adapter integration", () => {
   let tmpDir: string;
@@ -273,17 +287,17 @@ describe("codebaseGraph — git adapter integration", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("gitCurrentBranch returns null when gitExecAsync returns ok:false — no changed files from git", async () => {
     // Mock gitExecAsync to always return ok:false (simulates no git repo)
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
-        ok: false,
-        stdout: "",
-        stderr: "fatal: not a git repository",
         exitCode: 128,
+        ok: false,
+        stderr: "fatal: not a git repository",
+        stdout: "",
         timedOut: false,
       }),
     }));
@@ -301,10 +315,10 @@ describe("codebaseGraph — git adapter integration", () => {
 
   it("uses gitExecAsync (not child_process) for git helpers", async () => {
     const gitExecAsync = vi.fn().mockResolvedValue({
-      ok: true,
-      stdout: "feat/my-branch",
-      stderr: "",
       exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "feat/my-branch",
       timedOut: false,
     });
     vi.doMock("../adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
@@ -319,4 +333,3 @@ describe("codebaseGraph — git adapter integration", () => {
     expect(firstArgs).toEqual(["rev-parse", "--abbrev-ref", "HEAD"]);
   });
 });
-

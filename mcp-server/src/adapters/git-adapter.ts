@@ -20,15 +20,15 @@ export function gitExec(args: string[], cwd: string, timeout = DEFAULT_TIMEOUT):
   const duration_ms = Math.round(performance.now() - start);
 
   return {
-    ok: result.status === 0 && !result.error,
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
+    duration_ms,
     exitCode: result.status ?? 1,
+    ok: result.status === 0 && !result.error,
+    stderr: result.stderr ?? "",
+    stdout: result.stdout ?? "",
     timedOut:
       result.error?.message?.includes("ETIMEDOUT") === true ||
       result.error?.message?.includes("timed out") === true ||
       result.signal === "SIGTERM",
-    duration_ms,
   };
 }
 
@@ -64,13 +64,19 @@ export function gitLog(
   );
 }
 
+/** Options for creating a git worktree. */
+export type GitWorktreeAddOptions = {
+  branchName: string;
+  baseCommit: string;
+  timeout?: number;
+};
+
 /** Convenience wrapper: runs `git worktree add`. */
 export function gitWorktreeAdd(
   worktreePath: string,
-  branchName: string,
-  baseCommit: string,
   cwd: string,
-  timeout?: number,
+  options: GitWorktreeAddOptions,
 ): ProcessResult {
+  const { branchName, baseCommit, timeout } = options;
   return gitExec(["worktree", "add", worktreePath, "-b", branchName, baseCommit], cwd, timeout);
 }

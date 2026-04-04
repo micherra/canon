@@ -25,38 +25,44 @@
  * - Progress not in cache prefix (ADR-006a risk)
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports — only mock external I/O, not the pipeline
-// ---------------------------------------------------------------------------
 
 vi.mock("../../orchestration/wave-briefing.ts", () => ({
+  assembleWaveBriefing: vi
+    .fn()
+    .mockImplementation(
+      (opts: {
+        wave: number;
+        summaries: string[];
+        consultationOutputs: Record<string, { section?: string; summary: string }>;
+      }) => {
+        const outputs = opts.consultationOutputs ?? {};
+        const keys = Object.keys(outputs);
+        if (keys.length === 0) return "";
+        const parts = keys.map((k) => `${k}: ${outputs[k].summary}`);
+        return `## Consultation Briefing\n\n${parts.join("\n")}`;
+      },
+    ),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
-  assembleWaveBriefing: vi.fn().mockImplementation(
-    (opts: { wave: number; summaries: string[]; consultationOutputs: Record<string, { section?: string; summary: string }> }) => {
-      const outputs = opts.consultationOutputs ?? {};
-      const keys = Object.keys(outputs);
-      if (keys.length === 0) return "";
-      const parts = keys.map((k) => `${k}: ${outputs[k].summary}`);
-      return `## Consultation Briefing\n\n${parts.join("\n")}`;
-    }
-  ),
 }));
 
 vi.mock("../../orchestration/messages.ts", () => ({
+  buildMessageInstructions: vi
+    .fn()
+    .mockReturnValue("## Wave Coordination\n\nCoordination instructions here."),
   readChannelAsContext: vi.fn().mockResolvedValue(""),
-  buildMessageInstructions: vi.fn().mockReturnValue("## Wave Coordination\n\nCoordination instructions here."),
 }));
 
 vi.mock("../../orchestration/inject-context.ts", () => ({
   resolveContextInjections: vi.fn().mockResolvedValue({
+    hitl: undefined,
     variables: {},
     warnings: [],
-    hitl: undefined,
   }),
 }));
 
@@ -65,9 +71,9 @@ vi.mock("../../orchestration/diff-cluster.ts", () => ({
 }));
 
 vi.mock("../../orchestration/debate.ts", () => ({
-  inspectDebateProgress: vi.fn().mockResolvedValue({ completed: true, summary: "" }),
   buildDebatePrompt: vi.fn().mockReturnValue("Debate prompt content"),
   debateTeamLabel: vi.fn().mockImplementation((i: number) => `team-${i}`),
+  inspectDebateProgress: vi.fn().mockResolvedValue({ completed: true, summary: "" }),
 }));
 
 vi.mock("../../orchestration/compete.ts", () => ({
@@ -78,25 +84,16 @@ vi.mock("../../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn().mockResolvedValue({ skip: false }),
 }));
 
-// ---------------------------------------------------------------------------
 // Imports (after mocks)
-// ---------------------------------------------------------------------------
 
-import {
-  readWaveGuidance,
-  assembleWaveBriefing,
-} from "../../orchestration/wave-briefing.ts";
-import { resolveContextInjections } from "../../orchestration/inject-context.ts";
+import { buildDebatePrompt, inspectDebateProgress } from "../../orchestration/debate.ts";
 import { clusterDiff } from "../../orchestration/diff-cluster.ts";
-import { inspectDebateProgress, buildDebatePrompt } from "../../orchestration/debate.ts";
-import { getSpawnPrompt } from "../../tools/get-spawn-prompt.ts";
-import { getExecutionStore, clearStoreCache } from "../../orchestration/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "../../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../../orchestration/flow-schema.ts";
+import { resolveContextInjections } from "../../orchestration/inject-context.ts";
+import { assembleWaveBriefing, readWaveGuidance } from "../../orchestration/wave-briefing.ts";
+import { getSpawnPrompt } from "../../tools/get-spawn-prompt.ts";
 import type { SpawnPromptInput } from "../../tools/prompt-pipeline/types.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -115,45 +112,45 @@ function seedWorkspace(task = "test task"): string {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: "test-flow",
-    task,
-    entry: "implement",
-    current_state: "implement",
     base_commit: "abc1234",
-    started: now,
-    last_updated: now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: "implement",
+    entry: "implement",
+    flow: "test-flow",
     flow_name: "test-flow",
+    last_updated: now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: now,
+    task,
+    tier: "medium",
   });
-  store.upsertState("implement", { status: "pending", entries: 0 });
-  store.upsertState("done", { status: "pending", entries: 0 });
+  store.upsertState("implement", { entries: 0, status: "pending" });
+  store.upsertState("done", { entries: 0, status: "pending" });
   return workspace;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: { type: "single", agent: "canon-implementor" },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: { implement: "Implement the task." },
+    states: {
+      done: { type: "terminal" },
+      implement: { agent: "canon-implementor", type: "single" },
+    },
     ...overrides,
   };
 }
 
 function makeInput(workspace: string, overrides: Partial<SpawnPromptInput> = {}): SpawnPromptInput {
   return {
-    workspace,
-    state_id: "implement",
     flow: makeFlow(),
+    state_id: "implement",
     variables: { CANON_PLUGIN_ROOT: "" },
+    workspace,
     ...overrides,
   };
 }
@@ -162,14 +159,12 @@ afterEach(() => {
   clearStoreCache();
   vi.clearAllMocks();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
-// ---------------------------------------------------------------------------
 // 1. Single state — basic structure
-// ---------------------------------------------------------------------------
 
 describe("integration — single state produces correct prompt structure", () => {
   it("produces exactly one prompt with correct agent and state_type", async () => {
@@ -226,24 +221,22 @@ describe("integration — single state produces correct prompt structure", () =>
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Wave state — N prompts with item substitution
-// ---------------------------------------------------------------------------
 
 describe("integration — wave state produces N prompts with items substituted", () => {
   it("produces one prompt per item for wave state", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
       flow,
       items: ["task-1", "task-2", "task-3"],
+      state_id: "build",
       wave: 1,
     });
 
@@ -259,16 +252,16 @@ describe("integration — wave state produces N prompts with items substituted",
   it("wave prompts have isolation: worktree set", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
       flow,
       items: ["task-1"],
+      state_id: "build",
       wave: 1,
     });
 
@@ -280,16 +273,16 @@ describe("integration — wave state produces N prompts with items substituted",
   it("wave state with no items produces zero prompts (graceful)", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
       flow,
       items: [],
+      state_id: "build",
       wave: 1,
     });
 
@@ -301,9 +294,7 @@ describe("integration — wave state produces N prompts with items substituted",
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Progress injection
-// ---------------------------------------------------------------------------
 
 describe("integration — progress variable injection", () => {
   it("progress appears in prompt when flow.progress is set", async () => {
@@ -330,7 +321,8 @@ describe("integration — progress variable injection", () => {
     const workspace = seedWorkspace();
     const store = getExecutionStore(workspace);
 
-    const cachePrefix = "## Flow: test-flow\n\nA test flow.\n\n---\n\n## Workspace\n\n- Task: test task";
+    const cachePrefix =
+      "## Flow: test-flow\n\nA test flow.\n\n---\n\n## Workspace\n\n- Task: test task";
     store.setCachePrefix(cachePrefix);
 
     store.appendProgress("- [x] State entered");
@@ -374,9 +366,7 @@ describe("integration — progress variable injection", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. inject_context escaping
-// ---------------------------------------------------------------------------
 
 describe("integration — inject_context content is escaped (not expanded as variable)", () => {
   it("${WORKSPACE} in inject_context value appears escaped in final prompt", async () => {
@@ -384,25 +374,41 @@ describe("integration — inject_context content is escaped (not expanded as var
 
     // Mock inject_context to return a value containing ${WORKSPACE}
     vi.mocked(resolveContextInjections).mockResolvedValueOnce({
+      hitl: undefined,
       variables: {
         context_data: "Use ${WORKSPACE} for the output path",
       },
       warnings: [],
-      hitl: undefined,
     });
 
     const flow = makeFlow({
+      spawn_instructions: { implement: "Context: ${context_data}" },
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
           inject_context: [{ from: "state", name: "context_data" }] as unknown as never[],
+          type: "single",
         },
-        done: { type: "terminal" },
       },
-      spawn_instructions: { implement: "Context: ${context_data}" },
     });
-    const input = makeInput(workspace, { flow, _board: { flow: "test-flow", task: "t", entry: "implement", current_state: "implement", base_commit: "abc", started: new Date().toISOString(), last_updated: new Date().toISOString(), states: {}, iterations: {}, blocked: null, concerns: [], skipped: [] } });
+    const input = makeInput(workspace, {
+      _board: {
+        base_commit: "abc",
+        blocked: null,
+        concerns: [],
+        current_state: "implement",
+        entry: "implement",
+        flow: "test-flow",
+        iterations: {},
+        last_updated: new Date().toISOString(),
+        skipped: [],
+        started: new Date().toISOString(),
+        states: {},
+        task: "t",
+      },
+      flow,
+    });
 
     const result = await getSpawnPrompt(input);
 
@@ -416,25 +422,41 @@ describe("integration — inject_context content is escaped (not expanded as var
     const workspace = seedWorkspace();
 
     vi.mocked(resolveContextInjections).mockResolvedValueOnce({
+      hitl: undefined,
       variables: {
         context_data: "Plain text without dollar patterns",
       },
       warnings: [],
-      hitl: undefined,
     });
 
     const flow = makeFlow({
+      spawn_instructions: { implement: "Context: ${context_data}" },
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
           inject_context: [{ from: "state", name: "context_data" }] as unknown as never[],
+          type: "single",
         },
-        done: { type: "terminal" },
       },
-      spawn_instructions: { implement: "Context: ${context_data}" },
     });
-    const input = makeInput(workspace, { flow, _board: { flow: "test-flow", task: "t", entry: "implement", current_state: "implement", base_commit: "abc", started: new Date().toISOString(), last_updated: new Date().toISOString(), states: {}, iterations: {}, blocked: null, concerns: [], skipped: [] } });
+    const input = makeInput(workspace, {
+      _board: {
+        base_commit: "abc",
+        blocked: null,
+        concerns: [],
+        current_state: "implement",
+        entry: "implement",
+        flow: "test-flow",
+        iterations: {},
+        last_updated: new Date().toISOString(),
+        skipped: [],
+        started: new Date().toISOString(),
+        states: {},
+        task: "t",
+      },
+      flow,
+    });
 
     const result = await getSpawnPrompt(input);
 
@@ -442,28 +464,26 @@ describe("integration — inject_context content is escaped (not expanded as var
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. Consultation outputs — escaping by pipeline (not pre-escaped by caller)
-// ---------------------------------------------------------------------------
 
 describe("integration — consultation_outputs escaped by pipeline", () => {
   it("raw ${var} in consultation summary appears escaped in final prompt", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
-      flow,
-      items: ["task-1"],
-      wave: 1,
       consultation_outputs: {
         research: { summary: "Use ${PATTERN} in the implementation" },
       },
+      flow,
+      items: ["task-1"],
+      state_id: "build",
+      wave: 1,
     });
 
     const result = await getSpawnPrompt(input);
@@ -478,16 +498,16 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
   it("absent consultation_outputs does not error and produces clean prompt", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
       flow,
       items: ["task-1"],
+      state_id: "build",
       wave: 1,
       // no consultation_outputs
     });
@@ -504,16 +524,16 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
 
     // Path 1: without consultation_outputs
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const inputWithout = makeInput(workspace, {
-      state_id: "build",
       flow,
       items: ["task-a"],
+      state_id: "build",
       wave: 1,
     });
     const resultWithout = await getSpawnPrompt(inputWithout);
@@ -521,13 +541,13 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
 
     // Path 2: with consultation_outputs (same workspace)
     const inputWith = makeInput(workspace, {
-      state_id: "build",
-      flow,
-      items: ["task-b"],
-      wave: 1,
       consultation_outputs: {
         research: { summary: "Plain text findings" },
       },
+      flow,
+      items: ["task-b"],
+      state_id: "build",
+      wave: 1,
     });
     const resultWith = await getSpawnPrompt(inputWith);
     expect(resultWith.prompts).toHaveLength(1);
@@ -535,9 +555,7 @@ describe("integration — consultation_outputs escaped by pipeline", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. Cache prefix
-// ---------------------------------------------------------------------------
 
 describe("integration — cache prefix prepended to all prompts", () => {
   it("cache prefix is prepended to single-state prompt", async () => {
@@ -566,16 +584,16 @@ describe("integration — cache prefix prepended to all prompts", () => {
     store.setCachePrefix(prefix);
 
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
       flow,
       items: ["task-1", "task-2"],
+      state_id: "build",
       wave: 1,
     });
 
@@ -603,9 +621,7 @@ describe("integration — cache prefix prepended to all prompts", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. Validate stage — unresolved variables produce ERROR warnings
-// ---------------------------------------------------------------------------
 
 describe("integration — unresolved variable produces ERROR warning", () => {
   it("unknown variable in instruction produces ERROR: warning", async () => {
@@ -651,28 +667,26 @@ describe("integration — unresolved variable produces ERROR warning", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 8. Wave briefing injection — wave state with consultation_outputs
-// ---------------------------------------------------------------------------
 
 describe("integration — wave briefing injection", () => {
   it("wave briefing appears in each wave prompt when consultation_outputs provided", async () => {
     const workspace = seedWorkspace();
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
-      flow,
-      items: ["task-1", "task-2"],
-      wave: 1,
       consultation_outputs: {
         architecture: { summary: "Use layered architecture" },
       },
+      flow,
+      items: ["task-1", "task-2"],
+      state_id: "build",
+      wave: 1,
     });
 
     const result = await getSpawnPrompt(input);
@@ -689,16 +703,16 @@ describe("integration — wave briefing injection", () => {
     vi.mocked(readWaveGuidance).mockResolvedValueOnce("Use the strangler fig pattern.");
 
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
       flow,
       items: ["task-1"],
+      state_id: "build",
       wave: 1,
     });
 
@@ -709,9 +723,7 @@ describe("integration — wave briefing injection", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 9. Stage ordering preserved
-// ---------------------------------------------------------------------------
 
 describe("integration — stage ordering preserved end-to-end", () => {
   it("cache prefix appears before instruction content, metrics footer appears last", async () => {
@@ -740,20 +752,20 @@ describe("integration — stage ordering preserved end-to-end", () => {
     store.setCachePrefix("## CACHE_PREFIX_MARKER ##\n\n");
 
     const flow = makeFlow({
+      spawn_instructions: { build: "## INSTRUCTION_MARKER ##\n\n${item}" },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "## INSTRUCTION_MARKER ##\n\n${item}" },
     });
     const input = makeInput(workspace, {
-      state_id: "build",
-      flow,
-      items: ["task-1"],
-      wave: 1,
       consultation_outputs: {
         research: { summary: "findings summary" },
       },
+      flow,
+      items: ["task-1"],
+      state_id: "build",
+      wave: 1,
     });
 
     const result = await getSpawnPrompt(input);
@@ -773,9 +785,7 @@ describe("integration — stage ordering preserved end-to-end", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 10. Debate state
-// ---------------------------------------------------------------------------
 
 describe("integration — debate state produces debate prompts", () => {
   it("active debate on entry state produces per-team prompts with fanned_out flag", async () => {
@@ -783,18 +793,18 @@ describe("integration — debate state produces debate prompts", () => {
 
     vi.mocked(inspectDebateProgress).mockResolvedValueOnce({
       completed: false,
-      next_round: 1,
-      next_channel: "debate-round-1",
-      transcript: undefined,
       last_completed_round: 0,
+      next_channel: "debate-round-1",
+      next_round: 1,
+      transcript: undefined,
     });
     vi.mocked(buildDebatePrompt).mockReturnValue("## Debate Prompt for team");
 
     const flow = makeFlow({
       debate: {
-        teams: 2,
-        max_rounds: 3,
         composition: ["canon-implementor"],
+        max_rounds: 3,
+        teams: 2,
       },
     } as unknown as Partial<ResolvedFlow>);
 
@@ -808,33 +818,44 @@ describe("integration — debate state produces debate prompts", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 11. Cluster fanout
-// ---------------------------------------------------------------------------
 
 describe("integration — cluster fanout for single state", () => {
   it("cluster fanout produces one prompt per cluster", async () => {
     const workspace = seedWorkspace();
 
     vi.mocked(clusterDiff).mockReturnValueOnce([
-      { key: "cluster-1", files: ["src/a.ts", "src/b.ts"] },
-      { key: "cluster-2", files: ["src/c.ts"] },
+      { files: ["src/a.ts", "src/b.ts"], key: "cluster-1" },
+      { files: ["src/c.ts"], key: "cluster-2" },
     ] as never);
 
     const flow = makeFlow({
+      spawn_instructions: { implement: "Implement files: ${item.files}" },
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
           large_diff_threshold: 5,
+          type: "single",
         } as never,
-        done: { type: "terminal" },
       },
-      spawn_instructions: { implement: "Implement files: ${item.files}" },
     });
     const input = makeInput(workspace, {
+      _board: {
+        base_commit: "abc",
+        blocked: null,
+        concerns: [],
+        current_state: "implement",
+        entry: "implement",
+        flow: "test-flow",
+        iterations: {},
+        last_updated: new Date().toISOString(),
+        skipped: [],
+        started: new Date().toISOString(),
+        states: {},
+        task: "t",
+      },
       flow,
-      _board: { flow: "test-flow", task: "t", entry: "implement", current_state: "implement", base_commit: "abc", started: new Date().toISOString(), last_updated: new Date().toISOString(), states: {}, iterations: {}, blocked: null, concerns: [], skipped: [] },
     });
 
     const result = await getSpawnPrompt(input);
@@ -848,9 +869,7 @@ describe("integration — cluster fanout for single state", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 12. Resumed workspace prefix availability (risk #8)
-// ---------------------------------------------------------------------------
 
 describe("integration — resumed workspace prefix availability (risk #8)", () => {
   it("cache prefix persists across store cache clear (simulated process restart)", async () => {
@@ -878,9 +897,7 @@ describe("integration — resumed workspace prefix availability (risk #8)", () =
   });
 });
 
-// ---------------------------------------------------------------------------
 // 13. Terminal state early exit
-// ---------------------------------------------------------------------------
 
 describe("integration — terminal state returns empty prompts", () => {
   it("terminal state returns empty prompts without running pipeline", async () => {

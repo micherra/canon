@@ -14,27 +14,25 @@
  * 7. Multiple artifact types validated together in a single reportResult call
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import { afterEach, describe, expect, it } from "vitest";
+import { DriftStore } from "../drift/store.ts";
+import { executeEffects } from "../orchestration/effects.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import type {
+  RequiredArtifact,
+  ResolvedFlow,
+  StateDefinition,
+} from "../orchestration/flow-schema.ts";
+import { RequiredArtifactSchema } from "../orchestration/flow-schema.ts";
+import { reportResult, validateRequiredArtifacts } from "../tools/report-result.ts";
+import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
 import { writeReview } from "../tools/write-review.ts";
 import { writeTestReport } from "../tools/write-test-report.ts";
-import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
-import { validateRequiredArtifacts } from "../tools/report-result.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { executeEffects } from "../orchestration/effects.ts";
-import { DriftStore } from "../drift/store.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import type { ResolvedFlow, RequiredArtifact, StateDefinition } from "../orchestration/flow-schema.ts";
-import { RequiredArtifactSchema } from "../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -47,7 +45,7 @@ function makeTmpDir(): string {
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
@@ -57,28 +55,28 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: flow.name,
-    task: "task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc1234",
-    started: now,
-    last_updated: now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "main",
     slug: "test-slug",
+    started: now,
+    task: "task",
+    tier: "medium",
   });
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
     if ("max_iterations" in stateDef && stateDef.max_iterations !== undefined) {
       store.upsertIteration(stateId, {
-        count: 0,
-        max: stateDef.max_iterations,
-        history: [],
         cannot_fix: [],
+        count: 0,
+        history: [],
+        max: stateDef.max_iterations,
       });
     }
   }
@@ -87,18 +85,18 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
 function makeFlow(requiredArtifacts?: RequiredArtifact[]): ResolvedFlow {
   const stateDef = requiredArtifacts
     ? {
-        type: "single" as const,
-        transitions: { done: "terminal" },
         required_artifacts: requiredArtifacts,
+        transitions: { done: "terminal" },
+        type: "single" as const,
       }
     : {
-        type: "single" as const,
         transitions: { done: "terminal" },
+        type: "single" as const,
       };
   return {
-    name: "adr010-integration-flow",
     description: "ADR-010 integration test flow",
     entry: "implement",
+    name: "adr010-integration-flow",
     spawn_instructions: { implement: "Implement." },
     states: {
       implement: stateDef,
@@ -107,9 +105,7 @@ function makeFlow(requiredArtifacts?: RequiredArtifact[]): ResolvedFlow {
   };
 }
 
-// ---------------------------------------------------------------------------
 // 1. writeReview → executeEffects end-to-end round-trip
-// ---------------------------------------------------------------------------
 
 describe("writeReview → executeEffects (persistReview) end-to-end", () => {
   it("structured .meta.json written by writeReview is consumed correctly by executeEffects", async () => {
@@ -119,23 +115,23 @@ describe("writeReview → executeEffects (persistReview) end-to-end", () => {
 
     // Call writeReview as a real agent would
     const reviewResult = await writeReview({
-      workspace,
+      files: ["src/api.ts", "src/service.ts"],
+      honored: ["errors-are-values", "thin-handlers"],
+      score: {
+        conventions: { passed: 2, total: 2 },
+        opinions: { passed: 3, total: 4 },
+        rules: { passed: 4, total: 5 },
+      },
       slug: "my-task",
       verdict: "approved_with_concerns",
       violations: [
         {
+          file_path: "src/api.ts",
           principle_id: "validate-at-boundaries",
           severity: "strong-opinion",
-          file_path: "src/api.ts",
         },
       ],
-      honored: ["errors-are-values", "thin-handlers"],
-      score: {
-        rules: { passed: 4, total: 5 },
-        opinions: { passed: 3, total: 4 },
-        conventions: { passed: 2, total: 2 },
-      },
-      files: ["src/api.ts", "src/service.ts"],
+      workspace,
     });
 
     assertOk(reviewResult);
@@ -143,11 +139,11 @@ describe("writeReview → executeEffects (persistReview) end-to-end", () => {
 
     // Now run executeEffects as reportResult would after a review state
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const effectResults = await executeEffects(stateDef, workspace, [], projectDir);
+    const effectResults = await executeEffects(stateDef, { artifacts: [], projectDir, workspace });
 
     expect(effectResults).toHaveLength(1);
     expect(effectResults[0].type).toBe("persist_review");
@@ -169,30 +165,30 @@ describe("writeReview → executeEffects (persistReview) end-to-end", () => {
     await mkdir(join(projectDir, ".canon"), { recursive: true });
 
     const reviewResult = await writeReview({
-      workspace,
+      files: ["src/secrets.ts"],
+      honored: [],
+      score: {
+        conventions: { passed: 2, total: 2 },
+        opinions: { passed: 1, total: 3 },
+        rules: { passed: 0, total: 2 },
+      },
       slug: "review-task",
       verdict: "blocked",
       violations: [
         { principle_id: "secrets-never-in-code", severity: "rule" },
         { principle_id: "no-silent-failures", severity: "strong-opinion" },
       ],
-      honored: [],
-      score: {
-        rules: { passed: 0, total: 2 },
-        opinions: { passed: 1, total: 3 },
-        conventions: { passed: 2, total: 2 },
-      },
-      files: ["src/secrets.ts"],
+      workspace,
     });
 
     assertOk(reviewResult);
 
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const effectResults = await executeEffects(stateDef, workspace, [], projectDir);
+    const effectResults = await executeEffects(stateDef, { artifacts: [], projectDir, workspace });
 
     expect(effectResults[0].recorded).toBe(1);
     const entries = await new DriftStore(projectDir).getReviews();
@@ -208,28 +204,28 @@ describe("writeReview → executeEffects (persistReview) end-to-end", () => {
     await mkdir(join(projectDir, ".canon"), { recursive: true });
 
     const reviewResult = await writeReview({
-      workspace,
+      files: [],
+      honored: [], // explicitly empty
+      score: {
+        conventions: { passed: 1, total: 1 },
+        opinions: { passed: 1, total: 2 },
+        rules: { passed: 2, total: 3 },
+      },
       slug: "no-honored",
       verdict: "changes_required",
       violations: [{ principle_id: "validate-at-boundaries", severity: "rule" }],
-      honored: [], // explicitly empty
-      score: {
-        rules: { passed: 2, total: 3 },
-        opinions: { passed: 1, total: 2 },
-        conventions: { passed: 1, total: 1 },
-      },
-      files: [],
+      workspace,
     });
 
     assertOk(reviewResult);
     expect(reviewResult.violation_count).toBe(1);
 
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const effectResults = await executeEffects(stateDef, workspace, [], projectDir);
+    const effectResults = await executeEffects(stateDef, { artifacts: [], projectDir, workspace });
 
     expect(effectResults[0].recorded).toBe(1);
     const entries = await new DriftStore(projectDir).getReviews();
@@ -238,9 +234,7 @@ describe("writeReview → executeEffects (persistReview) end-to-end", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. writeTestReport → validateRequiredArtifacts (cross-tool)
-// ---------------------------------------------------------------------------
 
 describe("writeTestReport → validateRequiredArtifacts (cross-tool)", () => {
   it("meta.json written by writeTestReport satisfies validateRequiredArtifacts", async () => {
@@ -248,12 +242,12 @@ describe("writeTestReport → validateRequiredArtifacts (cross-tool)", () => {
 
     // Agent calls writeTestReport
     const writeResult = await writeTestReport({
-      workspace,
+      failed: 0,
+      passed: 42,
+      skipped: 2,
       slug: "my-epic",
       summary: "All tests passed.",
-      passed: 42,
-      failed: 0,
-      skipped: 2,
+      workspace,
     });
 
     assertOk(writeResult);
@@ -272,13 +266,13 @@ describe("writeTestReport → validateRequiredArtifacts (cross-tool)", () => {
     const workspace = makeTmpDir();
 
     await writeTestReport({
-      workspace,
+      failed: 1,
+      issues: [{ error: "assertion failed", test: "failing-test" }],
+      passed: 10,
+      skipped: 0,
       slug: "specific-task",
       summary: "Tests ran.",
-      passed: 10,
-      failed: 1,
-      skipped: 0,
-      issues: [{ test: "failing-test", error: "assertion failed" }],
+      workspace,
     });
 
     const validationError = await validateRequiredArtifacts(
@@ -306,22 +300,18 @@ describe("writeTestReport → validateRequiredArtifacts (cross-tool)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. writeImplementationSummary → validateRequiredArtifacts (cross-tool)
-// ---------------------------------------------------------------------------
 
 describe("writeImplementationSummary → validateRequiredArtifacts (cross-tool)", () => {
   it("meta.json written by writeImplementationSummary satisfies validateRequiredArtifacts", async () => {
     const workspace = makeTmpDir();
 
     const writeResult = await writeImplementationSummary({
-      workspace,
+      decisions_applied: ["dec-03"],
+      files_changed: [{ action: "added", path: "src/tools/write-implementation-summary.ts" }],
       slug: "my-epic",
       task_id: "adr010-03",
-      files_changed: [
-        { path: "src/tools/write-implementation-summary.ts", action: "added" },
-      ],
-      decisions_applied: ["dec-03"],
+      workspace,
     });
 
     assertOk(writeResult);
@@ -340,12 +330,12 @@ describe("writeImplementationSummary → validateRequiredArtifacts (cross-tool)"
 
     // Write a TEST-REPORT, then require an IMPLEMENTATION-SUMMARY
     await writeTestReport({
-      workspace,
+      failed: 0,
+      passed: 5,
+      skipped: 0,
       slug: "my-epic",
       summary: "Tests passed.",
-      passed: 5,
-      failed: 0,
-      skipped: 0,
+      workspace,
     });
 
     const validationError = await validateRequiredArtifacts(
@@ -361,9 +351,7 @@ describe("writeImplementationSummary → validateRequiredArtifacts (cross-tool)"
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. validateRequiredArtifacts with .meta.json path in artifacts list
-// ---------------------------------------------------------------------------
 
 describe("validateRequiredArtifacts — explicit .meta.json in artifacts list", () => {
   it("finds artifact when absolute .meta.json path is in artifacts list", async () => {
@@ -371,17 +359,17 @@ describe("validateRequiredArtifacts — explicit .meta.json in artifacts list", 
 
     // Write the sidecar via writeReview
     const reviewResult = await writeReview({
-      workspace,
+      files: [],
+      honored: ["errors-are-values"],
+      score: {
+        conventions: { passed: 1, total: 1 },
+        opinions: { passed: 2, total: 2 },
+        rules: { passed: 3, total: 3 },
+      },
       slug: "my-review-task",
       verdict: "approved",
       violations: [],
-      honored: ["errors-are-values"],
-      score: {
-        rules: { passed: 3, total: 3 },
-        opinions: { passed: 2, total: 2 },
-        conventions: { passed: 1, total: 1 },
-      },
-      files: [],
+      workspace,
     });
     assertOk(reviewResult);
 
@@ -404,17 +392,17 @@ describe("validateRequiredArtifacts — explicit .meta.json in artifacts list", 
     const workspace = makeTmpDir();
 
     await writeReview({
-      workspace,
+      files: [],
+      honored: [],
+      score: {
+        conventions: { passed: 1, total: 1 },
+        opinions: { passed: 1, total: 1 },
+        rules: { passed: 1, total: 1 },
+      },
       slug: "md-path-task",
       verdict: "approved",
       violations: [],
-      honored: [],
-      score: {
-        rules: { passed: 1, total: 1 },
-        opinions: { passed: 1, total: 1 },
-        conventions: { passed: 1, total: 1 },
-      },
-      files: [],
+      workspace,
     });
 
     // Agent reports the .md path — does NOT match REVIEW.meta.json in basename check
@@ -449,9 +437,7 @@ describe("validateRequiredArtifacts — explicit .meta.json in artifacts list", 
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. RequiredArtifactSchema — schema validation
-// ---------------------------------------------------------------------------
 
 describe("RequiredArtifactSchema — Zod schema validation", () => {
   it("accepts valid required artifact declaration", () => {
@@ -497,9 +483,7 @@ describe("RequiredArtifactSchema — Zod schema validation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. writeReview → reportResult with required_artifacts (full flow)
-// ---------------------------------------------------------------------------
 
 describe("writeReview → reportResult with required_artifacts (end-to-end)", () => {
   it("reportResult succeeds when writeReview produced the required artifact", async () => {
@@ -509,27 +493,27 @@ describe("writeReview → reportResult with required_artifacts (end-to-end)", ()
 
     // Reviewer writes the review via the structured write tool
     const writeResult = await writeReview({
-      workspace,
+      files: ["src/index.ts"],
+      honored: ["errors-are-values"],
+      score: {
+        conventions: { passed: 2, total: 2 },
+        opinions: { passed: 4, total: 4 },
+        rules: { passed: 5, total: 5 },
+      },
       slug: "my-epic",
       verdict: "approved",
       violations: [],
-      honored: ["errors-are-values"],
-      score: {
-        rules: { passed: 5, total: 5 },
-        opinions: { passed: 4, total: 4 },
-        conventions: { passed: 2, total: 2 },
-      },
-      files: ["src/index.ts"],
+      workspace,
     });
     assertOk(writeResult);
 
     // Orchestrator calls reportResult with the artifact path
     const result = await reportResult({
-      workspace,
+      artifacts: ["reviews/REVIEW.md"],
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["reviews/REVIEW.md"],
+      workspace,
     });
 
     assertOk(result);
@@ -547,11 +531,11 @@ describe("writeReview → reportResult with required_artifacts (end-to-end)", ()
     // But no REVIEW.meta.json sidecar
 
     const result = await reportResult({
-      workspace,
+      artifacts: ["reviews/REVIEW.md"],
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["reviews/REVIEW.md"],
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -562,9 +546,7 @@ describe("writeReview → reportResult with required_artifacts (end-to-end)", ()
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. Multiple artifact types validated together
-// ---------------------------------------------------------------------------
 
 describe("Multiple required artifact types in a single state", () => {
   it("all artifacts present: test_report + review → reportResult succeeds", async () => {
@@ -577,35 +559,35 @@ describe("Multiple required artifact types in a single state", () => {
 
     // Tester writes TEST-REPORT
     await writeTestReport({
-      workspace,
+      failed: 0,
+      passed: 50,
+      skipped: 0,
       slug: "my-epic",
       summary: "All tests passed.",
-      passed: 50,
-      failed: 0,
-      skipped: 0,
+      workspace,
     });
 
     // Reviewer writes REVIEW
     await writeReview({
-      workspace,
+      files: ["src/index.ts"],
+      honored: ["errors-are-values"],
+      score: {
+        conventions: { passed: 1, total: 1 },
+        opinions: { passed: 3, total: 3 },
+        rules: { passed: 5, total: 5 },
+      },
       slug: "my-epic",
       verdict: "approved",
       violations: [],
-      honored: ["errors-are-values"],
-      score: {
-        rules: { passed: 5, total: 5 },
-        opinions: { passed: 3, total: 3 },
-        conventions: { passed: 1, total: 1 },
-      },
-      files: ["src/index.ts"],
+      workspace,
     });
 
     const result = await reportResult({
-      workspace,
+      artifacts: ["plans/my-epic/TEST-REPORT.md", "reviews/REVIEW.md"],
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["plans/my-epic/TEST-REPORT.md", "reviews/REVIEW.md"],
+      workspace,
     });
 
     assertOk(result);
@@ -622,20 +604,20 @@ describe("Multiple required artifact types in a single state", () => {
 
     // Only writeTestReport — no writeReview
     await writeTestReport({
-      workspace,
+      failed: 0,
+      passed: 10,
+      skipped: 0,
       slug: "my-epic",
       summary: "Tests passed.",
-      passed: 10,
-      failed: 0,
-      skipped: 0,
+      workspace,
     });
 
     const result = await reportResult({
-      workspace,
+      artifacts: ["plans/my-epic/TEST-REPORT.md"],
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["plans/my-epic/TEST-REPORT.md"],
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -649,33 +631,33 @@ describe("Multiple required artifact types in a single state", () => {
     const workspace = makeTmpDir();
 
     await writeTestReport({
-      workspace,
+      failed: 0,
+      passed: 20,
+      skipped: 1,
       slug: "full-epic",
       summary: "All tests passed.",
-      passed: 20,
-      failed: 0,
-      skipped: 1,
+      workspace,
     });
 
     await writeReview({
-      workspace,
+      files: [],
+      honored: ["errors-are-values"],
+      score: {
+        conventions: { passed: 1, total: 1 },
+        opinions: { passed: 2, total: 2 },
+        rules: { passed: 3, total: 3 },
+      },
       slug: "full-epic",
       verdict: "approved",
       violations: [],
-      honored: ["errors-are-values"],
-      score: {
-        rules: { passed: 3, total: 3 },
-        opinions: { passed: 2, total: 2 },
-        conventions: { passed: 1, total: 1 },
-      },
-      files: [],
+      workspace,
     });
 
     await writeImplementationSummary({
-      workspace,
+      files_changed: [{ action: "modified", path: "src/index.ts" }],
       slug: "full-epic",
       task_id: "task-01",
-      files_changed: [{ path: "src/index.ts", action: "modified" }],
+      workspace,
     });
 
     const required: RequiredArtifact[] = [
@@ -689,26 +671,24 @@ describe("Multiple required artifact types in a single state", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 8. write-review meta.json is readable after writeReview (content verification)
-// ---------------------------------------------------------------------------
 
 describe("writeReview meta.json content structure", () => {
   it("meta.json contains verdict_original alongside mapped verdict", async () => {
     const workspace = makeTmpDir();
 
     const result = await writeReview({
-      workspace,
+      files: [],
+      honored: [],
+      score: {
+        conventions: { passed: 1, total: 1 },
+        opinions: { passed: 1, total: 1 },
+        rules: { passed: 1, total: 1 },
+      },
       slug: "verify-meta",
       verdict: "approved_with_concerns",
       violations: [],
-      honored: [],
-      score: {
-        rules: { passed: 1, total: 1 },
-        opinions: { passed: 1, total: 1 },
-        conventions: { passed: 1, total: 1 },
-      },
-      files: [],
+      workspace,
     });
 
     assertOk(result);
@@ -726,25 +706,25 @@ describe("writeReview meta.json content structure", () => {
     const workspace = makeTmpDir();
 
     const result = await writeReview({
-      workspace,
+      files: ["src/api.ts"],
+      honored: [],
+      score: {
+        conventions: { passed: 1, total: 1 },
+        opinions: { passed: 1, total: 1 },
+        rules: { passed: 0, total: 1 },
+      },
       slug: "violation-meta",
       verdict: "changes_required",
       violations: [
         {
+          description: "Input not validated",
+          file_path: "src/api.ts",
+          fix: "Add zod schema at handler entry",
           principle_id: "validate-at-boundaries",
           severity: "rule",
-          file_path: "src/api.ts",
-          description: "Input not validated",
-          fix: "Add zod schema at handler entry",
         },
       ],
-      honored: [],
-      score: {
-        rules: { passed: 0, total: 1 },
-        opinions: { passed: 1, total: 1 },
-        conventions: { passed: 1, total: 1 },
-      },
-      files: ["src/api.ts"],
+      workspace,
     });
 
     assertOk(result);

@@ -10,17 +10,13 @@
  * 6. No board.json or .lock file created
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
@@ -39,24 +35,20 @@ vi.mock("../orchestration/consultation-executor.ts", () => ({
 }));
 
 vi.mock("../orchestration/wave-variables.ts", () => ({
-  escapeDollarBrace: vi.fn((s: string) => s),
-  substituteVariables: vi.fn((s: string) => s),
   buildTemplateInjection: vi.fn(() => ""),
-  parseTaskIdsForWave: vi.fn(() => []),
+  escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
+  parseTaskIdsForWave: vi.fn(() => []),
+  substituteVariables: vi.fn((s: string) => s),
 }));
 
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
 import { wrapHandler } from "../utils/wrap-handler.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -75,39 +67,39 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
 
   // Initialize execution row (board top-level fields + session)
   store.initExecution({
-    flow: overrides.flow ?? "test-flow",
-    task: overrides.task ?? "test task",
-    entry: overrides.entry ?? "implement",
-    current_state: overrides.current_state ?? "implement",
     base_commit: overrides.base_commit ?? "abc1234",
-    started: overrides.started ?? now,
-    last_updated: overrides.last_updated ?? now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: overrides.current_state ?? "implement",
+    entry: overrides.entry ?? "implement",
+    flow: overrides.flow ?? "test-flow",
     flow_name: "test-flow",
+    last_updated: overrides.last_updated ?? now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: overrides.started ?? now,
+    task: overrides.task ?? "test task",
+    tier: "medium",
   });
 
   // Create initial state rows
-  const states = (overrides.states as Board['states']) ?? {
-    implement: { status: "pending", entries: 0 },
-    done: { status: "pending", entries: 0 },
+  const states = (overrides.states as Board["states"]) ?? {
+    done: { entries: 0, status: "pending" },
+    implement: { entries: 0, status: "pending" },
   };
   for (const [stateId, state] of Object.entries(states)) {
-    store.upsertState(stateId, { status: state.status, entries: state.entries ?? 0 });
+    store.upsertState(stateId, { entries: state.entries ?? 0, status: state.status });
   }
 
   // Create iteration rows if provided
-  const iterations = overrides.iterations as Board['iterations'] | undefined;
+  const iterations = overrides.iterations as Board["iterations"] | undefined;
   if (iterations) {
     for (const [stateId, iter] of Object.entries(iterations)) {
       store.upsertIteration(stateId, {
-        count: iter.count,
-        max: iter.max,
-        history: iter.history ?? [],
         cannot_fix: iter.cannot_fix ?? [],
+        count: iter.count,
+        history: iter.history ?? [],
+        max: iter.max,
       });
     }
   }
@@ -117,14 +109,14 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: { type: "single", agent: "canon-implementor" },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: { implement: "Implement ${task}." },
+    states: {
+      done: { type: "terminal" },
+      implement: { agent: "canon-implementor", type: "single" },
+    },
     ...overrides,
   };
 }
@@ -135,15 +127,11 @@ afterEach(() => {
   if (cache instanceof Map) cache.clear();
 
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState", () => {
   describe("convergence blocked", () => {
@@ -151,16 +139,16 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace, {
         iterations: {
-          implement: { count: 3, max: 3, history: [], cannot_fix: [] },
+          implement: { cannot_fix: [], count: 3, history: [], max: 3 },
         },
       });
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -177,19 +165,19 @@ describe("enterAndPrepareState", () => {
 
     it("includes cannot_fix_items and history in the convergence-blocked result", async () => {
       const workspace = makeTmpDir();
-      const cannotFixItems = [{ principle_id: "thin-handlers", file_path: "src/api/handler.ts" }];
-      const history = [{ principle_ids: ["thin-handlers"], file_paths: ["src/api/handler.ts"] }];
+      const cannotFixItems = [{ file_path: "src/api/handler.ts", principle_id: "thin-handlers" }];
+      const history = [{ file_paths: ["src/api/handler.ts"], principle_ids: ["thin-handlers"] }];
       seedStore(workspace, {
         iterations: {
-          implement: { count: 2, max: 2, history, cannot_fix: cannotFixItems },
+          implement: { cannot_fix: cannotFixItems, count: 2, history, max: 2 },
         },
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow: makeFlow(),
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -204,26 +192,26 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace);
       vi.mocked(evaluateSkipWhen).mockResolvedValue({
-        skip: true,
         reason: "No contract changes detected — all changes are internal",
+        skip: true,
       });
 
       const flow = makeFlow({
         states: {
+          done: { type: "terminal" },
           implement: {
-            type: "single",
             agent: "canon-implementor",
             skip_when: "no_contract_changes",
+            type: "single",
           },
-          done: { type: "terminal" },
         },
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -244,20 +232,20 @@ describe("enterAndPrepareState", () => {
 
       const flow = makeFlow({
         states: {
+          done: { type: "terminal" },
           implement: {
-            type: "single",
             agent: "canon-implementor",
             skip_when: "no_contract_changes",
+            type: "single",
           },
-          done: { type: "terminal" },
         },
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -278,10 +266,10 @@ describe("enterAndPrepareState", () => {
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "build the widget", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "build the widget" },
+        workspace,
       });
       assertOk(result);
 
@@ -298,16 +286,16 @@ describe("enterAndPrepareState", () => {
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
       expect(result.board).toBeDefined();
-      expect(result.board!.states["implement"].status).toBe("in_progress");
-      expect(result.board!.states["implement"].entries).toBe(1);
+      expect(result.board!.states.implement.status).toBe("in_progress");
+      expect(result.board!.states.implement.entries).toBe(1);
     });
 
     it("persists state entry to execution_states table — not board.json", async () => {
@@ -316,10 +304,10 @@ describe("enterAndPrepareState", () => {
 
       const flow = makeFlow();
       await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
 
       // Board.json must NOT exist
@@ -338,22 +326,22 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace, {
         iterations: {
-          implement: { count: 1, max: 5, history: [], cannot_fix: [] },
+          implement: { cannot_fix: [], count: 1, history: [], max: 5 },
         },
       });
 
       const flow = makeFlow({
         states: {
-          implement: { type: "single", agent: "canon-implementor", max_iterations: 5 },
           done: { type: "terminal" },
+          implement: { agent: "canon-implementor", max_iterations: 5, type: "single" },
         },
       });
 
       await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
 
       const store = getExecutionStore(workspace);
@@ -367,10 +355,10 @@ describe("enterAndPrepareState", () => {
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -386,17 +374,17 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace, {
         states: {
-          implement: { status: "pending", entries: 0 },
-          done: { status: "pending", entries: 0 },
+          done: { entries: 0, status: "pending" },
+          implement: { entries: 0, status: "pending" },
         },
       });
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "done",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "done",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -411,27 +399,27 @@ describe("enterAndPrepareState", () => {
       const workspace = makeTmpDir();
       seedStore(workspace, {
         states: {
-          review: { status: "pending", entries: 0 },
-          done: { status: "pending", entries: 0 },
+          done: { entries: 0, status: "pending" },
+          review: { entries: 0, status: "pending" },
         },
       });
 
       const flow: ResolvedFlow = {
-        name: "test-flow",
         description: "Test flow",
         entry: "review",
-        states: {
-          review: { type: "parallel", agents: ["canon-reviewer", "canon-security"] },
-          done: { type: "terminal" },
-        },
+        name: "test-flow",
         spawn_instructions: { review: "Review the code for ${task}." },
+        states: {
+          done: { type: "terminal" },
+          review: { agents: ["canon-reviewer", "canon-security"], type: "parallel" },
+        },
       };
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "review",
         flow,
-        variables: { task: "security", CANON_PLUGIN_ROOT: "" },
+        state_id: "review",
+        variables: { CANON_PLUGIN_ROOT: "", task: "security" },
+        workspace,
       });
       assertOk(result);
 
@@ -445,28 +433,28 @@ describe("enterAndPrepareState", () => {
   describe("consultation_prompts", () => {
     function makeFlowWithConsultations(breakpoint: "before" | "between" = "before"): ResolvedFlow {
       return {
-        name: "test-flow",
+        consultations: {
+          "risk-assessment": {
+            agent: "canon-security",
+            fragment: "risk-assessment",
+            role: "security-reviewer",
+            section: "Risk Assessment",
+            timeout: "10m",
+          },
+        },
         description: "Test flow",
         entry: "implement",
-        states: {
-          implement: {
-            type: "wave",
-            agent: "canon-implementor",
-            consultations: { [breakpoint]: ["risk-assessment"] },
-          },
-          done: { type: "terminal" },
-        },
+        name: "test-flow",
         spawn_instructions: {
           implement: "Implement ${task}.",
           "risk-assessment": "Assess risks for ${task}.",
         },
-        consultations: {
-          "risk-assessment": {
-            fragment: "risk-assessment",
-            agent: "canon-security",
-            role: "security-reviewer",
-            timeout: "10m",
-            section: "Risk Assessment",
+        states: {
+          done: { type: "terminal" },
+          implement: {
+            agent: "canon-implementor",
+            consultations: { [breakpoint]: ["risk-assessment"] },
+            type: "wave",
           },
         },
       } as unknown as ResolvedFlow;
@@ -481,28 +469,28 @@ describe("enterAndPrepareState", () => {
         agent: "canon-security",
         prompt: "Assess risks for test task.",
         role: "security-reviewer",
-        timeout: "10m",
         section: "Risk Assessment",
+        timeout: "10m",
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test task" },
         wave: 0,
+        workspace,
       });
       assertOk(result);
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
       expect(result.consultation_prompts![0]).toEqual({
-        name: "risk-assessment",
         agent: "canon-security",
+        name: "risk-assessment",
         prompt: "Assess risks for test task.",
         role: "security-reviewer",
-        timeout: "10m",
         section: "Risk Assessment",
+        timeout: "10m",
       });
     });
 
@@ -518,10 +506,10 @@ describe("enterAndPrepareState", () => {
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test task" },
+        workspace,
         // wave is undefined
       });
       assertOk(result);
@@ -543,21 +531,20 @@ describe("enterAndPrepareState", () => {
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test task" },
         wave: 1,
+        workspace,
       });
       assertOk(result);
 
       expect(result.consultation_prompts).toBeDefined();
       expect(result.consultation_prompts).toHaveLength(1);
-      expect(resolveConsultationPrompt).toHaveBeenCalledWith(
-        "risk-assessment",
-        flow,
-        { task: "test task", CANON_PLUGIN_ROOT: "" },
-      );
+      expect(resolveConsultationPrompt).toHaveBeenCalledWith("risk-assessment", flow, {
+        CANON_PLUGIN_ROOT: "",
+        task: "test task",
+      });
     });
 
     it("returns no consultation_prompts when wave > 0 but only before consultations declared", async () => {
@@ -567,11 +554,11 @@ describe("enterAndPrepareState", () => {
       const flow = makeFlowWithConsultations("before");
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test task" },
         wave: 1, // uses "between" breakpoint — but only "before" declared
+        workspace,
       });
       assertOk(result);
 
@@ -586,11 +573,11 @@ describe("enterAndPrepareState", () => {
       const flow = makeFlow(); // no consultations declared
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test task" },
         wave: 0,
+        workspace,
       });
       assertOk(result);
 
@@ -606,11 +593,11 @@ describe("enterAndPrepareState", () => {
       vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test task" },
         wave: 0,
+        workspace,
       });
       assertOk(result);
 
@@ -624,25 +611,23 @@ describe("enterAndPrepareState", () => {
       const store = getExecutionStore(workspace);
       const now = new Date().toISOString();
       store.initExecution({
-        flow: "test-flow",
-        task: "test task",
-        entry: "implement",
-        current_state: "implement",
         base_commit: "abc1234",
-        started: now,
-        last_updated: now,
         branch: "feat/test",
-        sanitized: "feat-test",
         created: now,
-        tier: "medium",
+        current_state: "implement",
+        entry: "implement",
+        flow: "test-flow",
         flow_name: "test-flow",
+        last_updated: now,
+        sanitized: "feat-test",
         slug: "test-slug",
+        started: now,
+        task: "test task",
+        tier: "medium",
       });
 
       const waveResults = {
         "wave-0": {
-          tasks: [],
-          status: "done",
           consultations: {
             before: {
               "risk-assessment": {
@@ -651,30 +636,30 @@ describe("enterAndPrepareState", () => {
               },
             },
           },
+          status: "done",
+          tasks: [],
         },
       };
 
       store.upsertState("implement", {
-        status: "in_progress",
         entries: 1,
+        status: "in_progress",
         wave_results: waveResults,
       });
-      store.upsertState("done", { status: "pending", entries: 0 });
+      store.upsertState("done", { entries: 0, status: "pending" });
 
       // escapeDollarBrace should escape the injection string
-      vi.mocked(escapeDollarBrace).mockImplementation((s: string) =>
-        s.replace(/\$\{/g, "\\${")
-      );
+      vi.mocked(escapeDollarBrace).mockImplementation((s: string) => s.replace(/\$\{/g, "\\${"));
 
       const flow = makeFlowWithConsultations("between");
       vi.mocked(resolveConsultationPrompt).mockReturnValue(null);
 
       await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test task" },
         wave: 1,
+        workspace,
       });
 
       expect(escapeDollarBrace).toHaveBeenCalledWith("Risk: ${evil} injection attempt");
@@ -687,10 +672,10 @@ describe("enterAndPrepareState", () => {
 
       const flow = makeFlow();
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
 
       expect(result.ok).toBe(false);
@@ -711,10 +696,10 @@ describe("enterAndPrepareState — session branch variable injection", () => {
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
@@ -727,34 +712,34 @@ describe("enterAndPrepareState — session branch variable injection", () => {
     const store = getExecutionStore(workspace);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test-flow",
-      task: "test task",
-      entry: "implement",
-      current_state: "implement",
       base_commit: "abc1234",
-      started: now,
-      last_updated: now,
       branch: "feat/my-feature",
-      sanitized: "feat-my-feature",
       created: now,
-      tier: "medium",
+      current_state: "implement",
+      entry: "implement",
+      flow: "test-flow",
       flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "feat-my-feature",
       slug: "my-slug",
+      started: now,
+      task: "test task",
+      tier: "medium",
       worktree_branch: "canon-build/my-slug",
       worktree_path: "/tmp/worktrees/my-slug",
     });
-    store.upsertState("implement", { status: "pending", entries: 0 });
-    store.upsertState("done", { status: "pending", entries: 0 });
+    store.upsertState("implement", { entries: 0, status: "pending" });
+    store.upsertState("done", { entries: 0, status: "pending" });
 
     const flow = makeFlow({
       spawn_instructions: { implement: "Worktree: ${worktree_branch}" },
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
@@ -766,33 +751,33 @@ describe("enterAndPrepareState — session branch variable injection", () => {
     const store = getExecutionStore(workspace);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test-flow",
-      task: "test task",
-      entry: "implement",
-      current_state: "implement",
       base_commit: "abc1234",
-      started: now,
-      last_updated: now,
       branch: "feat/my-feature",
-      sanitized: "feat-my-feature",
       created: now,
-      tier: "medium",
+      current_state: "implement",
+      entry: "implement",
+      flow: "test-flow",
       flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "feat-my-feature",
       slug: "my-slug",
+      started: now,
+      task: "test task",
+      tier: "medium",
       worktree_path: "/tmp/worktrees/my-slug",
     });
-    store.upsertState("implement", { status: "pending", entries: 0 });
-    store.upsertState("done", { status: "pending", entries: 0 });
+    store.upsertState("implement", { entries: 0, status: "pending" });
+    store.upsertState("done", { entries: 0, status: "pending" });
 
     const flow = makeFlow({
       spawn_instructions: { implement: "Path: ${worktree_path}" },
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
@@ -808,11 +793,11 @@ describe("enterAndPrepareState — session branch variable injection", () => {
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
+      state_id: "implement",
       // Caller explicitly overrides branch
-      variables: { task: "test", CANON_PLUGIN_ROOT: "", branch: "override/branch" },
+      variables: { branch: "override/branch", CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
@@ -830,10 +815,10 @@ describe("enterAndPrepareState — session branch variable injection", () => {
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
@@ -849,9 +834,9 @@ describe("enterAndPrepareState — missing directory", () => {
     const missingWorkspace = join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-eaps");
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "",
       entry: "implement",
+      name: "test-flow",
       states: {
         implement: {
           prompt: "test",
@@ -861,14 +846,14 @@ describe("enterAndPrepareState — missing directory", () => {
     } as unknown as ResolvedFlow;
 
     const wrappedEnterAndPrepare = wrapHandler(
-      async (input: Parameters<typeof enterAndPrepareState>[0]) => enterAndPrepareState(input)
+      async (input: Parameters<typeof enterAndPrepareState>[0]) => enterAndPrepareState(input),
     );
 
     const response = await wrappedEnterAndPrepare({
-      workspace: missingWorkspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test task" },
+      workspace: missingWorkspace,
     });
     const result = JSON.parse(response.content[0].text);
 

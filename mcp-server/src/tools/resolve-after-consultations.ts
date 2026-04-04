@@ -15,17 +15,17 @@ import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 
 export type { ConsultationPromptEntry };
 
-export interface ResolveAfterConsultationsInput {
+export type ResolveAfterConsultationsInput = {
   workspace: string;
   state_id: string;
   flow: ResolvedFlow;
   variables: Record<string, string>;
-}
+};
 
-export interface ResolveAfterConsultationsResult {
+export type ResolveAfterConsultationsResult = {
   consultation_prompts: ConsultationPromptEntry[];
   warnings: string[];
-}
+};
 
 /**
  * Resolves "after" consultation prompts for the given state.
@@ -34,7 +34,9 @@ export interface ResolveAfterConsultationsResult {
  * via `resolveConsultationPrompt`. Names that cannot be resolved produce
  * warnings rather than errors (handle-partial-failure).
  */
-export function resolveAfterConsultations(input: ResolveAfterConsultationsInput): ResolveAfterConsultationsResult {
+export function resolveAfterConsultations(
+  input: ResolveAfterConsultationsInput,
+): ResolveAfterConsultationsResult {
   const { state_id, flow, variables } = input;
 
   const consultation_prompts: ConsultationPromptEntry[] = [];
@@ -51,15 +53,17 @@ export function resolveAfterConsultations(input: ResolveAfterConsultationsInput)
     const resolved = resolveConsultationPrompt(name, flow, variables);
     if (resolved) {
       consultation_prompts.push({
-        name,
         agent: resolved.agent,
+        name,
         prompt: resolved.prompt,
         role: resolved.role,
         ...(resolved.timeout ? { timeout: resolved.timeout } : {}),
         ...(resolved.section ? { section: resolved.section } : {}),
       });
     } else {
-      warnings.push(`After consultation "${name}" could not be resolved for state "${state_id}" — skipping.`);
+      warnings.push(
+        `After consultation "${name}" could not be resolved for state "${state_id}" — skipping.`,
+      );
     }
   }
 

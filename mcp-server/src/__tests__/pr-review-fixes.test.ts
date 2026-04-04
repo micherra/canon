@@ -14,32 +14,28 @@
  *   since callers like report_result already send prefixed lines.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { InitExecutionParams } from "../orchestration/execution-store.ts";
+import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
 
 // Top-level mock for flow-parser — used by Comment 5 tests
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "fast-path",
     description: "test",
     entry: "build",
+    name: "fast-path",
+    spawn_instructions: {},
     states: {
-      build: { type: "single", transitions: { done: "done" } },
+      build: { transitions: { done: "done" }, type: "single" },
       done: { type: "terminal" },
     },
-    spawn_instructions: {},
   }),
 }));
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeDb(): Database.Database {
   return initExecutionDb(":memory:");
@@ -50,19 +46,19 @@ function makeStore(): ExecutionStore {
 }
 
 const BASE_INIT_PARAMS: InitExecutionParams = {
-  flow: "test-flow",
-  task: "Test task",
-  entry: "research",
-  current_state: "implement",
   base_commit: "abc1234",
-  started: new Date().toISOString(),
-  last_updated: new Date().toISOString(),
   branch: "main",
-  sanitized: "main",
   created: new Date().toISOString(),
-  tier: "small",
+  current_state: "implement",
+  entry: "research",
+  flow: "test-flow",
   flow_name: "test-flow",
+  last_updated: new Date().toISOString(),
+  sanitized: "main",
   slug: "test-task",
+  started: new Date().toISOString(),
+  task: "Test task",
+  tier: "small",
 };
 
 let tmpDirs: string[] = [];
@@ -74,20 +70,22 @@ function makeTmpDir(): string {
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.restoreAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // Comment 6: getProgress returns verbatim — no "- " prefix added
-// ---------------------------------------------------------------------------
 
 describe("Comment 6: getProgress — no double bullet prefix", () => {
   let store: ExecutionStore;
-  beforeEach(() => { store = makeStore(); });
-  afterEach(() => { store.close(); });
+  beforeEach(() => {
+    store = makeStore();
+  });
+  afterEach(() => {
+    store.close();
+  });
 
   it("returns stored lines verbatim (no '- ' prefix added)", () => {
     store.appendProgress("- [build] done: compiled successfully");
@@ -136,9 +134,7 @@ describe("Comment 6: getProgress — no double bullet prefix", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Comment 3 & 4: updateWaveEvent — compare-and-swap (CAS) on status='pending'
-// ---------------------------------------------------------------------------
 
 describe("Comment 3 & 4: updateWaveEvent CAS", () => {
   let store: ExecutionStore;
@@ -146,16 +142,18 @@ describe("Comment 3 & 4: updateWaveEvent CAS", () => {
     store = makeStore();
     store.initExecution(BASE_INIT_PARAMS);
   });
-  afterEach(() => { store.close(); });
+  afterEach(() => {
+    store.close();
+  });
 
   function postTestEvent(s: ExecutionStore): string {
     const id = `evt_cas_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     s.postWaveEvent({
       id,
-      type: "guidance",
       payload: {},
-      timestamp: new Date().toISOString(),
       status: "pending",
+      timestamp: new Date().toISOString(),
+      type: "guidance",
     });
     return id;
   }
@@ -164,7 +162,7 @@ describe("Comment 3 & 4: updateWaveEvent CAS", () => {
     const id = postTestEvent(store);
     // Should not throw
     expect(() =>
-      store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() }),
+      store.updateWaveEvent(id, { applied_at: new Date().toISOString(), status: "applied" }),
     ).not.toThrow();
     const events = store.getWaveEvents();
     const updated = events.find((e) => e.id === id)!;
@@ -174,26 +172,26 @@ describe("Comment 3 & 4: updateWaveEvent CAS", () => {
   it("throws when event is already applied (CAS rejects double-apply)", () => {
     const id = postTestEvent(store);
     // First update succeeds
-    store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() });
+    store.updateWaveEvent(id, { applied_at: new Date().toISOString(), status: "applied" });
     // Second update must throw — status is no longer 'pending'
     expect(() =>
-      store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() }),
+      store.updateWaveEvent(id, { applied_at: new Date().toISOString(), status: "applied" }),
     ).toThrow(/already|not pending|no rows|CAS/i);
   });
 
   it("throws when event is already rejected (CAS rejects update)", () => {
     const id = postTestEvent(store);
-    store.updateWaveEvent(id, { status: "rejected", rejection_reason: "nope" });
+    store.updateWaveEvent(id, { rejection_reason: "nope", status: "rejected" });
     expect(() =>
-      store.updateWaveEvent(id, { status: "applied", applied_at: new Date().toISOString() }),
+      store.updateWaveEvent(id, { applied_at: new Date().toISOString(), status: "applied" }),
     ).toThrow(/already|not pending|no rows|CAS/i);
   });
 
   it("does not mutate an already-applied event", () => {
     const id = postTestEvent(store);
-    store.updateWaveEvent(id, { status: "applied", applied_at: "2026-01-01T00:00:00Z" });
+    store.updateWaveEvent(id, { applied_at: "2026-01-01T00:00:00Z", status: "applied" });
     try {
-      store.updateWaveEvent(id, { status: "rejected", rejection_reason: "late reject" });
+      store.updateWaveEvent(id, { rejection_reason: "late reject", status: "rejected" });
     } catch {
       // expected to throw after fix
     }
@@ -204,14 +202,12 @@ describe("Comment 3 & 4: updateWaveEvent CAS", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Comment 1 & 2: appendEvent failures in event handlers must not propagate
 //
 // Strategy: test appendEvent error isolation at the unit level by verifying
 // that the event handler catches thrown errors from appendEvent.
 // We do this by testing the actual listener callback behavior directly,
 // mirroring what update-board and enter-and-prepare-state do.
-// ---------------------------------------------------------------------------
 
 describe("Comment 1 & 2: appendEvent error isolation in event handlers", () => {
   it("appendEvent throwing inside a listener does NOT propagate if wrapped in try/catch", () => {
@@ -232,7 +228,9 @@ describe("Comment 1 & 2: appendEvent error isolation in event handlers", () => {
     };
 
     // Must not throw
-    expect(() => handler({ stateId: "build", stateType: "single", timestamp: "t", iterationCount: 0 })).not.toThrow();
+    expect(() =>
+      handler({ iterationCount: 0, stateId: "build", stateType: "single", timestamp: "t" }),
+    ).not.toThrow();
     store.close();
   });
 
@@ -253,10 +251,8 @@ describe("Comment 1 & 2: appendEvent error isolation in event handlers", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Comment 1: updateBoard enter_state — appendEvent error is swallowed
 // (Integration-level: calls updateBoard with real store + mocked event bus)
-// ---------------------------------------------------------------------------
 
 // We need to test updateBoard with a real event bus to verify the appendEvent
 // try/catch works when the listener is actually called.
@@ -298,23 +294,24 @@ describe("Comment 1 (integration): updateBoard enter_state does not throw on app
       // Emit should not throw even though appendEvent throws inside the listener
       expect(() =>
         localBus.emit("state_entered", {
+          iterationCount: 0,
           stateId: "build",
           stateType: "single",
           timestamp: new Date().toISOString(),
-          iterationCount: 0,
         }),
       ).not.toThrow();
     } finally {
-      localBus.removeListener("state_entered", onStateEntered as Parameters<typeof localBus.removeListener>[1]);
+      localBus.removeListener(
+        "state_entered",
+        onStateEntered as Parameters<typeof localBus.removeListener>[1],
+      );
     }
 
     expect(listenerError).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // Comment 5: init-workspace catch — narrow error handling
-// ---------------------------------------------------------------------------
 
 describe("Comment 5: init-workspace catch — narrow error handling", () => {
   it("proceeds with creation on a fresh workspace (no existing DB)", async () => {
@@ -322,7 +319,13 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
     const projectDir = makeTmpDir();
 
     const result = await initWorkspaceFlow(
-      { flow_name: "fast-path", task: "fresh task", branch: "main", base_commit: "abc", tier: "small" },
+      {
+        base_commit: "abc",
+        branch: "main",
+        flow_name: "fast-path",
+        task: "fresh task",
+        tier: "small",
+      },
       projectDir,
       "/fake/plugin",
     );
@@ -334,14 +337,26 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
     const projectDir = makeTmpDir();
 
     const first = await initWorkspaceFlow(
-      { flow_name: "fast-path", task: "resume test", branch: "feat/narrow", base_commit: "abc", tier: "small" },
+      {
+        base_commit: "abc",
+        branch: "feat/narrow",
+        flow_name: "fast-path",
+        task: "resume test",
+        tier: "small",
+      },
       projectDir,
       "/fake/plugin",
     );
     expect(first.created).toBe(true);
 
     const second = await initWorkspaceFlow(
-      { flow_name: "fast-path", task: "resume test", branch: "feat/narrow", base_commit: "abc", tier: "small" },
+      {
+        base_commit: "abc",
+        branch: "feat/narrow",
+        flow_name: "fast-path",
+        task: "resume test",
+        tier: "small",
+      },
       projectDir,
       "/fake/plugin",
     );
@@ -360,7 +375,8 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
       // Expected: SQLite can't open (no file), or no-execution row in fresh DB
       if (code === "SQLITE_CANTOPEN" || code === "ENOENT") return true;
       // Also swallow "no execution" type errors (store returns null/undefined)
-      if (err.message?.includes("no execution") || err.message?.includes("SQLITE_CANTOPEN")) return true;
+      if (err.message?.includes("no execution") || err.message?.includes("SQLITE_CANTOPEN"))
+        return true;
       return false;
     }
 

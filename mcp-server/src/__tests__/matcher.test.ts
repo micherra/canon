@@ -4,14 +4,14 @@ import type { Principle } from "../parser.ts";
 
 function makePrinciple(overrides: Partial<Principle> = {}): Principle {
   return {
-    id: "test",
-    title: "Test",
-    severity: "convention",
-    scope: { layers: [], file_patterns: [] },
-    tags: [],
     archived: false,
     body: "Body",
     filePath: "test.md",
+    id: "test",
+    scope: { file_patterns: [], layers: [] },
+    severity: "convention",
+    tags: [],
+    title: "Test",
     ...overrides,
   };
 }
@@ -68,14 +68,20 @@ describe("matchPrinciples", () => {
   });
 
   it("excludes archived principles", () => {
-    const principles = [makePrinciple({ id: "active" }), makePrinciple({ id: "archived", archived: true })];
+    const principles = [
+      makePrinciple({ id: "active" }),
+      makePrinciple({ archived: true, id: "archived" }),
+    ];
     const result = matchPrinciples(principles, {});
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("active");
   });
 
   it("includes archived principles when include_archived is true", () => {
-    const principles = [makePrinciple({ id: "active" }), makePrinciple({ id: "archived", archived: true })];
+    const principles = [
+      makePrinciple({ id: "active" }),
+      makePrinciple({ archived: true, id: "archived" }),
+    ];
     const result = matchPrinciples(principles, { include_archived: true });
     expect(result).toHaveLength(2);
     expect(result.map((p) => p.id)).toContain("archived");
@@ -83,9 +89,9 @@ describe("matchPrinciples", () => {
 
   it("filters by layer", () => {
     const principles = [
-      makePrinciple({ id: "api-only", scope: { layers: ["api"], file_patterns: [] } }),
-      makePrinciple({ id: "ui-only", scope: { layers: ["ui"], file_patterns: [] } }),
-      makePrinciple({ id: "any-layer", scope: { layers: [], file_patterns: [] } }),
+      makePrinciple({ id: "api-only", scope: { file_patterns: [], layers: ["api"] } }),
+      makePrinciple({ id: "ui-only", scope: { file_patterns: [], layers: ["ui"] } }),
+      makePrinciple({ id: "any-layer", scope: { file_patterns: [], layers: [] } }),
     ];
     const result = matchPrinciples(principles, { layers: ["api"] });
     expect(result.map((p) => p.id)).toEqual(["api-only", "any-layer"]);
@@ -93,8 +99,8 @@ describe("matchPrinciples", () => {
 
   it("infers layer from file_path", () => {
     const principles = [
-      makePrinciple({ id: "api-rule", scope: { layers: ["api"], file_patterns: [] } }),
-      makePrinciple({ id: "ui-rule", scope: { layers: ["ui"], file_patterns: [] } }),
+      makePrinciple({ id: "api-rule", scope: { file_patterns: [], layers: ["api"] } }),
+      makePrinciple({ id: "ui-rule", scope: { file_patterns: [], layers: ["ui"] } }),
     ];
     const result = matchPrinciples(principles, { file_path: "src/routes/users.ts" });
     expect(result.map((p) => p.id)).toEqual(["api-rule"]);
@@ -104,11 +110,11 @@ describe("matchPrinciples", () => {
     const principles = [
       makePrinciple({
         id: "tf-only",
-        scope: { layers: [], file_patterns: ["**/*.tf"] },
+        scope: { file_patterns: ["**/*.tf"], layers: [] },
       }),
       makePrinciple({
         id: "any-file",
-        scope: { layers: [], file_patterns: [] },
+        scope: { file_patterns: [], layers: [] },
       }),
     ];
     const result = matchPrinciples(principles, { file_path: "infra/main.tf" });
@@ -120,7 +126,7 @@ describe("matchPrinciples", () => {
     const principles = [
       makePrinciple({
         id: "ts-only",
-        scope: { layers: [], file_patterns: ["**/*.ts"] },
+        scope: { file_patterns: ["**/*.ts"], layers: [] },
       }),
     ];
     const result = matchPrinciples(principles, { file_path: "src/style.css" });
@@ -161,13 +167,13 @@ describe("matchPrinciples", () => {
     const principles = [
       makePrinciple({
         id: "generic",
+        scope: { file_patterns: [], layers: [] },
         severity: "rule",
-        scope: { layers: [], file_patterns: [] },
       }),
       makePrinciple({
         id: "specific",
+        scope: { file_patterns: ["src/**", "lib/**"], layers: [] },
         severity: "rule",
-        scope: { layers: [], file_patterns: ["src/**", "lib/**"] },
       }),
     ];
     const result = matchPrinciples(principles, {});

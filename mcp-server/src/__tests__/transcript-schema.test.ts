@@ -6,26 +6,22 @@
  * - initWorkspace creates transcripts/ subdirectory
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
+import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { access } from "node:fs/promises";
 import Database from "better-sqlite3";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  initExecutionDb,
-  SCHEMA_VERSION,
   columnExists,
+  initExecutionDb,
   runMigrations,
+  SCHEMA_VERSION,
 } from "../orchestration/execution-schema.ts";
 import { ExecutionStore } from "../orchestration/execution-store.ts";
 import { TranscriptEntrySchema } from "../orchestration/flow-schema.ts";
 import { initWorkspace } from "../orchestration/workspace.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -161,14 +157,12 @@ function createV3Db(dbPath: string): Database.Database {
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
-// ---------------------------------------------------------------------------
 // 1. SCHEMA_VERSION is '4'
-// ---------------------------------------------------------------------------
 
 describe("schema version", () => {
   it("SCHEMA_VERSION is '8'", () => {
@@ -176,9 +170,7 @@ describe("schema version", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Migration v5 adds transcript_path column to execution_states on fresh DB
-// ---------------------------------------------------------------------------
 
 describe("migration v5 — fresh DB", () => {
   it("fresh DB has transcript_path column on execution_states", () => {
@@ -194,9 +186,9 @@ describe("migration v5 — fresh DB", () => {
     const dbPath = makeTmpDb();
     const db = initExecutionDb(dbPath);
 
-    const row = db
-      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-      .get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
 
     expect(row?.value).toBe("8");
 
@@ -204,9 +196,7 @@ describe("migration v5 — fresh DB", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Migration v5 is idempotent (running twice does not error)
-// ---------------------------------------------------------------------------
 
 describe("migration v5 — idempotency", () => {
   it("calling initExecutionDb twice does not throw", () => {
@@ -228,9 +218,9 @@ describe("migration v5 — idempotency", () => {
 
     const db2 = initExecutionDb(dbPath);
 
-    const row = db2
-      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-      .get() as { value: string } | undefined;
+    const row = db2.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
 
     expect(row?.value).toBe("8");
     db2.close();
@@ -246,9 +236,7 @@ describe("migration v5 — idempotency", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. Migration v5 upgrades existing v3 database correctly
-// ---------------------------------------------------------------------------
 
 describe("migration v5 — v3 to v5 upgrade", () => {
   it("migrates v3 DB: transcript_path column added to execution_states", () => {
@@ -270,9 +258,9 @@ describe("migration v5 — v3 to v5 upgrade", () => {
 
     const db = initExecutionDb(dbPath);
 
-    const row = db
-      .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-      .get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
 
     expect(row?.value).toBe("8");
 
@@ -294,7 +282,9 @@ describe("migration v5 — v3 to v5 upgrade", () => {
     const db = initExecutionDb(dbPath);
 
     const row = db
-      .prepare("SELECT state_id, status, transcript_path FROM execution_states WHERE state_id = 'build'")
+      .prepare(
+        "SELECT state_id, status, transcript_path FROM execution_states WHERE state_id = 'build'",
+      )
       .get() as { state_id: string; status: string; transcript_path: string | null } | undefined;
 
     expect(row).toBeDefined();
@@ -306,9 +296,7 @@ describe("migration v5 — v3 to v5 upgrade", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. setTranscriptPath stores and getTranscriptPath retrieves the path
-// ---------------------------------------------------------------------------
 
 describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
   it("setTranscriptPath stores and getTranscriptPath retrieves the path", () => {
@@ -317,7 +305,7 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     const store = new ExecutionStore(db);
 
     // Insert a state row first
-    store.upsertState("build", { status: "pending", entries: 0 });
+    store.upsertState("build", { entries: 0, status: "pending" });
 
     const transcriptPath = "/workspace/transcripts/build-001.jsonl";
     const result = store.setTranscriptPath("build", transcriptPath);
@@ -345,7 +333,7 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    store.upsertState("review", { status: "pending", entries: 0 });
+    store.upsertState("review", { entries: 0, status: "pending" });
 
     expect(store.getTranscriptPath("review")).toBeNull();
 
@@ -367,7 +355,7 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    store.upsertState("build", { status: "pending", entries: 0 });
+    store.upsertState("build", { entries: 0, status: "pending" });
     store.setTranscriptPath("build", "/first/path.jsonl");
     store.setTranscriptPath("build", "/second/path.jsonl");
 
@@ -377,9 +365,7 @@ describe("ExecutionStore — setTranscriptPath / getTranscriptPath", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. upsert preserves existing transcript_path
-// ---------------------------------------------------------------------------
 
 describe("ExecutionStore — upsert preserves transcript_path", () => {
   it("upsertState does not clear an existing transcript_path", () => {
@@ -387,11 +373,11 @@ describe("ExecutionStore — upsert preserves transcript_path", () => {
     const db = initExecutionDb(dbPath);
     const store = new ExecutionStore(db);
 
-    store.upsertState("build", { status: "pending", entries: 0 });
+    store.upsertState("build", { entries: 0, status: "pending" });
     store.setTranscriptPath("build", "/transcripts/build.jsonl");
 
     // Re-upsert the state (simulating a status update)
-    store.upsertState("build", { status: "in_progress", entries: 1 });
+    store.upsertState("build", { entries: 1, status: "in_progress" });
 
     expect(store.getTranscriptPath("build")).toBe("/transcripts/build.jsonl");
 
@@ -399,16 +385,14 @@ describe("ExecutionStore — upsert preserves transcript_path", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. TranscriptEntrySchema validation
-// ---------------------------------------------------------------------------
 
 describe("TranscriptEntrySchema", () => {
   it("validates a correct entry", () => {
     const entry = {
+      content: "I will implement the feature.",
       role: "assistant",
       timestamp: "2026-04-02T00:00:00Z",
-      content: "I will implement the feature.",
       turn_number: 1,
     };
 
@@ -418,12 +402,12 @@ describe("TranscriptEntrySchema", () => {
 
   it("validates a correct entry with optional fields", () => {
     const entry = {
+      content: '{"tool": "Read", "path": "/foo.ts"}',
+      cumulative_tokens: 1234,
       role: "tool_use",
       timestamp: "2026-04-02T00:00:00Z",
-      content: '{"tool": "Read", "path": "/foo.ts"}',
-      tool_name: "Read",
       tokens: 42,
-      cumulative_tokens: 1234,
+      tool_name: "Read",
       turn_number: 3,
     };
 
@@ -433,9 +417,9 @@ describe("TranscriptEntrySchema", () => {
 
   it("rejects entry with invalid role", () => {
     const entry = {
+      content: "hello",
       role: "bot", // invalid — not in enum
       timestamp: "2026-04-02T00:00:00Z",
-      content: "hello",
       turn_number: 1,
     };
 
@@ -445,9 +429,9 @@ describe("TranscriptEntrySchema", () => {
 
   it("rejects entry missing required turn_number", () => {
     const entry = {
+      content: "hello",
       role: "user",
       timestamp: "2026-04-02T00:00:00Z",
-      content: "hello",
       // turn_number missing
     };
 
@@ -471,9 +455,9 @@ describe("TranscriptEntrySchema", () => {
     const validRoles = ["system", "user", "assistant", "tool_use", "tool_result"] as const;
     for (const role of validRoles) {
       const result = TranscriptEntrySchema.safeParse({
+        content: "test",
         role,
         timestamp: "2026-04-02T00:00:00Z",
-        content: "test",
         turn_number: 1,
       });
       expect(result.success).toBe(true);
@@ -481,18 +465,14 @@ describe("TranscriptEntrySchema", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 8. initWorkspace creates transcripts/ subdirectory
-// ---------------------------------------------------------------------------
 
 describe("initWorkspace — transcripts subdirectory", () => {
   it("creates transcripts/ subdirectory", async () => {
     const projectDir = makeTmpDir();
     const ws = await initWorkspace(projectDir, "my-branch");
 
-    await expect(
-      access(join(ws, "transcripts")).then(() => true),
-    ).resolves.toBe(true);
+    await expect(access(join(ws, "transcripts")).then(() => true)).resolves.toBe(true);
   });
 
   it("creates all expected subdirectories including transcripts", async () => {
@@ -501,9 +481,7 @@ describe("initWorkspace — transcripts subdirectory", () => {
 
     const expected = ["research", "decisions", "plans", "reviews", "transcripts"];
     for (const dir of expected) {
-      await expect(
-        access(join(ws, dir)).then(() => true),
-      ).resolves.toBe(true);
+      await expect(access(join(ws, dir)).then(() => true)).resolves.toBe(true);
     }
   });
 });

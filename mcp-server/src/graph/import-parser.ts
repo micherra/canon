@@ -28,9 +28,10 @@ function extractJsImports(content: string): string[] {
   const imports: string[] = [];
 
   for (const re of JS_IMPORT_RES) {
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(content)) !== null) {
+    let match = re.exec(content);
+    while (match !== null) {
       imports.push(match[1]);
+      match = re.exec(content);
     }
   }
 
@@ -43,25 +44,28 @@ function extractPyImports(content: string): string[] {
 
   // from X import Y
   const fromImportRe = /^from\s+([\w.]+)\s+import/gm;
-  let match: RegExpExecArray | null;
-  while ((match = fromImportRe.exec(content)) !== null) {
+  let match = fromImportRe.exec(content);
+  while (match !== null) {
     imports.push(match[1]);
+    match = fromImportRe.exec(content);
   }
 
   // import X
   const importRe = /^import\s+([\w.]+)/gm;
-  while ((match = importRe.exec(content)) !== null) {
+  match = importRe.exec(content);
+  while (match !== null) {
     imports.push(match[1]);
+    match = importRe.exec(content);
   }
 
   return imports;
 }
 
 /** A parsed path alias: prefix to match and the directory it maps to */
-export interface PathAlias {
+export type PathAlias = {
   prefix: string; // e.g. "@/" or "~/"
   target: string; // e.g. "src/" — relative to project root
-}
+};
 
 /**
  * Parse tsconfig.json compilerOptions.paths into PathAlias entries.
@@ -96,36 +100,54 @@ const ESM_JS_TO_TS: Record<string, string[]> = {
   ".mjs": [".mts", ".ts"],
 };
 
+/** Try to match a path with extension variants against the file set. */
+function tryExtensions(
+  base: string,
+  extensions: readonly string[],
+  allFiles: Set<string>,
+): string | null {
+  for (const ext of extensions) {
+    if (allFiles.has(base + ext)) return base + ext;
+  }
+  return null;
+}
+
+/** Try to resolve a path as an index file within a directory. */
+function tryIndexResolution(
+  dir: string,
+  extensions: readonly string[],
+  allFiles: Set<string>,
+): string | null {
+  for (const ext of extensions) {
+    const indexPath = toPosix(join(dir, `index${ext}`));
+    if (allFiles.has(indexPath)) return indexPath;
+  }
+  return null;
+}
+
+/** Try ESM JS→TS extension remapping (e.g., .js → .ts/.tsx). */
+function tryEsmRemap(posix: string, allFiles: Set<string>): string | null {
+  for (const [jsExt, tsExts] of Object.entries(ESM_JS_TO_TS)) {
+    if (!posix.endsWith(jsExt)) continue;
+    const base = posix.slice(0, -jsExt.length);
+    const direct = tryExtensions(base, tsExts, allFiles);
+    if (direct) return direct;
+    const index = tryIndexResolution(base, tsExts, allFiles);
+    if (index) return index;
+  }
+  return null;
+}
+
 /** Try to find a file in the set with extension and index resolution */
 function tryResolve(candidate: string, allFiles: Set<string>): string | null {
   const posix = toPosix(candidate);
   if (allFiles.has(posix)) return posix;
-  for (const ext of RESOLVE_EXTENSIONS) {
-    if (allFiles.has(posix + ext)) return posix + ext;
-  }
-  for (const ext of RESOLVE_EXTENSIONS) {
-    const indexPath = toPosix(join(candidate, `index${ext}`));
-    if (allFiles.has(indexPath)) return indexPath;
-  }
 
-  // TS execution (vitest/tsx): import specifiers use `.ts` even though source files
-  // are `.ts`. Or standard Node.js ESM convention: import specifiers use `.js`
-  // even though source files are `.ts`. Try both.
-  for (const [jsExt, tsExts] of Object.entries(ESM_JS_TO_TS)) {
-    if (posix.endsWith(jsExt)) {
-      const base = posix.slice(0, -jsExt.length);
-      for (const tsExt of tsExts) {
-        if (allFiles.has(base + tsExt)) return base + tsExt;
-      }
-      // Also try index resolution after stripping the JS extension
-      for (const tsExt of tsExts) {
-        const indexPath = toPosix(join(base, `index${tsExt}`));
-        if (allFiles.has(indexPath)) return indexPath;
-      }
-    }
-  }
-
-  return null;
+  return (
+    tryExtensions(posix, RESOLVE_EXTENSIONS, allFiles) ??
+    tryIndexResolution(candidate, RESOLVE_EXTENSIONS, allFiles) ??
+    tryEsmRemap(posix, allFiles)
+  );
 }
 
 /**

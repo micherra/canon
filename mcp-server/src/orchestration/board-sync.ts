@@ -5,34 +5,35 @@
  * duplicating logic. See ADR-009a (composition over inline).
  */
 
-import { getExecutionStore } from './execution-store.ts';
-import type { Board } from './flow-schema.ts';
+import type { getExecutionStore } from "./execution-store.ts";
+import type { Board } from "./flow-schema.ts";
 
 /**
  * Sync a Board object back to the ExecutionStore after mutation.
  * Updates execution-level fields, states, and iterations.
  */
-export function syncBoardToStore(
-  store: ReturnType<typeof getExecutionStore>,
-  board: Board,
-): void {
+export function syncBoardToStore(store: ReturnType<typeof getExecutionStore>, board: Board): void {
   store.updateExecution({
-    current_state: board.current_state,
     blocked: board.blocked,
     concerns: board.concerns,
-    skipped: board.skipped,
-    metadata: board.metadata,
+    current_state: board.current_state,
     last_updated: board.last_updated,
+    metadata: board.metadata,
+    skipped: board.skipped,
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries });
+    store.upsertState(stateId, {
+      ...stateEntry,
+      entries: stateEntry.entries,
+      status: stateEntry.status,
+    });
   }
   for (const [stateId, iterEntry] of Object.entries(board.iterations)) {
     store.upsertIteration(stateId, {
-      count: iterEntry.count,
-      max: iterEntry.max,
-      history: iterEntry.history,
       cannot_fix: iterEntry.cannot_fix,
+      count: iterEntry.count,
+      history: iterEntry.history,
+      max: iterEntry.max,
     });
   }
 }

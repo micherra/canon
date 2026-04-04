@@ -1,8 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 // --- Shared spawnSync mock (used by git-adapter.ts and process-adapter.ts) ---
 
@@ -20,14 +18,10 @@ let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
 let execFileImpl: ((cb: ExecFileCallback) => void) | null = null;
 
 vi.mock("node:child_process", () => ({
-  spawnSync: (cmd: string, argsOrOpts?: unknown, opts?: unknown) => {
-    if (spawnSyncImpl) return spawnSyncImpl();
-    return { stdout: "", stderr: "", status: 0, signal: null };
-  },
   execFile: (
-    cmd: string,
-    args: string[],
-    opts: Record<string, unknown>,
+    _cmd: string,
+    _args: string[],
+    _opts: Record<string, unknown>,
     cb: ExecFileCallback,
   ) => {
     if (execFileImpl) {
@@ -36,6 +30,10 @@ vi.mock("node:child_process", () => ({
       cb(null, "", "");
     }
     return { pid: 99999 };
+  },
+  spawnSync: (_cmd: string, _argsOrOpts?: unknown, _opts?: unknown) => {
+    if (spawnSyncImpl) return spawnSyncImpl();
+    return { signal: null, status: 0, stderr: "", stdout: "" };
   },
 }));
 
@@ -47,9 +45,7 @@ vi.mock("node:perf_hooks", () => ({
   },
 }));
 
-// ---------------------------------------------------------------------------
 // Import after mocks
-// ---------------------------------------------------------------------------
 
 import { gitExec } from "../adapters/git-adapter.ts";
 import { gitExecAsync } from "../adapters/git-adapter-async.ts";
@@ -61,9 +57,7 @@ beforeEach(() => {
   performanceNowValue = 0;
 });
 
-// ---------------------------------------------------------------------------
 // gitExec — duration_ms field
-// ---------------------------------------------------------------------------
 
 describe("gitExec — duration_ms timing", () => {
   it("returns duration_ms as a non-negative number on success", () => {
@@ -71,7 +65,7 @@ describe("gitExec — duration_ms timing", () => {
     performanceNowValue = 100;
     spawnSyncImpl = () => {
       performanceNowValue = 250;
-      return { stdout: "", stderr: "", status: 0, signal: null };
+      return { signal: null, status: 0, stderr: "", stdout: "" };
     };
     const result = gitExec(["status"], "/project");
     expect(typeof result.duration_ms).toBe("number");
@@ -82,7 +76,7 @@ describe("gitExec — duration_ms timing", () => {
     performanceNowValue = 1000;
     spawnSyncImpl = () => {
       performanceNowValue = 1350;
-      return { stdout: "", stderr: "", status: 0, signal: null };
+      return { signal: null, status: 0, stderr: "", stdout: "" };
     };
     const result = gitExec(["log"], "/project");
     expect(result.duration_ms).toBe(350);
@@ -92,7 +86,7 @@ describe("gitExec — duration_ms timing", () => {
     performanceNowValue = 0;
     spawnSyncImpl = () => {
       performanceNowValue = 80;
-      return { stdout: "", stderr: "fatal error", status: 128, signal: null };
+      return { signal: null, status: 128, stderr: "fatal error", stdout: "" };
     };
     const result = gitExec(["status"], "/notarepo");
     expect(result.ok).toBe(false);
@@ -104,7 +98,7 @@ describe("gitExec — duration_ms timing", () => {
     performanceNowValue = 0;
     spawnSyncImpl = () => {
       performanceNowValue = 123.7;
-      return { stdout: "", stderr: "", status: 0, signal: null };
+      return { signal: null, status: 0, stderr: "", stdout: "" };
     };
     const result = gitExec(["status"], "/project");
     expect(result.duration_ms).toBe(124); // Math.round(123.7) = 124
@@ -114,7 +108,7 @@ describe("gitExec — duration_ms timing", () => {
     performanceNowValue = 0;
     spawnSyncImpl = () => {
       performanceNowValue = 5000;
-      return { stdout: "", stderr: "", status: null, signal: "SIGTERM" };
+      return { signal: "SIGTERM", status: null, stderr: "", stdout: "" };
     };
     const result = gitExec(["log"], "/project", 5_000);
     expect(result.timedOut).toBe(true);
@@ -123,16 +117,14 @@ describe("gitExec — duration_ms timing", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // runShell — duration_ms field
-// ---------------------------------------------------------------------------
 
 describe("runShell — duration_ms timing", () => {
   it("returns duration_ms as a non-negative number on success", () => {
     performanceNowValue = 200;
     spawnSyncImpl = () => {
       performanceNowValue = 450;
-      return { stdout: "hello\n", stderr: "", status: 0, signal: null };
+      return { signal: null, status: 0, stderr: "", stdout: "hello\n" };
     };
     const result = runShell("echo hello", "/project");
     expect(typeof result.duration_ms).toBe("number");
@@ -143,7 +135,7 @@ describe("runShell — duration_ms timing", () => {
     performanceNowValue = 500;
     spawnSyncImpl = () => {
       performanceNowValue = 700;
-      return { stdout: "", stderr: "", status: 0, signal: null };
+      return { signal: null, status: 0, stderr: "", stdout: "" };
     };
     const result = runShell("true", "/project");
     expect(result.duration_ms).toBe(200);
@@ -153,7 +145,7 @@ describe("runShell — duration_ms timing", () => {
     performanceNowValue = 0;
     spawnSyncImpl = () => {
       performanceNowValue = 30;
-      return { stdout: "", stderr: "command not found", status: 127, signal: null };
+      return { signal: null, status: 127, stderr: "command not found", stdout: "" };
     };
     const result = runShell("nonexistent-cmd", "/project");
     expect(result.ok).toBe(false);
@@ -165,7 +157,7 @@ describe("runShell — duration_ms timing", () => {
     performanceNowValue = 0;
     spawnSyncImpl = () => {
       performanceNowValue = 10_000;
-      return { stdout: "", stderr: "", status: null, signal: "SIGTERM" };
+      return { signal: "SIGTERM", status: null, stderr: "", stdout: "" };
     };
     const result = runShell("sleep 30", "/project", 10_000);
     expect(result.timedOut).toBe(true);
@@ -173,9 +165,7 @@ describe("runShell — duration_ms timing", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitExecAsync — duration_ms field
-// ---------------------------------------------------------------------------
 
 describe("gitExecAsync — duration_ms timing", () => {
   it("returns duration_ms as a non-negative number on success", async () => {
@@ -227,7 +217,7 @@ describe("gitExecAsync — duration_ms timing", () => {
     performanceNowValue = 0;
     execFileImpl = (cb) => {
       performanceNowValue = 30_000;
-      const err = Object.assign(new Error("Process killed"), { killed: true, code: 1 });
+      const err = Object.assign(new Error("Process killed"), { code: 1, killed: true });
       cb(err, "", "");
     };
     const result = await gitExecAsync(["log"], "/project", 30_000);

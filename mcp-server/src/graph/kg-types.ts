@@ -5,9 +5,7 @@
  * No runtime code — all exports are TypeScript types and interfaces.
  */
 
-// ---------------------------------------------------------------------------
 // Entity and Edge Kind Unions
-// ---------------------------------------------------------------------------
 
 export type EntityKind =
   | "file"
@@ -43,12 +41,10 @@ export type EdgeType =
   | "spawns"
   | "tests";
 
-// ---------------------------------------------------------------------------
 // SQLite Row Interfaces
-// ---------------------------------------------------------------------------
 
 /** Matches the `files` table. `file_id` is undefined before DB insert. */
-export interface FileRow {
+export type FileRow = {
   file_id?: number;
   path: string;
   mtime_ms: number;
@@ -56,10 +52,10 @@ export interface FileRow {
   language: string;
   layer: string;
   last_indexed_at: number;
-}
+};
 
 /** Matches the `entities` table. `entity_id` is undefined before DB insert. */
-export interface EntityRow {
+export type EntityRow = {
   entity_id?: number;
   file_id: number;
   name: string;
@@ -73,10 +69,10 @@ export interface EntityRow {
   signature: string | null;
   /** JSON-serialized metadata blob */
   metadata: string | null;
-}
+};
 
 /** Matches the `edges` table. `edge_id` is undefined before DB insert. */
-export interface EdgeRow {
+export type EdgeRow = {
   edge_id?: number;
   source_entity_id: number;
   target_entity_id: number;
@@ -85,10 +81,10 @@ export interface EdgeRow {
   confidence: number;
   /** JSON-serialized metadata blob */
   metadata: string | null;
-}
+};
 
 /** Matches the `file_edges` table. `file_edge_id` is undefined before DB insert. */
-export interface FileEdgeRow {
+export type FileEdgeRow = {
   file_edge_id?: number;
   source_file_id: number;
   target_file_id: number;
@@ -99,50 +95,46 @@ export interface FileEdgeRow {
   evidence: string | null;
   /** Human-readable relation label */
   relation: string | null;
-}
+};
 
-// ---------------------------------------------------------------------------
 // Ingestion Pipeline — Adapter Interface
-// ---------------------------------------------------------------------------
 
 /** Intra-file edge before entity IDs are resolved */
-export interface IntraFileEdge {
+export type IntraFileEdge = {
   source_qualified: string;
   target_qualified: string;
   edge_type: EdgeType;
   confidence?: number;
-}
+};
 
 /** Import specifier with the names it brings into scope */
-export interface ImportSpecifier {
+export type ImportSpecifier = {
   specifier: string;
   names: string[];
-}
+};
 
 /**
  * Result returned by a LanguageAdapter after parsing a single file.
  * `entity_id` and `file_id` are omitted because they are assigned by the
  * ingestion layer after database insertion.
  */
-export interface AdapterResult {
+export type AdapterResult = {
   entities: Omit<EntityRow, "entity_id" | "file_id">[];
   intraFileEdges: IntraFileEdge[];
   importSpecifiers: ImportSpecifier[];
-}
+};
 
 /** Pluggable per-language file parser */
-export interface LanguageAdapter {
+export type LanguageAdapter = {
   /** File extensions this adapter handles (e.g. ['.ts', '.tsx']) */
   extensions: string[];
   parse(filePath: string, content: string): AdapterResult;
-}
+};
 
-// ---------------------------------------------------------------------------
 // Query Result Types
-// ---------------------------------------------------------------------------
 
 /** Result row for caller/callee queries */
-export interface CallerResult {
+export type CallerResult = {
   entity_id: number;
   file_id: number;
   name: string;
@@ -150,10 +142,10 @@ export interface CallerResult {
   kind: EntityKind;
   edge_type: EdgeType;
   confidence: number;
-}
+};
 
 /** Result row for blast-radius recursive CTE queries */
-export interface BlastRadiusResult {
+export type BlastRadiusResult = {
   entity_id: number;
   file_id: number;
   name: string;
@@ -161,10 +153,10 @@ export interface BlastRadiusResult {
   kind: EntityKind;
   /** Distance from the root entity in the dependency graph */
   depth: number;
-}
+};
 
 /** Result row for full-text search (FTS5) queries */
-export interface SearchResult {
+export type SearchResult = {
   entity_id: number;
   file_id: number;
   name: string;
@@ -173,10 +165,10 @@ export interface SearchResult {
   /** BM25 rank score from FTS5 (lower is better) */
   rank: number;
   snippet: string | null;
-}
+};
 
 /** Result row for dead-code detection queries */
-export interface DeadCodeResult {
+export type DeadCodeResult = {
   entity_id: number;
   file_id: number;
   name: string;
@@ -184,36 +176,34 @@ export interface DeadCodeResult {
   kind: EntityKind;
   /** True when the entity has no incoming edges */
   is_unreferenced: boolean;
-}
+};
 
 /** Result row for file-level blast-radius recursive CTE queries */
-export interface FileBlastRadiusResult {
+export type FileBlastRadiusResult = {
   file_id: number;
   path: string;
   layer: string;
   language: string;
   depth: number;
-}
+};
 
-// ---------------------------------------------------------------------------
 // File Metrics Types
-// ---------------------------------------------------------------------------
 
 /**
  * A layer violation where a file imports from a layer it is not allowed to
  * depend on per the clean-architecture layer rules.
  */
-export interface LayerViolation {
+export type LayerViolation = {
   target: string;
   source_layer: string;
   target_layer: string;
-}
+};
 
 /**
  * Full structural metrics for a single file, computed from SQL aggregates
  * over file_edges and enriched with hub/cycle/violation data.
  */
-export interface FileMetrics {
+export type FileMetrics = {
   in_degree: number;
   out_degree: number;
   is_hub: boolean;
@@ -223,10 +213,10 @@ export interface FileMetrics {
   layer_violation_count: number;
   layer_violations: LayerViolation[];
   impact_score: number;
-}
+};
 
 /** Matches the `summaries` table. `summary_id` is undefined before DB insert. */
-export interface SummaryRow {
+export type SummaryRow = {
   summary_id?: number;
   file_id: number;
   entity_id: number | null;
@@ -235,19 +225,19 @@ export interface SummaryRow {
   model: string | null;
   content_hash: string | null;
   updated_at: string;
-}
+};
 
 /** Matches the entity_vector_meta / summary_vector_meta tables */
-export interface VectorMetaRow {
-  entity_id?: number;    // or summary_id for summary vectors
+export type VectorMetaRow = {
+  entity_id?: number; // or summary_id for summary vectors
   summary_id?: number;
   text_hash: string;
   model_id: string;
   updated_at: string;
-}
+};
 
 /** Result from semantic search across vector tables */
-export interface SemanticSearchResult {
+export type SemanticSearchResult = {
   entity_id: number;
   file_id: number;
   name: string;
@@ -257,4 +247,4 @@ export interface SemanticSearchResult {
   source: "entity" | "summary";
   summary?: string;
   file_path?: string;
-}
+};

@@ -10,42 +10,36 @@
  * to internal implementation details.
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist spawnSync mock so vitest can use it before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("node:child_process", () => ({
   spawnSync: vi.fn(() => ({
-    status: 0,
-    stdout: "",
-    stderr: "",
-    pid: 1,
-    output: [],
-    signal: null,
     error: undefined,
+    output: [],
+    pid: 1,
+    signal: null,
+    status: 0,
+    stderr: "",
+    stdout: "",
   })),
 }));
 
 import { spawnSync } from "node:child_process";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import { resolveWaveVariables } from "../orchestration/wave-variables.ts";
-import { updateBoard } from "../tools/update-board.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import { mkdir, writeFile } from "node:fs/promises";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { resolveWaveVariables } from "../orchestration/wave-variables.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
 
 const mockSpawnSync = vi.mocked(spawnSync);
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -58,7 +52,7 @@ function makeTmpDir(): string {
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   flowEventBus.removeAllListeners();
@@ -69,34 +63,34 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
   const now = new Date().toISOString();
   const store = getExecutionStore(workspace);
   store.initExecution({
-    flow: flow.name,
-    task: "test task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc123",
-    started: now,
-    last_updated: now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "main",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
-  store.upsertState(flow.entry, { status: "pending", entries: 0 });
-  store.upsertIteration(flow.entry, { count: 0, max: 3, history: [], cannot_fix: [] });
+  store.upsertState(flow.entry, { entries: 0, status: "pending" });
+  store.upsertIteration(flow.entry, { cannot_fix: [], count: 0, history: [], max: 3 });
 }
 
 function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "A test flow",
     entry: "build",
+    name: "test-flow",
     spawn_instructions: {},
     states: {
       build: {
-        type: "single",
         transitions: { done: "ship" },
+        type: "single",
       },
       ship: { type: "terminal" },
     },
@@ -104,58 +98,46 @@ function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Fix 4: flow-parser.ts — path traversal validation on flow name
-// ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow — flow name path traversal validation", () => {
   it("rejects flow names containing path separators (forward slash)", async () => {
-    await expect(
-      loadAndResolveFlow("/some/dir", "../../etc/passwd"),
-    ).rejects.toThrow(/invalid flow name/i);
+    await expect(loadAndResolveFlow("/some/dir", "../../etc/passwd")).rejects.toThrow(
+      /invalid flow name/i,
+    );
   });
 
   it("rejects flow names containing path separators (back slash)", async () => {
-    await expect(
-      loadAndResolveFlow("/some/dir", "..\\..\\secret"),
-    ).rejects.toThrow(/invalid flow name/i);
+    await expect(loadAndResolveFlow("/some/dir", "..\\..\\secret")).rejects.toThrow(
+      /invalid flow name/i,
+    );
   });
 
   it("rejects flow names with spaces", async () => {
-    await expect(
-      loadAndResolveFlow("/some/dir", "my flow"),
-    ).rejects.toThrow(/invalid flow name/i);
+    await expect(loadAndResolveFlow("/some/dir", "my flow")).rejects.toThrow(/invalid flow name/i);
   });
 
   it("rejects flow names with dot extensions that could traverse", async () => {
-    await expect(
-      loadAndResolveFlow("/some/dir", "flow.md"),
-    ).rejects.toThrow(/invalid flow name/i);
+    await expect(loadAndResolveFlow("/some/dir", "flow.md")).rejects.toThrow(/invalid flow name/i);
   });
 
   it("accepts valid alphanumeric flow names with hyphens and underscores", async () => {
     // Validation passes — the error will be a file-not-found, not a validation error.
     // We confirm the error is NOT "invalid flow name".
-    const err = await loadAndResolveFlow("/nonexistent/dir", "review-only").catch(
-      (e: Error) => e,
-    );
+    const err = await loadAndResolveFlow("/nonexistent/dir", "review-only").catch((e: Error) => e);
     expect(err).toBeInstanceOf(Error);
     // The error should be about file reading, not the name validation
     expect((err as Error).message).not.toMatch(/invalid flow name/i);
   });
 
   it("accepts flow names with underscores", async () => {
-    const err = await loadAndResolveFlow("/nonexistent/dir", "deep_build").catch(
-      (e: Error) => e,
-    );
+    const err = await loadAndResolveFlow("/nonexistent/dir", "deep_build").catch((e: Error) => e);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).not.toMatch(/invalid flow name/i);
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 3: wave-variables.ts — cwd passed to git spawnSync call
-// ---------------------------------------------------------------------------
 
 describe("resolveWaveVariables — cwd is passed to git spawnSync", () => {
   it("passes projectDir as cwd to spawnSync for wave_diff", async () => {
@@ -171,7 +153,12 @@ describe("resolveWaveVariables — cwd is passed to git spawnSync", () => {
 
     const customProjectDir = "/custom/project/root";
 
-    await resolveWaveVariables(tmpDir, 1, "my-slug", 1, customProjectDir);
+    await resolveWaveVariables(tmpDir, {
+      projectDir: customProjectDir,
+      slug: "my-slug",
+      totalWaves: 1,
+      wave: 1,
+    });
 
     // Verify spawnSync was called with the correct cwd
     expect(mockSpawnSync).toHaveBeenCalledWith(
@@ -193,9 +180,9 @@ describe("resolveWaveVariables — cwd is passed to git spawnSync", () => {
 
     // No projectDir passed → should fall back to process.cwd() or CANON_PROJECT_DIR
     const originalEnv = process.env.CANON_PROJECT_DIR;
-    delete process.env.CANON_PROJECT_DIR;
+    process.env.CANON_PROJECT_DIR = undefined;
 
-    await resolveWaveVariables(tmpDir, 1, "my-slug", 1);
+    await resolveWaveVariables(tmpDir, { slug: "my-slug", totalWaves: 1, wave: 1 });
 
     expect(mockSpawnSync).toHaveBeenCalledWith(
       "git",
@@ -221,7 +208,7 @@ describe("resolveWaveVariables — cwd is passed to git spawnSync", () => {
     const envProjectDir = "/env/project/root";
     process.env.CANON_PROJECT_DIR = envProjectDir;
 
-    await resolveWaveVariables(tmpDir, 1, "my-slug", 1);
+    await resolveWaveVariables(tmpDir, { slug: "my-slug", totalWaves: 1, wave: 1 });
 
     expect(mockSpawnSync).toHaveBeenCalledWith(
       "git",
@@ -229,13 +216,11 @@ describe("resolveWaveVariables — cwd is passed to git spawnSync", () => {
       expect.objectContaining({ cwd: envProjectDir }),
     );
 
-    delete process.env.CANON_PROJECT_DIR;
+    process.env.CANON_PROJECT_DIR = undefined;
   });
 });
 
-// ---------------------------------------------------------------------------
 // FlowEventBus — no listener leaks across repeated operations
-// ---------------------------------------------------------------------------
 
 describe("FlowEventBus — no listener leaks across repeated operations", () => {
   it("listener counts are stable after 10 full reportResult + updateBoard cycles", async () => {
@@ -262,14 +247,14 @@ describe("FlowEventBus — no listener leaks across repeated operations", () => 
     for (let i = 0; i < CYCLES; i++) {
       // Reset board state for each cycle
       const store = getExecutionStore(workspace);
-      store.upsertState("build", { status: "pending", entries: 0 });
-      store.upsertIteration("build", { count: 0, max: 3, history: [], cannot_fix: [] });
-      await updateBoard({ workspace, action: "enter_state", state_id: "build" });
+      store.upsertState("build", { entries: 0, status: "pending" });
+      store.upsertIteration("build", { cannot_fix: [], count: 0, history: [], max: 3 });
+      await updateBoard({ action: "enter_state", state_id: "build", workspace });
       await reportResult({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
+        workspace,
       });
     }
 

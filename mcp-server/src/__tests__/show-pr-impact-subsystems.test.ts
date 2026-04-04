@@ -24,9 +24,7 @@ import { describe, expect, it } from "vitest";
 import type { BlastRadiusFileEntry, Subsystem } from "../tools/show-pr-impact.ts";
 import { buildBlastRadiusByFile, detectSubsystems } from "../tools/show-pr-impact.ts";
 
-// ---------------------------------------------------------------------------
 // detectSubsystems
-// ---------------------------------------------------------------------------
 
 describe("detectSubsystems — new subsystem detection", () => {
   it("returns 'new' for a directory with 3+ added files", () => {
@@ -40,8 +38,8 @@ describe("detectSubsystems — new subsystem detection", () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject<Subsystem>({
       directory: "src/tools",
-      label: "new",
       file_count: 3,
+      label: "new",
     });
   });
 
@@ -57,8 +55,8 @@ describe("detectSubsystems — new subsystem detection", () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject<Subsystem>({
       directory: "src/old",
-      label: "removed",
       file_count: 4,
+      label: "removed",
     });
   });
 
@@ -158,21 +156,19 @@ describe("detectSubsystems — new subsystem detection", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // buildBlastRadiusByFile
-// ---------------------------------------------------------------------------
 
 describe("buildBlastRadiusByFile — grouping and counting", () => {
   it("groups affected entries by file_path and counts", () => {
     const blastRadius = {
-      total_affected: 3,
+      affected: [
+        { depth: 1, entity_kind: "function", entity_name: "foo", file_path: "src/a.ts" },
+        { depth: 1, entity_kind: "class", entity_name: "bar", file_path: "src/a.ts" },
+        { depth: 1, entity_kind: "function", entity_name: "baz", file_path: "src/b.ts" },
+      ],
       affected_files: 2,
       by_depth: { 1: 3 },
-      affected: [
-        { entity_name: "foo", entity_kind: "function", file_path: "src/a.ts", depth: 1 },
-        { entity_name: "bar", entity_kind: "class", file_path: "src/a.ts", depth: 1 },
-        { entity_name: "baz", entity_kind: "function", file_path: "src/b.ts", depth: 1 },
-      ],
+      total_affected: 3,
     };
     const result = buildBlastRadiusByFile(blastRadius);
     expect(result).toHaveLength(2);
@@ -189,17 +185,17 @@ describe("buildBlastRadiusByFile — grouping and counting", () => {
 
   it("sorts descending by dep_count", () => {
     const blastRadius = {
-      total_affected: 5,
+      affected: [
+        { depth: 1, entity_kind: "function", entity_name: "e1", file_path: "src/low.ts" },
+        { depth: 1, entity_kind: "function", entity_name: "e2", file_path: "src/high.ts" },
+        { depth: 1, entity_kind: "function", entity_name: "e3", file_path: "src/high.ts" },
+        { depth: 1, entity_kind: "function", entity_name: "e4", file_path: "src/high.ts" },
+        { depth: 1, entity_kind: "function", entity_name: "e5", file_path: "src/mid.ts" },
+        { depth: 1, entity_kind: "function", entity_name: "e6", file_path: "src/mid.ts" },
+      ],
       affected_files: 3,
       by_depth: { 1: 5 },
-      affected: [
-        { entity_name: "e1", entity_kind: "function", file_path: "src/low.ts", depth: 1 },
-        { entity_name: "e2", entity_kind: "function", file_path: "src/high.ts", depth: 1 },
-        { entity_name: "e3", entity_kind: "function", file_path: "src/high.ts", depth: 1 },
-        { entity_name: "e4", entity_kind: "function", file_path: "src/high.ts", depth: 1 },
-        { entity_name: "e5", entity_kind: "function", file_path: "src/mid.ts", depth: 1 },
-        { entity_name: "e6", entity_kind: "function", file_path: "src/mid.ts", depth: 1 },
-      ],
+      total_affected: 5,
     };
     const result = buildBlastRadiusByFile(blastRadius);
     expect(result[0].file).toBe("src/high.ts");
@@ -211,16 +207,16 @@ describe("buildBlastRadiusByFile — grouping and counting", () => {
   it("limits to top 15 entries", () => {
     // Create 20 distinct files with 1 entry each
     const affected = Array.from({ length: 20 }, (_, i) => ({
-      entity_name: `e${i}`,
-      entity_kind: "function",
-      file_path: `src/file${i}.ts`,
       depth: 1,
+      entity_kind: "function",
+      entity_name: `e${i}`,
+      file_path: `src/file${i}.ts`,
     }));
     const blastRadius = {
-      total_affected: 20,
+      affected,
       affected_files: 20,
       by_depth: { 1: 20 },
-      affected,
+      total_affected: 20,
     };
     const result = buildBlastRadiusByFile(blastRadius);
     expect(result).toHaveLength(15);
@@ -228,10 +224,10 @@ describe("buildBlastRadiusByFile — grouping and counting", () => {
 
   it("returns correct BlastRadiusFileEntry shape", () => {
     const blastRadius = {
-      total_affected: 1,
+      affected: [{ depth: 1, entity_kind: "function", entity_name: "fn", file_path: "src/x.ts" }],
       affected_files: 1,
       by_depth: { 1: 1 },
-      affected: [{ entity_name: "fn", entity_kind: "function", file_path: "src/x.ts", depth: 1 }],
+      total_affected: 1,
     };
     const result = buildBlastRadiusByFile(blastRadius);
     expect(result).toHaveLength(1);

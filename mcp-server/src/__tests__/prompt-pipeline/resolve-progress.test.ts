@@ -5,19 +5,14 @@
  * One behavior per test.
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
-import { getExecutionStore, clearStoreCache } from "../../orchestration/execution-store.ts";
-
 import { resolveProgress } from "../../tools/prompt-pipeline/resolve-progress.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
 
 let tmpDirs: string[] = [];
 
@@ -29,51 +24,51 @@ function makeTmpDir(): string {
 
 function makeBoard(): Board {
   return {
-    flow: "test",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
   };
 }
 
 function makeFlow(progress?: string): ResolvedFlow {
   return {
-    name: "test",
     description: "test flow",
     entry: "start",
-    states: {
-      start: { type: "single", agent: "test-agent" },
-      done: { type: "terminal" },
-    },
-    spawn_instructions: { start: "Do the thing" },
+    name: "test",
     progress,
+    spawn_instructions: { start: "Do the thing" },
+    states: {
+      done: { type: "terminal" },
+      start: { agent: "test-agent", type: "single" },
+    },
   };
 }
 
 function makeCtx(workspace: string, overrides: Partial<PromptContext> = {}): PromptContext {
-  const state: StateDefinition = { type: "single", agent: "test-agent" };
+  const state: StateDefinition = { agent: "test-agent", type: "single" };
   const flow = makeFlow();
   return {
-    input: {
-      workspace,
-      state_id: "start",
-      flow,
-      variables: { task: "test task" },
-    },
-    state,
-    rawInstruction: "Do the thing",
-    board: makeBoard(),
-    mergedVariables: { task: "test task" },
     basePrompt: "",
+    board: makeBoard(),
+    input: {
+      flow,
+      state_id: "start",
+      variables: { task: "test task" },
+      workspace,
+    },
+    mergedVariables: { task: "test task" },
     prompts: [],
+    rawInstruction: "Do the thing",
+    state,
     warnings: [],
     ...overrides,
   };
@@ -82,15 +77,11 @@ function makeCtx(workspace: string, overrides: Partial<PromptContext> = {}): Pro
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("resolveProgress (Stage 2)", () => {
   it("returns ctx unchanged when flow.progress is falsy (undefined)", async () => {
@@ -105,7 +96,7 @@ describe("resolveProgress (Stage 2)", () => {
     const workspace = makeTmpDir();
     const flow = makeFlow("");
     const ctx = makeCtx(workspace, {
-      input: { workspace, state_id: "start", flow, variables: {} },
+      input: { flow, state_id: "start", variables: {}, workspace },
     });
     const result = await resolveProgress(ctx);
     expect(result).toBe(ctx);
@@ -117,17 +108,26 @@ describe("resolveProgress (Stage 2)", () => {
     const now = new Date().toISOString();
     const store = getExecutionStore(workspace);
     store.initExecution({
-      flow: "test", task: "test", entry: "start", current_state: "start",
-      base_commit: "abc", started: now, last_updated: now,
-      branch: "main", sanitized: "main", created: now, tier: "small",
-      flow_name: "test", slug: "test-slug",
+      base_commit: "abc",
+      branch: "main",
+      created: now,
+      current_state: "start",
+      entry: "start",
+      flow: "test",
+      flow_name: "test",
+      last_updated: now,
+      sanitized: "main",
+      slug: "test-slug",
+      started: now,
+      task: "test",
+      tier: "small",
     });
     store.appendProgress("## Progress: test");
     store.appendProgress("- [research] done: found something");
 
     const flow = makeFlow("${WORKSPACE}/progress.md");
     const ctx = makeCtx(workspace, {
-      input: { workspace, state_id: "start", flow, variables: {} },
+      input: { flow, state_id: "start", variables: {}, workspace },
     });
 
     const result = await resolveProgress(ctx);
@@ -140,17 +140,26 @@ describe("resolveProgress (Stage 2)", () => {
     const now = new Date().toISOString();
     const store = getExecutionStore(workspace);
     store.initExecution({
-      flow: "test", task: "test", entry: "start", current_state: "start",
-      base_commit: "abc", started: now, last_updated: now,
-      branch: "main", sanitized: "main", created: now, tier: "small",
-      flow_name: "test", slug: "test-slug",
+      base_commit: "abc",
+      branch: "main",
+      created: now,
+      current_state: "start",
+      entry: "start",
+      flow: "test",
+      flow_name: "test",
+      last_updated: now,
+      sanitized: "main",
+      slug: "test-slug",
+      started: now,
+      task: "test",
+      tier: "small",
     });
     // Progress content contains ${WORKSPACE} which could cause re-expansion
     store.appendProgress("Use ${WORKSPACE} for the path");
 
     const flow = makeFlow("${WORKSPACE}/progress.md");
     const ctx = makeCtx(workspace, {
-      input: { workspace, state_id: "start", flow, variables: {} },
+      input: { flow, state_id: "start", variables: {}, workspace },
     });
 
     const result = await resolveProgress(ctx);
@@ -165,7 +174,7 @@ describe("resolveProgress (Stage 2)", () => {
 
     const flow = makeFlow("${WORKSPACE}/progress.md");
     const ctx = makeCtx(workspace, {
-      input: { workspace, state_id: "start", flow, variables: {} },
+      input: { flow, state_id: "start", variables: {}, workspace },
     });
 
     const result = await resolveProgress(ctx);

@@ -73,69 +73,62 @@ type EdgeAttrs = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function nodeSize(node: GraphNode): number {
-  return Math.max(2, Math.sqrt(node.entity_count || 1) * 1.5);
-}
+const nodeSize = (node: GraphNode): number => Math.max(2, Math.sqrt(node.entity_count || 1) * 1.5);
 
-function edgeSize(confidence?: number): number {
+const edgeSize = (confidence?: number): number => {
   if (!confidence || confidence >= 1) return 0.4;
   if (confidence >= 0.7) return 0.25;
   return 0.15;
-}
+};
 
 /** Sanitize a node id so it can be used as a graphology key (must be a string). */
-function safeKey(id: string): string {
-  return id;
-}
+const safeKey = (id: string): string => id;
 
 // ── Graph construction helpers ─────────────────────────────────────────────────
 
-function initialNodeColor(node: GraphNode): string {
+const initialNodeColor = (node: GraphNode): string => {
   if ((node.violation_count ?? 0) > 0) return NODE_VIOLATION;
   if (node.changed) return NODE_CHANGED;
   return NODE_DEFAULT;
-}
+};
 
-function buildNodeAttrs(node: GraphNode): NodeAttrs {
-  return {
-    label: node.id.split("/").pop() || node.id,
-    x: Math.random() * 1000,
-    y: Math.random() * 1000,
-    size: nodeSize(node),
-    color: initialNodeColor(node),
-    layer: node.layer || "unknown",
-    changed: node.changed || false,
-    violation_count: node.violation_count || 0,
-    dead_code_count: node.dead_code_count || 0,
-    community: node.community ?? -1,
-    hidden: false,
-  };
-}
+const buildNodeAttrs = (node: GraphNode): NodeAttrs => ({
+  changed: node.changed || false,
+  color: initialNodeColor(node),
+  community: node.community ?? -1,
+  dead_code_count: node.dead_code_count || 0,
+  hidden: false,
+  label: node.id.split("/").pop() || node.id,
+  layer: node.layer || "unknown",
+  size: nodeSize(node),
+  violation_count: node.violation_count || 0,
+  x: Math.random() * 1000,
+  y: Math.random() * 1000,
+});
 
-function populateNodes(graph: Graph, nodes: GraphNode[]): void {
+const populateNodes = (graph: Graph, nodes: GraphNode[]): void => {
   for (const node of nodes) {
     graph.addNode(safeKey(node.id), buildNodeAttrs(node));
   }
-}
+};
 
-function resolveEdgeEndpoint(endpoint: string | { id: string }): string {
-  return typeof endpoint === "string" ? endpoint : endpoint.id;
-}
+const resolveEdgeEndpoint = (endpoint: string | { id: string }): string =>
+  typeof endpoint === "string" ? endpoint : endpoint.id;
 
-function tryAddEdge(graph: Graph, s: string, t: string, confidence?: number): void {
+const tryAddEdge = (graph: Graph, s: string, t: string, confidence?: number): void => {
   try {
     graph.addEdge(safeKey(s), safeKey(t), {
       color: EDGE_DEFAULT,
-      size: edgeSize(confidence),
-      hidden: false,
       confidence: confidence ?? 1,
+      hidden: false,
+      size: edgeSize(confidence),
     } satisfies EdgeAttrs);
   } catch (_err) {
     // ignore rare duplicate-edge errors in multi: false mode
   }
-}
+};
 
-function populateEdges(graph: Graph, edges: GraphData["edges"]): void {
+const populateEdges = (graph: Graph, edges: GraphData["edges"]): void => {
   const seenEdges = new Set<string>();
   for (const edge of edges) {
     const s = resolveEdgeEndpoint(edge.source);
@@ -146,20 +139,20 @@ function populateEdges(graph: Graph, edges: GraphData["edges"]): void {
     seenEdges.add(key);
     tryAddEdge(graph, s, t, edge.confidence);
   }
-}
+};
 
-function applyLayout(graph: Graph, iterations: number): void {
+const applyGraphLayout = (graph: Graph, iterations: number): void => {
   try {
     forceAtlas2.assign(graph, {
       iterations,
-      settings: { gravity: 0.5, scalingRatio: 5, barnesHutOptimize: true, slowDown: 2 },
+      settings: { barnesHutOptimize: true, gravity: 0.5, scalingRatio: 5, slowDown: 2 },
     });
   } catch (_err) {
     // If FA2 fails (e.g. disconnected graph), positions stay random — still renderable
   }
-}
+};
 
-function applyCommunityDetection(graph: Graph): void {
+const applyCommunityDetection = (graph: Graph): void => {
   try {
     louvain.assign(graph as Parameters<typeof louvain.assign>[0], {
       nodeCommunityAttribute: "community",
@@ -167,27 +160,27 @@ function applyCommunityDetection(graph: Graph): void {
   } catch (_err) {
     // Community detection is optional — non-fatal
   }
-}
+};
 
 // ── Filter logic (module-scope to avoid nesting penalty) ─────────────────────
 
-function matchesSearchFilter(
+const matchesSearchFilter = (
   gn: GraphNode,
   parsed: FilterOptions["parsedSearch"],
   q: string,
-): boolean {
+): boolean => {
   if (parsed.filterLayer && !gn.layer.toLowerCase().includes(parsed.filterLayer)) return false;
   if (parsed.filterChanged && !gn.changed) return false;
   if (parsed.filterViolation && !(gn.violation_count && gn.violation_count > 0)) return false;
   if (q.length >= 2 && !gn.id.toLowerCase().includes(q)) return false;
   return true;
-}
+};
 
-function isNodeVisible(
+const isNodeVisible = (
   nodeId: string,
   f: FilterOptions,
   nodeIndex: Map<string, GraphNode>,
-): boolean {
+): boolean => {
   const gn = nodeIndex.get(nodeId);
   if (!gn) return false;
   if (!f.activeLayers.has(gn.layer)) return false;
@@ -200,52 +193,58 @@ function isNodeVisible(
     q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
   if (hasSearch && !matchesSearchFilter(gn, parsed, q)) return false;
   return true;
-}
+};
 
 // ── Reducer helpers ───────────────────────────────────────────────────────────
 
-function reduceNodeCascade(
+const reduceNodeCascade = (
   nodeId: string,
   data: NodeAttrs,
   cascadeRoot: string,
   cascadeFiles: Set<string>,
-): Partial<NodeAttrs> {
+): Partial<NodeAttrs> => {
   if (nodeId === cascadeRoot) return { ...data, color: "#60a5fa", hidden: false };
   if (cascadeFiles.has(nodeId)) return { ...data, color: "#fbbf24", hidden: false };
   return { ...data, color: NODE_UNFOCUSED, hidden: false };
-}
+};
 
-function reduceNodeFocus(
-  nodeId: string,
-  data: NodeAttrs,
-  gn: GraphNode,
-  focusedNodeId: string,
-  focusedConnected: Set<string>,
-  nodeBaseColor: (gn: GraphNode) => string,
-): Partial<NodeAttrs> {
+type NodeFocusCtx = {
+  nodeId: string;
+  data: NodeAttrs;
+  gn: GraphNode;
+  focusedNodeId: string;
+  focusedConnected: Set<string>;
+  nodeBaseColor: (gn: GraphNode) => string;
+};
+
+const reduceNodeFocus = (ctx: NodeFocusCtx): Partial<NodeAttrs> => {
+  const { nodeId, data, gn, focusedNodeId, focusedConnected, nodeBaseColor } = ctx;
   const baseColor = nodeBaseColor(gn);
   if (nodeId === focusedNodeId) {
-    return { ...data, color: baseColor, size: nodeSize(gn) + 3, hidden: false };
+    return { ...data, color: baseColor, hidden: false, size: nodeSize(gn) + 3 };
   }
   if (focusedConnected.has(nodeId)) {
-    return { ...data, color: baseColor, size: nodeSize(gn), hidden: false };
+    return { ...data, color: baseColor, hidden: false, size: nodeSize(gn) };
   }
   return {
     ...data,
     color: (gn.violation_count ?? 0) > 0 ? "rgba(255,107,107,0.25)" : NODE_UNFOCUSED,
-    size: nodeSize(gn),
     hidden: false,
+    size: nodeSize(gn),
   };
-}
+};
 
-function reduceNodeFilter(
-  nodeId: string,
-  data: NodeAttrs,
-  gn: GraphNode,
-  f: FilterOptions,
-  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean,
-  nodeBaseColor: (gn: GraphNode) => string,
-): Partial<NodeAttrs> {
+type NodeFilterCtx = {
+  nodeId: string;
+  data: NodeAttrs;
+  gn: GraphNode;
+  f: FilterOptions;
+  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean;
+  nodeBaseColor: (gn: GraphNode) => string;
+};
+
+const reduceNodeFilter = (ctx: NodeFilterCtx): Partial<NodeAttrs> => {
+  const { nodeId, data, gn, f, matchesSearch, nodeBaseColor } = ctx;
   if (!f.activeLayers.has(gn.layer)) return { ...data, hidden: true };
   if (f.insightFilter !== null && !f.insightFilter.has(nodeId)) return { ...data, hidden: true };
   if (f.prReviewFiles !== null && !f.prReviewFiles.has(nodeId)) return { ...data, hidden: true };
@@ -257,43 +256,46 @@ function reduceNodeFilter(
     q.length >= 2 || parsed.filterLayer || parsed.filterChanged || parsed.filterViolation;
   if (hasSearch && !matchesSearch(gn, parsed, q)) return { ...data, hidden: true };
 
-  return { ...data, hidden: false, color: nodeBaseColor(gn), size: nodeSize(gn) };
-}
+  return { ...data, color: nodeBaseColor(gn), hidden: false, size: nodeSize(gn) };
+};
 
-function reduceEdgeCascade(
+const reduceEdgeCascade = (
   s: string,
   t: string,
   data: EdgeAttrs,
   cascadeFiles: Set<string>,
-): Partial<EdgeAttrs> {
+): Partial<EdgeAttrs> => {
   const bothIn = cascadeFiles.has(s) && cascadeFiles.has(t);
   return { ...data, color: bothIn ? EDGE_HIGHLIGHTED : EDGE_VERY_DIM };
-}
+};
 
-function reduceEdgeFocus(
+const reduceEdgeFocus = (
   s: string,
   t: string,
   data: EdgeAttrs,
   focusedNodeId: string,
-): Partial<EdgeAttrs> {
+): Partial<EdgeAttrs> => {
   const adjacent = s === focusedNodeId || t === focusedNodeId;
   return { ...data, color: adjacent ? EDGE_ADJACENT_FOCUS : EDGE_DIM, size: adjacent ? 0.8 : 0.2 };
-}
+};
 
 /** Classify a pair of endpoints as both-in, one-in, or neither for a set filter. */
-function setFilterColor(sIn: boolean, tIn: boolean): string {
+const setFilterColor = (sIn: boolean, tIn: boolean): string => {
   if (sIn && tIn) return EDGE_HIGHLIGHTED;
   if (sIn || tIn) return EDGE_SEMI_DIM;
   return EDGE_DEFAULT;
-}
+};
 
-function resolveEdgeFilterColor(
-  s: string,
-  t: string,
-  f: FilterOptions,
-  nodeIndex: Map<string, GraphNode>,
-  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean,
-): string {
+type EdgeFilterColorCtx = {
+  s: string;
+  t: string;
+  f: FilterOptions;
+  nodeIndex: Map<string, GraphNode>;
+  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean;
+};
+
+const resolveEdgeFilterColor = (ctx: EdgeFilterColorCtx): string => {
+  const { s, t, f, nodeIndex, matchesSearch } = ctx;
   if (f.prReviewFiles !== null) {
     return setFilterColor(f.prReviewFiles.has(s), f.prReviewFiles.has(t));
   }
@@ -312,143 +314,40 @@ function resolveEdgeFilterColor(
   const sMatch = sGn ? matchesSearch(sGn, parsed, q) : false;
   const tMatch = tGn ? matchesSearch(tGn, parsed, q) : false;
   return sMatch && tMatch ? EDGE_HIGHLIGHTED : EDGE_DEFAULT;
-}
+};
 
-function reduceEdgeFilter(
-  s: string,
-  t: string,
-  data: EdgeAttrs,
-  f: FilterOptions,
-  nodeVisible: (nodeId: string, f: FilterOptions) => boolean,
-  nodeIndex: Map<string, GraphNode>,
-  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean,
-): Partial<EdgeAttrs> {
+type EdgeFilterCtx = {
+  s: string;
+  t: string;
+  data: EdgeAttrs;
+  f: FilterOptions;
+  nodeVisible: (nodeId: string, f: FilterOptions) => boolean;
+  nodeIndex: Map<string, GraphNode>;
+  matchesSearch: (gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string) => boolean;
+};
+
+const reduceEdgeFilter = (ctx: EdgeFilterCtx): Partial<EdgeAttrs> => {
+  const { s, t, data, f, nodeVisible, nodeIndex, matchesSearch } = ctx;
   if (!nodeVisible(s, f) || !nodeVisible(t, f)) return { ...data, hidden: true };
-  const color = resolveEdgeFilterColor(s, t, f, nodeIndex, matchesSearch);
-  return { ...data, hidden: false, color };
-}
+  const color = resolveEdgeFilterColor({ f, matchesSearch, nodeIndex, s, t });
+  return { ...data, color, hidden: false };
+};
 
-// ── Main builder ───────────────────────────────────────────────────────────────
+// ── Drag support wiring ───────────────────────────────────────────────────────
 
-export function buildSigmaGraph(
-  container: HTMLElement,
-  data: GraphData,
-  opts: {
-    onNodeClick: (node: GraphNode) => void;
-    onBackgroundClick: () => void;
-    edgeIn: Map<string, string[]>;
-    edgeOut: Map<string, string[]>;
-    layerColors: Record<string, string>;
-    fa2Iterations?: number; // default 100; SubGraph passes 60 for smaller graphs
-  },
-): SigmaGraphApi {
-  // ── 1. Build Graphology graph ────────────────────────────────────────────
-
-  const graph = new Graph({ type: "directed", multi: false });
-
-  const nodeIndex = new Map<string, GraphNode>();
-  for (const node of data.nodes) {
-    nodeIndex.set(node.id, node);
-  }
-
-  populateNodes(graph, data.nodes);
-  populateEdges(graph, data.edges);
-  applyLayout(graph, opts.fa2Iterations ?? 100);
-  applyCommunityDetection(graph);
-
-  // ── Rendering state (closure-scoped) ─────────────────────────────────────
-
-  let currentFilters: FilterOptions | null = null;
-  let focusedNodeId: string | null = null;
-  let focusedConnected: Set<string> | null = null;
-  let cascadeRoot: string | null = null;
-  let cascadeFiles: Set<string> | null = null;
-
-  // ── Helpers for filter logic ──────────────────────────────────────────────
-
-  function matchesSearch(gn: GraphNode, parsed: FilterOptions["parsedSearch"], q: string): boolean {
-    return matchesSearchFilter(gn, parsed, q);
-  }
-
-  function nodeVisible(nodeId: string, f: FilterOptions): boolean {
-    return isNodeVisible(nodeId, f, nodeIndex);
-  }
-
-  function nodeBaseColor(gn: GraphNode): string {
-    if ((gn.violation_count ?? 0) > 0) return NODE_VIOLATION;
-    if (gn.changed) return NODE_CHANGED;
-    return NODE_DEFAULT;
-  }
-
-  // ── nodeReducer — computes visual props from rendering state ─────────────
-
-  function nodeReducer(nodeId: string, data: NodeAttrs): Partial<NodeAttrs> {
-    const gn = nodeIndex.get(nodeId);
-    if (!gn) return data;
-
-    if (cascadeRoot && cascadeFiles) {
-      return reduceNodeCascade(nodeId, data, cascadeRoot, cascadeFiles);
-    }
-    if (focusedNodeId && focusedConnected) {
-      return reduceNodeFocus(nodeId, data, gn, focusedNodeId, focusedConnected, nodeBaseColor);
-    }
-    if (currentFilters) {
-      return reduceNodeFilter(nodeId, data, gn, currentFilters, matchesSearch, nodeBaseColor);
-    }
-    return { ...data, hidden: false, color: nodeBaseColor(gn) };
-  }
-
-  // ── edgeReducer — computes visual props from rendering state ─────────────
-
-  function edgeReducer(edgeId: string, data: EdgeAttrs): Partial<EdgeAttrs> {
-    const [s, t] = graph.extremities(edgeId);
-
-    if (cascadeRoot && cascadeFiles) {
-      return reduceEdgeCascade(s, t, data, cascadeFiles);
-    }
-    if (focusedNodeId) {
-      return reduceEdgeFocus(s, t, data, focusedNodeId);
-    }
-    if (currentFilters) {
-      return reduceEdgeFilter(s, t, data, currentFilters, nodeVisible, nodeIndex, matchesSearch);
-    }
-    return data;
-  }
-
-  // ── 4. Create Sigma renderer with reducers ────────────────────────────────
-
-  const sigma = new Sigma(graph as unknown as import("graphology").default, container, {
-    renderEdgeLabels: false,
-    renderLabels: false,
-    defaultEdgeColor: EDGE_DEFAULT,
-    labelFont: "'Inter', sans-serif",
-    labelSize: 11,
-    labelColor: { color: "#9ca3af" },
-    defaultNodeColor: NODE_DEFAULT,
-    nodeReducer: nodeReducer as unknown as (
-      node: string,
-      data: Record<string, unknown>,
-    ) => Record<string, unknown>,
-    edgeReducer: edgeReducer as unknown as (
-      edge: string,
-      data: Record<string, unknown>,
-    ) => Record<string, unknown>,
-  });
-
-  // ── 5. Drag support ────────────────────────────────────────────────────
-
+const wireDragHandlers = (sigma: Sigma, graph: Graph): { isDragging: () => boolean } => {
   let draggedNode: string | null = null;
-  let isDragging = false;
+  let dragging = false;
 
   sigma.on("downNode", ({ node, event: _event }: { node: string; event: MouseEvent }) => {
     draggedNode = node;
-    isDragging = false;
+    dragging = false;
     sigma.getCamera().disable();
   });
 
   sigma.getMouseCaptor().on("mousemovebody", (event: { original: MouseEvent }) => {
     if (!draggedNode) return;
-    isDragging = true;
+    dragging = true;
     const pos = sigma.viewportToGraph({ x: event.original.offsetX, y: event.original.offsetY });
     graph.setNodeAttribute(draggedNode, "x", pos.x);
     graph.setNodeAttribute(draggedNode, "y", pos.y);
@@ -461,115 +360,285 @@ export function buildSigmaGraph(
     }
   });
 
-  // ── 6. Event handlers ────────────────────────────────────────────────────
+  return { isDragging: () => dragging };
+};
 
+// ── Click event wiring ────────────────────────────────────────────────────────
+
+type ClickHandlerCtx = {
+  sigma: Sigma;
+  nodeIndex: Map<string, GraphNode>;
+  isDragging: () => boolean;
+  onNodeClick: (node: GraphNode) => void;
+  onBackgroundClick: () => void;
+};
+
+const wireClickHandlers = (ctx: ClickHandlerCtx): void => {
+  const { sigma, nodeIndex, isDragging, onNodeClick, onBackgroundClick } = ctx;
   sigma.on("clickNode", ({ node }: { node: string }) => {
-    if (isDragging) return; // don't fire click after drag
+    if (isDragging()) return;
     const gn = nodeIndex.get(node);
-    if (gn) opts.onNodeClick(gn);
+    if (gn) onNodeClick(gn);
   });
 
   sigma.on("clickStage", () => {
-    opts.onBackgroundClick();
+    onBackgroundClick();
+  });
+};
+
+// ── Rendering state container ─────────────────────────────────────────────────
+
+type RenderState = {
+  currentFilters: FilterOptions | null;
+  focusedNodeId: string | null;
+  focusedConnected: Set<string> | null;
+  cascadeRoot: string | null;
+  cascadeFiles: Set<string> | null;
+};
+
+// ── API method factory ────────────────────────────────────────────────────────
+
+type BuildApiCtx = {
+  sigma: Sigma;
+  graph: Graph;
+  nodeIndex: Map<string, GraphNode>;
+  state: RenderState;
+  edges: { edgeIn: Map<string, string[]>; edgeOut: Map<string, string[]> };
+};
+
+const clearRenderState = (state: RenderState): void => {
+  state.currentFilters = null;
+  state.focusedNodeId = null;
+  state.focusedConnected = null;
+  state.cascadeRoot = null;
+  state.cascadeFiles = null;
+};
+
+const animateCamera = (sigma: Sigma, nodeId: string, ratio: number, duration: number): void => {
+  const display = sigma.getNodeDisplayData(nodeId);
+  if (display) {
+    sigma.getCamera().animate({ ratio, x: display.x, y: display.y }, { duration });
+  }
+};
+
+const buildApi = (ctx: BuildApiCtx): SigmaGraphApi => {
+  const { sigma, graph, nodeIndex, state, edges: opts } = ctx;
+
+  return {
+    applyFilters: (f: FilterOptions) => {
+      state.currentFilters = f;
+      state.cascadeRoot = null;
+      state.cascadeFiles = null;
+      state.focusedNodeId = null;
+      state.focusedConnected = null;
+      sigma.refresh();
+    },
+    clearHighlight: () => {
+      state.cascadeRoot = null;
+      state.cascadeFiles = null;
+      sigma.refresh();
+    },
+    destroy: () => {
+      sigma.kill();
+      graph.clear();
+    },
+    focusNode: (node: GraphNode) => {
+      state.focusedNodeId = node.id;
+      state.focusedConnected = new Set([node.id]);
+      for (const f of opts.edgeOut.get(node.id) || []) state.focusedConnected.add(f);
+      for (const f of opts.edgeIn.get(node.id) || []) state.focusedConnected.add(f);
+      sigma.refresh();
+      animateCamera(sigma, node.id, 0.4, 400);
+    },
+    highlightCascade: (nodeId: string, files: Set<string>) => {
+      state.cascadeRoot = nodeId;
+      state.cascadeFiles = new Set(files);
+      state.cascadeFiles.add(nodeId);
+      sigma.refresh();
+    },
+    resetView: () => {
+      clearRenderState(state);
+      sigma.refresh();
+    },
+    unfocusNode: () => {
+      state.focusedNodeId = null;
+      state.focusedConnected = null;
+      sigma.refresh();
+    },
+    zoomToNode: (nodeId: string) => {
+      const gn = nodeIndex.get(nodeId);
+      if (!gn || !graph.hasNode(nodeId)) return null;
+      animateCamera(sigma, nodeId, 0.2, 500);
+      return gn;
+    },
+  };
+};
+
+// ── Main builder ───────────────────────────────────────────────────────────────
+
+type ReducerDeps = {
+  graph: Graph;
+  nodeIndex: Map<string, GraphNode>;
+  state: RenderState;
+};
+
+const createNodeReducer = ({ nodeIndex, state }: ReducerDeps) => {
+  const nodeBaseColor = (gn: GraphNode): string => {
+    if ((gn.violation_count ?? 0) > 0) return NODE_VIOLATION;
+    if (gn.changed) return NODE_CHANGED;
+    return NODE_DEFAULT;
+  };
+  const matchesSearch = (
+    gn: GraphNode,
+    parsed: FilterOptions["parsedSearch"],
+    q: string,
+  ): boolean => matchesSearchFilter(gn, parsed, q);
+
+  return (nodeId: string, data: NodeAttrs): Partial<NodeAttrs> => {
+    const gn = nodeIndex.get(nodeId);
+    if (!gn) return data;
+    if (state.cascadeRoot && state.cascadeFiles) {
+      return reduceNodeCascade(nodeId, data, state.cascadeRoot, state.cascadeFiles);
+    }
+    if (state.focusedNodeId && state.focusedConnected) {
+      return reduceNodeFocus({
+        data,
+        focusedConnected: state.focusedConnected,
+        focusedNodeId: state.focusedNodeId,
+        gn,
+        nodeBaseColor,
+        nodeId,
+      });
+    }
+    if (state.currentFilters) {
+      return reduceNodeFilter({
+        data,
+        f: state.currentFilters,
+        gn,
+        matchesSearch,
+        nodeBaseColor,
+        nodeId,
+      });
+    }
+    return { ...data, color: nodeBaseColor(gn), hidden: false };
+  };
+};
+
+const createEdgeReducer = ({ graph, nodeIndex, state }: ReducerDeps) => {
+  const matchesSearch = (
+    gn: GraphNode,
+    parsed: FilterOptions["parsedSearch"],
+    q: string,
+  ): boolean => matchesSearchFilter(gn, parsed, q);
+  const nodeVisible = (nodeId: string, f: FilterOptions): boolean =>
+    isNodeVisible(nodeId, f, nodeIndex);
+
+  return (edgeId: string, data: EdgeAttrs): Partial<EdgeAttrs> => {
+    const [s, t] = graph.extremities(edgeId);
+    if (state.cascadeRoot && state.cascadeFiles) {
+      return reduceEdgeCascade(s, t, data, state.cascadeFiles);
+    }
+    if (state.focusedNodeId) {
+      return reduceEdgeFocus(s, t, data, state.focusedNodeId);
+    }
+    if (state.currentFilters) {
+      return reduceEdgeFilter({
+        data,
+        f: state.currentFilters,
+        matchesSearch,
+        nodeIndex,
+        nodeVisible,
+        s,
+        t,
+      });
+    }
+    return data;
+  };
+};
+
+const createSigmaRenderer = (
+  graph: Graph,
+  container: HTMLElement,
+  nodeReducer: (nodeId: string, data: NodeAttrs) => Partial<NodeAttrs>,
+  edgeReducer: (edgeId: string, data: EdgeAttrs) => Partial<EdgeAttrs>,
+): Sigma =>
+  new Sigma(graph as unknown as import("graphology").default, container, {
+    defaultEdgeColor: EDGE_DEFAULT,
+    defaultNodeColor: NODE_DEFAULT,
+    edgeReducer: edgeReducer as unknown as (
+      edge: string,
+      data: Record<string, unknown>,
+    ) => Record<string, unknown>,
+    labelColor: { color: "#9ca3af" },
+    labelFont: "'Inter', sans-serif",
+    labelSize: 11,
+    nodeReducer: nodeReducer as unknown as (
+      node: string,
+      data: Record<string, unknown>,
+    ) => Record<string, unknown>,
+    renderEdgeLabels: false,
+    renderLabels: false,
   });
 
-  // ── API methods ────────────────────────────────────────────────────────────
+export type BuildSigmaGraphOpts = {
+  onNodeClick: (node: GraphNode) => void;
+  onBackgroundClick: () => void;
+  edgeIn: Map<string, string[]>;
+  edgeOut: Map<string, string[]>;
+  layerColors: Record<string, string>;
+  fa2Iterations?: number; // default 100; SubGraph passes 60 for smaller graphs
+};
 
-  function applyFilters(f: FilterOptions): void {
-    currentFilters = f;
-    // Clear cascade/focus so filter mode takes precedence
-    cascadeRoot = null;
-    cascadeFiles = null;
-    focusedNodeId = null;
-    focusedConnected = null;
-    sigma.refresh();
-  }
+export const buildSigmaGraph = (
+  container: HTMLElement,
+  data: GraphData,
+  opts: BuildSigmaGraphOpts,
+): SigmaGraphApi => {
+  const graph = new Graph({ multi: false, type: "directed" });
+  const nodeIndex = new Map<string, GraphNode>();
+  for (const node of data.nodes) nodeIndex.set(node.id, node);
 
-  function focusNode(node: GraphNode): void {
-    focusedNodeId = node.id;
-    focusedConnected = new Set([node.id]);
-    for (const f of opts.edgeOut.get(node.id) || []) focusedConnected.add(f);
-    for (const f of opts.edgeIn.get(node.id) || []) focusedConnected.add(f);
+  populateNodes(graph, data.nodes);
+  populateEdges(graph, data.edges);
+  applyGraphLayout(graph, opts.fa2Iterations ?? 100);
+  applyCommunityDetection(graph);
 
-    sigma.refresh();
-
-    // Animate camera to node
-    const nodeDisplayData = sigma.getNodeDisplayData(node.id);
-    if (nodeDisplayData) {
-      sigma
-        .getCamera()
-        .animate({ x: nodeDisplayData.x, y: nodeDisplayData.y, ratio: 0.4 }, { duration: 400 });
-    }
-  }
-
-  function unfocusNode(): void {
-    focusedNodeId = null;
-    focusedConnected = null;
-    sigma.refresh();
-  }
-
-  function zoomToNode(nodeId: string): GraphNode | null {
-    const gn = nodeIndex.get(nodeId);
-    if (!gn || !graph.hasNode(nodeId)) return null;
-    const nodeDisplayData = sigma.getNodeDisplayData(nodeId);
-    if (!nodeDisplayData) return null;
-    sigma
-      .getCamera()
-      .animate({ x: nodeDisplayData.x, y: nodeDisplayData.y, ratio: 0.2 }, { duration: 500 });
-    return gn;
-  }
-
-  function highlightCascade(nodeId: string, files: Set<string>): void {
-    // Copy the caller's set and add the root — never mutate caller's data
-    cascadeRoot = nodeId;
-    cascadeFiles = new Set(files);
-    cascadeFiles.add(nodeId);
-    sigma.refresh();
-  }
-
-  function resetView(): void {
-    // Clear all rendering state — returns graph to the default (natural colors) view.
-    currentFilters = null;
-    focusedNodeId = null;
-    focusedConnected = null;
-    cascadeRoot = null;
-    cascadeFiles = null;
-    sigma.refresh();
-  }
-
-  function clearHighlight(): void {
-    cascadeRoot = null;
-    cascadeFiles = null;
-    sigma.refresh();
-  }
-
-  function destroy(): void {
-    sigma.kill();
-    graph.clear();
-  }
-
-  const api: SigmaGraphApi = {
-    applyFilters,
-    resetView,
-    focusNode,
-    unfocusNode,
-    zoomToNode,
-    highlightCascade,
-    clearHighlight,
-    destroy,
+  const state: RenderState = {
+    cascadeFiles: null,
+    cascadeRoot: null,
+    currentFilters: null,
+    focusedConnected: null,
+    focusedNodeId: null,
   };
 
+  const deps: ReducerDeps = { graph, nodeIndex, state };
+  const sigma = createSigmaRenderer(
+    graph,
+    container,
+    createNodeReducer(deps),
+    createEdgeReducer(deps),
+  );
+
+  const { isDragging } = wireDragHandlers(sigma, graph);
+  wireClickHandlers({
+    isDragging,
+    nodeIndex,
+    onBackgroundClick: opts.onBackgroundClick,
+    onNodeClick: opts.onNodeClick,
+    sigma,
+  });
+
+  const api = buildApi({ edges: opts, graph, nodeIndex, sigma, state });
+
   // Expose graph internals on window for Playwright integration tests.
-  // This allows tests to inspect node display data, colors, and hidden state
-  // without trying to read WebGL pixel colors from the canvas.
   if (typeof window !== "undefined") {
     (window as unknown as Record<string, unknown>).__SIGMA_GRAPH__ = {
-      graph,
-      sigma,
       api,
+      graph,
       nodeIndex,
+      sigma,
     };
   }
 
   return api;
-}
+};

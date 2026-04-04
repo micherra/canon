@@ -67,17 +67,17 @@ export function decodeCompactGraph(compact: CompactGraphData): GraphData {
   const nodes: GraphNode[] = compact.node_ids.map((id, i) => {
     const n = compact.nodes[i];
     return {
-      id,
-      layer: n.l,
-      violation_count: n.v ?? 0,
-      top_violations: n.t ?? [],
       changed: n.c ?? false,
+      id,
       kind: n.k,
+      layer: n.l,
+      top_violations: n.t ?? [],
+      violation_count: n.v ?? 0,
     };
   });
   const edges: GraphEdge[] = compact.edges.map(([si, ti]) => ({
     source: compact.node_ids[si],
     target: compact.node_ids[ti],
   }));
-  return { nodes, edges, layers: compact.layers };
+  return { edges, layers: compact.layers, nodes };
 }

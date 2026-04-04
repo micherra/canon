@@ -2,11 +2,11 @@ import { analyzeDrift } from "../drift/analyzer.ts";
 import { DriftStore, type WeeklyTrendPoint } from "../drift/store.ts";
 import { loadAllPrinciples } from "../matcher.ts";
 
-export interface ComplianceInput {
+export type ComplianceInput = {
   principle_id: string;
-}
+};
 
-export interface ComplianceOutput {
+export type ComplianceOutput = {
   principle_id: string;
   found: boolean;
   compliance_rate: number;
@@ -16,7 +16,7 @@ export interface ComplianceOutput {
   total_reviews: number;
   trend: "improving" | "stable" | "declining" | "insufficient_data";
   weekly_trend: WeeklyTrendPoint[];
-}
+};
 
 export async function getCompliance(
   input: ComplianceInput,
@@ -37,14 +37,14 @@ export async function getCompliance(
 
   if (!principleExists) {
     return {
-      principle_id: input.principle_id,
-      found: false,
       compliance_rate: 0,
-      total_violations: 0,
-      unintentional_violations: 0,
+      found: false,
+      principle_id: input.principle_id,
       times_honored: 0,
       total_reviews: 0,
+      total_violations: 0,
       trend: "insufficient_data",
+      unintentional_violations: 0,
       weekly_trend: [],
     };
   }
@@ -61,27 +61,27 @@ export async function getCompliance(
     const honored = reviews.filter((r) => r.honored.includes(input.principle_id)).length;
 
     return {
-      principle_id: input.principle_id,
-      found: true,
       compliance_rate: 100,
-      total_violations: 0,
-      unintentional_violations: 0,
+      found: true,
+      principle_id: input.principle_id,
       times_honored: honored,
       total_reviews: report.total_reviews,
+      total_violations: 0,
       trend: report.trend,
+      unintentional_violations: 0,
       weekly_trend: weeklyTrend,
     };
   }
 
   return {
-    principle_id: input.principle_id,
-    found: true,
     compliance_rate: stats.compliance_rate,
-    total_violations: stats.total_violations,
-    unintentional_violations: stats.unintentional_violations,
+    found: true,
+    principle_id: input.principle_id,
     times_honored: stats.times_honored,
     total_reviews: report.total_reviews,
+    total_violations: stats.total_violations,
     trend: report.trend,
+    unintentional_violations: stats.unintentional_violations,
     weekly_trend: weeklyTrend,
   };
 }

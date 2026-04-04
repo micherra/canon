@@ -12,14 +12,12 @@
  *   8. diff_base and incremental params forwarded to getPrReviewData
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Module-level mocks — set up before importing the module under test
-// ---------------------------------------------------------------------------
 
 // Mock existsSync to control KG availability
 vi.mock("fs", async (importOriginal) => {
@@ -52,71 +50,88 @@ vi.mock("../tools/pr-review-data.ts", () => ({
 import { existsSync } from "node:fs";
 import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
 import { KgQuery } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
-// ---------------------------------------------------------------------------
 // Shared test fixtures
-// ---------------------------------------------------------------------------
 
 const SAMPLE_SCORE = {
-  rules: { passed: 1, total: 2 },
-  opinions: { passed: 2, total: 3 },
   conventions: { passed: 3, total: 3 },
+  opinions: { passed: 2, total: 3 },
+  rules: { passed: 1, total: 2 },
 };
 
 // Minimal stub for PrReviewDataOutput returned by mocked getPrReviewData
 const SAMPLE_PREP = {
+  blast_radius: [],
+  diff_command: "git diff main",
   files: [],
   impact_files: [],
+  incremental: false,
   layers: [],
+  narrative: "No changed files.",
+  net_new_files: 0,
   total_files: 0,
   total_violations: 0,
-  net_new_files: 0,
-  incremental: false,
-  diff_command: "git diff main",
-  narrative: "No changed files.",
-  blast_radius: [],
 };
 
 const SAMPLE_REVIEW = {
+  branch: "feat/my-feature",
+  files: ["src/tools/foo.ts", "src/tools/bar.ts"],
+  honored: ["validate-at-trust-boundaries"],
+  pr_number: 42,
   review_id: "rev_test_001",
+  score: SAMPLE_SCORE,
   timestamp: new Date().toISOString(),
   verdict: "WARNING" as const,
-  branch: "feat/my-feature",
-  pr_number: 42,
-  files: ["src/tools/foo.ts", "src/tools/bar.ts"],
   violations: [
     {
-      principle_id: "functions-do-one-thing",
-      severity: "strong-opinion",
       file_path: "src/tools/foo.ts",
       message: "Function does too many things",
+      principle_id: "functions-do-one-thing",
+      severity: "strong-opinion",
     },
     {
+      file_path: "src/tools/bar.ts",
       principle_id: "deep-modules",
       severity: "rule",
-      file_path: "src/tools/bar.ts",
     },
   ],
-  honored: ["validate-at-trust-boundaries"],
-  score: SAMPLE_SCORE,
 };
 
 const SAMPLE_BLAST_RADIUS = {
-  seed_entities: ["foo", "bar"],
-  total_affected: 5,
+  affected: [
+    {
+      depth: 1,
+      edge_type: "dependency",
+      entity_kind: "function",
+      entity_name: "baz",
+      file_path: "src/tools/baz.ts",
+    },
+    {
+      depth: 2,
+      edge_type: "dependency",
+      entity_kind: "class",
+      entity_name: "qux",
+      file_path: "src/utils/qux.ts",
+    },
+  ],
   affected_files: 3,
   by_depth: { 0: 2, 1: 2, 2: 1 },
-  affected: [
-    { entity_name: "baz", entity_kind: "function", file_path: "src/tools/baz.ts", depth: 1, edge_type: "dependency" },
-    { entity_name: "qux", entity_kind: "class", file_path: "src/utils/qux.ts", depth: 2, edge_type: "dependency" },
-  ],
+  seed_entities: ["foo", "bar"],
+  total_affected: 5,
 };
 
 const SAMPLE_GRAPH_DATA = {
+  edges: [
+    { confidence: 1, source: "src/tools/foo.ts", target: "src/tools/bar.ts" },
+    { confidence: 1, source: "src/tools/bar.ts", target: "src/tools/baz.ts" },
+    { confidence: 1, source: "src/tools/baz.ts", target: "src/utils/qux.ts" },
+    // Edge that crosses out of our subgraph — should be excluded
+    { confidence: 1, source: "src/unrelated.ts", target: "src/tools/foo.ts" },
+  ],
   nodes: [
     { id: "src/tools/foo.ts", layer: "tools", violation_count: 1 },
     { id: "src/tools/bar.ts", layer: "tools", violation_count: 0 },
@@ -124,18 +139,9 @@ const SAMPLE_GRAPH_DATA = {
     { id: "src/utils/qux.ts", layer: "utils", violation_count: 0 },
     { id: "src/unrelated.ts", layer: "domain", violation_count: 0 },
   ],
-  edges: [
-    { source: "src/tools/foo.ts", target: "src/tools/bar.ts", confidence: 1 },
-    { source: "src/tools/bar.ts", target: "src/tools/baz.ts", confidence: 1 },
-    { source: "src/tools/baz.ts", target: "src/utils/qux.ts", confidence: 1 },
-    // Edge that crosses out of our subgraph — should be excluded
-    { source: "src/unrelated.ts", target: "src/tools/foo.ts", confidence: 1 },
-  ],
 };
 
-// ---------------------------------------------------------------------------
 // Test setup
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact", () => {
   let tmpDir: string;
@@ -153,7 +159,9 @@ describe("showPrImpact", () => {
     vi.mocked(KgQuery).mockReset();
     // Default KgQuery mock: getSubgraph returns empty
     // Using prototype mock pattern for class constructor mocks
-    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockReturnValue({ nodes: [], edges: [] });
+    (
+      KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }
+    ).prototype.getSubgraph = vi.fn().mockReturnValue({ edges: [], nodes: [] });
 
     // Default: getPrReviewData returns minimal prep stub
     vi.mocked(getPrReviewData).mockReset();
@@ -161,13 +169,11 @@ describe("showPrImpact", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
-  // -------------------------------------------------------------------------
   // 1. No stored PR review — prep always present
-  // -------------------------------------------------------------------------
 
   it("returns ok with prep data when no stored PR review exists", async () => {
     const result = await showPrImpact(tmpDir);
@@ -178,14 +184,12 @@ describe("showPrImpact", () => {
     expect(result.prep).toMatchObject(SAMPLE_PREP);
     // impact fields are empty/absent
     expect(result.hotspots).toEqual([]);
-    expect(result.subgraph).toEqual({ nodes: [], edges: [], layers: [] });
+    expect(result.subgraph).toEqual({ edges: [], layers: [], nodes: [] });
     expect(result.review).toBeUndefined();
     expect(result.blastRadius).toBeUndefined();
   });
 
-  // -------------------------------------------------------------------------
   // 2. Stored PR review present, no KG
-  // -------------------------------------------------------------------------
 
   it("returns ok with review + prep data but no blast radius when KG is absent", async () => {
     // Write a PR review
@@ -219,9 +223,7 @@ describe("showPrImpact", () => {
     expect(initDatabase).not.toHaveBeenCalled();
   });
 
-  // -------------------------------------------------------------------------
   // 3. PR review + KG
-  // -------------------------------------------------------------------------
 
   it("returns ok with blast radius when KG is available", async () => {
     const store = new DriftStore(tmpDir);
@@ -246,12 +248,13 @@ describe("showPrImpact", () => {
     expect(mockDb.close).toHaveBeenCalledOnce();
 
     // analyzeBlastRadius called with the review's file list
-    expect(analyzeBlastRadius).toHaveBeenCalledWith(mockDb, SAMPLE_REVIEW.files, { maxDepth: 3, includeTests: false });
+    expect(analyzeBlastRadius).toHaveBeenCalledWith(mockDb, SAMPLE_REVIEW.files, {
+      includeTests: false,
+      maxDepth: 3,
+    });
   });
 
-  // -------------------------------------------------------------------------
   // 4. Hotspot ranking
-  // -------------------------------------------------------------------------
 
   it("ranks hotspots by risk_score descending", async () => {
     // 3 files: one with rule violation + blast radius, one with strong-opinion, one with convention
@@ -259,9 +262,9 @@ describe("showPrImpact", () => {
       ...SAMPLE_REVIEW,
       files: ["src/a.ts", "src/b.ts", "src/c.ts"],
       violations: [
-        { principle_id: "p1", severity: "convention", file_path: "src/c.ts" }, // weight 1
-        { principle_id: "p2", severity: "strong-opinion", file_path: "src/b.ts" }, // weight 2
-        { principle_id: "p3", severity: "rule", file_path: "src/a.ts" }, // weight 3
+        { file_path: "src/c.ts", principle_id: "p1", severity: "convention" }, // weight 1
+        { file_path: "src/b.ts", principle_id: "p2", severity: "strong-opinion" }, // weight 2
+        { file_path: "src/a.ts", principle_id: "p3", severity: "rule" }, // weight 3
       ],
     };
     const store = new DriftStore(tmpDir);
@@ -286,7 +289,7 @@ describe("showPrImpact", () => {
     const review = {
       ...SAMPLE_REVIEW,
       files: ["src/a.ts", "src/b.ts"],
-      violations: [{ principle_id: "p1", severity: "rule", file_path: "src/a.ts" }],
+      violations: [{ file_path: "src/a.ts", principle_id: "p1", severity: "rule" }],
     };
     const store = new DriftStore(tmpDir);
     await store.appendReview(review);
@@ -306,9 +309,7 @@ describe("showPrImpact", () => {
     expect(bHotspot!.risk_score).toBe(0);
   });
 
-  // -------------------------------------------------------------------------
   // 5. Decisions field — always empty
-  // -------------------------------------------------------------------------
 
   it("does not include decisions field in output", async () => {
     const store = new DriftStore(tmpDir);
@@ -321,9 +322,7 @@ describe("showPrImpact", () => {
     expect(result).not.toHaveProperty("decisions");
   });
 
-  // -------------------------------------------------------------------------
   // 6. Subgraph filtering
-  // -------------------------------------------------------------------------
 
   it("filters subgraph to changed files + blast radius affected files", async () => {
     const store = new DriftStore(tmpDir);
@@ -336,14 +335,20 @@ describe("showPrImpact", () => {
     // SAMPLE_BLAST_RADIUS affected: baz.ts + qux.ts
 
     // Mock KgQuery.getSubgraph to return nodes from SAMPLE_GRAPH_DATA for the included paths
-    const allNodes = SAMPLE_GRAPH_DATA.nodes.map((n) => ({ path: n.id, layer: n.layer, file_id: 1 }));
+    const allNodes = SAMPLE_GRAPH_DATA.nodes.map((n) => ({
+      file_id: 1,
+      layer: n.layer,
+      path: n.id,
+    }));
     const allEdges = SAMPLE_GRAPH_DATA.edges.map((e) => ({ source: e.source, target: e.target }));
-    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockImplementation((paths: string[]) => {
+    (
+      KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }
+    ).prototype.getSubgraph = vi.fn().mockImplementation((paths: string[]) => {
       const pathSet = new Set(paths);
       const nodes = allNodes.filter((n) => pathSet.has(n.path));
       const nodeIds = new Set(nodes.map((n) => n.path));
       const edges = allEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
-      return { nodes, edges };
+      return { edges, nodes };
     });
 
     const result = await showPrImpact(tmpDir);
@@ -385,9 +390,7 @@ describe("showPrImpact", () => {
     expect(result.subgraph.layers).toEqual([]);
   });
 
-  // -------------------------------------------------------------------------
   // 7. KG error handling
-  // -------------------------------------------------------------------------
 
   it("continues without blast radius when analyzeBlastRadius throws", async () => {
     const store = new DriftStore(tmpDir);
@@ -409,9 +412,7 @@ describe("showPrImpact", () => {
     expect(mockDb.close).toHaveBeenCalledOnce();
   });
 
-  // -------------------------------------------------------------------------
   // 8. UnifiedPrOutput — prep field always present
-  // -------------------------------------------------------------------------
 
   it("prep data is always populated even when no stored review exists", async () => {
     // No review stored — getPrReviewData still returns prep data
@@ -428,15 +429,15 @@ describe("showPrImpact", () => {
       ...SAMPLE_PREP,
       files: [
         {
-          path: "src/foo.ts",
-          layer: "tools",
-          status: "modified",
           bucket: "needs-attention",
+          layer: "tools",
+          path: "src/foo.ts",
           reason: "Has violations",
+          status: "modified",
         },
       ],
-      total_files: 1,
       narrative: "This PR touches the tools layer.",
+      total_files: 1,
     };
     vi.mocked(getPrReviewData).mockResolvedValue(customPrep as never);
 
@@ -470,22 +471,20 @@ describe("showPrImpact", () => {
     );
   });
 
-  // -------------------------------------------------------------------------
   // 9. Recommendations surfaced from stored review
-  // -------------------------------------------------------------------------
 
   it("surfaces recommendations from stored review when present", async () => {
     const recommendations = [
       {
         file_path: "src/tools/foo.ts",
-        title: "thin-handlers",
         message: "Business logic should move to a service layer.",
         source: "principle" as const,
+        title: "thin-handlers",
       },
       {
-        title: "Missing error handling",
         message: "JSON.parse is unguarded — wrap in try/catch.",
         source: "holistic" as const,
+        title: "Missing error handling",
       },
     ];
 
@@ -520,22 +519,20 @@ describe("showPrImpact", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Registration tests
-// ---------------------------------------------------------------------------
 
 describe("show_pr_impact registration", () => {
   it("registers with correct name and _meta.ui.resourceUri", () => {
     const { registerAppTool } = require("@modelcontextprotocol/ext-apps/server");
 
-    interface RecordedTool {
+    type RecordedTool = {
       name: string;
       config: Record<string, unknown>;
-    }
+    };
     const tools: RecordedTool[] = [];
     const mockServer = {
       registerTool(name: string, config: Record<string, unknown>, _cb: unknown) {
-        tools.push({ name, config });
+        tools.push({ config, name });
       },
     };
 
@@ -545,12 +542,12 @@ describe("show_pr_impact registration", () => {
       mockServer,
       "show_pr_impact",
       {
-        title: "PR Review",
+        _meta: { ui: { resourceUri: prReviewResourceUri } },
         description: "Opens the PR Review view.",
         inputSchema: {},
-        _meta: { ui: { resourceUri: prReviewResourceUri } },
+        title: "PR Review",
       },
-      async () => ({ content: [{ type: "text" as const, text: "{}" }] }),
+      async () => ({ content: [{ text: "{}", type: "text" as const }] }),
     );
 
     expect(tools).toHaveLength(1);

@@ -7,44 +7,36 @@
  * 3. getSpawnPrompt — wave briefing injection via consultation_outputs
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Mock execution-store so tests don't need a real SQLite DB
-// ---------------------------------------------------------------------------
 
 const mockStore = {
-  getBoard: vi.fn(),
-  getProgress: vi.fn(),
   appendProgress: vi.fn(),
-  getExecution: vi.fn(),
+  getBoard: vi.fn(),
   getCachePrefix: vi.fn().mockReturnValue(""),
+  getExecution: vi.fn(),
+  getProgress: vi.fn(),
 };
 
 vi.mock("../orchestration/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
 
-// ---------------------------------------------------------------------------
 // Hoist mock for wave-briefing before module import
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/wave-briefing.ts", () => ({
-  readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn(),
+  readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -56,53 +48,53 @@ function makeTmpDir(): string {
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "implement",
-    current_state: "implement",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "implement",
+    entry: "implement",
+    flow: "test-flow",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
     ...overrides,
   } as Board;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: { type: "single", agent: "canon-implementor" },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: { implement: "Implement ${task}." },
+    states: {
+      done: { type: "terminal" },
+      implement: { agent: "canon-implementor", type: "single" },
+    },
     ...overrides,
   };
 }
 
 function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-wave-flow",
     description: "Test wave flow",
     entry: "build",
+    name: "test-wave-flow",
+    spawn_instructions: { build: "Build ${item}." },
     states: {
-      build: { type: "wave", agent: "canon-implementor" },
+      build: { agent: "canon-implementor", type: "wave" },
       done: { type: "terminal" },
     },
-    spawn_instructions: { build: "Build ${item}." },
     ...overrides,
   };
 }
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
@@ -113,9 +105,7 @@ afterEach(() => {
   mockStore.getExecution.mockReset();
 });
 
-// ---------------------------------------------------------------------------
 // getSpawnPrompt — board state comes from store
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — board state from ExecutionStore", () => {
   it("reads board from store when _board is not provided and board is needed", async () => {
@@ -126,16 +116,16 @@ describe("getSpawnPrompt — board state from ExecutionStore", () => {
 
     const flow = makeFlow({
       states: {
-        implement: { type: "single", agent: "canon-implementor", skip_when: "auto_approved" },
         done: { type: "terminal" },
+        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
       },
     });
 
     await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     // Store should have been queried for board (skip_when requires board)
@@ -151,11 +141,11 @@ describe("getSpawnPrompt — board state from ExecutionStore", () => {
     const flow = makeFlow();
 
     await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
-      flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
       _board: board,
+      flow,
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     // Store should NOT have been called for board since _board was provided
@@ -163,9 +153,7 @@ describe("getSpawnPrompt — board state from ExecutionStore", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getSpawnPrompt — progress from store
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — progress from store", () => {
   it("reads progress from store when flow.progress is configured", async () => {
@@ -179,10 +167,10 @@ describe("getSpawnPrompt — progress from store", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     const prompt = result.prompts[0].prompt;
@@ -204,10 +192,10 @@ describe("getSpawnPrompt — progress from store", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -228,10 +216,10 @@ describe("getSpawnPrompt — progress from store", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     // Store.getProgress must have been called (store-based, not file-based)
@@ -241,37 +229,37 @@ describe("getSpawnPrompt — progress from store", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getSpawnPrompt — wave briefing injection
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — wave briefing injection", () => {
   it("injects assembleWaveBriefing output into wave-type prompts when consultation_outputs is provided", async () => {
     const workspace = makeTmpDir();
     mockStore.getBoard.mockReturnValue(makeBoard());
     mockStore.getProgress.mockReturnValue("");
-    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\n### Security\nUse parameterized queries.");
+    vi.mocked(assembleWaveBriefing).mockReturnValue(
+      "## Wave Briefing (from wave 1)\n\n### Security\nUse parameterized queries.",
+    );
 
     const flow = makeWaveFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
-      flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
-      items: ["task-a", "task-b"],
-      wave: 1,
       consultation_outputs: {
         security: { section: "Security", summary: "Use parameterized queries." },
       },
+      flow,
+      items: ["task-a", "task-b"],
+      state_id: "build",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      wave: 1,
+      workspace,
     });
 
     expect(vi.mocked(assembleWaveBriefing)).toHaveBeenCalledWith({
-      wave: 1,
-      summaries: [],
       consultationOutputs: {
         security: { section: "Security", summary: "Use parameterized queries." },
       },
+      summaries: [],
+      wave: 1,
     });
 
     expect(result.prompts).toHaveLength(2);
@@ -290,12 +278,12 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     const flow = makeWaveFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "build",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
       wave: 1,
+      workspace,
     });
 
     expect(vi.mocked(assembleWaveBriefing)).not.toHaveBeenCalled();
@@ -311,14 +299,14 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     const flow = makeFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
-      flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
-      wave: 1,
       consultation_outputs: {
         security: { section: "Security", summary: "Some advice." },
       },
+      flow,
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      wave: 1,
+      workspace,
     });
 
     expect(vi.mocked(assembleWaveBriefing)).not.toHaveBeenCalled();
@@ -331,20 +319,22 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     mockStore.getProgress.mockReturnValue("");
 
     const escapedSummary = "Use \\${PARAM} in queries.";
-    vi.mocked(assembleWaveBriefing).mockReturnValue(`## Wave Briefing (from wave 1)\n\n### Security\n${escapedSummary}`);
+    vi.mocked(assembleWaveBriefing).mockReturnValue(
+      `## Wave Briefing (from wave 1)\n\n### Security\n${escapedSummary}`,
+    );
 
     const flow = makeWaveFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
-      flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
-      items: ["task-a"],
-      wave: 2,
       consultation_outputs: {
         security: { section: "Security", summary: escapedSummary },
       },
+      flow,
+      items: ["task-a"],
+      state_id: "build",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      wave: 2,
+      workspace,
     });
 
     expect(result.prompts[0].prompt).toContain("\\${PARAM}");
@@ -358,13 +348,13 @@ describe("getSpawnPrompt — wave briefing injection", () => {
 
     const flow = makeWaveFlow();
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
-      flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
-      items: ["task-a"],
-      wave: 1,
       consultation_outputs: {},
+      flow,
+      items: ["task-a"],
+      state_id: "build",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      wave: 1,
+      workspace,
     });
 
     expect(result.prompts[0].prompt).not.toContain("\n\n\n\n");
@@ -374,29 +364,31 @@ describe("getSpawnPrompt — wave briefing injection", () => {
     const workspace = makeTmpDir();
     mockStore.getBoard.mockReturnValue(makeBoard());
     mockStore.getProgress.mockReturnValue("");
-    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\n### Arch\nUse services.");
+    vi.mocked(assembleWaveBriefing).mockReturnValue(
+      "## Wave Briefing (from wave 1)\n\n### Arch\nUse services.",
+    );
 
     const flow: ResolvedFlow = {
-      name: "test-parallel-per-flow",
       description: "Test parallel-per flow",
       entry: "review",
-      states: {
-        review: { type: "parallel-per", agent: "canon-reviewer" },
-        done: { type: "terminal" },
-      },
+      name: "test-parallel-per-flow",
       spawn_instructions: { review: "Review ${item}." },
+      states: {
+        done: { type: "terminal" },
+        review: { agent: "canon-reviewer", type: "parallel-per" },
+      },
     };
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
-      items: ["file-a.ts", "file-b.ts"],
-      wave: 1,
       consultation_outputs: {
         arch: { section: "Arch", summary: "Use services." },
       },
+      flow,
+      items: ["file-a.ts", "file-b.ts"],
+      state_id: "review",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      wave: 1,
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(2);
@@ -406,9 +398,7 @@ describe("getSpawnPrompt — wave briefing injection", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getSpawnPrompt — metrics footer injection
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — metrics footer injection", () => {
   it("appends metrics footer to every prompt entry from a single state", async () => {
@@ -419,10 +409,10 @@ describe("getSpawnPrompt — metrics footer injection", () => {
     const flow = makeFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -439,19 +429,19 @@ describe("getSpawnPrompt — metrics footer injection", () => {
 
     const flow: ResolvedFlow = {
       ...makeFlow(),
-      states: {
-        review: { type: "single" as const, agent: "canon-reviewer" },
-        done: { type: "terminal" as const },
-      },
-      spawn_instructions: { review: "Review the code." },
       entry: "review",
+      spawn_instructions: { review: "Review the code." },
+      states: {
+        done: { type: "terminal" as const },
+        review: { agent: "canon-reviewer", type: "single" as const },
+      },
     };
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
       flow,
-      variables: { task: "review task", CANON_PLUGIN_ROOT: "" },
+      state_id: "review",
+      variables: { CANON_PLUGIN_ROOT: "", task: "review task" },
+      workspace,
     });
 
     const prompt = result.prompts[0].prompt;
@@ -463,20 +453,22 @@ describe("getSpawnPrompt — metrics footer injection", () => {
     const workspace = makeTmpDir();
     mockStore.getBoard.mockReturnValue(makeBoard());
     mockStore.getProgress.mockReturnValue("");
-    vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing (from wave 1)\n\nSome briefing.");
+    vi.mocked(assembleWaveBriefing).mockReturnValue(
+      "## Wave Briefing (from wave 1)\n\nSome briefing.",
+    );
 
     const flow = makeWaveFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
-      flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
-      items: ["task-a"],
-      wave: 1,
       consultation_outputs: {
         security: { section: "Security", summary: "Use parameterized queries." },
       },
+      flow,
+      items: ["task-a"],
+      state_id: "build",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      wave: 1,
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -498,11 +490,11 @@ describe("getSpawnPrompt — metrics footer injection", () => {
     const flow = makeWaveFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a", "task-b", "task-c"],
+      state_id: "build",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(3);
@@ -519,18 +511,18 @@ describe("getSpawnPrompt — metrics footer injection", () => {
 
     const flow: ResolvedFlow = {
       ...makeFlow(),
-      states: {
-        implement: { type: "single" as const, agent: "canon-implementor" },
-        done: { type: "terminal" as const },
-      },
       spawn_instructions: { implement: "Implement ${task}." },
+      states: {
+        done: { type: "terminal" as const },
+        implement: { agent: "canon-implementor", type: "single" as const },
+      },
     };
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "done",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "done",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     expect(result.state_type).toBe("terminal");

@@ -5,13 +5,11 @@
  * One behavior per test.
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
-import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
+import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
 
-// ---------------------------------------------------------------------------
 // Hoist vi.mock — must come before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../../orchestration/execution-store.ts", () => ({
   getExecutionStore: vi.fn(),
@@ -20,55 +18,51 @@ vi.mock("../../orchestration/execution-store.ts", () => ({
 import { getExecutionStore } from "../../orchestration/execution-store.ts";
 import { substituteVariablesStage } from "../../tools/prompt-pipeline/substitute-variables.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeBoard(): Board {
   return {
-    flow: "test",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
   };
 }
 
 function makeFlow(): ResolvedFlow {
   return {
-    name: "test",
     description: "test flow",
     entry: "start",
-    states: {
-      start: { type: "single", agent: "test-agent" },
-      done: { type: "terminal" },
-    },
+    name: "test",
     spawn_instructions: { start: "Do the thing" },
+    states: {
+      done: { type: "terminal" },
+      start: { agent: "test-agent", type: "single" },
+    },
   };
 }
 
 function makeCtx(rawInstruction: string, variables: Record<string, string> = {}): PromptContext {
-  const state: StateDefinition = { type: "single", agent: "test-agent" };
+  const state: StateDefinition = { agent: "test-agent", type: "single" };
   return {
-    input: {
-      workspace: "/tmp/test-workspace",
-      state_id: "start",
-      flow: makeFlow(),
-      variables,
-    },
-    state,
-    rawInstruction,
-    board: makeBoard(),
-    mergedVariables: variables,
     basePrompt: "",
+    board: makeBoard(),
+    input: {
+      flow: makeFlow(),
+      state_id: "start",
+      variables,
+      workspace: "/tmp/test-workspace",
+    },
+    mergedVariables: variables,
     prompts: [],
+    rawInstruction,
+    state,
     warnings: [],
   };
 }
@@ -81,20 +75,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("substituteVariablesStage (Stage 4)", () => {
   it("substitutes known variables in rawInstruction", async () => {
-    vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>);
+    vi.mocked(getExecutionStore).mockReturnValue(
+      makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>,
+    );
     const ctx = makeCtx("Do ${task} now", { task: "the thing" });
     const result = await substituteVariablesStage(ctx);
     expect(result.basePrompt).toBe("Do the thing now");
   });
 
   it("leaves unknown ${...} patterns unchanged", async () => {
-    vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>);
+    vi.mocked(getExecutionStore).mockReturnValue(
+      makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>,
+    );
     const ctx = makeCtx("Do ${task} and ${unknown}", { task: "a task" });
     const result = await substituteVariablesStage(ctx);
     expect(result.basePrompt).toBe("Do a task and ${unknown}");
@@ -102,14 +96,18 @@ describe("substituteVariablesStage (Stage 4)", () => {
 
   it("prepends cache prefix when store returns non-empty string", async () => {
     const prefix = "CACHED_CONTEXT: some cached data\n\n";
-    vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => prefix) as ReturnType<typeof getExecutionStore>);
+    vi.mocked(getExecutionStore).mockReturnValue(
+      makeStoreWith(() => prefix) as ReturnType<typeof getExecutionStore>,
+    );
     const ctx = makeCtx("Do ${task}", { task: "the work" });
     const result = await substituteVariablesStage(ctx);
     expect(result.basePrompt).toBe(`${prefix}\n\n---\n\nDo the work`);
   });
 
   it("skips cache prefix when store returns empty string", async () => {
-    vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>);
+    vi.mocked(getExecutionStore).mockReturnValue(
+      makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>,
+    );
     const ctx = makeCtx("Do ${task}", { task: "the work" });
     const result = await substituteVariablesStage(ctx);
     expect(result.basePrompt).toBe("Do the work");
@@ -118,7 +116,9 @@ describe("substituteVariablesStage (Stage 4)", () => {
   });
 
   it("sets cachePrefix to undefined when store returns empty string", async () => {
-    vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>);
+    vi.mocked(getExecutionStore).mockReturnValue(
+      makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>,
+    );
     const ctx = makeCtx("Do ${task}", { task: "something" });
     const result = await substituteVariablesStage(ctx);
     expect(result.basePrompt).toBe("Do something");
@@ -126,7 +126,9 @@ describe("substituteVariablesStage (Stage 4)", () => {
   });
 
   it("uses mergedVariables (not input.variables) for substitution", async () => {
-    vi.mocked(getExecutionStore).mockReturnValue(makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>);
+    vi.mocked(getExecutionStore).mockReturnValue(
+      makeStoreWith(() => "") as ReturnType<typeof getExecutionStore>,
+    );
     const ctx = makeCtx("${injected} value", {});
     // Override mergedVariables with injected value (simulating stage 1 having run)
     const ctxWithMerged = { ...ctx, mergedVariables: { injected: "resolved" } };

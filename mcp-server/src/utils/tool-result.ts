@@ -10,13 +10,13 @@ export type CanonErrorCode =
   | "PREFLIGHT_FAILED"
   | "UNEXPECTED";
 
-export interface CanonToolError {
+export type CanonToolError = {
   ok: false;
   error_code: CanonErrorCode;
   message: string;
   recoverable: boolean;
   context?: Record<string, unknown>;
-}
+};
 
 export type ToolResult<T> = ({ ok: true } & T) | CanonToolError;
 
@@ -26,7 +26,7 @@ export function toolError(
   recoverable = false,
   context?: Record<string, unknown>,
 ): CanonToolError {
-  return { ok: false, error_code, message, recoverable, context };
+  return { context, error_code, message, ok: false, recoverable };
 }
 
 export function toolOk<T extends Record<string, unknown>>(data: T): { ok: true } & T {
@@ -50,12 +50,14 @@ export function isToolError(result: unknown): result is CanonToolError {
  */
 export function assertOk<T>(result: ToolResult<T>): asserts result is { ok: true } & T {
   if (!result.ok) {
-    throw new Error(`assertOk: expected ok result but got error ${result.error_code}: ${result.message}`);
+    throw new Error(
+      `assertOk: expected ok result but got error ${result.error_code}: ${result.message}`,
+    );
   }
 }
 
 /** Shared subprocess result type — returned by all adapter functions. */
-export interface ProcessResult {
+export type ProcessResult = {
   ok: boolean;
   stdout: string;
   stderr: string;
@@ -63,4 +65,4 @@ export interface ProcessResult {
   timedOut: boolean;
   /** Wall-clock time of subprocess execution in milliseconds (Math.round precision). */
   duration_ms: number;
-}
+};

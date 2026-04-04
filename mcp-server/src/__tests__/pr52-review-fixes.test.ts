@@ -8,14 +8,12 @@
  * Fix 5: process-adapter.ts — incorporate result.error.message into stderr when empty
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Fix 1: git-adapter-async — exitCode normalization for string err.code
-// ---------------------------------------------------------------------------
 
 type ExecFileCallback = (err: Error | null, stdout: string, stderr: string) => void;
 
@@ -37,7 +35,7 @@ vi.mock("node:child_process", () => ({
   },
   spawnSync: (_cmd: string, _opts?: unknown) => {
     if (spawnSyncImpl) return spawnSyncImpl();
-    return { stdout: "", stderr: "", status: 0, signal: null };
+    return { signal: null, status: 0, stderr: "", stdout: "" };
   },
 }));
 
@@ -113,14 +111,12 @@ describe("Fix 1: gitExecAsync — exitCode normalization for string err.code", (
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 5: process-adapter — incorporate result.error.message into stderr
-// ---------------------------------------------------------------------------
 
 describe("Fix 5: runShell — error.message incorporated into stderr when stderr is empty", () => {
   it("includes result.error.message in stderr when stderr is empty and error exists", () => {
     const err = new Error("spawn ENOENT");
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: null, signal: null, error: err });
+    spawnSyncImpl = () => ({ error: err, signal: null, status: null, stderr: "", stdout: "" });
     const result = runShell("nonexistent-command", "/project");
     expect(result.ok).toBe(false);
     // stderr must contain the error message for diagnostics
@@ -130,11 +126,11 @@ describe("Fix 5: runShell — error.message incorporated into stderr when stderr
   it("does NOT overwrite non-empty stderr with error.message", () => {
     const err = new Error("spawn error");
     spawnSyncImpl = () => ({
-      stdout: "",
-      stderr: "command not found: nonexistent-command",
-      status: 127,
-      signal: null,
       error: err,
+      signal: null,
+      status: 127,
+      stderr: "command not found: nonexistent-command",
+      stdout: "",
     });
     const result = runShell("nonexistent-command", "/project");
     // Original stderr content is preserved
@@ -143,20 +139,19 @@ describe("Fix 5: runShell — error.message incorporated into stderr when stderr
   });
 
   it("stderr remains empty when there is no error and stderr is empty", () => {
-    spawnSyncImpl = () => ({ stdout: "output", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "output" });
     const result = runShell("echo output", "/project");
     expect(result.stderr).toBe("");
   });
 
   it("returns ok:false when error exists even with empty stderr", () => {
     const err = new Error("ENOENT");
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: null, signal: null, error: err });
+    spawnSyncImpl = () => ({ error: err, signal: null, status: null, stderr: "", stdout: "" });
     const result = runShell("missing", "/project");
     expect(result.ok).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 2: codebase-graph — catch sanitizeGitRef throw for invalid diff_base
 //
 // To reach the sanitizeGitRef call at codebase-graph.ts line ~169, we must:
@@ -166,7 +161,6 @@ describe("Fix 5: runShell — error.message incorporated into stderr when stderr
 // We mock gitExecAsync so gitCurrentBranch returns "feat/something", which causes
 // the code to enter the block where sanitizeGitRef(rawBase) is called with an
 // invalid diff_base value. Before the fix, this throws; after the fix, it's caught.
-// ---------------------------------------------------------------------------
 
 describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
   let tmpDir: string;
@@ -185,7 +179,7 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("does not throw when diff_base is invalid and git branch detection is on a feature branch", async () => {
@@ -193,25 +187,43 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
     // subsequent calls (rev-parse --verify for origin/main) return ok:true,
     // and the final diff call returns ok:true empty.
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi.fn()
-        .mockResolvedValueOnce({ ok: true, stdout: "feat/test\n", stderr: "", exitCode: 0, timedOut: false })
-        .mockResolvedValueOnce({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false })
-        .mockResolvedValue({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false }),
+      gitExecAsync: vi
+        .fn()
+        .mockResolvedValueOnce({
+          exitCode: 0,
+          ok: true,
+          stderr: "",
+          stdout: "feat/test\n",
+          timedOut: false,
+        })
+        .mockResolvedValueOnce({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false })
+        .mockResolvedValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),
     }));
 
     const { codebaseGraph } = await import("../tools/codebase-graph.ts");
     // diff_base with shell-dangerous chars that sanitizeGitRef would reject
     await expect(
-      codebaseGraph({ diff_base: "origin/main; rm -rf /", source_dirs: ["src"] }, tmpDir, "/nonexistent"),
+      codebaseGraph(
+        { diff_base: "origin/main; rm -rf /", source_dirs: ["src"] },
+        tmpDir,
+        "/nonexistent",
+      ),
     ).resolves.toBeDefined();
   });
 
   it("returns graph nodes when diff_base is invalid (graceful fallback, no changed files marked)", async () => {
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
-      gitExecAsync: vi.fn()
-        .mockResolvedValueOnce({ ok: true, stdout: "feat/test\n", stderr: "", exitCode: 0, timedOut: false })
-        .mockResolvedValueOnce({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false })
-        .mockResolvedValue({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false }),
+      gitExecAsync: vi
+        .fn()
+        .mockResolvedValueOnce({
+          exitCode: 0,
+          ok: true,
+          stderr: "",
+          stdout: "feat/test\n",
+          timedOut: false,
+        })
+        .mockResolvedValueOnce({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false })
+        .mockResolvedValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),
     }));
 
     const { codebaseGraph } = await import("../tools/codebase-graph.ts");
@@ -228,9 +240,7 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 3: pr-review-data — shell-escaping in runDiffCommand non-git path
-// ---------------------------------------------------------------------------
 
 describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
   let tmpDir: string;
@@ -243,7 +253,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("shell-escapes args when passed to runShell for non-git command", async () => {
@@ -251,7 +261,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
     vi.doMock("../adapters/process-adapter.ts", () => ({
       runShell: (cmd: string, _cwd: string) => {
         capturedCommand = cmd;
-        return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+        return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
       },
     }));
 
@@ -270,15 +280,15 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
     vi.doMock("../adapters/process-adapter.ts", () => ({
       runShell: (cmd: string, _cwd: string) => {
         capturedCommand = cmd;
-        return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+        return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
       },
     }));
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
-        ok: true,
-        stdout: "",
-        stderr: "",
         exitCode: 0,
+        ok: true,
+        stderr: "",
+        stdout: "",
         timedOut: false,
       }),
     }));
@@ -290,7 +300,8 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
     expect(capturedCommand).toBeDefined();
     // After fix: args like 'pr', 'diff', '42', '--name-only' should be quoted
     // The presence of single quotes around at least one arg verifies the fix
-    const hasSingleQuotedArgs = capturedCommand!.includes("'pr'") ||
+    const hasSingleQuotedArgs =
+      capturedCommand!.includes("'pr'") ||
       capturedCommand!.includes("'diff'") ||
       capturedCommand!.includes("'42'") ||
       capturedCommand!.includes("'--name-only'");
@@ -298,18 +309,16 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 4: wrap-handler — docstring accuracy (verified via import + behavior test)
-// ---------------------------------------------------------------------------
 
 import { wrapHandler } from "../utils/wrap-handler.ts";
 
 describe("Fix 4: wrapHandler — ok:false ToolResult passes through jsonResponse (not converted to MCP error)", () => {
   it("returns ok:false result as JSON (not converted to SDK error format)", async () => {
     const handler = wrapHandler(async (_input: unknown) => ({
-      ok: false,
       error_code: "INVALID_INPUT",
       message: "invalid ref",
+      ok: false,
       recoverable: false,
     }));
     const response = await handler({});
@@ -323,8 +332,8 @@ describe("Fix 4: wrapHandler — ok:false ToolResult passes through jsonResponse
 
   it("returns ok:true result as JSON (passthrough, no conversion)", async () => {
     const handler = wrapHandler(async (_input: unknown) => ({
-      ok: true,
       nodes: [],
+      ok: true,
     }));
     const response = await handler({});
     const parsed = JSON.parse(response.content[0].text);

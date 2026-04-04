@@ -6,18 +6,18 @@ import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./utils/config.ts";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
 
-export interface MatchFilters {
+export type MatchFilters = {
   layers?: string[];
   file_path?: string;
   severity_filter?: "rule" | "strong-opinion" | "convention";
   tags?: string[];
   include_archived?: boolean;
-}
+};
 
 const SEVERITY_RANK: Record<string, number> = {
+  convention: 3,
   rule: 1,
   "strong-opinion": 2,
-  convention: 3,
 };
 
 /** Default layer inferrer using built-in mappings. For config-aware inference, use buildLayerInferrer(). */
@@ -50,43 +50,41 @@ function severityPassesFilter(severity: string, filter?: string): boolean {
   return (SEVERITY_RANK[severity] ?? 9) <= (SEVERITY_RANK[filter] ?? 9);
 }
 
+/** Check if a principle matches the layer filter. */
+function matchesLayers(p: Principle, layers: string[]): boolean {
+  if (layers.length === 0 || p.scope.layers.length === 0) return true;
+  return layers.some((l) => p.scope.layers.includes(l));
+}
+
+/** Check if a principle matches the file pattern filter. */
+function matchesFilePattern(p: Principle, filePath: string | undefined): boolean {
+  if (!filePath || p.scope.file_patterns.length === 0) return true;
+  return p.scope.file_patterns.some((pattern) => globToRegex(pattern).test(filePath));
+}
+
+/** Check if a principle matches the tag filter. */
+function matchesTags(p: Principle, tags: string[] | undefined): boolean {
+  if (!tags || tags.length === 0) return true;
+  return tags.some((t) => p.tags.includes(t));
+}
+
 export function matchPrinciples(principles: Principle[], filters: MatchFilters): Principle[] {
   const layers =
-    filters.layers || (filters.file_path ? ([inferLayer(filters.file_path)].filter(Boolean) as string[]) : []);
+    filters.layers ||
+    (filters.file_path ? ([inferLayer(filters.file_path)].filter(Boolean) as string[]) : []);
 
   return principles
     .filter((p) => {
-      // Skip archived principles unless explicitly included
       if (p.archived && !filters.include_archived) return false;
-
-      // Severity filter
       if (!severityPassesFilter(p.severity, filters.severity_filter)) return false;
-
-      // Layer filter
-      if (layers.length > 0 && p.scope.layers.length > 0) {
-        if (!layers.some((l) => p.scope.layers.includes(l))) return false;
-      }
-
-      // File pattern filter
-      if (filters.file_path && p.scope.file_patterns.length > 0) {
-        const matched = p.scope.file_patterns.some((pattern) => {
-          const regex = globToRegex(pattern);
-          return regex.test(filters.file_path!);
-        });
-        if (!matched) return false;
-      }
-
-      // Tag filter
-      if (filters.tags && filters.tags.length > 0) {
-        if (!filters.tags.some((t) => p.tags.includes(t))) return false;
-      }
-
+      if (!matchesLayers(p, layers)) return false;
+      if (!matchesFilePattern(p, filters.file_path)) return false;
+      if (!matchesTags(p, filters.tags)) return false;
       return true;
     })
     .sort((a, b) => {
       const sevDiff = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
       if (sevDiff !== 0) return sevDiff;
-      // Tie-breaker: more specific scope (more file patterns) ranks first
       return b.scope.file_patterns.length - a.scope.file_patterns.length;
     });
 }
@@ -103,17 +101,19 @@ async function loadMdFilesFromDir(dir: string): Promise<Principle[]> {
 }
 
 export async function loadPrinciplesFromDir(dir: string): Promise<Principle[]> {
-  const results = await Promise.all(SEVERITY_SUBDIRS.map((sub) => loadMdFilesFromDir(join(dir, sub))));
+  const results = await Promise.all(
+    SEVERITY_SUBDIRS.map((sub) => loadMdFilesFromDir(join(dir, sub))),
+  );
   return results.flat();
 }
 
 // --- Principle cache: avoids re-reading all principle files on every tool call ---
 // Invalidated when any .md file's mtime changes (or files are added/removed).
 
-interface PrincipleCache {
+type PrincipleCache = {
   principles: Principle[];
   mtimeKey: string; // concatenated file mtimes for invalidation
-}
+};
 
 let principleCache: PrincipleCache | null = null;
 
@@ -146,7 +146,10 @@ async function computeMtimeKey(projectDir: string, pluginDir: string): Promise<s
   return allMtimes.flat().join(",");
 }
 
-export async function loadAllPrinciples(projectDir: string, pluginDir: string): Promise<Principle[]> {
+export async function loadAllPrinciples(
+  projectDir: string,
+  pluginDir: string,
+): Promise<Principle[]> {
   const mtimeKey = await computeMtimeKey(projectDir, pluginDir);
 
   if (principleCache && principleCache.mtimeKey === mtimeKey) {
@@ -167,6 +170,6 @@ export async function loadAllPrinciples(projectDir: string, pluginDir: string): 
     }
   }
 
-  principleCache = { principles: merged, mtimeKey };
+  principleCache = { mtimeKey, principles: merged };
   return merged;
 }

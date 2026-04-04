@@ -16,28 +16,26 @@
  *    the design state lacks approval_gate (post-approval re-entry path)
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pluginDir = resolve(__dirname, "../../..");
 
-// ---------------------------------------------------------------------------
 // 1 & 2: Flow YAML parsing — feature.md and epic.md
-// ---------------------------------------------------------------------------
 
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import { ParallelStateSchema } from "../orchestration/flow-schema.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { ParallelStateSchema } from "../orchestration/flow-schema.ts";
 
 describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow", () => {
   it("feature.md: design state has approval_gate: true and max_revisions: 3", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "feature");
-    const design = flow.states["design"];
+    const design = flow.states.design;
     expect(design).toBeDefined();
     expect(design?.approval_gate).toBe(true);
     expect(design?.max_revisions).toBe(3);
@@ -45,15 +43,15 @@ describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow"
 
   it("feature.md: design state has approved and revise transitions", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "feature");
-    const design = flow.states["design"];
-    expect(design?.transitions?.["approved"]).toBeDefined();
-    expect(design?.transitions?.["revise"]).toBeDefined();
-    expect(design?.transitions?.["reject"]).toBeDefined();
+    const design = flow.states.design;
+    expect(design?.transitions?.approved).toBeDefined();
+    expect(design?.transitions?.revise).toBeDefined();
+    expect(design?.transitions?.reject).toBeDefined();
   });
 
   it("epic.md: design state has approval_gate: true and max_revisions: 3", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "epic");
-    const design = flow.states["design"];
+    const design = flow.states.design;
     expect(design).toBeDefined();
     expect(design?.approval_gate).toBe(true);
     expect(design?.max_revisions).toBe(3);
@@ -61,10 +59,10 @@ describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow"
 
   it("epic.md: design state has approved and revise transitions", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "epic");
-    const design = flow.states["design"];
-    expect(design?.transitions?.["approved"]).toBeDefined();
-    expect(design?.transitions?.["revise"]).toBeDefined();
-    expect(design?.transitions?.["reject"]).toBeDefined();
+    const design = flow.states.design;
+    expect(design?.transitions?.approved).toBeDefined();
+    expect(design?.transitions?.revise).toBeDefined();
+    expect(design?.transitions?.reject).toBeDefined();
   });
 
   it("feature.md parses without throwing (schema is valid end-to-end)", async () => {
@@ -76,15 +74,13 @@ describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow"
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2: ParallelStateSchema accepts approval gate fields
-// ---------------------------------------------------------------------------
 
 describe("ParallelStateSchema approval gate fields", () => {
   it("accepts approval_gate: true on a parallel state", () => {
     const result = ParallelStateSchema.safeParse({
-      type: "parallel",
       approval_gate: true,
+      type: "parallel",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -94,8 +90,8 @@ describe("ParallelStateSchema approval gate fields", () => {
 
   it("accepts max_revisions on a parallel state", () => {
     const result = ParallelStateSchema.safeParse({
-      type: "parallel",
       max_revisions: 2,
+      type: "parallel",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -105,8 +101,8 @@ describe("ParallelStateSchema approval gate fields", () => {
 
   it("accepts rejection_target on a parallel state", () => {
     const result = ParallelStateSchema.safeParse({
-      type: "parallel",
       rejection_target: "design",
+      type: "parallel",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -115,49 +111,47 @@ describe("ParallelStateSchema approval gate fields", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3 & 4: shouldApprovalGate edge cases
-// ---------------------------------------------------------------------------
 
-import { shouldApprovalGate, shouldApprovalGateWaveBoundary } from "../tools/drive-flow.ts";
-import type { Board, StateDefinition } from "../orchestration/flow-schema.ts";
 import type { DriveFlowInput } from "../orchestration/drive-flow-types.ts";
+import type { Board, StateDefinition } from "../orchestration/flow-schema.ts";
+import { shouldApprovalGate, shouldApprovalGateWaveBoundary } from "../tools/drive-flow.ts";
 
 function makeBoard(metadataOverrides?: Record<string, string | number | boolean>): Board {
   return {
-    flow: "test-flow",
-    task: "test",
-    entry: "design",
-    current_state: "design",
     base_commit: "abc",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
     blocked: null,
     concerns: [],
-    skipped: [],
-    states: {},
+    current_state: "design",
+    entry: "design",
+    flow: "test-flow",
     iterations: {},
+    last_updated: new Date().toISOString(),
     metadata: metadataOverrides,
+    skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test",
   };
 }
 
 function makeFlow(tier: "small" | "medium" | "large" | undefined): DriveFlowInput["flow"] {
   return {
-    name: "test-flow",
     description: "test",
     entry: "design",
-    tier,
+    name: "test-flow",
     spawn_instructions: {},
     states: {
-      design: { type: "single", agent: "canon-architect" },
+      design: { agent: "canon-architect", type: "single" },
       terminal: { type: "terminal" },
     },
+    tier,
   } as DriveFlowInput["flow"];
 }
 
 describe("shouldApprovalGate — additional edge cases", () => {
   it("parallel state type returns false (approval gate does not apply to parallel states)", () => {
-    const stateDef: StateDefinition = { type: "parallel", approval_gate: true };
+    const stateDef: StateDefinition = { approval_gate: true, type: "parallel" };
     const flow = makeFlow("large");
     const board = makeBoard();
     // parallel states are not supported by the gate — only single/wave
@@ -171,7 +165,10 @@ describe("shouldApprovalGate — additional edge cases", () => {
 
   it("parallel state without approval_gate: true does NOT gate on architect-agent medium tier", () => {
     // Parallel states don't have a single agent field at top level — tier default doesn't apply
-    const stateDef: StateDefinition = { type: "parallel", agents: ["canon-architect"] } as StateDefinition;
+    const stateDef: StateDefinition = {
+      agents: ["canon-architect"],
+      type: "parallel",
+    } as StateDefinition;
     const flow = makeFlow("medium");
     const board = makeBoard();
     // No agent field at top level on parallel — tier default checks stateDef.agent, which is undefined
@@ -180,21 +177,21 @@ describe("shouldApprovalGate — additional edge cases", () => {
   });
 
   it("wave state with explicit approval_gate: true returns true regardless of tier", () => {
-    const stateDef: StateDefinition = { type: "wave", approval_gate: true };
+    const stateDef: StateDefinition = { approval_gate: true, type: "wave" };
     const flow = makeFlow("small");
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(true);
   });
 
   it("wave state with approval_gate: false returns false even on large tier (shouldApprovalGate, not wave boundary)", () => {
-    const stateDef: StateDefinition = { type: "wave", approval_gate: false };
+    const stateDef: StateDefinition = { approval_gate: false, type: "wave" };
     const flow = makeFlow("large");
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
   });
 
   it("undefined tier (no tier set) with architect agent returns false", () => {
-    const stateDef: StateDefinition = { type: "single", agent: "canon-architect" };
+    const stateDef: StateDefinition = { agent: "canon-architect", type: "single" };
     const flow = makeFlow(undefined);
     const board = makeBoard();
     expect(shouldApprovalGate(stateDef, flow, board)).toBe(false);
@@ -210,28 +207,28 @@ describe("shouldApprovalGateWaveBoundary — additional edge cases", () => {
   });
 
   it("auto_approve true disables explicit approval_gate: true on wave state", () => {
-    const stateDef: StateDefinition = { type: "wave", approval_gate: true };
+    const stateDef: StateDefinition = { approval_gate: true, type: "wave" };
     const flow = makeFlow("large");
     const board = makeBoard({ auto_approve: true });
     expect(shouldApprovalGateWaveBoundary(stateDef, flow, board)).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5: initBoard — max_revisions on wave state type
-// ---------------------------------------------------------------------------
 
 import { initBoard } from "../orchestration/board.ts";
 
 describe("initBoard with approval gate fields — wave state", () => {
-  function makeMinimalFlow(stateOverrides?: Partial<Record<string, StateDefinition>>): ResolvedFlow {
+  function makeMinimalFlow(
+    stateOverrides?: Partial<Record<string, StateDefinition>>,
+  ): ResolvedFlow {
     return {
-      name: "test-flow",
       description: "test",
       entry: "implement",
+      name: "test-flow",
       spawn_instructions: {},
       states: {
-        implement: { type: "wave", agent: "canon:canon-implementor" },
+        implement: { agent: "canon:canon-implementor", type: "wave" },
         terminal: { type: "terminal" },
         ...stateOverrides,
       },
@@ -240,65 +237,63 @@ describe("initBoard with approval gate fields — wave state", () => {
 
   it("wave state with max_revisions creates IterationEntry", () => {
     const flow = makeMinimalFlow({
-      implement: { type: "wave", max_revisions: 4 },
+      implement: { max_revisions: 4, type: "wave" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations["implement"]).toEqual({
-      count: 0,
-      max: 4,
-      history: [],
+    expect(board.iterations.implement).toEqual({
       cannot_fix: [],
+      count: 0,
+      history: [],
+      max: 4,
     });
   });
 
   it("wave state with approval_gate: true creates default IterationEntry (max: 3)", () => {
     const flow = makeMinimalFlow({
-      implement: { type: "wave", approval_gate: true },
+      implement: { approval_gate: true, type: "wave" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations["implement"]).toEqual({
-      count: 0,
-      max: 3,
-      history: [],
+    expect(board.iterations.implement).toEqual({
       cannot_fix: [],
+      count: 0,
+      history: [],
+      max: 3,
     });
   });
 
   it("wave state with both max_revisions and max_iterations uses max_revisions", () => {
     const flow = makeMinimalFlow({
-      implement: { type: "wave", max_revisions: 2, max_iterations: 10 },
+      implement: { max_iterations: 10, max_revisions: 2, type: "wave" },
     });
     const board = initBoard(flow, "task", "abc");
-    expect(board.iterations["implement"]).toEqual({
-      count: 0,
-      max: 2,
-      history: [],
+    expect(board.iterations.implement).toEqual({
       cannot_fix: [],
+      count: 0,
+      history: [],
+      max: 2,
     });
   });
 
   it("terminal state does NOT create IterationEntry even with approval_gate: true", () => {
     const flow = {
-      name: "test-flow",
       description: "test",
       entry: "implement",
+      name: "test-flow",
       spawn_instructions: {},
       states: {
-        implement: { type: "wave" as const, agent: "canon:canon-implementor" },
+        implement: { agent: "canon:canon-implementor", type: "wave" as const },
         // Terminal with approval_gate — semantically nonsensical but the terminal guard
         // in initBoard prevents creating an iteration entry (fix #5).
-        terminal: { type: "terminal" as const, approval_gate: true },
+        terminal: { approval_gate: true, type: "terminal" as const },
       },
     } as ResolvedFlow;
     const board = initBoard(flow, "task", "abc");
     // Terminal states are skipped by the approval_gate iteration entry guard.
-    expect(board.iterations["terminal"]).toBeUndefined();
+    expect(board.iterations.terminal).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6 & 7 & 8: driveFlow integration — reject path, Branch B no gate, re-entry
-// ---------------------------------------------------------------------------
 
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
@@ -307,12 +302,12 @@ vi.mock("../tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
 
+import { initExecutionDb } from "../orchestration/execution-schema.ts";
+import { clearStoreCache, ExecutionStore } from "../orchestration/execution-store.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 
 let tmpDirs: string[] = [];
 
@@ -326,39 +321,39 @@ function makeStore(workspace: string): ExecutionStore {
   const db = initExecutionDb(join(workspace, "orchestration.db"));
   const store = new ExecutionStore(db);
   store.initExecution({
-    flow: "test-flow",
-    task: "build feature",
-    entry: "design",
-    current_state: "design",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
     branch: "feat/test",
-    sanitized: "feat-test",
     created: new Date().toISOString(),
-    tier: "medium",
+    current_state: "design",
+    entry: "design",
+    flow: "test-flow",
     flow_name: "test-flow",
+    last_updated: new Date().toISOString(),
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: new Date().toISOString(),
+    task: "build feature",
+    tier: "medium",
   });
   return store;
 }
 
 function makeEnterResult(
-  overrides: Partial<EnterAndPrepareStateResult> = {}
+  overrides: Partial<EnterAndPrepareStateResult> = {},
 ): { ok: true } & EnterAndPrepareStateResult {
   return {
-    ok: true,
     can_enter: true,
-    iteration_count: 1,
-    max_iterations: 3,
     cannot_fix_items: [],
     history: [],
+    iteration_count: 1,
+    max_iterations: 3,
+    ok: true,
     prompts: [
       {
         agent: "canon-architect",
         prompt: "Design the feature",
-        template_paths: [],
         role: "main",
+        template_paths: [],
       },
     ],
     state_type: "single",
@@ -368,27 +363,27 @@ function makeEnterResult(
 
 function makeReportResult(nextState: string | null, overrides: Record<string, unknown> = {}) {
   return {
-    ok: true,
-    transition_condition: overrides.transition_condition ?? "done",
-    next_state: nextState,
-    stuck: false,
-    hitl_required: overrides.hitl_required ?? false,
-    hitl_reason: overrides.hitl_reason,
     board: {
-      flow: "test-flow",
-      task: "build feature",
-      entry: "design",
-      current_state: nextState ?? "terminal",
       base_commit: "abc123",
-      started: new Date().toISOString(),
-      last_updated: new Date().toISOString(),
       blocked: null,
       concerns: [],
-      skipped: [],
-      states: {},
+      current_state: nextState ?? "terminal",
+      entry: "design",
+      flow: "test-flow",
       iterations: {},
+      last_updated: new Date().toISOString(),
+      skipped: [],
+      started: new Date().toISOString(),
+      states: {},
+      task: "build feature",
     },
+    hitl_reason: overrides.hitl_reason,
+    hitl_required: overrides.hitl_required ?? false,
     log_entry: {},
+    next_state: nextState,
+    ok: true,
+    stuck: false,
+    transition_condition: overrides.transition_condition ?? "done",
     ...overrides,
   };
 }
@@ -397,7 +392,7 @@ afterEach(() => {
   clearStoreCache();
   vi.clearAllMocks();
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
@@ -405,33 +400,33 @@ afterEach(() => {
 // Flow with design state having approval_gate: true (medium tier)
 function makeApprovalFlow(): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "test",
     entry: "design",
-    tier: "medium",
+    name: "test-flow",
     spawn_instructions: {
       design: "Design something",
       implement: "Implement it",
     },
     states: {
       design: {
-        type: "single",
         agent: "canon-architect",
         approval_gate: true,
         transitions: {
-          done: "implement",
           approved: "implement",
-          revise: "design",
+          done: "implement",
           reject: "hitl",
+          revise: "design",
         },
+        type: "single",
       },
       implement: {
-        type: "single",
         agent: "canon:canon-implementor",
         transitions: { done: "terminal" },
+        type: "single",
       },
       terminal: { type: "terminal" },
     },
+    tier: "medium",
   } as unknown as ResolvedFlow;
 }
 
@@ -443,20 +438,20 @@ describe("driveFlow — reject status routes to HITL, not approval gate", () => 
     // report-result returns hitl_required: true when status leads to hitl
     vi.mocked(reportResult).mockResolvedValue(
       makeReportResult(null, {
-        hitl_required: true,
         hitl_reason: "Design rejected — returning to orchestrator",
+        hitl_required: true,
         transition_condition: "reject",
       }) as any,
     );
 
     const result = await driveFlow({
-      workspace,
       flow: makeApprovalFlow(),
       result: {
+        artifacts: ["/workspace/design.md"],
         state_id: "design",
         status: "reject",
-        artifacts: ["/workspace/design.md"],
       },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -473,19 +468,19 @@ describe("driveFlow — reject status routes to HITL, not approval gate", () => 
 
     vi.mocked(reportResult).mockResolvedValue(
       makeReportResult(null, {
+        hitl_reason: "rejected",
         hitl_required: true,
         transition_condition: "reject",
-        hitl_reason: "rejected",
       }) as any,
     );
 
     const result = await driveFlow({
-      workspace,
       flow: makeApprovalFlow(),
       result: {
         state_id: "design",
         status: "reject",
       },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -502,8 +497,8 @@ describe("driveFlow Branch B — no result, approval gate does NOT fire on initi
     vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult());
 
     const result = await driveFlow({
-      workspace,
       flow: makeApprovalFlow(),
+      workspace,
       // No result — Branch B
     });
 
@@ -523,8 +518,8 @@ describe("driveFlow Branch B — no result, approval gate does NOT fire on initi
     vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult());
 
     await driveFlow({
-      workspace,
       flow: makeApprovalFlow(),
+      workspace,
     });
 
     expect(vi.mocked(reportResult)).not.toHaveBeenCalled();
@@ -536,38 +531,47 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
     const workspace = makeTmpWorkspace();
     makeStore(workspace);
 
-    vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult({
-      prompts: [{ agent: "canon:canon-implementor", prompt: "Implement", template_paths: [], role: "main" }],
-    }));
+    vi.mocked(enterAndPrepareState).mockResolvedValue(
+      makeEnterResult({
+        prompts: [
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
+        ],
+      }),
+    );
     // implement → terminal; implement has no approval_gate
     vi.mocked(reportResult).mockResolvedValue(
       makeReportResult("terminal", { transition_condition: "done" }) as any,
     );
 
     const flowNoGate: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "implement",
-      tier: "medium",
+      name: "test-flow",
       spawn_instructions: { implement: "Implement" },
       states: {
         implement: {
-          type: "single",
           agent: "canon:canon-implementor",
           transitions: { done: "terminal" },
+          type: "single",
           // No approval_gate — implementor on medium tier doesn't trigger tier default either
         },
         terminal: { type: "terminal" },
       },
+      tier: "medium",
     } as unknown as ResolvedFlow;
 
     const result = await driveFlow({
-      workspace,
       flow: flowNoGate,
       result: {
         state_id: "implement",
         status: "done",
       },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -587,30 +591,30 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
     );
 
     const flowGatedToTerminal: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "design",
-      tier: "medium",
+      name: "test-flow",
       spawn_instructions: { design: "Design" },
       states: {
         design: {
-          type: "single",
           agent: "canon-architect",
           approval_gate: true,
-          transitions: { done: "terminal", approved: "terminal" },
+          transitions: { approved: "terminal", done: "terminal" },
+          type: "single",
         },
         terminal: { type: "terminal" },
       },
+      tier: "medium",
     } as unknown as ResolvedFlow;
 
     const result = await driveFlow({
-      workspace,
       flow: flowGatedToTerminal,
       result: {
+        artifacts: ["/workspace/design.md"],
         state_id: "design",
         status: "done",
-        artifacts: ["/workspace/design.md"],
       },
+      workspace,
     });
 
     expect(result.ok).toBe(true);

@@ -8,15 +8,18 @@ import {
   validateFlow,
   validateStateIdParams,
 } from "../orchestration/flow-parser.ts";
-import type { FlowDefinition, FragmentDefinition, FragmentInclude, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type {
+  FlowDefinition,
+  FragmentDefinition,
+  FragmentInclude,
+  ResolvedFlow,
+} from "../orchestration/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
 
-// ---------------------------------------------------------------------------
 // parseFlowContent
-// ---------------------------------------------------------------------------
 
 describe("parseFlowContent", () => {
   it("extracts frontmatter and spawn instructions from a flow string", () => {
@@ -57,8 +60,8 @@ Review the code changes.
     expect(frontmatter.states).toBeDefined();
 
     expect(Object.keys(spawnInstructions)).toEqual(["build", "review"]);
-    expect(spawnInstructions["build"]).toBe("Build the project. Save output to workspace.");
-    expect(spawnInstructions["review"]).toBe("Review the code changes.");
+    expect(spawnInstructions.build).toBe("Build the project. Save output to workspace.");
+    expect(spawnInstructions.review).toBe("Review the code changes.");
   });
 
   it("returns empty objects for content without frontmatter", () => {
@@ -68,19 +71,17 @@ Review the code changes.
   });
 });
 
-// ---------------------------------------------------------------------------
 // resolveFragments
-// ---------------------------------------------------------------------------
 
 describe("resolveFragments", () => {
   const baseFlow: FlowDefinition = {
-    name: "test",
     description: "test flow",
+    name: "test",
     states: {
       start: {
-        type: "single",
         agent: "starter",
         transitions: { done: "frag-state" },
+        type: "single",
       },
     },
   };
@@ -90,9 +91,9 @@ describe("resolveFragments", () => {
       fragment: "my-frag",
       states: {
         "frag-state": {
-          type: "single",
           agent: "frag-agent",
           transitions: { done: "end" },
+          type: "single",
         },
       },
     };
@@ -110,12 +111,12 @@ describe("resolveFragments", () => {
 
   it("handles consultation fragments separately", () => {
     const consultation: FragmentDefinition = {
-      fragment: "my-consult",
-      type: "consultation",
       agent: "advisor",
+      fragment: "my-consult",
       role: "advisor-role",
       section: "Advisory",
       timeout: "5m",
+      type: "consultation",
     };
 
     const result = resolveFragments(
@@ -137,9 +138,9 @@ describe("resolveFragments", () => {
       params: { target: null },
       states: {
         "loop-state": {
-          type: "single",
           agent: "looper",
           transitions: { done: "${target}" },
+          type: "single",
         },
       },
     };
@@ -150,7 +151,7 @@ describe("resolveFragments", () => {
       [{ fragment: "loop-frag", with: { target: "end" } }],
     );
 
-    expect(result.states["loop-state"].transitions!["done"]).toBe("end");
+    expect(result.states["loop-state"].transitions!.done).toBe("end");
     expect(result.spawnInstructions["loop-state"]).toBe("Go to end");
   });
 
@@ -158,13 +159,13 @@ describe("resolveFragments", () => {
     const frag1: FragmentDefinition = {
       fragment: "frag-a",
       states: {
-        "shared-id": { type: "single", agent: "a" },
+        "shared-id": { agent: "a", type: "single" },
       },
     };
     const frag2: FragmentDefinition = {
       fragment: "frag-b",
       states: {
-        "shared-id": { type: "single", agent: "b" },
+        "shared-id": { agent: "b", type: "single" },
       },
     };
 
@@ -185,7 +186,7 @@ describe("resolveFragments", () => {
       fragment: "needs-param",
       params: { required_val: null },
       states: {
-        s: { type: "single", agent: "a", transitions: { done: "${required_val}" } },
+        s: { agent: "a", transitions: { done: "${required_val}" }, type: "single" },
       },
     };
 
@@ -203,10 +204,10 @@ describe("resolveFragments", () => {
       fragment: "overridable",
       states: {
         review: {
-          type: "single",
           agent: "reviewer",
           large_diff_threshold: 300,
           transitions: { done: "end" },
+          type: "single",
         },
       },
     };
@@ -222,30 +223,28 @@ describe("resolveFragments", () => {
       ],
     );
 
-    expect(result.states["review"].large_diff_threshold).toBe(500);
+    expect(result.states.review.large_diff_threshold).toBe(500);
     // Original fields preserved
-    expect(result.states["review"].agent).toBe("reviewer");
+    expect(result.states.review.agent).toBe("reviewer");
   });
 });
 
-// ---------------------------------------------------------------------------
 // validateFlow
-// ---------------------------------------------------------------------------
 
 describe("validateFlow", () => {
   it("returns empty array for a valid flow", () => {
     const flow: ResolvedFlow = {
-      name: "valid",
       description: "valid flow",
       entry: "start",
+      name: "valid",
       spawn_instructions: { start: "Do work." },
       states: {
+        end: { type: "terminal" },
         start: {
-          type: "single",
           agent: "a",
           transitions: { done: "end" },
+          type: "single",
         },
-        end: { type: "terminal" },
       },
     };
 
@@ -254,9 +253,9 @@ describe("validateFlow", () => {
 
   it("catches missing entry state", () => {
     const flow: ResolvedFlow = {
-      name: "bad",
       description: "bad flow",
       entry: "nonexistent",
+      name: "bad",
       spawn_instructions: {},
       states: {
         start: { type: "terminal" },
@@ -269,15 +268,15 @@ describe("validateFlow", () => {
 
   it("catches broken transition targets", () => {
     const flow: ResolvedFlow = {
-      name: "bad-trans",
       description: "bad transitions",
       entry: "start",
+      name: "bad-trans",
       spawn_instructions: { start: "Do work." },
       states: {
         start: {
-          type: "single",
           agent: "a",
           transitions: { done: "nowhere" },
+          type: "single",
         },
       },
     };
@@ -288,17 +287,17 @@ describe("validateFlow", () => {
 
   it("allows hitl as a transition target", () => {
     const flow: ResolvedFlow = {
-      name: "hitl-ok",
       description: "hitl transitions",
       entry: "start",
+      name: "hitl-ok",
       spawn_instructions: { start: "Do work." },
       states: {
+        end: { type: "terminal" },
         start: {
-          type: "single",
           agent: "a",
           transitions: { blocked: "hitl", done: "end" },
+          type: "single",
         },
-        end: { type: "terminal" },
       },
     };
 
@@ -307,18 +306,18 @@ describe("validateFlow", () => {
 
   it("warns when max_iterations lacks stuck_when", () => {
     const flow: ResolvedFlow = {
-      name: "no-stuck",
       description: "missing stuck_when",
       entry: "loop",
+      name: "no-stuck",
       spawn_instructions: { loop: "Do loopy work." },
       states: {
+        end: { type: "terminal" },
         loop: {
-          type: "single",
           agent: "a",
           max_iterations: 3,
           transitions: { done: "end" },
+          type: "single",
         },
-        end: { type: "terminal" },
       },
     };
 
@@ -328,17 +327,17 @@ describe("validateFlow", () => {
 
   it("warns when parallel-per lacks iterate_on", () => {
     const flow: ResolvedFlow = {
-      name: "no-iterate",
       description: "missing iterate_on",
       entry: "par",
+      name: "no-iterate",
       spawn_instructions: { par: "Run in parallel." },
       states: {
+        end: { type: "terminal" },
         par: {
-          type: "parallel-per",
           agent: "a",
           transitions: { done: "end" },
+          type: "parallel-per",
         },
-        end: { type: "terminal" },
       },
     };
 
@@ -348,19 +347,19 @@ describe("validateFlow", () => {
 
   it("warns when terminal state has transitions", () => {
     const flow: ResolvedFlow = {
-      name: "bad-terminal",
       description: "terminal with transitions",
       entry: "start",
+      name: "bad-terminal",
       spawn_instructions: { start: "Do work." },
       states: {
+        end: {
+          transitions: { done: "start" },
+          type: "terminal",
+        },
         start: {
-          type: "single",
           agent: "a",
           transitions: { done: "end" },
-        },
-        end: {
-          type: "terminal",
-          transitions: { done: "start" },
+          type: "single",
         },
       },
     };
@@ -370,21 +369,22 @@ describe("validateFlow", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // validateStateIdParams
-// ---------------------------------------------------------------------------
 
 describe("validateStateIdParams", () => {
   const resolvedStateIds = new Set(["build", "review", "done"]);
 
   it("returns no errors when state_id param value exists in resolved states", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "my-frag",
           params: { next_state: { type: "state_id" } },
           states: {
-            "frag-state": { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+            "frag-state": { agent: "a", transitions: { done: "${next_state}" }, type: "single" },
           },
         },
         spawnInstructions: {},
@@ -396,19 +396,24 @@ describe("validateStateIdParams", () => {
   });
 
   it("returns error when state_id param value does not exist in resolved states", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "my-frag",
           params: { next_state: { type: "state_id" } },
           states: {
-            "frag-state": { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+            "frag-state": { agent: "a", transitions: { done: "${next_state}" }, type: "single" },
           },
         },
         spawnInstructions: {},
       },
     ];
-    const includes: FragmentInclude[] = [{ fragment: "my-frag", with: { next_state: "nonexistent-state" } }];
+    const includes: FragmentInclude[] = [
+      { fragment: "my-frag", with: { next_state: "nonexistent-state" } },
+    ];
     const errors = validateStateIdParams(fragments, includes, resolvedStateIds);
     expect(errors.length).toBe(1);
     expect(errors[0]).toMatch(/my-frag/);
@@ -417,13 +422,20 @@ describe("validateStateIdParams", () => {
   });
 
   it("returns no errors when state_id param value is 'hitl'", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "my-frag",
           params: { fallback_state: { type: "state_id" } },
           states: {
-            "frag-state": { type: "single", agent: "a", transitions: { blocked: "${fallback_state}" } },
+            "frag-state": {
+              agent: "a",
+              transitions: { blocked: "${fallback_state}" },
+              type: "single",
+            },
           },
         },
         spawnInstructions: {},
@@ -435,13 +447,16 @@ describe("validateStateIdParams", () => {
   });
 
   it("skips validation for params that are not type state_id", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "my-frag",
-          params: { label: { type: "string", default: "foo" } },
+          params: { label: { default: "foo", type: "string" } },
           states: {
-            "frag-state": { type: "single", agent: "a" },
+            "frag-state": { agent: "a", type: "single" },
           },
         },
         spawnInstructions: {},
@@ -453,13 +468,16 @@ describe("validateStateIdParams", () => {
   });
 
   it("uses default value for state_id param when not in with", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "my-frag",
-          params: { next_state: { type: "state_id", default: "build" } },
+          params: { next_state: { default: "build", type: "state_id" } },
           states: {
-            "frag-state": { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+            "frag-state": { agent: "a", transitions: { done: "${next_state}" }, type: "single" },
           },
         },
         spawnInstructions: {},
@@ -471,13 +489,16 @@ describe("validateStateIdParams", () => {
   });
 
   it("returns error when state_id param default refers to nonexistent state", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "my-frag",
-          params: { next_state: { type: "state_id", default: "bad-state" } },
+          params: { next_state: { default: "bad-state", type: "state_id" } },
           states: {
-            "frag-state": { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+            "frag-state": { agent: "a", transitions: { done: "${next_state}" }, type: "single" },
           },
         },
         spawnInstructions: {},
@@ -490,14 +511,12 @@ describe("validateStateIdParams", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // resolveFragments — typed param support
-// ---------------------------------------------------------------------------
 
 describe("resolveFragments — typed params", () => {
   const baseFlow: FlowDefinition = {
-    name: "test",
     description: "test flow",
+    name: "test",
   };
 
   it("accepts old null-marker format (backward compat)", () => {
@@ -505,7 +524,7 @@ describe("resolveFragments — typed params", () => {
       fragment: "old-frag",
       params: { required_val: null },
       states: {
-        s: { type: "single", agent: "a", transitions: { done: "${required_val}" } },
+        s: { agent: "a", transitions: { done: "${required_val}" }, type: "single" },
       },
     };
 
@@ -515,15 +534,15 @@ describe("resolveFragments — typed params", () => {
       [{ fragment: "old-frag", with: { required_val: "end" } }],
     );
 
-    expect(result.states["s"].transitions!["done"]).toBe("end");
+    expect(result.states.s.transitions!.done).toBe("end");
   });
 
   it("uses default from typed param { type: 'string', default: 'foo' } when not in with", () => {
     const fragment: FragmentDefinition = {
       fragment: "typed-frag",
-      params: { label: { type: "string", default: "foo" } },
+      params: { label: { default: "foo", type: "string" } },
       states: {
-        s: { type: "single", agent: "a", template: "${label}" },
+        s: { agent: "a", template: "${label}", type: "single" },
       },
     };
 
@@ -533,15 +552,15 @@ describe("resolveFragments — typed params", () => {
       [{ fragment: "typed-frag" }], // no with, uses default
     );
 
-    expect(result.states["s"].template).toBe("foo");
+    expect(result.states.s.template).toBe("foo");
   });
 
   it("allows typed param with default to be overridden via with", () => {
     const fragment: FragmentDefinition = {
       fragment: "typed-frag",
-      params: { label: { type: "string", default: "foo" } },
+      params: { label: { default: "foo", type: "string" } },
       states: {
-        s: { type: "single", agent: "a", template: "${label}" },
+        s: { agent: "a", template: "${label}", type: "single" },
       },
     };
 
@@ -551,7 +570,7 @@ describe("resolveFragments — typed params", () => {
       [{ fragment: "typed-frag", with: { label: "bar" } }],
     );
 
-    expect(result.states["s"].template).toBe("bar");
+    expect(result.states.s.template).toBe("bar");
   });
 
   it("throws when typed param { type: 'number' } with no default is missing from with", () => {
@@ -559,7 +578,7 @@ describe("resolveFragments — typed params", () => {
       fragment: "typed-frag",
       params: { count: { type: "number" } },
       states: {
-        s: { type: "single", agent: "a" },
+        s: { agent: "a", type: "single" },
       },
     };
 
@@ -577,7 +596,7 @@ describe("resolveFragments — typed params", () => {
       fragment: "typed-frag",
       params: { next_state: { type: "state_id" } },
       states: {
-        s: { type: "single", agent: "a", transitions: { done: "${next_state}" } },
+        s: { agent: "a", transitions: { done: "${next_state}" }, type: "single" },
       },
     };
 
@@ -587,13 +606,11 @@ describe("resolveFragments — typed params", () => {
       [{ fragment: "typed-frag", with: { next_state: "my-state" } }],
     );
 
-    expect(result.states["s"].transitions!["done"]).toBe("my-state");
+    expect(result.states.s.transitions!.done).toBe("my-state");
   });
 });
 
-// ---------------------------------------------------------------------------
 // loadAndResolveFlow (real files)
-// ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow", () => {
   it("loads the review-only flow from real files", async () => {
@@ -601,15 +618,15 @@ describe("loadAndResolveFlow", () => {
 
     expect(flow.name).toBe("review-only");
     expect(flow.entry).toBe("review");
-    expect(flow.states["review"]).toBeDefined();
-    expect(flow.states["done"]).toBeDefined();
-    expect(flow.states["review"].type).toBe("single");
-    expect(flow.states["review"].agent).toBe("canon-reviewer");
-    expect(flow.states["done"].type).toBe("terminal");
+    expect(flow.states.review).toBeDefined();
+    expect(flow.states.done).toBeDefined();
+    expect(flow.states.review.type).toBe("single");
+    expect(flow.states.review.agent).toBe("canon-reviewer");
+    expect(flow.states.done.type).toBe("terminal");
 
     // Should have spawn instruction for review
-    expect(flow.spawn_instructions["review"]).toBeDefined();
-    expect(flow.spawn_instructions["review"]).toContain("git diff");
+    expect(flow.spawn_instructions.review).toBeDefined();
+    expect(flow.spawn_instructions.review).toContain("git diff");
   });
 
   it("fast-path execute state has agent: canon-generalist", async () => {
@@ -617,14 +634,12 @@ describe("loadAndResolveFlow", () => {
 
     expect(flow.name).toBe("fast-path");
     expect(flow.entry).toBe("execute");
-    expect(flow.states["execute"]).toBeDefined();
-    expect(flow.states["execute"].agent).toBe("canon-generalist");
+    expect(flow.states.execute).toBeDefined();
+    expect(flow.states.execute.agent).toBe("canon-generalist");
   });
 });
 
-// ---------------------------------------------------------------------------
 // Integration: all 11 production flows load with no unresolved ${...} refs
-// ---------------------------------------------------------------------------
 
 const ALL_FLOWS = [
   "feature",

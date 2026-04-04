@@ -34,7 +34,11 @@ describe("aggregateReviewResults", () => {
   });
 
   it("returns blocking when any result is blocking", () => {
-    const results: ParallelPerResult[] = [{ status: "clean" }, { status: "warning" }, { status: "blocking" }];
+    const results: ParallelPerResult[] = [
+      { status: "clean" },
+      { status: "warning" },
+      { status: "blocking" },
+    ];
     const result = aggregateReviewResults(results);
     expect(result.condition).toBe("blocking");
     expect(result.cannotFixItems).toEqual([]);
@@ -80,7 +84,7 @@ describe("aggregateReviewResults", () => {
   });
 
   it("always returns empty cannotFixItems", () => {
-    const results: ParallelPerResult[] = [{ status: "blocking", item: "some-cluster" }];
+    const results: ParallelPerResult[] = [{ item: "some-cluster", status: "blocking" }];
     const result = aggregateReviewResults(results);
     expect(result.cannotFixItems).toEqual([]);
   });

@@ -13,32 +13,22 @@
  * 9. jsonl-store.ts has zero production importers
  */
 
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
-import {
-  mkdtempSync,
-  rmSync,
-  existsSync,
-  mkdirSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import {
-  getExecutionStore,
-  clearStoreCache,
-  assertWorkspacePath,
-} from "../orchestration/execution-store.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../utils/tool-result.ts";
-import { postMessage } from "../tools/post-message.ts";
-import { getMessages } from "../tools/get-messages.ts";
+import { afterEach, describe, expect, it } from "vitest";
 import { DriftStore } from "../drift/store.ts";
+import {
+  assertWorkspacePath,
+  clearStoreCache,
+  getExecutionStore,
+} from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { ReviewEntry } from "../schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { getMessages } from "../tools/get-messages.ts";
+import { postMessage } from "../tools/post-message.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 
@@ -51,21 +41,21 @@ function makeTmpWorkspace(prefix = "sqlite-integ-"): string {
 /** A canonical three-state flow: build → review → ship */
 function makeThreeStateFlow(): ResolvedFlow {
   return {
-    name: "fast-path",
     description: "Build, review, ship",
     entry: "build",
+    name: "fast-path",
     spawn_instructions: {},
     states: {
       build: {
-        type: "single",
         transitions: { done: "review", failed: "hitl" },
-      },
-      review: {
         type: "single",
+      },
+      hitl: { type: "terminal" },
+      review: {
         transitions: { done: "ship", failed: "hitl" },
+        type: "single",
       },
       ship: { type: "terminal" },
-      hitl: { type: "terminal" },
     },
   };
 }
@@ -75,41 +65,39 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: flow.name,
-    task: "integration test task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "deadbeef",
-    started: now,
-    last_updated: now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "small",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "feat-test",
     slug: "integration-test-task",
+    started: now,
     status: "active",
+    task: "integration test task",
+    tier: "small",
   });
 
   // Create pending state entries and iteration records for each non-terminal state
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
     if (stateDef.type === "terminal") continue;
-    store.upsertState(stateId, { status: "pending", entries: 0 });
-    store.upsertIteration(stateId, { count: 0, max: 3, history: [], cannot_fix: [] });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
+    store.upsertIteration(stateId, { cannot_fix: [], count: 0, history: [], max: 3 });
   }
 }
 
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
-// ---------------------------------------------------------------------------
 // 1. Full lifecycle: init → enter state → report result → next state → complete flow
-// ---------------------------------------------------------------------------
 
 describe("full SQLite lifecycle: init → report_result → complete_flow", () => {
   it("board state advances from build → review → ship via report_result", async () => {
@@ -120,15 +108,15 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     // Verify initial state
     const initialBoard = getExecutionStore(workspace).getBoard()!;
     expect(initialBoard.current_state).toBe("build");
-    expect(initialBoard.states["build"].status).toBe("pending");
+    expect(initialBoard.states.build.status).toBe("pending");
 
     // Agent reports build done
     const buildResult = await reportResult({
-      workspace,
+      artifacts: ["src/fix.ts"],
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["src/fix.ts"],
+      workspace,
     });
 
     assertOk(buildResult);
@@ -140,16 +128,16 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     // Board persisted: current_state is now "review", build is done
     const midBoard = getExecutionStore(workspace).getBoard()!;
     expect(midBoard.current_state).toBe("review");
-    expect(midBoard.states["build"].status).toBe("done");
-    expect(midBoard.states["build"].result).toBe("done");
-    expect(midBoard.states["build"].artifacts).toEqual(["src/fix.ts"]);
+    expect(midBoard.states.build.status).toBe("done");
+    expect(midBoard.states.build.result).toBe("done");
+    expect(midBoard.states.build.artifacts).toEqual(["src/fix.ts"]);
 
     // Agent reports review done
     const reviewResult = await reportResult({
-      workspace,
+      flow,
       state_id: "review",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     assertOk(reviewResult);
@@ -158,7 +146,7 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     // Verify ship state is the next state in the board
     const finalBoard = getExecutionStore(workspace).getBoard()!;
     expect(finalBoard.current_state).toBe("ship");
-    expect(finalBoard.states["review"].status).toBe("done");
+    expect(finalBoard.states.review.status).toBe("done");
   });
 
   it("progress_line from report_result accumulates in SQLite, not in log.jsonl", async () => {
@@ -167,19 +155,19 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     seedWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       progress_line: "Build completed: 3 files changed",
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
 
     await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "DONE",
       flow,
       progress_line: "Review passed: no violations",
+      state_id: "review",
+      status_keyword: "DONE",
+      workspace,
     });
 
     const store = getExecutionStore(workspace);
@@ -199,10 +187,10 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     seedWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     // Read events from SQLite directly
@@ -233,11 +221,11 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     seedWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
+      concern_text: "TypeScript strict mode violations remain in legacy files",
+      flow,
       state_id: "build",
       status_keyword: "DONE_WITH_CONCERNS",
-      flow,
-      concern_text: "TypeScript strict mode violations remain in legacy files",
+      workspace,
     });
 
     const board = getExecutionStore(workspace).getBoard()!;
@@ -254,23 +242,23 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
     seedWorkspace(workspace, flow);
 
     const gateResults = [
-      { passed: true, gate: "npm-test", command: "npm test", output: "All passed", exitCode: 0 },
+      { command: "npm test", exitCode: 0, gate: "npm-test", output: "All passed", passed: true },
     ];
-    const testResults = { passed: 42, failed: 0, skipped: 2 };
+    const testResults = { failed: 0, passed: 42, skipped: 2 };
 
     await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
+      files_changed: 5,
       flow,
       gate_results: gateResults,
+      metrics: { duration_ms: 1500, model: "claude-3", spawns: 1 },
+      state_id: "build",
+      status_keyword: "DONE",
       test_results: testResults,
-      files_changed: 5,
-      metrics: { duration_ms: 1500, spawns: 1, model: "claude-3" },
+      workspace,
     });
 
     const board = getExecutionStore(workspace).getBoard()!;
-    const buildState = board.states["build"];
+    const buildState = board.states.build;
     expect(buildState.gate_results).toEqual(gateResults);
     expect(buildState.metrics?.test_results).toEqual(testResults);
     expect(buildState.metrics?.files_changed).toBe(5);
@@ -278,26 +266,24 @@ describe("full SQLite lifecycle: init → report_result → complete_flow", () =
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Messages round-trip through store
-// ---------------------------------------------------------------------------
 
 describe("messages round-trip through SQLite store", () => {
   it("postMessage persists to store; getMessages retrieves in order", async () => {
     const workspace = makeTmpWorkspace();
     seedWorkspace(workspace, makeThreeStateFlow());
 
-    await postMessage({ workspace, channel: "main", from: "orchestrator", content: "Hello" });
-    await postMessage({ workspace, channel: "main", from: "agent", content: "Working on it" });
-    await postMessage({ workspace, channel: "notes", from: "orchestrator", content: "Side note" });
+    await postMessage({ channel: "main", content: "Hello", from: "orchestrator", workspace });
+    await postMessage({ channel: "main", content: "Working on it", from: "agent", workspace });
+    await postMessage({ channel: "notes", content: "Side note", from: "orchestrator", workspace });
 
-    const mainMessages = await getMessages({ workspace, channel: "main" });
+    const mainMessages = await getMessages({ channel: "main", workspace });
     expect(mainMessages.messages).toHaveLength(2);
     expect(mainMessages.messages[0].content).toBe("Hello");
     expect(mainMessages.messages[1].content).toBe("Working on it");
 
     // Different channel is isolated
-    const notesMessages = await getMessages({ workspace, channel: "notes" });
+    const notesMessages = await getMessages({ channel: "notes", workspace });
     expect(notesMessages.messages).toHaveLength(1);
     expect(notesMessages.messages[0].content).toBe("Side note");
   });
@@ -307,42 +293,40 @@ describe("messages round-trip through SQLite store", () => {
     const store = getExecutionStore(workspace);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test",
-      task: "task",
-      entry: "implement",
-      current_state: "implement",
       base_commit: "abc",
-      started: now,
-      last_updated: now,
       branch: "main",
-      sanitized: "main",
       created: now,
-      tier: "small",
+      current_state: "implement",
+      entry: "implement",
+      flow: "test",
       flow_name: "test",
+      last_updated: now,
+      sanitized: "main",
       slug: "task",
+      started: now,
+      task: "task",
+      tier: "small",
     });
-    store.upsertState("implement", { status: "in_progress", entries: 1, wave: 1 });
+    store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
 
     // Post a message and inject a wave event
-    await postMessage({ workspace, channel: "main", from: "orchestrator", content: "Hi" });
+    await postMessage({ channel: "main", content: "Hi", from: "orchestrator", workspace });
     store.postWaveEvent({
       id: "evt-test-001",
-      type: "guidance",
       payload: { description: "Added authentication" },
-      timestamp: new Date().toISOString(),
       status: "pending",
+      timestamp: new Date().toISOString(),
+      type: "guidance",
     });
 
-    const result = await getMessages({ workspace, channel: "main", include_events: true });
+    const result = await getMessages({ channel: "main", include_events: true, workspace });
     expect(result.messages.length).toBeGreaterThanOrEqual(1);
     expect(result.events).toBeDefined();
     expect(result.events!.some((e) => e.id === "evt-test-001")).toBe(true);
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Wave events lifecycle
-// ---------------------------------------------------------------------------
 
 describe("wave events lifecycle through SQLite store", () => {
   it("wave event transitions from pending → applied, clearing pending count", async () => {
@@ -350,35 +334,35 @@ describe("wave events lifecycle through SQLite store", () => {
     const store = getExecutionStore(workspace);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test",
-      task: "task",
-      entry: "implement",
-      current_state: "implement",
       base_commit: "abc",
-      started: now,
-      last_updated: now,
       branch: "main",
-      sanitized: "main",
       created: now,
-      tier: "small",
+      current_state: "implement",
+      entry: "implement",
+      flow: "test",
       flow_name: "test",
+      last_updated: now,
+      sanitized: "main",
       slug: "task",
+      started: now,
+      task: "task",
+      tier: "small",
     });
 
     const eventId = "evt-apply-001";
     store.postWaveEvent({
       id: eventId,
-      type: "guidance",
       payload: { description: "Scope expanded" },
-      timestamp: now,
       status: "pending",
+      timestamp: now,
+      type: "guidance",
     });
 
     // Apply the event
     store.updateWaveEvent(eventId, {
-      status: "applied",
       applied_at: new Date().toISOString(),
       resolution: { decision: "accepted" },
+      status: "applied",
     });
 
     const allEvents = store.getWaveEvents();
@@ -396,33 +380,33 @@ describe("wave events lifecycle through SQLite store", () => {
     const store = getExecutionStore(workspace);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test",
-      task: "task",
-      entry: "implement",
-      current_state: "implement",
       base_commit: "abc",
-      started: now,
-      last_updated: now,
       branch: "main",
-      sanitized: "main",
       created: now,
-      tier: "small",
+      current_state: "implement",
+      entry: "implement",
+      flow: "test",
       flow_name: "test",
+      last_updated: now,
+      sanitized: "main",
       slug: "task",
+      started: now,
+      task: "task",
+      tier: "small",
     });
 
     const eventId = "evt-reject-001";
     store.postWaveEvent({
       id: eventId,
-      type: "guidance",
       payload: { description: "Unrelated change" },
-      timestamp: now,
       status: "pending",
+      timestamp: now,
+      type: "guidance",
     });
 
     store.updateWaveEvent(eventId, {
-      status: "rejected",
       rejection_reason: "Out of scope for this iteration",
+      status: "rejected",
     });
 
     const evt = store.getWaveEvents().find((e) => e.id === eventId)!;
@@ -435,35 +419,35 @@ describe("wave events lifecycle through SQLite store", () => {
     const store = getExecutionStore(workspace);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test",
-      task: "task",
-      entry: "implement",
-      current_state: "implement",
       base_commit: "abc",
-      started: now,
-      last_updated: now,
       branch: "main",
-      sanitized: "main",
       created: now,
-      tier: "small",
+      current_state: "implement",
+      entry: "implement",
+      flow: "test",
       flow_name: "test",
+      last_updated: now,
+      sanitized: "main",
       slug: "task",
+      started: now,
+      task: "task",
+      tier: "small",
     });
-    store.upsertState("implement", { status: "in_progress", entries: 1, wave: 1 });
+    store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
 
     const { resolveWaveEvent } = await import("../tools/resolve-wave-event.ts");
     const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
 
     const injected = await injectWaveEvent({
-      workspace,
-      type: "guidance",
       payload: { description: "Test change" },
+      type: "guidance",
+      workspace,
     });
 
     await resolveWaveEvent({
-      workspace,
-      event_id: injected.event.id,
       action: "apply",
+      event_id: injected.event.id,
+      workspace,
     });
 
     // log.jsonl should not exist — events go to SQLite
@@ -482,28 +466,30 @@ describe("wave events lifecycle through SQLite store", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. DriftStore → DriftDb delegation round-trip
-// ---------------------------------------------------------------------------
 
 describe("DriftStore → DriftDb delegation round-trip", () => {
   it("appendReview then getReviews returns the entry with violations", async () => {
     const projectDir = makeTmpWorkspace("drift-integ-");
 
     const review: ReviewEntry = {
-      review_id: "rev_test001",
-      timestamp: new Date().toISOString(),
       files: ["src/tools/report-result.ts"],
       honored: [],
-      score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } },
+      review_id: "rev_test001",
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 1 },
+      },
+      timestamp: new Date().toISOString(),
       verdict: "BLOCKING",
       violations: [
         {
-          principle_id: "deep-modules",
-          severity: "rule",
           file_path: "src/tools/report-result.ts",
           impact_score: 0.8,
           message: "Leaking internal SQL via public API",
+          principle_id: "deep-modules",
+          severity: "rule",
         },
       ],
     };
@@ -527,21 +513,29 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
     const now = new Date().toISOString();
 
     await store.appendReview({
-      review_id: "rev_a",
-      timestamp: now,
       files: ["a.ts"],
       honored: [],
-      score: { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 0 } },
+      review_id: "rev_a",
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 1 },
+        rules: { passed: 0, total: 0 },
+      },
+      timestamp: now,
       verdict: "WARNING",
       violations: [{ principle_id: "fail-fast", severity: "strong-opinion" }],
     });
 
     await store.appendReview({
-      review_id: "rev_b",
-      timestamp: now,
       files: ["b.ts"],
       honored: [],
-      score: { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 1 } },
+      review_id: "rev_b",
+      score: {
+        conventions: { passed: 0, total: 1 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
+      },
+      timestamp: now,
       verdict: "WARNING",
       violations: [{ principle_id: "deep-modules", severity: "convention" }],
     });
@@ -561,28 +555,32 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
     const store = new DriftStore(projectDir);
     const now = new Date().toISOString();
 
-    const emptyScore = { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } };
+    const emptyScore = {
+      conventions: { passed: 0, total: 0 },
+      opinions: { passed: 0, total: 0 },
+      rules: { passed: 0, total: 0 },
+    };
 
     await store.appendReview({
-      review_id: "rev_main",
-      timestamp: now,
+      branch: "main",
       files: ["main.ts"],
       honored: [],
+      review_id: "rev_main",
       score: emptyScore,
+      timestamp: now,
       verdict: "CLEAN",
       violations: [],
-      branch: "main",
     });
 
     await store.appendReview({
-      review_id: "rev_feat",
-      timestamp: now,
+      branch: "feat/new-feature",
       files: ["feat.ts"],
       honored: [],
+      review_id: "rev_feat",
       score: emptyScore,
+      timestamp: now,
       verdict: "CLEAN",
       violations: [],
-      branch: "feat/new-feature",
     });
 
     const mainOnly = await store.getReviews({ branch: "main" });
@@ -597,28 +595,32 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
     const earlier = new Date(Date.now() - 1000).toISOString();
     const later = new Date().toISOString();
 
-    const emptyScore = { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } };
+    const emptyScore = {
+      conventions: { passed: 0, total: 0 },
+      opinions: { passed: 0, total: 0 },
+      rules: { passed: 0, total: 0 },
+    };
 
     await store.appendReview({
-      review_id: "rev_pr_old",
-      timestamp: earlier,
       files: [],
       honored: [],
+      pr_number: 42,
+      review_id: "rev_pr_old",
       score: emptyScore,
+      timestamp: earlier,
       verdict: "CLEAN",
       violations: [],
-      pr_number: 42,
     });
 
     await store.appendReview({
-      review_id: "rev_pr_new",
-      timestamp: later,
       files: [],
       honored: [],
+      pr_number: 42,
+      review_id: "rev_pr_new",
       score: emptyScore,
+      timestamp: later,
       verdict: "BLOCKING",
       violations: [],
-      pr_number: 42,
     });
 
     const last = await store.getLastReviewForPr(42);
@@ -628,9 +630,7 @@ describe("DriftStore → DriftDb delegation round-trip", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. Concurrent report_result calls (SQLite busy_timeout)
-// ---------------------------------------------------------------------------
 
 describe("concurrent report_result calls serialize without SQLITE_BUSY", () => {
   it("two simultaneous report_result calls on the same workspace complete without error", async () => {
@@ -642,18 +642,18 @@ describe("concurrent report_result calls serialize without SQLITE_BUSY", () => {
     // (simulates parallel wave agents both completing at roughly the same time)
     const [r1, r2] = await Promise.all([
       reportResult({
-        workspace,
-        state_id: "build",
-        status_keyword: "DONE",
         flow,
         progress_line: "Agent A done",
-      }),
-      reportResult({
-        workspace,
         state_id: "build",
         status_keyword: "DONE",
+        workspace,
+      }),
+      reportResult({
         flow,
         progress_line: "Agent B done",
+        state_id: "build",
+        status_keyword: "DONE",
+        workspace,
       }),
     ]);
 
@@ -669,9 +669,7 @@ describe("concurrent report_result calls serialize without SQLITE_BUSY", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. jsonl-store.ts has zero production importers
-// ---------------------------------------------------------------------------
 
 describe("jsonl-store.ts migration completeness", () => {
   it("no production source file imports from jsonl-store", async () => {
@@ -705,9 +703,7 @@ describe("jsonl-store.ts migration completeness", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. assertWorkspacePath validation
-// ---------------------------------------------------------------------------
 
 describe("assertWorkspacePath validation", () => {
   it("does NOT throw for paths containing .canon/workspaces/", () => {
@@ -717,15 +713,13 @@ describe("assertWorkspacePath validation", () => {
   });
 
   it("does NOT throw for Windows-style paths containing .canon\\workspaces\\", () => {
-    expect(() =>
-      assertWorkspacePath("C:\\project\\.canon\\workspaces\\main\\task"),
-    ).not.toThrow();
+    expect(() => assertWorkspacePath("C:\\project\\.canon\\workspaces\\main\\task")).not.toThrow();
   });
 
   it("throws for a project root path without .canon/workspaces/", () => {
     // We temporarily unset VITEST to test the production guard
     const orig = process.env.VITEST;
-    delete process.env.VITEST;
+    process.env.VITEST = undefined;
     try {
       expect(() => assertWorkspacePath("/home/user/project")).toThrow(
         /Invalid workspace path.*\.canon\/workspaces\//,
@@ -737,20 +731,16 @@ describe("assertWorkspacePath validation", () => {
 
   it("throws for a temp dir path without .canon/workspaces/", () => {
     const orig = process.env.VITEST;
-    delete process.env.VITEST;
+    process.env.VITEST = undefined;
     try {
-      expect(() => assertWorkspacePath("/tmp/some-temp-dir")).toThrow(
-        /Invalid workspace path/,
-      );
+      expect(() => assertWorkspacePath("/tmp/some-temp-dir")).toThrow(/Invalid workspace path/);
     } finally {
       if (orig !== undefined) process.env.VITEST = orig;
     }
   });
 });
 
-// ---------------------------------------------------------------------------
 // 8. No file-based state (no board.json, session.json, log.jsonl after full run)
-// ---------------------------------------------------------------------------
 
 describe("no file-based orchestration state artifacts", () => {
   it("after a full build→review→ship run, no board.json or session.json exist", async () => {
@@ -758,8 +748,8 @@ describe("no file-based orchestration state artifacts", () => {
     const flow = makeThreeStateFlow();
     seedWorkspace(workspace, flow);
 
-    await reportResult({ workspace, state_id: "build", status_keyword: "DONE", flow });
-    await reportResult({ workspace, state_id: "review", status_keyword: "DONE", flow });
+    await reportResult({ flow, state_id: "build", status_keyword: "DONE", workspace });
+    await reportResult({ flow, state_id: "review", status_keyword: "DONE", workspace });
 
     expect(existsSync(join(workspace, "board.json"))).toBe(false);
     expect(existsSync(join(workspace, "session.json"))).toBe(false);

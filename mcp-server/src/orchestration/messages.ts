@@ -13,14 +13,14 @@
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 
-export interface Message {
+export type Message = {
   /** Sender identity (e.g. "implementor-task-3", "architect-team-a") */
   from: string;
   /** ISO timestamp of when the message was written */
   timestamp: string;
   /** Markdown content — intent is in the words, not metadata */
   content: string;
-}
+};
 
 function assertValidChannel(channel: string): void {
   if (!channel.trim()) {
@@ -37,7 +37,11 @@ function assertValidChannel(channel: string): void {
  * Build messaging instructions to inject into agent prompts.
  * Builds coordination instructions injected into wave agent prompts.
  */
-export function buildMessageInstructions(channel: string, peerCount: number, workspace: string): string {
+export function buildMessageInstructions(
+  channel: string,
+  peerCount: number,
+  workspace: string,
+): string {
   return `## Wave Coordination
 
 You are working in parallel with ${peerCount} other agent${peerCount === 1 ? "" : "s"}.
@@ -70,9 +74,9 @@ export async function writeMessage(
   const store = getExecutionStore(workspace);
   const row = store.appendMessage(channel, from, content);
   return {
+    content: row.content,
     from: row.sender,
     timestamp: row.timestamp,
-    content: row.content,
   };
 }
 
@@ -91,9 +95,9 @@ export async function readMessages(
   const store = getExecutionStore(workspace);
   const rows = store.getMessages(channel, { since: options?.since });
   return rows.map((r) => ({
+    content: r.content,
     from: r.sender,
     timestamp: r.timestamp,
-    content: r.content,
   }));
 }
 

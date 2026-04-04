@@ -1,22 +1,20 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  expandCompetitorPrompts,
   buildSynthesizerPrompt,
   type CompeteConfig,
   type CompetitorOutput,
+  expandCompetitorPrompts,
 } from "../orchestration/compete.ts";
 import type { SpawnPromptEntry } from "../tools/get-spawn-prompt.ts";
 
-// ---------------------------------------------------------------------------
 // Mocks for getSpawnPrompt compete path tests
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/wave-briefing.ts", () => ({
-  readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
+  readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("../orchestration/diff-cluster.ts", () => ({
@@ -44,8 +42,8 @@ describe("compete", () => {
     it("injects lens into competitor prompts", () => {
       const config: CompeteConfig = {
         count: 3,
-        strategy: "synthesize",
         lenses: ["simplicity", "extensibility", "performance"],
+        strategy: "synthesize",
       };
       const result = expandCompetitorPrompts(basePrompt, config);
 
@@ -67,8 +65,8 @@ describe("compete", () => {
     it("handles partial lenses (fewer lenses than count)", () => {
       const config: CompeteConfig = {
         count: 3,
-        strategy: "synthesize",
         lenses: ["simplicity"],
+        strategy: "synthesize",
       };
       const result = expandCompetitorPrompts(basePrompt, config);
 
@@ -99,9 +97,9 @@ describe("compete", () => {
 
   describe("buildSynthesizerPrompt", () => {
     const outputs: CompetitorOutput[] = [
-      { index: 0, lens: "simplicity", content: "Use JWT with minimal middleware." },
-      { index: 1, lens: "extensibility", content: "Use OAuth2 with plugin architecture." },
-      { index: 2, lens: "performance", content: "Use session cookies with Redis cache." },
+      { content: "Use JWT with minimal middleware.", index: 0, lens: "simplicity" },
+      { content: "Use OAuth2 with plugin architecture.", index: 1, lens: "extensibility" },
+      { content: "Use session cookies with Redis cache.", index: 2, lens: "performance" },
     ];
 
     it("builds synthesis prompt with all outputs", () => {
@@ -126,8 +124,8 @@ describe("compete", () => {
 
     it("handles outputs without lenses", () => {
       const noLensOutputs: CompetitorOutput[] = [
-        { index: 0, content: "Approach A" },
-        { index: 1, content: "Approach B" },
+        { content: "Approach A", index: 0 },
+        { content: "Approach B", index: 1 },
       ];
       const prompt = buildSynthesizerPrompt("Brief", noLensOutputs, "synthesize");
 
@@ -138,13 +136,11 @@ describe("compete", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // resolveCompeteConfig("auto") and compete path through get-spawn-prompt
-// ---------------------------------------------------------------------------
 
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 
@@ -154,29 +150,33 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function makeCompeteFlow(competeValue: "auto" | { count: number; strategy: "synthesize" | "select"; lenses?: string[] } = "auto"): ResolvedFlow {
+function makeCompeteFlow(
+  competeValue:
+    | "auto"
+    | { count: number; strategy: "synthesize" | "select"; lenses?: string[] } = "auto",
+): ResolvedFlow {
   return {
-    name: "compete-flow",
     description: "Test compete flow",
     entry: "design",
+    name: "compete-flow",
+    spawn_instructions: {
+      design: "Design the system for ${task}.",
+    },
     states: {
       design: {
-        type: "single",
         agent: "canon-architect",
         compete: competeValue,
         transitions: { done: "ship" },
+        type: "single",
       },
       ship: { type: "terminal" },
-    },
-    spawn_instructions: {
-      design: "Design the system for ${task}.",
     },
   };
 }
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
@@ -188,10 +188,10 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "design",
       flow: makeCompeteFlow("auto"),
+      state_id: "design",
       variables: { task: "auth system" },
+      workspace,
     });
 
     // auto → 3 competitors
@@ -207,10 +207,10 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "design",
       flow: makeCompeteFlow("auto"),
+      state_id: "design",
       variables: { task: "auth system" },
+      workspace,
     });
 
     for (const p of result.prompts) {
@@ -222,12 +222,16 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
     const workspace = makeTmpDir();
     vi.mocked(clusterDiff).mockReturnValue(null);
 
-    const flow = makeCompeteFlow({ count: 2, strategy: "select", lenses: ["simplicity", "performance"] });
+    const flow = makeCompeteFlow({
+      count: 2,
+      lenses: ["simplicity", "performance"],
+      strategy: "select",
+    });
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "design",
       flow,
+      state_id: "design",
       variables: { task: "auth system" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(2);
@@ -240,29 +244,29 @@ describe("resolveCompeteConfig auto + compete path through getSpawnPrompt", () =
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow: ResolvedFlow = {
-      name: "wave-flow",
       description: "Test",
       entry: "build",
+      name: "wave-flow",
+      spawn_instructions: {
+        build: "Implement ${task}.",
+      },
       states: {
         build: {
-          type: "wave",
           agent: "canon-implementor",
           compete: "auto" as any, // non-single with compete
           transitions: { done: "done_state" },
+          type: "wave",
         },
         done_state: { type: "terminal" },
-      },
-      spawn_instructions: {
-        build: "Implement ${task}.",
       },
     };
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
       flow,
-      variables: { task: "feature" },
       items: [{ name: "task-1" }],
+      state_id: "build",
+      variables: { task: "feature" },
+      workspace,
     });
 
     expect(result.warnings).toBeDefined();

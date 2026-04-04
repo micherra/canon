@@ -10,7 +10,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { loadAndResolveFlow, loadFragment, resolveFragments } from "../orchestration/flow-parser.ts";
+import {
+  loadAndResolveFlow,
+  loadFragment,
+  resolveFragments,
+} from "../orchestration/flow-parser.ts";
 import type { FragmentDefinition } from "../orchestration/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,9 +22,7 @@ const __dirname = dirname(__filename);
 // pluginDir points to the project root (canon/), which contains flows/ and flows/fragments/
 const pluginDir = resolve(__dirname, "../../..");
 
-// ---------------------------------------------------------------------------
 // Test fixtures
-// ---------------------------------------------------------------------------
 
 const PROJECT_FLOW_CONTENT = `---
 name: my-project-flow
@@ -126,9 +128,7 @@ includes:
 Research the topic.
 `;
 
-// ---------------------------------------------------------------------------
 // Temporary directory setup
-// ---------------------------------------------------------------------------
 
 let tmpDir: string;
 let projectDir: string;
@@ -149,17 +149,23 @@ beforeAll(async () => {
   await writeFile(join(projectFlowsDir, "test-epic.md"), EPIC_FLOW_WITH_TARGETED_RESEARCH, "utf-8");
 
   // Write project-level fragment files
-  await writeFile(join(projectFragmentsDir, "my-plugin-frag.md"), PROJECT_FRAGMENT_CONTENT, "utf-8");
-  await writeFile(join(projectFragmentsDir, "targeted-research.md"), TARGETED_RESEARCH_FRAGMENT, "utf-8");
+  await writeFile(
+    join(projectFragmentsDir, "my-plugin-frag.md"),
+    PROJECT_FRAGMENT_CONTENT,
+    "utf-8",
+  );
+  await writeFile(
+    join(projectFragmentsDir, "targeted-research.md"),
+    TARGETED_RESEARCH_FRAGMENT,
+    "utf-8",
+  );
 });
 
 afterAll(async () => {
-  await rm(tmpDir, { recursive: true, force: true });
+  await rm(tmpDir, { force: true, recursive: true });
 });
 
-// ---------------------------------------------------------------------------
 // Plugin-only resolution (no projectDir) — backward compat
-// ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow — plugin-only (no projectDir)", () => {
   it("loads the feature flow from plugin dir without projectDir", async () => {
@@ -177,9 +183,7 @@ describe("loadAndResolveFlow — plugin-only (no projectDir)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Project-level flow resolution
-// ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow — project-level resolution", () => {
   it("loads a flow from project .canon/flows/ when projectDir is provided", async () => {
@@ -187,8 +191,8 @@ describe("loadAndResolveFlow — project-level resolution", () => {
 
     expect(flow.name).toBe("my-project-flow");
     expect(flow.entry).toBe("research");
-    expect(flow.states["research"]).toBeDefined();
-    expect(flow.states["research"].agent).toBe("canon-researcher");
+    expect(flow.states.research).toBeDefined();
+    expect(flow.states.research.agent).toBe("canon-researcher");
   });
 
   it("project-level flow overrides plugin-level flow of the same name", async () => {
@@ -197,12 +201,12 @@ describe("loadAndResolveFlow — project-level resolution", () => {
     const pluginFlow = await loadAndResolveFlow(pluginDir, "feature");
 
     // Project flow has "build" state with custom-implementor
-    expect(projectFlow.states["build"]).toBeDefined();
-    expect(projectFlow.states["build"].agent).toBe("custom-implementor");
+    expect(projectFlow.states.build).toBeDefined();
+    expect(projectFlow.states.build.agent).toBe("custom-implementor");
 
     // Plugin flow uses a different structure (no "build" state with custom-implementor)
     // The plugin feature flow uses "design", "implement", etc.
-    expect(pluginFlow.states["build"]).toBeUndefined();
+    expect(pluginFlow.states.build).toBeUndefined();
   });
 
   it("falls back to plugin flow when flow not in project dir", async () => {
@@ -220,9 +224,7 @@ describe("loadAndResolveFlow — project-level resolution", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fragment resolution — project dir first
-// ---------------------------------------------------------------------------
 
 describe("loadFragment — project dir first", () => {
   it("loads fragment from project dir when projectDir provided and fragment exists there", async () => {
@@ -255,9 +257,7 @@ describe("loadFragment — project dir first", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Mixed resolution — project-level fragment referenced in project-level flow
-// ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow — mixed project/plugin fragment resolution", () => {
   it("project-level flow can reference project-level consultation fragment", async () => {
@@ -265,7 +265,7 @@ describe("loadAndResolveFlow — mixed project/plugin fragment resolution", () =
 
     expect(flow.name).toBe("test-epic");
     expect(flow.entry).toBe("research");
-    expect(flow.states["research"]).toBeDefined();
+    expect(flow.states.research).toBeDefined();
 
     // The targeted-research fragment should be resolved as a consultation
     expect(flow.consultations).toBeDefined();
@@ -279,36 +279,34 @@ describe("loadAndResolveFlow — mixed project/plugin fragment resolution", () =
     expect(consultation).toBeDefined();
     // skip_when should be propagated from the fragment definition
     // Note: This field is added to ConsultationFragmentSchema by epic-01
-    expect((consultation as Record<string, unknown>)["skip_when"]).toBe("no_open_questions");
+    expect((consultation as Record<string, unknown>).skip_when).toBe("no_open_questions");
   });
 });
 
-// ---------------------------------------------------------------------------
 // resolveFragments — consultation skip_when propagation
-// ---------------------------------------------------------------------------
 
 describe("resolveFragments — consultation skip_when propagation", () => {
   it("propagates skip_when from fragment definition to resolved consultation", () => {
     const baseFlow = {
-      name: "test",
       description: "test",
+      name: "test",
       states: {
+        done: { type: "terminal" as const },
         start: {
-          type: "single" as const,
           agent: "a",
           transitions: { done: "done" },
+          type: "single" as const,
         },
-        done: { type: "terminal" as const },
       },
     };
 
     const consultationFragment: FragmentDefinition = {
-      fragment: "my-consult",
-      type: "consultation",
       agent: "canon-researcher",
+      fragment: "my-consult",
       role: "researcher",
       section: "Research Findings",
       skip_when: "no_open_questions",
+      type: "consultation",
     };
 
     const result = resolveFragments(
@@ -321,28 +319,28 @@ describe("resolveFragments — consultation skip_when propagation", () => {
     expect(consultation).toBeDefined();
     expect(consultation.agent).toBe("canon-researcher");
     // skip_when should be propagated via spread
-    expect((consultation as Record<string, unknown>)["skip_when"]).toBe("no_open_questions");
+    expect((consultation as Record<string, unknown>).skip_when).toBe("no_open_questions");
   });
 
   it("consultation without skip_when does not get skip_when field set", () => {
     const baseFlow = {
-      name: "test",
       description: "test",
+      name: "test",
       states: {
+        done: { type: "terminal" as const },
         start: {
-          type: "single" as const,
           agent: "a",
           transitions: { done: "done" },
+          type: "single" as const,
         },
-        done: { type: "terminal" as const },
       },
     };
 
     const consultationFragment: FragmentDefinition = {
-      fragment: "plain-consult",
-      type: "consultation",
       agent: "canon-reviewer",
+      fragment: "plain-consult",
       role: "reviewer",
+      type: "consultation",
     };
 
     const result = resolveFragments(
@@ -353,6 +351,6 @@ describe("resolveFragments — consultation skip_when propagation", () => {
 
     const consultation = result.consultations["plain-consult"];
     expect(consultation).toBeDefined();
-    expect((consultation as Record<string, unknown>)["skip_when"]).toBeUndefined();
+    expect((consultation as Record<string, unknown>).skip_when).toBeUndefined();
   });
 });

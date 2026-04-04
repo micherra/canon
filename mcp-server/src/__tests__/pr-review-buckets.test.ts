@@ -5,11 +5,11 @@ import { classifyFile } from "../tools/pr-review-data.ts";
 // Helper to build a minimal PrFileInfo for classification tests
 function makeFile(overrides: Partial<PrFileInfo> = {}): PrFileInfo {
   return {
-    path: "src/some/file.ts",
-    layer: "domain",
-    status: "modified",
     bucket: "low-risk",
+    layer: "domain",
+    path: "src/some/file.ts",
     reason: "",
+    status: "modified",
     ...overrides,
   };
 }
@@ -19,10 +19,10 @@ describe("classifyFile — needs-attention", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 0,
-        violation_count: 2,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 2,
       },
     });
     const result = classifyFile(file);
@@ -33,10 +33,10 @@ describe("classifyFile — needs-attention", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 0,
-        violation_count: 2,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 2,
       },
     });
     const result = classifyFile(file);
@@ -48,10 +48,10 @@ describe("classifyFile — needs-attention", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 9,
-        violation_count: 0,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
     });
     const result = classifyFile(file);
@@ -62,10 +62,10 @@ describe("classifyFile — needs-attention", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 9,
-        violation_count: 0,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
     });
     const result = classifyFile(file);
@@ -77,10 +77,10 @@ describe("classifyFile — needs-attention", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 9,
-        violation_count: 0,
         is_changed: false,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
     });
     const result = classifyFile(file);
@@ -91,10 +91,10 @@ describe("classifyFile — needs-attention", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 5,
-        violation_count: 0,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
     });
     const result = classifyFile(file);
@@ -105,10 +105,10 @@ describe("classifyFile — needs-attention", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 4,
-        violation_count: 0,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
       priority_score: 3,
     });
@@ -120,14 +120,14 @@ describe("classifyFile — needs-attention", () => {
 describe("classifyFile — worth-a-look", () => {
   it("classifies file with medium priority score as worth-a-look", () => {
     const file = makeFile({
-      priority_score: 5,
       priority_factors: {
         in_degree: 1,
-        violation_count: 0,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
+      priority_score: 5,
     });
     const result = classifyFile(file);
     expect(result.bucket).toBe("worth-a-look");
@@ -136,14 +136,14 @@ describe("classifyFile — worth-a-look", () => {
   it("reason for worth-a-look mentions layer", () => {
     const file = makeFile({
       layer: "api",
-      priority_score: 7,
       priority_factors: {
         in_degree: 1,
-        violation_count: 0,
         is_changed: true,
         layer: "api",
         layer_centrality: 1,
+        violation_count: 0,
       },
+      priority_score: 7,
     });
     const result = classifyFile(file);
     expect(result.bucket).toBe("worth-a-look");
@@ -152,14 +152,14 @@ describe("classifyFile — worth-a-look", () => {
 
   it("reason is human-readable — no raw numeric scores", () => {
     const file = makeFile({
-      priority_score: 8,
       priority_factors: {
         in_degree: 2,
-        violation_count: 0,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
+      priority_score: 8,
     });
     const result = classifyFile(file);
     // Should not contain score number like "8" or "score: 8"
@@ -168,14 +168,14 @@ describe("classifyFile — worth-a-look", () => {
 
   it("priority_score exactly 5 triggers worth-a-look", () => {
     const file = makeFile({
-      priority_score: 5,
       priority_factors: {
         in_degree: 1,
-        violation_count: 0,
         is_changed: false,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
+      priority_score: 5,
     });
     const result = classifyFile(file);
     expect(result.bucket).toBe("worth-a-look");
@@ -197,14 +197,14 @@ describe("classifyFile — low-risk", () => {
 
   it("file with priority_score below 5 and no violations is low-risk", () => {
     const file = makeFile({
-      priority_score: 3,
       priority_factors: {
         in_degree: 0,
-        violation_count: 0,
         is_changed: true,
         layer: "ui",
         layer_centrality: 0.5,
+        violation_count: 0,
       },
+      priority_score: 3,
     });
     const result = classifyFile(file);
     expect(result.bucket).toBe("low-risk");
@@ -216,10 +216,10 @@ describe("classifyFile — reason strings are human-readable", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 0,
-        violation_count: 3,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 3,
       },
     });
     const { reason } = classifyFile(file);
@@ -231,10 +231,10 @@ describe("classifyFile — reason strings are human-readable", () => {
     const file = makeFile({
       priority_factors: {
         in_degree: 7,
-        violation_count: 0,
         is_changed: true,
         layer: "shared",
         layer_centrality: 3,
+        violation_count: 0,
       },
     });
     const { reason } = classifyFile(file);

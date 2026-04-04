@@ -10,12 +10,12 @@
  * 6. Empty DB returns {total_runs: 0, avg_duration_ms: 0}
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { appendFlowRun, computeAnalytics, type FlowRunEntry } from "../drift/analytics.ts";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CANON_DIR } from "../constants.ts";
+import { appendFlowRun, computeAnalytics, type FlowRunEntry } from "../drift/analytics.ts";
 
 function makeTmpDir(): string {
   return mkdtempSync(join(tmpdir(), "canon-analytics-test-"));
@@ -23,16 +23,16 @@ function makeTmpDir(): string {
 
 function makeBaseEntry(overrides: Partial<FlowRunEntry> = {}): FlowRunEntry {
   return {
-    run_id: `run_${Math.random().toString(36).slice(2, 8)}`,
-    flow: "test-flow",
-    tier: "small",
-    task: "test task",
-    started: new Date(Date.now() - 60000).toISOString(),
     completed: new Date().toISOString(),
-    total_duration_ms: 60000,
+    flow: "test-flow",
+    run_id: `run_${Math.random().toString(36).slice(2, 8)}`,
+    skipped_states: [],
+    started: new Date(Date.now() - 60000).toISOString(),
     state_durations: { impl: 50000 },
     state_iterations: { impl: 1 },
-    skipped_states: [],
+    task: "test task",
+    tier: "small",
+    total_duration_ms: 60000,
     total_spawns: 2,
     ...overrides,
   };
@@ -47,12 +47,10 @@ describe("analytics.ts (SQLite-backed via DriftDb)", () => {
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
-  // --------------------------------------------------------------------------
   // appendFlowRun writes to drift.db
-  // --------------------------------------------------------------------------
 
   it("appendFlowRun creates drift.db in the .canon directory", async () => {
     const entry = makeBaseEntry();
@@ -76,9 +74,7 @@ describe("analytics.ts (SQLite-backed via DriftDb)", () => {
     expect(analytics.avg_duration_ms).toBe(30000);
   });
 
-  // --------------------------------------------------------------------------
   // computeAnalytics — empty DB
-  // --------------------------------------------------------------------------
 
   it("computeAnalytics returns {total_runs: 0, avg_duration_ms: 0} for empty DB", async () => {
     const analytics = await computeAnalytics(projectDir);
@@ -88,13 +84,11 @@ describe("analytics.ts (SQLite-backed via DriftDb)", () => {
     expect(analytics.avg_postcondition_pass_rate).toBeUndefined();
   });
 
-  // --------------------------------------------------------------------------
   // computeAnalytics — avg_gate_pass_rate
-  // --------------------------------------------------------------------------
 
   it("computeAnalytics computes avg_gate_pass_rate from runs with gate data", async () => {
-    await appendFlowRun(projectDir, makeBaseEntry({ run_id: "run_g1", gate_pass_rate: 0.667 }));
-    await appendFlowRun(projectDir, makeBaseEntry({ run_id: "run_g2", gate_pass_rate: 1.0 }));
+    await appendFlowRun(projectDir, makeBaseEntry({ gate_pass_rate: 0.667, run_id: "run_g1" }));
+    await appendFlowRun(projectDir, makeBaseEntry({ gate_pass_rate: 1.0, run_id: "run_g2" }));
     // Run without gate data — excluded from average
     await appendFlowRun(projectDir, makeBaseEntry({ run_id: "run_g3" }));
 
@@ -110,13 +104,17 @@ describe("analytics.ts (SQLite-backed via DriftDb)", () => {
     expect(analytics.avg_gate_pass_rate).toBeUndefined();
   });
 
-  // --------------------------------------------------------------------------
   // computeAnalytics — avg_postcondition_pass_rate
-  // --------------------------------------------------------------------------
 
   it("computeAnalytics computes avg_postcondition_pass_rate from runs with postcondition data", async () => {
-    await appendFlowRun(projectDir, makeBaseEntry({ run_id: "run_p1", postcondition_pass_rate: 0.5 }));
-    await appendFlowRun(projectDir, makeBaseEntry({ run_id: "run_p2", postcondition_pass_rate: 0.75 }));
+    await appendFlowRun(
+      projectDir,
+      makeBaseEntry({ postcondition_pass_rate: 0.5, run_id: "run_p1" }),
+    );
+    await appendFlowRun(
+      projectDir,
+      makeBaseEntry({ postcondition_pass_rate: 0.75, run_id: "run_p2" }),
+    );
 
     const analytics = await computeAnalytics(projectDir);
     expect(analytics.avg_postcondition_pass_rate).toBeDefined();
@@ -129,9 +127,7 @@ describe("analytics.ts (SQLite-backed via DriftDb)", () => {
     expect(analytics.avg_postcondition_pass_rate).toBeUndefined();
   });
 
-  // --------------------------------------------------------------------------
   // computeAnalytics — avg_duration_ms
-  // --------------------------------------------------------------------------
 
   it("computeAnalytics averages total_duration_ms across all runs", async () => {
     await appendFlowRun(projectDir, makeBaseEntry({ run_id: "run_d1", total_duration_ms: 10000 }));
@@ -143,9 +139,7 @@ describe("analytics.ts (SQLite-backed via DriftDb)", () => {
     expect(analytics.avg_duration_ms).toBeCloseTo(20000, 1);
   });
 
-  // --------------------------------------------------------------------------
   // Backward compat: entries without quality fields work
-  // --------------------------------------------------------------------------
 
   it("backward compat: old entry without quality signal fields still computes analytics", async () => {
     // Entry with only required fields (no gate_pass_rate etc.)
@@ -158,18 +152,16 @@ describe("analytics.ts (SQLite-backed via DriftDb)", () => {
     expect(analytics.avg_postcondition_pass_rate).toBeUndefined();
   });
 
-  // --------------------------------------------------------------------------
   // Round-trip: all optional fields survive persist/retrieve
-  // --------------------------------------------------------------------------
 
   it("all optional FlowRunEntry fields round-trip through drift.db", async () => {
     const entry = makeBaseEntry({
-      run_id: "run_full_01",
       gate_pass_rate: 0.75,
       postcondition_pass_rate: 1.0,
-      total_violations: 5,
-      total_test_results: { passed: 20, failed: 2, skipped: 1 },
+      run_id: "run_full_01",
       total_files_changed: 8,
+      total_test_results: { failed: 2, passed: 20, skipped: 1 },
+      total_violations: 5,
     });
     await appendFlowRun(projectDir, entry);
 

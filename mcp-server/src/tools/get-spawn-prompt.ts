@@ -14,13 +14,11 @@ import { assemblePrompt } from "./prompt-pipeline/assemble-prompt.ts";
 import type { SpawnPromptInput } from "./prompt-pipeline/types.ts";
 
 // Re-export canonical types so existing callers need no import changes.
-export type { SpawnPromptEntry, TaskItem, SpawnPromptResult } from "./prompt-pipeline/types.ts";
+export type { SpawnPromptEntry, SpawnPromptResult, TaskItem } from "./prompt-pipeline/types.ts";
 
 export { assemblePrompt };
 
-export async function getSpawnPrompt(
-  input: SpawnPromptInput,
-): ReturnType<typeof assemblePrompt> {
+export async function getSpawnPrompt(input: SpawnPromptInput): ReturnType<typeof assemblePrompt> {
   return assemblePrompt(input);
 }
 
@@ -69,9 +67,15 @@ export function parseTimeout(timeout: string): number | undefined {
     matched = true;
     const n = parseInt(num, 10);
     switch (unit.toLowerCase()) {
-      case "h": totalMs += n * 3600000; break;
-      case "m": totalMs += n * 60000; break;
-      case "s": totalMs += n * 1000; break;
+      case "h":
+        totalMs += n * 3600000;
+        break;
+      case "m":
+        totalMs += n * 60000;
+        break;
+      case "s":
+        totalMs += n * 1000;
+        break;
     }
     return "";
   });

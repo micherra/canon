@@ -13,16 +13,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Mock execution-store so tests don't need a real SQLite DB
-// ---------------------------------------------------------------------------
 
 const mockStore = {
-  getBoard: vi.fn(),
-  getProgress: vi.fn().mockReturnValue(""),
   appendProgress: vi.fn(),
-  getExecution: vi.fn(),
+  getBoard: vi.fn(),
   getCachePrefix: vi.fn().mockReturnValue(""),
+  getExecution: vi.fn(),
+  getProgress: vi.fn().mockReturnValue(""),
 };
 
 vi.mock("../orchestration/execution-store.ts", () => ({
@@ -30,16 +28,12 @@ vi.mock("../orchestration/execution-store.ts", () => ({
 }));
 
 vi.mock("../orchestration/wave-briefing.ts", () => ({
-  readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(""),
+  readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -51,7 +45,7 @@ function makeTmpDir(): string {
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
@@ -59,17 +53,17 @@ afterEach(() => {
 
 function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: {
-        type: "wave",
-        agent: "canon-implementor",
-      },
-    },
+    name: "test-flow",
     spawn_instructions: {
       implement: "Implement task ${item}",
+    },
+    states: {
+      implement: {
+        agent: "canon-implementor",
+        type: "wave",
+      },
     },
     ...overrides,
   } as ResolvedFlow;
@@ -77,41 +71,37 @@ function makeWaveFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 
 function makeSingleFlow(): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "research",
-    states: {
-      research: {
-        type: "single",
-        agent: "canon-researcher",
-      },
-    },
+    name: "test-flow",
     spawn_instructions: {
       research: "Research the problem",
+    },
+    states: {
+      research: {
+        agent: "canon-researcher",
+        type: "single",
+      },
     },
   } as ResolvedFlow;
 }
 
 function makeParallelPerFlow(): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: {
-        type: "parallel-per",
-        agent: "canon-implementor",
-      },
-    },
+    name: "test-flow",
     spawn_instructions: {
       implement: "Implement ${item}",
     },
+    states: {
+      implement: {
+        agent: "canon-implementor",
+        type: "parallel-per",
+      },
+    },
   } as ResolvedFlow;
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — wave state isolation", () => {
   it("sets isolation: 'worktree' on all wave state prompt entries", async () => {
@@ -119,11 +109,11 @@ describe("getSpawnPrompt — wave state isolation", () => {
     const flow = makeWaveFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: {},
       items: ["task-01", "task-02", "task-03"],
+      state_id: "implement",
+      variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(3);
@@ -137,11 +127,11 @@ describe("getSpawnPrompt — wave state isolation", () => {
     const flow = makeWaveFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: {},
       items: ["task-01"],
+      state_id: "implement",
+      variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -153,11 +143,11 @@ describe("getSpawnPrompt — wave state isolation", () => {
     const flow = makeWaveFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: {},
       items: ["task-01"],
+      state_id: "implement",
+      variables: {},
+      workspace,
     });
 
     expect(result.prompts[0].worktree_path).toBeUndefined();
@@ -170,10 +160,10 @@ describe("getSpawnPrompt — single state isolation", () => {
     const flow = makeSingleFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "research",
       flow,
+      state_id: "research",
       variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -187,11 +177,11 @@ describe("getSpawnPrompt — parallel-per state isolation", () => {
     const flow = makeParallelPerFlow();
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: {},
       items: ["file-a.ts", "file-b.ts"],
+      state_id: "implement",
+      variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(2);

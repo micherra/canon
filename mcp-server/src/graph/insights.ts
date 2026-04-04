@@ -8,7 +8,7 @@ import { detectDeadCode } from "./kg-dead-code.ts";
 import { initDatabase } from "./kg-schema.ts";
 import { KgStore } from "./kg-store.ts";
 
-export interface CodebaseInsights {
+export type CodebaseInsights = {
   overview: {
     total_files: number;
     total_edges: number;
@@ -48,20 +48,22 @@ export interface CodebaseInsights {
     file_path: string;
     affected_count: number;
   }>;
-}
+};
 
-interface NodeLike {
+type NodeLike = {
   id: string;
   layer: string;
-}
+};
 
-interface EdgeLike {
+type EdgeLike = {
   source: string;
   target: string;
-}
+};
 
 function isTestFile(path: string): boolean {
-  return /(?:^|\/)__tests__\/|(?:^|\/)test\/|(?:^|\/)tests\/|(?:^|\/)[^.]+\.(?:test|spec)\.[^.]+$/i.test(path);
+  return /(?:^|\/)__tests__\/|(?:^|\/)test\/|(?:^|\/)tests\/|(?:^|\/)[^.]+\.(?:test|spec)\.[^.]+$/i.test(
+    path,
+  );
 }
 
 function getParentCandidates(testPath: string): string[] {
@@ -86,7 +88,10 @@ function hasMatchedParentTestConnection(path: string, nodeSet: Set<string>): boo
   }
 
   // Also clear a source file from orphan list if it has colocated tests.
-  const testCandidates = [path.replace(/\.([^.]+)$/i, ".test.$1"), path.replace(/\.([^.]+)$/i, ".spec.$1")];
+  const testCandidates = [
+    path.replace(/\.([^.]+)$/i, ".test.$1"),
+    path.replace(/\.([^.]+)$/i, ".spec.$1"),
+  ];
   if (path.includes("/")) {
     testCandidates.push(
       path.replace(/\/([^/]+)$/i, "/__tests__/$1"),
@@ -101,72 +106,42 @@ function hasMatchedParentTestConnection(path: string, nodeSet: Set<string>): boo
 // Default clean-architecture layer rules: layer → allowed dependency targets
 const DEFAULT_LAYER_RULES: Record<string, string[]> = {
   api: ["domain", "shared", "data"],
-  ui: ["domain", "shared"],
-  domain: ["data", "shared"],
   data: ["infra", "shared"],
+  domain: ["data", "shared"],
   infra: ["shared"],
   shared: [],
+  ui: ["domain", "shared"],
 };
 
-export function generateInsights(
-  nodes: NodeLike[],
-  edges: EdgeLike[],
-  layerRules?: Record<string, string[]>,
-  projectDir?: string,
-): CodebaseInsights {
-  const rules = layerRules || DEFAULT_LAYER_RULES;
-
-  // Degree maps
-  const { inDegree, outDegree } = buildDegreeMaps(
-    nodes.map((n) => n.id),
-    edges,
-  );
-
-  // Overview
+function buildOverview(nodes: NodeLike[], edges: EdgeLike[]): CodebaseInsights["overview"] {
   const layerCounts = new Map<string, number>();
   for (const node of nodes) {
     const layer = node.layer || "unknown";
     layerCounts.set(layer, (layerCounts.get(layer) || 0) + 1);
   }
 
-  const overview = {
-    total_files: nodes.length,
-    total_edges: edges.length,
-    avg_dependencies_per_file: nodes.length > 0 ? Math.round((edges.length / nodes.length) * 100) / 100 : 0,
+  return {
+    avg_dependencies_per_file:
+      nodes.length > 0 ? Math.round((edges.length / nodes.length) * 100) / 100 : 0,
     layers: Array.from(layerCounts.entries())
-      .map(([name, file_count]) => ({ name, file_count }))
+      .map(([name, file_count]) => ({ file_count, name }))
       .sort((a, b) => b.file_count - a.file_count),
+    total_edges: edges.length,
+    total_files: nodes.length,
   };
+}
 
-  // Most connected (top 10 by total degree)
-  const most_connected = nodes
-    .map((n) => ({
-      path: n.id,
-      in_degree: inDegree.get(n.id) || 0,
-      out_degree: outDegree.get(n.id) || 0,
-      total: (inDegree.get(n.id) || 0) + (outDegree.get(n.id) || 0),
-    }))
-    .filter((n) => n.total > 0)
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 10);
-
-  // Orphan files (zero connections)
-  const rawOrphans = nodes
-    .filter((n) => (inDegree.get(n.id) || 0) === 0 && (outDegree.get(n.id) || 0) === 0)
-    .map((n) => n.id);
-  const nodeSet = new Set(nodes.map((n) => n.id));
-  const orphan_files = rawOrphans.filter((path) => !hasMatchedParentTestConnection(path, nodeSet)).sort();
-
-  // Circular dependencies (DFS cycle detection, max cycle length 5)
-  const circular_dependencies = detectCycles(nodes, edges);
-
-  // Layer violations
+function detectLayerViolations(
+  edges: EdgeLike[],
+  nodes: NodeLike[],
+  rules: Record<string, string[]>,
+): CodebaseInsights["layer_violations"] {
   const nodeLayerMap = new Map<string, string>();
   for (const node of nodes) {
     nodeLayerMap.set(node.id, node.layer || "unknown");
   }
 
-  const layer_violations: CodebaseInsights["layer_violations"] = [];
+  const violations: CodebaseInsights["layer_violations"] = [];
   for (const edge of edges) {
     const sourceLayer = nodeLayerMap.get(edge.source) || "unknown";
     const targetLayer = nodeLayerMap.get(edge.target) || "unknown";
@@ -177,21 +152,60 @@ export function generateInsights(
 
     const allowed = rules[sourceLayer];
     if (allowed && !allowed.includes(targetLayer)) {
-      layer_violations.push({
+      violations.push({
         source: edge.source,
-        target: edge.target,
         source_layer: sourceLayer,
+        target: edge.target,
         target_layer: targetLayer,
       });
     }
   }
+  return violations;
+}
+
+export function generateInsights(
+  nodes: NodeLike[],
+  edges: EdgeLike[],
+  layerRules?: Record<string, string[]>,
+  projectDir?: string,
+): CodebaseInsights {
+  const rules = layerRules || DEFAULT_LAYER_RULES;
+
+  const { inDegree, outDegree } = buildDegreeMaps(
+    nodes.map((n) => n.id),
+    edges,
+  );
+
+  const overview = buildOverview(nodes, edges);
+
+  const most_connected = nodes
+    .map((n) => ({
+      in_degree: inDegree.get(n.id) || 0,
+      out_degree: outDegree.get(n.id) || 0,
+      path: n.id,
+      total: (inDegree.get(n.id) || 0) + (outDegree.get(n.id) || 0),
+    }))
+    .filter((n) => n.total > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+
+  const rawOrphans = nodes
+    .filter((n) => (inDegree.get(n.id) || 0) === 0 && (outDegree.get(n.id) || 0) === 0)
+    .map((n) => n.id);
+  const nodeSet = new Set(nodes.map((n) => n.id));
+  const orphan_files = rawOrphans
+    .filter((path) => !hasMatchedParentTestConnection(path, nodeSet))
+    .sort();
+
+  const circular_dependencies = detectCycles(nodes, edges);
+  const layer_violations = detectLayerViolations(edges, nodes, rules);
 
   const base: CodebaseInsights = {
-    overview,
-    most_connected,
-    orphan_files,
     circular_dependencies,
     layer_violations,
+    most_connected,
+    orphan_files,
+    overview,
   };
 
   return enrichWithKgInsights(base, projectDir);
@@ -210,8 +224,71 @@ export function generateInsights(
  * arrays passed to generateInsights() by codebase-graph.ts come directly from
  * the KgQuery scan — no intermediate JSON persistence happens.
  */
+/** Build entity overview from the KG database. */
+function buildEntityOverview(
+  db: ReturnType<typeof initDatabase>,
+  store: KgStore,
+): CodebaseInsights["entity_overview"] {
+  const byKindRows = db
+    .prepare(`SELECT kind, COUNT(*) AS n FROM entities GROUP BY kind`)
+    .all() as Array<{ kind: string; n: number }>;
+  const by_kind = Object.fromEntries(byKindRows.map((r) => [r.kind, r.n]));
+
+  const byEdgeTypeRows = db
+    .prepare(`SELECT edge_type, COUNT(*) AS n FROM edges GROUP BY edge_type`)
+    .all() as Array<{ edge_type: string; n: number }>;
+  const by_edge_type = Object.fromEntries(byEdgeTypeRows.map((r) => [r.edge_type, r.n]));
+
+  const stats = store.getStats();
+  return {
+    by_edge_type,
+    by_kind,
+    total_edges: stats.edges,
+    total_entities: stats.entities,
+  };
+}
+
+/** Build dead code summary from the KG database. */
+function buildDeadCodeSummary(
+  db: ReturnType<typeof initDatabase>,
+): CodebaseInsights["dead_code_summary"] {
+  const deadReport = detectDeadCode(db);
+  const top_files = deadReport.by_file
+    .slice(0, 5)
+    .map(({ path: filePath, entities }) => ({ count: entities.length, path: filePath }));
+  return {
+    by_kind: deadReport.by_kind,
+    top_files,
+    total_dead: deadReport.total_dead,
+  };
+}
+
+/** Build blast-radius hotspot list from the KG database. */
+function buildBlastRadiusHotspots(
+  db: ReturnType<typeof initDatabase>,
+): CodebaseInsights["blast_radius_hotspots"] {
+  const hotspotRows = db
+    .prepare(
+      `SELECT e.name, f.path AS file_path, COUNT(ed.edge_id) AS incoming
+       FROM entities e
+       JOIN files f ON f.file_id = e.file_id
+       JOIN edges ed ON ed.target_entity_id = e.entity_id
+       WHERE ed.edge_type IN ('calls', 'type-references', 'extends', 'implements')
+       GROUP BY e.entity_id
+       ORDER BY incoming DESC
+       LIMIT 10`,
+    )
+    .all() as Array<{ name: string; file_path: string; incoming: number }>;
+
+  return hotspotRows.map((row) => ({
+    affected_count: row.incoming,
+    entity_name: row.name,
+    file_path: row.file_path,
+  }));
+}
+
 function enrichWithKgInsights(base: CodebaseInsights, projectDir?: string): CodebaseInsights {
-  const root = projectDir ?? (process.env["CANON_PROJECT_DIR"] || process.cwd());
+  const root = projectDir ?? (process.env.CANON_PROJECT_DIR || process.cwd());
   const dbPath = path.join(root, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
 
   if (!existsSync(dbPath)) {
@@ -223,82 +300,15 @@ function enrichWithKgInsights(base: CodebaseInsights, projectDir?: string): Code
     db = initDatabase(dbPath);
     const store = new KgStore(db);
 
-    // ------------------------------------------------------------------ //
-    // 1. Entity overview — totals and by-kind / by-edge-type breakdowns   //
-    // ------------------------------------------------------------------ //
-
-    const byKindRows = db.prepare(`SELECT kind, COUNT(*) AS n FROM entities GROUP BY kind`).all() as Array<{
-      kind: string;
-      n: number;
-    }>;
-    const by_kind = Object.fromEntries(byKindRows.map((r) => [r.kind, r.n]));
-
-    const byEdgeTypeRows = db.prepare(`SELECT edge_type, COUNT(*) AS n FROM edges GROUP BY edge_type`).all() as Array<{
-      edge_type: string;
-      n: number;
-    }>;
-    const by_edge_type = Object.fromEntries(byEdgeTypeRows.map((r) => [r.edge_type, r.n]));
-
-    const stats = store.getStats();
-    const entity_overview: CodebaseInsights["entity_overview"] = {
-      total_entities: stats.entities,
-      by_kind,
-      total_edges: stats.edges,
-      by_edge_type,
-    };
-
-    // ------------------------------------------------------------------ //
-    // 2. Dead code summary                                                 //
-    // ------------------------------------------------------------------ //
-
-    const deadReport = detectDeadCode(db);
-    const top_files = deadReport.by_file
-      .slice(0, 5)
-      .map(({ path: filePath, entities }) => ({ path: filePath, count: entities.length }));
-
-    const dead_code_summary: CodebaseInsights["dead_code_summary"] = {
-      total_dead: deadReport.total_dead,
-      by_kind: deadReport.by_kind,
-      top_files,
-    };
-
-    // ------------------------------------------------------------------ //
-    // 3. Blast-radius hotspots — entities with the most callers           //
-    //    (counts incoming entity edges: calls, type-references, extends,  //
-    //    implements). This measures "how many things depend on this        //
-    //    entity" — i.e. reverse direction, not forward blast radius.      //
-    // ------------------------------------------------------------------ //
-
-    const hotspotRows = db
-      .prepare(
-        `SELECT e.name, f.path AS file_path, COUNT(ed.edge_id) AS incoming
-         FROM entities e
-         JOIN files f ON f.file_id = e.file_id
-         JOIN edges ed ON ed.target_entity_id = e.entity_id
-         WHERE ed.edge_type IN ('calls', 'type-references', 'extends', 'implements')
-         GROUP BY e.entity_id
-         ORDER BY incoming DESC
-         LIMIT 10`,
-      )
-      .all() as Array<{ name: string; file_path: string; incoming: number }>;
-
-    const blast_radius_hotspots: CodebaseInsights["blast_radius_hotspots"] = hotspotRows.map((row) => ({
-      entity_name: row.name,
-      file_path: row.file_path,
-      affected_count: row.incoming,
-    }));
-
     return {
       ...base,
-      entity_overview,
-      dead_code_summary,
-      blast_radius_hotspots,
+      blast_radius_hotspots: buildBlastRadiusHotspots(db),
+      dead_code_summary: buildDeadCodeSummary(db),
+      entity_overview: buildEntityOverview(db, store),
     };
   } catch {
-    // KG enrichment is best-effort — failures must never break base insights.
     return base;
   } finally {
-    // Always close the DB handle to avoid resource leaks.
     try {
       db?.close();
     } catch {
@@ -320,49 +330,49 @@ function buildAdjacencyList(nodes: NodeLike[], edges: EdgeLike[]): Map<string, s
   return adj;
 }
 
+type CycleCollector = {
+  maxLen: number;
+  cycleSet: Set<string>;
+  cycles: string[][];
+};
+
 /** Try to record a cycle from the current DFS path. */
-function tryRecordCycle(
-  neighbor: string,
-  path: string[],
-  maxLen: number,
-  cycleSet: Set<string>,
-  cycles: string[][],
-): void {
+function tryRecordCycle(neighbor: string, path: string[], collector: CycleCollector): void {
   const cycleStart = path.indexOf(neighbor);
   if (cycleStart < 0) return;
 
   const cycle = path.slice(cycleStart);
-  if (cycle.length > maxLen) return;
+  if (cycle.length > collector.maxLen) return;
 
   const normalized = normalizeCycle(cycle);
   const key = normalized.join(" -> ");
-  if (cycleSet.has(key)) return;
+  if (collector.cycleSet.has(key)) return;
 
-  cycleSet.add(key);
-  cycles.push(normalized);
+  collector.cycleSet.add(key);
+  collector.cycles.push(normalized);
 }
 
+type DfsContext = {
+  adj: Map<string, string[]>;
+  visited: Set<string>;
+  collector: CycleCollector;
+  maxCycles: number;
+};
+
 /** Process one DFS component starting from startNode. */
-function dfsComponent(
-  startNodeId: string,
-  adj: Map<string, string[]>,
-  visited: Set<string>,
-  maxCycleLen: number,
-  cycleSet: Set<string>,
-  cycles: string[][],
-  maxCycles: number,
-): void {
+function dfsComponent(startNodeId: string, ctx: DfsContext): void {
   type Frame = { node: string; neighborIdx: number };
 
+  const { adj, visited, collector, maxCycles } = ctx;
   const inStack = new Set<string>();
   const path: string[] = [];
 
-  const callStack: Frame[] = [{ node: startNodeId, neighborIdx: 0 }];
+  const callStack: Frame[] = [{ neighborIdx: 0, node: startNodeId }];
   visited.add(startNodeId);
   inStack.add(startNodeId);
   path.push(startNodeId);
 
-  while (callStack.length > 0 && cycles.length < maxCycles) {
+  while (callStack.length > 0 && collector.cycles.length < maxCycles) {
     const frame = callStack[callStack.length - 1];
     const neighbors = adj.get(frame.node) || [];
 
@@ -377,12 +387,12 @@ function dfsComponent(
     frame.neighborIdx++;
 
     if (inStack.has(neighbor)) {
-      tryRecordCycle(neighbor, path, maxCycleLen, cycleSet, cycles);
+      tryRecordCycle(neighbor, path, collector);
     } else if (!visited.has(neighbor)) {
       visited.add(neighbor);
       inStack.add(neighbor);
       path.push(neighbor);
-      callStack.push({ node: neighbor, neighborIdx: 0 });
+      callStack.push({ neighborIdx: 0, node: neighbor });
     }
   }
 
@@ -395,16 +405,20 @@ function detectCycles(nodes: NodeLike[], edges: EdgeLike[]): string[][] {
   const adj = buildAdjacencyList(nodes, edges);
   const MAX_CYCLE_LEN = 5;
   const MAX_CYCLES = 20;
-  const cycles: string[][] = [];
-  const cycleSet = new Set<string>();
+  const collector: CycleCollector = {
+    cycleSet: new Set<string>(),
+    cycles: [],
+    maxLen: MAX_CYCLE_LEN,
+  };
   const visited = new Set<string>();
+  const ctx: DfsContext = { adj, collector, maxCycles: MAX_CYCLES, visited };
 
   for (const startNode of nodes) {
-    if (visited.has(startNode.id) || cycles.length >= MAX_CYCLES) continue;
-    dfsComponent(startNode.id, adj, visited, MAX_CYCLE_LEN, cycleSet, cycles, MAX_CYCLES);
+    if (visited.has(startNode.id) || collector.cycles.length >= MAX_CYCLES) continue;
+    dfsComponent(startNode.id, ctx);
   }
 
-  return cycles;
+  return collector.cycles;
 }
 
 /** Normalize a cycle by rotating so the lexicographically smallest element is first */

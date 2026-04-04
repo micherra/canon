@@ -13,51 +13,37 @@
  * - updateJobStatus builds SQL dynamically based on optional fields — not cached.
  */
 
-import type { Database, Statement } from 'better-sqlite3';
+import type { Database, Statement } from "better-sqlite3";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+export type JobStatus = "pending" | "running" | "complete" | "failed" | "cancelled" | "timed_out";
 
-export type JobStatus =
-  | 'pending'
-  | 'running'
-  | 'complete'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
-
-export interface JobRow {
+export type JobRow = {
   job_id: string;
   job_type: string;
   fingerprint: string;
   status: JobStatus;
   pid: number | null;
-  progress: string | null;   // JSON
+  progress: string | null; // JSON
   error: string | null;
   started_at: string;
   completed_at: string | null;
   timeout_ms: number;
-}
+};
 
-export interface JobCacheRow {
+export type JobCacheRow = {
   fingerprint: string;
   job_type: string;
-  result_summary: string;    // JSON
+  result_summary: string; // JSON
   cached_at: string;
   expires_at: string | null;
-}
+};
 
-// ---------------------------------------------------------------------------
 // JobStore
-// ---------------------------------------------------------------------------
 
 export class JobStore {
   constructor(private db: Database) {}
 
-  // ---------------------------------------------------------------------------
   // Cached prepared statements (Comment #12: lazily initialized on first use)
-  // ---------------------------------------------------------------------------
 
   private _createJobStmt?: Statement;
   private get createJobStmt(): Statement {
@@ -135,14 +121,12 @@ export class JobStore {
     `));
   }
 
-  // ---------------------------------------------------------------------------
   // Public methods
-  // ---------------------------------------------------------------------------
 
   /**
    * Insert a new job row. started_at is required; completed_at defaults to NULL.
    */
-  createJob(job: Omit<JobRow, 'completed_at'>): void {
+  createJob(job: Omit<JobRow, "completed_at">): void {
     this.createJobStmt.run(
       job.job_id,
       job.job_type,
@@ -186,24 +170,24 @@ export class JobStore {
     extra?: { pid?: number; error?: string; completed_at?: string },
   ): void {
     // Build SET clause dynamically based on provided extra fields
-    const sets: string[] = ['status = ?'];
+    const sets: string[] = ["status = ?"];
     const params: unknown[] = [status];
 
     if (extra?.pid !== undefined) {
-      sets.push('pid = ?');
+      sets.push("pid = ?");
       params.push(extra.pid);
     }
     if (extra?.error !== undefined) {
-      sets.push('error = ?');
+      sets.push("error = ?");
       params.push(extra.error);
     }
     if (extra?.completed_at !== undefined) {
-      sets.push('completed_at = ?');
+      sets.push("completed_at = ?");
       params.push(extra.completed_at);
     }
 
     params.push(jobId);
-    this.db.prepare(`UPDATE jobs SET ${sets.join(', ')} WHERE job_id = ?`).run(...params);
+    this.db.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE job_id = ?`).run(...params);
   }
 
   /**

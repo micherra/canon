@@ -9,13 +9,13 @@
  * - getComplianceTrend produces correct weekly buckets
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CANON_DIR } from "../constants.ts";
 import { DriftStore } from "../drift/store.ts";
 import type { ReviewEntry } from "../schema.ts";
-import { CANON_DIR } from "../constants.ts";
 
 function makeTmpDir(): string {
   return mkdtempSync(join(tmpdir(), "canon-store-test-"));
@@ -23,17 +23,17 @@ function makeTmpDir(): string {
 
 function makeReview(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {
-    review_id: `rev_test_${Math.random().toString(36).slice(2, 8)}`,
     files: ["src/a.ts"],
-    violations: [],
     honored: [],
+    review_id: `rev_test_${Math.random().toString(36).slice(2, 8)}`,
     score: {
-      rules: { passed: 1, total: 1 },
-      opinions: { passed: 0, total: 0 },
       conventions: { passed: 0, total: 0 },
+      opinions: { passed: 0, total: 0 },
+      rules: { passed: 1, total: 1 },
     },
-    verdict: "CLEAN",
     timestamp: "2026-03-15T00:00:00Z",
+    verdict: "CLEAN",
+    violations: [],
     ...overrides,
   };
 }
@@ -49,12 +49,10 @@ describe("DriftStore (SQLite-backed)", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
-  // --------------------------------------------------------------------------
   // SQLite backing
-  // --------------------------------------------------------------------------
 
   it("creates drift.db in the .canon directory on first use", async () => {
     await store.appendReview(makeReview());
@@ -62,20 +60,18 @@ describe("DriftStore (SQLite-backed)", () => {
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  // --------------------------------------------------------------------------
   // appendReview + getReviews round-trip
-  // --------------------------------------------------------------------------
 
   it("appends a review and reads it back with all fields intact", async () => {
     const entry = makeReview({
-      review_id: "rev_roundtrip_01",
-      files: ["src/a.ts", "src/b.ts"],
-      violations: [{ principle_id: "thin-handlers", severity: "rule", message: "Handler too fat" }],
-      honored: ["deep-modules"],
-      verdict: "BLOCKING",
-      timestamp: "2026-03-15T10:00:00Z",
-      pr_number: 42,
       branch: "feat/my-feature",
+      files: ["src/a.ts", "src/b.ts"],
+      honored: ["deep-modules"],
+      pr_number: 42,
+      review_id: "rev_roundtrip_01",
+      timestamp: "2026-03-15T10:00:00Z",
+      verdict: "BLOCKING",
+      violations: [{ message: "Handler too fat", principle_id: "thin-handlers", severity: "rule" }],
     });
 
     await store.appendReview(entry);
@@ -112,11 +108,9 @@ describe("DriftStore (SQLite-backed)", () => {
 
   it("persists optional fields (file_priorities, recommendations)", async () => {
     const entry = makeReview({
-      review_id: "rev_optional_01",
       file_priorities: [{ path: "src/a.ts", priority_score: 10 }],
-      recommendations: [
-        { title: "Fix it", message: "Fix this now", source: "principle" },
-      ],
+      recommendations: [{ message: "Fix this now", source: "principle", title: "Fix it" }],
+      review_id: "rev_optional_01",
     });
 
     await store.appendReview(entry);
@@ -124,13 +118,11 @@ describe("DriftStore (SQLite-backed)", () => {
 
     expect(reviews[0].file_priorities).toEqual([{ path: "src/a.ts", priority_score: 10 }]);
     expect(reviews[0].recommendations).toEqual([
-      { title: "Fix it", message: "Fix this now", source: "principle" },
+      { message: "Fix this now", source: "principle", title: "Fix it" },
     ]);
   });
 
-  // --------------------------------------------------------------------------
   // Filter: principleId
-  // --------------------------------------------------------------------------
 
   it("filters by principleId matching violations", async () => {
     const matching = makeReview({
@@ -164,9 +156,7 @@ describe("DriftStore (SQLite-backed)", () => {
     expect(results).toHaveLength(0);
   });
 
-  // --------------------------------------------------------------------------
   // Filter: branch
-  // --------------------------------------------------------------------------
 
   it("filters by branch", async () => {
     const onBranch = makeReview({ branch: "feat/my-feature" });
@@ -187,9 +177,7 @@ describe("DriftStore (SQLite-backed)", () => {
     expect(results).toHaveLength(0);
   });
 
-  // --------------------------------------------------------------------------
   // Filter: prNumber
-  // --------------------------------------------------------------------------
 
   it("filters by prNumber", async () => {
     const pr42 = makeReview({ pr_number: 42 });
@@ -202,9 +190,7 @@ describe("DriftStore (SQLite-backed)", () => {
     expect(results[0].review_id).toBe(pr42.review_id);
   });
 
-  // --------------------------------------------------------------------------
   // Filter: combined (AND logic)
-  // --------------------------------------------------------------------------
 
   it("applies branch AND prNumber filters (AND logic)", async () => {
     const both = makeReview({ branch: "feat/x", pr_number: 99 });
@@ -227,24 +213,22 @@ describe("DriftStore (SQLite-backed)", () => {
     await store.appendReview(principleOnly);
     await store.appendReview(branchOnly);
 
-    const results = await store.getReviews({ principleId: "thin-handlers", branch: "feat/y" });
+    const results = await store.getReviews({ branch: "feat/y", principleId: "thin-handlers" });
     expect(results).toHaveLength(1);
     expect(results[0].review_id).toBe(bothMatch.review_id);
   });
 
-  // --------------------------------------------------------------------------
   // getLastReviewForPr
-  // --------------------------------------------------------------------------
 
   it("getLastReviewForPr returns most recent review for a PR number", async () => {
     const first = makeReview({
-      review_id: "rev_pr_first",
       pr_number: 7,
+      review_id: "rev_pr_first",
       timestamp: "2026-03-10T00:00:00Z",
     });
     const second = makeReview({
-      review_id: "rev_pr_second",
       pr_number: 7,
+      review_id: "rev_pr_second",
       timestamp: "2026-03-12T00:00:00Z",
     });
     await store.appendReview(first);
@@ -265,19 +249,17 @@ describe("DriftStore (SQLite-backed)", () => {
     expect(result).toBeNull();
   });
 
-  // --------------------------------------------------------------------------
   // getLastReviewForBranch
-  // --------------------------------------------------------------------------
 
   it("getLastReviewForBranch returns most recent review for a branch", async () => {
     const first = makeReview({
-      review_id: "rev_branch_first",
       branch: "feat/branch-a",
+      review_id: "rev_branch_first",
       timestamp: "2026-03-10T00:00:00Z",
     });
     const second = makeReview({
-      review_id: "rev_branch_second",
       branch: "feat/branch-a",
+      review_id: "rev_branch_second",
       timestamp: "2026-03-12T00:00:00Z",
     });
     await store.appendReview(first);
@@ -299,9 +281,7 @@ describe("DriftStore (SQLite-backed)", () => {
     expect(result).toBeNull();
   });
 
-  // --------------------------------------------------------------------------
   // getComplianceTrend
-  // --------------------------------------------------------------------------
 
   it("getComplianceTrend returns empty array when no reviews exist", async () => {
     const trend = await store.getComplianceTrend("thin-handlers");
@@ -310,18 +290,22 @@ describe("DriftStore (SQLite-backed)", () => {
 
   it("getComplianceTrend buckets reviews by ISO week and computes pass rate", async () => {
     // Two reviews in the same week — one violation, one honored
-    await store.appendReview(makeReview({
-      review_id: "rev_w1_violation",
-      violations: [{ principle_id: "thin-handlers", severity: "rule" }],
-      honored: [],
-      timestamp: "2026-03-16T00:00:00Z", // W12 (Monday)
-    }));
-    await store.appendReview(makeReview({
-      review_id: "rev_w1_honored",
-      violations: [],
-      honored: ["thin-handlers"],
-      timestamp: "2026-03-17T00:00:00Z", // W12 (Tuesday)
-    }));
+    await store.appendReview(
+      makeReview({
+        honored: [],
+        review_id: "rev_w1_violation",
+        timestamp: "2026-03-16T00:00:00Z", // W12 (Monday)
+        violations: [{ principle_id: "thin-handlers", severity: "rule" }],
+      }),
+    );
+    await store.appendReview(
+      makeReview({
+        honored: ["thin-handlers"],
+        review_id: "rev_w1_honored",
+        timestamp: "2026-03-17T00:00:00Z", // W12 (Tuesday)
+        violations: [],
+      }),
+    );
 
     const trend = await store.getComplianceTrend("thin-handlers");
     expect(trend).toHaveLength(1);
@@ -332,21 +316,27 @@ describe("DriftStore (SQLite-backed)", () => {
 
   it("getComplianceTrend limits to most recent N weeks when weeks param provided", async () => {
     // 3 reviews in 3 different weeks
-    await store.appendReview(makeReview({
-      violations: [{ principle_id: "p1", severity: "rule" }],
-      honored: [],
-      timestamp: "2026-03-02T00:00:00Z", // W10
-    }));
-    await store.appendReview(makeReview({
-      violations: [{ principle_id: "p1", severity: "rule" }],
-      honored: [],
-      timestamp: "2026-03-09T00:00:00Z", // W11
-    }));
-    await store.appendReview(makeReview({
-      violations: [],
-      honored: ["p1"],
-      timestamp: "2026-03-16T00:00:00Z", // W12
-    }));
+    await store.appendReview(
+      makeReview({
+        honored: [],
+        timestamp: "2026-03-02T00:00:00Z", // W10
+        violations: [{ principle_id: "p1", severity: "rule" }],
+      }),
+    );
+    await store.appendReview(
+      makeReview({
+        honored: [],
+        timestamp: "2026-03-09T00:00:00Z", // W11
+        violations: [{ principle_id: "p1", severity: "rule" }],
+      }),
+    );
+    await store.appendReview(
+      makeReview({
+        honored: ["p1"],
+        timestamp: "2026-03-16T00:00:00Z", // W12
+        violations: [],
+      }),
+    );
 
     const trend2 = await store.getComplianceTrend("p1", 2);
     expect(trend2).toHaveLength(2);
@@ -361,19 +351,21 @@ describe("DriftStore (SQLite-backed)", () => {
     expect(trend).toEqual([]);
   });
 
-  // --------------------------------------------------------------------------
   // getReviewsForFiles — facade method
-  // --------------------------------------------------------------------------
 
   it("getReviewsForFiles returns reviews whose files overlap with input", async () => {
-    await store.appendReview(makeReview({
-      review_id: "rev_files_001",
-      files: ["src/a.ts", "src/b.ts"],
-    }));
-    await store.appendReview(makeReview({
-      review_id: "rev_files_002",
-      files: ["src/c.ts"],
-    }));
+    await store.appendReview(
+      makeReview({
+        files: ["src/a.ts", "src/b.ts"],
+        review_id: "rev_files_001",
+      }),
+    );
+    await store.appendReview(
+      makeReview({
+        files: ["src/c.ts"],
+        review_id: "rev_files_002",
+      }),
+    );
 
     const results = await store.getReviewsForFiles(["src/a.ts"]);
     expect(results).toHaveLength(1);

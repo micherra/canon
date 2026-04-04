@@ -31,10 +31,10 @@ vi.mock("../tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
 vi.mock("../orchestration/wave-lifecycle.ts", () => ({
-  createWaveWorktrees: vi.fn(),
-  mergeWaveResults: vi.fn(),
   cleanupWorktrees: vi.fn(),
+  createWaveWorktrees: vi.fn(),
   getProjectDir: vi.fn(),
+  mergeWaveResults: vi.fn(),
 }));
 vi.mock("../orchestration/gate-runner.ts", () => ({
   runGates: vi.fn(),
@@ -43,21 +43,16 @@ vi.mock("../tools/resolve-after-consultations.ts", () => ({
   resolveAfterConsultations: vi.fn(),
 }));
 
+import { syncBoardToStore } from "../orchestration/board-sync.ts";
+import { initExecutionDb } from "../orchestration/execution-schema.ts";
+import { clearStoreCache, ExecutionStore } from "../orchestration/execution-store.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { categorizeFailures } from "../tools/categorize-failures.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { syncBoardToStore } from "../orchestration/board-sync.ts";
-import { categorizeFailures } from "../tools/categorize-failures.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
-import type { Board } from "../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -71,37 +66,37 @@ function makeStore(workspace: string): ExecutionStore {
   const db = initExecutionDb(join(workspace, "orchestration.db"));
   const store = new ExecutionStore(db);
   store.initExecution({
-    flow: "test-flow",
-    task: "build feature",
-    entry: "research",
-    current_state: "research",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
     branch: "feat/test",
-    sanitized: "feat-test",
     created: new Date().toISOString(),
-    tier: "medium",
+    current_state: "research",
+    entry: "research",
+    flow: "test-flow",
     flow_name: "test-flow",
+    last_updated: new Date().toISOString(),
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: new Date().toISOString(),
+    task: "build feature",
+    tier: "medium",
   });
   return store;
 }
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {
-    flow: "test-flow",
-    task: "build feature",
-    entry: "research",
-    current_state: "research",
     base_commit: "abc123",
-    started: "2026-01-01T00:00:00.000Z",
-    last_updated: "2026-01-01T00:00:00.000Z",
     blocked: null,
     concerns: [],
-    skipped: [],
-    states: {},
+    current_state: "research",
+    entry: "research",
+    flow: "test-flow",
     iterations: {},
+    last_updated: "2026-01-01T00:00:00.000Z",
+    skipped: [],
+    started: "2026-01-01T00:00:00.000Z",
+    states: {},
+    task: "build feature",
     ...overrides,
   };
 }
@@ -110,18 +105,18 @@ function makeEnterResult(
   overrides: Partial<EnterAndPrepareStateResult> = {},
 ): ToolResult<EnterAndPrepareStateResult> {
   return {
-    ok: true,
     can_enter: true,
-    iteration_count: 1,
-    max_iterations: 3,
     cannot_fix_items: [],
     history: [],
+    iteration_count: 1,
+    max_iterations: 3,
+    ok: true,
     prompts: [
       {
         agent: "canon:canon-researcher",
         prompt: "Do task",
-        template_paths: [],
         role: "main",
+        template_paths: [],
       },
     ],
     state_type: "single",
@@ -131,13 +126,13 @@ function makeEnterResult(
 
 function makeReportResult(nextState: string | null, overrides: Record<string, unknown> = {}) {
   return {
-    ok: true,
-    transition_condition: "done",
-    next_state: nextState,
-    stuck: false,
-    hitl_required: false,
     board: makeBoard({ current_state: nextState ?? "terminal" }),
+    hitl_required: false,
     log_entry: {},
+    next_state: nextState,
+    ok: true,
+    stuck: false,
+    transition_condition: "done",
     ...overrides,
   };
 }
@@ -145,17 +140,15 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.resetAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // Gap 1: Multi-hop skip loop (3+ consecutive skips)
 // Task-03 declared gap: "Multi-hop skip loop — tested single skip; a chain of 3+ skips is not
 // explicitly tested. Logic is covered by the loop, but integration confirmation would add confidence."
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
   it("auto-advances through a chain of 3 consecutive skipped states", async () => {
@@ -163,44 +156,44 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
     makeStore(workspace);
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "multi-skip flow",
       entry: "research",
+      name: "test-flow",
       spawn_instructions: {
+        implement: "Implement",
         research: "Do research",
         "skip-a": "Skip A",
         "skip-b": "Skip B",
         "skip-c": "Skip C",
-        implement: "Implement",
       },
       states: {
-        research: {
-          type: "single",
-          agent: "canon:canon-researcher",
-          transitions: { done: "skip-a" },
-        },
-        "skip-a": {
-          type: "single",
-          agent: "canon:canon-researcher",
-          transitions: { done: "skip-b", skipped: "skip-b" },
-          skip_when: "no_contract_changes" as const,
-        },
-        "skip-b": {
-          type: "single",
-          agent: "canon:canon-researcher",
-          transitions: { done: "skip-c", skipped: "skip-c" },
-          skip_when: "no_contract_changes" as const,
-        },
-        "skip-c": {
-          type: "single",
-          agent: "canon:canon-security",
-          transitions: { done: "implement", skipped: "implement" },
-          skip_when: "no_fix_requested" as const,
-        },
         implement: {
-          type: "single",
           agent: "canon:canon-implementor",
           transitions: { done: "terminal" },
+          type: "single",
+        },
+        research: {
+          agent: "canon:canon-researcher",
+          transitions: { done: "skip-a" },
+          type: "single",
+        },
+        "skip-a": {
+          agent: "canon:canon-researcher",
+          skip_when: "no_contract_changes" as const,
+          transitions: { done: "skip-b", skipped: "skip-b" },
+          type: "single",
+        },
+        "skip-b": {
+          agent: "canon:canon-researcher",
+          skip_when: "no_contract_changes" as const,
+          transitions: { done: "skip-c", skipped: "skip-c" },
+          type: "single",
+        },
+        "skip-c": {
+          agent: "canon:canon-security",
+          skip_when: "no_fix_requested" as const,
+          transitions: { done: "implement", skipped: "implement" },
+          type: "single",
         },
         terminal: { type: "terminal" },
       },
@@ -211,31 +204,53 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("skip-a") as never);
     // skip-a: skip
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
-      makeEnterResult({ can_enter: true, skip_reason: "skip-a condition met", prompts: [], state_type: "single" }),
+      makeEnterResult({
+        can_enter: true,
+        prompts: [],
+        skip_reason: "skip-a condition met",
+        state_type: "single",
+      }),
     );
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("skip-b") as never);
     // skip-b: skip
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
-      makeEnterResult({ can_enter: true, skip_reason: "skip-b condition met", prompts: [], state_type: "single" }),
+      makeEnterResult({
+        can_enter: true,
+        prompts: [],
+        skip_reason: "skip-b condition met",
+        state_type: "single",
+      }),
     );
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("skip-c") as never);
     // skip-c: skip
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
-      makeEnterResult({ can_enter: true, skip_reason: "skip-c condition met", prompts: [], state_type: "single" }),
+      makeEnterResult({
+        can_enter: true,
+        prompts: [],
+        skip_reason: "skip-c condition met",
+        state_type: "single",
+      }),
     );
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement") as never);
     // implement: actual work
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-implementor", prompt: "Implement", template_paths: [], role: "main" }],
+        prompts: [
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
+        ],
         state_type: "single",
       }),
     );
 
     const result = await driveFlow({
-      workspace,
       flow,
       result: { state_id: "research", status: "done" },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -248,9 +263,9 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
     // reportResult was called 4 times: research + skip-a + skip-b + skip-c
     expect(vi.mocked(reportResult)).toHaveBeenCalledTimes(4);
     // 3 of those should be skipped
-    const skipCalls = vi.mocked(reportResult).mock.calls.filter(
-      (call) => call[0].status_keyword === "skipped",
-    );
+    const skipCalls = vi
+      .mocked(reportResult)
+      .mock.calls.filter((call) => call[0].status_keyword === "skipped");
     expect(skipCalls).toHaveLength(3);
   });
 
@@ -260,24 +275,24 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
 
     // Chain ends at terminal state directly after skip
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "skip-to-terminal flow",
       entry: "research",
+      name: "test-flow",
       spawn_instructions: {
         research: "Do research",
         "skip-state": "Skip state",
       },
       states: {
         research: {
-          type: "single",
           agent: "canon:canon-researcher",
           transitions: { done: "skip-state" },
+          type: "single",
         },
         "skip-state": {
-          type: "single",
           agent: "canon:canon-security",
-          transitions: { done: "terminal", skipped: "terminal" },
           skip_when: "auto_approved" as const,
+          transitions: { done: "terminal", skipped: "terminal" },
+          type: "single",
         },
         terminal: { type: "terminal" },
       },
@@ -285,15 +300,20 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
 
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("skip-state") as never);
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
-      makeEnterResult({ can_enter: true, skip_reason: "auto_approved", prompts: [], state_type: "single" }),
+      makeEnterResult({
+        can_enter: true,
+        prompts: [],
+        skip_reason: "auto_approved",
+        state_type: "single",
+      }),
     );
     // After skip, next_state = terminal
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("terminal") as never);
 
     const result = await driveFlow({
-      workspace,
       flow,
       result: { state_id: "research", status: "done" },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -304,10 +324,8 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Gap 2: WORKSPACE_NOT_FOUND when workspace exists but has no board
 // Task-03/06: only tests for entirely missing workspace path, not missing execution row
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — workspace exists but no board execution", () => {
   it("returns WORKSPACE_NOT_FOUND when workspace directory exists but store has no execution", async () => {
@@ -316,17 +334,21 @@ describe("driveFlow — workspace exists but no board execution", () => {
     initExecutionDb(join(workspace, "orchestration.db"));
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "research",
+      name: "test-flow",
       spawn_instructions: { research: "research" },
       states: {
-        research: { type: "single", agent: "canon:canon-researcher", transitions: { done: "terminal" } },
+        research: {
+          agent: "canon:canon-researcher",
+          transitions: { done: "terminal" },
+          type: "single",
+        },
         terminal: { type: "terminal" },
       },
     };
 
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;
@@ -335,10 +357,8 @@ describe("driveFlow — workspace exists but no board execution", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Gap 3: buildDoneSummary state counting
 // Task-03: "buildDoneSummary content: tested that action is 'done', not the exact summary string content"
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — buildDoneSummary state counting", () => {
   it("summary reflects done + skipped count vs total states in board", async () => {
@@ -346,24 +366,36 @@ describe("driveFlow — buildDoneSummary state counting", () => {
     const store = makeStore(workspace);
     store.updateExecution({ current_state: "terminal" });
     // Manually populate state rows with mixed statuses
-    store.upsertState("research", { status: "done", entries: 1 });
-    store.upsertState("implement", { status: "skipped", entries: 0 });
-    store.upsertState("review", { status: "pending", entries: 0 });
+    store.upsertState("research", { entries: 1, status: "done" });
+    store.upsertState("implement", { entries: 0, status: "skipped" });
+    store.upsertState("review", { entries: 0, status: "pending" });
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "research",
-      spawn_instructions: { research: "research", implement: "implement", review: "review" },
+      name: "test-flow",
+      spawn_instructions: { implement: "implement", research: "research", review: "review" },
       states: {
-        research: { type: "single", agent: "canon:canon-researcher", transitions: { done: "terminal" } },
-        implement: { type: "single", agent: "canon:canon-implementor", transitions: { done: "terminal" } },
-        review: { type: "single", agent: "canon:canon-reviewer", transitions: { done: "terminal" } },
+        implement: {
+          agent: "canon:canon-implementor",
+          transitions: { done: "terminal" },
+          type: "single",
+        },
+        research: {
+          agent: "canon:canon-researcher",
+          transitions: { done: "terminal" },
+          type: "single",
+        },
+        review: {
+          agent: "canon:canon-reviewer",
+          transitions: { done: "terminal" },
+          type: "single",
+        },
         terminal: { type: "terminal" },
       },
     };
 
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -376,10 +408,8 @@ describe("driveFlow — buildDoneSummary state counting", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Gap 4: syncBoardToStore skipped field propagation
 // board-sync.test.ts does not test that the skipped field is persisted
-// ---------------------------------------------------------------------------
 
 describe("syncBoardToStore — skipped field", () => {
   it("persists the skipped array to execution store", () => {
@@ -420,11 +450,9 @@ describe("syncBoardToStore — skipped field", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Gap 5: SpawnRequest item as object with task_id key
 // Task-03: "SpawnRequest task_id from structured item: only the string path is exercised in tests.
 // The object path is a passthrough."
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — SpawnRequest item as object with task_id", () => {
   it("extracts task_id from item object when item is { task_id: string }", async () => {
@@ -432,37 +460,44 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
     makeStore(workspace);
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce({
-      ok: true,
       can_enter: true,
-      iteration_count: 1,
-      max_iterations: 3,
       cannot_fix_items: [],
       history: [],
+      iteration_count: 1,
+      max_iterations: 3,
+      ok: true,
       prompts: [
         {
           agent: "canon:canon-implementor",
-          prompt: "Implement task",
-          template_paths: [],
-          role: "implementor",
           // item is an object (not a string)
-          item: { task_id: "task-structured-01", description: "structured task" } as unknown as string,
+          item: {
+            description: "structured task",
+            task_id: "task-structured-01",
+          } as unknown as string,
+          prompt: "Implement task",
+          role: "implementor",
+          template_paths: [],
         },
       ],
       state_type: "single",
     });
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "research",
+      name: "test-flow",
       spawn_instructions: { research: "research" },
       states: {
-        research: { type: "single", agent: "canon:canon-implementor", transitions: { done: "terminal" } },
+        research: {
+          agent: "canon:canon-implementor",
+          transitions: { done: "terminal" },
+          type: "single",
+        },
         terminal: { type: "terminal" },
       },
     };
 
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -478,37 +513,41 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
     makeStore(workspace);
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce({
-      ok: true,
       can_enter: true,
-      iteration_count: 1,
-      max_iterations: 3,
       cannot_fix_items: [],
       history: [],
+      iteration_count: 1,
+      max_iterations: 3,
+      ok: true,
       prompts: [
         {
           agent: "canon:canon-implementor",
-          prompt: "Implement task",
-          template_paths: [],
-          role: "implementor",
           // item is an object without task_id
           item: { description: "no task_id here" } as unknown as string,
+          prompt: "Implement task",
+          role: "implementor",
+          template_paths: [],
         },
       ],
       state_type: "single",
     });
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "research",
+      name: "test-flow",
       spawn_instructions: { research: "research" },
       states: {
-        research: { type: "single", agent: "canon:canon-implementor", transitions: { done: "terminal" } },
+        research: {
+          agent: "canon:canon-implementor",
+          transitions: { done: "terminal" },
+          type: "single",
+        },
         terminal: { type: "terminal" },
       },
     };
 
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -519,11 +558,9 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Gap 6: categorizeFailures — uncategorized count boundary
 // Task-05: No test for the case where exactly 1 uncategorized failure (does NOT trigger needs_refinement)
 // vs. 2 uncategorized failures (DOES trigger needs_refinement)
-// ---------------------------------------------------------------------------
 
 describe("categorizeFailures — uncategorized count boundary", () => {
   it("needs_refinement is true when 2+ failures have no partial signal (truly uncategorized)", async () => {
@@ -531,11 +568,11 @@ describe("categorizeFailures — uncategorized count boundary", () => {
     // they are truly uncategorized and do NOT become singleton categories.
     // uncategorized.length > 1 → needs_refinement true.
     const result = await categorizeFailures({
-      workspace: "/tmp/test",
       failures: [
-        { file: "a/foo.test.ts", error_message: "unique error alpha" },
-        { file: "b/bar.test.ts", error_message: "unique error beta" },
+        { error_message: "unique error alpha", file: "a/foo.test.ts" },
+        { error_message: "unique error beta", file: "b/bar.test.ts" },
       ],
+      workspace: "/tmp/test",
     });
 
     expect(result.ok).toBe(true);
@@ -550,11 +587,11 @@ describe("categorizeFailures — uncategorized count boundary", () => {
   it("needs_refinement flag is driven by confidence < 0.8, not uncategorized count (singletons prevent accumulation)", async () => {
     // 2 failures in same dir, no common substring → confidence 0.7 → needs_refinement: true
     const result = await categorizeFailures({
-      workspace: "/tmp/test",
       failures: [
-        { file: "src/tools/foo.test.ts", error_message: "TypeError: cannot read x" },
-        { file: "src/tools/bar.test.ts", error_message: "ReferenceError: y is not defined" },
+        { error_message: "TypeError: cannot read x", file: "src/tools/foo.test.ts" },
+        { error_message: "ReferenceError: y is not defined", file: "src/tools/bar.test.ts" },
       ],
+      workspace: "/tmp/test",
     });
 
     expect(result.ok).toBe(true);
@@ -566,39 +603,49 @@ describe("categorizeFailures — uncategorized count boundary", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Gap 7: categorizeFailures — integration with driveFlow context
 // task-06 gap: "no integration test with a real MCP tool registration"
 // Verify the tool is importable and callable as a standalone function (unit-level registration check)
-// ---------------------------------------------------------------------------
 
 describe("categorizeFailures — cross-module contract with driveFlow consumer pattern", () => {
   it("returns structured categories that the orchestrator can fan-out fixers from", async () => {
     // Simulates the consumer pattern: tester reports failures → categorizeFailures groups them
     // → orchestrator uses groups to fan-out parallel fixers
     const result = await categorizeFailures({
-      workspace: "/tmp/test-workspace",
       failures: [
-        { file: "src/tools/drive-flow.ts", error_message: "TypeError: Cannot read property 'ok'", error_type: "TypeError" },
-        { file: "src/tools/categorize-failures.ts", error_message: "TypeError: Cannot read property 'ok'", error_type: "TypeError" },
-        { file: "src/orchestration/board-sync.ts", error_message: "ReferenceError: store is not defined", error_type: "ReferenceError" },
+        {
+          error_message: "TypeError: Cannot read property 'ok'",
+          error_type: "TypeError",
+          file: "src/tools/drive-flow.ts",
+        },
+        {
+          error_message: "TypeError: Cannot read property 'ok'",
+          error_type: "TypeError",
+          file: "src/tools/categorize-failures.ts",
+        },
+        {
+          error_message: "ReferenceError: store is not defined",
+          error_type: "ReferenceError",
+          file: "src/orchestration/board-sync.ts",
+        },
       ],
+      workspace: "/tmp/test-workspace",
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
     // Exact error match should group the two TypeError failures
-    const typeErrorGroup = result.categories.find(
-      (c) => c.entries.every((e) => e.error_message === "TypeError: Cannot read property 'ok'"),
+    const typeErrorGroup = result.categories.find((c) =>
+      c.entries.every((e) => e.error_message === "TypeError: Cannot read property 'ok'"),
     );
     expect(typeErrorGroup).toBeDefined();
     expect(typeErrorGroup?.confidence).toBe(0.95);
     expect(typeErrorGroup?.entries).toHaveLength(2);
 
     // ReferenceError should be singletonized
-    const refErrorGroup = result.categories.find(
-      (c) => c.entries.some((e) => e.error_type === "ReferenceError"),
+    const refErrorGroup = result.categories.find((c) =>
+      c.entries.some((e) => e.error_type === "ReferenceError"),
     );
     expect(refErrorGroup).toBeDefined();
 
@@ -614,11 +661,10 @@ describe("categorizeFailures — cross-module contract with driveFlow consumer p
     // When LLM provides refined categories, ensure entries are correctly populated
     // even when multiple failures share the same file path
     const result = await categorizeFailures({
-      workspace: "/tmp/test",
       failures: [
-        { file: "src/tools/drive-flow.ts", error_message: "Error A" },
-        { file: "src/tools/drive-flow.ts", error_message: "Error B" },
-        { file: "src/tools/categorize-failures.ts", error_message: "Error C" },
+        { error_message: "Error A", file: "src/tools/drive-flow.ts" },
+        { error_message: "Error B", file: "src/tools/drive-flow.ts" },
+        { error_message: "Error C", file: "src/tools/categorize-failures.ts" },
       ],
       refined_categories: [
         {
@@ -627,6 +673,7 @@ describe("categorizeFailures — cross-module contract with driveFlow consumer p
           files: ["src/tools/drive-flow.ts"],
         },
       ],
+      workspace: "/tmp/test",
     });
 
     expect(result.ok).toBe(true);
@@ -641,11 +688,9 @@ describe("categorizeFailures — cross-module contract with driveFlow consumer p
   });
 });
 
-// ---------------------------------------------------------------------------
 // Gap 8: driveFlow — board.current_state when result has no agent_session_id
 // The agent_session_id is optional; ensure driveFlow doesn't throw when absent
 // (Implicit test of the conditional guard in drive-flow.ts line 96)
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — result without agent_session_id", () => {
   it("does not throw and advances normally when result has no agent_session_id", async () => {
@@ -655,28 +700,43 @@ describe("driveFlow — result without agent_session_id", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement") as never);
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-implementor", prompt: "Implement", template_paths: [], role: "main" }],
+        prompts: [
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
+        ],
         state_type: "single",
       }),
     );
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "research",
-      spawn_instructions: { research: "research", implement: "implement" },
+      name: "test-flow",
+      spawn_instructions: { implement: "implement", research: "research" },
       states: {
-        research: { type: "single", agent: "canon:canon-researcher", transitions: { done: "implement" } },
-        implement: { type: "single", agent: "canon:canon-implementor", transitions: { done: "terminal" } },
+        implement: {
+          agent: "canon:canon-implementor",
+          transitions: { done: "terminal" },
+          type: "single",
+        },
+        research: {
+          agent: "canon:canon-researcher",
+          transitions: { done: "implement" },
+          type: "single",
+        },
         terminal: { type: "terminal" },
       },
     };
 
     // result has no agent_session_id field
     const result = await driveFlow({
-      workspace,
       flow,
       result: { state_id: "research", status: "done" },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -687,10 +747,8 @@ describe("driveFlow — result without agent_session_id", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Gap 9: syncBoardToStore — metadata field propagation
 // board-sync.test.ts does not test metadata field
-// ---------------------------------------------------------------------------
 
 describe("syncBoardToStore — metadata field", () => {
   it("persists board metadata object to execution store", () => {

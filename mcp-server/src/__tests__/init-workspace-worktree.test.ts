@@ -19,11 +19,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "fast-path",
     description: "test",
     entry: "build",
-    states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
+    name: "fast-path",
     spawn_instructions: {},
+    states: {
+      build: { transitions: { done: "done" }, type: "single" },
+      done: { type: "terminal" },
+    },
   }),
 }));
 
@@ -52,29 +55,31 @@ function initGitRepo(dir: string): string {
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
 const baseInput = {
+  base_commit: "abc123",
+  branch: "main",
   flow_name: "fast-path",
   task: "fix the bug",
-  branch: "main",
-  base_commit: "abc123",
   tier: "small" as const,
 };
 
-// ---------------------------------------------------------------------------
 // New workspace: worktree creation
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — worktree creation on new workspace", () => {
   it("returns worktree_path pointing inside .canon/worktrees/{slug}", async () => {
     const projectDir = makeTmpProjectDir();
     const baseCommit = initGitRepo(projectDir);
 
-    const result = await initWorkspaceFlow({ ...baseInput, base_commit: baseCommit }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
 
     expect(result.created).toBe(true);
     expect(result.worktree_path).toBeDefined();
@@ -86,7 +91,11 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
     const projectDir = makeTmpProjectDir();
     const baseCommit = initGitRepo(projectDir);
 
-    const result = await initWorkspaceFlow({ ...baseInput, base_commit: baseCommit }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
 
     expect(result.created).toBe(true);
     expect(result.worktree_branch).toBe(`canon-build/${result.slug}`);
@@ -96,7 +105,11 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
     const projectDir = makeTmpProjectDir();
     const baseCommit = initGitRepo(projectDir);
 
-    const result = await initWorkspaceFlow({ ...baseInput, base_commit: baseCommit }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
 
     expect(result.worktree_path).toBeDefined();
     expect(existsSync(result.worktree_path!)).toBe(true);
@@ -106,16 +119,18 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
     const projectDir = makeTmpProjectDir();
     const baseCommit = initGitRepo(projectDir);
 
-    const result = await initWorkspaceFlow({ ...baseInput, base_commit: baseCommit }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
 
     expect(result.session.worktree_path).toBe(result.worktree_path);
     expect(result.session.worktree_branch).toBe(result.worktree_branch);
   });
 });
 
-// ---------------------------------------------------------------------------
 // Resume: worktree detection
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — resume with existing worktree", () => {
   it("returns worktree_path when worktree still exists", async () => {
@@ -123,12 +138,20 @@ describe("initWorkspaceFlow — resume with existing worktree", () => {
     const baseCommit = initGitRepo(projectDir);
 
     // Create workspace first
-    const first = await initWorkspaceFlow({ ...baseInput, base_commit: baseCommit }, projectDir, "/fake/plugin");
+    const first = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
     expect(first.created).toBe(true);
     expect(first.worktree_path).toBeDefined();
 
     // Resume — worktree should still exist
-    const second = await initWorkspaceFlow({ ...baseInput, base_commit: baseCommit }, projectDir, "/fake/plugin");
+    const second = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
     expect(second.created).toBe(false);
     expect(second.worktree_path).toBeDefined();
     expect(second.worktree_path).toBe(first.worktree_path);
@@ -139,7 +162,11 @@ describe("initWorkspaceFlow — resume with existing worktree", () => {
     const baseCommit = initGitRepo(projectDir);
 
     // Create workspace first
-    const first = await initWorkspaceFlow({ ...baseInput, base_commit: baseCommit }, projectDir, "/fake/plugin");
+    const first = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
     expect(first.created).toBe(true);
 
     // Forcibly remove the worktree directory (simulating manual removal)
@@ -149,16 +176,18 @@ describe("initWorkspaceFlow — resume with existing worktree", () => {
     }
 
     // Resume — worktree should be detected as missing
-    const second = await initWorkspaceFlow({ ...baseInput, base_commit: baseCommit }, projectDir, "/fake/plugin");
+    const second = await initWorkspaceFlow(
+      { ...baseInput, base_commit: baseCommit },
+      projectDir,
+      "/fake/plugin",
+    );
     expect(second.created).toBe(false);
     expect(second.worktree_path).toBeUndefined();
     expect(second.worktree_branch).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // Preflight-only: no worktree creation
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — preflight skips worktree creation", () => {
   it("does not create a worktree when preflight returns issues", async () => {
@@ -174,7 +203,11 @@ describe("initWorkspaceFlow — preflight skips worktree creation", () => {
     // Create dirty state
     writeFileSync(join(projectDir, "dirty.txt"), "uncommitted change");
 
-    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, preflight: true },
+      projectDir,
+      "/fake/plugin",
+    );
 
     expect(result.preflight_issues).toBeDefined();
     expect(result.preflight_issues!.length).toBeGreaterThan(0);
@@ -186,9 +219,7 @@ describe("initWorkspaceFlow — preflight skips worktree creation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Graceful fallback when worktree creation fails
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — worktree creation failure fallback", () => {
   it("returns result without worktree_path when not in a git repo", async () => {
@@ -209,9 +240,7 @@ describe("initWorkspaceFlow — worktree creation failure fallback", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Backward compat: existing behavior preserved
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — backward compat", () => {
   it("returns all existing fields regardless of worktree presence", async () => {
@@ -228,6 +257,8 @@ describe("initWorkspaceFlow — backward compat", () => {
 
     // worktree_path is optional — callers that ignore it still work
     // (value may be string or undefined — both acceptable)
-    expect(typeof result.worktree_path === "string" || result.worktree_path === undefined).toBe(true);
+    expect(typeof result.worktree_path === "string" || result.worktree_path === undefined).toBe(
+      true,
+    );
   });
 });

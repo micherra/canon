@@ -37,16 +37,16 @@ describe("normalizeStatus", () => {
 describe("evaluateTransition", () => {
   it("returns target state when condition matches", () => {
     const state: StateDefinition = {
+      transitions: { blocked: "error_state", done: "next_state" },
       type: "single",
-      transitions: { done: "next_state", blocked: "error_state" },
     };
     expect(evaluateTransition(state, "done")).toBe("next_state");
   });
 
   it("returns null when condition does not match", () => {
     const state: StateDefinition = {
-      type: "single",
       transitions: { done: "next_state" },
+      type: "single",
     };
     expect(evaluateTransition(state, "blocked")).toBeNull();
   });
@@ -61,9 +61,9 @@ describe("evaluateTransition", () => {
 
 describe("applyReviewThresholdToCondition", () => {
   const transitions = {
+    blocking: "block_state",
     clean: "next",
     warning: "warn_state",
-    blocking: "block_state",
   };
 
   it("upgrades warning to blocking when threshold is warning", () => {
@@ -90,12 +90,12 @@ describe("applyReviewThresholdToCondition", () => {
 describe("buildHistoryEntry", () => {
   it("builds same_violations entry", () => {
     const entry = buildHistoryEntry("same_violations", {
-      principleIds: ["p1", "p2"],
       filePaths: ["a.ts", "b.ts"],
+      principleIds: ["p1", "p2"],
     });
     expect(entry).toEqual({
-      principle_ids: ["p1", "p2"],
       file_paths: ["a.ts", "b.ts"],
+      principle_ids: ["p1", "p2"],
     });
   });
 
@@ -115,10 +115,10 @@ describe("buildHistoryEntry", () => {
 
   it("builds no_progress entry", () => {
     const entry = buildHistoryEntry("no_progress", {
-      commitSha: "abc123",
       artifactCount: 5,
+      commitSha: "abc123",
     });
-    expect(entry).toEqual({ commit_sha: "abc123", artifact_count: 5 });
+    expect(entry).toEqual({ artifact_count: 5, commit_sha: "abc123" });
   });
 });
 
@@ -131,16 +131,16 @@ describe("isStuck", () => {
   describe("same_violations", () => {
     it("returns true when violations match", () => {
       const history = [
-        { principle_ids: ["p1", "p2"], file_paths: ["a.ts"] },
-        { principle_ids: ["p2", "p1"], file_paths: ["a.ts"] },
+        { file_paths: ["a.ts"], principle_ids: ["p1", "p2"] },
+        { file_paths: ["a.ts"], principle_ids: ["p2", "p1"] },
       ];
       expect(isStuck(history, "same_violations")).toBe(true);
     });
 
     it("returns false when violations differ", () => {
       const history = [
-        { principle_ids: ["p1", "p2"], file_paths: ["a.ts"] },
-        { principle_ids: ["p1"], file_paths: ["a.ts"] },
+        { file_paths: ["a.ts"], principle_ids: ["p1", "p2"] },
+        { file_paths: ["a.ts"], principle_ids: ["p1"] },
       ];
       expect(isStuck(history, "same_violations")).toBe(false);
     });
@@ -202,16 +202,16 @@ describe("isStuck", () => {
   describe("no_progress", () => {
     it("returns true when commit and artifact count match", () => {
       const history = [
-        { commit_sha: "abc", artifact_count: 3 },
-        { commit_sha: "abc", artifact_count: 3 },
+        { artifact_count: 3, commit_sha: "abc" },
+        { artifact_count: 3, commit_sha: "abc" },
       ];
       expect(isStuck(history, "no_progress")).toBe(true);
     });
 
     it("returns false when commit differs", () => {
       const history = [
-        { commit_sha: "abc", artifact_count: 3 },
-        { commit_sha: "def", artifact_count: 3 },
+        { artifact_count: 3, commit_sha: "abc" },
+        { artifact_count: 3, commit_sha: "def" },
       ];
       expect(isStuck(history, "no_progress")).toBe(false);
     });
@@ -221,20 +221,20 @@ describe("isStuck", () => {
 describe("aggregateParallelPerResults", () => {
   it("returns done when all results are done", () => {
     const results = [
-      { status: "done", item: "a" },
-      { status: "done", item: "b" },
+      { item: "a", status: "done" },
+      { item: "b", status: "done" },
     ];
     expect(aggregateParallelPerResults(results)).toEqual({
-      condition: "done",
       cannotFixItems: [],
+      condition: "done",
     });
   });
 
   it("returns done with cannotFixItems for mixed results", () => {
     const results = [
-      { status: "done", item: "a" },
-      { status: "cannot_fix", item: "b" },
-      { status: "done", item: "c" },
+      { item: "a", status: "done" },
+      { item: "b", status: "cannot_fix" },
+      { item: "c", status: "done" },
     ];
     const result = aggregateParallelPerResults(results);
     expect(result.condition).toBe("done");
@@ -243,8 +243,8 @@ describe("aggregateParallelPerResults", () => {
 
   it("returns cannot_fix when all results are cannot_fix", () => {
     const results = [
-      { status: "cannot_fix", item: "a" },
-      { status: "cannot_fix", item: "b" },
+      { item: "a", status: "cannot_fix" },
+      { item: "b", status: "cannot_fix" },
     ];
     const result = aggregateParallelPerResults(results);
     expect(result.condition).toBe("cannot_fix");
@@ -253,13 +253,13 @@ describe("aggregateParallelPerResults", () => {
 
   it("returns blocked when any result is blocked", () => {
     const results = [
-      { status: "done", item: "a" },
-      { status: "blocked", item: "b" },
-      { status: "cannot_fix", item: "c" },
+      { item: "a", status: "done" },
+      { item: "b", status: "blocked" },
+      { item: "c", status: "cannot_fix" },
     ];
     expect(aggregateParallelPerResults(results)).toEqual({
-      condition: "blocked",
       cannotFixItems: [],
+      condition: "blocked",
     });
   });
 });

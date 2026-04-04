@@ -3,19 +3,22 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { evaluatePostconditions, resolvePostconditions } from "../orchestration/contract-checker.ts";
+import {
+  evaluatePostconditions,
+  resolvePostconditions,
+} from "../orchestration/contract-checker.ts";
 import type { PostconditionAssertion } from "../orchestration/flow-schema.ts";
 
 describe("resolvePostconditions", () => {
   it("returns explicit assertions when both provided", () => {
-    const explicit: PostconditionAssertion[] = [{ type: "file_exists", target: "foo.ts" }];
-    const discovered: PostconditionAssertion[] = [{ type: "file_exists", target: "bar.ts" }];
+    const explicit: PostconditionAssertion[] = [{ target: "foo.ts", type: "file_exists" }];
+    const discovered: PostconditionAssertion[] = [{ target: "bar.ts", type: "file_exists" }];
     const result = resolvePostconditions(explicit, discovered);
     expect(result).toEqual(explicit);
   });
 
   it("returns discovered when no explicit assertions", () => {
-    const discovered: PostconditionAssertion[] = [{ type: "file_exists", target: "bar.ts" }];
+    const discovered: PostconditionAssertion[] = [{ target: "bar.ts", type: "file_exists" }];
     const result = resolvePostconditions(undefined, discovered);
     expect(result).toEqual(discovered);
   });
@@ -27,7 +30,7 @@ describe("resolvePostconditions", () => {
   });
 
   it("returns discovered when explicit is empty array", () => {
-    const discovered: PostconditionAssertion[] = [{ type: "file_exists", target: "bar.ts" }];
+    const discovered: PostconditionAssertion[] = [{ target: "bar.ts", type: "file_exists" }];
     const result = resolvePostconditions([], discovered);
     expect(result).toEqual(discovered);
   });
@@ -38,23 +41,23 @@ describe("resolvePostconditions", () => {
 
   it("strips bash_check entries from discovered postconditions", () => {
     const discovered: PostconditionAssertion[] = [
-      { type: "file_exists", target: "foo.ts" },
-      { type: "bash_check", command: "echo injected" },
-      { type: "pattern_match", target: "bar.ts", pattern: "hello" },
-      { type: "bash_check", command: "npm test" },
+      { target: "foo.ts", type: "file_exists" },
+      { command: "echo injected", type: "bash_check" },
+      { pattern: "hello", target: "bar.ts", type: "pattern_match" },
+      { command: "npm test", type: "bash_check" },
     ];
     const result = resolvePostconditions(undefined, discovered);
     // bash_check entries must be stripped — only safe types remain
     expect(result).toHaveLength(2);
     expect(result.every((a) => a.type !== "bash_check")).toBe(true);
-    expect(result[0]).toEqual({ type: "file_exists", target: "foo.ts" });
-    expect(result[1]).toEqual({ type: "pattern_match", target: "bar.ts", pattern: "hello" });
+    expect(result[0]).toEqual({ target: "foo.ts", type: "file_exists" });
+    expect(result[1]).toEqual({ pattern: "hello", target: "bar.ts", type: "pattern_match" });
   });
 
   it("returns empty array when discovered contains only bash_check entries", () => {
     const discovered: PostconditionAssertion[] = [
-      { type: "bash_check", command: "npm test" },
-      { type: "bash_check", command: "echo hello" },
+      { command: "npm test", type: "bash_check" },
+      { command: "echo hello", type: "bash_check" },
     ];
     const result = resolvePostconditions(undefined, discovered);
     expect(result).toEqual([]);
@@ -62,8 +65,8 @@ describe("resolvePostconditions", () => {
 
   it("does NOT strip bash_check from explicit (YAML-committed) postconditions", () => {
     const explicit: PostconditionAssertion[] = [
-      { type: "bash_check", command: "npm test" },
-      { type: "file_exists", target: "foo.ts" },
+      { command: "npm test", type: "bash_check" },
+      { target: "foo.ts", type: "file_exists" },
     ];
     const result = resolvePostconditions(explicit, undefined);
     // Explicit YAML entries pass through unchanged — bash_check in YAML is allowed
@@ -80,12 +83,12 @@ describe("evaluatePostconditions — file_exists", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("passes when file exists", async () => {
     await writeFile(join(tmpDir, "target.ts"), "export const x = 1;");
-    const assertions: PostconditionAssertion[] = [{ type: "file_exists", target: "target.ts" }];
+    const assertions: PostconditionAssertion[] = [{ target: "target.ts", type: "file_exists" }];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results).toHaveLength(1);
     expect(results[0].passed).toBe(true);
@@ -94,7 +97,7 @@ describe("evaluatePostconditions — file_exists", () => {
   });
 
   it("fails when file does not exist", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "file_exists", target: "missing.ts" }];
+    const assertions: PostconditionAssertion[] = [{ target: "missing.ts", type: "file_exists" }];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(false);
     expect(results[0].name).toBe("postcondition-0-file_exists");
@@ -121,7 +124,7 @@ describe("evaluatePostconditions — file_changed", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("passes when file has changed since base commit", async () => {
@@ -131,7 +134,7 @@ describe("evaluatePostconditions — file_changed", () => {
     execSync("git add .", { cwd: tmpDir });
     execSync('git commit -m "change"', { cwd: tmpDir });
 
-    const assertions: PostconditionAssertion[] = [{ type: "file_changed", target: "initial.ts" }];
+    const assertions: PostconditionAssertion[] = [{ target: "initial.ts", type: "file_changed" }];
     const results = evaluatePostconditions(assertions, tmpDir, baseCommit);
     expect(results[0].passed).toBe(true);
     expect(results[0].name).toBe("postcondition-0-file_changed");
@@ -144,13 +147,13 @@ describe("evaluatePostconditions — file_changed", () => {
     execSync("git add .", { cwd: tmpDir });
     execSync('git commit -m "other change"', { cwd: tmpDir });
 
-    const assertions: PostconditionAssertion[] = [{ type: "file_changed", target: "initial.ts" }];
+    const assertions: PostconditionAssertion[] = [{ target: "initial.ts", type: "file_changed" }];
     const results = evaluatePostconditions(assertions, tmpDir, baseCommit);
     expect(results[0].passed).toBe(false);
   });
 
   it("fails with descriptive error when no baseCommit provided", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "file_changed", target: "initial.ts" }];
+    const assertions: PostconditionAssertion[] = [{ target: "initial.ts", type: "file_changed" }];
     const results = evaluatePostconditions(assertions, tmpDir, undefined);
     expect(results[0].passed).toBe(false);
     expect(results[0].output).toMatch(/No base commit/);
@@ -165,33 +168,41 @@ describe("evaluatePostconditions — pattern_match", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("passes when pattern matches file content", async () => {
     await writeFile(join(tmpDir, "target.ts"), "export const greeting = 'hello world';");
-    const assertions: PostconditionAssertion[] = [{ type: "pattern_match", target: "target.ts", pattern: "hello" }];
+    const assertions: PostconditionAssertion[] = [
+      { pattern: "hello", target: "target.ts", type: "pattern_match" },
+    ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(true);
   });
 
   it("fails when pattern does not match", async () => {
     await writeFile(join(tmpDir, "target.ts"), "export const x = 1;");
-    const assertions: PostconditionAssertion[] = [{ type: "pattern_match", target: "target.ts", pattern: "goodbye" }];
+    const assertions: PostconditionAssertion[] = [
+      { pattern: "goodbye", target: "target.ts", type: "pattern_match" },
+    ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(false);
   });
 
   it("fails with error message for invalid regex", async () => {
     await writeFile(join(tmpDir, "target.ts"), "export const x = 1;");
-    const assertions: PostconditionAssertion[] = [{ type: "pattern_match", target: "target.ts", pattern: "[invalid" }];
+    const assertions: PostconditionAssertion[] = [
+      { pattern: "[invalid", target: "target.ts", type: "pattern_match" },
+    ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(false);
     expect(results[0].output).toBeTruthy();
   });
 
   it("fails when file does not exist", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "pattern_match", target: "missing.ts", pattern: "hello" }];
+    const assertions: PostconditionAssertion[] = [
+      { pattern: "hello", target: "missing.ts", type: "pattern_match" },
+    ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(false);
   });
@@ -205,12 +216,14 @@ describe("evaluatePostconditions — no_pattern", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("passes when pattern is NOT found in file", async () => {
     await writeFile(join(tmpDir, "target.ts"), "export const x = 1;");
-    const assertions: PostconditionAssertion[] = [{ type: "no_pattern", target: "target.ts", pattern: "TODO" }];
+    const assertions: PostconditionAssertion[] = [
+      { pattern: "TODO", target: "target.ts", type: "no_pattern" },
+    ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(true);
     expect(results[0].name).toBe("postcondition-0-no_pattern");
@@ -218,20 +231,26 @@ describe("evaluatePostconditions — no_pattern", () => {
 
   it("fails when pattern IS found in file", async () => {
     await writeFile(join(tmpDir, "target.ts"), "// TODO: remove this");
-    const assertions: PostconditionAssertion[] = [{ type: "no_pattern", target: "target.ts", pattern: "TODO" }];
+    const assertions: PostconditionAssertion[] = [
+      { pattern: "TODO", target: "target.ts", type: "no_pattern" },
+    ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(false);
   });
 
   it("fails with error for invalid regex", async () => {
     await writeFile(join(tmpDir, "target.ts"), "export const x = 1;");
-    const assertions: PostconditionAssertion[] = [{ type: "no_pattern", target: "target.ts", pattern: "[invalid" }];
+    const assertions: PostconditionAssertion[] = [
+      { pattern: "[invalid", target: "target.ts", type: "no_pattern" },
+    ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(false);
   });
 
   it("fails when file does not exist", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "no_pattern", target: "missing.ts", pattern: "TODO" }];
+    const assertions: PostconditionAssertion[] = [
+      { pattern: "TODO", target: "missing.ts", type: "no_pattern" },
+    ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].passed).toBe(false);
   });
@@ -239,27 +258,35 @@ describe("evaluatePostconditions — no_pattern", () => {
 
 describe("evaluatePostconditions — bash_check", () => {
   it("passes when command exits with code 0", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "bash_check", target: "", command: "echo hello" }];
+    const assertions: PostconditionAssertion[] = [
+      { command: "echo hello", target: "", type: "bash_check" },
+    ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(true);
     expect(results[0].name).toBe("postcondition-0-bash_check");
   });
 
   it("fails when command exits with non-zero code", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "bash_check", target: "", command: "false" }];
+    const assertions: PostconditionAssertion[] = [
+      { command: "false", target: "", type: "bash_check" },
+    ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
   });
 
   it("blocks 'rm' command via denylist", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "bash_check", target: "", command: "rm -rf /" }];
+    const assertions: PostconditionAssertion[] = [
+      { command: "rm -rf /", target: "", type: "bash_check" },
+    ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
     expect(results[0].output).toMatch(/denylist/i);
   });
 
   it("blocks 'sudo' command via denylist", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "bash_check", target: "", command: "sudo something" }];
+    const assertions: PostconditionAssertion[] = [
+      { command: "sudo something", target: "", type: "bash_check" },
+    ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
     expect(results[0].output).toMatch(/denylist/i);
@@ -267,7 +294,7 @@ describe("evaluatePostconditions — bash_check", () => {
 
   it("blocks 'curl' command via denylist", () => {
     const assertions: PostconditionAssertion[] = [
-      { type: "bash_check", target: "", command: "curl http://example.com" },
+      { command: "curl http://example.com", target: "", type: "bash_check" },
     ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
@@ -276,7 +303,7 @@ describe("evaluatePostconditions — bash_check", () => {
 
   it("blocks 'wget' command via denylist", () => {
     const assertions: PostconditionAssertion[] = [
-      { type: "bash_check", target: "", command: "wget http://example.com" },
+      { command: "wget http://example.com", target: "", type: "bash_check" },
     ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
@@ -284,21 +311,27 @@ describe("evaluatePostconditions — bash_check", () => {
   });
 
   it("blocks 'chmod' command via denylist", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "bash_check", target: "", command: "chmod 777 file" }];
+    const assertions: PostconditionAssertion[] = [
+      { command: "chmod 777 file", target: "", type: "bash_check" },
+    ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
     expect(results[0].output).toMatch(/denylist/i);
   });
 
   it("blocks 'chown' command via denylist", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "bash_check", target: "", command: "chown root file" }];
+    const assertions: PostconditionAssertion[] = [
+      { command: "chown root file", target: "", type: "bash_check" },
+    ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
     expect(results[0].output).toMatch(/denylist/i);
   });
 
   it("blocks 'mkfs' command via denylist", () => {
-    const assertions: PostconditionAssertion[] = [{ type: "bash_check", target: "", command: "mkfs.ext4 /dev/sda" }];
+    const assertions: PostconditionAssertion[] = [
+      { command: "mkfs.ext4 /dev/sda", target: "", type: "bash_check" },
+    ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
     expect(results[0].output).toMatch(/denylist/i);
@@ -306,7 +339,7 @@ describe("evaluatePostconditions — bash_check", () => {
 
   it("blocks 'dd' command via denylist", () => {
     const assertions: PostconditionAssertion[] = [
-      { type: "bash_check", target: "", command: "dd if=/dev/zero of=/dev/sda" },
+      { command: "dd if=/dev/zero of=/dev/sda", target: "", type: "bash_check" },
     ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(false);
@@ -315,7 +348,9 @@ describe("evaluatePostconditions — bash_check", () => {
 
   it("does not block commands that merely contain denylist words as substrings", () => {
     // "echo rm-something" — first token is "echo", not "rm"
-    const assertions: PostconditionAssertion[] = [{ type: "bash_check", target: "", command: "echo rm-something" }];
+    const assertions: PostconditionAssertion[] = [
+      { command: "echo rm-something", target: "", type: "bash_check" },
+    ];
     const results = evaluatePostconditions(assertions, process.cwd());
     expect(results[0].passed).toBe(true);
   });
@@ -331,14 +366,14 @@ describe("evaluatePostconditions — result naming", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("names results with correct index and type", () => {
     const assertions: PostconditionAssertion[] = [
-      { type: "file_exists", target: "a.ts" },
-      { type: "file_exists", target: "b.ts" },
-      { type: "file_exists", target: "missing.ts" },
+      { target: "a.ts", type: "file_exists" },
+      { target: "b.ts", type: "file_exists" },
+      { target: "missing.ts", type: "file_exists" },
     ];
     const results = evaluatePostconditions(assertions, tmpDir);
     expect(results[0].name).toBe("postcondition-0-file_exists");

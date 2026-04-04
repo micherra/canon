@@ -5,42 +5,38 @@
  * One behavior per test.
  */
 
-import { describe, it, expect } from "vitest";
-import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
+import { describe, expect, it } from "vitest";
 import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
 import { injectTemplates } from "../../tools/prompt-pipeline/inject-templates.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
 
 function makeBoard(): Board {
   return {
-    flow: "test",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
   };
 }
 
 function makeFlow(): ResolvedFlow {
   return {
-    name: "test",
     description: "test flow",
     entry: "start",
-    states: {
-      start: { type: "single", agent: "test-agent" },
-      done: { type: "terminal" },
-    },
+    name: "test",
     spawn_instructions: { start: "Do the thing" },
+    states: {
+      done: { type: "terminal" },
+      start: { agent: "test-agent", type: "single" },
+    },
   };
 }
 
@@ -49,27 +45,23 @@ function makeCtx(
   variables: Record<string, string> = {},
   basePrompt = "Base prompt content",
 ): PromptContext {
-  const state: StateDefinition = { type: "single", agent: "test-agent", ...stateOverrides };
+  const state: StateDefinition = { agent: "test-agent", type: "single", ...stateOverrides };
   return {
-    input: {
-      workspace: "/tmp/test-workspace",
-      state_id: "start",
-      flow: makeFlow(),
-      variables,
-    },
-    state,
-    rawInstruction: "Do the thing",
-    board: makeBoard(),
-    mergedVariables: variables,
     basePrompt,
+    board: makeBoard(),
+    input: {
+      flow: makeFlow(),
+      state_id: "start",
+      variables,
+      workspace: "/tmp/test-workspace",
+    },
+    mergedVariables: variables,
     prompts: [],
+    rawInstruction: "Do the thing",
+    state,
     warnings: [],
   };
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("injectTemplates (Stage 5)", () => {
   it("returns ctx unchanged when state has no template field", async () => {

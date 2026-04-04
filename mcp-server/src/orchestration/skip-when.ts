@@ -1,10 +1,10 @@
 import { gitExec } from "../adapters/git-adapter.ts";
 import type { Board } from "./flow-schema.ts";
 
-interface SkipResult {
+type SkipResult = {
   skip: boolean;
   reason?: string;
-}
+};
 
 const CONTRACT_PATTERNS = [
   "**/index.ts",
@@ -17,7 +17,11 @@ const CONTRACT_PATTERNS = [
   "**/migrations/**",
 ];
 
-export async function evaluateSkipWhen(condition: string, _workspace: string, board: Board): Promise<SkipResult> {
+export async function evaluateSkipWhen(
+  condition: string,
+  _workspace: string,
+  board: Board,
+): Promise<SkipResult> {
   switch (condition) {
     case "no_contract_changes":
       return evaluateNoContractChanges(board.base_commit);
@@ -42,7 +46,10 @@ function evaluateNoContractChanges(baseCommit: string): SkipResult {
   }
 
   try {
-    const result = gitExec(["diff", "--diff-filter=d", "--name-only", `${baseCommit}..HEAD`], process.cwd());
+    const result = gitExec(
+      ["diff", "--diff-filter=d", "--name-only", `${baseCommit}..HEAD`],
+      process.cwd(),
+    );
     if (!result.ok) return { skip: false };
     const output = result.stdout;
     const changedFiles = output.trim().split("\n").filter(Boolean);
@@ -53,8 +60,8 @@ function evaluateNoContractChanges(baseCommit: string): SkipResult {
 
     if (!hasContractChange) {
       return {
-        skip: true,
         reason: "No contract changes detected — all changes are internal",
+        skip: true,
       };
     }
     return { skip: false };
@@ -69,16 +76,16 @@ function evaluateNoFixRequested(board: Board): SkipResult {
     return { skip: false };
   }
   return {
-    skip: true,
     reason: "No fix requested — user has not flagged issues for fixing",
+    skip: true,
   };
 }
 
 function evaluateAutoApproved(board: Board): SkipResult {
   if (board.metadata?.auto_approve === true) {
     return {
-      skip: true,
       reason: "Task auto-approved — checkpoint skipped",
+      skip: true,
     };
   }
   return { skip: false };
@@ -89,8 +96,8 @@ function evaluateNoOpenQuestions(board: Board): SkipResult {
     return { skip: false };
   }
   return {
-    skip: true,
     reason: "No open questions from pattern-check — targeted research skipped",
+    skip: true,
   };
 }
 

@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { gitExecAsync } from "../adapters/git-adapter-async.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
-export interface FingerprintInput {
+export type FingerprintInput = {
   projectDir: string;
   sourceDirs?: string[];
-}
+};
 
 /**
  * Compute a deterministic fingerprint for a codebase graph job.

@@ -12,18 +12,14 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { EntityRow, FileRow } from "../graph/kg-types.ts";
 
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {
-    path: "src/A.ts",
-    mtime_ms: 1700000000000,
     content_hash: "abc123",
     language: "typescript",
-    layer: "domain",
     last_indexed_at: Date.now(),
+    layer: "domain",
+    mtime_ms: 1700000000000,
+    path: "src/A.ts",
     ...overrides,
   };
 }
@@ -34,22 +30,20 @@ function makeEntityRow(
 ): Omit<EntityRow, "entity_id"> {
   return {
     file_id: fileId,
+    is_default_export: false,
+    is_exported: false,
+    kind: "function",
+    line_end: 10,
+    line_start: 1,
+    metadata: null,
     name: "myFunc",
     qualified_name: "src/A.ts::myFunc",
-    kind: "function",
-    line_start: 1,
-    line_end: 10,
-    is_exported: false,
-    is_default_export: false,
     signature: null,
-    metadata: null,
     ...overrides,
   };
 }
 
-// ---------------------------------------------------------------------------
 // detectDeadCode tests
-// ---------------------------------------------------------------------------
 
 describe("detectDeadCode", () => {
   let db: Database.Database;
@@ -77,9 +71,9 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/utils.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
         name: "deadHelper",
         qualified_name: "src/utils.ts::deadHelper",
-        is_exported: false,
       }),
     );
 
@@ -100,25 +94,25 @@ describe("detectDeadCode", () => {
 
     const caller = store.insertEntity(
       makeEntityRow(fileA.file_id!, {
+        is_exported: true,
         name: "caller",
         qualified_name: "src/A.ts::caller",
-        is_exported: true,
       }),
     );
     const callee = store.insertEntity(
       makeEntityRow(fileB.file_id!, {
+        is_exported: false,
         name: "helper",
         qualified_name: "src/B.ts::helper",
-        is_exported: false,
       }),
     );
 
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: caller.entity_id!,
       target_entity_id: callee.entity_id!,
-      edge_type: "calls",
-      confidence: 1.0,
-      metadata: null,
     });
 
     const report = detectDeadCode(db);
@@ -130,9 +124,9 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/api.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: true,
         name: "publicFunc",
         qualified_name: "src/api.ts::publicFunc",
-        is_exported: true,
       }),
     );
 
@@ -144,10 +138,10 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/module.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
+        kind: "file",
         name: "src/module.ts",
         qualified_name: "src/module.ts",
-        kind: "file",
-        is_exported: false,
       }),
     );
 
@@ -159,10 +153,10 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/types.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
+        kind: "property",
         name: "myProp",
         qualified_name: "src/types.ts::MyClass::myProp",
-        kind: "property",
-        is_exported: false,
       }),
     );
 
@@ -176,9 +170,9 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/index.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
         name: "setup",
         qualified_name: "src/index.ts::setup",
-        is_exported: false,
       }),
     );
 
@@ -190,9 +184,9 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/main.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
         name: "bootstrap",
         qualified_name: "src/main.ts::bootstrap",
-        is_exported: false,
       }),
     );
 
@@ -206,9 +200,9 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/__tests__/utils.test.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
         name: "helper",
         qualified_name: "src/__tests__/utils.test.ts::helper",
-        is_exported: false,
       }),
     );
 
@@ -220,9 +214,9 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/__tests__/utils.test.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
         name: "helper",
         qualified_name: "src/__tests__/utils.test.ts::helper",
-        is_exported: false,
       }),
     );
 
@@ -238,9 +232,9 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/helpers.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
         name: "deadFunc",
         qualified_name: "src/helpers.ts::deadFunc",
-        is_exported: false,
       }),
     );
 
@@ -259,33 +253,33 @@ describe("detectDeadCode", () => {
     const file = store.upsertFile(makeFileRow({ path: "src/module.ts" }));
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
+        kind: "function",
         name: "fn1",
         qualified_name: "src/module.ts::fn1",
-        kind: "function",
-        is_exported: false,
       }),
     );
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
+        kind: "function",
         name: "fn2",
         qualified_name: "src/module.ts::fn2",
-        kind: "function",
-        is_exported: false,
       }),
     );
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_exported: false,
+        kind: "class",
         name: "MyClass",
         qualified_name: "src/module.ts::MyClass",
-        kind: "class",
-        is_exported: false,
       }),
     );
 
     const report = detectDeadCode(db);
     expect(report.total_dead).toBe(3);
-    expect(report.by_kind["function"]).toBe(2);
-    expect(report.by_kind["class"]).toBe(1);
+    expect(report.by_kind.function).toBe(2);
+    expect(report.by_kind.class).toBe(1);
   });
 
   // ---- by_file sorting ----
@@ -297,17 +291,17 @@ describe("detectDeadCode", () => {
     // fileB gets 3 dead entities, fileA gets 1
     store.insertEntity(
       makeEntityRow(fileA.file_id!, {
+        is_exported: false,
         name: "fn1",
         qualified_name: "src/A.ts::fn1",
-        is_exported: false,
       }),
     );
     for (let i = 1; i <= 3; i++) {
       store.insertEntity(
         makeEntityRow(fileB.file_id!, {
+          is_exported: false,
           name: `fn${i}`,
           qualified_name: `src/B.ts::fn${i}`,
-          is_exported: false,
         }),
       );
     }
@@ -327,26 +321,26 @@ describe("detectDeadCode", () => {
 
     const consumer = store.insertEntity(
       makeEntityRow(fileA.file_id!, {
+        is_exported: true,
         name: "consumer",
         qualified_name: "src/A.ts::consumer",
-        is_exported: true,
       }),
     );
     const myType = store.insertEntity(
       makeEntityRow(fileB.file_id!, {
+        is_exported: false,
+        kind: "type-alias",
         name: "MyType",
         qualified_name: "src/B.ts::MyType",
-        kind: "type-alias",
-        is_exported: false,
       }),
     );
 
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "type-references",
+      metadata: null,
       source_entity_id: consumer.entity_id!,
       target_entity_id: myType.entity_id!,
-      edge_type: "type-references",
-      confidence: 1.0,
-      metadata: null,
     });
 
     const report = detectDeadCode(db);

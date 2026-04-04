@@ -95,11 +95,11 @@ function makeFile(
   overrides: Partial<PrFileInfo> = {},
 ): PrFileInfo {
   return {
-    path,
-    layer: "tools",
-    status,
     bucket: "low-risk",
+    layer: "tools",
+    path,
     reason: "No issues found",
+    status,
     ...overrides,
   };
 }
@@ -120,9 +120,9 @@ const FILES_WITH_VIOLATIONS: PrFileInfo[] = [
   makeFile("src/tools/alpha.ts", "modified", {
     violations: [
       {
+        message: "Too much logic in handler",
         principle_id: "thin-handlers",
         severity: "strong-opinion",
-        message: "Too much logic in handler",
       },
       { principle_id: "errors-are-values", severity: "rule" },
     ],
@@ -130,9 +130,9 @@ const FILES_WITH_VIOLATIONS: PrFileInfo[] = [
   makeFile("src/tools/beta.ts", "modified", {
     violations: [
       {
+        message: "Implicit mutation",
         principle_id: "no-hidden-side-effects",
         severity: "convention",
-        message: "Implicit mutation",
       },
     ],
   }),
@@ -430,34 +430,34 @@ describe("Acceptance criteria: all sections render for valid responses", () => {
     const HIGH_IMPACT_THRESHOLD = 15;
     const files: PrFileInfo[] = [
       makeFile("src/a.ts", "modified", {
-        priority_score: 20,
         priority_factors: {
           in_degree: 10,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 0.5,
+          violation_count: 0,
         },
+        priority_score: 20,
       }),
       makeFile("src/b.ts", "modified", {
-        priority_score: 14,
         priority_factors: {
           in_degree: 5,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 0.3,
+          violation_count: 0,
         },
+        priority_score: 14,
       }),
       makeFile("src/c.ts", "modified", {
-        priority_score: 15,
         priority_factors: {
           in_degree: 7,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 0.4,
+          violation_count: 0,
         },
+        priority_score: 15,
       }),
       makeFile("src/d.ts", "modified", { priority_score: 5 }),
     ];
@@ -467,9 +467,9 @@ describe("Acceptance criteria: all sections render for valid responses", () => {
 
   it("Section 3 Tab B: violations sorted by severity then in_degree", () => {
     const SEVERITY_ORDER: Record<string, number> = {
+      convention: 2,
       rule: 0,
       "strong-opinion": 1,
-      convention: 2,
     };
 
     type FlatViol = {
@@ -479,10 +479,10 @@ describe("Acceptance criteria: all sections render for valid responses", () => {
     };
 
     const violations: FlatViol[] = [
-      { principleId: "v1", severity: "convention", inDegree: 10 },
-      { principleId: "v2", severity: "rule", inDegree: 3 },
-      { principleId: "v3", severity: "strong-opinion", inDegree: 7 },
-      { principleId: "v4", severity: "rule", inDegree: 8 },
+      { inDegree: 10, principleId: "v1", severity: "convention" },
+      { inDegree: 3, principleId: "v2", severity: "rule" },
+      { inDegree: 7, principleId: "v3", severity: "strong-opinion" },
+      { inDegree: 8, principleId: "v4", severity: "rule" },
     ];
 
     const sorted = [...violations].sort((a, b) => {

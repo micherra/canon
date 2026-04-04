@@ -16,17 +16,14 @@
  * 6. Coverage gap: initDatabase failure (throws) is caught and returns a warning.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, rmdir } from "node:fs/promises";
-import { mkdtempSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // 1. Cross-task: shared tier caps from context-budget.ts
-// ---------------------------------------------------------------------------
 
 describe("context-budget: shared cap values match expected tier bounds", () => {
   it("getItemCountCap values match the documented caps (5/15/30)", async () => {
@@ -44,11 +41,9 @@ describe("context-budget: shared cap values match expected tier bounds", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Cross-task: PIPELINE_ALLOWED_VARIABLES extends RUNTIME_VARIABLES
 //    The "enrichment" entry added to RUNTIME_VARIABLES by ctx-05 must be
 //    visible in the stage 9 allowlist (imported via spread in validate.ts).
-// ---------------------------------------------------------------------------
 
 describe("PIPELINE_ALLOWED_VARIABLES superset relationship", () => {
   it("contains all RUNTIME_VARIABLES entries (superset contract)", async () => {
@@ -81,11 +76,9 @@ describe("PIPELINE_ALLOWED_VARIABLES superset relationship", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Config-validation: real flow files load without ${enrichment} unresolved-ref errors
 //    This is the integration test for ctx-05's RUNTIME_VARIABLES addition.
 //    Without it, loadAndResolveFlow would throw for epic, feature, refactor, migrate.
-// ---------------------------------------------------------------------------
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -118,10 +111,8 @@ describe("flow files load successfully with ${enrichment} in spawn instructions"
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. Coverage gap: session === null fallback → "medium" tier in file_context
 //    ctx-03 declared: "No test for the exact behavior when session is null"
-// ---------------------------------------------------------------------------
 
 const {
   mockGetFileMetrics2,
@@ -138,12 +129,12 @@ const {
   const mockStore2 = { getSession: vi.fn() };
   const mockDb2 = { close: vi.fn() };
   return {
+    mockDb2,
+    mockGetFile2,
     mockGetFileMetrics2,
     mockGetKgFreshnessMs2,
-    mockGetFile2,
     mockGetSummaryByFile2,
     mockStore2,
-    mockDb2,
   };
 });
 
@@ -164,15 +155,15 @@ vi.mock("../graph/kg-schema.ts", () => ({
 }));
 
 vi.mock("../graph/kg-query.ts", () => ({
+  computeFileInsightMaps: vi.fn().mockReturnValue({
+    cycleMemberPaths: new Map<string, string[]>(),
+    hubPaths: new Set<string>(),
+    layerViolationsByPath: new Map<string, unknown[]>(),
+  }),
   KgQuery: class MockKgQuery2 {
     getFileMetrics = mockGetFileMetrics2;
     getKgFreshnessMs = mockGetKgFreshnessMs2;
   },
-  computeFileInsightMaps: vi.fn().mockReturnValue({
-    hubPaths: new Set<string>(),
-    cycleMemberPaths: new Map<string, string[]>(),
-    layerViolationsByPath: new Map<string, unknown[]>(),
-  }),
 }));
 
 vi.mock("../graph/kg-store.ts", () => ({
@@ -187,21 +178,21 @@ import { computeFileInsightMaps } from "../graph/kg-query.ts";
 
 function makeBoardWithFiles(files: string[]): import("../orchestration/flow-schema.ts").Board {
   return {
-    flow: "test",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
-    skipped: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     metadata: {
       affected_files: JSON.stringify(files),
     },
+    skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
   };
 }
 
@@ -222,7 +213,7 @@ describe("file_context injection — session null fallback", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("uses medium tier cap (15) when session is null", async () => {
@@ -234,7 +225,7 @@ describe("file_context injection — session null fallback", () => {
 
     const { resolveContextInjections } = await import("../orchestration/inject-context.ts");
     const result = await resolveContextInjections(
-      [{ from: "file_context", as: "FILE_CONTEXT" }],
+      [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,
       tmpDir,
     );
@@ -242,16 +233,14 @@ describe("file_context injection — session null fallback", () => {
     // Medium cap is 15, so computeFileInsightMaps called once and getFileMetrics called 15 times
     expect(computeFileInsightMaps).toHaveBeenCalledTimes(1);
     expect(mockGetFileMetrics2).toHaveBeenCalledTimes(15);
-    const value = result.variables["FILE_CONTEXT"];
+    const value = result.variables.FILE_CONTEXT;
     expect(value).toContain("src/file0.ts");
     expect(value).not.toContain("src/file15.ts");
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. Coverage gap: file in affected_files that is NOT in KG → "(not indexed)" label
 //    This path is exercised but not explicitly asserted in ctx-03 tests.
-// ---------------------------------------------------------------------------
 
 describe("file_context injection — not-indexed file formatting", () => {
   let tmpDir: string;
@@ -263,11 +252,11 @@ describe("file_context injection — not-indexed file formatting", () => {
     });
     mockStore2.getSession.mockReturnValue({ tier: "medium" });
     mockGetFileMetrics2.mockReturnValue(null); // file not in KG
-    mockGetFile2.mockReturnValue(undefined);   // no file row in store
+    mockGetFile2.mockReturnValue(undefined); // no file row in store
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("formats file as '(not indexed)' when KG has no entry for the file", async () => {
@@ -275,22 +264,20 @@ describe("file_context injection — not-indexed file formatting", () => {
 
     const { resolveContextInjections } = await import("../orchestration/inject-context.ts");
     const result = await resolveContextInjections(
-      [{ from: "file_context", as: "FILE_CONTEXT" }],
+      [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,
       tmpDir,
     );
 
     expect(result.warnings).toHaveLength(0);
-    const value = result.variables["FILE_CONTEXT"];
+    const value = result.variables.FILE_CONTEXT;
     expect(value).toContain("src/new-file.ts");
     expect(value).toContain("(not indexed)");
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. Coverage gap: initDatabase throws → caught, warning returned, no crash
 //    ctx-02 declared: "No test for KG DB that exists but throws on open"
-// ---------------------------------------------------------------------------
 
 describe("file_context injection — initDatabase failure graceful degradation", () => {
   let tmpDir: string;
@@ -305,7 +292,7 @@ describe("file_context injection — initDatabase failure graceful degradation",
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("emits warning and returns no value when initDatabase throws (corrupt DB)", async () => {
@@ -318,12 +305,16 @@ describe("file_context injection — initDatabase failure graceful degradation",
 
     const { resolveContextInjections } = await import("../orchestration/inject-context.ts");
     const result = await resolveContextInjections(
-      [{ from: "file_context", as: "FILE_CONTEXT" }],
+      [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,
       tmpDir,
     );
 
-    expect(result.warnings.some((w) => w.includes("KG") || w.includes("database") || w.includes("failed"))).toBe(true);
+    expect(
+      result.warnings.some(
+        (w) => w.includes("KG") || w.includes("database") || w.includes("failed"),
+      ),
+    ).toBe(true);
     expect(result.variables).not.toHaveProperty("FILE_CONTEXT");
   });
 });

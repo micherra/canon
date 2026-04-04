@@ -3,15 +3,13 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LayerViolation } from "../graph/kg-types.ts";
 import type { Board, ContextInjection } from "../orchestration/flow-schema.ts";
 import { extractSection, resolveContextInjections } from "../orchestration/inject-context.ts";
-import type { LayerViolation } from "../graph/kg-types.ts";
 
-// ---------------------------------------------------------------------------
 // Mocks for file_context tests
 // Use vi.hoisted so mock factory functions can reference these variables
 // even after vi.mock() is hoisted to the top of the module by vitest.
-// ---------------------------------------------------------------------------
 
 const {
   mockGetFileMetrics,
@@ -29,7 +27,14 @@ const {
     getSession: vi.fn().mockReturnValue({ tier: "medium" }),
   };
   const mockDb = { close: vi.fn() };
-  return { mockGetFileMetrics, mockGetKgFreshnessMs, mockGetFile, mockGetSummaryByFile, mockStore, mockDb };
+  return {
+    mockDb,
+    mockGetFile,
+    mockGetFileMetrics,
+    mockGetKgFreshnessMs,
+    mockGetSummaryByFile,
+    mockStore,
+  };
 });
 
 vi.mock("../orchestration/execution-store.ts", () => ({
@@ -49,15 +54,15 @@ vi.mock("../graph/kg-schema.ts", () => ({
 }));
 
 vi.mock("../graph/kg-query.ts", () => ({
+  computeFileInsightMaps: vi.fn().mockReturnValue({
+    cycleMemberPaths: new Map<string, string[]>(),
+    hubPaths: new Set<string>(),
+    layerViolationsByPath: new Map<string, LayerViolation[]>(),
+  }),
   KgQuery: class MockKgQuery {
     getFileMetrics = mockGetFileMetrics;
     getKgFreshnessMs = mockGetKgFreshnessMs;
   },
-  computeFileInsightMaps: vi.fn().mockReturnValue({
-    hubPaths: new Set<string>(),
-    cycleMemberPaths: new Map<string, string[]>(),
-    layerViolationsByPath: new Map<string, LayerViolation[]>(),
-  }),
 }));
 
 vi.mock("../graph/kg-store.ts", () => ({
@@ -68,33 +73,26 @@ vi.mock("../graph/kg-store.ts", () => ({
 }));
 
 import { existsSync } from "node:fs";
-import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { computeFileInsightMaps } from "../graph/kg-query.ts";
 
 function makeBoard(stateOverrides: Board["states"] = {}): Board {
   return {
-    flow: "test",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: stateOverrides,
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: stateOverrides,
+    task: "test task",
   };
 }
 
-// ---------------------------------------------------------------------------
 // extractSection — pure function, no filesystem
-// ---------------------------------------------------------------------------
 
 describe("extractSection", () => {
   it("returns null for empty markdown", () => {
@@ -125,7 +123,8 @@ describe("extractSection", () => {
   });
 
   it("includes nested subheadings within the section", () => {
-    const md = "## Overview\nIntro.\n### Part A\nPart A content.\n### Part B\nPart B content.\n## Next\nDone.";
+    const md =
+      "## Overview\nIntro.\n### Part A\nPart A content.\n### Part B\nPart B content.\n## Next\nDone.";
     const result = extractSection(md, "Overview");
     expect(result).toContain("### Part A");
     expect(result).toContain("### Part B");
@@ -159,9 +158,7 @@ describe("extractSection", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // resolveContextInjections — filesystem interactions
-// ---------------------------------------------------------------------------
 
 describe("resolveContextInjections", () => {
   let tmpDir: string;
@@ -171,7 +168,7 @@ describe("resolveContextInjections", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("reads artifact from a state and assigns to variable", async () => {
@@ -179,31 +176,34 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, "# Summary\nThis is important output.");
 
     const board = makeBoard({
-      research: { status: "done", entries: 1, artifacts: [artifactPath] },
+      research: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "RESEARCH_OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "RESEARCH_OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
     expect(result.hitl).toBeUndefined();
-    expect(result.variables["RESEARCH_OUTPUT"]).toContain("This is important output.");
+    expect(result.variables.RESEARCH_OUTPUT).toContain("This is important output.");
   });
 
   it("extracts a named section from artifact content", async () => {
     const artifactPath = join(tmpDir, "report.md");
-    const content = "# Introduction\nIntro text.\n\n# Findings\nKey findings here.\n\n# Conclusion\nDone.";
+    const content =
+      "# Introduction\nIntro text.\n\n# Findings\nKey findings here.\n\n# Conclusion\nDone.";
     await writeFile(artifactPath, content);
 
     const board = makeBoard({
-      analysis: { status: "done", entries: 1, artifacts: [artifactPath] },
+      analysis: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "analysis", section: "Findings", as: "FINDINGS" }];
+    const injections: ContextInjection[] = [
+      { as: "FINDINGS", from: "analysis", section: "Findings" },
+    ];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
-    expect(result.variables["FINDINGS"]).toContain("Key findings here.");
-    expect(result.variables["FINDINGS"]).not.toContain("Intro text.");
-    expect(result.variables["FINDINGS"]).not.toContain("Done.");
+    expect(result.variables.FINDINGS).toContain("Key findings here.");
+    expect(result.variables.FINDINGS).not.toContain("Intro text.");
+    expect(result.variables.FINDINGS).not.toContain("Done.");
   });
 
   it("injects full content with warning when section is not found", async () => {
@@ -211,21 +211,23 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, "# Introduction\nIntro only.");
 
     const board = makeBoard({
-      analysis: { status: "done", entries: 1, artifacts: [artifactPath] },
+      analysis: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "analysis", section: "Missing Section", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [
+      { as: "OUTPUT", from: "analysis", section: "Missing Section" },
+    ];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]).toContain("Missing Section");
     expect(result.warnings[0]).toContain("injecting full content");
     // Still injects full content
-    expect(result.variables["OUTPUT"]).toContain("Intro only.");
+    expect(result.variables.OUTPUT).toContain("Intro only.");
   });
 
   it("produces warning when source state is not found in board", async () => {
     const board = makeBoard({});
-    const injections: ContextInjection[] = [{ from: "nonexistent-state", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "nonexistent-state" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(1);
@@ -236,9 +238,9 @@ describe("resolveContextInjections", () => {
 
   it("produces warning when source state has no artifacts", async () => {
     const board = makeBoard({
-      empty_state: { status: "done", entries: 1 },
+      empty_state: { entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "empty_state", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "empty_state" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(1);
@@ -249,9 +251,9 @@ describe("resolveContextInjections", () => {
 
   it("produces warning when artifact file does not exist on disk", async () => {
     const board = makeBoard({
-      research: { status: "done", entries: 1, artifacts: ["nonexistent/path.md"] },
+      research: { artifacts: ["nonexistent/path.md"], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings.some((w) => w.includes("nonexistent/path.md"))).toBe(true);
@@ -261,12 +263,12 @@ describe("resolveContextInjections", () => {
   it("produces warning when all artifacts are missing, variable not set", async () => {
     const board = makeBoard({
       research: {
-        status: "done",
-        entries: 1,
         artifacts: ["missing1.md", "missing2.md"],
+        entries: 1,
+        status: "done",
       },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     // Expect warnings for each missing file plus the "all artifacts missing" warning
@@ -280,17 +282,17 @@ describe("resolveContextInjections", () => {
 
     const board = makeBoard({
       research: {
-        status: "done",
-        entries: 1,
         artifacts: [existingPath, "missing.md"],
+        entries: 1,
+        status: "done",
       },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     // Warning for missing file, but variable IS set with existing content
     expect(result.warnings.some((w) => w.includes("missing.md"))).toBe(true);
-    expect(result.variables["OUTPUT"]).toContain("Found content.");
+    expect(result.variables.OUTPUT).toContain("Found content.");
   });
 
   it("concatenates multiple artifacts with double newline separator", async () => {
@@ -300,20 +302,20 @@ describe("resolveContextInjections", () => {
     await writeFile(path2, "Second part.");
 
     const board = makeBoard({
-      research: { status: "done", entries: 1, artifacts: [path1, path2] },
+      research: { artifacts: [path1, path2], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
-    expect(result.variables["OUTPUT"]).toContain("First part.");
-    expect(result.variables["OUTPUT"]).toContain("Second part.");
+    expect(result.variables.OUTPUT).toContain("First part.");
+    expect(result.variables.OUTPUT).toContain("Second part.");
   });
 
   it("returns hitl with prompt for from:user injection", async () => {
     const board = makeBoard({});
     const injections: ContextInjection[] = [
-      { from: "user", as: "USER_INPUT", prompt: "Please provide the task scope" },
+      { as: "USER_INPUT", from: "user", prompt: "Please provide the task scope" },
     ];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
@@ -325,7 +327,7 @@ describe("resolveContextInjections", () => {
 
   it("uses default prompt text for from:user injection with no prompt field", async () => {
     const board = makeBoard({});
-    const injections: ContextInjection[] = [{ from: "user", as: "USER_INPUT" }];
+    const injections: ContextInjection[] = [{ as: "USER_INPUT", from: "user" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.hitl).toBeDefined();
@@ -337,34 +339,40 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, "Absolute path content.");
 
     const board = makeBoard({
-      research: { status: "done", entries: 1, artifacts: [artifactPath] },
+      research: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
-    expect(result.variables["OUTPUT"]).toContain("Absolute path content.");
+    expect(result.variables.OUTPUT).toContain("Absolute path content.");
   });
 
   it("blocks absolute path traversal outside workspace (e.g. /etc/passwd)", async () => {
     const board = makeBoard({
-      research: { status: "done", entries: 1, artifacts: ["/etc/passwd"] },
+      research: { artifacts: ["/etc/passwd"], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
-    expect(result.warnings.some((w) => w.includes("/etc/passwd") && w.includes("escapes workspace"))).toBe(true);
+    expect(
+      result.warnings.some((w) => w.includes("/etc/passwd") && w.includes("escapes workspace")),
+    ).toBe(true);
     expect(result.variables).not.toHaveProperty("OUTPUT");
   });
 
   it("blocks relative path traversal that escapes workspace (e.g. ../../etc/passwd)", async () => {
     const board = makeBoard({
-      research: { status: "done", entries: 1, artifacts: ["../../etc/passwd"] },
+      research: { artifacts: ["../../etc/passwd"], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
-    expect(result.warnings.some((w) => w.includes("../../etc/passwd") && w.includes("escapes workspace"))).toBe(true);
+    expect(
+      result.warnings.some(
+        (w) => w.includes("../../etc/passwd") && w.includes("escapes workspace"),
+      ),
+    ).toBe(true);
     expect(result.variables).not.toHaveProperty("OUTPUT");
   });
 
@@ -374,13 +382,13 @@ describe("resolveContextInjections", () => {
     await writeFile(join(subdir, "relative.md"), "Relative path content.");
 
     const board = makeBoard({
-      research: { status: "done", entries: 1, artifacts: ["artifacts/relative.md"] },
+      research: { artifacts: ["artifacts/relative.md"], entries: 1, status: "done" },
     });
-    const injections: ContextInjection[] = [{ from: "research", as: "OUTPUT" }];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "research" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
     expect(result.warnings).toHaveLength(0);
-    expect(result.variables["OUTPUT"]).toContain("Relative path content.");
+    expect(result.variables.OUTPUT).toContain("Relative path content.");
   });
 
   it("processes multiple injections independently, collecting all warnings", async () => {
@@ -388,38 +396,36 @@ describe("resolveContextInjections", () => {
     await writeFile(artifactPath, "Good content.");
 
     const board = makeBoard({
-      good_state: { status: "done", entries: 1, artifacts: [artifactPath] },
+      good_state: { artifacts: [artifactPath], entries: 1, status: "done" },
     });
     const injections: ContextInjection[] = [
-      { from: "good_state", as: "GOOD" },
-      { from: "missing_state", as: "MISSING" },
+      { as: "GOOD", from: "good_state" },
+      { as: "MISSING", from: "missing_state" },
     ];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
-    expect(result.variables["GOOD"]).toContain("Good content.");
+    expect(result.variables.GOOD).toContain("Good content.");
     expect(result.variables).not.toHaveProperty("MISSING");
     expect(result.warnings.some((w) => w.includes("missing_state"))).toBe(true);
   });
 });
 
-// ---------------------------------------------------------------------------
 // file_context injection source
-// ---------------------------------------------------------------------------
 
 function makeBoardWithMetadata(metadata?: Record<string, string | number | boolean>): Board {
   return {
-    flow: "test",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
     ...(metadata !== undefined ? { metadata } : {}),
   };
 }
@@ -442,14 +448,14 @@ describe("resolveContextInjections — file_context source", () => {
     mockGetFile.mockReturnValue(undefined);
     mockGetKgFreshnessMs.mockReturnValue(1000); // fresh by default
     vi.mocked(computeFileInsightMaps).mockReturnValue({
-      hubPaths: new Set<string>(),
       cycleMemberPaths: new Map<string, string[]>(),
+      hubPaths: new Set<string>(),
       layerViolationsByPath: new Map<string, LayerViolation[]>(),
     });
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
     vi.clearAllMocks();
   });
 
@@ -457,31 +463,31 @@ describe("resolveContextInjections — file_context source", () => {
     const board = makeBoardWithMetadata({
       affected_files: JSON.stringify(["src/api/handler.ts", "src/domain/service.ts"]),
     });
-    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+    const injections: ContextInjection[] = [{ as: "FILE_CONTEXT", from: "file_context" }];
 
     // Set up KG mocks: metrics and summaries for both files
     mockGetFileMetrics
       .mockReturnValueOnce({
-        in_degree: 5,
-        out_degree: 3,
-        is_hub: false,
-        in_cycle: false,
         cycle_peers: [],
+        impact_score: 16,
+        in_cycle: false,
+        in_degree: 5,
+        is_hub: false,
         layer: "api",
         layer_violation_count: 0,
         layer_violations: [],
-        impact_score: 16,
+        out_degree: 3,
       })
       .mockReturnValueOnce({
-        in_degree: 2,
-        out_degree: 8,
-        is_hub: false,
-        in_cycle: false,
         cycle_peers: [],
+        impact_score: 8,
+        in_cycle: false,
+        in_degree: 2,
+        is_hub: false,
         layer: "domain",
         layer_violation_count: 0,
         layer_violations: [],
-        impact_score: 8,
+        out_degree: 8,
       });
 
     mockGetFile
@@ -495,8 +501,8 @@ describe("resolveContextInjections — file_context source", () => {
     const result = await resolveContextInjections(injections, board, tmpDir);
 
     expect(result.warnings).toHaveLength(0);
-    expect(result.variables["FILE_CONTEXT"]).toBeDefined();
-    const value = result.variables["FILE_CONTEXT"]!;
+    expect(result.variables.FILE_CONTEXT).toBeDefined();
+    const value = result.variables.FILE_CONTEXT!;
     expect(value).toContain("### File Context");
     expect(value).toContain("src/api/handler.ts");
     expect(value).toContain("src/domain/service.ts");
@@ -508,7 +514,7 @@ describe("resolveContextInjections — file_context source", () => {
 
   it("produces warning and no value when affected_files is missing from board metadata", async () => {
     const board = makeBoardWithMetadata(); // no metadata
-    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+    const injections: ContextInjection[] = [{ as: "FILE_CONTEXT", from: "file_context" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
 
@@ -520,7 +526,7 @@ describe("resolveContextInjections — file_context source", () => {
     const board = makeBoardWithMetadata({
       affected_files: JSON.stringify([]),
     });
-    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+    const injections: ContextInjection[] = [{ as: "FILE_CONTEXT", from: "file_context" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
 
@@ -532,7 +538,7 @@ describe("resolveContextInjections — file_context source", () => {
     const board = makeBoardWithMetadata({
       affected_files: "not-valid-json[",
     });
-    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+    const injections: ContextInjection[] = [{ as: "FILE_CONTEXT", from: "file_context" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
 
@@ -547,7 +553,7 @@ describe("resolveContextInjections — file_context source", () => {
     const board = makeBoardWithMetadata({
       affected_files: JSON.stringify(tenFiles),
     });
-    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+    const injections: ContextInjection[] = [{ as: "FILE_CONTEXT", from: "file_context" }];
 
     // All files return null metrics (no KG entry)
     mockGetFileMetrics.mockReturnValue(null);
@@ -559,7 +565,7 @@ describe("resolveContextInjections — file_context source", () => {
     // KgQuery.getFileMetrics called at most 5 times (capped)
     expect(mockGetFileMetrics).toHaveBeenCalledTimes(5);
     // Result should reference only the first 5 files
-    const value = result.variables["FILE_CONTEXT"];
+    const value = result.variables.FILE_CONTEXT;
     expect(value).toContain("src/file0.ts");
     expect(value).not.toContain("src/file5.ts");
   });
@@ -570,11 +576,19 @@ describe("resolveContextInjections — file_context source", () => {
     const board = makeBoardWithMetadata({
       affected_files: JSON.stringify(["src/api/handler.ts"]),
     });
-    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+    const injections: ContextInjection[] = [{ as: "FILE_CONTEXT", from: "file_context" }];
 
     const result = await resolveContextInjections(injections, board, tmpDir);
 
-    expect(result.warnings.some((w) => w.includes("KG") || w.includes("knowledge") || w.includes("database") || w.includes("unavailable"))).toBe(true);
+    expect(
+      result.warnings.some(
+        (w) =>
+          w.includes("KG") ||
+          w.includes("knowledge") ||
+          w.includes("database") ||
+          w.includes("unavailable"),
+      ),
+    ).toBe(true);
     expect(result.variables).not.toHaveProperty("FILE_CONTEXT");
   });
 
@@ -584,18 +598,18 @@ describe("resolveContextInjections — file_context source", () => {
     const board = makeBoardWithMetadata({
       affected_files: JSON.stringify(["src/api/handler.ts"]),
     });
-    const injections: ContextInjection[] = [{ from: "file_context", as: "FILE_CONTEXT" }];
+    const injections: ContextInjection[] = [{ as: "FILE_CONTEXT", from: "file_context" }];
 
     mockGetFileMetrics.mockReturnValue({
-      in_degree: 1,
-      out_degree: 1,
-      is_hub: false,
-      in_cycle: false,
       cycle_peers: [],
+      impact_score: 4,
+      in_cycle: false,
+      in_degree: 1,
+      is_hub: false,
       layer: "api",
       layer_violation_count: 0,
       layer_violations: [],
-      impact_score: 4,
+      out_degree: 1,
     });
     mockGetFile.mockReturnValue({ file_id: 1, path: "src/api/handler.ts" });
     mockGetSummaryByFile.mockReturnValue(undefined); // no summary
@@ -603,9 +617,11 @@ describe("resolveContextInjections — file_context source", () => {
     const result = await resolveContextInjections(injections, board, tmpDir);
 
     // Should have a staleness warning
-    expect(result.warnings.some((w) => w.includes("stale") || w.includes("KG") || w.includes("hour"))).toBe(true);
+    expect(
+      result.warnings.some((w) => w.includes("stale") || w.includes("KG") || w.includes("hour")),
+    ).toBe(true);
     // But still returns a value
-    expect(result.variables["FILE_CONTEXT"]).toBeDefined();
-    expect(result.variables["FILE_CONTEXT"]).toContain("src/api/handler.ts");
+    expect(result.variables.FILE_CONTEXT).toBeDefined();
+    expect(result.variables.FILE_CONTEXT).toContain("src/api/handler.ts");
   });
 });

@@ -1,10 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist adapter mock before module imports
-// ---------------------------------------------------------------------------
 
-type GitExecResult = { ok: boolean; stdout: string; stderr: string; exitCode: number; timedOut: boolean };
+type GitExecResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+};
 let gitExecImpl: ((args: string[], cwd: string) => GitExecResult) | null = null;
 let lastGitExecArgs: { args: string[]; cwd: string } | null = null;
 
@@ -12,20 +16,22 @@ vi.mock("../adapters/git-adapter.ts", () => ({
   gitExec: (args: string[], cwd: string) => {
     lastGitExecArgs = { args, cwd };
     if (gitExecImpl) return gitExecImpl(args, cwd);
-    return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+    return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
   },
 }));
 
-import { clusterByDirectory, clusterByLayer, getChangedFiles } from "../orchestration/diff-cluster.ts";
+import {
+  clusterByDirectory,
+  clusterByLayer,
+  getChangedFiles,
+} from "../orchestration/diff-cluster.ts";
 
 beforeEach(() => {
   gitExecImpl = null;
   lastGitExecArgs = null;
 });
 
-// ---------------------------------------------------------------------------
 // clusterByDirectory
-// ---------------------------------------------------------------------------
 
 describe("clusterByDirectory", () => {
   it("groups files by first two path segments", () => {
@@ -69,9 +75,7 @@ describe("clusterByDirectory", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // clusterByLayer
-// ---------------------------------------------------------------------------
 
 describe("clusterByLayer", () => {
   it("groups files by Canon layer", () => {
@@ -106,17 +110,15 @@ describe("clusterByLayer", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getChangedFiles — via git-adapter
-// ---------------------------------------------------------------------------
 
 describe("getChangedFiles — happy path via git adapter", () => {
   it("returns list of changed files on success", () => {
     gitExecImpl = () => ({
-      ok: true,
-      stdout: "src/api/users.ts\nsrc/services/auth.ts\n",
-      stderr: "",
       exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "src/api/users.ts\nsrc/services/auth.ts\n",
       timedOut: false,
     });
     const result = getChangedFiles("abc1234");
@@ -124,19 +126,25 @@ describe("getChangedFiles — happy path via git adapter", () => {
   });
 
   it("returns empty array when no files changed (empty stdout)", () => {
-    gitExecImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     const result = getChangedFiles("abc1234");
     expect(result).toEqual([]);
   });
 
   it("passes optional cwd to gitExec", () => {
-    gitExecImpl = () => ({ ok: true, stdout: "file.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "file.ts\n",
+      timedOut: false,
+    });
     getChangedFiles("abc1234", "/my/project");
     expect(lastGitExecArgs?.cwd).toBe("/my/project");
   });
 
   it("passes baseCommit..HEAD in args to gitExec", () => {
-    gitExecImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     getChangedFiles("abc1234");
     expect(lastGitExecArgs?.args).toContain("abc1234..HEAD");
   });
@@ -145,10 +153,10 @@ describe("getChangedFiles — happy path via git adapter", () => {
 describe("getChangedFiles — graceful degradation on failure", () => {
   it("returns empty array when gitExec returns ok: false (non-zero exit)", () => {
     gitExecImpl = () => ({
-      ok: false,
-      stdout: "",
-      stderr: "fatal: not a git repository",
       exitCode: 128,
+      ok: false,
+      stderr: "fatal: not a git repository",
+      stdout: "",
       timedOut: false,
     });
     const result = getChangedFiles("abc1234");
@@ -157,7 +165,7 @@ describe("getChangedFiles — graceful degradation on failure", () => {
 
   it("returns empty array when adapter returns timedOut: true (Risk 9)", () => {
     // Risk 9: adapter returns timedOut: true → getChangedFiles degrades gracefully
-    gitExecImpl = () => ({ ok: false, stdout: "", stderr: "", exitCode: 1, timedOut: true });
+    gitExecImpl = () => ({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: true });
     const result = getChangedFiles("abc1234");
     expect(result).toEqual([]);
   });

@@ -1,9 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ChildProcess } from "node:child_process";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 type ForkOptions = {
   stdio: unknown;
@@ -61,29 +59,25 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-// ---------------------------------------------------------------------------
 // Import after mocks
-// ---------------------------------------------------------------------------
 
-import { forkJob, sendWorkerInput, killJob } from "../job-adapter.ts";
 import type { JobMessage, WorkerInput } from "../job-adapter.ts";
+import { forkJob, killJob, sendWorkerInput } from "../job-adapter.ts";
 
 beforeEach(() => {
   forkImpl = null;
   lastChild = null;
 });
 
-// ---------------------------------------------------------------------------
 // forkJob — spawns a child process
-// ---------------------------------------------------------------------------
 
 describe("forkJob — spawns a child process", () => {
   it("returns a ChildProcess handle", () => {
     const child = forkJob({
-      workerPath: "/path/to/worker.ts",
       cwd: "/mock/cwd",
-      onMessage: vi.fn(),
       onExit: vi.fn(),
+      onMessage: vi.fn(),
+      workerPath: "/path/to/worker.ts",
     });
     expect(child).toBeDefined();
     expect(child.pid).toBe(12345);
@@ -97,10 +91,10 @@ describe("forkJob — spawns a child process", () => {
     };
 
     forkJob({
-      workerPath: "/workers/graph-worker.ts",
       cwd: "/mock/cwd",
-      onMessage: vi.fn(),
       onExit: vi.fn(),
+      onMessage: vi.fn(),
+      workerPath: "/workers/graph-worker.ts",
     });
 
     expect(capturedPath).toBe("/workers/graph-worker.ts");
@@ -114,10 +108,10 @@ describe("forkJob — spawns a child process", () => {
     };
 
     forkJob({
-      workerPath: "/workers/graph-worker.ts",
       cwd: "/mock/cwd",
-      onMessage: vi.fn(),
       onExit: vi.fn(),
+      onMessage: vi.fn(),
+      workerPath: "/workers/graph-worker.ts",
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -127,13 +121,13 @@ describe("forkJob — spawns a child process", () => {
   it("calls onMessage when child emits a message", () => {
     const onMessage = vi.fn();
     forkJob({
-      workerPath: "/worker.ts",
       cwd: "/mock/cwd",
-      onMessage,
       onExit: vi.fn(),
+      onMessage,
+      workerPath: "/worker.ts",
     });
 
-    const msg: JobMessage = { type: "progress", phase: "scan", current: 1, total: 10 };
+    const msg: JobMessage = { current: 1, phase: "scan", total: 10, type: "progress" };
     lastChild!.emit("message", msg);
 
     expect(onMessage).toHaveBeenCalledWith(msg);
@@ -142,10 +136,10 @@ describe("forkJob — spawns a child process", () => {
   it("calls onExit when child exits", () => {
     const onExit = vi.fn();
     forkJob({
-      workerPath: "/worker.ts",
       cwd: "/mock/cwd",
-      onMessage: vi.fn(),
       onExit,
+      onMessage: vi.fn(),
+      workerPath: "/worker.ts",
     });
 
     lastChild!.emit("exit", 0, null);
@@ -155,56 +149,54 @@ describe("forkJob — spawns a child process", () => {
 
   it("registers drain handlers on stdout and stderr to prevent pipe backpressure", () => {
     forkJob({
-      workerPath: "/worker.ts",
       cwd: "/mock/cwd",
-      onMessage: vi.fn(),
       onExit: vi.fn(),
+      onMessage: vi.fn(),
+      workerPath: "/worker.ts",
     });
 
     // stdout.on and stderr.on should each be called with 'data' and a noop handler
-    expect(lastChild!.stdout.on).toHaveBeenCalledWith('data', expect.any(Function));
-    expect(lastChild!.stderr.on).toHaveBeenCalledWith('data', expect.any(Function));
+    expect(lastChild!.stdout.on).toHaveBeenCalledWith("data", expect.any(Function));
+    expect(lastChild!.stderr.on).toHaveBeenCalledWith("data", expect.any(Function));
   });
 
   it("calls onMessage with error message when child emits error", () => {
     const onMessage = vi.fn();
     forkJob({
-      workerPath: "/worker.ts",
       cwd: "/mock/cwd",
-      onMessage,
       onExit: vi.fn(),
+      onMessage,
+      workerPath: "/worker.ts",
     });
 
     const err = new Error("spawn error");
     lastChild!.emit("error", err);
 
     expect(onMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "error", message: "spawn error" }),
+      expect.objectContaining({ message: "spawn error", type: "error" }),
     );
   });
 });
 
-// ---------------------------------------------------------------------------
 // sendWorkerInput — delivers message to child
-// ---------------------------------------------------------------------------
 
 describe("sendWorkerInput — delivers message to child", () => {
   it("sends the WorkerInput to the child via IPC", () => {
     forkJob({
-      workerPath: "/worker.ts",
       cwd: "/mock/cwd",
-      onMessage: vi.fn(),
       onExit: vi.fn(),
+      onMessage: vi.fn(),
+      workerPath: "/worker.ts",
     });
 
     const sentMessages: unknown[] = [];
     lastChild!.on("_sent", (msg) => sentMessages.push(msg));
 
     const input: WorkerInput = {
-      type: "start",
-      projectDir: "/my/project",
       dbPath: "/my/project/.canon/knowledge-graph.db",
+      projectDir: "/my/project",
       sourceDirs: ["src"],
+      type: "start",
     };
 
     sendWorkerInput(lastChild as unknown as ChildProcess, input);
@@ -214,17 +206,15 @@ describe("sendWorkerInput — delivers message to child", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // killJob — terminates child process
-// ---------------------------------------------------------------------------
 
 describe("killJob — terminates child process", () => {
   it("kills the child with SIGTERM when not already killed", () => {
     forkJob({
-      workerPath: "/worker.ts",
       cwd: "/mock/cwd",
-      onMessage: vi.fn(),
       onExit: vi.fn(),
+      onMessage: vi.fn(),
+      workerPath: "/worker.ts",
     });
 
     expect(lastChild!.killed).toBe(false);
@@ -234,10 +224,10 @@ describe("killJob — terminates child process", () => {
 
   it("does not kill an already-killed child", () => {
     forkJob({
-      workerPath: "/worker.ts",
       cwd: "/mock/cwd",
-      onMessage: vi.fn(),
       onExit: vi.fn(),
+      onMessage: vi.fn(),
+      workerPath: "/worker.ts",
     });
 
     // Pre-kill

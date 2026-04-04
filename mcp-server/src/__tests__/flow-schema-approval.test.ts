@@ -9,24 +9,22 @@
  * - DriveFlowAction "approval" variant (compile-time)
  */
 
-import { describe, it, expect } from "vitest";
-import {
-  SingleStateSchema,
-  WaveStateSchema,
-  FragmentStateDefinitionSchema,
-  STATUS_KEYWORDS,
-} from "../orchestration/flow-schema.ts";
+import { describe, expect, it } from "vitest";
 import type { ApprovalBreakpoint, DriveFlowAction } from "../orchestration/drive-flow-types.ts";
+import {
+  FragmentStateDefinitionSchema,
+  SingleStateSchema,
+  STATUS_KEYWORDS,
+  WaveStateSchema,
+} from "../orchestration/flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // BaseStateFields — approval_gate / max_revisions / rejection_target
-// ---------------------------------------------------------------------------
 
 describe("BaseStateFields approval gate fields", () => {
   it("parses state with approval_gate: true", () => {
     const result = SingleStateSchema.safeParse({
-      type: "single",
       approval_gate: true,
+      type: "single",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -46,8 +44,8 @@ describe("BaseStateFields approval gate fields", () => {
 
   it("parses state with max_revisions: 3", () => {
     const result = SingleStateSchema.safeParse({
-      type: "single",
       max_revisions: 3,
+      type: "single",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -57,8 +55,8 @@ describe("BaseStateFields approval gate fields", () => {
 
   it("parses state with rejection_target: 'design'", () => {
     const result = SingleStateSchema.safeParse({
-      type: "single",
       rejection_target: "design",
+      type: "single",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -68,10 +66,10 @@ describe("BaseStateFields approval gate fields", () => {
 
   it("parses wave state with all approval gate fields", () => {
     const result = WaveStateSchema.safeParse({
-      type: "wave",
       approval_gate: true,
       max_revisions: 2,
       rejection_target: "research",
+      type: "wave",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -83,8 +81,8 @@ describe("BaseStateFields approval gate fields", () => {
 
   it("coerces max_revisions from string '5'", () => {
     const result = SingleStateSchema.safeParse({
-      type: "single",
       max_revisions: "5",
+      type: "single",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -93,15 +91,13 @@ describe("BaseStateFields approval gate fields", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // FragmentBaseStateFields — relaxed variants for param placeholders
-// ---------------------------------------------------------------------------
 
 describe("FragmentBaseStateFields approval gate fields", () => {
   it("parses fragment state with approval_gate as string placeholder", () => {
     const result = FragmentStateDefinitionSchema.safeParse({
-      type: "single",
       approval_gate: "${enable_approval}",
+      type: "single",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -111,8 +107,8 @@ describe("FragmentBaseStateFields approval gate fields", () => {
 
   it("parses fragment state with approval_gate: true (boolean still valid)", () => {
     const result = FragmentStateDefinitionSchema.safeParse({
-      type: "single",
       approval_gate: true,
+      type: "single",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -122,8 +118,8 @@ describe("FragmentBaseStateFields approval gate fields", () => {
 
   it("parses fragment state with max_revisions as string placeholder", () => {
     const result = FragmentStateDefinitionSchema.safeParse({
-      type: "single",
       max_revisions: "${max_revisions}",
+      type: "single",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -133,8 +129,8 @@ describe("FragmentBaseStateFields approval gate fields", () => {
 
   it("parses fragment state with rejection_target as string", () => {
     const result = FragmentStateDefinitionSchema.safeParse({
-      type: "single",
       rejection_target: "${reject_to}",
+      type: "single",
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -143,9 +139,7 @@ describe("FragmentBaseStateFields approval gate fields", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // STATUS_KEYWORDS — approved / revise / reject
-// ---------------------------------------------------------------------------
 
 describe("STATUS_KEYWORDS approval gate keywords", () => {
   it("includes 'approved'", () => {
@@ -161,39 +155,35 @@ describe("STATUS_KEYWORDS approval gate keywords", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // ApprovalBreakpoint type — compile-time structural check
-// ---------------------------------------------------------------------------
 
 describe("ApprovalBreakpoint interface", () => {
   it("accepts a structurally correct ApprovalBreakpoint value", () => {
     // This is a compile-time check — if the type is wrong, TS will error at build time.
     const breakpoint: ApprovalBreakpoint = {
-      state_id: "implement",
       agent_type: "canon:canon-implementor",
       artifacts: ["/workspace/plans/task-01-SUMMARY.md"],
-      summary: "Implemented approval gate schema fields",
       options: ["approved", "revise", "reject"],
+      state_id: "implement",
+      summary: "Implemented approval gate schema fields",
     };
     expect(breakpoint.state_id).toBe("implement");
     expect(breakpoint.options).toEqual(["approved", "revise", "reject"]);
   });
 });
 
-// ---------------------------------------------------------------------------
 // DriveFlowAction "approval" variant — compile-time structural check
-// ---------------------------------------------------------------------------
 
 describe("DriveFlowAction approval variant", () => {
   it("accepts an 'approval' action with ApprovalBreakpoint", () => {
     const action: DriveFlowAction = {
       action: "approval",
       breakpoint: {
-        state_id: "design",
         agent_type: "canon:canon-architect",
         artifacts: [],
-        summary: "Design complete",
         options: ["approved", "revise", "reject"],
+        state_id: "design",
+        summary: "Design complete",
       },
     };
     expect(action.action).toBe("approval");
@@ -210,7 +200,7 @@ describe("DriveFlowAction approval variant", () => {
   it("existing 'hitl' variant still compiles", () => {
     const action: DriveFlowAction = {
       action: "hitl",
-      breakpoint: { reason: "needs input", context: "some context" },
+      breakpoint: { context: "some context", reason: "needs input" },
     };
     expect(action.action).toBe("hitl");
   });
@@ -218,8 +208,8 @@ describe("DriveFlowAction approval variant", () => {
   it("existing 'done' variant still compiles", () => {
     const action: DriveFlowAction = {
       action: "done",
-      terminal_state: "complete",
       summary: "All done",
+      terminal_state: "complete",
     };
     expect(action.action).toBe("done");
   });

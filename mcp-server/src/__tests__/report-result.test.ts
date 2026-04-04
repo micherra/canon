@@ -8,44 +8,40 @@
  * All workspace setup uses ExecutionStore instead of readBoard/writeBoard.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import type { FlowEventMap } from "../orchestration/events.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
+import { writeMessage } from "../orchestration/messages.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { writeMessage } from "../orchestration/messages.ts";
-import type { FlowEventMap } from "../orchestration/events.ts";
-import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeMinimalFlow(overrides?: Partial<FlowType>): FlowType {
   return {
-    name: "test-flow",
     description: "A test flow",
     entry: "build",
+    name: "test-flow",
     spawn_instructions: {},
     states: {
       build: {
-        type: "single",
         transitions: {
           done: "review",
           failed: "hitl",
         },
-      },
-      review: {
         type: "single",
+      },
+      hitl: { type: "terminal" },
+      review: {
         transitions: {
           done: "ship",
         },
+        type: "single",
       },
       ship: { type: "terminal" },
-      hitl: { type: "terminal" },
     },
     ...overrides,
   };
@@ -67,23 +63,23 @@ function setupWorkspace(workspace: string, flow: FlowType): void {
   const now = new Date().toISOString();
 
   store.initExecution({
-    flow: flow.name,
-    task: "test task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc123",
-    started: now,
-    last_updated: now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
 
   for (const stateId of Object.keys(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
   }
 }
 
@@ -92,15 +88,13 @@ afterEach(() => {
   clearStoreCache();
 
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   flowEventBus.removeAllListeners();
 });
 
-// ---------------------------------------------------------------------------
 // Basic functionality
-// ---------------------------------------------------------------------------
 
 describe("reportResult — basic functionality", () => {
   it("normalizes status keyword and evaluates transition", async () => {
@@ -109,10 +103,10 @@ describe("reportResult — basic functionality", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -127,10 +121,10 @@ describe("reportResult — basic functionality", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -143,10 +137,10 @@ describe("reportResult — basic functionality", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "SOMETHING_WEIRD",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -160,18 +154,15 @@ describe("reportResult — basic functionality", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      artifacts: ["summary.md", "diff.patch"],
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["summary.md", "diff.patch"],
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].artifacts).toEqual([
-      "summary.md",
-      "diff.patch",
-    ]);
+    expect(result.board.states.build.artifacts).toEqual(["summary.md", "diff.patch"]);
   });
 
   it("persists board state to execution_states table (no board.json)", async () => {
@@ -180,10 +171,10 @@ describe("reportResult — basic functionality", () => {
     setupWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     const store = getExecutionStore(workspace);
@@ -201,25 +192,30 @@ describe("reportResult — debate flow", () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow({
       debate: {
-        teams: 2,
         composition: ["canon-researcher", "canon-architect"],
-        min_rounds: 2,
-        max_rounds: 4,
+        continue_to_build: true,
         convergence_check_after: 3,
         hitl_checkpoint: true,
-        continue_to_build: true,
+        max_rounds: 4,
+        min_rounds: 2,
+        teams: 2,
       },
     });
     setupWorkspace(workspace, flow);
 
-    await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "Use events.");
+    await writeMessage(
+      workspace,
+      "debate-round-1",
+      "round-1-team-a-canon-researcher",
+      "Use events.",
+    );
     await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Use CRUD.");
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -233,27 +229,42 @@ describe("reportResult — debate flow", () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow({
       debate: {
-        teams: 2,
         composition: ["canon-researcher", "canon-architect"],
-        min_rounds: 2,
-        max_rounds: 4,
+        continue_to_build: true,
         convergence_check_after: 2,
         hitl_checkpoint: true,
-        continue_to_build: true,
+        max_rounds: 4,
+        min_rounds: 2,
+        teams: 2,
       },
     });
     setupWorkspace(workspace, flow);
 
-    await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "We agree on event sourcing.");
-    await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Consensus reached, aligned.");
+    await writeMessage(
+      workspace,
+      "debate-round-1",
+      "round-1-team-a-canon-researcher",
+      "We agree on event sourcing.",
+    );
+    await writeMessage(
+      workspace,
+      "debate-round-1",
+      "round-1-team-b-canon-architect",
+      "Consensus reached, aligned.",
+    );
     await writeMessage(workspace, "debate-round-2", "round-2-team-a-canon-researcher", "Agreed.");
-    await writeMessage(workspace, "debate-round-2", "round-2-team-b-canon-architect", "Same conclusion.");
+    await writeMessage(
+      workspace,
+      "debate-round-2",
+      "round-2-team-b-canon-architect",
+      "Same conclusion.",
+    );
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -265,9 +276,7 @@ describe("reportResult — debate flow", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Event emissions
-// ---------------------------------------------------------------------------
 
 describe("reportResult — event emissions", () => {
   it("emits state_completed event with correct stateId and result", async () => {
@@ -279,10 +288,10 @@ describe("reportResult — event emissions", () => {
     flowEventBus.on("state_completed", (event) => received.push(event));
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     expect(received).toHaveLength(1);
@@ -300,12 +309,12 @@ describe("reportResult — event emissions", () => {
     flowEventBus.on("state_completed", (event) => received.push(event));
 
     await reportResult({
-      workspace,
+      artifacts: ["plan.md"],
+      flow,
+      metrics: { duration_ms: 3000, model: "sonnet", spawns: 1 },
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["plan.md"],
-      metrics: { duration_ms: 3000, spawns: 1, model: "sonnet" },
+      workspace,
     });
 
     expect(received[0].duration_ms).toBe(3000);
@@ -321,10 +330,10 @@ describe("reportResult — event emissions", () => {
     flowEventBus.on("transition_evaluated", (event) => received.push(event));
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     expect(received).toHaveLength(1);
@@ -340,10 +349,10 @@ describe("reportResult — event emissions", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "BLOCKED",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -361,10 +370,10 @@ describe("reportResult — event emissions", () => {
     flowEventBus.on("hitl_triggered", (event) => hitlEvents.push(event));
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     expect(hitlEvents).toHaveLength(0);
@@ -379,10 +388,10 @@ describe("reportResult — event emissions", () => {
     flowEventBus.on("hitl_triggered", (event) => received.push(event));
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "NEEDS_CONTEXT",
-      flow,
+      workspace,
     });
 
     expect(received).toHaveLength(1);
@@ -404,21 +413,19 @@ describe("reportResult — event emissions", () => {
     });
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
     assertOk(result);
 
     expect(boardStatusAtEmit).toBe("done");
-    expect(result.board.states["build"].status).toBe("done");
+    expect(result.board.states.build.status).toBe("done");
   });
 });
 
-// ---------------------------------------------------------------------------
 // Listener error isolation
-// ---------------------------------------------------------------------------
 
 describe("reportResult — listener error isolation", () => {
   it("cleans up listeners after successful emit (no listener leak)", async () => {
@@ -429,10 +436,10 @@ describe("reportResult — listener error isolation", () => {
     const listenersBefore = flowEventBus.listenerCount("state_completed");
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     const listenersAfter = flowEventBus.listenerCount("state_completed");
@@ -440,9 +447,7 @@ describe("reportResult — listener error isolation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // HITL scenarios
-// ---------------------------------------------------------------------------
 
 describe("reportResult — HITL scenarios", () => {
   it("hitl_reason includes state_id for unrecognized status", async () => {
@@ -451,10 +456,10 @@ describe("reportResult — HITL scenarios", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "MYSTERY_WORD",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -469,10 +474,10 @@ describe("reportResult — HITL scenarios", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "ship",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -480,26 +485,24 @@ describe("reportResult — HITL scenarios", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // parallel_results aggregation
-// ---------------------------------------------------------------------------
 
 describe("reportResult — parallel_results aggregation", () => {
   function makeFlowWithParallelTransitions(): FlowType {
     return makeMinimalFlow({
       states: {
         build: {
-          type: "single",
           transitions: {
-            done: "review",
-            cannot_fix: "hitl",
             blocked: "hitl",
+            cannot_fix: "hitl",
+            done: "review",
             failed: "hitl",
           },
+          type: "single",
         },
-        review: { type: "single", transitions: { done: "ship" } },
-        ship: { type: "terminal" },
         hitl: { type: "terminal" },
+        review: { transitions: { done: "ship" }, type: "single" },
+        ship: { type: "terminal" },
       },
     });
   }
@@ -510,14 +513,14 @@ describe("reportResult — parallel_results aggregation", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       parallel_results: [
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "done" },
       ],
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
@@ -531,14 +534,14 @@ describe("reportResult — parallel_results aggregation", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       parallel_results: [
         { item: "file-a.ts", status: "cannot_fix" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
@@ -552,14 +555,14 @@ describe("reportResult — parallel_results aggregation", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       parallel_results: [
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
@@ -573,14 +576,14 @@ describe("reportResult — parallel_results aggregation", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       parallel_results: [
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "blocked" },
       ],
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
@@ -594,20 +597,20 @@ describe("reportResult — parallel_results aggregation", () => {
     setupWorkspace(workspace, flow);
 
     const parallelResults = [
-      { item: "file-a.ts", status: "done", artifacts: ["summary.md"] },
+      { artifacts: ["summary.md"], item: "file-a.ts", status: "done" },
       { item: "file-b.ts", status: "done" },
     ];
 
     const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       parallel_results: parallelResults,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].parallel_results).toEqual(parallelResults);
+    expect(result.board.states.build.parallel_results).toEqual(parallelResults);
   });
 
   it("absent parallel_results does not override condition", async () => {
@@ -616,16 +619,16 @@ describe("reportResult — parallel_results aggregation", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
     assertOk(result);
 
     expect(result.transition_condition).toBe("done");
     expect(result.next_state).toBe("review");
-    expect(result.board.states["build"].parallel_results).toBeUndefined();
+    expect(result.board.states.build.parallel_results).toBeUndefined();
   });
 
   it("empty parallel_results array does not override condition", async () => {
@@ -634,11 +637,11 @@ describe("reportResult — parallel_results aggregation", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       parallel_results: [],
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
@@ -647,9 +650,7 @@ describe("reportResult — parallel_results aggregation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Progress line append
-// ---------------------------------------------------------------------------
 
 describe("reportResult — progress_line", () => {
   it("appends progress_line to store when provided", async () => {
@@ -658,11 +659,11 @@ describe("reportResult — progress_line", () => {
     setupWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       progress_line: "- [build] done: Built successfully",
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
 
     const store = getExecutionStore(workspace);
@@ -676,10 +677,10 @@ describe("reportResult — progress_line", () => {
     setupWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     const store = getExecutionStore(workspace);
@@ -688,9 +689,7 @@ describe("reportResult — progress_line", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Quality signals persistence
-// ---------------------------------------------------------------------------
 
 describe("reportResult — quality signals", () => {
   it("persists gate_results to state metrics and top-level", async () => {
@@ -699,21 +698,21 @@ describe("reportResult — quality signals", () => {
     setupWorkspace(workspace, flow);
 
     const gateResults = [
-      { gate: "npm test", command: "npm test", passed: true, output: "All pass", exitCode: 0 },
+      { command: "npm test", exitCode: 0, gate: "npm test", output: "All pass", passed: true },
     ];
 
     const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "DONE",
       flow,
       gate_results: gateResults,
-      metrics: { duration_ms: 1000, spawns: 1, model: "sonnet" },
+      metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].gate_results).toEqual(gateResults);
-    expect(result.board.states["build"].metrics?.gate_results).toEqual(gateResults);
+    expect(result.board.states.build.gate_results).toEqual(gateResults);
+    expect(result.board.states.build.metrics?.gate_results).toEqual(gateResults);
 
     // Verify persisted in SQLite
     const store = getExecutionStore(workspace);
@@ -727,20 +726,20 @@ describe("reportResult — quality signals", () => {
     setupWorkspace(workspace, flow);
 
     const postconditionResults = [
-      { name: "file_exists", type: "file_exists" as const, passed: true, output: "File found" },
+      { name: "file_exists", output: "File found", passed: true, type: "file_exists" as const },
     ];
 
     const result = await reportResult({
-      workspace,
+      flow,
+      metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
+      postcondition_results: postconditionResults,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      postcondition_results: postconditionResults,
-      metrics: { duration_ms: 1000, spawns: 1, model: "sonnet" },
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].postcondition_results).toEqual(postconditionResults);
+    expect(result.board.states.build.postcondition_results).toEqual(postconditionResults);
   });
 
   it("persists violation_count and violation_severities to metrics", async () => {
@@ -749,18 +748,21 @@ describe("reportResult — quality signals", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
+      metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
       state_id: "build",
       status_keyword: "DONE",
-      flow,
       violation_count: 3,
       violation_severities: { blocking: 1, warning: 2 },
-      metrics: { duration_ms: 1000, spawns: 1, model: "sonnet" },
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].metrics?.violation_count).toBe(3);
-    expect(result.board.states["build"].metrics?.violation_severities).toEqual({ blocking: 1, warning: 2 });
+    expect(result.board.states.build.metrics?.violation_count).toBe(3);
+    expect(result.board.states.build.metrics?.violation_severities).toEqual({
+      blocking: 1,
+      warning: 2,
+    });
   });
 
   it("persists test_results to metrics", async () => {
@@ -769,16 +771,20 @@ describe("reportResult — quality signals", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
+      metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      test_results: { passed: 50, failed: 2, skipped: 1 },
-      metrics: { duration_ms: 1000, spawns: 1, model: "sonnet" },
+      test_results: { failed: 2, passed: 50, skipped: 1 },
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].metrics?.test_results).toEqual({ passed: 50, failed: 2, skipped: 1 });
+    expect(result.board.states.build.metrics?.test_results).toEqual({
+      failed: 2,
+      passed: 50,
+      skipped: 1,
+    });
   });
 
   it("does not record metrics when no signal fields provided", async () => {
@@ -787,21 +793,19 @@ describe("reportResult — quality signals", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
       // No metrics or signal fields
     });
     assertOk(result);
 
-    expect(result.board.states["build"].metrics).toBeUndefined();
+    expect(result.board.states.build.metrics).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // Discovered gates/postconditions accumulation
-// ---------------------------------------------------------------------------
 
 describe("reportResult — discovered gates/postconditions accumulation", () => {
   it("accumulates discovered_gates (not replaced) across calls", async () => {
@@ -811,26 +815,30 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
 
     // First call: add 1 discovered gate
     await reportResult({
-      workspace,
+      discovered_gates: [{ command: "npm test", source: "agent-1" }],
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      discovered_gates: [{ command: "npm test", source: "agent-1" }],
+      workspace,
     });
 
     // Seed another call — re-seed with same execution for second call
     // Reset the state and re-run, preserving discovered_gates from first call
     const store = getExecutionStore(workspace);
     const prevState = store.getState("build");
-    store.upsertState("build", { status: "pending", entries: 0, discovered_gates: prevState?.discovered_gates });
+    store.upsertState("build", {
+      discovered_gates: prevState?.discovered_gates,
+      entries: 0,
+      status: "pending",
+    });
     store.updateExecution({ current_state: "build" });
 
     await reportResult({
-      workspace,
+      discovered_gates: [{ command: "npm run lint", source: "agent-2" }],
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      discovered_gates: [{ command: "npm run lint", source: "agent-2" }],
+      workspace,
     });
 
     // Both gates should be accumulated
@@ -846,24 +854,30 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
     setupWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
+      discovered_postconditions: [{ target: "dist/index.js", type: "file_exists" }],
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      discovered_postconditions: [{ type: "file_exists", target: "dist/index.js" }],
+      workspace,
     });
 
     const store = getExecutionStore(workspace);
     const prevState = store.getState("build");
-    store.upsertState("build", { status: "pending", entries: 0, discovered_postconditions: prevState?.discovered_postconditions });
+    store.upsertState("build", {
+      discovered_postconditions: prevState?.discovered_postconditions,
+      entries: 0,
+      status: "pending",
+    });
     store.updateExecution({ current_state: "build" });
 
     await reportResult({
-      workspace,
+      discovered_postconditions: [
+        { pattern: "export", target: "src/index.ts", type: "pattern_match" },
+      ],
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      discovered_postconditions: [{ type: "pattern_match", target: "src/index.ts", pattern: "export" }],
+      workspace,
     });
 
     const state = store.getState("build");
@@ -871,9 +885,7 @@ describe("reportResult — discovered gates/postconditions accumulation", () => 
   });
 });
 
-// ---------------------------------------------------------------------------
 // compete_results persistence
-// ---------------------------------------------------------------------------
 
 describe("reportResult — compete_results persistence", () => {
   it("persists compete_results to board state entry", async () => {
@@ -882,20 +894,20 @@ describe("reportResult — compete_results persistence", () => {
     setupWorkspace(workspace, flow);
 
     const competeResults = [
-      { lens: "simplicity", status: "done", artifacts: ["design-a.md"] },
-      { lens: "performance", status: "done", artifacts: ["design-b.md"] },
+      { artifacts: ["design-a.md"], lens: "simplicity", status: "done" },
+      { artifacts: ["design-b.md"], lens: "performance", status: "done" },
     ];
 
     const result = await reportResult({
-      workspace,
+      compete_results: competeResults,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      compete_results: competeResults,
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].compete_results).toEqual(competeResults);
+    expect(result.board.states.build.compete_results).toEqual(competeResults);
   });
 
   it("persists synthesized flag to board state entry", async () => {
@@ -904,16 +916,16 @@ describe("reportResult — compete_results persistence", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      compete_results: [{ status: "done" }],
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      compete_results: [{ status: "done" }],
       synthesized: true,
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].synthesized).toBe(true);
+    expect(result.board.states.build.synthesized).toBe(true);
   });
 
   it("persists synthesized flag without compete_results", async () => {
@@ -922,16 +934,16 @@ describe("reportResult — compete_results persistence", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
       synthesized: true,
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].synthesized).toBe(true);
-    expect(result.board.states["build"].compete_results).toBeUndefined();
+    expect(result.board.states.build.synthesized).toBe(true);
+    expect(result.board.states.build.compete_results).toBeUndefined();
   });
 
   it("does not set compete_results when not provided", async () => {
@@ -940,21 +952,19 @@ describe("reportResult — compete_results persistence", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
     assertOk(result);
 
-    expect(result.board.states["build"].compete_results).toBeUndefined();
-    expect(result.board.states["build"].synthesized).toBeUndefined();
+    expect(result.board.states.build.compete_results).toBeUndefined();
+    expect(result.board.states.build.synthesized).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // Concurrent calls — SQLite busy_timeout serializes writes
-// ---------------------------------------------------------------------------
 
 describe("reportResult — concurrent calls", () => {
   it("3 simultaneous calls do not throw SQLITE_BUSY", async () => {
@@ -967,12 +977,12 @@ describe("reportResult — concurrent calls", () => {
 
     const promises = workspaces.map((workspace) =>
       reportResult({
-        workspace,
-        state_id: "build",
-        status_keyword: "DONE",
         flow,
         progress_line: `- done in ${workspace}`,
-      })
+        state_id: "build",
+        status_keyword: "DONE",
+        workspace,
+      }),
     );
 
     // All should resolve without error
@@ -988,19 +998,19 @@ describe("reportResult — concurrent calls", () => {
     const workspace = makeTmpWorkspace();
     const flow = makeMinimalFlow({
       states: {
-        build: { type: "single", transitions: { done: "review", failed: "hitl" } },
-        review: { type: "single", transitions: { done: "ship" } },
-        ship: { type: "terminal" },
+        build: { transitions: { done: "review", failed: "hitl" }, type: "single" },
         hitl: { type: "terminal" },
+        review: { transitions: { done: "ship" }, type: "single" },
+        ship: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
 
     // Call report_result 3x on different states in the same workspace
     const results = await Promise.all([
-      reportResult({ workspace, state_id: "build", status_keyword: "DONE", flow }),
-      reportResult({ workspace, state_id: "review", status_keyword: "DONE", flow }),
-      reportResult({ workspace, state_id: "ship", status_keyword: "DONE", flow }),
+      reportResult({ flow, state_id: "build", status_keyword: "DONE", workspace }),
+      reportResult({ flow, state_id: "review", status_keyword: "DONE", workspace }),
+      reportResult({ flow, state_id: "ship", status_keyword: "DONE", workspace }),
     ]);
 
     // All should succeed (transactions serialize writes)
@@ -1010,9 +1020,7 @@ describe("reportResult — concurrent calls", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Store persistence — full mutation chain
-// ---------------------------------------------------------------------------
 
 describe("reportResult — store persistence", () => {
   it("full mutation chain: status normalization → transition → board persistence", async () => {
@@ -1021,14 +1029,16 @@ describe("reportResult — store persistence", () => {
     setupWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
+      artifacts: ["plan.md"],
+      flow,
+      gate_results: [
+        { command: "npm test", exitCode: 0, gate: "npm test", output: "", passed: true },
+      ],
+      metrics: { duration_ms: 2000, model: "sonnet", spawns: 2 },
       state_id: "build",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["plan.md"],
-      metrics: { duration_ms: 2000, spawns: 2, model: "sonnet" },
-      gate_results: [{ gate: "npm test", command: "npm test", passed: true, output: "", exitCode: 0 }],
       violation_count: 0,
+      workspace,
     });
     assertOk(result);
 
@@ -1054,14 +1064,14 @@ describe("reportResult — store persistence", () => {
     const flow = makeMinimalFlow({
       states: {
         build: {
-          type: "single",
-          transitions: { done: "review", failed: "build" },
-          stuck_when: "same_status",
           max_iterations: 5,
+          stuck_when: "same_status",
+          transitions: { done: "review", failed: "build" },
+          type: "single",
         },
-        review: { type: "single", transitions: { done: "ship" } },
-        ship: { type: "terminal" },
         hitl: { type: "terminal" },
+        review: { transitions: { done: "ship" }, type: "single" },
+        ship: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
@@ -1069,17 +1079,17 @@ describe("reportResult — store persistence", () => {
     // Seed iteration entry
     const store = getExecutionStore(workspace);
     store.upsertIteration("build", {
-      count: 1,
-      max: 5,
-      history: [{ status: "failed" }],
       cannot_fix: [],
+      count: 1,
+      history: [{ status: "failed" }],
+      max: 5,
     });
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "FAILED",
-      flow,
+      workspace,
     });
     assertOk(result);
 
@@ -1094,9 +1104,7 @@ describe("reportResult — store persistence", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Concurrent read-modify-write — P1 fix: entire RMW inside transaction
-// ---------------------------------------------------------------------------
 
 describe("reportResult — concurrent RMW serialization (P1)", () => {
   it("two concurrent calls accumulating discovered_gates preserve both sets", async () => {
@@ -1110,12 +1118,12 @@ describe("reportResult — concurrent RMW serialization (P1)", () => {
     const flow = makeMinimalFlow({
       states: {
         build: {
-          type: "single",
           transitions: { done: "review", failed: "build" },
+          type: "single",
         },
-        review: { type: "single", transitions: { done: "ship" } },
-        ship: { type: "terminal" },
         hitl: { type: "terminal" },
+        review: { transitions: { done: "ship" }, type: "single" },
+        ship: { type: "terminal" },
       },
     });
     setupWorkspace(workspace, flow);
@@ -1123,18 +1131,18 @@ describe("reportResult — concurrent RMW serialization (P1)", () => {
     // Two concurrent calls each reporting a distinct discovered gate
     const [r1, r2] = await Promise.all([
       reportResult({
-        workspace,
+        discovered_gates: [{ command: "npm test", source: "agent-1" }],
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        discovered_gates: [{ command: "npm test", source: "agent-1" }],
+        workspace,
       }),
       reportResult({
-        workspace,
+        discovered_gates: [{ command: "npm run lint", source: "agent-2" }],
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        discovered_gates: [{ command: "npm run lint", source: "agent-2" }],
+        workspace,
       }),
     ]);
 
@@ -1158,9 +1166,7 @@ describe("reportResult — concurrent RMW serialization (P1)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Workspace not found — typed WORKSPACE_NOT_FOUND error
-// ---------------------------------------------------------------------------
 
 describe("reportResult — workspace not found", () => {
   it("returns WORKSPACE_NOT_FOUND ToolResult when workspace has no execution", async () => {
@@ -1168,10 +1174,10 @@ describe("reportResult — workspace not found", () => {
 
     const flow = makeMinimalFlow();
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "DONE",
-      flow,
+      workspace,
     });
 
     expect(result.ok).toBe(false);

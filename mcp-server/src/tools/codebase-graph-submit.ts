@@ -11,11 +11,11 @@
  * - deep-modules: delegates all complexity to JobManager
  */
 
-import type { ToolResult } from '../utils/tool-result.ts';
-import type { SubmitResult } from '../jobs/job-manager.ts';
-import { getOrCreateJobManager } from '../jobs/job-manager.ts';
-import { deriveSourceDirsFromLayers } from '../utils/config.ts';
-import type { CodebaseGraphInput } from './codebase-graph.ts';
+import type { SubmitResult } from "../jobs/job-manager.ts";
+import { getOrCreateJobManager } from "../jobs/job-manager.ts";
+import { deriveSourceDirsFromLayers } from "../utils/config.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
+import type { CodebaseGraphInput } from "./codebase-graph.ts";
 
 export interface GraphSubmitInput extends CodebaseGraphInput {
   /** Skip cache, force new run (not yet implemented — reserved). */

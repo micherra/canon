@@ -9,18 +9,15 @@
  * 5. Enter convergence exceeded: report succeeds, enter returns can_enter:false
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertOk } from "../utils/tool-result.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../utils/tool-result.ts";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn().mockResolvedValue({ skip: false }),
@@ -30,8 +27,8 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
-    removeListener: vi.fn(),
     removeAllListeners: vi.fn(),
+    removeListener: vi.fn(),
   },
 }));
 
@@ -40,18 +37,14 @@ vi.mock("../orchestration/consultation-executor.ts", () => ({
 }));
 
 vi.mock("../orchestration/wave-variables.ts", () => ({
-  escapeDollarBrace: vi.fn((s: string) => s),
-  substituteVariables: vi.fn((s: string) => s),
   buildTemplateInjection: vi.fn(() => ""),
-  parseTaskIdsForWave: vi.fn(() => []),
+  escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
+  parseTaskIdsForWave: vi.fn(() => []),
+  substituteVariables: vi.fn((s: string) => s),
 }));
 
 import { reportAndEnterNextState } from "../tools/report-and-enter-next-state.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -66,53 +59,53 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
   const now = new Date().toISOString();
 
   store.initExecution({
-    flow: flow.name,
-    task: "test task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc123",
-    started: now,
-    last_updated: now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
 
   for (const stateId of Object.keys(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
   }
 }
 
 function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "A test flow",
     entry: "build",
+    name: "test-flow",
     spawn_instructions: {
       build: "Build the thing: ${task}",
       review: "Review the thing: ${task}",
     },
     states: {
       build: {
-        type: "single",
         agent: "canon-implementor",
         transitions: {
           done: "review",
           failed: "hitl",
         },
-      },
-      review: {
         type: "single",
+      },
+      hitl: { type: "terminal" },
+      review: {
         agent: "canon-reviewer",
         transitions: {
           done: "ship",
         },
+        type: "single",
       },
       ship: { type: "terminal" },
-      hitl: { type: "terminal" },
     },
     ...overrides,
   };
@@ -121,15 +114,11 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("reportAndEnterNextState", () => {
   describe("normal transition", () => {
@@ -139,11 +128,11 @@ describe("reportAndEnterNextState", () => {
       setupWorkspace(workspace, flow);
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        variables: { task: "build the widget", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "build the widget" },
+        workspace,
       });
       assertOk(result);
 
@@ -167,21 +156,21 @@ describe("reportAndEnterNextState", () => {
       setupWorkspace(workspace, flow);
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
       // Board should reflect the next state entered
       expect(result.board).toBeDefined();
-      expect(result.board.states["build"].status).toBe("done");
+      expect(result.board.states.build.status).toBe("done");
 
       // Enter phase should have entered the review state
       expect(result.enter!.board).toBeDefined();
-      expect(result.enter!.board!.states["review"].status).toBe("in_progress");
+      expect(result.enter!.board!.states.review.status).toBe("in_progress");
     });
 
     it("uses the enter phase board as the final board when enter succeeds", async () => {
@@ -190,16 +179,16 @@ describe("reportAndEnterNextState", () => {
       setupWorkspace(workspace, flow);
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
       // The top-level board should be the enter phase board (more up-to-date)
-      expect(result.board.states["review"].status).toBe("in_progress");
+      expect(result.board.states.review.status).toBe("in_progress");
     });
   });
 
@@ -210,11 +199,11 @@ describe("reportAndEnterNextState", () => {
       setupWorkspace(workspace, flow);
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "COMPLETELY_BROKEN",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -231,11 +220,11 @@ describe("reportAndEnterNextState", () => {
       setupWorkspace(workspace, flow);
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "FAILED",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -253,9 +242,9 @@ describe("reportAndEnterNextState", () => {
       const flow = makeFlow({
         states: {
           build: {
-            type: "single",
             agent: "canon-implementor",
             transitions: { done: "ship" },
+            type: "single",
           },
           ship: { type: "terminal" },
         },
@@ -263,11 +252,11 @@ describe("reportAndEnterNextState", () => {
       setupWorkspace(workspace, flow);
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -284,9 +273,9 @@ describe("reportAndEnterNextState", () => {
       const flow = makeFlow({
         states: {
           build: {
-            type: "single",
             agent: "canon-implementor",
             transitions: { failed: "hitl" },
+            type: "single",
           },
           hitl: { type: "terminal" },
         },
@@ -294,11 +283,11 @@ describe("reportAndEnterNextState", () => {
       setupWorkspace(workspace, flow);
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -318,11 +307,11 @@ describe("reportAndEnterNextState", () => {
       // Intentionally do NOT call setupWorkspace — no execution row exists
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
 
       expect(result.ok).toBe(false);
@@ -338,15 +327,15 @@ describe("reportAndEnterNextState", () => {
       const flow = makeFlow({
         states: {
           build: {
-            type: "single",
             agent: "canon-implementor",
             transitions: { done: "review" },
+            type: "single",
           },
           review: {
-            type: "single",
             agent: "canon-reviewer",
             max_iterations: 2,
             transitions: { done: "ship" },
+            type: "single",
           },
           ship: { type: "terminal" },
         },
@@ -356,18 +345,18 @@ describe("reportAndEnterNextState", () => {
       // Seed the review state with max iterations already reached
       const store = getExecutionStore(workspace);
       store.upsertIteration("review", {
-        count: 2,
-        max: 2,
-        history: [],
         cannot_fix: [],
+        count: 2,
+        history: [],
+        max: 2,
       });
 
       const result = await reportAndEnterNextState({
-        workspace,
+        flow,
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
@@ -391,18 +380,18 @@ describe("reportAndEnterNextState", () => {
       setupWorkspace(workspace, flow);
 
       const result = await reportAndEnterNextState({
-        workspace,
+        artifacts: ["summary.md"],
+        flow,
+        progress_line: "- [build] done: built the thing",
         state_id: "build",
         status_keyword: "DONE",
-        flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
-        artifacts: ["summary.md"],
-        progress_line: "- [build] done: built the thing",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
       assertOk(result);
 
       // Artifacts should be on the board state
-      expect(result.board.states["build"].artifacts).toEqual(["summary.md"]);
+      expect(result.board.states.build.artifacts).toEqual(["summary.md"]);
     });
   });
 });

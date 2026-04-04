@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { writeTestReport } from "../tools/write-test-report.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
@@ -9,25 +9,23 @@ let tmpDir: string;
 
 afterEach(async () => {
   if (tmpDir) {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   }
 });
 
-// ---------------------------------------------------------------------------
 // Valid input — happy path
-// ---------------------------------------------------------------------------
 
 describe("writeTestReport — valid input", () => {
   it("writes TEST-REPORT.md and TEST-REPORT.meta.json to correct location", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 10,
+      skipped: 2,
       slug: "my-slug",
       summary: "All tests passed.",
-      passed: 10,
-      failed: 0,
-      skipped: 2,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -47,12 +45,12 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 2,
+      passed: 8,
+      skipped: 1,
       slug: "stats-test",
       summary: "Some tests failed.",
-      passed: 8,
-      failed: 2,
-      skipped: 1,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -83,12 +81,12 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 1,
+      passed: 3,
+      skipped: 0,
       slug: "compute-test",
       summary: "Test run complete.",
-      passed: 3,
-      failed: 1,
-      skipped: 0,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -100,12 +98,12 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 0,
+      skipped: 0,
       slug: "zero-total",
       summary: "No tests ran.",
-      passed: 0,
-      failed: 0,
-      skipped: 0,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -117,12 +115,12 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 5,
+      skipped: 0,
       slug: "meta-type-test",
       summary: "Checking meta.",
-      passed: 5,
-      failed: 0,
-      skipped: 0,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -137,12 +135,12 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 3,
+      passed: 7,
+      skipped: 1,
       slug: "meta-fields-test",
       summary: "Complete summary text.",
-      passed: 7,
-      failed: 3,
-      skipped: 1,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -161,18 +159,23 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const issues = [
-      { test: "should handle errors", error: "Expected true, got false", category: "logic", file: "src/foo.ts" },
-      { test: "should parse input", error: "TypeError: cannot read property", category: "crash" },
+      {
+        category: "logic",
+        error: "Expected true, got false",
+        file: "src/foo.ts",
+        test: "should handle errors",
+      },
+      { category: "crash", error: "TypeError: cannot read property", test: "should parse input" },
     ];
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 2,
+      issues,
+      passed: 8,
+      skipped: 0,
       slug: "issues-test",
       summary: "Some failures.",
-      passed: 8,
-      failed: 2,
-      skipped: 0,
-      issues,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -193,15 +196,13 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 2,
+      issues: [{ category: "regression", error: "it broke", file: "src/foo.ts", test: "test foo" }],
+      passed: 8,
+      skipped: 0,
       slug: "issues-md-test",
       summary: "Some failures.",
-      passed: 8,
-      failed: 2,
-      skipped: 0,
-      issues: [
-        { test: "test foo", error: "it broke", category: "regression", file: "src/foo.ts" },
-      ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -220,12 +221,12 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 5,
+      skipped: 0,
       slug: "no-issues-test",
       summary: "All passed!",
-      passed: 5,
-      failed: 0,
-      skipped: 0,
+      workspace: tmpDir,
       // no issues field
     });
 
@@ -244,12 +245,12 @@ describe("writeTestReport — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 1,
+      skipped: 0,
       slug: "brand-new-slug",
       summary: "New plan directory.",
-      passed: 1,
-      failed: 0,
-      skipped: 0,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -258,21 +259,17 @@ describe("writeTestReport — valid input", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Validation errors
-// ---------------------------------------------------------------------------
-
 describe("writeTestReport — validation errors", () => {
   it("returns INVALID_INPUT for slug with spaces", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 0,
+      skipped: 0,
       slug: "slug with spaces",
       summary: "Bad slug.",
-      passed: 0,
-      failed: 0,
-      skipped: 0,
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -286,12 +283,12 @@ describe("writeTestReport — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 0,
+      skipped: 0,
       slug: "bad@slug!",
       summary: "Bad slug.",
-      passed: 0,
-      failed: 0,
-      skipped: 0,
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -306,12 +303,12 @@ describe("writeTestReport — validation errors", () => {
     // The slug pattern check catches ".." first, but test that the path traversal
     // guard also works for cases that might slip through
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 0,
+      skipped: 0,
       slug: "..",
       summary: "Path traversal.",
-      passed: 0,
-      failed: 0,
-      skipped: 0,
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -324,12 +321,12 @@ describe("writeTestReport — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-test-report-test-"));
 
     const result = await writeTestReport({
-      workspace: tmpDir,
+      failed: 0,
+      passed: 0,
+      skipped: 0,
       slug: "invalid slug!",
       summary: "Should not write.",
-      passed: 0,
-      failed: 0,
-      skipped: 0,
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);

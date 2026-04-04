@@ -26,7 +26,7 @@ describe("reviewCode", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   async function addPrinciple(
@@ -49,12 +49,21 @@ describe("reviewCode", () => {
     await addPrinciple("strong-opinions", "so2", "strong-opinion");
 
     // Set cap to 2 — smaller than the 3 rules
-    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ review: { max_review_principles: 2 } }));
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ review: { max_review_principles: 2 } }),
+    );
 
-    const result = await reviewCode({ code: "const x = 1;", file_path: "src/foo.ts" }, tmpDir, pluginDir);
+    const result = await reviewCode(
+      { code: "const x = 1;", file_path: "src/foo.ts" },
+      tmpDir,
+      pluginDir,
+    );
 
     // All 3 rules must be present
-    const ruleIds = result.principles_to_evaluate.filter((p) => p.severity === "rule").map((p) => p.principle_id);
+    const ruleIds = result.principles_to_evaluate
+      .filter((p) => p.severity === "rule")
+      .map((p) => p.principle_id);
     expect(ruleIds).toContain("r1");
     expect(ruleIds).toContain("r2");
     expect(ruleIds).toContain("r3");
@@ -71,9 +80,16 @@ describe("reviewCode", () => {
     await addPrinciple("conventions", "c1", "convention");
 
     // Cap at 3: 1 rule + 2 non-rules
-    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ review: { max_review_principles: 3 } }));
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ review: { max_review_principles: 3 } }),
+    );
 
-    const result = await reviewCode({ code: "const x = 1;", file_path: "src/foo.ts" }, tmpDir, pluginDir);
+    const result = await reviewCode(
+      { code: "const x = 1;", file_path: "src/foo.ts" },
+      tmpDir,
+      pluginDir,
+    );
 
     expect(result.principles_to_evaluate).toHaveLength(3);
     expect(result.principles_to_evaluate.filter((p) => p.severity === "rule")).toHaveLength(1);
@@ -85,9 +101,16 @@ describe("reviewCode", () => {
     await addPrinciple("strong-opinions", "so2", "strong-opinion");
     await addPrinciple("conventions", "c1", "convention");
 
-    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ review: { max_review_principles: 2 } }));
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ review: { max_review_principles: 2 } }),
+    );
 
-    const result = await reviewCode({ code: "const x = 1;", file_path: "src/foo.ts" }, tmpDir, pluginDir);
+    const result = await reviewCode(
+      { code: "const x = 1;", file_path: "src/foo.ts" },
+      tmpDir,
+      pluginDir,
+    );
 
     // 1 rule always included + 1 non-rule from budget = 2 returned, 2 omitted
     expect(result.summary).toContain("2 lower-priority principles omitted");
@@ -97,7 +120,11 @@ describe("reviewCode", () => {
     await addPrinciple("rules", "r1", "rule");
     await addPrinciple("strong-opinions", "so1", "strong-opinion");
 
-    const result = await reviewCode({ code: "const x = 1;", file_path: "src/foo.ts" }, tmpDir, pluginDir);
+    const result = await reviewCode(
+      { code: "const x = 1;", file_path: "src/foo.ts" },
+      tmpDir,
+      pluginDir,
+    );
 
     expect(result.principles_to_evaluate).toHaveLength(2);
     expect(result.summary).not.toContain("omitted");

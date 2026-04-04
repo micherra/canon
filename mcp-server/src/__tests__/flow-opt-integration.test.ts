@@ -25,9 +25,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
 
-// ---------------------------------------------------------------------------
 // Mocks for enterAndPrepareState tests
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
@@ -57,8 +55,8 @@ vi.mock("../orchestration/consultation-executor.ts", () => ({
     if (!fragment) return undefined;
     return {
       agent: fragment.agent,
-      role: fragment.role,
       prompt: `Consultation: ${name}`,
+      role: fragment.role,
     };
   }),
 }));
@@ -67,18 +65,14 @@ vi.mock("node:child_process", () => ({
   spawnSync: vi.fn(),
 }));
 
+import { spawnSync } from "node:child_process";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import { loadFlow } from "../tools/load-flow.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import { spawnSync } from "node:child_process";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -90,21 +84,21 @@ function makeTmpDir(): string {
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "review",
-    current_state: "review",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {
-      review: { status: "pending", entries: 0 },
-      done: { status: "pending", entries: 0 },
-    },
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "review",
+    entry: "review",
+    flow: "test-flow",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {
+      done: { entries: 0, status: "pending" },
+      review: { entries: 0, status: "pending" },
+    },
+    task: "test task",
     ...overrides,
   } as Board;
 }
@@ -113,36 +107,38 @@ function seedBoard(workspace: string, board: Board): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: board.flow,
-    task: board.task,
-    entry: board.entry,
-    current_state: board.current_state,
     base_commit: board.base_commit,
-    started: board.started ?? now,
-    last_updated: board.last_updated ?? now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: board.current_state,
+    entry: board.entry,
+    flow: board.flow,
     flow_name: board.flow,
+    last_updated: board.last_updated ?? now,
+    sanitized: "main",
     slug: "test-slug",
+    started: board.started ?? now,
+    task: board.task,
+    tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+    store.upsertState(stateId, {
+      ...stateEntry,
+      entries: stateEntry.entries ?? 0,
+      status: stateEntry.status,
+    });
   }
 }
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
 
-// ===========================================================================
 // 0. loadFlow REGRESSION GUARD — errors: string[] retained on success path
-// ===========================================================================
 
 describe("loadFlow — success path returns flow and state_graph (no errors field)", () => {
   it("loadFlow returns ok: true with flow and state_graph on success", async () => {
@@ -164,9 +160,7 @@ describe("loadFlow — success path returns flow and state_graph (no errors fiel
   });
 });
 
-// ===========================================================================
 // 1. REGRESSION GUARD — affected flows still load cleanly
-// ===========================================================================
 
 describe("affected flows load without errors after all optimizations", () => {
   it("feature.md loads cleanly", async () => {
@@ -190,15 +184,13 @@ describe("affected flows load without errors after all optimizations", () => {
   });
 });
 
-// ===========================================================================
 // 2. DISK-LOAD INTEGRATION — skip_when: auto_approved from user-checkpoint fragment
-// ===========================================================================
 
 describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved", () => {
   it("feature.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "feature");
 
-    const checkpointState = flow.states["checkpoint"];
+    const checkpointState = flow.states.checkpoint;
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
@@ -206,7 +198,7 @@ describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved"
   it("epic.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const checkpointState = flow.states["checkpoint"];
+    const checkpointState = flow.states.checkpoint;
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
@@ -214,19 +206,17 @@ describe("disk-load: user-checkpoint fragment resolves skip_when: auto_approved"
   it("refactor.md checkpoint state has skip_when: auto_approved after loading from disk", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "refactor");
 
-    const checkpointState = flow.states["checkpoint"];
+    const checkpointState = flow.states.checkpoint;
     expect(checkpointState).toBeDefined();
     expect(checkpointState.skip_when).toBe("auto_approved");
   });
 });
 
-// ===========================================================================
 // 3. DISK-LOAD INTEGRATION — min_waves on consultation fragments
 //    NOTE: This test suite documents a known implementation gap:
 //    FragmentDefinitionSchema does not include min_waves, so it is dropped
 //    during fragment parsing. The test asserts current behavior and will need
 //    to be updated when the bug is fixed.
-// ===========================================================================
 
 describe("disk-load: epic flow consultation fragments from disk", () => {
   it("epic flow consultations map contains pattern-check after disk load", async () => {
@@ -252,7 +242,7 @@ describe("disk-load: epic flow consultation fragments from disk", () => {
   it("epic implement state references pattern-check and early-scan in between breakpoint", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "epic");
 
-    const implementState = flow.states["implement"];
+    const implementState = flow.states.implement;
     expect(implementState).toBeDefined();
     const between = implementState.consultations?.between;
     expect(between).toContain("pattern-check");
@@ -260,30 +250,28 @@ describe("disk-load: epic flow consultation fragments from disk", () => {
   });
 });
 
-// ===========================================================================
 // 4. END-TO-END — auto_approved skip through enterAndPrepareState
 //    (flow-opt-04 declared known gap: no integration test with full board fixture)
-// ===========================================================================
 
 describe("enterAndPrepareState — auto_approved skip integration", () => {
   function makeCheckpointFlow(): ResolvedFlow {
     return {
-      name: "test-flow",
       description: "Test flow with checkpoint",
       entry: "checkpoint",
+      name: "test-flow",
+      spawn_instructions: {
+        checkpoint: "Present checkpoint for: ${task}.",
+      },
       states: {
         checkpoint: {
-          type: "single",
           agent: "canon-guide",
           skip_when: "auto_approved",
           transitions: {
             approved: "done",
           },
+          type: "single",
         },
         done: { type: "terminal" },
-      },
-      spawn_instructions: {
-        checkpoint: "Present checkpoint for: ${task}.",
       },
     } as unknown as ResolvedFlow;
   }
@@ -291,26 +279,29 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
   it("skips checkpoint state when evaluateSkipWhen returns skip: true", async () => {
     // Mock evaluateSkipWhen to simulate auto_approved condition met
     vi.mocked(evaluateSkipWhen).mockResolvedValue({
-      skip: true,
       reason: "Task auto-approved — checkpoint skipped",
+      skip: true,
     });
 
     const workspace = makeTmpDir();
-    seedBoard(workspace, makeBoard({
-      entry: "checkpoint",
-      current_state: "checkpoint",
-      states: {
-        checkpoint: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        current_state: "checkpoint",
+        entry: "checkpoint",
+        states: {
+          checkpoint: { entries: 0, status: "pending" },
+          done: { entries: 0, status: "pending" },
+        },
+      }),
+    );
 
     const flow = makeCheckpointFlow();
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "checkpoint",
       flow,
-      variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "checkpoint",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test-task" },
+      workspace,
     });
     assertOk(result);
 
@@ -327,21 +318,24 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
 
     const workspace = makeTmpDir();
-    seedBoard(workspace, makeBoard({
-      entry: "checkpoint",
-      current_state: "checkpoint",
-      states: {
-        checkpoint: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        current_state: "checkpoint",
+        entry: "checkpoint",
+        states: {
+          checkpoint: { entries: 0, status: "pending" },
+          done: { entries: 0, status: "pending" },
+        },
+      }),
+    );
 
     const flow = makeCheckpointFlow();
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "checkpoint",
       flow,
-      variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "checkpoint",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test-task" },
+      workspace,
     });
     assertOk(result);
 
@@ -356,36 +350,37 @@ describe("enterAndPrepareState — auto_approved skip integration", () => {
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
 
     const workspace = makeTmpDir();
-    seedBoard(workspace, makeBoard({
-      entry: "checkpoint",
-      current_state: "checkpoint",
-      states: {
-        checkpoint: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        current_state: "checkpoint",
+        entry: "checkpoint",
+        states: {
+          checkpoint: { entries: 0, status: "pending" },
+          done: { entries: 0, status: "pending" },
+        },
+      }),
+    );
 
     const flow = makeCheckpointFlow();
     await enterAndPrepareState({
-      workspace,
-      state_id: "checkpoint",
       flow,
-      variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "checkpoint",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test-task" },
+      workspace,
     });
 
     expect(evaluateSkipWhen).toHaveBeenCalledWith(
       "auto_approved",
       workspace,
-      expect.objectContaining({ flow: "test-flow", entry: "checkpoint" }),
+      expect.objectContaining({ entry: "checkpoint", flow: "test-flow" }),
     );
   });
 });
 
-// ===========================================================================
 // 5. CROSS-FEATURE INTEGRATION — min_waves filtering + scoped re-review
 //    A re-entered state that has consultation fragments with min_waves.
 //    Verifies: git diff IS called AND min_waves filtering still applies.
-// ===========================================================================
 
 describe("cross-feature: min_waves filtering + scoped re-review in the same flow", () => {
   /**
@@ -398,30 +393,30 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
    */
   function makeFlowWithBothFeatures(): ResolvedFlow {
     return {
-      name: "test-flow",
+      consultations: {
+        "pattern-check": {
+          agent: "canon:canon-architect",
+          fragment: "pattern-check",
+          min_waves: 2,
+          role: "pattern-check",
+          timeout: "5m",
+        },
+      },
       description: "Test flow exercising both optimizations",
       entry: "implement",
-      states: {
-        implement: {
-          type: "wave",
-          agent: "canon-implementor",
-          consultations: {
-            between: ["pattern-check"],
-          },
-        },
-        done: { type: "terminal" },
-      },
+      name: "test-flow",
       spawn_instructions: {
         implement: "Implement ${task}.",
         "pattern-check": "Check patterns.",
       },
-      consultations: {
-        "pattern-check": {
-          fragment: "pattern-check",
-          agent: "canon:canon-architect",
-          role: "pattern-check",
-          timeout: "5m",
-          min_waves: 2,
+      states: {
+        done: { type: "terminal" },
+        implement: {
+          agent: "canon-implementor",
+          consultations: {
+            between: ["pattern-check"],
+          },
+          type: "wave",
         },
       },
     } as unknown as ResolvedFlow;
@@ -433,33 +428,36 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
     const workspace = makeTmpDir();
     // entries=1 in pre-enter → after enterState: entries=2 (re-entry triggers git diff)
     // wave_total=1 → min_waves:2 consultation should be skipped
-    seedBoard(workspace, makeBoard({
-      base_commit: "abc1234",
-      entry: "implement",
-      current_state: "implement",
-      states: {
-        implement: { status: "done", entries: 1, wave_total: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        base_commit: "abc1234",
+        current_state: "implement",
+        entry: "implement",
+        states: {
+          done: { entries: 0, status: "pending" },
+          implement: { entries: 1, status: "done", wave_total: 1 },
+        },
+      }),
+    );
 
     // git diff returns some files
     vi.mocked(spawnSync).mockReturnValue({
-      status: 0,
-      stdout: "src/foo.ts\nsrc/bar.ts\n",
-      stderr: "",
-      pid: 1,
       output: [],
+      pid: 1,
       signal: null,
+      status: 0,
+      stderr: "",
+      stdout: "src/foo.ts\nsrc/bar.ts\n",
     });
 
     const flow = makeFlowWithBothFeatures();
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test-task" },
       wave: 1, // between breakpoint
+      workspace,
     });
     assertOk(result);
 
@@ -483,32 +481,35 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
     const workspace = makeTmpDir();
     // entries=1 in pre-enter → after enterState: entries=2 (re-entry triggers git diff)
     // wave_total=2 → min_waves:2 consultation should be included
-    seedBoard(workspace, makeBoard({
-      base_commit: "abc1234",
-      entry: "implement",
-      current_state: "implement",
-      states: {
-        implement: { status: "done", entries: 1, wave_total: 2 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        base_commit: "abc1234",
+        current_state: "implement",
+        entry: "implement",
+        states: {
+          done: { entries: 0, status: "pending" },
+          implement: { entries: 1, status: "done", wave_total: 2 },
+        },
+      }),
+    );
 
     vi.mocked(spawnSync).mockReturnValue({
-      status: 0,
-      stdout: "src/changed.ts\n",
-      stderr: "",
-      pid: 1,
       output: [],
+      pid: 1,
       signal: null,
+      status: 0,
+      stderr: "",
+      stdout: "src/changed.ts\n",
     });
 
     const flow = makeFlowWithBothFeatures();
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test-task" },
       wave: 1, // between breakpoint
+      workspace,
     });
     assertOk(result);
 
@@ -533,33 +534,36 @@ describe("cross-feature: min_waves filtering + scoped re-review in the same flow
     const workspace = makeTmpDir();
     // entries=1 in pre-enter → after enterState: entries=2 (re-entry)
     // wave_total not set → fail-open for min_waves (include consultation)
-    seedBoard(workspace, makeBoard({
-      base_commit: "abc1234",
-      entry: "implement",
-      current_state: "implement",
-      states: {
-        implement: { status: "done", entries: 1 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        base_commit: "abc1234",
+        current_state: "implement",
+        entry: "implement",
+        states: {
+          done: { entries: 0, status: "pending" },
+          implement: { entries: 1, status: "done" },
+        },
+      }),
+    );
 
     // git diff fails — review_scope degrades to empty
     vi.mocked(spawnSync).mockReturnValue({
-      status: 128,
-      stdout: "",
-      stderr: "fatal: not a git repository",
-      pid: 1,
       output: [],
+      pid: 1,
       signal: null,
+      status: 128,
+      stderr: "fatal: not a git repository",
+      stdout: "",
     });
 
     const flow = makeFlowWithBothFeatures();
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 

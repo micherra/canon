@@ -19,23 +19,28 @@ import { canEnterState } from "../orchestration/convergence.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, CannotFixItem, HistoryEntry, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type {
+  Board,
+  CannotFixItem,
+  HistoryEntry,
+  ResolvedFlow,
+} from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
 import { toolError } from "../utils/tool-result.ts";
 import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
 import { getSpawnPrompt } from "./get-spawn-prompt.ts";
 
-export interface ConsultationPromptEntry {
+export type ConsultationPromptEntry = {
   name: string;
   agent: string;
   prompt: string;
   role: string;
   timeout?: string;
   section?: string;
-}
+};
 
-export interface EnterAndPrepareStateInput {
+export type EnterAndPrepareStateInput = {
   workspace: string;
   state_id: string;
   flow: ResolvedFlow;
@@ -45,9 +50,9 @@ export interface EnterAndPrepareStateInput {
   wave?: number;
   peer_count?: number;
   project_dir?: string;
-}
+};
 
-export interface EnterAndPrepareStateResult {
+export type EnterAndPrepareStateResult = {
   // Convergence data (always present)
   can_enter: boolean;
   iteration_count: number;
@@ -70,114 +75,81 @@ export interface EnterAndPrepareStateResult {
 
   // Updated board (only when state was entered)
   board?: Board;
+};
+
+/** Extract session branch variables from the persisted execution row. */
+function extractSessionVars(store: ReturnType<typeof getExecutionStore>): Record<string, string> {
+  const session = store.getSession();
+  const vars: Record<string, string> = {};
+  if (!session) return vars;
+  vars.branch = session.branch;
+  if (session.worktree_branch) vars.worktree_branch = session.worktree_branch;
+  if (session.worktree_path) vars.worktree_path = session.worktree_path;
+  return vars;
 }
 
-export async function enterAndPrepareState(
-  input: EnterAndPrepareStateInput,
-): Promise<ToolResult<EnterAndPrepareStateResult>> {
-  const { workspace, state_id, flow } = input;
-
-  const store = getExecutionStore(workspace);
-
-  // Step 1: Read board once from ExecutionStore (synchronous — no retry needed).
-  // SQLite init is atomic — the execution row is always present after initWorkspaceFlow.
-  const board = store.getBoard();
-  if (!board) {
-    return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${workspace}`);
-  }
-
-  // Step 1.5: Inject session branch variables into the variables map.
-  // These are resolved from the persisted execution row so agents always have access
-  // to the branch, worktree_branch, and worktree_path regardless of orchestrator state.
-  const session = store.getSession();
-  const sessionVars: Record<string, string> = {};
-  if (session) {
-    sessionVars.branch = session.branch;
-    if (session.worktree_branch) sessionVars.worktree_branch = session.worktree_branch;
-    if (session.worktree_path) sessionVars.worktree_path = session.worktree_path;
-  }
-
-  // Step 2: Check convergence — bail early if max iterations reached.
-  const { allowed, reason } = canEnterState(board, state_id);
+/** Extract convergence data from the board for a given state. */
+function extractConvergenceData(board: Board, state_id: string) {
   const iteration = board.iterations[state_id];
-  const iteration_count = iteration?.count ?? 0;
-  const max_iterations = iteration?.max ?? 0;
-  const cannot_fix_items: CannotFixItem[] = iteration?.cannot_fix ?? [];
-  const history: HistoryEntry[] = iteration?.history ?? [];
+  return {
+    cannot_fix_items: (iteration?.cannot_fix ?? []) as CannotFixItem[],
+    history: (iteration?.history ?? []) as HistoryEntry[],
+    iteration_count: iteration?.count ?? 0,
+    max_iterations: iteration?.max ?? 0,
+  };
+}
 
-  if (!allowed) {
-    return {
-      ok: true as const,
-      can_enter: false,
-      iteration_count,
-      max_iterations,
-      cannot_fix_items,
-      history,
-      convergence_reason: reason,
-      prompts: [],
-      state_type: flow.states[state_id]?.type ?? "unknown",
-    };
-  }
-
-  // Step 3: Evaluate skip_when BEFORE entering state.
-  const stateDef = flow.states[state_id];
-  if (stateDef?.skip_when) {
-    const skipResult = await evaluateSkipWhen(stateDef.skip_when, workspace, board);
-    if (skipResult.skip) {
-      const skipReason = `Skipping ${state_id}: ${stateDef.skip_when} condition met — ${skipResult.reason ?? "condition satisfied"}`;
-      return {
-        ok: true as const,
-        can_enter: true,
-        iteration_count,
-        max_iterations,
-        cannot_fix_items,
-        history,
-        prompts: [],
-        state_type: stateDef.type,
-        skip_reason: skipReason,
-      };
-    }
-  }
-
-  // Step 4: Enter the state inside a SQLite transaction (replaces withBoardLock).
-  // Pure mutation on in-memory board, then persist only changed fields.
+/** Persist the entered state inside a SQLite transaction. */
+function persistStateEntry(
+  store: ReturnType<typeof getExecutionStore>,
+  board: Board,
+  state_id: string,
+  now: string,
+): Board {
   let enteredBoard: Board = board;
-  const now = new Date().toISOString();
-
   store.transaction(() => {
     enteredBoard = enterState(board, state_id);
+    store.updateExecution({ current_state: state_id, last_updated: now });
 
-    // Persist execution-level changes
-    store.updateExecution({
-      current_state: state_id,
-      last_updated: now,
-    });
-
-    // Persist the entered state
     const enteredStateEntry = enteredBoard.states[state_id];
     if (enteredStateEntry) {
       store.upsertState(state_id, {
         ...enteredStateEntry,
-        status: enteredStateEntry.status,
-        entries: enteredStateEntry.entries,
         entered_at: enteredStateEntry.entered_at,
+        entries: enteredStateEntry.entries,
+        status: enteredStateEntry.status,
       });
     }
 
-    // Persist iteration count if the state has iteration limits
     if (enteredBoard.iterations[state_id]) {
       const iter = enteredBoard.iterations[state_id];
       store.upsertIteration(state_id, {
-        count: iter.count,
-        max: iter.max,
-        history: iter.history,
         cannot_fix: iter.cannot_fix,
+        count: iter.count,
+        history: iter.history,
+        max: iter.max,
       });
     }
   });
+  return enteredBoard;
+}
 
-  // Emit events (best-effort)
-  const onBoardUpdated = (event: import("../orchestration/events.js").FlowEventMap["board_updated"]) => {
+type EmitStateEntryEventsOpts = {
+  state_id: string;
+  stateType: string;
+  now: string;
+  iterationCount: number;
+};
+
+/** Emit board_updated and state_entered events (best-effort). */
+function emitStateEntryEvents(
+  store: ReturnType<typeof getExecutionStore>,
+  opts: EmitStateEntryEventsOpts,
+): void {
+  const { state_id, stateType, now, iterationCount } = opts;
+  const onBoardUpdated = (
+    event: import("../orchestration/events.js").FlowEventMap["board_updated"],
+  ) => {
     try {
       store.appendEvent("board_updated", event as Record<string, unknown>);
     } catch {
@@ -191,7 +163,9 @@ export async function enterAndPrepareState(
       stateId: state_id,
       timestamp: now,
     });
-    const onStateEntered = (event: import("../orchestration/events.js").FlowEventMap["state_entered"]) => {
+    const onStateEntered = (
+      event: import("../orchestration/events.js").FlowEventMap["state_entered"],
+    ) => {
       try {
         store.appendEvent("state_entered", event as Record<string, unknown>);
       } catch {
@@ -201,10 +175,10 @@ export async function enterAndPrepareState(
     flowEventBus.once("state_entered", onStateEntered);
     try {
       flowEventBus.emit("state_entered", {
+        iterationCount,
         stateId: state_id,
-        stateType: stateDef?.type ?? "unknown",
+        stateType,
         timestamp: now,
-        iterationCount: enteredBoard.iterations[state_id]?.count ?? 0,
       });
     } finally {
       flowEventBus.removeListener("state_entered", onStateEntered);
@@ -212,133 +186,194 @@ export async function enterAndPrepareState(
   } finally {
     flowEventBus.removeListener("board_updated", onBoardUpdated);
   }
+}
 
-  // Step 4.5: Resolve consultation prompts for the current breakpoint.
-  const consultationPrompts: ConsultationPromptEntry[] = [];
-  const consultationOutputs: Record<string, { section?: string; summary: string }> = {};
+/** Check if a consultation should be skipped due to min_waves constraint. */
+function shouldSkipConsultation(
+  name: string,
+  flow: ResolvedFlow,
+  enteredBoard: Board,
+  state_id: string,
+): boolean {
+  const fragment = flow.consultations?.[name];
+  if (fragment?.min_waves == null) return false;
+  const waveTotal = enteredBoard.states[state_id]?.wave_total;
+  return waveTotal != null && waveTotal < fragment.min_waves;
+}
 
-  if (stateDef?.consultations) {
-    // Determine breakpoint: "before" for first wave (0 or null), "between" for subsequent waves
-    const breakpoint: "before" | "between" = input.wave == null || input.wave === 0 ? "before" : "between";
-    const names = stateDef.consultations[breakpoint] ?? [];
+/** Build a ConsultationPromptEntry from a resolved prompt. */
+function buildConsultationEntry(
+  name: string,
+  resolved: NonNullable<ReturnType<typeof resolveConsultationPrompt>>,
+): ConsultationPromptEntry {
+  return {
+    agent: resolved.agent,
+    name,
+    prompt: resolved.prompt,
+    role: resolved.role,
+    ...(resolved.timeout ? { timeout: resolved.timeout } : {}),
+    ...(resolved.section ? { section: resolved.section } : {}),
+  };
+}
 
-    for (const name of names) {
-      // Check min_waves threshold before resolving — skip consultation if
-      // wave_total is known and below the fragment's minimum.
-      const fragment = flow.consultations?.[name];
-      if (fragment?.min_waves != null) {
-        const waveTotal = enteredBoard.states[state_id]?.wave_total;
-        if (waveTotal != null && waveTotal < fragment.min_waves) {
-          continue;
-        }
-      }
+type ResolveConsultationsOpts = {
+  flow: ResolvedFlow;
+  enteredBoard: Board;
+  state_id: string;
+  stateDef: ResolvedFlow["states"][string] | undefined;
+};
 
-      const resolved = resolveConsultationPrompt(name, flow, input.variables);
-      if (resolved) {
-        consultationPrompts.push({
-          name,
-          agent: resolved.agent,
-          prompt: resolved.prompt,
-          role: resolved.role,
-          ...(resolved.timeout ? { timeout: resolved.timeout } : {}),
-          ...(resolved.section ? { section: resolved.section } : {}),
-        });
-      }
-    }
+/** Resolve consultation prompts for the current breakpoint. */
+function resolveConsultations(
+  input: EnterAndPrepareStateInput,
+  opts: ResolveConsultationsOpts,
+): {
+  prompts: ConsultationPromptEntry[];
+  outputs: Record<string, { section?: string; summary: string }>;
+} {
+  const { flow, enteredBoard, state_id, stateDef } = opts;
+  const prompts: ConsultationPromptEntry[] = [];
+  const outputs: Record<string, { section?: string; summary: string }> = {};
 
-    // Collect completed consultation summaries from prior waves for briefing injection.
-    const stateEntry = enteredBoard.states[state_id];
-    if (stateEntry?.wave_results) {
-      for (const [_waveKey, waveResult] of Object.entries(stateEntry.wave_results)) {
-        const consultations = waveResult.consultations;
-        if (!consultations) continue;
-        for (const bp of ["before", "between", "after"] as const) {
-          const bpMap = consultations[bp];
-          if (!bpMap) continue;
-          for (const [cName, cResult] of Object.entries(bpMap)) {
-            if (cResult.status === "done" && cResult.summary) {
-              const fragment = flow.consultations?.[cName];
-              consultationOutputs[cName] = {
-                section: fragment?.section,
-                summary: cResult.summary,
-              };
-            }
-          }
-        }
-      }
-    }
+  if (!stateDef?.consultations) return { outputs, prompts };
+
+  const breakpoint: "before" | "between" =
+    input.wave == null || input.wave === 0 ? "before" : "between";
+  const names = stateDef.consultations[breakpoint] ?? [];
+
+  for (const name of names) {
+    if (shouldSkipConsultation(name, flow, enteredBoard, state_id)) continue;
+    const resolved = resolveConsultationPrompt(name, flow, input.variables);
+    if (resolved) prompts.push(buildConsultationEntry(name, resolved));
   }
 
-  // Step 4.6: Resolve review_scope for re-entered review states.
-  const reviewScopeVars: Record<string, string> = {};
-  if (enteredBoard.states[state_id]?.entries > 1) {
-    const baseRef = enteredBoard.base_commit;
-    if (baseRef && /^[a-f0-9]{7,40}$/.test(baseRef)) {
-      try {
-        const result = gitExec(["diff", "--name-only", `${baseRef}..HEAD`], process.cwd(), 5000);
-        if (result.ok && result.stdout) {
-          const files = result.stdout.trim().split("\n").filter(Boolean);
-          reviewScopeVars.review_scope =
-            files.length > 0 ? `Scoped re-review. Files changed since last review:\n${files.join("\n")}` : "";
-        } else {
-          reviewScopeVars.review_scope = "";
-        }
-      } catch {
-        reviewScopeVars.review_scope = "";
-      }
+  collectConsultationOutputs(enteredBoard, state_id, flow, outputs);
+  return { outputs, prompts };
+}
+
+/** Extract done consultation summaries from a single breakpoint map. */
+function extractBreakpointOutputs(
+  bpMap: Record<string, { status: string; summary?: string | null }> | undefined,
+  flow: ResolvedFlow,
+  outputs: Record<string, { section?: string; summary: string }>,
+): void {
+  if (!bpMap) return;
+  for (const [cName, cResult] of Object.entries(bpMap)) {
+    if (cResult.status === "done" && cResult.summary) {
+      outputs[cName] = { section: flow.consultations?.[cName]?.section, summary: cResult.summary };
     }
   }
+}
 
-  // Step 4.7: Context enrichment (non-blocking)
-  const enrichmentVars: Record<string, string> = {};
+/** Collect completed consultation summaries from prior waves. */
+function collectConsultationOutputs(
+  board: Board,
+  state_id: string,
+  flow: ResolvedFlow,
+  outputs: Record<string, { section?: string; summary: string }>,
+): void {
+  const stateEntry = board.states[state_id];
+  if (!stateEntry?.wave_results) return;
+  for (const [_waveKey, waveResult] of Object.entries(stateEntry.wave_results)) {
+    const consultations = waveResult.consultations;
+    if (!consultations) continue;
+    for (const bp of ["before", "between", "after"] as const) {
+      extractBreakpointOutputs(consultations[bp], flow, outputs);
+    }
+  }
+}
+
+/** Resolve review_scope variable for re-entered review states. */
+function resolveReviewScope(enteredBoard: Board, state_id: string): Record<string, string> {
+  if ((enteredBoard.states[state_id]?.entries ?? 0) <= 1) return {};
+  const baseRef = enteredBoard.base_commit;
+  if (!baseRef || !/^[a-f0-9]{7,40}$/.test(baseRef)) return {};
+  try {
+    const result = gitExec(["diff", "--name-only", `${baseRef}..HEAD`], process.cwd(), 5000);
+    if (result.ok && result.stdout) {
+      const files = result.stdout.trim().split("\n").filter(Boolean);
+      return {
+        review_scope:
+          files.length > 0
+            ? `Scoped re-review. Files changed since last review:\n${files.join("\n")}`
+            : "",
+      };
+    }
+    return { review_scope: "" };
+  } catch {
+    return { review_scope: "" };
+  }
+}
+
+type ResolveEnrichmentVarsOpts = {
+  state_id: string;
+  enteredBoard: Board;
+  flow: ResolvedFlow;
+  projectDir: string | undefined;
+};
+
+/** Resolve context enrichment variables (non-blocking). */
+async function resolveEnrichmentVars(
+  workspace: string,
+  opts: ResolveEnrichmentVarsOpts,
+): Promise<Record<string, string>> {
+  const { state_id, enteredBoard, flow, projectDir } = opts;
   try {
     const enrichment = await assembleEnrichment({
-      workspace,
-      stateId: state_id,
-      board: enteredBoard,
-      flow,
       baseCommit: enteredBoard.base_commit,
-      cwd: input.project_dir ?? process.cwd(),
-      projectDir: input.project_dir,
+      board: enteredBoard,
+      cwd: projectDir ?? process.cwd(),
+      flow,
+      projectDir,
+      stateId: state_id,
+      workspace,
     });
-    if (enrichment.content) {
-      enrichmentVars.enrichment = enrichment.content;
-    } else {
-      // Inject empty string so ${enrichment} in prompt templates resolves to ""
-      // rather than appearing as literal "${enrichment}"
-      enrichmentVars.enrichment = "";
-    }
     if (enrichment.warnings.length > 0) {
-      // Emit warnings but don't block — enrichment warnings are observability only
       console.error(`enrichment warnings: ${enrichment.warnings.join("; ")}`);
     }
+    return { enrichment: enrichment.content || "" };
   } catch {
-    // Enrichment is non-blocking — degrade gracefully to empty string
-    enrichmentVars.enrichment = "";
+    return { enrichment: "" };
   }
+}
 
-  // Step 5: Resolve spawn prompts.
-  const spawnResult = await getSpawnPrompt({
-    workspace,
-    state_id,
-    flow,
-    variables: { ...sessionVars, ...input.variables, ...reviewScopeVars, ...enrichmentVars },
-    items: input.items,
-    role: input.role,
-    wave: input.wave,
-    peer_count: input.peer_count,
-    project_dir: input.project_dir,
-    consultation_outputs: Object.keys(consultationOutputs).length > 0 ? consultationOutputs : undefined,
-    _board: enteredBoard,
-  });
+type CheckStateSkipWhenOpts = {
+  state_id: string;
+  workspace: string;
+  board: Board;
+  convergence: ReturnType<typeof extractConvergenceData>;
+};
 
+/** Check skip_when condition on a state definition. Returns skip result or null. */
+async function checkStateSkipWhen(
+  stateDef: ResolvedFlow["states"][string] | undefined,
+  opts: CheckStateSkipWhenOpts,
+): Promise<ToolResult<EnterAndPrepareStateResult> | null> {
+  const { state_id, workspace, board, convergence } = opts;
+  if (!stateDef?.skip_when) return null;
+  const skipResult = await evaluateSkipWhen(stateDef.skip_when, workspace, board);
+  if (!skipResult.skip) return null;
   return {
-    ok: true as const,
     can_enter: true,
-    iteration_count,
-    max_iterations,
-    cannot_fix_items,
-    history,
+    ok: true as const,
+    ...convergence,
+    prompts: [],
+    skip_reason: `Skipping ${state_id}: ${stateDef.skip_when} condition met — ${skipResult.reason ?? "condition satisfied"}`,
+    state_type: stateDef.type,
+  } as ToolResult<EnterAndPrepareStateResult>;
+}
+
+/** Build the final success result from spawn + consultation data. */
+function buildPrepareResult(
+  convergence: ReturnType<typeof extractConvergenceData>,
+  spawnResult: Awaited<ReturnType<typeof getSpawnPrompt>>,
+  consultationPrompts: ConsultationPromptEntry[],
+  enteredBoard: Board,
+): ToolResult<EnterAndPrepareStateResult> {
+  return {
+    can_enter: true,
+    ok: true as const,
+    ...convergence,
     prompts: spawnResult.prompts,
     state_type: spawnResult.state_type,
     ...(spawnResult.skip_reason ? { skip_reason: spawnResult.skip_reason } : {}),
@@ -348,5 +383,86 @@ export async function enterAndPrepareState(
     ...(spawnResult.fanned_out ? { fanned_out: true } : {}),
     ...(consultationPrompts.length > 0 ? { consultation_prompts: consultationPrompts } : {}),
     board: enteredBoard,
-  };
+  } as ToolResult<EnterAndPrepareStateResult>;
+}
+
+/** Enter state, resolve consultations/enrichment, and build spawn prompt. */
+async function enterAndResolveSpawn(
+  input: EnterAndPrepareStateInput,
+  store: ReturnType<typeof getExecutionStore>,
+  board: Board,
+  convergence: ReturnType<typeof extractConvergenceData>,
+): Promise<ToolResult<EnterAndPrepareStateResult>> {
+  const { workspace, state_id, flow } = input;
+  const stateDef = flow.states[state_id];
+  const skipEarly = await checkStateSkipWhen(stateDef, { board, convergence, state_id, workspace });
+  if (skipEarly) return skipEarly;
+
+  const now = new Date().toISOString();
+  const enteredBoard = persistStateEntry(store, board, state_id, now);
+  emitStateEntryEvents(store, {
+    iterationCount: enteredBoard.iterations[state_id]?.count ?? 0,
+    now,
+    state_id,
+    stateType: stateDef?.type ?? "unknown",
+  });
+
+  const { prompts: consultationPrompts, outputs: consultationOutputs } = resolveConsultations(
+    input,
+    { enteredBoard, flow, state_id, stateDef },
+  );
+
+  const sessionVars = extractSessionVars(store);
+  const reviewScopeVars = resolveReviewScope(enteredBoard, state_id);
+  const enrichmentVars = await resolveEnrichmentVars(workspace, {
+    enteredBoard,
+    flow,
+    projectDir: input.project_dir,
+    state_id,
+  });
+
+  const spawnResult = await getSpawnPrompt({
+    _board: enteredBoard,
+    consultation_outputs:
+      Object.keys(consultationOutputs).length > 0 ? consultationOutputs : undefined,
+    flow,
+    items: input.items,
+    peer_count: input.peer_count,
+    project_dir: input.project_dir,
+    role: input.role,
+    state_id,
+    variables: { ...sessionVars, ...input.variables, ...reviewScopeVars, ...enrichmentVars },
+    wave: input.wave,
+    workspace,
+  });
+
+  return buildPrepareResult(convergence, spawnResult, consultationPrompts, enteredBoard);
+}
+
+export async function enterAndPrepareState(
+  input: EnterAndPrepareStateInput,
+): Promise<ToolResult<EnterAndPrepareStateResult>> {
+  const { workspace, state_id, flow } = input;
+  const store = getExecutionStore(workspace);
+
+  const board = store.getBoard();
+  if (!board) {
+    return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${workspace}`);
+  }
+
+  const convergence = extractConvergenceData(board, state_id);
+  const { allowed, reason } = canEnterState(board, state_id);
+
+  if (!allowed) {
+    return {
+      can_enter: false,
+      ok: true as const,
+      ...convergence,
+      convergence_reason: reason,
+      prompts: [],
+      state_type: flow.states[state_id]?.type ?? "unknown",
+    } as ToolResult<EnterAndPrepareStateResult>;
+  }
+
+  return enterAndResolveSpawn(input, store, board, convergence);
 }

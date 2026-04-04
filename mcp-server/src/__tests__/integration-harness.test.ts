@@ -10,11 +10,11 @@
  * - Backward compatibility: board.json without new fields still parses
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist spawnSync mock to file level so vitest can hoist it before module imports.
 // Controls git diff output for skip_when integration tests.
@@ -25,25 +25,21 @@ vi.mock("node:child_process", () => ({
   spawnSync: (..._args: unknown[]) => {
     if (execSyncImpl) return execSyncImpl();
     // Default behavior: return error to simulate no git — fail-open means skip=false
-    return { stdout: "", status: 1, error: new Error("spawnSync not configured in test") };
+    return { error: new Error("spawnSync not configured in test"), status: 1, stdout: "" };
   },
 }));
 
-import { reportResult } from "../tools/report-result.ts";
-import { updateBoard } from "../tools/update-board.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { checkConvergence } from "../tools/check-convergence.ts";
 import { filterCannotFix } from "../orchestration/convergence.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { BoardSchema } from "../orchestration/flow-schema.ts";
 import type { FlowEventMap } from "../orchestration/events.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { BoardSchema } from "../orchestration/flow-schema.ts";
+import { checkConvergence } from "../tools/check-convergence.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
 import { assertOk } from "../utils/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -56,7 +52,7 @@ function makeTmpWorkspace(): string {
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   flowEventBus.removeAllListeners();
@@ -65,44 +61,44 @@ afterEach(() => {
 
 function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Integration test flow",
     entry: "implement",
+    name: "test-flow",
     spawn_instructions: {
+      fix: "Fix the issues.",
       implement: "Implement the feature.",
       review: "Review the implementation.",
-      fix: "Fix the issues.",
     },
     states: {
-      implement: {
+      fix: {
+        agent: "canon-fixer",
+        transitions: {
+          cannot_fix: "hitl",
+          done: "review",
+        },
         type: "single",
+      },
+      hitl: { type: "terminal" },
+      implement: {
         agent: "canon-implementor",
         max_iterations: 3,
         transitions: {
-          done: "review",
-          cannot_fix: "hitl",
           blocked: "hitl",
+          cannot_fix: "hitl",
+          done: "review",
         },
+        type: "single",
       },
       review: {
-        type: "single",
         agent: "canon-reviewer",
         max_iterations: 2,
         transitions: {
+          cannot_fix: "hitl",
           done: "ship",
-          cannot_fix: "hitl",
         },
-      },
-      fix: {
         type: "single",
-        agent: "canon-fixer",
-        transitions: {
-          done: "review",
-          cannot_fix: "hitl",
-        },
       },
       ship: { type: "terminal" },
-      hitl: { type: "terminal" },
     },
     ...overrides,
   };
@@ -112,32 +108,35 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: flow.name,
-    task: "task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc1234",
-    started: now,
-    last_updated: now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "main",
     slug: "test-slug",
+    started: now,
+    task: "task",
+    tier: "medium",
   });
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
     if (stateDef.max_iterations !== undefined) {
-      store.upsertIteration(stateId, { count: 0, max: stateDef.max_iterations, history: [], cannot_fix: [] });
+      store.upsertIteration(stateId, {
+        cannot_fix: [],
+        count: 0,
+        history: [],
+        max: stateDef.max_iterations,
+      });
     }
   }
 }
 
-// ---------------------------------------------------------------------------
 // Cross-feature: report-result with parallel_results + cannot_fix + events
 // (harness-02 + harness-03 + harness-05 together)
-// ---------------------------------------------------------------------------
 
 describe("cross-feature: parallel_results with cannot_fix items and event emission", () => {
   it("parallel_results aggregation emits state_completed with aggregated condition", async () => {
@@ -151,14 +150,14 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     flowEventBus.on("transition_evaluated", (e) => transitionEvents.push(e));
 
     const result = await reportResult({
-      workspace,
-      state_id: "implement",
-      status_keyword: "DONE",
       flow,
       parallel_results: [
         { item: "file-a.ts", status: "done" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
+      state_id: "implement",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
@@ -181,14 +180,14 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     flowEventBus.on("hitl_triggered", (e) => hitlEvents.push(e));
 
     const result = await reportResult({
-      workspace,
-      state_id: "implement",
-      status_keyword: "DONE",
       flow,
       parallel_results: [
         { item: "file-a.ts", status: "cannot_fix" },
         { item: "file-b.ts", status: "cannot_fix" },
       ],
+      state_id: "implement",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
@@ -208,20 +207,20 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     flowEventBus.on("state_completed", (e) => completedEvents.push(e));
 
     const result = await reportResult({
-      workspace,
-      state_id: "implement",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["src/tools/report-result.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
-      file_paths: ["src/tools/report-result.ts"],
+      state_id: "implement",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
     assertOk(result);
 
     // Cannot_fix items accumulated
-    expect(result.board.iterations["implement"]?.cannot_fix).toHaveLength(1);
-    expect(result.board.iterations["implement"]?.cannot_fix?.[0]).toEqual({
-      principle_id: "no-hidden-side-effects",
+    expect(result.board.iterations.implement?.cannot_fix).toHaveLength(1);
+    expect(result.board.iterations.implement?.cannot_fix?.[0]).toEqual({
       file_path: "src/tools/report-result.ts",
+      principle_id: "no-hidden-side-effects",
     });
 
     // Events still emitted even on cannot_fix path
@@ -235,24 +234,24 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     setupWorkspace(workspace, flow);
 
     const parallelResults = [
-      { item: "task-a", status: "done", artifacts: ["summary-a.md"] },
+      { artifacts: ["summary-a.md"], item: "task-a", status: "done" },
       { item: "task-b", status: "done" },
     ];
 
     await reportResult({
-      workspace,
-      state_id: "implement",
-      status_keyword: "DONE",
       flow,
       parallel_results: parallelResults,
+      state_id: "implement",
+      status_keyword: "DONE",
+      workspace,
     });
 
     // Read board directly to verify parallel_results persisted
     const board = getExecutionStore(workspace).getBoard();
-    expect(board?.states["implement"].parallel_results).toEqual(parallelResults);
+    expect(board?.states.implement.parallel_results).toEqual(parallelResults);
 
     // checkConvergence should still work (doesn't break on new field)
-    const convergenceResult = await checkConvergence({ workspace, state_id: "implement" });
+    const convergenceResult = await checkConvergence({ state_id: "implement", workspace });
     assertOk(convergenceResult);
     const convergence = convergenceResult;
     expect(convergence.can_enter).toBe(true); // iteration count=0, max=3
@@ -260,10 +259,8 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
   });
 });
 
-// ---------------------------------------------------------------------------
 // Cross-feature: cannot_fix accumulation → filterCannotFix full pipeline
 // (harness-05 integration with convergence)
-// ---------------------------------------------------------------------------
 
 describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergence → filterCannotFix", () => {
   it("two agents report cannot_fix, check-convergence returns all, filter excludes them from next run", async () => {
@@ -273,46 +270,44 @@ describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergen
 
     // Agent 1: cannot_fix p1 in a.ts and b.ts
     await reportResult({
-      workspace,
-      state_id: "implement",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["a.ts", "b.ts"],
       flow,
       principle_ids: ["p1"],
-      file_paths: ["a.ts", "b.ts"],
+      state_id: "implement",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
 
     // Agent 2: cannot_fix p2 in a.ts
     await reportResult({
-      workspace,
-      state_id: "implement",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["a.ts"],
       flow,
       principle_ids: ["p2"],
-      file_paths: ["a.ts"],
+      state_id: "implement",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
 
-    const convergenceResult = await checkConvergence({ workspace, state_id: "implement" });
+    const convergenceResult = await checkConvergence({ state_id: "implement", workspace });
     assertOk(convergenceResult);
     const convergence = convergenceResult;
     expect(convergence.cannot_fix_items).toHaveLength(3);
 
     // Orchestrator excludes known cannot_fix from next iteration's principle set
     const allViolations = [
-      { principle_id: "p1", file_path: "a.ts" }, // already cannot_fix
-      { principle_id: "p1", file_path: "b.ts" }, // already cannot_fix
-      { principle_id: "p2", file_path: "a.ts" }, // already cannot_fix
-      { principle_id: "p3", file_path: "a.ts" }, // new — still fixable
+      { file_path: "a.ts", principle_id: "p1" }, // already cannot_fix
+      { file_path: "b.ts", principle_id: "p1" }, // already cannot_fix
+      { file_path: "a.ts", principle_id: "p2" }, // already cannot_fix
+      { file_path: "a.ts", principle_id: "p3" }, // new — still fixable
     ];
 
     const remaining = filterCannotFix(allViolations, convergence.cannot_fix_items);
     expect(remaining).toHaveLength(1);
-    expect(remaining[0]).toEqual({ principle_id: "p3", file_path: "a.ts" });
+    expect(remaining[0]).toEqual({ file_path: "a.ts", principle_id: "p3" });
   });
 });
 
-// ---------------------------------------------------------------------------
 // update-board event emissions (harness-02 declared gap)
-// ---------------------------------------------------------------------------
 
 describe("updateBoard — event emissions (harness-02 gap)", () => {
   it("emits board_updated event on enter_state", async () => {
@@ -323,7 +318,7 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
     const boardEvents: FlowEventMap["board_updated"][] = [];
     flowEventBus.on("board_updated", (e) => boardEvents.push(e));
 
-    await updateBoard({ workspace, action: "enter_state", state_id: "implement" });
+    await updateBoard({ action: "enter_state", state_id: "implement", workspace });
 
     expect(boardEvents).toHaveLength(1);
     expect(boardEvents[0].action).toBe("enter_state");
@@ -339,7 +334,7 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
     const stateEnteredEvents: FlowEventMap["state_entered"][] = [];
     flowEventBus.on("state_entered", (e) => stateEnteredEvents.push(e));
 
-    await updateBoard({ workspace, action: "enter_state", state_id: "implement" });
+    await updateBoard({ action: "enter_state", state_id: "implement", workspace });
 
     expect(stateEnteredEvents).toHaveLength(1);
     expect(stateEnteredEvents[0].stateId).toBe("implement");
@@ -351,7 +346,7 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
     const flow = makeFlow();
     setupWorkspace(workspace, flow);
     // Enter state first so block has something to work with
-    await updateBoard({ workspace, action: "enter_state", state_id: "implement" });
+    await updateBoard({ action: "enter_state", state_id: "implement", workspace });
 
     // Clear listeners to count only the block action events
     flowEventBus.removeAllListeners();
@@ -361,7 +356,12 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
     flowEventBus.on("board_updated", (e) => boardEvents.push(e));
     flowEventBus.on("state_entered", (e) => stateEnteredEvents.push(e));
 
-    await updateBoard({ workspace, action: "block", state_id: "implement", blocked_reason: "manual block" });
+    await updateBoard({
+      action: "block",
+      blocked_reason: "manual block",
+      state_id: "implement",
+      workspace,
+    });
 
     expect(boardEvents).toHaveLength(1);
     expect(boardEvents[0].action).toBe("block");
@@ -369,28 +369,25 @@ describe("updateBoard — event emissions (harness-02 gap)", () => {
     expect(stateEnteredEvents).toHaveLength(0);
   });
 
-
   it("emits board_updated on complete_flow action", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlow();
     setupWorkspace(workspace, flow);
-    await updateBoard({ workspace, action: "enter_state", state_id: "ship" });
+    await updateBoard({ action: "enter_state", state_id: "ship", workspace });
 
     flowEventBus.removeAllListeners();
 
     const boardEvents: FlowEventMap["board_updated"][] = [];
     flowEventBus.on("board_updated", (e) => boardEvents.push(e));
 
-    await updateBoard({ workspace, action: "complete_flow" });
+    await updateBoard({ action: "complete_flow", workspace });
 
     expect(boardEvents).toHaveLength(1);
     expect(boardEvents[0].action).toBe("complete_flow");
   });
 });
 
-// ---------------------------------------------------------------------------
 // get-spawn-prompt with inject_context end-to-end (harness-06 declared gap)
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => {
   it("injects artifact content from a prior state into spawn prompt variable", async () => {
@@ -400,22 +397,20 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
 
     // Build board with research state having artifacts
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "implement",
+      name: "test-flow",
       spawn_instructions: {
         implement: "Implement using context: ${RESEARCH}",
       },
       states: {
-        research: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
-          inject_context: [
-            { from: "research", as: "RESEARCH" },
-          ],
+          inject_context: [{ as: "RESEARCH", from: "research" }],
           transitions: { done: "ship" },
+          type: "single",
         },
+        research: { type: "terminal" },
         ship: { type: "terminal" },
       },
     };
@@ -423,13 +418,13 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     // Seed workspace and set research state as done with artifact
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("research", { status: "done", entries: 1, artifacts: [artifactPath] });
+    store.upsertState("research", { artifacts: [artifactPath], entries: 1, status: "done" });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
+      state_id: "implement",
       variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -442,20 +437,18 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "implement",
+      name: "test-flow",
       spawn_instructions: {
         implement: "Implement with user guidance: ${USER_INPUT}",
       },
       states: {
         implement: {
-          type: "single",
           agent: "canon-implementor",
-          inject_context: [
-            { from: "user", as: "USER_INPUT", prompt: "Please describe the scope" },
-          ],
+          inject_context: [{ as: "USER_INPUT", from: "user", prompt: "Please describe the scope" }],
           transitions: { done: "ship" },
+          type: "single",
         },
         ship: { type: "terminal" },
       },
@@ -464,10 +457,10 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
+      state_id: "implement",
       variables: {},
+      workspace,
     });
 
     // Should get HITL skip, not a prompt
@@ -480,22 +473,20 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "implement",
+      name: "test-flow",
       spawn_instructions: {
         implement: "Do work: ${CONTEXT}",
       },
       states: {
-        research: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
-          inject_context: [
-            { from: "research", as: "CONTEXT" },
-          ],
+          inject_context: [{ as: "CONTEXT", from: "research" }],
           transitions: { done: "ship" },
+          type: "single",
         },
+        research: { type: "terminal" },
         ship: { type: "terminal" },
       },
     };
@@ -503,13 +494,13 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
     // Seed workspace and set research state as done with a missing artifact file
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("research", { status: "done", entries: 1, artifacts: ["does-not-exist.md"] });
+    store.upsertState("research", { artifacts: ["does-not-exist.md"], entries: 1, status: "done" });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
+      state_id: "implement",
       variables: {},
+      workspace,
     });
 
     // Should still produce a prompt (warnings don't block execution)
@@ -520,10 +511,8 @@ describe("getSpawnPrompt — inject_context end-to-end (harness-06 gap)", () => 
   });
 });
 
-// ---------------------------------------------------------------------------
 // get-spawn-prompt with both skip_when AND inject_context on same state
 // (harness-04 + harness-06 combined)
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
   beforeEach(() => {
@@ -532,39 +521,37 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
 
   it("returns skip_reason (skip_when met) without evaluating inject_context", async () => {
     // skip_when: no_contract_changes → skip if only internal files changed
-    execSyncImpl = () => ({ stdout: "src/internal/helper.ts\n", status: 0 }); // no contract files
+    execSyncImpl = () => ({ status: 0, stdout: "src/internal/helper.ts\n" }); // no contract files
 
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "type-check",
+      name: "test-flow",
       spawn_instructions: {
         "type-check": "Check types with context: ${PRIOR}",
       },
       states: {
         prior: { type: "terminal" },
-        "type-check": {
-          type: "single",
-          agent: "canon-reviewer",
-          skip_when: "no_contract_changes",
-          inject_context: [
-            { from: "prior", as: "PRIOR" },
-          ],
-          transitions: { done: "ship" },
-        },
         ship: { type: "terminal" },
+        "type-check": {
+          agent: "canon-reviewer",
+          inject_context: [{ as: "PRIOR", from: "prior" }],
+          skip_when: "no_contract_changes",
+          transitions: { done: "ship" },
+          type: "single",
+        },
       },
     };
 
     setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "type-check",
       flow,
+      state_id: "type-check",
       variables: {},
+      workspace,
     });
 
     // Should skip — not attempt inject_context
@@ -574,29 +561,27 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
 
   it("falls through to inject_context when skip_when is NOT met", async () => {
     // skip_when: no_contract_changes → don't skip if contract file changed
-    execSyncImpl = () => ({ stdout: "src/api/users.ts\n", status: 0 }); // contract file changed
+    execSyncImpl = () => ({ status: 0, stdout: "src/api/users.ts\n" }); // contract file changed
 
     const workspace = makeTmpWorkspace();
     const artifactPath = join(workspace, "context.md");
     await writeFile(artifactPath, "Important context here.");
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "review",
+      name: "test-flow",
       spawn_instructions: {
         review: "Review with context: ${CONTEXT}",
       },
       states: {
         prior: { type: "terminal" },
         review: {
-          type: "single",
           agent: "canon-reviewer",
+          inject_context: [{ as: "CONTEXT", from: "prior" }],
           skip_when: "no_contract_changes",
-          inject_context: [
-            { from: "prior", as: "CONTEXT" },
-          ],
           transitions: { done: "ship" },
+          type: "single",
         },
         ship: { type: "terminal" },
       },
@@ -604,13 +589,13 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
 
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("prior", { status: "done", entries: 1, artifacts: [artifactPath] });
+    store.upsertState("prior", { artifacts: [artifactPath], entries: 1, status: "done" });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: {},
+      workspace,
     });
 
     // Not skipped — inject_context runs and populates CONTEXT
@@ -620,25 +605,23 @@ describe("getSpawnPrompt — skip_when evaluated before inject_context", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // get-spawn-prompt — deferred-field warnings (harness-04 declared gap)
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — deferred-field warnings", () => {
   it("does NOT emit deferred-field warning for 'gate' field (gate is now implemented)", async () => {
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "build",
+      name: "test-flow",
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
-          type: "single",
           agent: "canon-implementor",
           gate: "some-gate-condition",
           transitions: { done: "ship" },
+          type: "single",
         },
         ship: { type: "terminal" },
       },
@@ -647,15 +630,16 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
       flow,
+      state_id: "build",
       variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1); // still produces prompt
     // gate is implemented — no deferred warning should be emitted for it
-    const gateWarnings = result.warnings?.filter((w) => w.includes("gate") && w.includes("not yet implemented")) ?? [];
+    const gateWarnings =
+      result.warnings?.filter((w) => w.includes("gate") && w.includes("not yet implemented")) ?? [];
     expect(gateWarnings).toHaveLength(0);
   });
 
@@ -665,16 +649,16 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "build",
+      name: "test-flow",
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
-          type: "single",
           agent: "canon-implementor",
           gate: "some-gate-condition",
           transitions: { done: "ship" },
+          type: "single",
         },
         ship: { type: "terminal" },
       },
@@ -683,13 +667,14 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
       flow,
+      state_id: "build",
       variables: {},
+      workspace,
     });
 
-    const deferredWarnings = result.warnings?.filter((w) => w.includes("not yet implemented")) ?? [];
+    const deferredWarnings =
+      result.warnings?.filter((w) => w.includes("not yet implemented")) ?? [];
     // Neither gate nor consultations should appear as deferred warnings
     expect(deferredWarnings.some((w) => w.includes("gate"))).toBe(false);
     // consultations is not a field that can be set on a single-agent state in this schema,
@@ -700,16 +685,16 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "build",
+      name: "test-flow",
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
-          type: "single",
           agent: "canon-implementor",
           timeout: "30m",
           transitions: { done: "ship" },
+          type: "single",
         },
         ship: { type: "terminal" },
       },
@@ -718,15 +703,16 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
       flow,
+      state_id: "build",
       variables: {},
+      workspace,
     });
 
     expect(result.timeout_ms).toBe(1800000); // 30 minutes
     // No deferred warning for timeout — it's now implemented
-    const deferredWarnings = result.warnings?.filter((w) => w.includes("not yet implemented")) ?? [];
+    const deferredWarnings =
+      result.warnings?.filter((w) => w.includes("not yet implemented")) ?? [];
     expect(deferredWarnings.some((w) => w.includes("timeout"))).toBe(false);
   });
 
@@ -734,18 +720,18 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     const workspace = makeTmpWorkspace();
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "test",
       entry: "build",
+      name: "test-flow",
       spawn_instructions: { build: "Build the feature." },
       states: {
         build: {
-          type: "single",
           agent: "canon-implementor",
           gate: "some-gate",
-          timeout: "15m",
           large_diff_threshold: 500,
+          timeout: "15m",
           transitions: { done: "ship" },
+          type: "single",
         },
         ship: { type: "terminal" },
       },
@@ -754,10 +740,10 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
     setupWorkspace(workspace, flow);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
       flow,
+      state_id: "build",
       variables: {},
+      workspace,
     });
 
     // All three fields are now implemented — no deferred warnings
@@ -768,59 +754,57 @@ describe("getSpawnPrompt — deferred-field warnings", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Backward compatibility: board.json without new optional fields still parses
-// ---------------------------------------------------------------------------
 
 describe("backward compatibility: board.json without new fields", () => {
   it("board without parallel_results in state entries still parses and reads correctly", () => {
     // Write a board JSON that lacks the parallel_results field (old format)
     const legacyBoard = {
-      flow: "test-flow",
-      task: "legacy task",
-      entry: "build",
-      current_state: "build",
       base_commit: "oldsha123",
-      started: new Date().toISOString(),
+      blocked: null,
+      concerns: [],
+      current_state: "build",
+      entry: "build",
+      flow: "test-flow",
+      iterations: {},
       last_updated: new Date().toISOString(),
+      skipped: [],
+      started: new Date().toISOString(),
       states: {
         build: {
-          status: "done",
           entries: 1,
           result: "done",
+          status: "done",
           // No parallel_results field — legacy format
         },
         ship: {
-          status: "pending",
           entries: 0,
+          status: "pending",
         },
       },
-      iterations: {},
-      blocked: null,
-      concerns: [],
-      skipped: [],
+      task: "legacy task",
     };
 
     // Should parse without error via BoardSchema
     const board = BoardSchema.parse(legacyBoard);
-    expect(board.states["build"].status).toBe("done");
-    expect(board.states["build"].parallel_results).toBeUndefined();
+    expect(board.states.build.status).toBe("done");
+    expect(board.states.build.parallel_results).toBeUndefined();
     expect(board.current_state).toBe("build");
   });
 
   it("board without concerns and skipped arrays is rejected by schema (they are required)", () => {
     // Board missing required fields
     const malformedBoard = {
-      flow: "test-flow",
-      task: "task",
-      entry: "build",
-      current_state: "build",
       base_commit: "sha",
-      started: new Date().toISOString(),
-      last_updated: new Date().toISOString(),
-      states: {},
-      iterations: {},
       blocked: null,
+      current_state: "build",
+      entry: "build",
+      flow: "test-flow",
+      iterations: {},
+      last_updated: new Date().toISOString(),
+      started: new Date().toISOString(),
+      states: {},
+      task: "task",
       // Missing concerns and skipped
     };
 
@@ -831,49 +815,47 @@ describe("backward compatibility: board.json without new fields", () => {
 
   it("BoardSchema validates a board with new optional fields alongside existing fields", () => {
     const boardWithNewFields = {
-      flow: "test-flow",
-      task: "task",
-      entry: "build",
-      current_state: "build",
       base_commit: "sha123",
-      started: new Date().toISOString(),
+      blocked: null,
+      concerns: [],
+      current_state: "build",
+      entry: "build",
+      flow: "test-flow",
+      iterations: {
+        build: {
+          cannot_fix: [{ file_path: "a.ts", principle_id: "p1" }],
+          count: 2,
+          history: [],
+          max: 3,
+        },
+      },
       last_updated: new Date().toISOString(),
+      skipped: [],
+      started: new Date().toISOString(),
       states: {
         build: {
-          status: "done",
           entries: 2,
           parallel_results: [
             { item: "task-a", status: "done" },
-            { item: "task-b", status: "cannot_fix", artifacts: ["report.md"] },
+            { artifacts: ["report.md"], item: "task-b", status: "cannot_fix" },
           ],
+          status: "done",
         },
       },
-      iterations: {
-        build: {
-          count: 2,
-          max: 3,
-          history: [],
-          cannot_fix: [{ principle_id: "p1", file_path: "a.ts" }],
-        },
-      },
-      blocked: null,
-      concerns: [],
-      skipped: [],
+      task: "task",
     };
 
     const parsed = BoardSchema.safeParse(boardWithNewFields);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.states["build"].parallel_results).toHaveLength(2);
-      expect(parsed.data.iterations["build"].cannot_fix).toHaveLength(1);
+      expect(parsed.data.states.build.parallel_results).toHaveLength(2);
+      expect(parsed.data.iterations.build.cannot_fix).toHaveLength(1);
     }
   });
 });
 
-// ---------------------------------------------------------------------------
 // Integration: store_pr_review → DriftStore round-trip with pr_number filtering
 // (harness-01 gap: store + retrieve with filter)
-// ---------------------------------------------------------------------------
 
 describe("store_pr_review — get_pr_review_data round-trip", () => {
   it("storing multiple reviews and retrieving by pr_number returns only matching ones", async () => {
@@ -886,36 +868,48 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
     // Store two reviews for PR #1 and one for PR #2
     await storePrReview(
       {
+        files: ["a.ts"],
+        honored: [],
         pr_number: 1,
+        score: {
+          conventions: { passed: 1, total: 1 },
+          opinions: { passed: 1, total: 1 },
+          rules: { passed: 1, total: 1 },
+        },
         verdict: "WARNING",
-        files: ["a.ts"],
         violations: [],
-        honored: [],
-        score: { rules: { passed: 1, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 1, total: 1 } },
       },
-      workspace
+      workspace,
     );
     await storePrReview(
       {
+        files: ["a.ts"],
+        honored: [],
         pr_number: 1,
+        score: {
+          conventions: { passed: 1, total: 1 },
+          opinions: { passed: 1, total: 1 },
+          rules: { passed: 1, total: 1 },
+        },
         verdict: "CLEAN",
-        files: ["a.ts"],
         violations: [],
-        honored: [],
-        score: { rules: { passed: 1, total: 1 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 1, total: 1 } },
       },
-      workspace
+      workspace,
     );
     await storePrReview(
       {
-        pr_number: 2,
-        verdict: "BLOCKING",
         files: ["b.ts"],
-        violations: [{ principle_id: "p1", severity: "rule" }],
         honored: [],
-        score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } },
+        pr_number: 2,
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
+        },
+        verdict: "BLOCKING",
+        violations: [{ principle_id: "p1", severity: "rule" }],
       },
-      workspace
+      workspace,
     );
 
     const store = new DriftStore(workspace);

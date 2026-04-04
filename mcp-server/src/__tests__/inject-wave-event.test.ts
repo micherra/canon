@@ -4,57 +4,50 @@
  * The tool now uses ExecutionStore (SQLite) instead of file-based JSONL.
  * Board state is read from store, not from board.json.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { injectWaveEvent } from "../tools/inject-wave-event.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { InitExecutionParams } from "../orchestration/execution-store.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import type { InitExecutionParams } from "../orchestration/execution-store.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { injectWaveEvent } from "../tools/inject-wave-event.ts";
 
 const BASE_EXECUTION: InitExecutionParams = {
-  flow: "test-flow",
-  task: "Test task",
-  entry: "research",
-  current_state: "implement",
   base_commit: "abc1234",
-  started: new Date().toISOString(),
-  last_updated: new Date().toISOString(),
   branch: "main",
-  sanitized: "main",
   created: new Date().toISOString(),
-  tier: "small",
+  current_state: "implement",
+  entry: "research",
+  flow: "test-flow",
   flow_name: "test-flow",
+  last_updated: new Date().toISOString(),
+  sanitized: "main",
   slug: "test-task",
+  started: new Date().toISOString(),
+  task: "Test task",
+  tier: "small",
 };
 
 function setupStoreWithWave(workspace: string, stateId = "implement"): void {
   const store = getExecutionStore(workspace);
   store.initExecution(BASE_EXECUTION);
   store.upsertState(stateId, {
-    status: "in_progress",
     entries: 1,
+    status: "in_progress",
     wave: 1,
   });
 }
 
-function setupStoreWithNoWave(workspace: string): void {
+function _setupStoreWithNoWave(workspace: string): void {
   const store = getExecutionStore(workspace);
   store.initExecution(BASE_EXECUTION);
   store.upsertState("research", {
-    status: "pending",
     entries: 0,
+    status: "pending",
   });
 }
-
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
 
 let workspace: string;
 
@@ -64,23 +57,21 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(workspace, { recursive: true, force: true });
+  await rm(workspace, { force: true, recursive: true });
   vi.restoreAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // 1. Active-wave guard
-// ---------------------------------------------------------------------------
 
 describe("active-wave guard", () => {
   it("throws when no execution exists in store", async () => {
     const emptyWorkspace = await mkdtemp(join(tmpdir(), "canon-empty-ws-"));
     try {
       await expect(
-        injectWaveEvent({ workspace: emptyWorkspace, type: "guidance", payload: {} }),
+        injectWaveEvent({ payload: {}, type: "guidance", workspace: emptyWorkspace }),
       ).rejects.toThrow("No active wave state found");
     } finally {
-      await rm(emptyWorkspace, { recursive: true, force: true });
+      await rm(emptyWorkspace, { force: true, recursive: true });
     }
   });
 
@@ -89,14 +80,14 @@ describe("active-wave guard", () => {
     try {
       const store = getExecutionStore(ws2);
       store.initExecution(BASE_EXECUTION);
-      store.upsertState("research", { status: "done", entries: 1, wave: 1 });
-      store.upsertState("implement", { status: "pending", entries: 0, wave: 2 });
+      store.upsertState("research", { entries: 1, status: "done", wave: 1 });
+      store.upsertState("implement", { entries: 0, status: "pending", wave: 2 });
 
       await expect(
-        injectWaveEvent({ workspace: ws2, type: "guidance", payload: {} }),
+        injectWaveEvent({ payload: {}, type: "guidance", workspace: ws2 }),
       ).rejects.toThrow("No active wave state found");
     } finally {
-      await rm(ws2, { recursive: true, force: true });
+      await rm(ws2, { force: true, recursive: true });
     }
   });
 
@@ -105,20 +96,20 @@ describe("active-wave guard", () => {
     try {
       const store = getExecutionStore(ws3);
       store.initExecution(BASE_EXECUTION);
-      store.upsertState("implement", { status: "in_progress", entries: 1 }); // no wave
+      store.upsertState("implement", { entries: 1, status: "in_progress" }); // no wave
 
       await expect(
-        injectWaveEvent({ workspace: ws3, type: "skip_task", payload: { task_id: "task-01" } }),
+        injectWaveEvent({ payload: { task_id: "task-01" }, type: "skip_task", workspace: ws3 }),
       ).rejects.toThrow("No active wave state found");
     } finally {
-      await rm(ws3, { recursive: true, force: true });
+      await rm(ws3, { force: true, recursive: true });
     }
   });
 
   it("succeeds when exactly one state has both wave set and status in_progress", async () => {
     // Default workspace has this setup
     await expect(
-      injectWaveEvent({ workspace, type: "guidance", payload: { context: "ok" } }),
+      injectWaveEvent({ payload: { context: "ok" }, type: "guidance", workspace }),
     ).resolves.toBeDefined();
   });
 
@@ -127,29 +118,27 @@ describe("active-wave guard", () => {
     try {
       const store = getExecutionStore(ws4);
       store.initExecution(BASE_EXECUTION);
-      store.upsertState("research", { status: "done", entries: 1 });
-      store.upsertState("implement", { status: "in_progress", entries: 1, wave: 2 });
-      store.upsertState("review", { status: "pending", entries: 0 });
+      store.upsertState("research", { entries: 1, status: "done" });
+      store.upsertState("implement", { entries: 1, status: "in_progress", wave: 2 });
+      store.upsertState("review", { entries: 0, status: "pending" });
 
       await expect(
-        injectWaveEvent({ workspace: ws4, type: "inject_context", payload: { context: "ctx" } }),
+        injectWaveEvent({ payload: { context: "ctx" }, type: "inject_context", workspace: ws4 }),
       ).resolves.toBeDefined();
     } finally {
-      await rm(ws4, { recursive: true, force: true });
+      await rm(ws4, { force: true, recursive: true });
     }
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Event posting and result shape
-// ---------------------------------------------------------------------------
 
 describe("event posting and result shape", () => {
   it("returns an event with id, type, timestamp, and payload", async () => {
     const result = await injectWaveEvent({
-      workspace,
-      type: "add_task",
       payload: { description: "A new task" },
+      type: "add_task",
+      workspace,
     });
 
     expect(result.event).toBeDefined();
@@ -162,25 +151,25 @@ describe("event posting and result shape", () => {
 
   it("returns pending_count equal to the number of pending events", async () => {
     const result1 = await injectWaveEvent({
-      workspace,
-      type: "guidance",
       payload: { context: "first" },
+      type: "guidance",
+      workspace,
     });
     expect(result1.pending_count).toBe(1);
 
     const result2 = await injectWaveEvent({
-      workspace,
-      type: "inject_context",
       payload: { context: "second" },
+      type: "inject_context",
+      workspace,
     });
     expect(result2.pending_count).toBe(2);
   });
 
   it("preserves all payload fields on the returned event", async () => {
     const result = await injectWaveEvent({
-      workspace,
-      type: "reprioritize",
       payload: { task_id: "task-03", wave: 3 },
+      type: "reprioritize",
+      workspace,
     });
 
     expect(result.event.payload.task_id).toBe("task-03");
@@ -189,9 +178,9 @@ describe("event posting and result shape", () => {
 
   it("returned event has status pending", async () => {
     const result = await injectWaveEvent({
-      workspace,
-      type: "pause",
       payload: {},
+      type: "pause",
+      workspace,
     });
 
     expect(result.event.status).toBe("pending");
@@ -199,9 +188,9 @@ describe("event posting and result shape", () => {
 
   it("event is persisted in store after injection", async () => {
     const result = await injectWaveEvent({
-      workspace,
-      type: "add_task",
       payload: { description: "Persisted task" },
+      type: "add_task",
+      workspace,
     });
 
     const store = getExecutionStore(workspace);
@@ -210,21 +199,21 @@ describe("event posting and result shape", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Event bus emission and listener cleanup
-// ---------------------------------------------------------------------------
 
 describe("event bus emission and listener cleanup", () => {
   it("emits wave_event_injected with correct fields", async () => {
     const emitSpy = vi.spyOn(flowEventBus, "emit");
 
     const result = await injectWaveEvent({
-      workspace,
-      type: "add_task",
       payload: { description: "Bus test" },
+      type: "add_task",
+      workspace,
     });
 
-    const emittedCall = emitSpy.mock.calls.find(([eventName]) => eventName === "wave_event_injected");
+    const emittedCall = emitSpy.mock.calls.find(
+      ([eventName]) => eventName === "wave_event_injected",
+    );
     expect(emittedCall).toBeDefined();
 
     const payload = emittedCall![1] as {
@@ -244,20 +233,19 @@ describe("event bus emission and listener cleanup", () => {
     const emitSpy = vi.spyOn(flowEventBus, "emit");
 
     await injectWaveEvent({
-      workspace,
-      type: "guidance",
       payload: { context: "listener order check" },
+      type: "guidance",
+      workspace,
     });
 
     const onceCall = onceSpy.mock.calls.find(([name]) => name === "wave_event_injected");
     expect(onceCall).toBeDefined();
 
-    const emitCallIndex = emitSpy.mock.calls.findIndex(
-      ([name]) => name === "wave_event_injected",
-    );
-    const onceCallIndex = onceSpy.mock.invocationCallOrder[
-      onceSpy.mock.calls.findIndex(([name]) => name === "wave_event_injected")
-    ];
+    const emitCallIndex = emitSpy.mock.calls.findIndex(([name]) => name === "wave_event_injected");
+    const onceCallIndex =
+      onceSpy.mock.invocationCallOrder[
+        onceSpy.mock.calls.findIndex(([name]) => name === "wave_event_injected")
+      ];
     const emitCallOrder = emitSpy.mock.invocationCallOrder[emitCallIndex];
 
     expect(onceCallIndex).toBeLessThan(emitCallOrder);
@@ -267,12 +255,14 @@ describe("event bus emission and listener cleanup", () => {
     const removeListenerSpy = vi.spyOn(flowEventBus, "removeListener");
 
     await injectWaveEvent({
-      workspace,
-      type: "inject_context",
       payload: { context: "cleanup check" },
+      type: "inject_context",
+      workspace,
     });
 
-    const removalCall = removeListenerSpy.mock.calls.find(([name]) => name === "wave_event_injected");
+    const removalCall = removeListenerSpy.mock.calls.find(
+      ([name]) => name === "wave_event_injected",
+    );
     expect(removalCall).toBeDefined();
   });
 
@@ -286,7 +276,9 @@ describe("event bus emission and listener cleanup", () => {
       return false;
     });
 
-    await expect(injectWaveEvent({ workspace, type: "pause", payload: {} })).rejects.toThrow("Simulated emit failure");
+    await expect(injectWaveEvent({ payload: {}, type: "pause", workspace })).rejects.toThrow(
+      "Simulated emit failure",
+    );
 
     const removalCall = removeListenerSpy.mock.calls.find(
       ([name]) => name === "wave_event_injected",

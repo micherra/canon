@@ -12,18 +12,14 @@ import { initDatabase, runMigrations, SCHEMA_VERSION } from "../graph/kg-schema.
 import { KgStore } from "../graph/kg-store.ts";
 import type { EntityRow, FileRow } from "../graph/kg-types.ts";
 
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {
-    path: "src/A.ts",
-    mtime_ms: 1700000000000,
     content_hash: "abc123",
     language: "typescript",
-    layer: "domain",
     last_indexed_at: Date.now(),
+    layer: "domain",
+    mtime_ms: 1700000000000,
+    path: "src/A.ts",
     ...overrides,
   };
 }
@@ -34,15 +30,15 @@ function makeEntityRow(
 ): Omit<EntityRow, "entity_id"> {
   return {
     file_id: fileId,
+    is_default_export: false,
+    is_exported: false,
+    kind: "function",
+    line_end: 10,
+    line_start: 1,
+    metadata: null,
     name: "myFunc",
     qualified_name: "src/A.ts::myFunc",
-    kind: "function",
-    line_start: 1,
-    line_end: 10,
-    is_exported: false,
-    is_default_export: false,
     signature: null,
-    metadata: null,
     ...overrides,
   };
 }
@@ -67,88 +63,86 @@ function populateTestGraph(store: KgStore): {
   funcD: EntityRow;
   classE: EntityRow;
 } {
-  const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
-  const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
-  const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+  const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
+  const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
+  const fileC = store.upsertFile(makeFileRow({ layer: "shared", path: "src/C.ts" }));
 
   const funcA = store.insertEntity(
     makeEntityRow(fileA.file_id!, {
+      is_exported: true,
       name: "funcA",
       qualified_name: "src/A.ts::funcA",
-      is_exported: true,
     }),
   );
   const funcB = store.insertEntity(
     makeEntityRow(fileB.file_id!, {
+      is_exported: true,
       name: "funcB",
       qualified_name: "src/B.ts::funcB",
-      is_exported: true,
     }),
   );
   const funcC = store.insertEntity(
     makeEntityRow(fileC.file_id!, {
+      is_exported: true,
       name: "funcC",
       qualified_name: "src/C.ts::funcC",
-      is_exported: true,
     }),
   );
   // Dead code: unexported, never called
   const funcD = store.insertEntity(
     makeEntityRow(fileB.file_id!, {
+      is_exported: false,
       name: "funcD",
       qualified_name: "src/B.ts::funcD",
-      is_exported: false,
     }),
   );
   const classE = store.insertEntity(
     makeEntityRow(fileC.file_id!, {
+      is_exported: true,
+      kind: "class",
       name: "ClassE",
       qualified_name: "src/C.ts::ClassE",
-      kind: "class",
-      is_exported: true,
     }),
   );
 
   // Entity edges: funcA->funcB, funcB->funcC
   store.insertEdge({
+    confidence: 1.0,
+    edge_type: "calls",
+    metadata: null,
     source_entity_id: funcA.entity_id!,
     target_entity_id: funcB.entity_id!,
-    edge_type: "calls",
-    confidence: 1.0,
-    metadata: null,
   });
   store.insertEdge({
+    confidence: 1.0,
+    edge_type: "calls",
+    metadata: null,
     source_entity_id: funcB.entity_id!,
     target_entity_id: funcC.entity_id!,
-    edge_type: "calls",
-    confidence: 1.0,
-    metadata: null,
   });
 
   // File edges: A imports B, B imports C
   store.insertFileEdge({
-    source_file_id: fileA.file_id!,
-    target_file_id: fileB.file_id!,
-    edge_type: "imports",
     confidence: 1.0,
+    edge_type: "imports",
     evidence: "import { funcB } from './B'",
     relation: "imports",
+    source_file_id: fileA.file_id!,
+    target_file_id: fileB.file_id!,
   });
   store.insertFileEdge({
-    source_file_id: fileB.file_id!,
-    target_file_id: fileC.file_id!,
-    edge_type: "imports",
     confidence: 1.0,
+    edge_type: "imports",
     evidence: "import { funcC } from './C'",
     relation: "imports",
+    source_file_id: fileB.file_id!,
+    target_file_id: fileC.file_id!,
   });
 
-  return { fileA, fileB, fileC, funcA, funcB, funcC, funcD, classE };
+  return { classE, fileA, fileB, fileC, funcA, funcB, funcC, funcD };
 }
 
-// ---------------------------------------------------------------------------
 // Schema tests
-// ---------------------------------------------------------------------------
 
 describe("Knowledge Graph Store", () => {
   describe("Schema", () => {
@@ -163,7 +157,9 @@ describe("Knowledge Graph Store", () => {
     });
 
     test("initDatabase creates all tables", () => {
-      const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`).all() as Array<{
+      const tables = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+        .all() as Array<{
         name: string;
       }>;
       const names = tables.map((t) => t.name);
@@ -207,9 +203,7 @@ describe("Knowledge Graph Store", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
   // Summaries table
-  // ---------------------------------------------------------------------------
 
   describe("Summaries table", () => {
     let db: Database.Database;
@@ -223,9 +217,9 @@ describe("Knowledge Graph Store", () => {
     });
 
     test("summaries table exists after initDatabase", () => {
-      const row = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='summaries'`).get() as
-        | { name: string }
-        | undefined;
+      const row = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='summaries'`)
+        .get() as { name: string } | undefined;
       expect(row).toBeDefined();
       expect(row!.name).toBe("summaries");
     });
@@ -254,7 +248,9 @@ describe("Knowledge Graph Store", () => {
       // Insert a file first
       db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at)
                VALUES ('src/A.ts', 0, 'hash1', 'typescript', 'domain', '2024-01-01')`);
-      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/A.ts'`).get() as { file_id: number };
+      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/A.ts'`).get() as {
+        file_id: number;
+      };
 
       const insert = db.prepare(
         `INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
@@ -282,7 +278,9 @@ describe("Knowledge Graph Store", () => {
       // Insert file and summary
       db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at)
                VALUES ('src/B.ts', 0, 'hash2', 'typescript', 'domain', '2024-01-01')`);
-      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/B.ts'`).get() as { file_id: number };
+      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/B.ts'`).get() as {
+        file_id: number;
+      };
 
       db.prepare(
         `INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
@@ -290,14 +288,18 @@ describe("Knowledge Graph Store", () => {
       ).run(file.file_id);
 
       // Verify it exists
-      expect(db.prepare(`SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ?`).get(file.file_id)).toMatchObject({
+      expect(
+        db.prepare(`SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ?`).get(file.file_id),
+      ).toMatchObject({
         cnt: 1,
       });
 
       // Delete the file — cascade should remove summary
       db.prepare(`DELETE FROM files WHERE file_id = ?`).run(file.file_id);
 
-      expect(db.prepare(`SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ?`).get(file.file_id)).toMatchObject({
+      expect(
+        db.prepare(`SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ?`).get(file.file_id),
+      ).toMatchObject({
         cnt: 0,
       });
     });
@@ -307,7 +309,9 @@ describe("Knowledge Graph Store", () => {
       // a non-NULL entity_id to properly test the uniqueness enforcement.
       db.exec(`INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at)
                VALUES ('src/C.ts', 0, 'hash3', 'typescript', 'domain', '2024-01-01')`);
-      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/C.ts'`).get() as { file_id: number };
+      const file = db.prepare(`SELECT file_id FROM files WHERE path = 'src/C.ts'`).get() as {
+        file_id: number;
+      };
 
       // Insert an entity so we have a valid entity_id
       db.prepare(
@@ -315,7 +319,9 @@ describe("Knowledge Graph Store", () => {
            is_exported, is_default_export, signature, metadata)
          VALUES (?, 'myEnt', 'src/C.ts::myEnt', 'function', 1, 5, 0, 0, NULL, NULL)`,
       ).run(file.file_id);
-      const entity = db.prepare(`SELECT entity_id FROM entities WHERE qualified_name = 'src/C.ts::myEnt'`).get() as {
+      const entity = db
+        .prepare(`SELECT entity_id FROM entities WHERE qualified_name = 'src/C.ts::myEnt'`)
+        .get() as {
         entity_id: number;
       };
 
@@ -330,9 +336,7 @@ describe("Knowledge Graph Store", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
   // KgStore CRUD
-  // ---------------------------------------------------------------------------
 
   describe("KgStore CRUD", () => {
     let db: Database.Database;
@@ -407,18 +411,30 @@ describe("Knowledge Graph Store", () => {
       });
 
       test("getEntitiesByFile returns all entities for a file", () => {
-        store.insertEntity(makeEntityRow(file.file_id!, { name: "fn1", qualified_name: "src/A.ts::fn1" }));
-        store.insertEntity(makeEntityRow(file.file_id!, { name: "fn2", qualified_name: "src/A.ts::fn2" }));
+        store.insertEntity(
+          makeEntityRow(file.file_id!, { name: "fn1", qualified_name: "src/A.ts::fn1" }),
+        );
+        store.insertEntity(
+          makeEntityRow(file.file_id!, { name: "fn2", qualified_name: "src/A.ts::fn2" }),
+        );
         const entities = store.getEntitiesByFile(file.file_id!);
         expect(entities).toHaveLength(2);
       });
 
       test("findExportedByName finds exported entities", () => {
         store.insertEntity(
-          makeEntityRow(file.file_id!, { name: "pubFn", qualified_name: "src/A.ts::pubFn", is_exported: true }),
+          makeEntityRow(file.file_id!, {
+            is_exported: true,
+            name: "pubFn",
+            qualified_name: "src/A.ts::pubFn",
+          }),
         );
         store.insertEntity(
-          makeEntityRow(file.file_id!, { name: "privFn", qualified_name: "src/A.ts::privFn", is_exported: false }),
+          makeEntityRow(file.file_id!, {
+            is_exported: false,
+            name: "privFn",
+            qualified_name: "src/A.ts::privFn",
+          }),
         );
         const results = store.findExportedByName("pubFn");
         expect(results).toHaveLength(1);
@@ -462,11 +478,11 @@ describe("Knowledge Graph Store", () => {
 
       test("insertEdge creates edge between entities", () => {
         const edge = store.insertEdge({
+          confidence: 0.9,
+          edge_type: "calls",
+          metadata: null,
           source_entity_id: entityA.entity_id!,
           target_entity_id: entityB.entity_id!,
-          edge_type: "calls",
-          confidence: 0.9,
-          metadata: null,
         });
         expect(edge.edge_id).toBeDefined();
         expect(edge.edge_type).toBe("calls");
@@ -475,11 +491,11 @@ describe("Knowledge Graph Store", () => {
 
       test("getEdgesFrom returns outgoing edges", () => {
         store.insertEdge({
+          confidence: 1.0,
+          edge_type: "calls",
+          metadata: null,
           source_entity_id: entityA.entity_id!,
           target_entity_id: entityB.entity_id!,
-          edge_type: "calls",
-          confidence: 1.0,
-          metadata: null,
         });
         const edges = store.getEdgesFrom(entityA.entity_id!);
         expect(edges).toHaveLength(1);
@@ -488,11 +504,11 @@ describe("Knowledge Graph Store", () => {
 
       test("getEdgesTo returns incoming edges", () => {
         store.insertEdge({
+          confidence: 1.0,
+          edge_type: "calls",
+          metadata: null,
           source_entity_id: entityA.entity_id!,
           target_entity_id: entityB.entity_id!,
-          edge_type: "calls",
-          confidence: 1.0,
-          metadata: null,
         });
         const edges = store.getEdgesTo(entityB.entity_id!);
         expect(edges).toHaveLength(1);
@@ -501,11 +517,11 @@ describe("Knowledge Graph Store", () => {
 
       test("edge cascade on entity delete", () => {
         store.insertEdge({
+          confidence: 1.0,
+          edge_type: "calls",
+          metadata: null,
           source_entity_id: entityA.entity_id!,
           target_entity_id: entityB.entity_id!,
-          edge_type: "calls",
-          confidence: 1.0,
-          metadata: null,
         });
         // Delete source entity; edge should cascade away
         store.deleteEntitiesByFile(fileA.file_id!);
@@ -527,12 +543,12 @@ describe("Knowledge Graph Store", () => {
 
       test("insertFileEdge creates file-level edge", () => {
         const edge = store.insertFileEdge({
-          source_file_id: fileA.file_id!,
-          target_file_id: fileB.file_id!,
-          edge_type: "imports",
           confidence: 1.0,
+          edge_type: "imports",
           evidence: "import { x } from './B'",
           relation: "imports",
+          source_file_id: fileA.file_id!,
+          target_file_id: fileB.file_id!,
         });
         expect(edge.file_edge_id).toBeDefined();
         expect(edge.edge_type).toBe("imports");
@@ -540,12 +556,12 @@ describe("Knowledge Graph Store", () => {
 
       test("getFileEdgesFrom returns outgoing file edges", () => {
         store.insertFileEdge({
-          source_file_id: fileA.file_id!,
-          target_file_id: fileB.file_id!,
-          edge_type: "imports",
           confidence: 1.0,
+          edge_type: "imports",
           evidence: null,
           relation: null,
+          source_file_id: fileA.file_id!,
+          target_file_id: fileB.file_id!,
         });
         const edges = store.getFileEdgesFrom(fileA.file_id!);
         expect(edges).toHaveLength(1);
@@ -554,12 +570,12 @@ describe("Knowledge Graph Store", () => {
 
       test("file edge cascade on file delete", () => {
         store.insertFileEdge({
-          source_file_id: fileA.file_id!,
-          target_file_id: fileB.file_id!,
-          edge_type: "imports",
           confidence: 1.0,
+          edge_type: "imports",
           evidence: null,
           relation: null,
+          source_file_id: fileA.file_id!,
+          target_file_id: fileB.file_id!,
         });
         store.deleteFile(fileA.path);
         expect(store.getFileEdgesFrom(fileA.file_id!)).toHaveLength(0);
@@ -594,19 +610,19 @@ describe("Knowledge Graph Store", () => {
       let file: FileRow;
 
       beforeEach(() => {
-        file = store.upsertFile(makeFileRow({ path: "src/sumFile.ts", content_hash: "hash-v1" }));
+        file = store.upsertFile(makeFileRow({ content_hash: "hash-v1", path: "src/sumFile.ts" }));
       });
 
       function makeSummaryParams(
         overrides: Partial<Omit<import("../graph/kg-types.ts").SummaryRow, "summary_id">> = {},
       ) {
         return {
-          file_id: file.file_id!,
+          content_hash: "hash-v1",
           entity_id: null,
+          file_id: file.file_id!,
+          model: "gpt-4",
           scope: "file" as const,
           summary: "This file does X.",
-          model: "gpt-4",
-          content_hash: "hash-v1",
           updated_at: "2024-01-01T00:00:00Z",
           ...overrides,
         };
@@ -625,12 +641,16 @@ describe("Knowledge Graph Store", () => {
         // NULL entity_id: SQLite UNIQUE treats NULLs as distinct, so we use DELETE+INSERT.
         // The summary_id changes (new AUTOINCREMENT), but only one row exists afterwards.
         store.upsertSummary(makeSummaryParams({ summary: "First summary." }));
-        const second = store.upsertSummary(makeSummaryParams({ summary: "Updated summary.", content_hash: "hash-v2" }));
+        const second = store.upsertSummary(
+          makeSummaryParams({ content_hash: "hash-v2", summary: "Updated summary." }),
+        );
         expect(second.summary).toBe("Updated summary.");
         expect(second.content_hash).toBe("hash-v2");
         // Verify only one row exists for this file (no duplicates)
         const rows = db
-          .prepare(`SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ? AND entity_id IS NULL AND scope = 'file'`)
+          .prepare(
+            `SELECT COUNT(*) as cnt FROM summaries WHERE file_id = ? AND entity_id IS NULL AND scope = 'file'`,
+          )
           .get(file.file_id) as { cnt: number };
         expect(rows.cnt).toBe(1);
       });
@@ -650,8 +670,12 @@ describe("Knowledge Graph Store", () => {
       });
 
       test("getSummariesByFiles returns summaries for all given file IDs", () => {
-        const file2 = store.upsertFile(makeFileRow({ path: "src/sumFile2.ts", content_hash: "hash-a" }));
-        const file3 = store.upsertFile(makeFileRow({ path: "src/sumFile3.ts", content_hash: "hash-b" }));
+        const file2 = store.upsertFile(
+          makeFileRow({ content_hash: "hash-a", path: "src/sumFile2.ts" }),
+        );
+        const file3 = store.upsertFile(
+          makeFileRow({ content_hash: "hash-b", path: "src/sumFile3.ts" }),
+        );
         store.upsertSummary(makeSummaryParams({ file_id: file.file_id! }));
         store.upsertSummary(makeSummaryParams({ file_id: file2.file_id! }));
         store.upsertSummary(makeSummaryParams({ file_id: file3.file_id! }));
@@ -721,9 +745,7 @@ describe("Knowledge Graph Store", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
   // KgQuery
-  // ---------------------------------------------------------------------------
 
   describe("KgQuery", () => {
     let db: Database.Database;
@@ -838,12 +860,14 @@ describe("Knowledge Graph Store", () => {
 
       test("findDeadCode excludes test files when option not set", () => {
         // Insert a dead entity in a test file
-        const testFile = store.upsertFile(makeFileRow({ path: "src/__tests__/A.test.ts", layer: "test" }));
+        const testFile = store.upsertFile(
+          makeFileRow({ layer: "test", path: "src/__tests__/A.test.ts" }),
+        );
         store.insertEntity(
           makeEntityRow(testFile.file_id!, {
+            is_exported: false,
             name: "testHelper",
             qualified_name: "src/__tests__/A.test.ts::testHelper",
-            is_exported: false,
           }),
         );
         const dead = query.findDeadCode({ includeTests: false });
@@ -851,12 +875,14 @@ describe("Knowledge Graph Store", () => {
       });
 
       test("findDeadCode includes test file entities when includeTests is true", () => {
-        const testFile = store.upsertFile(makeFileRow({ path: "src/__tests__/A.test.ts", layer: "test" }));
+        const testFile = store.upsertFile(
+          makeFileRow({ layer: "test", path: "src/__tests__/A.test.ts" }),
+        );
         store.insertEntity(
           makeEntityRow(testFile.file_id!, {
+            is_exported: false,
             name: "testHelper",
             qualified_name: "src/__tests__/A.test.ts::testHelper",
-            is_exported: false,
           }),
         );
         const dead = query.findDeadCode({ includeTests: true });
@@ -901,9 +927,7 @@ describe("Knowledge Graph Store", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
   // Schema v3 — vec0 tables and migration
-  // ---------------------------------------------------------------------------
 
   describe("Schema v3 — vector tables", () => {
     let db: Database.Database;
@@ -918,9 +942,7 @@ describe("Knowledge Graph Store", () => {
 
     test("initDatabase creates entity_vectors virtual table", () => {
       const row = db
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name='entity_vectors'`,
-        )
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='entity_vectors'`)
         .get() as { name: string } | undefined;
       expect(row).toBeDefined();
       expect(row!.name).toBe("entity_vectors");
@@ -928,16 +950,16 @@ describe("Knowledge Graph Store", () => {
 
     test("initDatabase creates summary_vectors virtual table", () => {
       const row = db
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name='summary_vectors'`,
-        )
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='summary_vectors'`)
         .get() as { name: string } | undefined;
       expect(row).toBeDefined();
       expect(row!.name).toBe("summary_vectors");
     });
 
     test("initDatabase creates entity_vector_meta table", () => {
-      const cols = db.prepare(`PRAGMA table_info(entity_vector_meta)`).all() as Array<{ name: string }>;
+      const cols = db.prepare(`PRAGMA table_info(entity_vector_meta)`).all() as Array<{
+        name: string;
+      }>;
       const colNames = cols.map((c) => c.name);
       expect(colNames).toContain("entity_id");
       expect(colNames).toContain("text_hash");
@@ -946,7 +968,9 @@ describe("Knowledge Graph Store", () => {
     });
 
     test("initDatabase creates summary_vector_meta table", () => {
-      const cols = db.prepare(`PRAGMA table_info(summary_vector_meta)`).all() as Array<{ name: string }>;
+      const cols = db.prepare(`PRAGMA table_info(summary_vector_meta)`).all() as Array<{
+        name: string;
+      }>;
       const colNames = cols.map((c) => c.name);
       expect(colNames).toContain("summary_id");
       expect(colNames).toContain("text_hash");
@@ -955,9 +979,9 @@ describe("Knowledge Graph Store", () => {
     });
 
     test("schema_version is '3' for new databases", () => {
-      const row = db
-        .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-        .get() as { value: string } | undefined;
+      const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
+        | { value: string }
+        | undefined;
       expect(row?.value).toBe("3");
       expect(SCHEMA_VERSION).toBe("3");
     });
@@ -975,7 +999,9 @@ describe("Knowledge Graph Store", () => {
     test("summary_vectors accepts insert with valid embedding", () => {
       const jsonEmbedding = `[${new Array(384).fill("0.2").join(",")}]`;
       expect(() =>
-        db.exec(`INSERT INTO summary_vectors (summary_id, embedding) VALUES (1, '${jsonEmbedding}')`),
+        db.exec(
+          `INSERT INTO summary_vectors (summary_id, embedding) VALUES (1, '${jsonEmbedding}')`,
+        ),
       ).not.toThrow();
     });
   });
@@ -988,7 +1014,9 @@ describe("Knowledge Graph Store", () => {
       const db = initDatabase(":memory:");
 
       // Confirm the migration already ran (new DB starts at v3)
-      const before = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string };
+      const before = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+        value: string;
+      };
       expect(before.value).toBe("3");
 
       // Simulate a v2 DB: downgrade schema_version to '2' and drop v3 tables
@@ -1002,7 +1030,9 @@ describe("Knowledge Graph Store", () => {
       runMigrations(db);
 
       // schema_version should now be '3'
-      const after = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string };
+      const after = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+        value: string;
+      };
       expect(after.value).toBe("3");
 
       // entity_vector_meta should exist
@@ -1018,7 +1048,9 @@ describe("Knowledge Graph Store", () => {
       const db = initDatabase(":memory:");
       // Should not throw on double-call
       expect(() => runMigrations(db)).not.toThrow();
-      const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as { value: string };
+      const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
+        value: string;
+      };
       expect(row.value).toBe("3");
       db.close();
     });

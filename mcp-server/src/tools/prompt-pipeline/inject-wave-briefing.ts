@@ -25,24 +25,20 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { escapeDollarBrace } from "../../orchestration/wave-variables.ts";
-import { assembleWaveBriefing, readWaveGuidance } from "../../orchestration/wave-briefing.ts";
-import { getExecutionStore } from "../../orchestration/execution-store.ts";
-import { getItemCountCap } from "../../orchestration/context-budget.ts";
-import { KgQuery, computeFileInsightMaps } from "../../graph/kg-query.ts";
-import { KgStore } from "../../graph/kg-store.ts";
-import { initDatabase } from "../../graph/kg-schema.ts";
 import { CANON_DIR, CANON_FILES } from "../../constants.ts";
+import { computeFileInsightMaps, KgQuery } from "../../graph/kg-query.ts";
+import { initDatabase } from "../../graph/kg-schema.ts";
+import { KgStore } from "../../graph/kg-store.ts";
+import { getItemCountCap } from "../../orchestration/context-budget.ts";
+import { getExecutionStore } from "../../orchestration/execution-store.ts";
+import { assembleWaveBriefing, readWaveGuidance } from "../../orchestration/wave-briefing.ts";
+import { escapeDollarBrace } from "../../orchestration/wave-variables.ts";
 import type { PromptContext, TaskItem } from "./types.ts";
 
-// ---------------------------------------------------------------------------
 // KG staleness threshold: 1 hour (matches show_pr_impact UI banner)
-// ---------------------------------------------------------------------------
 const KG_STALENESS_THRESHOLD_MS = 3_600_000;
 
-// ---------------------------------------------------------------------------
 // File path extraction from task items
-// ---------------------------------------------------------------------------
 
 /**
  * Extract file paths from task items. Items can be:
@@ -52,44 +48,46 @@ const KG_STALENESS_THRESHOLD_MS = 3_600_000;
  *
  * Returns an empty array if no file paths can be extracted.
  */
-function extractFilePaths(items: TaskItem[]): string[] {
-  const paths: string[] = [];
-  for (const item of items) {
-    if (typeof item === "string") {
-      paths.push(item);
-    } else if (item !== null && typeof item === "object") {
-      const filesField = item["files"];
-      const affectedField = item["affected_files"];
-      if (Array.isArray(filesField)) {
-        for (const f of filesField) {
-          if (typeof f === "string") paths.push(f);
-        }
-      } else if (Array.isArray(affectedField)) {
-        for (const f of affectedField) {
-          if (typeof f === "string") paths.push(f);
-        }
-      }
-    }
-  }
-  return paths;
+function extractStringArray(arr: unknown[]): string[] {
+  return arr.filter((f): f is string => typeof f === "string");
 }
 
-// ---------------------------------------------------------------------------
+function extractFilePathsFromItem(item: TaskItem): string[] {
+  if (typeof item === "string") return [item];
+  if (item === null || typeof item !== "object") return [];
+  const filesField = item.files;
+  if (Array.isArray(filesField)) return extractStringArray(filesField);
+  const affectedField = item.affected_files;
+  if (Array.isArray(affectedField)) return extractStringArray(affectedField);
+  return [];
+}
+
+function extractFilePaths(items: TaskItem[]): string[] {
+  return items.flatMap(extractFilePathsFromItem);
+}
+
 // KG section formatting
-// ---------------------------------------------------------------------------
 
 /**
  * Format a compact file context section from KG metrics and summary.
  * Returns raw (unescaped) text — caller is responsible for escaping.
  */
 function formatKgSection(
-  files: Array<{ path: string; layer: string; inDegree: number; outDegree: number; summary: string | null }>,
+  files: Array<{
+    path: string;
+    layer: string;
+    inDegree: number;
+    outDegree: number;
+    summary: string | null;
+  }>,
 ): string {
   if (files.length === 0) return "";
 
   const lines: string[] = ["## File Context (from Knowledge Graph)", ""];
   for (const file of files) {
-    lines.push(`**${file.path}** — layer: ${file.layer}, in: ${file.inDegree}, out: ${file.outDegree}`);
+    lines.push(
+      `**${file.path}** — layer: ${file.layer}, in: ${file.inDegree}, out: ${file.outDegree}`,
+    );
     if (file.summary) {
       lines.push(`Summary: ${file.summary}`);
     }
@@ -98,42 +96,77 @@ function formatKgSection(
   return lines.join("\n").trimEnd();
 }
 
-// ---------------------------------------------------------------------------
 // KG injection implementation
-// ---------------------------------------------------------------------------
 
 /**
  * Attempt to inject KG file context for the given file paths.
  * Returns { section: string; warnings: string[] } — section may be empty if
  * no KG data is available. Never throws.
  */
+function getTierFromWorkspace(workspace: string): "small" | "medium" | "large" {
+  try {
+    const store = getExecutionStore(workspace);
+    const session = store.getSession();
+    return session?.tier ?? "medium";
+  } catch {
+    return "medium";
+  }
+}
+
+function buildFileEntry(
+  filePath: string,
+  kgQuery: KgQuery,
+  kgStore: KgStore,
+  insightMaps: ReturnType<typeof computeFileInsightMaps>,
+): { path: string; layer: string; inDegree: number; outDegree: number; summary: string | null } {
+  const metrics = kgQuery.getFileMetrics(filePath, {
+    cycleMemberPaths: insightMaps.cycleMemberPaths,
+    hubPaths: insightMaps.hubPaths,
+    layerViolationsByPath: insightMaps.layerViolationsByPath,
+  });
+
+  if (metrics === null) {
+    return { inDegree: 0, layer: "unknown", outDegree: 0, path: filePath, summary: null };
+  }
+
+  let summary: string | null = null;
+  const fileRow = kgStore.getFile(filePath);
+  if (fileRow?.file_id !== undefined) {
+    const summaryRow = kgStore.getSummaryByFile(fileRow.file_id);
+    summary = summaryRow?.summary ?? null;
+  }
+
+  return {
+    inDegree: metrics.in_degree,
+    layer: metrics.layer,
+    outDegree: metrics.out_degree,
+    path: filePath,
+    summary,
+  };
+}
+
+function closeDb(db: ReturnType<typeof initDatabase> | undefined): void {
+  if (db !== undefined) {
+    try {
+      db.close();
+    } catch {
+      /* ignore close errors */
+    }
+  }
+}
+
 function injectKgSection(
   filePaths: string[],
   projectDir: string,
   workspace: string,
 ): { section: string; warnings: string[] } {
   const warnings: string[] = [];
+  const resolvedProjectDir = projectDir || process.env.CANON_PROJECT_DIR || process.cwd();
 
-  // Resolve project dir — fall back to env var then cwd
-  const resolvedProjectDir = projectDir || process.env["CANON_PROJECT_DIR"] || process.cwd();
-
-  // Get tier from execution store for item count cap
-  let tier: "small" | "medium" | "large" = "medium";
-  try {
-    const store = getExecutionStore(workspace);
-    const session = store.getSession();
-    if (session?.tier) {
-      tier = session.tier;
-    }
-  } catch {
-    // Execution store unavailable — proceed with medium defaults
-  }
-
+  const tier = getTierFromWorkspace(workspace);
   const uniquePaths = [...new Set(filePaths)];
-  const cap = getItemCountCap(tier);
-  const cappedPaths = uniquePaths.slice(0, cap);
+  const cappedPaths = uniquePaths.slice(0, getItemCountCap(tier));
 
-  // Check KG DB availability
   const dbPath = join(resolvedProjectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
   if (!existsSync(dbPath)) {
     warnings.push("KG not indexed: knowledge-graph.db not found, skipping file context injection");
@@ -146,84 +179,26 @@ function injectKgSection(
     const kgQuery = new KgQuery(db);
     const kgStore = new KgStore(db);
 
-    // Check KG freshness
     const freshnessMs = kgQuery.getKgFreshnessMs();
     if (freshnessMs !== null && freshnessMs > KG_STALENESS_THRESHOLD_MS) {
       warnings.push(`WARNING: KG data is ${freshnessMs}ms old (>1hr) — file context may be stale`);
     }
 
-    // Compute insight maps once (prevents N+1 queries)
     const insightMaps = computeFileInsightMaps(db);
+    const fileEntries = cappedPaths.map((fp) => buildFileEntry(fp, kgQuery, kgStore, insightMaps));
 
-    // Collect file context entries
-    const fileEntries: Array<{
-      path: string;
-      layer: string;
-      inDegree: number;
-      outDegree: number;
-      summary: string | null;
-    }> = [];
-
-    for (const filePath of cappedPaths) {
-      const metrics = kgQuery.getFileMetrics(filePath, {
-        hubPaths: insightMaps.hubPaths,
-        cycleMemberPaths: insightMaps.cycleMemberPaths,
-        layerViolationsByPath: insightMaps.layerViolationsByPath,
-      });
-
-      // Get summary from files table via KgStore
-      let summary: string | null = null;
-      if (metrics !== null) {
-        const fileRow = kgStore.getFile(filePath);
-        if (fileRow?.file_id !== undefined) {
-          const summaryRow = kgStore.getSummaryByFile(fileRow.file_id);
-          summary = summaryRow?.summary ?? null;
-        }
-
-        fileEntries.push({
-          path: filePath,
-          layer: metrics.layer,
-          inDegree: metrics.in_degree,
-          outDegree: metrics.out_degree,
-          summary,
-        });
-      } else {
-        // File not in KG — include with unknown metrics
-        fileEntries.push({
-          path: filePath,
-          layer: "unknown",
-          inDegree: 0,
-          outDegree: 0,
-          summary: null,
-        });
-      }
-    }
-
-    if (fileEntries.length === 0) {
-      return { section: "", warnings };
-    }
-
-    const rawSection = formatKgSection(fileEntries);
-    return { section: rawSection, warnings };
+    if (fileEntries.length === 0) return { section: "", warnings };
+    return { section: formatKgSection(fileEntries), warnings };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(`KG injection skipped due to error: ${msg}`);
     return { section: "", warnings };
   } finally {
-    // better-sqlite3 databases should be closed when done
-    if (db !== undefined) {
-      try {
-        db.close();
-      } catch {
-        // ignore close errors
-      }
-    }
+    closeDb(db);
   }
 }
 
-// ---------------------------------------------------------------------------
 // Stage 6: injectWaveBriefing
-// ---------------------------------------------------------------------------
 
 /**
  * Inject wave guidance and wave briefing into the base prompt.
@@ -231,11 +206,55 @@ function injectKgSection(
  *
  * Also injects KG file context summaries when task items include file paths.
  */
+function escapeConsultationOutputs(
+  outputs: Record<string, { section?: string; summary: string }>,
+): Record<string, { section?: string; summary: string }> {
+  const escaped: Record<string, { section?: string; summary: string }> = {};
+  for (const [key, output] of Object.entries(outputs)) {
+    escaped[key] = {
+      ...output,
+      ...(output.section != null ? { section: escapeDollarBrace(output.section) } : {}),
+      summary: escapeDollarBrace(output.summary),
+    };
+  }
+  return escaped;
+}
+
+function injectConsultationBriefing(
+  basePrompt: string,
+  wave: number,
+  outputs: Record<string, { section?: string; summary: string }>,
+): string {
+  const escapedOutputs = escapeConsultationOutputs(outputs);
+  const briefing = assembleWaveBriefing({
+    consultationOutputs: escapedOutputs,
+    summaries: [],
+    wave,
+  });
+  return briefing ? `${basePrompt}\n\n${briefing}` : basePrompt;
+}
+
+function injectKgFileContext(
+  basePrompt: string,
+  opts: { warnings: string[]; items: unknown[]; projectDir: string; workspace: string },
+): string {
+  const { warnings, items, projectDir, workspace } = opts;
+  const filePaths = extractFilePaths(items as TaskItem[]);
+  if (filePaths.length === 0) return basePrompt;
+  const resolvedProjectDir = projectDir || process.env.CANON_PROJECT_DIR || process.cwd();
+  const { section, warnings: kgWarnings } = injectKgSection(
+    filePaths,
+    resolvedProjectDir,
+    workspace,
+  );
+  warnings.push(...kgWarnings);
+  return section ? `${basePrompt}\n\n${escapeDollarBrace(section)}` : basePrompt;
+}
+
 export async function injectWaveBriefing(ctx: PromptContext): Promise<PromptContext> {
   const { state } = ctx;
   const { wave, workspace, consultation_outputs, items, project_dir } = ctx.input;
 
-  // Only active for wave/parallel-per states with a wave number
   if ((state.type !== "wave" && state.type !== "parallel-per") || wave == null) {
     return ctx;
   }
@@ -243,51 +262,22 @@ export async function injectWaveBriefing(ctx: PromptContext): Promise<PromptCont
   let basePrompt = ctx.basePrompt;
   const warnings = [...ctx.warnings];
 
-  // Inject wave guidance — escape at read boundary before appending
   const rawGuidance = await readWaveGuidance(workspace);
   if (rawGuidance) {
-    const escapedGuidance = escapeDollarBrace(rawGuidance);
-    basePrompt += `\n\n## Wave Guidance (from user)\n\n${escapedGuidance}`;
+    basePrompt += `\n\n## Wave Guidance (from user)\n\n${escapeDollarBrace(rawGuidance)}`;
   }
 
-  // Inject wave briefing from consultation outputs (if provided)
   if (consultation_outputs) {
-    // Escape summaries at trust boundary before passing to assembleWaveBriefing
-    const escapedOutputs: Record<string, { section?: string; summary: string }> = {};
-    for (const [key, output] of Object.entries(consultation_outputs)) {
-      escapedOutputs[key] = {
-        ...output,
-        ...(output.section != null ? { section: escapeDollarBrace(output.section) } : {}),
-        summary: escapeDollarBrace(output.summary),
-      };
-    }
-
-    const briefing = assembleWaveBriefing({
-      wave,
-      summaries: [],
-      consultationOutputs: escapedOutputs,
-    });
-
-    if (briefing) {
-      basePrompt += `\n\n${briefing}`;
-    }
+    basePrompt = injectConsultationBriefing(basePrompt, wave, consultation_outputs);
   }
 
-  // Inject KG file context summaries when items contain file paths
   if (items && items.length > 0) {
-    const filePaths = extractFilePaths(items);
-
-    if (filePaths.length > 0) {
-      const resolvedProjectDir = project_dir || process.env["CANON_PROJECT_DIR"] || process.cwd();
-      const { section, warnings: kgWarnings } = injectKgSection(filePaths, resolvedProjectDir, workspace);
-      warnings.push(...kgWarnings);
-
-      if (section) {
-        // Escape at trust boundary before appending to basePrompt
-        const escapedSection = escapeDollarBrace(section);
-        basePrompt += `\n\n${escapedSection}`;
-      }
-    }
+    basePrompt = injectKgFileContext(basePrompt, {
+      items,
+      projectDir: project_dir ?? "",
+      warnings,
+      workspace,
+    });
   }
 
   return { ...ctx, basePrompt, warnings };

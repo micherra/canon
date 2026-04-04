@@ -1,31 +1,27 @@
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ResolvedFlow, Board } from "../orchestration/flow-schema.ts";
+import { afterEach, describe, expect, it } from "vitest";
 import {
-  initBoard,
-  enterState,
   completeState,
-  setBlocked,
+  enterState,
+  initBoard,
   recordConsultationResult,
   recordGateResult,
+  setBlocked,
 } from "../orchestration/board.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "A test flow",
     entry: "start",
+    name: "test-flow",
     spawn_instructions: {},
     states: {
-      start: { type: "single", agent: "canon:canon-implementor" },
-      review: { type: "single", agent: "canon:canon-implementor", max_iterations: 3 },
       done: { type: "terminal" },
+      review: { agent: "canon:canon-implementor", max_iterations: 3, type: "single" },
+      start: { agent: "canon:canon-implementor", type: "single" },
     },
     ...overrides,
   };
@@ -37,7 +33,7 @@ function makeBoard(): Board {
 
 let tmpDirs: string[] = [];
 
-function makeTmpDir(): string {
+function _makeTmpDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "board-test-"));
   tmpDirs.push(dir);
   return dir;
@@ -45,14 +41,12 @@ function makeTmpDir(): string {
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
-// ---------------------------------------------------------------------------
 // initBoard
-// ---------------------------------------------------------------------------
 
 describe("initBoard", () => {
   it("creates correct structure from a minimal ResolvedFlow", () => {
@@ -72,7 +66,7 @@ describe("initBoard", () => {
 
     // All states should be pending with 0 entries
     for (const key of Object.keys(flow.states)) {
-      expect(board.states[key]).toEqual({ status: "pending", entries: 0 });
+      expect(board.states[key]).toEqual({ entries: 0, status: "pending" });
     }
   });
 
@@ -81,10 +75,10 @@ describe("initBoard", () => {
 
     // "review" has max_iterations: 3
     expect(board.iterations.review).toEqual({
-      count: 0,
-      max: 3,
-      history: [],
       cannot_fix: [],
+      count: 0,
+      history: [],
+      max: 3,
     });
 
     // "start" and "done" do not have max_iterations
@@ -93,9 +87,7 @@ describe("initBoard", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // enterState
-// ---------------------------------------------------------------------------
 
 describe("enterState", () => {
   it("sets status to in_progress and increments entries", () => {
@@ -131,9 +123,7 @@ describe("enterState", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // completeState
-// ---------------------------------------------------------------------------
 
 describe("completeState", () => {
   it("sets status to done and records result", () => {
@@ -147,15 +137,9 @@ describe("completeState", () => {
 
   it("records artifacts when provided", () => {
     const board = enterState(makeBoard(), "start");
-    const result = completeState(board, "start", "ok", [
-      "report.md",
-      "diff.patch",
-    ]);
+    const result = completeState(board, "start", "ok", ["report.md", "diff.patch"]);
 
-    expect(result.states.start.artifacts).toEqual([
-      "report.md",
-      "diff.patch",
-    ]);
+    expect(result.states.start.artifacts).toEqual(["report.md", "diff.patch"]);
   });
 
   it("does not include artifacts key when not provided", () => {
@@ -165,9 +149,7 @@ describe("completeState", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // setBlocked
-// ---------------------------------------------------------------------------
 
 describe("setBlocked", () => {
   it("sets blocked info and state status to blocked", () => {
@@ -191,27 +173,23 @@ describe("setBlocked", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // recordConsultationResult
-// ---------------------------------------------------------------------------
 
 describe("recordConsultationResult", () => {
   it("adds a consultation result to the correct breakpoint", () => {
     const board = makeBoard();
     const consultationResult = { status: "done", summary: "looks good" };
 
-    const result = recordConsultationResult(
-      board,
-      "start",
-      "wave_1",
-      "before",
-      "plan-review",
+    const result = recordConsultationResult(board, "start", {
+      breakpoint: "before",
+      name: "plan-review",
+      result: consultationResult,
+      waveKey: "wave_1",
+    });
+
+    expect(result.states.start.wave_results?.wave_1.consultations?.before?.["plan-review"]).toEqual(
       consultationResult,
     );
-
-    expect(
-      result.states.start.wave_results?.["wave_1"].consultations?.before?.["plan-review"],
-    ).toEqual(consultationResult);
   });
 
   it("does not mutate the input board", () => {
@@ -219,14 +197,12 @@ describe("recordConsultationResult", () => {
     const originalStates = board.states;
     const originalStart = board.states.start;
 
-    recordConsultationResult(
-      board,
-      "start",
-      "wave_1",
-      "before",
-      "plan-review",
-      { status: "done" },
-    );
+    recordConsultationResult(board, "start", {
+      breakpoint: "before",
+      name: "plan-review",
+      result: { status: "done" },
+      waveKey: "wave_1",
+    });
 
     // Reference equality — input must not be mutated
     expect(board.states).toBe(originalStates);
@@ -239,98 +215,87 @@ describe("recordConsultationResult", () => {
     // Confirm no wave_results initially
     expect(board.states.start.wave_results).toBeUndefined();
 
-    const result = recordConsultationResult(
-      board,
-      "start",
-      "wave_1",
-      "after",
-      "quality-check",
-      { status: "done", summary: "all good" },
-    );
+    const result = recordConsultationResult(board, "start", {
+      breakpoint: "after",
+      name: "quality-check",
+      result: { status: "done", summary: "all good" },
+      waveKey: "wave_1",
+    });
 
     expect(result.states.start.wave_results).toBeDefined();
-    expect(result.states.start.wave_results?.["wave_1"]).toBeDefined();
+    expect(result.states.start.wave_results?.wave_1).toBeDefined();
     expect(
-      result.states.start.wave_results?.["wave_1"].consultations?.after?.["quality-check"],
+      result.states.start.wave_results?.wave_1.consultations?.after?.["quality-check"],
     ).toEqual({ status: "done", summary: "all good" });
   });
 
   it("preserves existing consultation results in other breakpoints", () => {
     const board = makeBoard();
 
-    const r1 = recordConsultationResult(
-      board,
-      "start",
-      "wave_1",
-      "before",
-      "pre-check",
-      { status: "done", summary: "pre ok" },
-    );
+    const r1 = recordConsultationResult(board, "start", {
+      breakpoint: "before",
+      name: "pre-check",
+      result: { status: "done", summary: "pre ok" },
+      waveKey: "wave_1",
+    });
 
-    const r2 = recordConsultationResult(
-      r1,
-      "start",
-      "wave_1",
-      "after",
-      "post-check",
-      { status: "done", summary: "post ok" },
-    );
+    const r2 = recordConsultationResult(r1, "start", {
+      breakpoint: "after",
+      name: "post-check",
+      result: { status: "done", summary: "post ok" },
+      waveKey: "wave_1",
+    });
 
     // before breakpoint preserved
-    expect(
-      r2.states.start.wave_results?.["wave_1"].consultations?.before?.["pre-check"],
-    ).toEqual({ status: "done", summary: "pre ok" });
+    expect(r2.states.start.wave_results?.wave_1.consultations?.before?.["pre-check"]).toEqual({
+      status: "done",
+      summary: "pre ok",
+    });
     // after breakpoint present
-    expect(
-      r2.states.start.wave_results?.["wave_1"].consultations?.after?.["post-check"],
-    ).toEqual({ status: "done", summary: "post ok" });
+    expect(r2.states.start.wave_results?.wave_1.consultations?.after?.["post-check"]).toEqual({
+      status: "done",
+      summary: "post ok",
+    });
   });
 
   it("overwrites same-name consultation (idempotent)", () => {
     const board = makeBoard();
 
-    const r1 = recordConsultationResult(
-      board,
-      "start",
-      "wave_1",
-      "between",
-      "mid-check",
-      { status: "done", summary: "first run" },
-    );
+    const r1 = recordConsultationResult(board, "start", {
+      breakpoint: "between",
+      name: "mid-check",
+      result: { status: "done", summary: "first run" },
+      waveKey: "wave_1",
+    });
 
-    const r2 = recordConsultationResult(
-      r1,
-      "start",
-      "wave_1",
-      "between",
-      "mid-check",
-      { status: "done", summary: "second run" },
-    );
+    const r2 = recordConsultationResult(r1, "start", {
+      breakpoint: "between",
+      name: "mid-check",
+      result: { status: "done", summary: "second run" },
+      waveKey: "wave_1",
+    });
 
     // Should have the second value, not both
-    expect(
-      r2.states.start.wave_results?.["wave_1"].consultations?.between?.["mid-check"],
-    ).toEqual({ status: "done", summary: "second run" });
+    expect(r2.states.start.wave_results?.wave_1.consultations?.between?.["mid-check"]).toEqual({
+      status: "done",
+      summary: "second run",
+    });
   });
 });
 
-// ---------------------------------------------------------------------------
 // recordGateResult
-// ---------------------------------------------------------------------------
 
 describe("recordGateResult", () => {
   it("sets gate and gate_output on wave result", () => {
     const board = makeBoard();
 
-    const result = recordGateResult(
-      board,
-      "start",
-      "wave_1",
-      "quality-gate",
-      "PASS: all checks passed",
-    );
+    const result = recordGateResult(board, "start", {
+      gate: "quality-gate",
+      gateOutput: "PASS: all checks passed",
+      waveKey: "wave_1",
+    });
 
-    const waveResult = result.states.start.wave_results?.["wave_1"];
+    const waveResult = result.states.start.wave_results?.wave_1;
     expect(waveResult?.gate).toBe("quality-gate");
     expect(waveResult?.gate_output).toBe("PASS: all checks passed");
   });
@@ -340,7 +305,11 @@ describe("recordGateResult", () => {
     const originalStates = board.states;
     const originalStart = board.states.start;
 
-    recordGateResult(board, "start", "wave_1", "some-gate", "output");
+    recordGateResult(board, "start", {
+      gate: "some-gate",
+      gateOutput: "output",
+      waveKey: "wave_1",
+    });
 
     expect(board.states).toBe(originalStates);
     expect(board.states.start).toBe(originalStart);
@@ -351,16 +320,14 @@ describe("recordGateResult", () => {
     const board = makeBoard();
     expect(board.states.start.wave_results).toBeUndefined();
 
-    const result = recordGateResult(
-      board,
-      "start",
-      "wave_2",
-      "final-gate",
-      "PASS",
-    );
+    const result = recordGateResult(board, "start", {
+      gate: "final-gate",
+      gateOutput: "PASS",
+      waveKey: "wave_2",
+    });
 
     expect(result.states.start.wave_results).toBeDefined();
-    expect(result.states.start.wave_results?.["wave_2"].gate).toBe("final-gate");
-    expect(result.states.start.wave_results?.["wave_2"].gate_output).toBe("PASS");
+    expect(result.states.start.wave_results?.wave_2.gate).toBe("final-gate");
+    expect(result.states.start.wave_results?.wave_2.gate_output).toBe("PASS");
   });
 });

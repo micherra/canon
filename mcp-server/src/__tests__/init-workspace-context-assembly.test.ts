@@ -8,24 +8,27 @@
  * - Workspace init without .canon/CONVENTIONS.md still succeeds
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "fast-path",
     description: "test",
     entry: "build",
-    states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
+    name: "fast-path",
     spawn_instructions: {},
+    states: {
+      build: { transitions: { done: "done" }, type: "single" },
+      done: { type: "terminal" },
+    },
   }),
 }));
 
-import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 
@@ -53,14 +56,38 @@ function seedKgDb(projectDir: string): void {
   `);
 
   // api layer: 2 files
-  const apiFile1Id = (insertFile.run("src/api/index.ts", now, "h1", "typescript", "api", now) as { lastInsertRowid: number }).lastInsertRowid;
-  const apiFile2Id = (insertFile.run("src/api/router.ts", now, "h2", "typescript", "api", now) as { lastInsertRowid: number }).lastInsertRowid;
+  const apiFile1Id = (
+    insertFile.run("src/api/index.ts", now, "h1", "typescript", "api", now) as {
+      lastInsertRowid: number;
+    }
+  ).lastInsertRowid;
+  const apiFile2Id = (
+    insertFile.run("src/api/router.ts", now, "h2", "typescript", "api", now) as {
+      lastInsertRowid: number;
+    }
+  ).lastInsertRowid;
   // domain layer: 3 files
-  const domainFile1Id = (insertFile.run("src/domain/user.ts", now, "h3", "typescript", "domain", now) as { lastInsertRowid: number }).lastInsertRowid;
-  const domainFile2Id = (insertFile.run("src/domain/order.ts", now, "h4", "typescript", "domain", now) as { lastInsertRowid: number }).lastInsertRowid;
-  const domainFile3Id = (insertFile.run("src/domain/product.ts", now, "h5", "typescript", "domain", now) as { lastInsertRowid: number }).lastInsertRowid;
+  const domainFile1Id = (
+    insertFile.run("src/domain/user.ts", now, "h3", "typescript", "domain", now) as {
+      lastInsertRowid: number;
+    }
+  ).lastInsertRowid;
+  const domainFile2Id = (
+    insertFile.run("src/domain/order.ts", now, "h4", "typescript", "domain", now) as {
+      lastInsertRowid: number;
+    }
+  ).lastInsertRowid;
+  const domainFile3Id = (
+    insertFile.run("src/domain/product.ts", now, "h5", "typescript", "domain", now) as {
+      lastInsertRowid: number;
+    }
+  ).lastInsertRowid;
   // shared layer: 1 file
-  const sharedFile1Id = (insertFile.run("src/shared/utils.ts", now, "h6", "typescript", "shared", now) as { lastInsertRowid: number }).lastInsertRowid;
+  const sharedFile1Id = (
+    insertFile.run("src/shared/utils.ts", now, "h6", "typescript", "shared", now) as {
+      lastInsertRowid: number;
+    }
+  ).lastInsertRowid;
 
   // Insert file_edges so degrees are computed
   // shared/utils.ts is imported by all other files → high in_degree (5)
@@ -81,22 +108,20 @@ function seedKgDb(projectDir: string): void {
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
 const baseInput = {
+  base_commit: "abc123",
+  branch: "main",
   flow_name: "fast-path",
   task: "test context assembly",
-  branch: "main",
-  base_commit: "abc123",
   tier: "small" as const,
 };
 
-// ---------------------------------------------------------------------------
 // project_structure — KG DB present
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — project_structure in cache prefix", () => {
   it("cache prefix contains '## Project Structure' when KG DB exists", async () => {
@@ -147,9 +172,7 @@ describe("initWorkspaceFlow — project_structure in cache prefix", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // project_structure — graceful degradation (no KG DB)
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — project_structure graceful degradation", () => {
   it("succeeds without KG DB (no project_structure section)", async () => {
@@ -176,16 +199,17 @@ describe("initWorkspaceFlow — project_structure graceful degradation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // conventions — CONVENTIONS.md present
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — conventions in cache prefix", () => {
   it("cache prefix contains '## Conventions' when .canon/CONVENTIONS.md exists", async () => {
     const projectDir = makeTmpProjectDir();
     const canonDir = join(projectDir, ".canon");
     mkdirSync(canonDir, { recursive: true });
-    writeFileSync(join(canonDir, "CONVENTIONS.md"), "# Project Conventions\n\nUse TypeScript strict mode.");
+    writeFileSync(
+      join(canonDir, "CONVENTIONS.md"),
+      "# Project Conventions\n\nUse TypeScript strict mode.",
+    );
 
     const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
     expect(result.created).toBe(true);
@@ -212,9 +236,7 @@ describe("initWorkspaceFlow — conventions in cache prefix", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // conventions — graceful degradation (no CONVENTIONS.md)
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — conventions graceful degradation", () => {
   it("succeeds without CONVENTIONS.md", async () => {
@@ -237,9 +259,7 @@ describe("initWorkspaceFlow — conventions graceful degradation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Both KG DB and CONVENTIONS.md present
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — both project_structure and conventions present", () => {
   it("cache prefix contains both sections when both exist", async () => {

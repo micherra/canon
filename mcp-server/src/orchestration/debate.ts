@@ -7,10 +7,10 @@
  * convergence detection, and summary building.
  */
 
-import { readChannelAsContext, readMessages, type Message } from "./messages.ts";
 import { getExecutionStore } from "./execution-store.ts";
+import { type Message, readChannelAsContext, readMessages } from "./messages.ts";
 
-export interface DebateConfig {
+export type DebateConfig = {
   /** Number of competing teams (default 3) */
   teams: number;
   /** Agent types composing each team (e.g. ["canon-researcher", "canon-architect"]) */
@@ -25,22 +25,22 @@ export interface DebateConfig {
   hitl_checkpoint: boolean;
   /** Winning teams continue into implementation (default true) */
   continue_to_build: boolean;
-}
+};
 
 export type RoundType = "position" | "challenge" | "response" | "narrow";
 
-export interface DebateRound {
+export type DebateRound = {
   number: number;
   type: RoundType;
   teamMessages: Record<string, string[]>; // team-id → message file paths
-}
+};
 
-export interface ConvergenceResult {
+export type ConvergenceResult = {
   converged: boolean;
   reason?: string;
-}
+};
 
-export interface DebateProgress {
+export type DebateProgress = {
   completed: boolean;
   next_round: number;
   last_completed_round: number;
@@ -48,7 +48,7 @@ export interface DebateProgress {
   transcript?: string;
   summary?: string;
   convergence?: ConvergenceResult;
-}
+};
 
 const TEAM_LABELS = ["Team A", "Team B", "Team C", "Team D", "Team E"];
 
@@ -72,28 +72,27 @@ function debateSender(roundNumber: number, teamLabel: string, agent: string): st
   return `round-${roundNumber}-${teamSlug}-${agentSlug}`;
 }
 
-export async function inspectDebateProgress(
-  workspace: string,
-  config: DebateConfig,
-): Promise<DebateProgress> {
-  // Discover populated debate-round-N channels from the SQLite messages table
-  let roundNumbers: number[] = [];
-
+/** Discover populated debate round numbers from the execution store. */
+function discoverPopulatedRoundNumbers(workspace: string, maxRounds: number): number[] {
   try {
     const store = getExecutionStore(workspace);
-    // Probe each possible round channel up to max_rounds to find populated ones.
-    // Use hasMessages (single-row probe) instead of getMessages to avoid loading
-    // all message content just to check existence.
-    for (let r = 1; r <= config.max_rounds; r++) {
-      const channel = debateChannel(r);
-      if (store.hasMessages(channel)) {
+    const roundNumbers: number[] = [];
+    for (let r = 1; r <= maxRounds; r++) {
+      if (store.hasMessages(debateChannel(r))) {
         roundNumbers.push(r);
       }
     }
+    return roundNumbers;
   } catch {
-    roundNumbers = [];
+    return [];
   }
+}
 
+/** Build transcript sections and populated round list from round numbers. */
+async function buildTranscriptSections(
+  workspace: string,
+  roundNumbers: number[],
+): Promise<{ populatedRounds: number[]; transcriptSections: string[] }> {
   const populatedRounds: number[] = [];
   const transcriptSections: string[] = [];
   for (const round of roundNumbers) {
@@ -107,9 +106,22 @@ export async function inspectDebateProgress(
       transcriptSections.push(`### Debate Round ${round}\n\n${context}`);
     }
   }
+  return { populatedRounds, transcriptSections };
+}
+
+export async function inspectDebateProgress(
+  workspace: string,
+  config: DebateConfig,
+): Promise<DebateProgress> {
+  const roundNumbers = discoverPopulatedRoundNumbers(workspace, config.max_rounds);
+  const { populatedRounds, transcriptSections } = await buildTranscriptSections(
+    workspace,
+    roundNumbers,
+  );
 
   const lastCompletedRound = populatedRounds.at(-1) ?? 0;
-  const nextRound = lastCompletedRound === 0 ? 1 : Math.min(lastCompletedRound + 1, config.max_rounds);
+  const nextRound =
+    lastCompletedRound === 0 ? 1 : Math.min(lastCompletedRound + 1, config.max_rounds);
 
   let convergence: ConvergenceResult | undefined;
   if (lastCompletedRound >= Math.max(config.min_rounds, config.convergence_check_after)) {
@@ -119,13 +131,15 @@ export async function inspectDebateProgress(
 
   const completed = Boolean(convergence?.converged) || lastCompletedRound >= config.max_rounds;
   const summary =
-    transcriptSections.length > 0 ? `## Debate Transcript Summary\n\n${transcriptSections.join("\n\n")}` : undefined;
+    transcriptSections.length > 0
+      ? `## Debate Transcript Summary\n\n${transcriptSections.join("\n\n")}`
+      : undefined;
 
   return {
     completed,
-    next_round: completed ? lastCompletedRound : nextRound,
     last_completed_round: lastCompletedRound,
     next_channel: debateChannel(completed ? lastCompletedRound : nextRound),
+    next_round: completed ? lastCompletedRound : nextRound,
     ...(transcriptSections.length > 0 ? { transcript: transcriptSections.join("\n\n") } : {}),
     ...(summary ? { summary } : {}),
     ...(convergence ? { convergence } : {}),
@@ -215,25 +229,35 @@ If you believe the debate has converged and there's nothing meaningful left to d
  * The summary is structured for HITL review: it shows the trajectory of
  * the debate, what converged, and what remains unresolved.
  */
+/** Infer the round number for a message, using the channel round as primary source. */
+function inferRoundNumber(msg: Message, channelRoundNum: number | null): number {
+  if (channelRoundNum !== null) return channelRoundNum;
+  const roundMatch = msg.from.match(/round-(\d+)/i);
+  return roundMatch ? parseInt(roundMatch[1], 10) : 0;
+}
+
+/** Group messages by their round number. */
+function groupMessagesByRound(
+  messages: Message[],
+  channelRoundNum: number | null,
+): Map<number, Message[]> {
+  const rounds = new Map<number, Message[]>();
+  for (const msg of messages) {
+    const roundNum = inferRoundNumber(msg, channelRoundNum);
+    if (!rounds.has(roundNum)) rounds.set(roundNum, []);
+    rounds.get(roundNum)!.push(msg);
+  }
+  return rounds;
+}
+
 export async function buildDebateSummary(workspace: string, channel: string): Promise<string> {
   const messages = await readMessages(workspace, channel);
   if (messages.length === 0) return "No debate messages found.";
 
-  // Infer round number from the channel parameter (primary source) since
-  // the channel is the authoritative identifier for a round. Fall back to
-  // msg.from regex only when the channel doesn't carry round info.
   const channelRoundMatch = channel.match(/debate-round-(\d+)/i);
   const channelRoundNum = channelRoundMatch ? parseInt(channelRoundMatch[1], 10) : null;
 
-  // Group messages by round
-  const rounds = new Map<number, Message[]>();
-  for (const msg of messages) {
-    const roundMatch = msg.from.match(/round-(\d+)/i);
-    const roundNum = channelRoundNum ?? (roundMatch ? parseInt(roundMatch[1], 10) : 0);
-    if (!rounds.has(roundNum)) rounds.set(roundNum, []);
-    rounds.get(roundNum)!.push(msg);
-  }
-
+  const rounds = groupMessagesByRound(messages, channelRoundNum);
   const sections: string[] = ["## Debate Summary\n"];
 
   const sortedRounds = [...rounds.keys()].sort((a, b) => a - b);
@@ -242,8 +266,8 @@ export async function buildDebateSummary(workspace: string, channel: string): Pr
     const type = roundNum > 0 ? roundType(roundNum) : "pre-debate";
     sections.push(`### Round ${roundNum} (${type})\n`);
     for (const msg of roundMessages) {
-      // Truncate each message to first ~200 chars for the summary
-      const preview = msg.content.length > 200 ? `${msg.content.slice(0, 200).trimEnd()}...` : msg.content;
+      const preview =
+        msg.content.length > 200 ? `${msg.content.slice(0, 200).trimEnd()}...` : msg.content;
       sections.push(`**${msg.from}:** ${preview}\n`);
     }
   }
@@ -264,7 +288,19 @@ export async function buildDebateSummary(workspace: string, channel: string): Pr
  * should spawn a lightweight agent to read the full transcript.
  */
 /** Negation words that, when appearing within a few words before a convergence term, cancel it. */
-const NEGATION_WORDS = ["don't", "dont", "doesn't", "doesnt", "not", "no", "never", "can't", "cant", "won't", "wont"];
+const NEGATION_WORDS = [
+  "don't",
+  "dont",
+  "doesn't",
+  "doesnt",
+  "not",
+  "no",
+  "never",
+  "can't",
+  "cant",
+  "won't",
+  "wont",
+];
 
 /**
  * Check whether a convergence term occurrence at the given index in the lowercased text
@@ -325,16 +361,18 @@ export function heuristicConvergence(roundMessages: Message[]): ConvergenceResul
   return { converged: false };
 }
 
-export function buildDebatePrompt(
-  basePrompt: string,
-  workspace: string,
-  roundNumber: number,
-  maxRounds: number,
-  teamLabel: string,
-  otherTeamLabels: string[],
-  agent: string,
-  transcript?: string,
-): string {
+export type DebatePromptOpts = {
+  workspace: string;
+  roundNumber: number;
+  maxRounds: number;
+  teamLabel: string;
+  otherTeamLabels: string[];
+  agent: string;
+  transcript?: string;
+};
+
+export function buildDebatePrompt(basePrompt: string, opts: DebatePromptOpts): string {
+  const { workspace, roundNumber, maxRounds, teamLabel, otherTeamLabels, agent, transcript } = opts;
   const channel = debateChannel(roundNumber);
   const sender = debateSender(roundNumber, teamLabel, agent);
   const transcriptSection = transcript ? `\n\n## Prior Debate Transcript\n\n${transcript}` : "";

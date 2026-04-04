@@ -10,20 +10,16 @@ import type Database from "better-sqlite3";
 import { KgQuery } from "./kg-query.ts";
 import { KgStore } from "./kg-store.ts";
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-export interface DeadCodeOptions {
+export type DeadCodeOptions = {
   /** Include entities in test files (default: false) */
   includeTests?: boolean;
   /** Include private class members (default: false) */
   includePrivate?: boolean;
   /** Minimum confidence threshold to include an entry (default: 0.5) */
   minConfidence?: number;
-}
+};
 
-export interface DeadCodeEntry {
+export type DeadCodeEntry = {
   name: string;
   kind: string;
   line_start?: number;
@@ -32,20 +28,18 @@ export interface DeadCodeEntry {
   confidence: number;
   /** Human-readable explanation of why this entity is considered dead */
   reason: string;
-}
+};
 
-export interface DeadCodeReport {
+export type DeadCodeReport = {
   /** Total number of dead entities across all files */
   total_dead: number;
   /** Count of dead entities grouped by kind (e.g. { function: 5, class: 1 }) */
   by_kind: Record<string, number>;
   /** Dead entities grouped by file path, sorted descending by entity count */
   by_file: Array<{ path: string; entities: DeadCodeEntry[] }>;
-}
+};
 
-// ---------------------------------------------------------------------------
 // Entry-point file patterns
-// ---------------------------------------------------------------------------
 
 const ENTRY_POINT_PATTERNS = [/(?:^|\/)index\.[^/]+$/, /(?:^|\/)main\.[^/]+$/];
 
@@ -53,9 +47,7 @@ function isEntryPoint(path: string): boolean {
   return ENTRY_POINT_PATTERNS.some((re) => re.test(path));
 }
 
-// ---------------------------------------------------------------------------
 // Confidence and reason assignment
-// ---------------------------------------------------------------------------
 
 /**
  * Classify detection reason and assign a confidence score.
@@ -79,9 +71,7 @@ function assignConfidenceAndReason(isExported: boolean): { confidence: number; r
   };
 }
 
-// ---------------------------------------------------------------------------
 // detectDeadCode
-// ---------------------------------------------------------------------------
 
 /**
  * Detect potentially dead code in the knowledge graph database.
@@ -93,7 +83,10 @@ function assignConfidenceAndReason(isExported: boolean): { confidence: number; r
  * @param db   - A better-sqlite3 Database instance wrapping an initialised KG.
  * @param options - Optional filtering/inclusion settings.
  */
-export function detectDeadCode(db: Database.Database, options: DeadCodeOptions = {}): DeadCodeReport {
+export function detectDeadCode(
+  db: Database.Database,
+  options: DeadCodeOptions = {},
+): DeadCodeReport {
   const { includeTests = false, minConfidence = 0.5 } = options;
 
   const query = new KgQuery(db);
@@ -129,9 +122,9 @@ export function detectDeadCode(db: Database.Database, options: DeadCodeOptions =
     if (confidence < minConfidence) continue;
 
     const entry: DeadCodeEntry = {
-      name: result.name,
-      kind: result.kind,
       confidence,
+      kind: result.kind,
+      name: result.name,
       reason,
     };
 
@@ -149,14 +142,14 @@ export function detectDeadCode(db: Database.Database, options: DeadCodeOptions =
 
   // Sort by most dead entities per file (descending)
   const byFileArray = Array.from(byFile.entries())
-    .map(([path, entities]) => ({ path, entities }))
+    .map(([path, entities]) => ({ entities, path }))
     .sort((a, b) => b.entities.length - a.entities.length);
 
   const totalDead = byFileArray.reduce((sum, { entities }) => sum + entities.length, 0);
 
   return {
-    total_dead: totalDead,
-    by_kind: byKind,
     by_file: byFileArray,
+    by_kind: byKind,
+    total_dead: totalDead,
   };
 }

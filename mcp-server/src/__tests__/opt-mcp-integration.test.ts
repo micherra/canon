@@ -21,9 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
@@ -41,17 +39,13 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { resolveContextInjections } from "../orchestration/inject-context.ts";
-import { truncateProgress, getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { resolveContextInjections } from "../orchestration/inject-context.ts";
+import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { getSpawnPrompt, truncateProgress } from "../tools/get-spawn-prompt.ts";
 import { assertOk } from "../utils/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -63,35 +57,35 @@ function makeTmpDir(): string {
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "implement",
-    current_state: "implement",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {
-      implement: { status: "pending", entries: 0 },
-      done: { status: "pending", entries: 0 },
-    },
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "implement",
+    entry: "implement",
+    flow: "test-flow",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {
+      done: { entries: 0, status: "pending" },
+      implement: { entries: 0, status: "pending" },
+    },
+    task: "test task",
     ...overrides,
   } as Board;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: { type: "single", agent: "canon-implementor" },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: { implement: "Implement ${task}." },
+    states: {
+      done: { type: "terminal" },
+      implement: { agent: "canon-implementor", type: "single" },
+    },
     ...overrides,
   };
 }
@@ -100,36 +94,38 @@ function seedBoard(workspace: string, board: Board): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: board.flow,
-    task: board.task,
-    entry: board.entry,
-    current_state: board.current_state,
     base_commit: board.base_commit,
-    started: board.started ?? now,
-    last_updated: board.last_updated ?? now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: board.current_state,
+    entry: board.entry,
+    flow: board.flow,
     flow_name: board.flow,
+    last_updated: board.last_updated ?? now,
+    sanitized: "main",
     slug: "test-slug",
+    started: board.started ?? now,
+    task: board.task,
+    tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+    store.upsertState(stateId, {
+      ...stateEntry,
+      entries: stateEntry.entries ?? 0,
+      status: stateEntry.status,
+    });
   }
 }
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // 1. _board passthrough — getSpawnPrompt does NOT call readBoard when _board is given
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — _board passthrough skips store read", () => {
   it("succeeds when _board is provided and state has skip_when (no store read needed)", async () => {
@@ -140,21 +136,21 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
 
     const flow = makeFlow({
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
+          type: "single",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
-      flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       _board: board,
+      flow,
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
 
     // Should produce a prompt without error (store not seeded, _board provided directly)
@@ -165,28 +161,28 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
     const workspace = makeTmpDir();
     const board = makeBoard();
     vi.mocked(resolveContextInjections).mockResolvedValue({
+      hitl: undefined,
       variables: { some_context: "value from board" },
       warnings: [],
-      hitl: undefined,
     });
 
     const flow = makeFlow({
       states: {
-        implement: {
-          type: "single",
-          agent: "canon-implementor",
-          inject_context: [{ from: "board", as: "some_context" }],
-        },
         done: { type: "terminal" },
+        implement: {
+          agent: "canon-implementor",
+          inject_context: [{ as: "some_context", from: "board" }],
+          type: "single",
+        },
       },
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
-      flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
       _board: board,
+      flow,
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -198,22 +194,22 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
 
     const flow = makeFlow({
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "parallel-per",
           agent: "canon-implementor",
           large_diff_threshold: 5,
+          type: "parallel-per",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
-      flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
-      items: ["item1", "item2"],
       _board: board,
+      flow,
+      items: ["item1", "item2"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(2);
@@ -224,80 +220,81 @@ describe("getSpawnPrompt — _board passthrough skips store read", () => {
     const board = makeBoard();
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
     vi.mocked(resolveContextInjections).mockResolvedValue({
+      hitl: undefined,
       variables: { ctx: "value" },
       warnings: [],
-      hitl: undefined,
     });
 
     const flow = makeFlow({
       states: {
-        implement: {
-          type: "parallel-per",
-          agent: "canon-implementor",
-          skip_when: "no_contract_changes",
-          inject_context: [{ from: "board", as: "ctx" }],
-          large_diff_threshold: 5,
-        },
         done: { type: "terminal" },
+        implement: {
+          agent: "canon-implementor",
+          inject_context: [{ as: "ctx", from: "board" }],
+          large_diff_threshold: 5,
+          skip_when: "no_contract_changes",
+          type: "parallel-per",
+        },
       },
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
-      flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
-      items: ["item1"],
       _board: board,
+      flow,
+      items: ["item1"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. enterAndPrepareState → getSpawnPrompt integration
 //    The entered board (post-enterState) is forwarded, not the original
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
   it("passes the entered board (post-enterState) to getSpawnPrompt, not the original board", async () => {
     const workspace = makeTmpDir();
     // Seed with pre-enter state (entries: 0)
-    seedBoard(workspace, makeBoard({
-      states: {
-        implement: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
-      },
-    }));
+    seedBoard(
+      workspace,
+      makeBoard({
+        states: {
+          done: { entries: 0, status: "pending" },
+          implement: { entries: 0, status: "pending" },
+        },
+      }),
+    );
 
     // skip_when=present but not met, so we proceed normally
     vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: false });
 
     const flow = makeFlow({
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
+          type: "single",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
     // The board in the result must be the entered board (post-enterState)
     expect(result.board).toBeDefined();
     // After enterState: status=in_progress, entries=1
-    expect(result.board!.states["implement"].status).toBe("in_progress");
-    expect(result.board!.states["implement"].entries).toBe(1);
+    expect(result.board!.states.implement.status).toBe("in_progress");
+    expect(result.board!.states.implement.entries).toBe(1);
   });
 
   it("the entered board state shows in_progress for the entered state", async () => {
@@ -305,22 +302,20 @@ describe("enterAndPrepareState → getSpawnPrompt board forwarding", () => {
     seedBoard(workspace, makeBoard());
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow: makeFlow(),
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
     // The board snapshot in result reflects state entered, not the pre-enter state
-    expect(result.board!.states["implement"].status).toBe("in_progress");
-    expect(result.board!.states["implement"].entries).toBe(1);
+    expect(result.board!.states.implement.status).toBe("in_progress");
+    expect(result.board!.states.implement.entries).toBe(1);
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. truncateProgress edge cases
-// ---------------------------------------------------------------------------
 
 describe("truncateProgress — edge cases", () => {
   it("returns empty string unchanged when input is empty", () => {
@@ -384,35 +379,33 @@ describe("truncateProgress — edge cases", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. skip_reason message format in enterAndPrepareState
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — skip_reason message format", () => {
   it("skip_reason includes the condition name and reason from evaluateSkipWhen", async () => {
     const workspace = makeTmpDir();
     seedBoard(workspace, makeBoard());
     vi.mocked(evaluateSkipWhen).mockResolvedValue({
-      skip: true,
       reason: "No contract changes detected — all changes are internal",
+      skip: true,
     });
 
     const flow = makeFlow({
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
+          type: "single",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
@@ -433,20 +426,20 @@ describe("enterAndPrepareState — skip_reason message format", () => {
 
     const flow = makeFlow({
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
+          type: "single",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
@@ -456,24 +449,24 @@ describe("enterAndPrepareState — skip_reason message format", () => {
   it("can_enter is true when state is skipped (skip is not a convergence failure)", async () => {
     const workspace = makeTmpDir();
     seedBoard(workspace, makeBoard());
-    vi.mocked(evaluateSkipWhen).mockResolvedValue({ skip: true, reason: "condition met" });
+    vi.mocked(evaluateSkipWhen).mockResolvedValue({ reason: "condition met", skip: true });
 
     const flow = makeFlow({
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "single",
           agent: "canon-implementor",
           skip_when: "no_contract_changes",
+          type: "single",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
     assertOk(result);
 
@@ -483,9 +476,7 @@ describe("enterAndPrepareState — skip_reason message format", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. getSpawnPrompt degrades gracefully when progress.md is absent
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — progress.md absent", () => {
   it("injects empty string when progress.md does not exist, prompt has no broken placeholder", async () => {
@@ -498,10 +489,10 @@ describe("getSpawnPrompt — progress.md absent", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -520,15 +511,15 @@ describe("getSpawnPrompt — progress.md absent", () => {
     store.appendProgress("[implement] done: wrote code");
 
     const flow = makeFlow({
-      progress: "${WORKSPACE}/progress.md",  // presence of this field triggers progress injection
+      progress: "${WORKSPACE}/progress.md", // presence of this field triggers progress injection
       spawn_instructions: { implement: "${progress}" },
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     const prompt = result.prompts[0].prompt;

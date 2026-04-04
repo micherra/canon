@@ -11,9 +11,9 @@
 import type { Session } from "./flow-schema.ts";
 
 const TIER_CAPS: Record<Session["tier"], number> = {
-  small: 5,
-  medium: 15,
   large: 30,
+  medium: 15,
+  small: 5,
 };
 
 /**

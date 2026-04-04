@@ -35,8 +35,8 @@ describe("generateInsights", () => {
     expect(result.overview.avg_dependencies_per_file).toBeCloseTo(0.67, 1);
     expect(result.overview.layers).toEqual(
       expect.arrayContaining([
-        { name: "api", file_count: 2 },
-        { name: "domain", file_count: 1 },
+        { file_count: 2, name: "api" },
+        { file_count: 1, name: "domain" },
       ]),
     );
   });
@@ -147,8 +147,8 @@ describe("generateInsights", () => {
     expect(result.layer_violations).toHaveLength(1);
     expect(result.layer_violations[0]).toEqual({
       source: "api/handler.ts",
-      target: "infra/db.ts",
       source_layer: "api",
+      target: "infra/db.ts",
       target_layer: "infra",
     });
   });
@@ -194,9 +194,7 @@ describe("generateInsights", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // KG enrichment tests — use a real on-disk SQLite DB via a temp directory
-// ---------------------------------------------------------------------------
 
 describe("generateInsights — KG enrichment", () => {
   let tmpDir: string;
@@ -211,7 +209,7 @@ describe("generateInsights — KG enrichment", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("omits KG fields when DB does not exist", () => {
@@ -240,36 +238,36 @@ describe("generateInsights — KG enrichment", () => {
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
     const fileRow = store.upsertFile({
-      path: "src/service.ts",
-      mtime_ms: Date.now(),
       content_hash: "abc",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/service.ts",
     });
     store.insertEntity({
       file_id: fileRow.file_id!,
+      is_default_export: false,
+      is_exported: true,
+      kind: "function",
+      line_end: 10,
+      line_start: 1,
+      metadata: null,
       name: "doWork",
       qualified_name: "src/service.ts::doWork",
-      kind: "function",
-      line_start: 1,
-      line_end: 10,
-      is_exported: true,
-      is_default_export: false,
       signature: null,
-      metadata: null,
     });
     store.insertEntity({
       file_id: fileRow.file_id!,
+      is_default_export: false,
+      is_exported: true,
+      kind: "class",
+      line_end: 30,
+      line_start: 12,
+      metadata: null,
       name: "MyClass",
       qualified_name: "src/service.ts::MyClass",
-      kind: "class",
-      line_start: 12,
-      line_end: 30,
-      is_exported: true,
-      is_default_export: false,
       signature: null,
-      metadata: null,
     });
     db.close();
 
@@ -277,8 +275,8 @@ describe("generateInsights — KG enrichment", () => {
 
     expect(result.entity_overview).toBeDefined();
     expect(result.entity_overview!.total_entities).toBe(2);
-    expect(result.entity_overview!.by_kind["function"]).toBe(1);
-    expect(result.entity_overview!.by_kind["class"]).toBe(1);
+    expect(result.entity_overview!.by_kind.function).toBe(1);
+    expect(result.entity_overview!.by_kind.class).toBe(1);
     expect(result.entity_overview!.total_edges).toBe(0);
   });
 
@@ -286,25 +284,25 @@ describe("generateInsights — KG enrichment", () => {
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
     const fileRow = store.upsertFile({
-      path: "src/utils.ts",
-      mtime_ms: Date.now(),
       content_hash: "def",
       language: "typescript",
-      layer: "shared",
       last_indexed_at: Date.now(),
+      layer: "shared",
+      mtime_ms: Date.now(),
+      path: "src/utils.ts",
     });
     // Unexported + no incoming edges = dead code
     store.insertEntity({
       file_id: fileRow.file_id!,
+      is_default_export: false,
+      is_exported: false,
+      kind: "function",
+      line_end: 15,
+      line_start: 5,
+      metadata: null,
       name: "deadHelper",
       qualified_name: "src/utils.ts::deadHelper",
-      kind: "function",
-      line_start: 5,
-      line_end: 15,
-      is_exported: false,
-      is_default_export: false,
       signature: null,
-      metadata: null,
     });
     db.close();
 
@@ -312,7 +310,7 @@ describe("generateInsights — KG enrichment", () => {
 
     expect(result.dead_code_summary).toBeDefined();
     expect(result.dead_code_summary!.total_dead).toBe(1);
-    expect(result.dead_code_summary!.by_kind["function"]).toBe(1);
+    expect(result.dead_code_summary!.by_kind.function).toBe(1);
     expect(result.dead_code_summary!.top_files).toHaveLength(1);
     expect(result.dead_code_summary!.top_files[0].path).toBe("src/utils.ts");
     expect(result.dead_code_summary!.top_files[0].count).toBe(1);
@@ -322,25 +320,25 @@ describe("generateInsights — KG enrichment", () => {
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
     const fileRow = store.upsertFile({
-      path: "src/index.ts",
-      mtime_ms: Date.now(),
       content_hash: "ghi",
       language: "typescript",
-      layer: "api",
       last_indexed_at: Date.now(),
+      layer: "api",
+      mtime_ms: Date.now(),
+      path: "src/index.ts",
     });
     // Exported entity — not dead
     store.insertEntity({
       file_id: fileRow.file_id!,
+      is_default_export: false,
+      is_exported: true,
+      kind: "function",
+      line_end: 5,
+      line_start: 1,
+      metadata: null,
       name: "main",
       qualified_name: "src/index.ts::main",
-      kind: "function",
-      line_start: 1,
-      line_end: 5,
-      is_exported: true,
-      is_default_export: false,
       signature: null,
-      metadata: null,
     });
     db.close();
 
@@ -355,71 +353,71 @@ describe("generateInsights — KG enrichment", () => {
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
     const fileA = store.upsertFile({
-      path: "src/hub.ts",
-      mtime_ms: Date.now(),
       content_hash: "jkl",
       language: "typescript",
-      layer: "shared",
       last_indexed_at: Date.now(),
+      layer: "shared",
+      mtime_ms: Date.now(),
+      path: "src/hub.ts",
     });
     const fileB = store.upsertFile({
-      path: "src/callers.ts",
-      mtime_ms: Date.now(),
       content_hash: "mno",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/callers.ts",
     });
     const hubEntity = store.insertEntity({
       file_id: fileA.file_id!,
+      is_default_export: false,
+      is_exported: true,
+      kind: "function",
+      line_end: 10,
+      line_start: 1,
+      metadata: null,
       name: "hubFunc",
       qualified_name: "src/hub.ts::hubFunc",
-      kind: "function",
-      line_start: 1,
-      line_end: 10,
-      is_exported: true,
-      is_default_export: false,
       signature: null,
-      metadata: null,
     });
     const callerA = store.insertEntity({
       file_id: fileB.file_id!,
+      is_default_export: false,
+      is_exported: false,
+      kind: "function",
+      line_end: 5,
+      line_start: 1,
+      metadata: null,
       name: "callerA",
       qualified_name: "src/callers.ts::callerA",
-      kind: "function",
-      line_start: 1,
-      line_end: 5,
-      is_exported: false,
-      is_default_export: false,
       signature: null,
-      metadata: null,
     });
     const callerB = store.insertEntity({
       file_id: fileB.file_id!,
+      is_default_export: false,
+      is_exported: false,
+      kind: "function",
+      line_end: 10,
+      line_start: 6,
+      metadata: null,
       name: "callerB",
       qualified_name: "src/callers.ts::callerB",
-      kind: "function",
-      line_start: 6,
-      line_end: 10,
-      is_exported: false,
-      is_default_export: false,
       signature: null,
-      metadata: null,
     });
     // Both callers call hubFunc
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: callerA.entity_id!,
       target_entity_id: hubEntity.entity_id!,
-      edge_type: "calls",
-      confidence: 1.0,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: callerB.entity_id!,
       target_entity_id: hubEntity.entity_id!,
-      edge_type: "calls",
-      confidence: 1.0,
-      metadata: null,
     });
     db.close();
 

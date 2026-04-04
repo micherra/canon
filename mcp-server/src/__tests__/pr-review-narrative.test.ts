@@ -5,11 +5,11 @@ import { generateNarrative } from "../tools/pr-review-data.ts";
 // Helper to build a PrFileInfo with priority factors
 function makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {
   return {
-    path,
-    layer,
-    status: "modified",
     bucket: "low-risk",
+    layer,
+    path,
     reason: "",
+    status: "modified",
     ...overrides,
   };
 }
@@ -22,8 +22,8 @@ describe("generateNarrative — top layer", () => {
       makeFile("src/graph/c.ts", "graph"),
     ];
     const layers = [
-      { name: "tools", file_count: 2 },
-      { name: "graph", file_count: 1 },
+      { file_count: 2, name: "tools" },
+      { file_count: 1, name: "graph" },
     ];
     const narrative = generateNarrative(files, layers);
     expect(narrative).toContain("tools");
@@ -36,8 +36,8 @@ describe("generateNarrative — top layer", () => {
       makeFile("src/graph/c.ts", "graph"),
     ];
     const layers = [
-      { name: "tools", file_count: 2 },
-      { name: "graph", file_count: 1 },
+      { file_count: 2, name: "tools" },
+      { file_count: 1, name: "graph" },
     ];
     const narrative = generateNarrative(files, layers);
     expect(narrative).toContain("3");
@@ -50,8 +50,8 @@ describe("generateNarrative — top layer", () => {
       makeFile("src/graph/c.ts", "graph"),
     ];
     const layers = [
-      { name: "tools", file_count: 2 },
-      { name: "graph", file_count: 1 },
+      { file_count: 2, name: "tools" },
+      { file_count: 1, name: "graph" },
     ];
     const narrative = generateNarrative(files, layers);
     expect(narrative).toContain("2");
@@ -64,25 +64,25 @@ describe("generateNarrative — most consequential file", () => {
       makeFile("src/tools/high-impact.ts", "tools", {
         priority_factors: {
           in_degree: 12,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 0,
         },
       }),
       makeFile("src/graph/low.ts", "graph", {
         priority_factors: {
           in_degree: 1,
-          violation_count: 0,
           is_changed: true,
           layer: "graph",
           layer_centrality: 1,
+          violation_count: 0,
         },
       }),
     ];
     const layers = [
-      { name: "tools", file_count: 1 },
-      { name: "graph", file_count: 1 },
+      { file_count: 1, name: "tools" },
+      { file_count: 1, name: "graph" },
     ];
     const narrative = generateNarrative(files, layers);
     expect(narrative).toContain("high-impact.ts");
@@ -93,23 +93,26 @@ describe("generateNarrative — most consequential file", () => {
       makeFile("src/tools/hub.ts", "tools", {
         priority_factors: {
           in_degree: 15,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 0,
         },
       }),
     ];
-    const layers = [{ name: "tools", file_count: 1 }];
+    const layers = [{ file_count: 1, name: "tools" }];
     const narrative = generateNarrative(files, layers);
     expect(narrative).toContain("15");
   });
 
   it("does not mention a most consequential file when no factors available", () => {
-    const files: PrFileInfo[] = [makeFile("src/tools/a.ts", "tools"), makeFile("src/graph/b.ts", "graph")];
+    const files: PrFileInfo[] = [
+      makeFile("src/tools/a.ts", "tools"),
+      makeFile("src/graph/b.ts", "graph"),
+    ];
     const layers = [
-      { name: "tools", file_count: 1 },
-      { name: "graph", file_count: 1 },
+      { file_count: 1, name: "tools" },
+      { file_count: 1, name: "graph" },
     ];
     // Should not throw — just returns a narrative without the impact line
     expect(() => generateNarrative(files, layers)).not.toThrow();
@@ -122,17 +125,17 @@ describe("generateNarrative — violations", () => {
       makeFile("src/tools/bad.ts", "tools", {
         priority_factors: {
           in_degree: 0,
-          violation_count: 3,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 3,
         },
       }),
       makeFile("src/graph/ok.ts", "graph"),
     ];
     const layers = [
-      { name: "tools", file_count: 1 },
-      { name: "graph", file_count: 1 },
+      { file_count: 1, name: "tools" },
+      { file_count: 1, name: "graph" },
     ];
     const narrative = generateNarrative(files, layers);
     expect(narrative).toMatch(/violation/i);
@@ -144,14 +147,14 @@ describe("generateNarrative — violations", () => {
       makeFile("src/tools/clean.ts", "tools", {
         priority_factors: {
           in_degree: 0,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 0,
         },
       }),
     ];
-    const layers = [{ name: "tools", file_count: 1 }];
+    const layers = [{ file_count: 1, name: "tools" }];
     const narrative = generateNarrative(files, layers);
     expect(narrative).not.toMatch(/violation/i);
   });
@@ -166,7 +169,7 @@ describe("generateNarrative — edge cases", () => {
 
   it("handles single file with no graph data", () => {
     const files: PrFileInfo[] = [makeFile("src/tools/a.ts", "tools")];
-    const layers = [{ name: "tools", file_count: 1 }];
+    const layers = [{ file_count: 1, name: "tools" }];
     expect(() => generateNarrative(files, layers)).not.toThrow();
     const narrative = generateNarrative(files, layers);
     expect(narrative).toContain("tools");
@@ -174,7 +177,7 @@ describe("generateNarrative — edge cases", () => {
 
   it("handles all factors undefined (no graph data available)", () => {
     const files: PrFileInfo[] = [makeFile("src/a.ts", "domain"), makeFile("src/b.ts", "domain")];
-    const layers = [{ name: "domain", file_count: 2 }];
+    const layers = [{ file_count: 2, name: "domain" }];
     const narrative = generateNarrative(files, layers);
     expect(narrative).toContain("domain");
     expect(narrative).toContain("2");
@@ -185,17 +188,17 @@ describe("generateNarrative — edge cases", () => {
       makeFile("src/tools/a.ts", "tools", {
         priority_factors: {
           in_degree: 5,
-          violation_count: 1,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 1,
         },
       }),
       makeFile("src/graph/b.ts", "graph"),
     ];
     const layers = [
-      { name: "tools", file_count: 1 },
-      { name: "graph", file_count: 1 },
+      { file_count: 1, name: "tools" },
+      { file_count: 1, name: "graph" },
     ];
     const narrative = generateNarrative(files, layers);
     // Count sentences by period+space or period at end

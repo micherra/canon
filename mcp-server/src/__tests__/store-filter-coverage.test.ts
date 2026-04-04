@@ -20,17 +20,17 @@ import type { ReviewEntry } from "../schema.ts";
 
 function makeReview(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {
-    review_id: `rev_test_${Math.random().toString(36).slice(2, 8)}`,
     files: ["src/a.ts"],
-    violations: [],
     honored: [],
+    review_id: `rev_test_${Math.random().toString(36).slice(2, 8)}`,
     score: {
-      rules: { passed: 1, total: 1 },
-      opinions: { passed: 0, total: 0 },
       conventions: { passed: 0, total: 0 },
+      opinions: { passed: 0, total: 0 },
+      rules: { passed: 1, total: 1 },
     },
-    verdict: "CLEAN",
     timestamp: "2026-03-15T00:00:00Z",
+    verdict: "CLEAN",
+    violations: [],
     ...overrides,
   };
 }
@@ -46,22 +46,20 @@ describe("DriftStore.getReviews() — filter options (Wave 1 Known Gaps)", () =>
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
-  // -------------------------------------------------------------------------
   // getReviews({ principleId })
-  // -------------------------------------------------------------------------
 
   describe("principleId filter", () => {
     it("returns reviews where the principle appears in violations", async () => {
       const matching = makeReview({
-        violations: [{ principle_id: "thin-handlers", severity: "rule" }],
         honored: [],
+        violations: [{ principle_id: "thin-handlers", severity: "rule" }],
       });
       const nonMatching = makeReview({
-        violations: [{ principle_id: "errors-are-values", severity: "rule" }],
         honored: [],
+        violations: [{ principle_id: "errors-are-values", severity: "rule" }],
       });
       await store.appendReview(matching);
       await store.appendReview(nonMatching);
@@ -74,12 +72,12 @@ describe("DriftStore.getReviews() — filter options (Wave 1 Known Gaps)", () =>
 
     it("returns reviews where the principle appears in honored list", async () => {
       const matchingHonored = makeReview({
-        violations: [],
         honored: ["deep-modules", "thin-handlers"],
+        violations: [],
       });
       const noMatch = makeReview({
-        violations: [],
         honored: ["errors-are-values"],
+        violations: [],
       });
       await store.appendReview(matchingHonored);
       await store.appendReview(noMatch);
@@ -92,16 +90,16 @@ describe("DriftStore.getReviews() — filter options (Wave 1 Known Gaps)", () =>
 
     it("returns reviews matching via either violations or honored (OR within principleId)", async () => {
       const viaViolation = makeReview({
-        violations: [{ principle_id: "p1", severity: "rule" }],
         honored: [],
+        violations: [{ principle_id: "p1", severity: "rule" }],
       });
       const viaHonored = makeReview({
-        violations: [],
         honored: ["p1"],
+        violations: [],
       });
       const neither = makeReview({
-        violations: [{ principle_id: "p2", severity: "rule" }],
         honored: ["p3"],
+        violations: [{ principle_id: "p2", severity: "rule" }],
       });
       await store.appendReview(viaViolation);
       await store.appendReview(viaHonored);
@@ -124,9 +122,7 @@ describe("DriftStore.getReviews() — filter options (Wave 1 Known Gaps)", () =>
     });
   });
 
-  // -------------------------------------------------------------------------
   // getReviews({ branch })
-  // -------------------------------------------------------------------------
 
   describe("branch filter", () => {
     it("returns only reviews for the specified branch", async () => {
@@ -161,9 +157,7 @@ describe("DriftStore.getReviews() — filter options (Wave 1 Known Gaps)", () =>
     });
   });
 
-  // -------------------------------------------------------------------------
   // AND-combination of filters
-  // -------------------------------------------------------------------------
 
   describe("combined filters (AND logic)", () => {
     it("applies branch AND prNumber filters together", async () => {
@@ -197,8 +191,8 @@ describe("DriftStore.getReviews() — filter options (Wave 1 Known Gaps)", () =>
       await store.appendReview(branchOnly);
 
       const results = await store.getReviews({
-        principleId: "thin-handlers",
         branch: "feat/y",
+        principleId: "thin-handlers",
       });
 
       expect(results).toHaveLength(1);
@@ -206,9 +200,7 @@ describe("DriftStore.getReviews() — filter options (Wave 1 Known Gaps)", () =>
     });
   });
 
-  // -------------------------------------------------------------------------
   // getLastReviewForBranch()
-  // -------------------------------------------------------------------------
 
   describe("getLastReviewForBranch()", () => {
     it("returns the last (most recently appended) review for the branch", async () => {

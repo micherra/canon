@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
@@ -9,26 +9,24 @@ let tmpDir: string;
 
 afterEach(async () => {
   if (tmpDir) {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   }
 });
 
-// ---------------------------------------------------------------------------
 // Valid input — happy path
-// ---------------------------------------------------------------------------
 
 describe("writeImplementationSummary — valid input", () => {
   it("writes IMPLEMENTATION-SUMMARY.md and .meta.json to correct location", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [
+        { action: "added", path: "src/tools/write-implementation-summary.ts" },
+        { action: "added", path: "src/__tests__/write-implementation-summary.test.ts" },
+      ],
       slug: "my-epic",
       task_id: "adr010-03",
-      files_changed: [
-        { path: "src/tools/write-implementation-summary.ts", action: "added" },
-        { path: "src/__tests__/write-implementation-summary.test.ts", action: "added" },
-      ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -49,14 +47,14 @@ describe("writeImplementationSummary — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [
+        { action: "added", path: "src/foo.ts" },
+        { action: "modified", path: "src/bar.ts" },
+        { action: "deleted", path: "src/old.ts" },
+      ],
       slug: "test-epic",
       task_id: "task-01",
-      files_changed: [
-        { path: "src/foo.ts", action: "added" },
-        { path: "src/bar.ts", action: "modified" },
-        { path: "src/old.ts", action: "deleted" },
-      ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -75,12 +73,10 @@ describe("writeImplementationSummary — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [{ action: "added", path: "src/tools/foo.ts" }],
       slug: "my-epic",
       task_id: "adr010-03",
-      files_changed: [
-        { path: "src/tools/foo.ts", action: "added" },
-      ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -97,10 +93,10 @@ describe("writeImplementationSummary — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [],
       slug: "my-epic",
       task_id: "task-01",
-      files_changed: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -119,11 +115,11 @@ describe("writeImplementationSummary — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      decisions_applied: ["dec-01", "dec-03"],
+      files_changed: [],
       slug: "my-epic",
       task_id: "task-01",
-      files_changed: [],
-      decisions_applied: ["dec-01", "dec-03"],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -139,13 +135,13 @@ describe("writeImplementationSummary — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
-      slug: "my-epic",
-      task_id: "task-01",
-      files_changed: [],
       deviations: [
         { decision_id: "dec-02", reason: "legacy constraint prevented strict compliance" },
       ],
+      files_changed: [],
+      slug: "my-epic",
+      task_id: "task-01",
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -163,14 +159,14 @@ describe("writeImplementationSummary — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [],
       slug: "my-epic",
       task_id: "task-01",
-      files_changed: [],
       tests_added: [
         "src/__tests__/write-implementation-summary.test.ts",
         "src/__tests__/other.test.ts",
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -189,16 +185,16 @@ describe("writeImplementationSummary — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
-      slug: "full-epic",
-      task_id: "full-task-01",
-      files_changed: [
-        { path: "src/a.ts", action: "added" },
-        { path: "src/b.ts", action: "modified" },
-      ],
       decisions_applied: ["dec-01"],
       deviations: [{ decision_id: "dec-02", reason: "test reason" }],
+      files_changed: [
+        { action: "added", path: "src/a.ts" },
+        { action: "modified", path: "src/b.ts" },
+      ],
+      slug: "full-epic",
+      task_id: "full-task-01",
       tests_added: ["src/__tests__/a.test.ts"],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -217,10 +213,10 @@ describe("writeImplementationSummary — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [],
       slug: "new-slug",
       task_id: "t-01",
-      files_changed: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -228,19 +224,15 @@ describe("writeImplementationSummary — valid input", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Validation errors
-// ---------------------------------------------------------------------------
-
 describe("writeImplementationSummary — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [],
       slug: "invalid slug",
       task_id: "task-01",
-      files_changed: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -254,10 +246,10 @@ describe("writeImplementationSummary — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [],
       slug: "my/epic!",
       task_id: "task-01",
-      files_changed: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -270,10 +262,10 @@ describe("writeImplementationSummary — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [],
       slug: "my-epic",
       task_id: "task 01",
-      files_changed: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -287,10 +279,10 @@ describe("writeImplementationSummary — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [],
       slug: "my-epic",
       task_id: "task@01!",
-      files_changed: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -303,10 +295,10 @@ describe("writeImplementationSummary — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-impl-summary-test-"));
 
     const result = await writeImplementationSummary({
-      workspace: tmpDir,
+      files_changed: [],
       slug: "../evil",
       task_id: "task-01",
-      files_changed: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);

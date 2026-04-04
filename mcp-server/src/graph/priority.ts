@@ -3,7 +3,7 @@
 import { LAYER_CENTRALITY } from "../constants.ts";
 import { buildDegreeMaps } from "./degree.ts";
 
-export interface FilePriorityScore {
+export type FilePriorityScore = {
   path: string;
   priority_score: number;
   factors: {
@@ -13,19 +13,19 @@ export interface FilePriorityScore {
     layer: string;
     layer_centrality: number;
   };
-}
+};
 
-interface PriorityNode {
+type PriorityNode = {
   id: string;
   layer: string;
   violation_count: number;
   changed: boolean;
-}
+};
 
-interface PriorityEdge {
+type PriorityEdge = {
   source: string;
   target: string;
-}
+};
 
 // LAYER_CENTRALITY imported from constants.ts
 
@@ -54,15 +54,15 @@ export function computeFilePriorities(
       const score = deg * 3 + n.violation_count * 2 + (n.changed ? 1 : 0) + centrality;
 
       return {
-        path: n.id,
-        priority_score: Math.round(score * 100) / 100,
         factors: {
           in_degree: deg,
-          violation_count: n.violation_count,
           is_changed: n.changed,
           layer: n.layer,
           layer_centrality: centrality,
+          violation_count: n.violation_count,
         },
+        path: n.id,
+        priority_score: Math.round(score * 100) / 100,
       };
     })
     .sort((a, b) => b.priority_score - a.priority_score);

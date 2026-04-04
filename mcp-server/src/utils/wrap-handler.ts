@@ -2,7 +2,7 @@ import { toolError } from "./tool-result.ts";
 
 /** Standard JSON response wrapper for MCP tool results. */
 function jsonResponse(result: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  return { content: [{ text: JSON.stringify(result), type: "text" as const }] };
 }
 
 /**

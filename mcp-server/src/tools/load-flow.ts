@@ -1,15 +1,15 @@
 import { buildStateGraph, loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
-export interface LoadFlowInput {
+export type LoadFlowInput = {
   flow_name: string;
-}
+};
 
-export interface LoadFlowResult {
+export type LoadFlowResult = {
   flow: ResolvedFlow;
   state_graph: Record<string, string[]>;
-}
+};
 
 export async function loadFlow(
   input: LoadFlowInput,

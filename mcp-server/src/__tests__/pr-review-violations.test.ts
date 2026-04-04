@@ -1,12 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtemp, rm, mkdir } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { buildFileViolationMap } from "../tools/pr-review-data.ts";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriftStore } from "../drift/store.ts";
 import type { ReviewEntry } from "../schema.ts";
-
-// ── buildFileViolationMap unit tests ──
+import { buildFileViolationMap } from "../tools/pr-review-data.ts";
 
 describe("buildFileViolationMap — unit", () => {
   it("returns empty map for empty reviews array", () => {
@@ -17,29 +15,29 @@ describe("buildFileViolationMap — unit", () => {
   it("groups violations by file_path", () => {
     const reviews: ReviewEntry[] = [
       {
-        review_id: "rev_1",
-        timestamp: "2026-03-20T10:00:00Z",
         files: ["src/tools/foo.ts"],
+        honored: [],
+        review_id: "rev_1",
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 2 },
+          rules: { passed: 1, total: 1 },
+        },
+        timestamp: "2026-03-20T10:00:00Z",
+        verdict: "WARNING",
         violations: [
           {
-            principle_id: "functions-do-one-thing",
-            severity: "strong-opinion",
             file_path: "src/tools/foo.ts",
             message: "Too many responsibilities",
+            principle_id: "functions-do-one-thing",
+            severity: "strong-opinion",
           },
           {
+            file_path: "src/graph/bar.ts",
             principle_id: "no-hidden-side-effects",
             severity: "strong-opinion",
-            file_path: "src/graph/bar.ts",
           },
         ],
-        honored: [],
-        score: {
-          rules: { passed: 1, total: 1 },
-          opinions: { passed: 0, total: 2 },
-          conventions: { passed: 0, total: 0 },
-        },
-        verdict: "WARNING",
       },
     ];
 
@@ -61,9 +59,16 @@ describe("buildFileViolationMap — unit", () => {
   it("falls back to review.files[0] when violation has no file_path", () => {
     const reviews: ReviewEntry[] = [
       {
-        review_id: "rev_2",
-        timestamp: "2026-03-20T11:00:00Z",
         files: ["src/tools/fallback.ts"],
+        honored: [],
+        review_id: "rev_2",
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 1 },
+          rules: { passed: 0, total: 0 },
+        },
+        timestamp: "2026-03-20T11:00:00Z",
+        verdict: "WARNING",
         violations: [
           {
             principle_id: "simplicity-first",
@@ -71,13 +76,6 @@ describe("buildFileViolationMap — unit", () => {
             // no file_path
           },
         ],
-        honored: [],
-        score: {
-          rules: { passed: 0, total: 0 },
-          opinions: { passed: 0, total: 1 },
-          conventions: { passed: 0, total: 0 },
-        },
-        verdict: "WARNING",
       },
     ];
 
@@ -92,42 +90,42 @@ describe("buildFileViolationMap — unit", () => {
   it("handles multiple reviews with overlapping files (accumulates, does not overwrite)", () => {
     const reviews: ReviewEntry[] = [
       {
-        review_id: "rev_3",
-        timestamp: "2026-03-18T10:00:00Z",
         files: ["src/shared.ts"],
+        honored: [],
+        review_id: "rev_3",
+        score: {
+          conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
+        },
+        timestamp: "2026-03-18T10:00:00Z",
+        verdict: "BLOCKING",
         violations: [
           {
+            file_path: "src/shared.ts",
             principle_id: "principle-a",
             severity: "rule",
-            file_path: "src/shared.ts",
           },
         ],
-        honored: [],
-        score: {
-          rules: { passed: 0, total: 1 },
-          opinions: { passed: 0, total: 0 },
-          conventions: { passed: 0, total: 0 },
-        },
-        verdict: "BLOCKING",
       },
       {
-        review_id: "rev_4",
-        timestamp: "2026-03-19T10:00:00Z",
         files: ["src/shared.ts"],
+        honored: [],
+        review_id: "rev_4",
+        score: {
+          conventions: { passed: 0, total: 1 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 0 },
+        },
+        timestamp: "2026-03-19T10:00:00Z",
+        verdict: "WARNING",
         violations: [
           {
+            file_path: "src/shared.ts",
             principle_id: "principle-b",
             severity: "convention",
-            file_path: "src/shared.ts",
           },
         ],
-        honored: [],
-        score: {
-          rules: { passed: 0, total: 0 },
-          opinions: { passed: 0, total: 0 },
-          conventions: { passed: 0, total: 1 },
-        },
-        verdict: "WARNING",
       },
     ];
 
@@ -144,21 +142,21 @@ describe("buildFileViolationMap — unit", () => {
   it("maps all three severity values correctly", () => {
     const reviews: ReviewEntry[] = [
       {
-        review_id: "rev_5",
-        timestamp: "2026-03-20T12:00:00Z",
         files: ["src/multi.ts"],
-        violations: [
-          { principle_id: "p-rule", severity: "rule", file_path: "src/a.ts" },
-          { principle_id: "p-opinion", severity: "strong-opinion", file_path: "src/b.ts" },
-          { principle_id: "p-conv", severity: "convention", file_path: "src/c.ts" },
-        ],
         honored: [],
+        review_id: "rev_5",
         score: {
-          rules: { passed: 0, total: 1 },
-          opinions: { passed: 0, total: 1 },
           conventions: { passed: 0, total: 1 },
+          opinions: { passed: 0, total: 1 },
+          rules: { passed: 0, total: 1 },
         },
+        timestamp: "2026-03-20T12:00:00Z",
         verdict: "BLOCKING",
+        violations: [
+          { file_path: "src/a.ts", principle_id: "p-rule", severity: "rule" },
+          { file_path: "src/b.ts", principle_id: "p-opinion", severity: "strong-opinion" },
+          { file_path: "src/c.ts", principle_id: "p-conv", severity: "convention" },
+        ],
       },
     ];
 
@@ -172,9 +170,16 @@ describe("buildFileViolationMap — unit", () => {
   it("skips violations with no file_path and empty files array", () => {
     const reviews: ReviewEntry[] = [
       {
-        review_id: "rev_6",
-        timestamp: "2026-03-20T13:00:00Z",
         files: [],
+        honored: [],
+        review_id: "rev_6",
+        score: {
+          conventions: { passed: 0, total: 1 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 0 },
+        },
+        timestamp: "2026-03-20T13:00:00Z",
+        verdict: "WARNING",
         violations: [
           {
             principle_id: "orphan-principle",
@@ -182,13 +187,6 @@ describe("buildFileViolationMap — unit", () => {
             // no file_path, files is empty
           },
         ],
-        honored: [],
-        score: {
-          rules: { passed: 0, total: 0 },
-          opinions: { passed: 0, total: 0 },
-          conventions: { passed: 0, total: 1 },
-        },
-        verdict: "WARNING",
       },
     ];
 
@@ -196,8 +194,6 @@ describe("buildFileViolationMap — unit", () => {
     expect(result.size).toBe(0);
   });
 });
-
-// ── Integration: getPrReviewData attaches violations to PrFileInfo ──
 
 describe("getPrReviewData — violations integration", () => {
   let tmpDir: string;
@@ -210,30 +206,30 @@ describe("getPrReviewData — violations integration", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("attaches violations from DriftStore reviews to matching PrFileInfo entries", async () => {
     // Write a reviews.jsonl with a known violation for a changed file
     const review: ReviewEntry = {
-      review_id: "rev_integration",
-      timestamp: "2026-03-25T10:00:00Z",
       files: ["src/tools/some-tool.ts"],
+      honored: ["no-hidden-side-effects"],
+      review_id: "rev_integration",
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 1 },
+        rules: { passed: 1, total: 1 },
+      },
+      timestamp: "2026-03-25T10:00:00Z",
+      verdict: "WARNING",
       violations: [
         {
-          principle_id: "functions-do-one-thing",
-          severity: "strong-opinion",
           file_path: "src/tools/some-tool.ts",
           message: "Does too many things",
+          principle_id: "functions-do-one-thing",
+          severity: "strong-opinion",
         },
       ],
-      honored: ["no-hidden-side-effects"],
-      score: {
-        rules: { passed: 1, total: 1 },
-        opinions: { passed: 0, total: 1 },
-        conventions: { passed: 0, total: 0 },
-      },
-      verdict: "WARNING",
     };
     // Seed review via DriftStore (which uses SQLite, not reviews.jsonl)
     const driftStore = new DriftStore(tmpDir);

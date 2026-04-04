@@ -32,31 +32,25 @@ const pluginCacheDir = process.env.CANON_PLUGIN_DIR
   ? resolve(process.env.CANON_PLUGIN_DIR)
   : resolve(__dirname, "../../..");
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeBoard(overrides?: Partial<Board>): Board {
   return {
-    flow: "epic",
-    task: "test task",
-    entry: "research",
-    current_state: "research",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "research",
+    entry: "research",
+    flow: "epic",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
     ...overrides,
   };
 }
 
-// ---------------------------------------------------------------------------
 // Temporary directory for error-message tests
-// ---------------------------------------------------------------------------
 
 let tmpDir: string;
 
@@ -82,12 +76,10 @@ states:
 });
 
 afterAll(async () => {
-  await rm(tmpDir, { recursive: true, force: true });
+  await rm(tmpDir, { force: true, recursive: true });
 });
 
-// ---------------------------------------------------------------------------
 // epic_complete status routing — normalizeStatus (declared gap from epic-01)
-// ---------------------------------------------------------------------------
 
 describe("normalizeStatus — epic_complete", () => {
   it("normalizes EPIC_COMPLETE to epic_complete (lowercase identity)", () => {
@@ -107,9 +99,7 @@ describe("normalizeStatus — epic_complete", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Schema validation — StuckWhenSchema (gap: SkipWhenSchema tested but not StuckWhenSchema)
-// ---------------------------------------------------------------------------
 
 describe("StuckWhenSchema — no_gate_progress", () => {
   it("accepts no_gate_progress as a valid value", async () => {
@@ -132,9 +122,7 @@ describe("StuckWhenSchema — no_gate_progress", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Schema validation — GateProgressHistoryEntrySchema.parse() (declared gap: only indirect coverage)
-// ---------------------------------------------------------------------------
 
 describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
   it("parses a valid gate progress history entry with hash and passed: true", async () => {
@@ -168,16 +156,14 @@ describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Schema validation — ConsultationFragmentSchema.skip_when (declared gap from epic-01)
-// ---------------------------------------------------------------------------
 
 describe("ConsultationFragmentSchema — skip_when field", () => {
   it("accepts a consultation fragment with skip_when: no_open_questions", async () => {
     const { ConsultationFragmentSchema } = await import("../orchestration/flow-schema.ts");
     const result = ConsultationFragmentSchema.parse({
-      fragment: "targeted-research",
       agent: "canon-researcher",
+      fragment: "targeted-research",
       role: "targeted-research",
       skip_when: "no_open_questions",
     });
@@ -187,8 +173,8 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
   it("accepts a consultation fragment without skip_when (backward compat)", async () => {
     const { ConsultationFragmentSchema } = await import("../orchestration/flow-schema.ts");
     const result = ConsultationFragmentSchema.parse({
-      fragment: "plan-review",
       agent: "canon-reviewer",
+      fragment: "plan-review",
       role: "reviewer",
     });
     expect(result.skip_when).toBeUndefined();
@@ -198,8 +184,8 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
     // ConsultationFragmentSchema uses SkipWhenSchema.optional() — only known enum values are valid
     const { ConsultationFragmentSchema } = await import("../orchestration/flow-schema.ts");
     const result = ConsultationFragmentSchema.parse({
-      fragment: "some-fragment",
       agent: "some-agent",
+      fragment: "some-fragment",
       role: "some-role",
       skip_when: "no_fix_requested",
     });
@@ -207,20 +193,18 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Schema validation — FragmentDefinitionSchema.skip_when (declared gap from epic-01)
-// ---------------------------------------------------------------------------
 
 describe("FragmentDefinitionSchema — skip_when field", () => {
   it("accepts a consultation fragment definition with skip_when", async () => {
     const { FragmentDefinitionSchema } = await import("../orchestration/flow-schema.ts");
     const result = FragmentDefinitionSchema.parse({
-      fragment: "targeted-research",
-      type: "consultation",
       agent: "canon-researcher",
+      fragment: "targeted-research",
       role: "targeted-research",
       section: "Research Findings",
       skip_when: "no_open_questions",
+      type: "consultation",
     });
     expect(result.skip_when).toBe("no_open_questions");
   });
@@ -228,18 +212,16 @@ describe("FragmentDefinitionSchema — skip_when field", () => {
   it("accepts a fragment definition without skip_when (backward compat)", async () => {
     const { FragmentDefinitionSchema } = await import("../orchestration/flow-schema.ts");
     const result = FragmentDefinitionSchema.parse({
-      fragment: "plan-review",
-      type: "consultation",
       agent: "canon-reviewer",
+      fragment: "plan-review",
       role: "reviewer",
+      type: "consultation",
     });
     expect(result.skip_when).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // epic.md loading end-to-end — plugin-level flow in flows/epic.md
-// ---------------------------------------------------------------------------
 
 describe("epic.md end-to-end loading through two-tier resolver", () => {
   it("loads epic.md from plugin flows/ directory without throwing", async () => {
@@ -256,34 +238,34 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
   it("epic flow has all three inline states: research, design, implement", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states["research"]).toBeDefined();
-    expect(flow.states["design"]).toBeDefined();
-    expect(flow.states["implement"]).toBeDefined();
+    expect(flow.states.research).toBeDefined();
+    expect(flow.states.design).toBeDefined();
+    expect(flow.states.implement).toBeDefined();
   });
 
   it("epic implement state has stuck_when: no_gate_progress", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states["implement"].stuck_when).toBe("no_gate_progress");
+    expect(flow.states.implement.stuck_when).toBe("no_gate_progress");
   });
 
   it("epic implement state has max_iterations: 10", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states["implement"].max_iterations).toBe(10);
+    expect(flow.states.implement.max_iterations).toBe(10);
   });
 
   it("epic implement state does NOT have max_waves (architecture constraint)", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
     // max_waves must not be present — architecture decision epic-06
-    expect((flow.states["implement"] as Record<string, unknown>)["max_waves"]).toBeUndefined();
+    expect((flow.states.implement as Record<string, unknown>).max_waves).toBeUndefined();
   });
 
   it("epic implement state has epic_complete transition to ship", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states["implement"].transitions?.["epic_complete"]).toBe("ship");
+    expect(flow.states.implement.transitions?.epic_complete).toBe("ship");
   });
 
   it("epic flow has tier: large", async () => {
@@ -305,31 +287,29 @@ describe("epic.md end-to-end loading through two-tier resolver", () => {
 
     const consultation = flow.consultations?.["targeted-research"];
     expect(consultation).toBeDefined();
-    expect((consultation as Record<string, unknown>)["skip_when"]).toBe("no_open_questions");
+    expect((consultation as Record<string, unknown>).skip_when).toBe("no_open_questions");
   });
 
   it("epic flow ship state is present (from ship-done fragment)", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states["ship"]).toBeDefined();
+    expect(flow.states.ship).toBeDefined();
   });
 
   it("epic flow research state has type: parallel", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states["research"].type).toBe("parallel");
+    expect(flow.states.research.type).toBe("parallel");
   });
 
   it("epic flow design state has done transition to checkpoint", async () => {
     const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
 
-    expect(flow.states["design"].transitions?.["done"]).toBe("checkpoint");
+    expect(flow.states.design.transitions?.done).toBe("checkpoint");
   });
 });
 
-// ---------------------------------------------------------------------------
 // loadFlow() — load-flow.ts → flow-parser.ts cross-task integration
-// ---------------------------------------------------------------------------
 
 describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
   it("loadFlow loads epic.md and returns state_graph", async () => {
@@ -346,7 +326,7 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
     if (!result.ok) throw new Error(result.message);
 
     // research state transitions done → design
-    const researchEdges = result.state_graph["research"];
+    const researchEdges = result.state_graph.research;
     expect(researchEdges).toBeDefined();
     expect(researchEdges).toContain("design");
   });
@@ -355,44 +335,44 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
     const result = await loadFlow({ flow_name: "epic" }, pluginCacheDir);
     if (!result.ok) throw new Error(result.message);
 
-    const implementEdges = result.state_graph["implement"];
+    const implementEdges = result.state_graph.implement;
     expect(implementEdges).toBeDefined();
     expect(implementEdges).toContain("ship");
   });
 });
 
-// ---------------------------------------------------------------------------
 // Error message listing flows from both tiers (declared gap from epic-04)
-// ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow error message — lists flows from both project and plugin dirs", () => {
   it("error message mentions the project flows dir and plugin path when projectDir is given", async () => {
-    await expect(loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir)).rejects.toThrow(
-      /nonexistent-xyz-flow/,
-    );
+    await expect(
+      loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir),
+    ).rejects.toThrow(/nonexistent-xyz-flow/);
   });
 
   it("error message includes the project .canon/flows/ directory path", async () => {
-    await expect(loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir)).rejects.toThrow(
+    await expect(
+      loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir),
+    ).rejects.toThrow(
       new RegExp(`${tmpDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*\\.canon.*flows`),
     );
   });
 
   it("error message includes project-level flow names in the available list", async () => {
-    await expect(loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir)).rejects.toThrow(
-      /project-only-flow/,
-    );
+    await expect(
+      loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir),
+    ).rejects.toThrow(/project-only-flow/);
   });
 
   it("error message includes plugin-level flow names in the available list", async () => {
-    await expect(loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir)).rejects.toThrow(/feature/);
+    await expect(
+      loadAndResolveFlow(pluginCacheDir, "nonexistent-xyz-flow", tmpDir),
+    ).rejects.toThrow(/feature/);
   });
 });
 
-// ---------------------------------------------------------------------------
 // no_open_questions + no_gate_progress runtime integration
 // (verifies the two new values work in the evaluateSkipWhen + isStuck pipeline)
-// ---------------------------------------------------------------------------
 
 describe("no_open_questions runtime path via evaluateSkipWhen", () => {
   it("returns skip: false when has_open_questions is true on an epic board", async () => {
@@ -451,27 +431,25 @@ describe("no_gate_progress isStuck integration with full history", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Backward compatibility — existing boards without new fields must still parse
-// ---------------------------------------------------------------------------
 
 describe("BoardSchema backward compatibility with new fields", () => {
   it("BoardSchema.parse succeeds on a minimal board without new fields", async () => {
     const { BoardSchema } = await import("../orchestration/flow-schema.ts");
 
     const minimalBoard = {
-      flow: "feature",
-      task: "add dark mode",
-      entry: "research",
-      current_state: "research",
       base_commit: "abc1234",
-      started: new Date().toISOString(),
-      last_updated: new Date().toISOString(),
-      states: {},
-      iterations: {},
       blocked: null,
       concerns: [],
+      current_state: "research",
+      entry: "research",
+      flow: "feature",
+      iterations: {},
+      last_updated: new Date().toISOString(),
       skipped: [],
+      started: new Date().toISOString(),
+      states: {},
+      task: "add dark mode",
     };
 
     expect(() => BoardSchema.parse(minimalBoard)).not.toThrow();
@@ -481,28 +459,26 @@ describe("BoardSchema backward compatibility with new fields", () => {
     const { BoardSchema } = await import("../orchestration/flow-schema.ts");
 
     const board = {
-      flow: "epic",
-      task: "large refactor",
-      entry: "research",
-      current_state: "implement",
       base_commit: "abc1234",
-      started: new Date().toISOString(),
-      last_updated: new Date().toISOString(),
-      states: {},
-      iterations: {},
       blocked: null,
       concerns: [],
-      skipped: [],
+      current_state: "implement",
+      entry: "research",
+      flow: "epic",
+      iterations: {},
+      last_updated: new Date().toISOString(),
       metadata: { has_open_questions: true },
+      skipped: [],
+      started: new Date().toISOString(),
+      states: {},
+      task: "large refactor",
     };
 
     expect(() => BoardSchema.parse(board)).not.toThrow();
   });
 });
 
-// ---------------------------------------------------------------------------
 // STATUS_KEYWORDS and STATUS_ALIASES contain epic_complete (declared gap from epic-01)
-// ---------------------------------------------------------------------------
 
 describe("STATUS_KEYWORDS and STATUS_ALIASES — epic_complete registration", () => {
   it("STATUS_KEYWORDS array contains epic_complete", async () => {
@@ -512,6 +488,6 @@ describe("STATUS_KEYWORDS and STATUS_ALIASES — epic_complete registration", ()
 
   it("STATUS_ALIASES maps epic_complete to epic_complete (identity alias)", async () => {
     const { STATUS_ALIASES } = await import("../orchestration/flow-schema.ts");
-    expect(STATUS_ALIASES["epic_complete"]).toBe("epic_complete");
+    expect(STATUS_ALIASES.epic_complete).toBe("epic_complete");
   });
 });

@@ -18,12 +18,12 @@ import { dirname, join } from "node:path";
 /** Maximum character length of the assembled briefing before truncation. */
 const MAX_BRIEFING_CHARS = 2000;
 
-export interface WaveBriefingInput {
+export type WaveBriefingInput = {
   wave: number;
   summaries: string[]; // Previous wave's summary texts (pre-escaped by caller or stage 6)
   consultationOutputs: Record<string, { section?: string; summary: string }>;
   // section = heading from ConsultationFragment.section (pre-escaped by caller or stage 6)
-}
+};
 
 /**
  * Assemble a wave briefing string from pre-processed wave summaries and
@@ -77,9 +77,7 @@ export function assembleWaveBriefing(input: WaveBriefingInput): string {
   return result;
 }
 
-// ---------------------------------------------------------------------------
 // Line-classification helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Returns lines from `allLines` that satisfy the predicate.
@@ -95,7 +93,12 @@ function extractLines(allLines: string[], predicate: (line: string) => boolean):
 function isNewSharedCodeLine(line: string): boolean {
   const lower = line.toLowerCase();
   // "created" / "added" keywords OR presence of a file-path-like pattern
-  return lower.includes("created") || lower.includes("added") || /\bsrc\//.test(line) || /\.\w{2,4}/.test(line);
+  return (
+    lower.includes("created") ||
+    lower.includes("added") ||
+    /\bsrc\//.test(line) ||
+    /\.\w{2,4}/.test(line)
+  );
 }
 
 /**
@@ -112,13 +115,14 @@ function isPatternLine(line: string): boolean {
 function isGotchaLine(line: string): boolean {
   const lower = line.toLowerCase();
   return (
-    lower.includes("concern") || lower.includes("gotcha") || lower.includes("warning") || lower.includes("unexpected")
+    lower.includes("concern") ||
+    lower.includes("gotcha") ||
+    lower.includes("warning") ||
+    lower.includes("unexpected")
   );
 }
 
-// ---------------------------------------------------------------------------
 // Wave guidance persistence
-// ---------------------------------------------------------------------------
 
 const GUIDANCE_FILE = "waves/guidance.md";
 

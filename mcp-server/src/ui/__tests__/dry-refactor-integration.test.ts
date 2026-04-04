@@ -26,9 +26,9 @@ const libDir = join(uiDir, "lib");
 describe("Cross-wave: getSeverityColor utility → ViolationCard integration", () => {
   it("getSeverityColor returns same value as SEVERITY_COLORS[severity] for all three valid severities", () => {
     // This is the behavioral contract: refactor must not change color values
-    expect(getSeverityColor("rule")).toBe(SEVERITY_COLORS["rule"]);
+    expect(getSeverityColor("rule")).toBe(SEVERITY_COLORS.rule);
     expect(getSeverityColor("strong-opinion")).toBe(SEVERITY_COLORS["strong-opinion"]);
-    expect(getSeverityColor("convention")).toBe(SEVERITY_COLORS["convention"]);
+    expect(getSeverityColor("convention")).toBe(SEVERITY_COLORS.convention);
   });
 
   it("getSeverityColor fallback (#636a80) differs from old inline fallback (#888888) but is intentional", () => {

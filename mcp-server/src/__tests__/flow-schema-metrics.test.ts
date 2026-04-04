@@ -3,9 +3,9 @@
  * and the new AgentMetricsSchema / AgentMetrics type export.
  */
 
-import { describe, it, expect } from "vitest";
-import { StateMetricsSchema, AgentMetricsSchema } from "../orchestration/flow-schema.ts";
+import { describe, expect, it } from "vitest";
 import type { AgentMetrics } from "../orchestration/flow-schema.ts";
+import { AgentMetricsSchema, StateMetricsSchema } from "../orchestration/flow-schema.ts";
 
 describe("StateMetricsSchema — backward-compatible optional fields", () => {
   it("parses empty object (all fields optional)", () => {
@@ -14,7 +14,7 @@ describe("StateMetricsSchema — backward-compatible optional fields", () => {
   });
 
   it("parses existing metrics shape without new fields", () => {
-    const input = { duration_ms: 100, spawns: 1, model: "opus" };
+    const input = { duration_ms: 100, model: "opus", spawns: 1 };
     const result = StateMetricsSchema.parse(input);
     expect(result.duration_ms).toBe(100);
     expect(result.spawns).toBe(1);
@@ -30,12 +30,12 @@ describe("StateMetricsSchema — backward-compatible optional fields", () => {
 
   it("parses all 7 new ADR-003a fields together", () => {
     const input = {
-      tool_calls: 12,
-      orientation_calls: 2,
-      input_tokens: 5000,
-      output_tokens: 1500,
       cache_read_tokens: 2000,
       cache_write_tokens: 800,
+      input_tokens: 5000,
+      orientation_calls: 2,
+      output_tokens: 1500,
+      tool_calls: 12,
       turns: 7,
     };
     const result = StateMetricsSchema.parse(input);
@@ -58,15 +58,15 @@ describe("StateMetricsSchema — backward-compatible optional fields", () => {
 
   it("parses combined existing and new fields", () => {
     const input = {
-      duration_ms: 2500,
-      spawns: 3,
-      model: "sonnet",
-      tool_calls: 10,
-      orientation_calls: 1,
-      input_tokens: 3000,
-      output_tokens: 900,
       cache_read_tokens: 500,
       cache_write_tokens: 200,
+      duration_ms: 2500,
+      input_tokens: 3000,
+      model: "sonnet",
+      orientation_calls: 1,
+      output_tokens: 900,
+      spawns: 3,
+      tool_calls: 10,
       turns: 4,
     };
     const result = StateMetricsSchema.parse(input);
@@ -84,13 +84,13 @@ describe("AgentMetricsSchema — focused ADR-003a input validation schema", () =
 
   it("validates all 8 ADR-003a fields", () => {
     const input = {
-      tool_calls: 12,
-      orientation_calls: 2,
-      input_tokens: 5000,
-      output_tokens: 1500,
       cache_read_tokens: 2000,
       cache_write_tokens: 800,
       duration_ms: 3000,
+      input_tokens: 5000,
+      orientation_calls: 2,
+      output_tokens: 1500,
+      tool_calls: 12,
       turns: 7,
     };
     const result = AgentMetricsSchema.parse(input);
@@ -113,7 +113,7 @@ describe("AgentMetricsSchema — focused ADR-003a input validation schema", () =
   });
 
   it("parses partial input (subset of fields)", () => {
-    const input = { tool_calls: 3, duration_ms: 1200 };
+    const input = { duration_ms: 1200, tool_calls: 3 };
     const result = AgentMetricsSchema.parse(input);
     expect(result.tool_calls).toBe(3);
     expect(result.duration_ms).toBe(1200);
@@ -128,13 +128,13 @@ describe("AgentMetrics type — structural type check", () => {
     expect(metrics).toBeDefined();
 
     const full: AgentMetrics = {
-      tool_calls: 1,
-      orientation_calls: 2,
-      input_tokens: 3,
-      output_tokens: 4,
       cache_read_tokens: 5,
       cache_write_tokens: 6,
       duration_ms: 7,
+      input_tokens: 3,
+      orientation_calls: 2,
+      output_tokens: 4,
+      tool_calls: 1,
       turns: 8,
     };
     expect(full.tool_calls).toBe(1);

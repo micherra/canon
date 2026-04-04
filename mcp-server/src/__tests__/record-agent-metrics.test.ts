@@ -10,17 +10,13 @@
  * - MCP metrics schema in report_result accepts the widened fields
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import { recordAgentMetrics } from "../tools/record-agent-metrics.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -34,34 +30,32 @@ function setupWorkspace(workspace: string, stateId = "build"): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: "test-flow",
-    task: "test task",
-    entry: stateId,
-    current_state: stateId,
     base_commit: "abc123",
-    started: now,
-    last_updated: now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: stateId,
+    entry: stateId,
+    flow: "test-flow",
     flow_name: "test-flow",
+    last_updated: now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
-  store.upsertState(stateId, { status: "in_progress", entries: 1 });
+  store.upsertState(stateId, { entries: 1, status: "in_progress" });
 }
 
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
-// ---------------------------------------------------------------------------
 // Basic writes
-// ---------------------------------------------------------------------------
 
 describe("recordAgentMetrics — basic writes", () => {
   it("writes tool_calls and turns to execution_states.metrics", async () => {
@@ -69,10 +63,10 @@ describe("recordAgentMetrics — basic writes", () => {
     setupWorkspace(workspace, "build");
 
     const result = await recordAgentMetrics({
-      workspace,
       state_id: "build",
       tool_calls: 5,
       turns: 3,
+      workspace,
     });
 
     assertOk(result);
@@ -92,9 +86,9 @@ describe("recordAgentMetrics — basic writes", () => {
     setupWorkspace(workspace, "implement");
 
     const result = await recordAgentMetrics({
-      workspace,
-      state_id: "implement",
       orientation_calls: 8,
+      state_id: "implement",
+      workspace,
     });
 
     assertOk(result);
@@ -106,9 +100,7 @@ describe("recordAgentMetrics — basic writes", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Merge with existing metrics
-// ---------------------------------------------------------------------------
 
 describe("recordAgentMetrics — merge with pre-existing metrics", () => {
   it("merges agent fields with pre-existing orchestrator metrics", async () => {
@@ -118,21 +110,21 @@ describe("recordAgentMetrics — merge with pre-existing metrics", () => {
     // Simulate orchestrator having set duration_ms and model
     const store = getExecutionStore(workspace);
     store.upsertState("build", {
-      status: "in_progress",
       entries: 1,
       metrics: {
         duration_ms: 12345,
-        spawns: 1,
         model: "claude-sonnet",
+        spawns: 1,
       },
+      status: "in_progress",
     });
 
     // Agent now records its own metrics
     const result = await recordAgentMetrics({
-      workspace,
       state_id: "build",
       tool_calls: 10,
       turns: 5,
+      workspace,
     });
 
     assertOk(result);
@@ -156,29 +148,29 @@ describe("recordAgentMetrics — merge with pre-existing metrics", () => {
 
     const store = getExecutionStore(workspace);
     store.upsertState("build", {
-      status: "in_progress",
       entries: 1,
       metrics: {
         duration_ms: 9999,
-        spawns: 2,
         model: "claude-opus",
+        spawns: 2,
       },
+      status: "in_progress",
     });
 
     // First call
     await recordAgentMetrics({
-      workspace,
       state_id: "build",
       tool_calls: 3,
       turns: 2,
+      workspace,
     });
 
     // Second call — overwrites previous agent values
     const result = await recordAgentMetrics({
-      workspace,
       state_id: "build",
       tool_calls: 7,
       turns: 4,
+      workspace,
     });
 
     assertOk(result);
@@ -197,18 +189,14 @@ describe("recordAgentMetrics — merge with pre-existing metrics", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Validation errors
-// ---------------------------------------------------------------------------
-
 describe("recordAgentMetrics — validation errors", () => {
   it("returns INVALID_INPUT when no metric fields are provided", async () => {
     const workspace = makeTmpWorkspace();
     setupWorkspace(workspace, "build");
 
     const result = await recordAgentMetrics({
-      workspace,
       state_id: "build",
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -222,9 +210,9 @@ describe("recordAgentMetrics — validation errors", () => {
     setupWorkspace(workspace, "build");
 
     const result = await recordAgentMetrics({
-      workspace,
       state_id: "nonexistent_state",
       tool_calls: 5,
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -234,9 +222,7 @@ describe("recordAgentMetrics — validation errors", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // MCP schema widening — report_result accepts widened fields
-// ---------------------------------------------------------------------------
 
 describe("MCP metrics schema widening", () => {
   it("reportResult metrics schema accepts widened agent performance fields", async () => {
@@ -245,54 +231,56 @@ describe("MCP metrics schema widening", () => {
     // confirming it succeeds rather than throwing a Zod validation error.
     // The actual behavior test is in the broadened schema acceptance.
     const { reportResult } = await import("../tools/report-result.ts");
-    const { getExecutionStore: getStore, clearStoreCache: clearCache } = await import("../orchestration/execution-store.ts");
+    const { getExecutionStore: getStore, clearStoreCache: clearCache } = await import(
+      "../orchestration/execution-store.ts"
+    );
 
     const ws = makeTmpWorkspace();
     const store = getStore(ws);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test-flow",
-      task: "test task",
-      entry: "build",
-      current_state: "build",
       base_commit: "abc123",
-      started: now,
-      last_updated: now,
       branch: "feat/test",
-      sanitized: "feat-test",
       created: now,
-      tier: "medium",
+      current_state: "build",
+      entry: "build",
+      flow: "test-flow",
       flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "feat-test",
       slug: "test-slug",
+      started: now,
+      task: "test task",
+      tier: "medium",
     });
-    store.upsertState("build", { status: "in_progress", entries: 1 });
-    store.upsertState("done", { status: "pending", entries: 0 });
+    store.upsertState("build", { entries: 1, status: "in_progress" });
+    store.upsertState("done", { entries: 0, status: "pending" });
 
     const flow = {
-      name: "test-flow",
       description: "test",
       entry: "build",
+      name: "test-flow",
       spawn_instructions: {},
       states: {
-        build: { type: "single" as const, transitions: { done: "done" } },
+        build: { transitions: { done: "done" }, type: "single" as const },
         done: { type: "terminal" as const },
       },
     };
 
     // Should not throw — widened metrics fields are accepted
     const result = await reportResult({
-      workspace: ws,
-      state_id: "build",
-      status_keyword: "done",
       flow,
       metrics: {
         duration_ms: 1000,
-        spawns: 1,
         model: "claude-sonnet",
-        tool_calls: 42,
         orientation_calls: 10,
+        spawns: 1,
+        tool_calls: 42,
         turns: 7,
       },
+      state_id: "build",
+      status_keyword: "done",
+      workspace: ws,
     });
 
     assertOk(result);

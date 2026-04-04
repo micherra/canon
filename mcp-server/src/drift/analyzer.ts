@@ -1,21 +1,21 @@
 import { dirname } from "node:path";
 import type { ReviewEntry } from "../schema.ts";
 
-export interface PrincipleStats {
+export type PrincipleStats = {
   principle_id: string;
   total_violations: number;
   unintentional_violations: number;
   times_honored: number;
   compliance_rate: number; // 0-100
-}
+};
 
-export interface DirectoryStats {
+export type DirectoryStats = {
   directory: string;
   total_violations: number;
   review_count: number;
-}
+};
 
-export interface DriftReport {
+export type DriftReport = {
   total_reviews: number;
   avg_score: {
     rules: number;
@@ -26,11 +26,7 @@ export interface DriftReport {
   violation_directories: DirectoryStats[];
   never_triggered: string[]; // principle IDs that never appeared in reviews
   trend: "improving" | "stable" | "declining" | "insufficient_data";
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+};
 
 function applyFilters(
   reviews: ReviewEntry[],
@@ -43,7 +39,8 @@ function applyFilters(
   if (options?.principleId) {
     filtered = filtered.filter(
       (r) =>
-        r.violations.some((v) => v.principle_id === options.principleId) || r.honored.includes(options.principleId!),
+        r.violations.some((v) => v.principle_id === options.principleId) ||
+        r.honored.includes(options.principleId!),
     );
   }
   if (options?.directory) {
@@ -54,11 +51,11 @@ function applyFilters(
 
 function initStats(id: string): PrincipleStats {
   return {
+    compliance_rate: 0,
     principle_id: id,
+    times_honored: 0,
     total_violations: 0,
     unintentional_violations: 0,
-    times_honored: 0,
-    compliance_rate: 0,
   };
 }
 
@@ -104,7 +101,10 @@ function computeViolationDirectories(reviews: ReviewEntry[]): DirectoryStats[] {
   return [...dirMap.values()].sort((a, b) => b.total_violations - a.total_violations).slice(0, 10);
 }
 
-function accumulatePerFileViolations(review: ReviewEntry, dirMap: Map<string, DirectoryStats>): void {
+function accumulatePerFileViolations(
+  review: ReviewEntry,
+  dirMap: Map<string, DirectoryStats>,
+): void {
   const perFileCount = new Map<string, number>();
   for (const v of review.violations) {
     const file = v.file_path || review.files[0] || "";
@@ -112,23 +112,30 @@ function accumulatePerFileViolations(review: ReviewEntry, dirMap: Map<string, Di
   }
   for (const [file, count] of perFileCount) {
     const dir = dirname(file);
-    const stats = dirMap.get(dir) || { directory: dir, total_violations: 0, review_count: 0 };
+    const stats = dirMap.get(dir) || { directory: dir, review_count: 0, total_violations: 0 };
     stats.total_violations += count;
     stats.review_count++;
     dirMap.set(dir, stats);
   }
 }
 
-function accumulateLegacyViolations(review: ReviewEntry, dirMap: Map<string, DirectoryStats>): void {
+function accumulateLegacyViolations(
+  review: ReviewEntry,
+  dirMap: Map<string, DirectoryStats>,
+): void {
   const dir = dirname(review.files[0] || ".");
-  const stats = dirMap.get(dir) || { directory: dir, total_violations: 0, review_count: 0 };
+  const stats = dirMap.get(dir) || { directory: dir, review_count: 0, total_violations: 0 };
   stats.total_violations += review.violations.length;
   stats.review_count++;
   dirMap.set(dir, stats);
 }
 
-function computeAverageScores(reviews: ReviewEntry[]): { rules: number; opinions: number; conventions: number } {
-  if (reviews.length === 0) return { rules: 0, opinions: 0, conventions: 0 };
+function computeAverageScores(reviews: ReviewEntry[]): {
+  rules: number;
+  opinions: number;
+  conventions: number;
+} {
+  if (reviews.length === 0) return { conventions: 0, opinions: 0, rules: 0 };
 
   let rTotal = 0,
     rPassed = 0;
@@ -147,9 +154,9 @@ function computeAverageScores(reviews: ReviewEntry[]): { rules: number; opinions
   }
 
   return {
-    rules: rTotal > 0 ? Math.round((rPassed / rTotal) * 100) : 100,
-    opinions: oTotal > 0 ? Math.round((oPassed / oTotal) * 100) : 100,
     conventions: cTotal > 0 ? Math.round((cPassed / cTotal) * 100) : 100,
+    opinions: oTotal > 0 ? Math.round((oPassed / oTotal) * 100) : 100,
+    rules: rTotal > 0 ? Math.round((rPassed / rTotal) * 100) : 100,
   };
 }
 
@@ -168,9 +175,7 @@ function computeTrend(reviews: ReviewEntry[]): DriftReport["trend"] {
   return "stable";
 }
 
-// ---------------------------------------------------------------------------
 // Main
-// ---------------------------------------------------------------------------
 
 export function analyzeDrift(
   reviews: ReviewEntry[],
@@ -188,11 +193,11 @@ export function analyzeDrift(
   const neverTriggered = allPrincipleIds.filter((id) => !triggeredIds.has(id));
 
   return {
-    total_reviews: filteredReviews.length,
     avg_score: computeAverageScores(filteredReviews),
     most_violated: mostViolated.slice(0, 10),
-    violation_directories: computeViolationDirectories(filteredReviews),
     never_triggered: neverTriggered,
+    total_reviews: filteredReviews.length,
     trend: computeTrend(filteredReviews),
+    violation_directories: computeViolationDirectories(filteredReviews),
   };
 }

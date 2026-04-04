@@ -14,9 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
@@ -39,14 +37,10 @@ vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
 });
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { ConsultationFragmentSchema } from "../orchestration/flow-schema.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { ConsultationFragmentSchema } from "../orchestration/flow-schema.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { assertOk } from "../utils/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -58,21 +52,21 @@ function makeTmpDir(): string {
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "implement",
-    current_state: "implement",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {
-      implement: { status: "pending", entries: 0 },
-      done: { status: "pending", entries: 0 },
-    },
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "implement",
+    entry: "implement",
+    flow: "test-flow",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {
+      done: { entries: 0, status: "pending" },
+      implement: { entries: 0, status: "pending" },
+    },
+    task: "test task",
     ...overrides,
   } as Board;
 }
@@ -81,22 +75,26 @@ function seedBoard(workspace: string, board: Board): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: board.flow,
-    task: board.task,
-    entry: board.entry,
-    current_state: board.current_state,
     base_commit: board.base_commit,
-    started: board.started ?? now,
-    last_updated: board.last_updated ?? now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: board.current_state,
+    entry: board.entry,
+    flow: board.flow,
     flow_name: board.flow,
+    last_updated: board.last_updated ?? now,
+    sanitized: "main",
     slug: "test-slug",
+    started: board.started ?? now,
+    task: board.task,
+    tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+    store.upsertState(stateId, {
+      ...stateEntry,
+      entries: stateEntry.entries ?? 0,
+      status: stateEntry.status,
+    });
   }
 }
 
@@ -106,30 +104,30 @@ function seedBoard(workspace: string, board: Board): void {
  */
 function makeFlowWithMinWavesConsultation(minWaves: number = 2): ResolvedFlow {
   return {
-    name: "test-flow",
+    consultations: {
+      "pattern-check": {
+        agent: "canon:canon-architect",
+        fragment: "pattern-check",
+        min_waves: minWaves,
+        role: "pattern-check",
+        timeout: "5m",
+      },
+    },
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: {
-        type: "wave",
-        agent: "canon-implementor",
-        consultations: {
-          between: ["pattern-check"],
-        },
-      },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: {
       implement: "Implement ${task} for ${item}.",
       "pattern-check": "Check patterns for ${task}.",
     },
-    consultations: {
-      "pattern-check": {
-        fragment: "pattern-check",
-        agent: "canon:canon-architect",
-        role: "pattern-check",
-        timeout: "5m",
-        min_waves: minWaves,
+    states: {
+      done: { type: "terminal" },
+      implement: {
+        agent: "canon-implementor",
+        consultations: {
+          between: ["pattern-check"],
+        },
+        type: "wave",
       },
     },
   } as unknown as ResolvedFlow;
@@ -141,28 +139,28 @@ function makeFlowWithMinWavesConsultation(minWaves: number = 2): ResolvedFlow {
  */
 function makeFlowWithUnconditionalConsultation(): ResolvedFlow {
   return {
-    name: "test-flow",
+    consultations: {
+      "plan-review": {
+        agent: "canon:canon-architect",
+        fragment: "plan-review",
+        role: "plan-reviewer",
+      },
+    },
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: {
-        type: "wave",
-        agent: "canon-implementor",
-        consultations: {
-          between: ["plan-review"],
-        },
-      },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: {
       implement: "Implement ${task} for ${item}.",
       "plan-review": "Review the plan for ${task}.",
     },
-    consultations: {
-      "plan-review": {
-        fragment: "plan-review",
-        agent: "canon:canon-architect",
-        role: "plan-reviewer",
+    states: {
+      done: { type: "terminal" },
+      implement: {
+        agent: "canon-implementor",
+        consultations: {
+          between: ["plan-review"],
+        },
+        type: "wave",
       },
     },
   } as unknown as ResolvedFlow;
@@ -175,30 +173,30 @@ function makeFlowWithUnconditionalConsultation(): ResolvedFlow {
  */
 function makeFlowWithMinWavesBeforeConsultation(): ResolvedFlow {
   return {
-    name: "test-flow",
+    consultations: {
+      "early-scan": {
+        agent: "canon:canon-security",
+        fragment: "early-scan",
+        min_waves: 2,
+        role: "early-scan",
+        timeout: "5m",
+      },
+    },
     description: "Test flow",
     entry: "implement",
+    name: "test-flow",
+    spawn_instructions: {
+      "early-scan": "Quick scan for ${task}.",
+      implement: "Implement ${task} for ${item}.",
+    },
     states: {
+      done: { type: "terminal" },
       implement: {
-        type: "wave",
         agent: "canon-implementor",
         consultations: {
           before: ["early-scan"],
         },
-      },
-      done: { type: "terminal" },
-    },
-    spawn_instructions: {
-      implement: "Implement ${task} for ${item}.",
-      "early-scan": "Quick scan for ${task}.",
-    },
-    consultations: {
-      "early-scan": {
-        fragment: "early-scan",
-        agent: "canon:canon-security",
-        role: "early-scan",
-        timeout: "5m",
-        min_waves: 2,
+        type: "wave",
       },
     },
   } as unknown as ResolvedFlow;
@@ -206,24 +204,22 @@ function makeFlowWithMinWavesBeforeConsultation(): ResolvedFlow {
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // 1. Schema tests
-// ---------------------------------------------------------------------------
 
 describe("ConsultationFragmentSchema — min_waves field", () => {
   it("accepts a fragment with min_waves field", () => {
     const result = ConsultationFragmentSchema.safeParse({
-      fragment: "pattern-check",
       agent: "canon:canon-architect",
+      fragment: "pattern-check",
+      min_waves: 2,
       role: "pattern-check",
       timeout: "5m",
-      min_waves: 2,
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -233,8 +229,8 @@ describe("ConsultationFragmentSchema — min_waves field", () => {
 
   it("accepts a fragment without min_waves (backward compat)", () => {
     const result = ConsultationFragmentSchema.safeParse({
-      fragment: "plan-review",
       agent: "canon:canon-architect",
+      fragment: "plan-review",
       role: "plan-reviewer",
     });
     expect(result.success).toBe(true);
@@ -245,30 +241,28 @@ describe("ConsultationFragmentSchema — min_waves field", () => {
 
   it("rejects a fragment with non-numeric min_waves", () => {
     const result = ConsultationFragmentSchema.safeParse({
-      fragment: "test",
       agent: "canon:canon-architect",
-      role: "test",
+      fragment: "test",
       min_waves: "two",
+      role: "test",
     });
     expect(result.success).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Runtime filtering tests -- between consultations
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — min_waves filtering for between consultations", () => {
   function setupBoard(workspace: string, waveTotalOverride?: number) {
     // wave_total set on the state entry BEFORE entering so enterState preserves it
-    const stateEntry: Record<string, unknown> = { status: "pending", entries: 0 };
+    const stateEntry: Record<string, unknown> = { entries: 0, status: "pending" };
     if (waveTotalOverride !== undefined) {
       stateEntry.wave_total = waveTotalOverride;
     }
     const board = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: stateEntry,
-        done: { status: "pending", entries: 0 },
       },
     });
     seedBoard(workspace, board);
@@ -280,11 +274,11 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     const flow = makeFlowWithMinWavesConsultation(2);
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1, // wave >= 1 triggers "between" breakpoint
+      workspace,
     });
     assertOk(result);
 
@@ -299,11 +293,11 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     const flow = makeFlowWithMinWavesConsultation(2);
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1, // wave >= 1 triggers "between" breakpoint
+      workspace,
     });
     assertOk(result);
 
@@ -319,11 +313,11 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     const flow = makeFlowWithMinWavesConsultation(2);
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 2,
+      workspace,
     });
     assertOk(result);
 
@@ -338,11 +332,11 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     const flow = makeFlowWithMinWavesConsultation(2);
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 
@@ -357,11 +351,11 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
     const flow = makeFlowWithUnconditionalConsultation();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 
@@ -370,20 +364,18 @@ describe("enterAndPrepareState — min_waves filtering for between consultations
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Runtime filtering tests -- before consultations with min_waves
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — min_waves filtering for before consultations", () => {
   function setupBoard(workspace: string, waveTotalOverride?: number) {
-    const stateEntry: Record<string, unknown> = { status: "pending", entries: 0 };
+    const stateEntry: Record<string, unknown> = { entries: 0, status: "pending" };
     if (waveTotalOverride !== undefined) {
       stateEntry.wave_total = waveTotalOverride;
     }
     const board = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: stateEntry,
-        done: { status: "pending", entries: 0 },
       },
     });
     seedBoard(workspace, board);
@@ -395,11 +387,11 @@ describe("enterAndPrepareState — min_waves filtering for before consultations"
     const flow = makeFlowWithMinWavesBeforeConsultation();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 0, // wave 0 triggers "before" breakpoint
+      workspace,
     });
     assertOk(result);
 
@@ -413,11 +405,11 @@ describe("enterAndPrepareState — min_waves filtering for before consultations"
     const flow = makeFlowWithMinWavesBeforeConsultation();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 0,
+      workspace,
     });
     assertOk(result);
 

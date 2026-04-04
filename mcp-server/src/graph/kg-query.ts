@@ -20,22 +20,18 @@ import type {
   SearchResult,
 } from "./kg-types.ts";
 
-// ---------------------------------------------------------------------------
 // Layer rules — clean-architecture defaults (mirrors insights.ts)
-// ---------------------------------------------------------------------------
 
 const DEFAULT_LAYER_RULES: Record<string, string[]> = {
   api: ["domain", "shared", "data"],
-  ui: ["domain", "shared"],
-  domain: ["data", "shared"],
   data: ["infra", "shared"],
+  domain: ["data", "shared"],
   infra: ["shared"],
   shared: [],
+  ui: ["domain", "shared"],
 };
 
-// ---------------------------------------------------------------------------
 // computeImpactScore — exported for consumers that migrated from query.ts
-// ---------------------------------------------------------------------------
 
 /** Compute impact score for a file based on graph position. Higher = more impactful. */
 export function computeImpactScore(
@@ -49,18 +45,16 @@ export function computeImpactScore(
   return Math.round(score * 100) / 100;
 }
 
-// ---------------------------------------------------------------------------
 // computeFileInsightMaps — batch helper for hub/cycle/violation computation
-// ---------------------------------------------------------------------------
 
-export interface FileInsightMaps {
+export type FileInsightMaps = {
   /** Set of file paths that qualify as hubs (top 10 by total degree). */
   hubPaths: Set<string>;
   /** Map from file path to the set of cycle-peer paths. */
   cycleMemberPaths: Map<string, string[]>;
   /** Map from file path to its outbound layer violations. */
   layerViolationsByPath: Map<string, LayerViolation[]>;
-}
+};
 
 /**
  * Compute hub detection, cycle membership, and layer violations from the
@@ -69,24 +63,17 @@ export interface FileInsightMaps {
  * Intended to be called once per request and the result passed into
  * getFileMetrics() for individual file lookups, avoiding N+1 query patterns.
  */
-export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
-  // ---- 1. Load all file edges ------------------------------------------------
-  const edgeRows = db
-    .prepare(`SELECT fe.source_file_id, fe.target_file_id, fs.path AS source_path, ft.path AS target_path,
-                     fs.layer AS source_layer, ft.layer AS target_layer
-              FROM file_edges fe
-              JOIN files fs ON fs.file_id = fe.source_file_id
-              JOIN files ft ON ft.file_id = fe.target_file_id`)
-    .all() as Array<{
-    source_file_id: number;
-    target_file_id: number;
-    source_path: string;
-    target_path: string;
-    source_layer: string;
-    target_layer: string;
-  }>;
+type FileEdgeRow = {
+  source_file_id: number;
+  target_file_id: number;
+  source_path: string;
+  target_path: string;
+  source_layer: string;
+  target_layer: string;
+};
 
-  // ---- 2. Degree computation for hub detection --------------------------------
+/** Compute hub paths from degree maps (top 10 by total degree). */
+function computeHubPaths(edgeRows: FileEdgeRow[]): Set<string> {
   const inDegree = new Map<string, number>();
   const outDegree = new Map<string, number>();
 
@@ -95,15 +82,16 @@ export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
     inDegree.set(row.target_path, (inDegree.get(row.target_path) || 0) + 1);
   }
 
-  // Top 10 by total degree → hub set
   const allPaths = new Set([...inDegree.keys(), ...outDegree.keys()]);
   const sorted = [...allPaths]
     .map((p) => ({ path: p, total: (inDegree.get(p) || 0) + (outDegree.get(p) || 0) }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
-  const hubPaths = new Set(sorted.map((x) => x.path));
+  return new Set(sorted.map((x) => x.path));
+}
 
-  // ---- 3. Adjacency list for cycle detection ----------------------------------
+/** Build adjacency list from file edge rows. */
+function buildFileAdjacency(edgeRows: FileEdgeRow[]): Map<string, string[]> {
   const adj = new Map<string, string[]>();
   for (const row of edgeRows) {
     let neighbors = adj.get(row.source_path);
@@ -113,15 +101,12 @@ export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
     }
     neighbors.push(row.target_path);
   }
+  return adj;
+}
 
-  // Collect all file nodes
-  const fileRows = db.prepare(`SELECT path FROM files`).all() as Array<{ path: string }>;
-  const nodes = fileRows.map((r) => r.path);
-
-  const cycleMemberPaths = detectFileCycles(nodes, adj);
-
-  // ---- 4. Layer violations ----------------------------------------------------
-  const layerViolationsByPath = new Map<string, LayerViolation[]>();
+/** Compute layer violations from file edge rows. */
+function computeLayerViolations(edgeRows: FileEdgeRow[]): Map<string, LayerViolation[]> {
+  const violations = new Map<string, LayerViolation[]>();
   const rules = DEFAULT_LAYER_RULES;
 
   for (const row of edgeRows) {
@@ -134,72 +119,111 @@ export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
 
     const allowed = rules[sourceLayer];
     if (allowed && !allowed.includes(targetLayer)) {
-      let violations = layerViolationsByPath.get(row.source_path);
-      if (!violations) {
-        violations = [];
-        layerViolationsByPath.set(row.source_path, violations);
+      let list = violations.get(row.source_path);
+      if (!list) {
+        list = [];
+        violations.set(row.source_path, list);
       }
-      violations.push({
-        target: row.target_path,
-        source_layer: sourceLayer,
-        target_layer: targetLayer,
-      });
+      list.push({ source_layer: sourceLayer, target: row.target_path, target_layer: targetLayer });
     }
   }
-
-  return { hubPaths, cycleMemberPaths, layerViolationsByPath };
+  return violations;
 }
 
-// ---------------------------------------------------------------------------
+export function computeFileInsightMaps(db: Database.Database): FileInsightMaps {
+  const edgeRows = db
+    .prepare(`SELECT fe.source_file_id, fe.target_file_id, fs.path AS source_path, ft.path AS target_path,
+                     fs.layer AS source_layer, ft.layer AS target_layer
+              FROM file_edges fe
+              JOIN files fs ON fs.file_id = fe.source_file_id
+              JOIN files ft ON ft.file_id = fe.target_file_id`)
+    .all() as FileEdgeRow[];
+
+  const hubPaths = computeHubPaths(edgeRows);
+  const adj = buildFileAdjacency(edgeRows);
+
+  const fileRows = db.prepare(`SELECT path FROM files`).all() as Array<{ path: string }>;
+  const cycleMemberPaths = detectFileCycles(
+    fileRows.map((r) => r.path),
+    adj,
+  );
+  const layerViolationsByPath = computeLayerViolations(edgeRows);
+
+  return { cycleMemberPaths, hubPaths, layerViolationsByPath };
+}
+
 // Cycle detection helpers (file-level DFS — mirrors insights.ts pattern)
-// ---------------------------------------------------------------------------
 
-function detectFileCycles(nodes: string[], adj: Map<string, string[]>): Map<string, string[]> {
-  const cycleMembers = new Map<string, string[]>();
-  const MAX_CYCLE_LEN = 5;
-  const MAX_CYCLES = 20;
-  const cycleSet = new Set<string>();
-  const cycles: string[][] = [];
-  const visited = new Set<string>();
-
-  for (const startNode of nodes) {
-    if (visited.has(startNode) || cycles.length >= MAX_CYCLES) continue;
-    fileDfsComponent(startNode, adj, visited, MAX_CYCLE_LEN, cycleSet, cycles, MAX_CYCLES);
-  }
-
-  // Build membership map from detected cycles
+/** Build a membership map from detected cycles: node → peer nodes in its cycles. */
+function buildCycleMembershipMap(cycles: string[][]): Map<string, string[]> {
+  const members = new Map<string, string[]>();
   for (const cycle of cycles) {
     for (const node of cycle) {
-      const existing = cycleMembers.get(node) || [];
+      const existing = members.get(node) || [];
       for (const peer of cycle) {
         if (peer !== node && !existing.includes(peer)) existing.push(peer);
       }
-      cycleMembers.set(node, existing);
+      members.set(node, existing);
     }
   }
-
-  return cycleMembers;
+  return members;
 }
 
-function fileDfsComponent(
-  startNode: string,
-  adj: Map<string, string[]>,
-  visited: Set<string>,
-  maxCycleLen: number,
-  cycleSet: Set<string>,
-  cycles: string[][],
-  maxCycles: number,
-): void {
+function detectFileCycles(nodes: string[], adj: Map<string, string[]>): Map<string, string[]> {
+  const collector: FileCycleCollector = {
+    cycleSet: new Set<string>(),
+    cycles: [],
+    maxLen: 5,
+  };
+  const visited = new Set<string>();
+  const ctx: FileDfsContext = { adj, collector, maxCycles: 20, visited };
+
+  for (const startNode of nodes) {
+    if (visited.has(startNode) || collector.cycles.length >= 20) continue;
+    fileDfsComponent(startNode, ctx);
+  }
+
+  return buildCycleMembershipMap(collector.cycles);
+}
+
+type FileCycleCollector = {
+  maxLen: number;
+  cycleSet: Set<string>;
+  cycles: string[][];
+};
+
+/** Try to record a file-level cycle from the current DFS path. */
+function tryRecordFileCycle(neighbor: string, path: string[], collector: FileCycleCollector): void {
+  const cycleStart = path.indexOf(neighbor);
+  if (cycleStart < 0) return;
+  const cycle = path.slice(cycleStart);
+  if (cycle.length > collector.maxLen) return;
+  const normalized = fileNormalizeCycle(cycle);
+  const key = normalized.join(" -> ");
+  if (collector.cycleSet.has(key)) return;
+  collector.cycleSet.add(key);
+  collector.cycles.push(normalized);
+}
+
+type FileDfsContext = {
+  adj: Map<string, string[]>;
+  visited: Set<string>;
+  collector: FileCycleCollector;
+  maxCycles: number;
+};
+
+function fileDfsComponent(startNode: string, ctx: FileDfsContext): void {
   type Frame = { node: string; neighborIdx: number };
 
+  const { adj, visited, collector, maxCycles } = ctx;
   const inStack = new Set<string>();
   const path: string[] = [];
-  const callStack: Frame[] = [{ node: startNode, neighborIdx: 0 }];
+  const callStack: Frame[] = [{ neighborIdx: 0, node: startNode }];
   visited.add(startNode);
   inStack.add(startNode);
   path.push(startNode);
 
-  while (callStack.length > 0 && cycles.length < maxCycles) {
+  while (callStack.length > 0 && collector.cycles.length < maxCycles) {
     const frame = callStack[callStack.length - 1];
     const neighbors = adj.get(frame.node) || [];
 
@@ -214,24 +238,12 @@ function fileDfsComponent(
     frame.neighborIdx++;
 
     if (inStack.has(neighbor)) {
-      // Found a cycle — record it
-      const cycleStart = path.indexOf(neighbor);
-      if (cycleStart >= 0) {
-        const cycle = path.slice(cycleStart);
-        if (cycle.length <= maxCycleLen) {
-          const normalized = fileNormalizeCycle(cycle);
-          const key = normalized.join(" -> ");
-          if (!cycleSet.has(key)) {
-            cycleSet.add(key);
-            cycles.push(normalized);
-          }
-        }
-      }
+      tryRecordFileCycle(neighbor, path, collector);
     } else if (!visited.has(neighbor)) {
       visited.add(neighbor);
       inStack.add(neighbor);
       path.push(neighbor);
-      callStack.push({ node: neighbor, neighborIdx: 0 });
+      callStack.push({ neighborIdx: 0, node: neighbor });
     }
   }
 
@@ -246,21 +258,17 @@ function fileNormalizeCycle(cycle: string[]): string[] {
   return [...cycle.slice(minIdx), ...cycle.slice(0, minIdx)];
 }
 
-// ---------------------------------------------------------------------------
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
-// ---------------------------------------------------------------------------
 
 function toEntityRow(row: Record<string, unknown>): EntityRow {
   return {
     ...(row as unknown as EntityRow),
-    is_exported: Boolean(row["is_exported"]),
-    is_default_export: Boolean(row["is_default_export"]),
+    is_default_export: Boolean(row.is_default_export),
+    is_exported: Boolean(row.is_exported),
   };
 }
 
-// ---------------------------------------------------------------------------
 // KgQuery
-// ---------------------------------------------------------------------------
 
 export class KgQuery {
   private readonly db: Database.Database;
@@ -277,8 +285,8 @@ export class KgQuery {
   private readonly stmtSearch: Database.Statement;
 
   // ---- Dead code ----
-  private readonly stmtDeadCode: Database.Statement;
-  private readonly stmtDeadCodeIncludeTests: Database.Statement;
+  private stmtDeadCode!: Database.Statement;
+  private stmtDeadCodeIncludeTests!: Database.Statement;
 
   // ---- Ancestry ----
   private readonly stmtGetAncestors: Database.Statement;
@@ -287,27 +295,22 @@ export class KgQuery {
   private readonly stmtGetAdjacencyList: Database.Statement;
 
   // ---- File stats ----
-  private readonly stmtFileEntityCount: Database.Statement;
-  private readonly stmtFileExportCount: Database.Statement;
-  private readonly stmtFileDeadCodeCount: Database.Statement;
-  private readonly stmtAllFilesWithStats: Database.Statement;
+  private stmtFileEntityCount!: Database.Statement;
+  private stmtFileExportCount!: Database.Statement;
+  private stmtFileDeadCodeCount!: Database.Statement;
+  private stmtAllFilesWithStats!: Database.Statement;
 
   // ---- File metric statements ----
-  private readonly stmtGetFileInDegree: Database.Statement;
-  private readonly stmtGetFileOutDegree: Database.Statement;
-  private readonly stmtGetAllInDegrees: Database.Statement;
-  private readonly stmtGetAllOutDegrees: Database.Statement;
+  private stmtGetFileInDegree!: Database.Statement;
+  private stmtGetFileOutDegree!: Database.Statement;
+  private stmtGetAllInDegrees!: Database.Statement;
+  private stmtGetAllOutDegrees!: Database.Statement;
   private readonly stmtGetFileAdjacencyList: Database.Statement;
   private readonly stmtGetFileIdByPath: Database.Statement;
-  private readonly stmtGetFileById: Database.Statement;
   private readonly stmtGetKgFreshness: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
-
-    // ------------------------------------------------------------------
-    // Callers: entities that reference entityId via dependency edge types
-    // ------------------------------------------------------------------
     this.stmtGetCallers = db.prepare(`
       SELECT ent.entity_id, ent.file_id, ent.name, ent.qualified_name, ent.kind,
              ed.edge_type, ed.confidence
@@ -316,10 +319,6 @@ export class KgQuery {
       WHERE ed.target_entity_id = ?
         AND ed.edge_type IN ('calls', 'type-references', 'extends', 'implements')
     `);
-
-    // ------------------------------------------------------------------
-    // Callees: entities that entityId references via dependency edge types
-    // ------------------------------------------------------------------
     this.stmtGetCallees = db.prepare(`
       SELECT ent.entity_id, ent.file_id, ent.name, ent.qualified_name, ent.kind,
              ed.edge_type, ed.confidence
@@ -328,27 +327,36 @@ export class KgQuery {
       WHERE ed.source_entity_id = ?
         AND ed.edge_type IN ('calls', 'type-references', 'extends', 'implements')
     `);
-
-    // ------------------------------------------------------------------
-    // FTS5 search — rank is a special column provided by FTS5 (BM25)
-    // snippet() requires the FTS table name and column index.
-    // column 0 = name (index 0 in the FTS virtual table)
-    // ------------------------------------------------------------------
     this.stmtSearch = db.prepare(`
       SELECT e.entity_id, e.file_id, e.name, e.qualified_name, e.kind,
              fts.rank,
-             snippet(entity_fts, 0, '<b>', '</b>', '…', 10) AS snippet
+             snippet(entity_fts, 0, '<b>', '</b>', '...', 10) AS snippet
       FROM entity_fts fts
       JOIN entities e ON e.entity_id = fts.rowid
       WHERE entity_fts MATCH ?
       ORDER BY fts.rank
       LIMIT ?
     `);
+    this.stmtGetAncestors = db.prepare(`
+      SELECT ent.entity_id, ent.file_id, ent.name, ent.qualified_name,
+             ent.kind, ent.line_start, ent.line_end,
+             ent.is_exported, ent.is_default_export, ent.signature, ent.metadata
+      FROM edges ed
+      JOIN entities ent ON ent.entity_id = ed.source_entity_id
+      WHERE ed.target_entity_id = ? AND ed.edge_type = 'contains'
+    `);
+    this.stmtGetAdjacencyList = db.prepare(`SELECT source_entity_id, target_entity_id FROM edges`);
+    this.stmtGetFileAdjacencyList = db.prepare(
+      `SELECT source_file_id, target_file_id FROM file_edges`,
+    );
+    this.stmtGetFileIdByPath = db.prepare(`SELECT file_id, layer FROM files WHERE path = ?`);
+    this.stmtGetKgFreshness = db.prepare(`SELECT MIN(last_indexed_at) AS min_ts FROM files`);
+    this.prepareDeadCodeStatements(db);
+    this.prepareFileStatStatements(db);
+    this.prepareFileDegreeStatements(db);
+  }
 
-    // ------------------------------------------------------------------
-    // Dead code — unexported, not a file/property, no incoming dep edges
-    // Excludes test/spec files by default.
-    // ------------------------------------------------------------------
+  private prepareDeadCodeStatements(db: Database.Database): void {
     this.stmtDeadCode = db.prepare(`
       SELECT e.entity_id, e.file_id, e.name, e.qualified_name, e.kind,
              1 AS is_unreferenced
@@ -366,8 +374,6 @@ export class KgQuery {
             AND (f.path LIKE '%test%' OR f.path LIKE '%spec%')
         )
     `);
-
-    // Same but includes test files
     this.stmtDeadCodeIncludeTests = db.prepare(`
       SELECT e.entity_id, e.file_id, e.name, e.qualified_name, e.kind,
              1 AS is_unreferenced
@@ -380,39 +386,13 @@ export class KgQuery {
             AND ed.edge_type IN ('calls', 'type-references', 'extends', 'implements')
         )
     `);
+  }
 
-    // ------------------------------------------------------------------
-    // Ancestors: entities that contain entityId (via 'contains' edges
-    // where entityId is the target), joined to get the parent entity row.
-    // ------------------------------------------------------------------
-    this.stmtGetAncestors = db.prepare(`
-      SELECT ent.entity_id, ent.file_id, ent.name, ent.qualified_name,
-             ent.kind, ent.line_start, ent.line_end,
-             ent.is_exported, ent.is_default_export, ent.signature, ent.metadata
-      FROM edges ed
-      JOIN entities ent ON ent.entity_id = ed.source_entity_id
-      WHERE ed.target_entity_id = ?
-        AND ed.edge_type = 'contains'
-    `);
-
-    // ------------------------------------------------------------------
-    // Adjacency list — all edges for community detection (all types)
-    // ------------------------------------------------------------------
-    this.stmtGetAdjacencyList = db.prepare(`
-      SELECT source_entity_id, target_entity_id FROM edges
-    `);
-
-    // ------------------------------------------------------------------
-    // File stats helpers
-    // ------------------------------------------------------------------
-    this.stmtFileEntityCount = db.prepare(`
-      SELECT COUNT(*) AS n FROM entities WHERE file_id = ?
-    `);
-
-    this.stmtFileExportCount = db.prepare(`
-      SELECT COUNT(*) AS n FROM entities WHERE file_id = ? AND is_exported = 1
-    `);
-
+  private prepareFileStatStatements(db: Database.Database): void {
+    this.stmtFileEntityCount = db.prepare(`SELECT COUNT(*) AS n FROM entities WHERE file_id = ?`);
+    this.stmtFileExportCount = db.prepare(
+      `SELECT COUNT(*) AS n FROM entities WHERE file_id = ? AND is_exported = 1`,
+    );
     this.stmtFileDeadCodeCount = db.prepare(`
       SELECT COUNT(*) AS n
       FROM entities e
@@ -425,56 +405,32 @@ export class KgQuery {
             AND ed.edge_type IN ('calls', 'type-references', 'extends', 'implements')
         )
     `);
-
     this.stmtAllFilesWithStats = db.prepare(`
       SELECT f.*,
-             COUNT(DISTINCT e.entity_id)              AS entity_count,
+             COUNT(DISTINCT e.entity_id) AS entity_count,
              SUM(CASE WHEN e.is_exported = 1 THEN 1 ELSE 0 END) AS export_count
       FROM files f
       LEFT JOIN entities e ON e.file_id = f.file_id
       GROUP BY f.file_id
     `);
-
-    // ------------------------------------------------------------------
-    // File metric statements
-    // ------------------------------------------------------------------
-    this.stmtGetFileInDegree = db.prepare(`
-      SELECT COUNT(*) AS n FROM file_edges WHERE target_file_id = ?
-    `);
-
-    this.stmtGetFileOutDegree = db.prepare(`
-      SELECT COUNT(*) AS n FROM file_edges WHERE source_file_id = ?
-    `);
-
-    // Aggregate all degrees in two GROUP BY queries (simpler and indexed)
-    this.stmtGetAllInDegrees = db.prepare(`
-      SELECT target_file_id AS file_id, COUNT(*) AS n FROM file_edges GROUP BY target_file_id
-    `);
-
-    this.stmtGetAllOutDegrees = db.prepare(`
-      SELECT source_file_id AS file_id, COUNT(*) AS n FROM file_edges GROUP BY source_file_id
-    `);
-
-    this.stmtGetFileAdjacencyList = db.prepare(`
-      SELECT source_file_id, target_file_id FROM file_edges
-    `);
-
-    this.stmtGetFileIdByPath = db.prepare(`
-      SELECT file_id, layer FROM files WHERE path = ?
-    `);
-
-    this.stmtGetFileById = db.prepare(`
-      SELECT file_id, path, layer FROM files WHERE file_id = ?
-    `);
-
-    this.stmtGetKgFreshness = db.prepare(`
-      SELECT MIN(last_indexed_at) AS min_ts FROM files
-    `);
   }
 
-  // --------------------------------------------------------------------------
+  private prepareFileDegreeStatements(db: Database.Database): void {
+    this.stmtGetFileInDegree = db.prepare(
+      `SELECT COUNT(*) AS n FROM file_edges WHERE target_file_id = ?`,
+    );
+    this.stmtGetFileOutDegree = db.prepare(
+      `SELECT COUNT(*) AS n FROM file_edges WHERE source_file_id = ?`,
+    );
+    this.stmtGetAllInDegrees = db.prepare(
+      `SELECT target_file_id AS file_id, COUNT(*) AS n FROM file_edges GROUP BY target_file_id`,
+    );
+    this.stmtGetAllOutDegrees = db.prepare(
+      `SELECT source_file_id AS file_id, COUNT(*) AS n FROM file_edges GROUP BY source_file_id`,
+    );
+  }
+
   // Callers / Callees
-  // --------------------------------------------------------------------------
 
   /**
    * Return all entities that call / reference / extend / implement entityId.
@@ -490,9 +446,7 @@ export class KgQuery {
     return this.stmtGetCallees.all(entityId) as CallerResult[];
   }
 
-  // --------------------------------------------------------------------------
   // Blast Radius (Recursive CTE)
-  // --------------------------------------------------------------------------
 
   /**
    * Return all entities that depend on the given seed entity IDs within
@@ -533,9 +487,7 @@ export class KgQuery {
     return stmt.all(params) as BlastRadiusResult[];
   }
 
-  // --------------------------------------------------------------------------
   // File Blast Radius (Recursive CTE on file_edges)
-  // --------------------------------------------------------------------------
 
   /**
    * Return all files that depend on the given seed file ID within `maxDepth`
@@ -568,9 +520,7 @@ export class KgQuery {
     return stmt.all(fileId, maxDepth) as FileBlastRadiusResult[];
   }
 
-  // --------------------------------------------------------------------------
   // FTS5 Search
-  // --------------------------------------------------------------------------
 
   /**
    * Full-text search over entity names, qualified names, and signatures.
@@ -593,9 +543,7 @@ export class KgQuery {
     }
   }
 
-  // --------------------------------------------------------------------------
   // Dead Code Detection
-  // --------------------------------------------------------------------------
 
   /**
    * Find unexported entities with no incoming dependency edges.
@@ -606,18 +554,16 @@ export class KgQuery {
     const stmt = options.includeTests ? this.stmtDeadCodeIncludeTests : this.stmtDeadCode;
     const rows = stmt.all() as Array<Record<string, unknown>>;
     return rows.map((row) => ({
-      entity_id: row["entity_id"] as number,
-      file_id: row["file_id"] as number,
-      name: row["name"] as string,
-      qualified_name: row["qualified_name"] as string,
-      kind: row["kind"] as DeadCodeResult["kind"],
-      is_unreferenced: Boolean(row["is_unreferenced"]),
+      entity_id: row.entity_id as number,
+      file_id: row.file_id as number,
+      is_unreferenced: Boolean(row.is_unreferenced),
+      kind: row.kind as DeadCodeResult["kind"],
+      name: row.name as string,
+      qualified_name: row.qualified_name as string,
     }));
   }
 
-  // --------------------------------------------------------------------------
   // Ancestry
-  // --------------------------------------------------------------------------
 
   /**
    * Return entities that contain entityId (i.e. parent scopes — file, class,
@@ -628,9 +574,7 @@ export class KgQuery {
     return rows.map(toEntityRow);
   }
 
-  // --------------------------------------------------------------------------
   // Adjacency List (Community Detection Prep)
-  // --------------------------------------------------------------------------
 
   /**
    * Export the full edge set as an adjacency list for external community
@@ -653,9 +597,7 @@ export class KgQuery {
     return map;
   }
 
-  // --------------------------------------------------------------------------
   // File Stats
-  // --------------------------------------------------------------------------
 
   /**
    * Return entity count, export count, and dead-code count for a single file.
@@ -668,19 +610,19 @@ export class KgQuery {
     const entityCount = (this.stmtFileEntityCount.get(fileId) as { n: number }).n;
     const exportCount = (this.stmtFileExportCount.get(fileId) as { n: number }).n;
     const deadCodeCount = (this.stmtFileDeadCodeCount.get(fileId) as { n: number }).n;
-    return { entityCount, exportCount, deadCodeCount };
+    return { deadCodeCount, entityCount, exportCount };
   }
 
   /**
    * Return all files with their aggregate entity and export counts.
    */
   getAllFilesWithStats(): Array<FileRow & { entity_count: number; export_count: number }> {
-    return this.stmtAllFilesWithStats.all() as Array<FileRow & { entity_count: number; export_count: number }>;
+    return this.stmtAllFilesWithStats.all() as Array<
+      FileRow & { entity_count: number; export_count: number }
+    >;
   }
 
-  // --------------------------------------------------------------------------
   // File Metric Methods
-  // --------------------------------------------------------------------------
 
   /**
    * Return in-degree and out-degree for a single file by file_id.
@@ -772,15 +714,15 @@ export class KgQuery {
     const impact_score = computeImpactScore(in_degree, layer_violations.length, isChanged, layer);
 
     return {
-      in_degree,
-      out_degree,
-      is_hub,
-      in_cycle,
       cycle_peers,
+      impact_score,
+      in_cycle,
+      in_degree,
+      is_hub,
       layer,
       layer_violation_count: layer_violations.length,
       layer_violations,
-      impact_score,
+      out_degree,
     };
   }
 
@@ -801,13 +743,13 @@ export class KgQuery {
       epochMs = row.min_ts;
     } else if (typeof row.min_ts === "string") {
       const asNumber = Number(row.min_ts);
-      if (!isNaN(asNumber) && row.min_ts.trim() !== "") {
+      if (!Number.isNaN(asNumber) && row.min_ts.trim() !== "") {
         // Numeric string (e.g. "1712345678000")
         epochMs = asNumber;
       } else {
         // ISO string (e.g. "2024-04-05T12:34:56.000Z")
         epochMs = Date.parse(row.min_ts);
-        if (isNaN(epochMs)) return null;
+        if (Number.isNaN(epochMs)) return null;
       }
     } else {
       return null;
@@ -828,18 +770,18 @@ export class KgQuery {
     nodes: Array<{ path: string; layer: string; file_id: number }>;
     edges: Array<{ source: string; target: string }>;
   } {
-    if (filePaths.length === 0) return { nodes: [], edges: [] };
+    if (filePaths.length === 0) return { edges: [], nodes: [] };
 
     // Resolve seed paths to file_ids — keep path alongside each resolved row
     const seedEntries: Array<{ path: string; file_id: number; layer: string }> = [];
     for (const p of filePaths) {
       const row = this.stmtGetFileIdByPath.get(p) as { file_id: number; layer: string } | undefined;
       if (row) {
-        seedEntries.push({ path: p, file_id: row.file_id, layer: row.layer });
+        seedEntries.push({ file_id: row.file_id, layer: row.layer, path: p });
       }
     }
 
-    if (seedEntries.length === 0) return { nodes: [], edges: [] };
+    if (seedEntries.length === 0) return { edges: [], nodes: [] };
 
     // Build a dynamic IN clause for the seed file_ids
     const seedIds = seedEntries.map((e) => e.file_id);
@@ -875,14 +817,14 @@ export class KgQuery {
 
     for (const row of edgeRows) {
       nodeMap.set(row.source_fid, {
-        path: row.source_path,
-        layer: row.source_layer,
         file_id: row.source_fid,
+        layer: row.source_layer,
+        path: row.source_path,
       });
       nodeMap.set(row.target_fid, {
-        path: row.target_path,
-        layer: row.target_layer,
         file_id: row.target_fid,
+        layer: row.target_layer,
+        path: row.target_path,
       });
       edges.push({ source: row.source_path, target: row.target_path });
     }
@@ -891,16 +833,16 @@ export class KgQuery {
     for (const entry of seedEntries) {
       if (!nodeMap.has(entry.file_id)) {
         nodeMap.set(entry.file_id, {
-          path: entry.path,
-          layer: entry.layer,
           file_id: entry.file_id,
+          layer: entry.layer,
+          path: entry.path,
         });
       }
     }
 
     return {
-      nodes: [...nodeMap.values()],
       edges,
+      nodes: [...nodeMap.values()],
     };
   }
 }

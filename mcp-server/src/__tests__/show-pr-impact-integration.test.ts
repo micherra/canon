@@ -18,14 +18,12 @@
  *   - Bridge argument contract: show_pr_impact called with empty arguments object
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Module-level mocks — set up before importing the module under test
-// ---------------------------------------------------------------------------
 
 vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
@@ -55,57 +53,54 @@ vi.mock("../tools/pr-review-data.ts", () => ({
 import { existsSync } from "node:fs";
 import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
 import { KgQuery } from "../graph/kg-query.ts";
+import { initDatabase } from "../graph/kg-schema.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
-// ---------------------------------------------------------------------------
-// Shared fixtures
-// ---------------------------------------------------------------------------
-
 const SAMPLE_SCORE = {
-  rules: { passed: 2, total: 3 },
-  opinions: { passed: 1, total: 2 },
   conventions: { passed: 3, total: 3 },
+  opinions: { passed: 1, total: 2 },
+  rules: { passed: 2, total: 3 },
 };
 
 const SAMPLE_PREP = {
+  blast_radius: [],
+  diff_command: "git diff main",
   files: [],
   impact_files: [],
+  incremental: false,
   layers: [],
+  narrative: "No changed files.",
+  net_new_files: 0,
   total_files: 0,
   total_violations: 0,
-  net_new_files: 0,
-  incremental: false,
-  diff_command: "git diff main",
-  narrative: "No changed files.",
-  blast_radius: [],
 };
 
 function makeReview(
   overrides: Partial<{
     files: string[];
-    violations: Array<{ principle_id: string; severity: string; file_path?: string; message?: string }>;
+    violations: Array<{
+      principle_id: string;
+      severity: string;
+      file_path?: string;
+      message?: string;
+    }>;
     verdict: "BLOCKING" | "WARNING" | "CLEAN";
   }> = {},
 ) {
   return {
+    branch: "feat/test",
+    files: overrides.files ?? ["src/a.ts"],
+    honored: [],
+    pr_number: 1,
     review_id: `rev_test_${Math.random().toString(36).slice(2)}`,
+    score: SAMPLE_SCORE,
     timestamp: new Date().toISOString(),
     verdict: overrides.verdict ?? ("WARNING" as const),
-    branch: "feat/test",
-    pr_number: 1,
-    files: overrides.files ?? ["src/a.ts"],
     violations: overrides.violations ?? [],
-    honored: [],
-    score: SAMPLE_SCORE,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
   let tmpDir: string;
@@ -121,15 +116,13 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
-  // -------------------------------------------------------------------------
   // Gap: risk_score = blast_radius_count × max_severity_weight (with KG)
   // The existing ranking test only uses the no-KG path (violation sum).
   // This test exercises the multiplication formula directly.
-  // -------------------------------------------------------------------------
 
   it("computes risk_score as blast_radius_count × max_severity_weight when KG present", async () => {
     const store = new DriftStore(tmpDir);
@@ -137,8 +130,8 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
       makeReview({
         files: ["src/core.ts", "src/utils.ts"],
         violations: [
-          { principle_id: "p1", severity: "rule", file_path: "src/core.ts" }, // weight 3
-          { principle_id: "p2", severity: "convention", file_path: "src/utils.ts" }, // weight 1
+          { file_path: "src/core.ts", principle_id: "p1", severity: "rule" }, // weight 3
+          { file_path: "src/utils.ts", principle_id: "p2", severity: "convention" }, // weight 1
         ],
       }),
     );
@@ -147,20 +140,56 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue({
-      seed_entities: ["core", "utils"],
-      total_affected: 10,
-      affected_files: 5,
-      by_depth: { 1: 5, 2: 5 },
       affected: [
         // 4 entities trace back to src/core.ts
-        { entity_name: "e1", entity_kind: "function", file_path: "src/core.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "e2", entity_kind: "function", file_path: "src/core.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "e3", entity_kind: "function", file_path: "src/core.ts", depth: 2, edge_type: "dependency" },
-        { entity_name: "e4", entity_kind: "function", file_path: "src/core.ts", depth: 2, edge_type: "dependency" },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e1",
+          file_path: "src/core.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e2",
+          file_path: "src/core.ts",
+        },
+        {
+          depth: 2,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e3",
+          file_path: "src/core.ts",
+        },
+        {
+          depth: 2,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e4",
+          file_path: "src/core.ts",
+        },
         // 2 entities trace back to src/utils.ts
-        { entity_name: "e5", entity_kind: "class", file_path: "src/utils.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "e6", entity_kind: "class", file_path: "src/utils.ts", depth: 2, edge_type: "dependency" },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "class",
+          entity_name: "e5",
+          file_path: "src/utils.ts",
+        },
+        {
+          depth: 2,
+          edge_type: "dependency",
+          entity_kind: "class",
+          entity_name: "e6",
+          file_path: "src/utils.ts",
+        },
       ],
+      affected_files: 5,
+      by_depth: { 1: 5, 2: 5 },
+      seed_entities: ["core", "utils"],
+      total_affected: 10,
     });
 
     const result = await showPrImpact(tmpDir);
@@ -181,10 +210,8 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
     expect(result.hotspots[1].file).toBe("src/utils.ts");
   });
 
-  // -------------------------------------------------------------------------
   // Gap: file with blast radius but no violations → risk_score = 0
   // (maxSeverityWeight = 0, so blast_count × 0 = 0)
-  // -------------------------------------------------------------------------
 
   it("assigns risk_score=0 to clean files even when they have blast radius", async () => {
     const store = new DriftStore(tmpDir);
@@ -199,15 +226,33 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue({
-      seed_entities: ["clean"],
-      total_affected: 3,
+      affected: [
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "x",
+          file_path: "src/clean.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "y",
+          file_path: "src/clean.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "z",
+          file_path: "src/clean.ts",
+        },
+      ],
       affected_files: 2,
       by_depth: { 1: 3 },
-      affected: [
-        { entity_name: "x", entity_kind: "function", file_path: "src/clean.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "y", entity_kind: "function", file_path: "src/clean.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "z", entity_kind: "function", file_path: "src/clean.ts", depth: 1, edge_type: "dependency" },
-      ],
+      seed_entities: ["clean"],
+      total_affected: 3,
     });
 
     const result = await showPrImpact(tmpDir);
@@ -219,9 +264,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
     expect(hotspot!.risk_score).toBe(0);
   });
 
-  // -------------------------------------------------------------------------
   // Gap: unknown severity falls back to weight 1
-  // -------------------------------------------------------------------------
 
   it("treats unknown severity as weight 1 in risk_score calculation", async () => {
     const store = new DriftStore(tmpDir);
@@ -229,8 +272,8 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
       makeReview({
         files: ["src/a.ts", "src/b.ts"],
         violations: [
-          { principle_id: "p1", severity: "unknown-severity", file_path: "src/a.ts" },
-          { principle_id: "p2", severity: "convention", file_path: "src/b.ts" },
+          { file_path: "src/a.ts", principle_id: "p1", severity: "unknown-severity" },
+          { file_path: "src/b.ts", principle_id: "p2", severity: "convention" },
         ],
       }),
     );
@@ -248,10 +291,8 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
     expect(bHotspot!.risk_score).toBe(1); // 1 convention × weight 1
   });
 
-  // -------------------------------------------------------------------------
   // Gap: multiple violations on same file — max severity is used, not sum
   // (blast radius path: blast_count × MAX severity, not sum)
-  // -------------------------------------------------------------------------
 
   it("uses max severity weight (not sum) when KG blast radius is present", async () => {
     const store = new DriftStore(tmpDir);
@@ -259,9 +300,9 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
       makeReview({
         files: ["src/mixed.ts"],
         violations: [
-          { principle_id: "p1", severity: "convention", file_path: "src/mixed.ts" }, // weight 1
-          { principle_id: "p2", severity: "convention", file_path: "src/mixed.ts" }, // weight 1
-          { principle_id: "p3", severity: "rule", file_path: "src/mixed.ts" }, // weight 3
+          { file_path: "src/mixed.ts", principle_id: "p1", severity: "convention" }, // weight 1
+          { file_path: "src/mixed.ts", principle_id: "p2", severity: "convention" }, // weight 1
+          { file_path: "src/mixed.ts", principle_id: "p3", severity: "rule" }, // weight 3
         ],
       }),
     );
@@ -270,14 +311,26 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue({
-      seed_entities: ["mixed"],
-      total_affected: 2,
+      affected: [
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "x",
+          file_path: "src/mixed.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "y",
+          file_path: "src/mixed.ts",
+        },
+      ],
       affected_files: 1,
       by_depth: { 1: 2 },
-      affected: [
-        { entity_name: "x", entity_kind: "function", file_path: "src/mixed.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "y", entity_kind: "function", file_path: "src/mixed.ts", depth: 1, edge_type: "dependency" },
-      ],
+      seed_entities: ["mixed"],
+      total_affected: 2,
     });
 
     const result = await showPrImpact(tmpDir);
@@ -289,9 +342,7 @@ describe("showPrImpact — hotspot risk scoring (blast radius path)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Subgraph building gaps
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — subgraph building gaps", () => {
   let tmpDir: string;
@@ -304,30 +355,37 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(analyzeBlastRadius).mockReset();
     vi.mocked(KgQuery).mockReset();
     // Default KgQuery mock: getSubgraph returns empty
-    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockReturnValue({ nodes: [], edges: [] });
+    (
+      KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }
+    ).prototype.getSubgraph = vi.fn().mockReturnValue({ edges: [], nodes: [] });
     vi.mocked(getPrReviewData).mockReset();
     vi.mocked(getPrReviewData).mockResolvedValue(SAMPLE_PREP as never);
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
   // Helper to configure KgQuery to return the given nodes/edges for paths in the inclusion set
-  function mockKgSubgraph(nodes: Array<{ path: string; layer: string }>, edges: Array<{ source: string; target: string }> = []) {
-    (KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }).prototype.getSubgraph = vi.fn().mockImplementation((paths: string[]) => {
+  function mockKgSubgraph(
+    nodes: Array<{ path: string; layer: string }>,
+    edges: Array<{ source: string; target: string }> = [],
+  ) {
+    (
+      KgQuery as unknown as { prototype: { getSubgraph: ReturnType<typeof vi.fn> } }
+    ).prototype.getSubgraph = vi.fn().mockImplementation((paths: string[]) => {
       const pathSet = new Set(paths);
-      const filteredNodes = nodes.filter((n) => pathSet.has(n.path)).map((n) => ({ ...n, file_id: 1 }));
+      const filteredNodes = nodes
+        .filter((n) => pathSet.has(n.path))
+        .map((n) => ({ ...n, file_id: 1 }));
       const nodeIds = new Set(filteredNodes.map((n) => n.path));
       const filteredEdges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
-      return { nodes: filteredNodes, edges: filteredEdges };
+      return { edges: filteredEdges, nodes: filteredNodes };
     });
   }
 
-  // -------------------------------------------------------------------------
   // Gap: unknown layer name → #888888 color fallback in layers array
-  // -------------------------------------------------------------------------
 
   it("assigns #888888 color to unknown layer names in subgraph layers", async () => {
     const store = new DriftStore(tmpDir);
@@ -342,8 +400,14 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
-    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
-    mockKgSubgraph([{ path: "src/exotic.ts", layer: "custom-exotic-layer" }]);
+    vi.mocked(analyzeBlastRadius).mockReturnValue({
+      affected: [],
+      affected_files: 0,
+      by_depth: {},
+      seed_entities: [],
+      total_affected: 0,
+    });
+    mockKgSubgraph([{ layer: "custom-exotic-layer", path: "src/exotic.ts" }]);
 
     const result = await showPrImpact(tmpDir);
 
@@ -357,9 +421,7 @@ describe("showPrImpact — subgraph building gaps", () => {
     expect(layer!.color).toBe("#888888");
   });
 
-  // -------------------------------------------------------------------------
   // Gap: known layer names get their correct palette color
-  // -------------------------------------------------------------------------
 
   it("uses correct palette colors for known layer names", async () => {
     const store = new DriftStore(tmpDir);
@@ -373,10 +435,16 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
-    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    vi.mocked(analyzeBlastRadius).mockReturnValue({
+      affected: [],
+      affected_files: 0,
+      by_depth: {},
+      seed_entities: [],
+      total_affected: 0,
+    });
     mockKgSubgraph([
-      { path: "src/tools/foo.ts", layer: "tools" },
-      { path: "src/utils/bar.ts", layer: "utils" },
+      { layer: "tools", path: "src/tools/foo.ts" },
+      { layer: "utils", path: "src/utils/bar.ts" },
     ]);
 
     const result = await showPrImpact(tmpDir);
@@ -388,9 +456,7 @@ describe("showPrImpact — subgraph building gaps", () => {
     expect(utilsLayer!.color).toBe("#f14e7c");
   });
 
-  // -------------------------------------------------------------------------
   // Gap: blast radius nodes are NOT marked changed, only review.files are
-  // -------------------------------------------------------------------------
 
   it("marks only changed files as changed=true, blast radius nodes as changed=false", async () => {
     const store = new DriftStore(tmpDir);
@@ -405,23 +471,23 @@ describe("showPrImpact — subgraph building gaps", () => {
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue({
-      seed_entities: [],
-      total_affected: 1,
-      affected_files: 1,
-      by_depth: { 1: 1 },
       affected: [
         {
-          entity_name: "dep",
-          entity_kind: "function",
-          file_path: "src/affected.ts",
           depth: 1,
           edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "dep",
+          file_path: "src/affected.ts",
         },
       ],
+      affected_files: 1,
+      by_depth: { 1: 1 },
+      seed_entities: [],
+      total_affected: 1,
     });
     mockKgSubgraph([
-      { path: "src/changed.ts", layer: "tools" },
-      { path: "src/affected.ts", layer: "tools" },
+      { layer: "tools", path: "src/changed.ts" },
+      { layer: "tools", path: "src/affected.ts" },
     ]);
 
     const result = await showPrImpact(tmpDir);
@@ -433,9 +499,7 @@ describe("showPrImpact — subgraph building gaps", () => {
     expect(affectedNode!.changed).toBe(false);
   });
 
-  // -------------------------------------------------------------------------
   // Gap: edge where only one endpoint is in the subgraph is excluded
-  // -------------------------------------------------------------------------
 
   it("excludes edges where one endpoint is outside the subgraph", async () => {
     const store = new DriftStore(tmpDir);
@@ -449,11 +513,17 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
-    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    vi.mocked(analyzeBlastRadius).mockReturnValue({
+      affected: [],
+      affected_files: 0,
+      by_depth: {},
+      seed_entities: [],
+      total_affected: 0,
+    });
     // KgQuery returns src/a.ts in the subgraph; src/b.ts is not in paths so it's excluded
     mockKgSubgraph(
       [
-        { path: "src/a.ts", layer: "tools" },
+        { layer: "tools", path: "src/a.ts" },
         // src/b.ts deliberately omitted — it's not in the review files or blast radius
       ],
       [
@@ -473,9 +543,7 @@ describe("showPrImpact — subgraph building gaps", () => {
     expect(edgeToB).toBeUndefined();
   });
 
-  // -------------------------------------------------------------------------
   // Gap: subgraph with no nodes in KG matching review files
-  // -------------------------------------------------------------------------
 
   it("returns empty subgraph when no KG nodes match review files", async () => {
     const store = new DriftStore(tmpDir);
@@ -496,9 +564,7 @@ describe("showPrImpact — subgraph building gaps", () => {
     expect(result.subgraph.layers).toHaveLength(0);
   });
 
-  // -------------------------------------------------------------------------
   // Gap: layer file_count reflects number of nodes per layer
-  // -------------------------------------------------------------------------
 
   it("counts file_count per layer correctly in subgraph layers", async () => {
     const store = new DriftStore(tmpDir);
@@ -512,11 +578,17 @@ describe("showPrImpact — subgraph building gaps", () => {
     vi.mocked(existsSync).mockReturnValue(true);
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
-    vi.mocked(analyzeBlastRadius).mockReturnValue({ seed_entities: [], total_affected: 0, affected_files: 0, by_depth: {}, affected: [] });
+    vi.mocked(analyzeBlastRadius).mockReturnValue({
+      affected: [],
+      affected_files: 0,
+      by_depth: {},
+      seed_entities: [],
+      total_affected: 0,
+    });
     mockKgSubgraph([
-      { path: "src/a.ts", layer: "tools" },
-      { path: "src/b.ts", layer: "tools" },
-      { path: "src/c.ts", layer: "utils" },
+      { layer: "tools", path: "src/a.ts" },
+      { layer: "tools", path: "src/b.ts" },
+      { layer: "utils", path: "src/c.ts" },
     ]);
 
     const result = await showPrImpact(tmpDir);
@@ -529,9 +601,7 @@ describe("showPrImpact — subgraph building gaps", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Multiple reviews: latest is used
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — multiple reviews", () => {
   let tmpDir: string;
@@ -547,7 +617,7 @@ describe("showPrImpact — multiple reviews", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
@@ -559,7 +629,7 @@ describe("showPrImpact — multiple reviews", () => {
       makeReview({
         files: ["src/old.ts"],
         verdict: "BLOCKING",
-        violations: [{ principle_id: "p1", severity: "rule", file_path: "src/old.ts" }],
+        violations: [{ file_path: "src/old.ts", principle_id: "p1", severity: "rule" }],
       }),
     );
 
@@ -584,9 +654,7 @@ describe("showPrImpact — multiple reviews", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Decisions field — removed from show_pr_impact output
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — decisions field is absent from output", () => {
   let tmpDir: string;
@@ -602,7 +670,7 @@ describe("showPrImpact — decisions field is absent from output", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
@@ -611,7 +679,13 @@ describe("showPrImpact — decisions field is absent from output", () => {
     await store.appendReview(
       makeReview({
         files: ["src/a.ts", "src/b.ts"],
-        violations: [{ principle_id: "functions-do-one-thing", severity: "strong-opinion", file_path: "src/a.ts" }],
+        violations: [
+          {
+            file_path: "src/a.ts",
+            principle_id: "functions-do-one-thing",
+            severity: "strong-opinion",
+          },
+        ],
       }),
     );
 
@@ -627,9 +701,7 @@ describe("showPrImpact — decisions field is absent from output", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // UnifiedPrOutput contract — shape always includes prep, review is optional
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — UnifiedPrOutput contract", () => {
   let tmpDir: string;
@@ -645,7 +717,7 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
@@ -662,9 +734,9 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
     expect(result).not.toHaveProperty("decisions");
     expect(Array.isArray(result.hotspots)).toBe(true);
     expect(result.subgraph).toMatchObject({
-      nodes: expect.any(Array),
       edges: expect.any(Array),
       layers: expect.any(Array),
+      nodes: expect.any(Array),
     });
     // review is absent when no stored review
     expect(result.review).toBeUndefined();
@@ -684,7 +756,12 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
         files: ["src/foo.ts"],
         verdict: "WARNING",
         violations: [
-          { principle_id: "deep-modules", severity: "strong-opinion", file_path: "src/foo.ts", message: "Too shallow" },
+          {
+            file_path: "src/foo.ts",
+            message: "Too shallow",
+            principle_id: "deep-modules",
+            severity: "strong-opinion",
+          },
         ],
       }),
     );
@@ -699,36 +776,36 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
 
     // review shape (consumed by VerdictStrip via bridge)
     expect(result.review).toMatchObject({
-      verdict: "WARNING",
       files: ["src/foo.ts"],
+      score: expect.objectContaining({
+        conventions: expect.any(Object),
+        opinions: expect.any(Object),
+        rules: expect.any(Object),
+      }),
+      verdict: "WARNING",
       violations: expect.arrayContaining([
         expect.objectContaining({
+          message: "Too shallow",
           principle_id: "deep-modules",
           severity: "strong-opinion",
-          message: "Too shallow",
         }),
       ]),
-      score: expect.objectContaining({
-        rules: expect.any(Object),
-        opinions: expect.any(Object),
-        conventions: expect.any(Object),
-      }),
     });
 
     // hotspots shape (consumed by HotspotList via bridge)
     expect(result.hotspots[0]).toMatchObject({
-      file: "src/foo.ts",
       blast_radius_count: expect.any(Number),
-      violation_count: expect.any(Number),
+      file: "src/foo.ts",
       risk_score: expect.any(Number),
+      violation_count: expect.any(Number),
       violations: expect.any(Array),
     });
 
     // subgraph shape (consumed by SubGraph via bridge)
     expect(result.subgraph).toMatchObject({
-      nodes: expect.any(Array),
       edges: expect.any(Array),
       layers: expect.any(Array),
+      nodes: expect.any(Array),
     });
   });
 
@@ -738,7 +815,12 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
       makeReview({
         files: ["src/foo.ts"],
         violations: [
-          { principle_id: "p1", severity: "rule", file_path: "src/foo.ts", message: "Specific reason here" },
+          {
+            file_path: "src/foo.ts",
+            message: "Specific reason here",
+            principle_id: "p1",
+            severity: "rule",
+          },
         ],
       }),
     );
@@ -755,7 +837,7 @@ describe("showPrImpact — UnifiedPrOutput contract", () => {
       makeReview({
         files: ["src/foo.ts"],
         violations: [
-          { principle_id: "p1", severity: "rule", file_path: "src/foo.ts" },
+          { file_path: "src/foo.ts", principle_id: "p1", severity: "rule" },
           // no message field
         ],
       }),

@@ -1,13 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import {
-  executeEffects,
-} from "../orchestration/effects.ts";
-import type { StateDefinition } from "../orchestration/flow-schema.ts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DriftStore } from "../drift/store.ts";
+import { executeEffects } from "../orchestration/effects.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { StateDefinition } from "../orchestration/flow-schema.ts";
 
 const SAMPLE_REVIEW = `---
 verdict: "WARNING"
@@ -45,9 +43,7 @@ principles-checked: 5
 - **Readability**: Consider extracting the order validation into a separate function
 `;
 
-// ---------------------------------------------------------------------------
 // persist_review — structured .meta.json path and legacy fallback
-// ---------------------------------------------------------------------------
 
 describe("persistReview via executeEffects — structured .meta.json path", () => {
   let tmpDir: string;
@@ -62,32 +58,38 @@ describe("persistReview via executeEffects — structured .meta.json path", () =
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("reads structured data from .meta.json when it exists", async () => {
     const meta = {
       _type: "review",
       _version: 1,
-      verdict: "BLOCKING",
-      verdict_original: "blocked",
-      violations: [{ principle_id: "secrets-never-in-code", severity: "rule", file_path: "src/auth.ts" }],
+      files: ["src/auth.ts"],
       honored: ["thin-handlers"],
       score: {
-        rules: { passed: 1, total: 2 },
-        opinions: { passed: 2, total: 3 },
         conventions: { passed: 1, total: 1 },
+        opinions: { passed: 2, total: 3 },
+        rules: { passed: 1, total: 2 },
       },
-      files: ["src/auth.ts"],
+      verdict: "BLOCKING",
+      verdict_original: "blocked",
+      violations: [
+        { file_path: "src/auth.ts", principle_id: "secrets-never-in-code", severity: "rule" },
+      ],
     };
     await writeFile(join(workspace, "reviews", "REVIEW.meta.json"), JSON.stringify(meta));
 
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir: tmpDir,
+      workspace,
+    });
 
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe("persist_review");
@@ -106,21 +108,29 @@ describe("persistReview via executeEffects — structured .meta.json path", () =
     const meta = {
       _type: "review",
       _version: 1,
+      files: [],
+      honored: ["errors-are-values"],
+      score: {
+        conventions: { passed: 0, total: 0 },
+        opinions: { passed: 1, total: 1 },
+        rules: { passed: 2, total: 2 },
+      },
       verdict: "WARNING",
       verdict_original: "approved_with_concerns",
       violations: [],
-      honored: ["errors-are-values"],
-      score: { rules: { passed: 2, total: 2 }, opinions: { passed: 1, total: 1 }, conventions: { passed: 0, total: 0 } },
-      files: [],
     };
     await writeFile(join(workspace, "reviews", "REVIEW.meta.json"), JSON.stringify(meta));
 
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir: tmpDir,
+      workspace,
+    });
 
     expect(results[0].recorded).toBe(1);
     const entries = await new DriftStore(tmpDir).getReviews();
@@ -133,11 +143,15 @@ describe("persistReview via executeEffects — structured .meta.json path", () =
     await writeFile(reviewPath, SAMPLE_REVIEW);
 
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir: tmpDir,
+      workspace,
+    });
 
     expect(results[0].recorded).toBe(1);
     expect(results[0].errors).toHaveLength(0);
@@ -157,11 +171,15 @@ describe("persistReview via executeEffects — structured .meta.json path", () =
     await writeFile(join(workspace, "reviews", "REVIEW.md"), SAMPLE_REVIEW);
 
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir: tmpDir,
+      workspace,
+    });
 
     expect(results[0].recorded).toBe(1);
     // Should have fallen back to REVIEW.md which has verdict WARNING
@@ -176,11 +194,15 @@ describe("persistReview via executeEffects — structured .meta.json path", () =
     await writeFile(join(workspace, "reviews", "REVIEW.md"), SAMPLE_REVIEW);
 
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir: tmpDir,
+      workspace,
+    });
 
     expect(results[0].recorded).toBe(1);
     const entries = await new DriftStore(tmpDir).getReviews();
@@ -189,11 +211,15 @@ describe("persistReview via executeEffects — structured .meta.json path", () =
 
   it("returns error when neither .meta.json nor .md artifact is found", async () => {
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir: tmpDir,
+      workspace,
+    });
 
     expect(results[0].recorded).toBe(0);
     expect(results[0].errors.length).toBeGreaterThan(0);
@@ -213,7 +239,7 @@ describe("executeEffects", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("persist_review writes to reviews.jsonl", async () => {
@@ -221,11 +247,15 @@ describe("executeEffects", () => {
     await writeFile(reviewPath, SAMPLE_REVIEW);
 
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "REVIEW.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "REVIEW.md" }],
     };
 
-    const results = await executeEffects(stateDef, workspace, ["plans/test-task/REVIEW.md"], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: ["plans/test-task/REVIEW.md"],
+      projectDir: tmpDir,
+      workspace,
+    });
 
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe("persist_review");
@@ -242,26 +272,32 @@ describe("executeEffects", () => {
 
   it("returns empty results when no effects defined", async () => {
     const stateDef: StateDefinition = { type: "single" };
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir: tmpDir,
+      workspace,
+    });
     expect(results).toHaveLength(0);
   });
 
   it("handles missing artifact gracefully", async () => {
     const stateDef: StateDefinition = {
+      effects: [{ artifact: "NONEXISTENT.md", type: "persist_review" }],
       type: "single",
-      effects: [{ type: "persist_review", artifact: "NONEXISTENT.md" }],
     };
 
-    const results = await executeEffects(stateDef, workspace, [], tmpDir);
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir: tmpDir,
+      workspace,
+    });
     expect(results).toHaveLength(1);
     expect(results[0].recorded).toBe(0);
     expect(results[0].errors.length).toBeGreaterThan(0);
   });
 });
 
-// ---------------------------------------------------------------------------
 // check_postconditions effect integration
-// ---------------------------------------------------------------------------
 
 describe("executeEffects — check_postconditions", () => {
   let tmpDir: string;
@@ -277,7 +313,7 @@ describe("executeEffects — check_postconditions", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("passes with explicit YAML file_exists postcondition that passes", async () => {
@@ -285,12 +321,17 @@ describe("executeEffects — check_postconditions", () => {
     await writeFile(join(projectDir, "output.ts"), "export const x = 1;");
 
     const stateDef: StateDefinition = {
-      type: "single",
       effects: [{ type: "check_postconditions" }],
-      postconditions: [{ type: "file_exists", target: "output.ts" }],
+      postconditions: [{ target: "output.ts", type: "file_exists" }],
+      type: "single",
     };
 
-    const results = await executeEffects(stateDef, workspace, [], projectDir, "review");
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir,
+      stateName: "review",
+      workspace,
+    });
 
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe("check_postconditions");
@@ -302,12 +343,17 @@ describe("executeEffects — check_postconditions", () => {
     // Do NOT create the file — postcondition should fail
 
     const stateDef: StateDefinition = {
-      type: "single",
       effects: [{ type: "check_postconditions" }],
-      postconditions: [{ type: "file_exists", target: "missing.ts" }],
+      postconditions: [{ target: "missing.ts", type: "file_exists" }],
+      type: "single",
     };
 
-    const results = await executeEffects(stateDef, workspace, [], projectDir, "review");
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir,
+      stateName: "review",
+      workspace,
+    });
 
     expect(results).toHaveLength(1);
     expect(results[0].type).toBe("check_postconditions");
@@ -324,35 +370,38 @@ describe("executeEffects — check_postconditions", () => {
     const store = getExecutionStore(workspace);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test-flow",
-      task: "test-task",
-      entry: "review",
-      current_state: "review",
       base_commit: "abc123",
-      started: now,
-      last_updated: now,
       branch: "main",
-      sanitized: "main",
       created: now,
-      tier: "medium",
+      current_state: "review",
+      entry: "review",
+      flow: "test-flow",
       flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "main",
       slug: "test-slug",
+      started: now,
+      task: "test-task",
+      tier: "medium",
     });
     store.upsertState("review", {
-      status: "in_progress",
+      discovered_postconditions: [{ target: "discovered.ts", type: "file_exists" }],
       entries: 1,
-      discovered_postconditions: [
-        { type: "file_exists", target: "discovered.ts" },
-      ],
+      status: "in_progress",
     });
 
     // stateDef has NO explicit postconditions — only discovered
     const stateDef: StateDefinition = {
-      type: "single",
       effects: [{ type: "check_postconditions" }],
+      type: "single",
     };
 
-    const results = await executeEffects(stateDef, workspace, [], projectDir, "review");
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir,
+      stateName: "review",
+      workspace,
+    });
 
     expect(results[0].type).toBe("check_postconditions");
     expect(results[0].recorded).toBe(1);
@@ -368,35 +417,38 @@ describe("executeEffects — check_postconditions", () => {
     const store = getExecutionStore(workspace);
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "test-flow",
-      task: "test-task",
-      entry: "review",
-      current_state: "review",
       base_commit: "abc123",
-      started: now,
-      last_updated: now,
       branch: "main",
-      sanitized: "main",
       created: now,
-      tier: "medium",
+      current_state: "review",
+      entry: "review",
+      flow: "test-flow",
       flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "main",
       slug: "test-slug",
+      started: now,
+      task: "test-task",
+      tier: "medium",
     });
     store.upsertState("review", {
-      status: "in_progress",
+      discovered_postconditions: [{ target: "discovered.ts", type: "file_exists" }],
       entries: 1,
-      discovered_postconditions: [
-        { type: "file_exists", target: "discovered.ts" },
-      ],
+      status: "in_progress",
     });
 
     const stateDef: StateDefinition = {
-      type: "single",
       effects: [{ type: "check_postconditions" }],
-      postconditions: [{ type: "file_exists", target: "explicit.ts" }],
+      postconditions: [{ target: "explicit.ts", type: "file_exists" }],
+      type: "single",
     };
 
-    const results = await executeEffects(stateDef, workspace, [], projectDir, "review");
+    const results = await executeEffects(stateDef, {
+      artifacts: [],
+      projectDir,
+      stateName: "review",
+      workspace,
+    });
 
     // Should pass — explicit file exists; discovered is ignored
     expect(results[0].recorded).toBe(1);
@@ -405,11 +457,11 @@ describe("executeEffects — check_postconditions", () => {
 
   it("returns recorded: 0 when no postconditions declared anywhere", async () => {
     const stateDef: StateDefinition = {
-      type: "single",
       effects: [{ type: "check_postconditions" }],
+      type: "single",
     };
 
-    const results = await executeEffects(stateDef, workspace, [], projectDir);
+    const results = await executeEffects(stateDef, { artifacts: [], projectDir, workspace });
 
     expect(results[0].type).toBe("check_postconditions");
     expect(results[0].recorded).toBe(0);
@@ -419,12 +471,12 @@ describe("executeEffects — check_postconditions", () => {
   it("returns recorded: 0 when store has no board data (no crash)", async () => {
     // Empty workspace — ExecutionStore returns null for board
     const stateDef: StateDefinition = {
-      type: "single",
       effects: [{ type: "check_postconditions" }],
+      type: "single",
     };
 
     // Should not throw — best-effort
-    const results = await executeEffects(stateDef, workspace, [], projectDir);
+    const results = await executeEffects(stateDef, { artifacts: [], projectDir, workspace });
 
     expect(results[0].type).toBe("check_postconditions");
     expect(results[0].recorded).toBe(0);

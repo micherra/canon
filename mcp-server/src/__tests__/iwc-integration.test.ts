@@ -16,18 +16,19 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist spawnSync mock — gate-runner uses child_process
-// ---------------------------------------------------------------------------
 
 type SpawnSyncArgs = { shell?: boolean; cwd?: string; encoding?: string; timeout?: number };
 let spawnSyncImpl:
-  | ((cmd: string, opts: SpawnSyncArgs) => { stdout: string; stderr: string; status: number | null; error?: Error })
+  | ((
+      cmd: string,
+      opts: SpawnSyncArgs,
+    ) => { stdout: string; stderr: string; status: number | null; error?: Error })
   | null = null;
 vi.mock("node:child_process", () => ({
   spawnSync: (cmd: string, opts: SpawnSyncArgs) => {
     if (spawnSyncImpl) return spawnSyncImpl(cmd, opts);
-    return { stdout: "", stderr: "", status: 0 };
+    return { status: 0, stderr: "", stdout: "" };
   },
 }));
 
@@ -40,9 +41,7 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-// ---------------------------------------------------------------------------
 // Imports after mocks
-// ---------------------------------------------------------------------------
 
 import { initBoard, recordConsultationResult, recordGateResult } from "../orchestration/board.ts";
 import {
@@ -55,49 +54,45 @@ import { resolveGateCommand, runGate } from "../orchestration/gate-runner.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {
-    name: "integration-flow",
     description: "IWC integration test flow",
     entry: "implement",
+    name: "integration-flow",
+    spawn_instructions: { implement: "Implement the feature." },
     states: {
-      implement: { type: "single", agent: "canon-implementor" },
+      implement: { agent: "canon-implementor", type: "single" },
       ship: { type: "terminal" },
     },
-    spawn_instructions: { implement: "Implement the feature." },
     ...(gates ? { gates } : {}),
   };
 }
 
 function makeConsultationFlow(): ResolvedFlow {
   return {
-    name: "consultation-flow",
-    description: "Flow with consultations",
-    entry: "build",
-    states: { build: { type: "single", agent: "canon-implementor" } },
-    spawn_instructions: {
-      "security-check": "Run security audit for ${task}.",
-      "arch-review": "Review architecture for ${task}.",
-    },
     consultations: {
+      "arch-review": {
+        agent: "canon:canon-architect",
+        fragment: "arch-review",
+        role: "architect",
+        section: "Architecture review",
+      },
       "security-check": {
-        fragment: "security-check",
         agent: "canon:canon-security",
+        fragment: "security-check",
         role: "security",
         section: "Security findings",
         timeout: "5m",
       },
-      "arch-review": {
-        fragment: "arch-review",
-        agent: "canon:canon-architect",
-        role: "architect",
-        section: "Architecture review",
-      },
     },
+    description: "Flow with consultations",
+    entry: "build",
+    name: "consultation-flow",
+    spawn_instructions: {
+      "arch-review": "Review architecture for ${task}.",
+      "security-check": "Run security audit for ${task}.",
+    },
+    states: { build: { agent: "canon-implementor", type: "single" } },
   };
 }
 
@@ -114,10 +109,8 @@ afterEach(() => {
   // noop
 });
 
-// ---------------------------------------------------------------------------
 // 1. Cross-module integration: wave-variables escaping → assembleWaveBriefing
 //    This is the declared gap from iwc-05 Coverage Notes.
-// ---------------------------------------------------------------------------
 
 describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing", () => {
   it("escaped ${...} from wave-variables passes through wave-briefing without double-escaping", () => {
@@ -128,9 +121,9 @@ describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing
     expect(escapedSummary).toBe("Pattern: use \\${template_name} in all new files");
 
     const result = assembleWaveBriefing({
-      wave: 2,
-      summaries: [escapedSummary],
       consultationOutputs: {},
+      summaries: [escapedSummary],
+      wave: 2,
     });
 
     // The escaped pattern must survive wave-briefing unchanged — no double-escape
@@ -145,14 +138,14 @@ describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing
     const escapedConsultation = escapeDollarBrace(rawConsultation);
 
     const result = assembleWaveBriefing({
-      wave: 3,
-      summaries: [],
       consultationOutputs: {
         "sec-review": {
           section: "Security notes",
           summary: escapedConsultation,
         },
       },
+      summaries: [],
+      wave: 3,
     });
 
     expect(result).toContain("\\${user_input}");
@@ -164,9 +157,9 @@ describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing
     const summary2 = escapeDollarBrace("pattern: always escape ${env_var} in templates");
 
     const result = assembleWaveBriefing({
-      wave: 2,
-      summaries: [summary1, summary2],
       consultationOutputs: {},
+      summaries: [summary1, summary2],
+      wave: 2,
     });
 
     // Each escaped pattern present exactly once (no duplication in escaping)
@@ -177,17 +170,15 @@ describe("integration: wave-variables escapeDollarBrace → assembleWaveBriefing
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Cross-module: executeConsultations → recordConsultationResult round-trip
 //    Tests the full consultation prep → board storage pipeline
-// ---------------------------------------------------------------------------
 
 describe("integration: executeConsultations result → recordConsultationResult on board", () => {
   it("pending results from executeConsultations can be stored on the board via recordConsultationResult", async () => {
     const flow = makeConsultationFlow();
     const input: ConsultationInput = {
-      consultationNames: ["security-check"],
       breakpoint: "before",
+      consultationNames: ["security-check"],
       flow,
       variables: { task: "deploy-auth" },
     };
@@ -197,16 +188,15 @@ describe("integration: executeConsultations result → recordConsultationResult 
     expect(results["security-check"]).toEqual({ status: "pending" });
 
     const board = makeBoard();
-    const updatedBoard = recordConsultationResult(
-      board,
-      "implement",
-      "wave_1",
-      "before",
-      "security-check",
-      results["security-check"],
-    );
+    const updatedBoard = recordConsultationResult(board, "implement", {
+      breakpoint: "before",
+      name: "security-check",
+      result: results["security-check"],
+      waveKey: "wave_1",
+    });
 
-    const stored = updatedBoard.states.implement.wave_results?.["wave_1"]?.consultations?.before?.["security-check"];
+    const stored =
+      updatedBoard.states.implement.wave_results?.wave_1?.consultations?.before?.["security-check"];
     expect(stored).toEqual({ status: "pending" });
   });
 
@@ -214,15 +204,15 @@ describe("integration: executeConsultations result → recordConsultationResult 
     const flow = makeConsultationFlow();
 
     const beforeInput: ConsultationInput = {
-      consultationNames: ["security-check"],
       breakpoint: "before",
+      consultationNames: ["security-check"],
       flow,
       variables: { task: "my-task" },
     };
 
     const afterInput: ConsultationInput = {
-      consultationNames: ["arch-review"],
       breakpoint: "after",
+      consultationNames: ["arch-review"],
       flow,
       variables: { task: "my-task" },
     };
@@ -231,24 +221,20 @@ describe("integration: executeConsultations result → recordConsultationResult 
     const afterOutput = await executeConsultations(afterInput);
 
     let board = makeBoard();
-    board = recordConsultationResult(
-      board,
-      "implement",
-      "wave_1",
-      "before",
-      "security-check",
-      beforeOutput.results["security-check"],
-    );
-    board = recordConsultationResult(
-      board,
-      "implement",
-      "wave_1",
-      "after",
-      "arch-review",
-      afterOutput.results["arch-review"],
-    );
+    board = recordConsultationResult(board, "implement", {
+      breakpoint: "before",
+      name: "security-check",
+      result: beforeOutput.results["security-check"],
+      waveKey: "wave_1",
+    });
+    board = recordConsultationResult(board, "implement", {
+      breakpoint: "after",
+      name: "arch-review",
+      result: afterOutput.results["arch-review"],
+      waveKey: "wave_1",
+    });
 
-    const waveResult = board.states.implement.wave_results?.["wave_1"];
+    const waveResult = board.states.implement.wave_results?.wave_1;
     expect(waveResult?.consultations?.before?.["security-check"]).toEqual({ status: "pending" });
     expect(waveResult?.consultations?.after?.["arch-review"]).toEqual({ status: "pending" });
   });
@@ -269,8 +255,8 @@ describe("integration: executeConsultations result → recordConsultationResult 
     // The 'between' breakpoint should produce the same pending result regardless —
     // it is used by the orchestrator for routing, not by executeConsultations itself.
     const betweenOutput = await executeConsultations({
-      consultationNames: ["security-check"],
       breakpoint: "between",
+      consultationNames: ["security-check"],
       flow,
       variables: {},
     });
@@ -280,49 +266,55 @@ describe("integration: executeConsultations result → recordConsultationResult 
 
     // Orchestrator routes it using the breakpoint:
     const board = makeBoard();
-    const stored = recordConsultationResult(
-      board,
-      "implement",
-      "wave_1",
-      "between",
-      "security-check",
-      betweenOutput.results["security-check"],
-    );
-    expect(stored.states.implement.wave_results?.["wave_1"]?.consultations?.between?.["security-check"]).toBeDefined();
+    const stored = recordConsultationResult(board, "implement", {
+      breakpoint: "between",
+      name: "security-check",
+      result: betweenOutput.results["security-check"],
+      waveKey: "wave_1",
+    });
+    expect(
+      stored.states.implement.wave_results?.wave_1?.consultations?.between?.["security-check"],
+    ).toBeDefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Cross-module: runGate → recordGateResult round-trip on board
-// ---------------------------------------------------------------------------
 
 describe("integration: runGate result → recordGateResult on board", () => {
   it("passed gate result can be stored on the board", () => {
-    spawnSyncImpl = () => ({ stdout: "All tests passed", stderr: "", status: 0 });
+    spawnSyncImpl = () => ({ status: 0, stderr: "", stdout: "All tests passed" });
     const flow = makeFlow({ "test-suite": "npm test" });
     const gateResult = runGate("test-suite", flow, "/project");
 
     expect(gateResult.passed).toBe(true);
 
     const board = makeBoard();
-    const updatedBoard = recordGateResult(board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "");
+    const updatedBoard = recordGateResult(board, "implement", {
+      gate: gateResult.gate,
+      gateOutput: gateResult.output ?? "",
+      waveKey: "wave_1",
+    });
 
-    const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
+    const waveResult = updatedBoard.states.implement.wave_results?.wave_1;
     expect(waveResult?.gate).toBe("test-suite");
     expect(waveResult?.gate_output).toBe("All tests passed");
   });
 
   it("failed gate result stored with FAIL output for audit trail", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "3 tests failed", status: 1 });
+    spawnSyncImpl = () => ({ status: 1, stderr: "3 tests failed", stdout: "" });
     const flow = makeFlow({ "test-suite": "npm test" });
     const gateResult = runGate("test-suite", flow, "/project");
 
     expect(gateResult.passed).toBe(false);
 
     const board = makeBoard();
-    const updatedBoard = recordGateResult(board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "");
+    const updatedBoard = recordGateResult(board, "implement", {
+      gate: gateResult.gate,
+      gateOutput: gateResult.output ?? "",
+      waveKey: "wave_1",
+    });
 
-    const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
+    const waveResult = updatedBoard.states.implement.wave_results?.wave_1;
     expect(waveResult?.gate).toBe("test-suite");
     expect(waveResult?.gate_output).toBe("3 tests failed");
   });
@@ -335,21 +327,27 @@ describe("integration: runGate result → recordGateResult on board", () => {
     expect(gateResult.output).toContain("fail-closed");
 
     const board = makeBoard();
-    const updatedBoard = recordGateResult(board, "implement", "wave_1", gateResult.gate, gateResult.output ?? "");
+    const updatedBoard = recordGateResult(board, "implement", {
+      gate: gateResult.gate,
+      gateOutput: gateResult.output ?? "",
+      waveKey: "wave_1",
+    });
 
-    const waveResult = updatedBoard.states.implement.wave_results?.["wave_1"];
+    const waveResult = updatedBoard.states.implement.wave_results?.wave_1;
     expect(waveResult?.gate_output).toContain("fail-closed");
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. gate-runner coverage gaps
-// ---------------------------------------------------------------------------
 
 describe("gate-runner — spawnSync null status (timeout/kill)", () => {
   it("treats null exit status as non-zero (passed: false)", () => {
     // spawnSync returns status: null when process is killed (e.g. by SIGKILL / timeout)
-    spawnSyncImpl = () => ({ stdout: "", stderr: "Process killed", status: null as unknown as number });
+    spawnSyncImpl = () => ({
+      status: null as unknown as number,
+      stderr: "Process killed",
+      stdout: "",
+    });
     const flow = makeFlow({ "test-suite": "npm test" });
     const result = runGate("test-suite", flow, "/project");
 
@@ -359,7 +357,11 @@ describe("gate-runner — spawnSync null status (timeout/kill)", () => {
   });
 
   it("combines non-empty stdout and stderr into combined output", () => {
-    spawnSyncImpl = () => ({ stdout: "Build output line", stderr: "Warning: deprecated API", status: 0 });
+    spawnSyncImpl = () => ({
+      status: 0,
+      stderr: "Warning: deprecated API",
+      stdout: "Build output line",
+    });
     const flow = makeFlow({ build: "npm run build" });
     const result = runGate("build", flow, "/project");
 
@@ -379,9 +381,7 @@ describe("gate-runner — resolveTestSuiteCommand: scripts.test is empty string"
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. board.ts coverage gaps
-// ---------------------------------------------------------------------------
 
 describe("board — recordGateResult preserves existing consultations", () => {
   it("recordGateResult does not discard pre-existing consultations on the same wave_result", () => {
@@ -389,12 +389,21 @@ describe("board — recordGateResult preserves existing consultations", () => {
 
     // First record a consultation result
     const consultationResult: ConsultationResult = { status: "done", summary: "Looks good" };
-    board = recordConsultationResult(board, "implement", "wave_1", "before", "sec-check", consultationResult);
+    board = recordConsultationResult(board, "implement", {
+      breakpoint: "before",
+      name: "sec-check",
+      result: consultationResult,
+      waveKey: "wave_1",
+    });
 
     // Then record a gate result on the same wave
-    board = recordGateResult(board, "implement", "wave_1", "quality-gate", "PASS");
+    board = recordGateResult(board, "implement", {
+      gate: "quality-gate",
+      gateOutput: "PASS",
+      waveKey: "wave_1",
+    });
 
-    const waveResult = board.states.implement.wave_results?.["wave_1"];
+    const waveResult = board.states.implement.wave_results?.wave_1;
     // Gate recorded
     expect(waveResult?.gate).toBe("quality-gate");
     expect(waveResult?.gate_output).toBe("PASS");
@@ -407,13 +416,17 @@ describe("board — recordConsultationResult on a state not in board.states", ()
   it("creates a new state entry when the stateId does not exist in board.states", () => {
     const board = makeBoard();
     // "nonexistent-state" is NOT in makeBoard()'s flow states
-    const result = recordConsultationResult(board, "nonexistent-state", "wave_1", "after", "my-consult", {
-      status: "pending",
+    const result = recordConsultationResult(board, "nonexistent-state", {
+      breakpoint: "after",
+      name: "my-consult",
+      result: { status: "pending" },
+      waveKey: "wave_1",
     });
 
     // A new state entry must be created from scratch
     expect(result.states["nonexistent-state"]).toBeDefined();
-    const stored = result.states["nonexistent-state"].wave_results?.["wave_1"]?.consultations?.after?.["my-consult"];
+    const stored =
+      result.states["nonexistent-state"].wave_results?.wave_1?.consultations?.after?.["my-consult"];
     expect(stored).toEqual({ status: "pending" });
     // Original board must not be mutated
     expect(board.states["nonexistent-state"]).toBeUndefined();
@@ -421,27 +434,29 @@ describe("board — recordConsultationResult on a state not in board.states", ()
 
   it("creates a new state entry for recordGateResult on unknown stateId", () => {
     const board = makeBoard();
-    const result = recordGateResult(board, "new-state", "wave_1", "lint", "0 errors");
+    const result = recordGateResult(board, "new-state", {
+      gate: "lint",
+      gateOutput: "0 errors",
+      waveKey: "wave_1",
+    });
 
     expect(result.states["new-state"]).toBeDefined();
-    expect(result.states["new-state"].wave_results?.["wave_1"]?.gate).toBe("lint");
-    expect(result.states["new-state"].wave_results?.["wave_1"]?.gate_output).toBe("0 errors");
+    expect(result.states["new-state"].wave_results?.wave_1?.gate).toBe("lint");
+    expect(result.states["new-state"].wave_results?.wave_1?.gate_output).toBe("0 errors");
     // Original board not mutated
     expect(board.states["new-state"]).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. wave-briefing: line matching multiple section classifiers
-// ---------------------------------------------------------------------------
 
 describe("wave-briefing — lines matching multiple classifiers", () => {
   it("a line matching both 'created' and 'pattern' appears in both sections", () => {
     // Line contains both keywords — both classifiers should fire
     const input = {
-      wave: 2,
-      summaries: ["created a pattern for barrel exports in src/index.ts"],
       consultationOutputs: {},
+      summaries: ["created a pattern for barrel exports in src/index.ts"],
+      wave: 2,
     };
 
     const result = assembleWaveBriefing(input);
@@ -454,9 +469,9 @@ describe("wave-briefing — lines matching multiple classifiers", () => {
 
   it("a line matching 'concern' and file path appears in both Gotchas and New shared code", () => {
     const input = {
-      wave: 1,
-      summaries: ["concern: src/parser.ts may have edge case with empty input"],
       consultationOutputs: {},
+      summaries: ["concern: src/parser.ts may have edge case with empty input"],
+      wave: 1,
     };
 
     const result = assembleWaveBriefing(input);
@@ -470,19 +485,19 @@ describe("wave-briefing — lines matching multiple classifiers", () => {
 describe("wave-briefing — multiple summaries aggregate correctly", () => {
   it("sections from different summaries are merged into one briefing", () => {
     const input = {
-      wave: 3,
-      summaries: [
-        "created src/gate-runner.ts with runGate export",
-        "pattern: all gate commands resolved via lookup, never raw string",
-        "added mcp-server/src/tools/check-gate.ts",
-        "concern: spawnSync blocks the event loop",
-      ],
       consultationOutputs: {
         "perf-review": {
           section: "Performance notes",
           summary: "Gate timeout is 300s — acceptable for CI.",
         },
       },
+      summaries: [
+        "created src/gate-runner.ts with runGate export",
+        "pattern: all gate commands resolved via lookup, never raw string",
+        "added mcp-server/src/tools/check-gate.ts",
+        "concern: spawnSync blocks the event loop",
+      ],
+      wave: 3,
     };
 
     const result = assembleWaveBriefing(input);
@@ -501,28 +516,26 @@ describe("wave-briefing — multiple summaries aggregate correctly", () => {
 
   it("wave number is correct in briefing header when wave > 1", () => {
     const result = assembleWaveBriefing({
-      wave: 5,
-      summaries: ["added src/module.ts"],
       consultationOutputs: {},
+      summaries: ["added src/module.ts"],
+      wave: 5,
     });
 
     expect(result).toContain("## Wave Briefing (from wave 5)");
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. Consultation executor — resolveConsultationPrompt with no variables (all unresolved)
-// ---------------------------------------------------------------------------
 
 describe("consultation-executor — resolveConsultationPrompt edge cases", () => {
   it("resolves prompt when consultations map is present but empty for the requested name (returns null)", () => {
     const flow: ResolvedFlow = {
-      name: "f",
+      consultations: {},
       description: "d",
       entry: "s",
-      states: { s: { type: "terminal" } },
+      name: "f",
       spawn_instructions: {},
-      consultations: {},
+      states: { s: { type: "terminal" } },
     };
 
     const result = resolveConsultationPrompt("any-name", flow, {});
@@ -531,11 +544,11 @@ describe("consultation-executor — resolveConsultationPrompt edge cases", () =>
 
   it("handles flow with no consultations field (undefined) and returns null", () => {
     const flow: ResolvedFlow = {
-      name: "f",
       description: "d",
       entry: "s",
-      states: { s: { type: "terminal" } },
+      name: "f",
       spawn_instructions: { sec: "Run audit." },
+      states: { s: { type: "terminal" } },
       // consultations: undefined
     };
 
@@ -545,17 +558,17 @@ describe("consultation-executor — resolveConsultationPrompt edge cases", () =>
 
   it("executeConsultations with flow having no consultations field returns warning for every name", async () => {
     const flow: ResolvedFlow = {
-      name: "f",
       description: "d",
       entry: "s",
-      states: { s: { type: "terminal" } },
+      name: "f",
       spawn_instructions: {},
+      states: { s: { type: "terminal" } },
       // consultations: undefined
     };
 
     const output = await executeConsultations({
-      consultationNames: ["foo", "bar"],
       breakpoint: "after",
+      consultationNames: ["foo", "bar"],
       flow,
       variables: {},
     });

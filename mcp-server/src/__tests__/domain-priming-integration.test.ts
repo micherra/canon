@@ -29,15 +29,17 @@ const ARCHITECT_MD = join(REPO_ROOT, "agents", "canon-architect.md");
 const IMPLEMENTOR_MD = join(REPO_ROOT, "agents", "canon-implementor.md");
 const TASK_PLAN_TEMPLATE = join(REPO_ROOT, "templates", "task-plan.md");
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 function readFile(path: string): string {
   return readFileSync(path, "utf-8");
 }
 
-// ── Domain file existence and structure (domain-03) ──────────────────────────
-
-const BUILT_IN_DOMAINS = ["frontend", "backend-api", "backend-data", "infrastructure", "testing"] as const;
+const BUILT_IN_DOMAINS = [
+  "frontend",
+  "backend-api",
+  "backend-data",
+  "infrastructure",
+  "testing",
+] as const;
 
 describe("domain files — existence", () => {
   for (const domain of BUILT_IN_DOMAINS) {
@@ -97,8 +99,6 @@ describe("domain files — approximate token budget (≤ 300 tokens ≈ 1200 cha
   }
 });
 
-// ── task-plan template exposes domains: field (domain-01) ────────────────────
-
 describe("templates/task-plan.md — domains: field", () => {
   it("template file exists", () => {
     expect(existsSync(TASK_PLAN_TEMPLATE)).toBe(true);
@@ -118,8 +118,6 @@ describe("templates/task-plan.md — domains: field", () => {
     expect(domainsIdx).toBeGreaterThan(principlesIdx);
   });
 });
-
-// ── canon-architect.md lists all built-in domains (domain-01) ────────────────
 
 describe("canon-architect.md — domain classification guidance", () => {
   it("architect file exists", () => {
@@ -153,8 +151,6 @@ describe("canon-architect.md — domain classification guidance", () => {
     expect(content).toContain("domains:");
   });
 });
-
-// ── canon-implementor.md Step 2 domain loading (domain-02) ───────────────────
 
 describe("canon-implementor.md — Step 2 domain priming", () => {
   it("implementor file exists", () => {
@@ -215,7 +211,6 @@ describe("canon-implementor.md — Step 2 domain priming", () => {
   });
 });
 
-// ── Cross-task integration: template ↔ architect ↔ implementor ───────────────
 // These verify that the three changes work together as a coherent pipeline:
 // Architect writes domains: in the plan → implementor reads domains: from plan → loads domain file
 

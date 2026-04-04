@@ -94,10 +94,10 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
     server,
     toolName,
     {
-      title,
+      _meta: { ui: { resourceUri } },
       description,
       inputSchema,
-      _meta: { ui: { resourceUri } },
+      title,
     },
     handler,
   );
@@ -107,7 +107,7 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
     registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
       const html = await readFile(join(mcpServerRoot, "dist", "src", "ui", htmlFile), "utf-8");
       return {
-        contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }],
+        contents: [{ mimeType: RESOURCE_MIME_TYPE, text: html, uri: resourceUri }],
       };
     });
   }
@@ -116,25 +116,25 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
 // --- MCP App tool UIs ---
 
 registerToolWithUi("show_pr_impact", {
-  resourceUri: "ui://canon/pr-review",
-  title: "PR Review",
   description:
     "Opens the PR Review view — change analysis, impact assessment, and review violations for a pull request or branch.",
-  inputSchema: {
-    branch: z.string().optional().describe("Filter to reviews for this branch"),
-    pr_number: z.number().optional().describe("Filter to reviews for this PR number"),
-    diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
-    incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
-  },
-  htmlFile: "pr-review.html",
   handler: wrapHandler(async (input) => {
     return showPrImpact(projectDir, {
       branch: input.branch,
-      pr_number: input.pr_number,
       diff_base: input.diff_base,
       incremental: input.incremental,
+      pr_number: input.pr_number,
     });
   }),
+  htmlFile: "pr-review.html",
+  inputSchema: {
+    branch: z.string().optional().describe("Filter to reviews for this branch"),
+    diff_base: z.string().optional().describe("Base ref for the diff (default: main)"),
+    incremental: z.boolean().optional().describe("Only review new commits since last Canon review"),
+    pr_number: z.number().optional().describe("Filter to reviews for this PR number"),
+  },
+  resourceUri: "ui://canon/pr-review",
+  title: "PR Review",
 });
 
 server.registerTool(
@@ -148,13 +148,13 @@ server.registerTool(
         .array(z.string())
         .optional()
         .describe("Architectural layers (e.g., api, domain, data)"),
-      task_description: z.string().optional().describe("Brief description of the task"),
       summary_only: z
         .boolean()
         .optional()
         .describe(
           "Return only the summary paragraph instead of full body — reduces context usage by ~60%",
         ),
+      task_description: z.string().optional().describe("Brief description of the task"),
     },
   },
   wrapHandler(async (input) => {
@@ -168,12 +168,12 @@ server.registerTool(
     description:
       "Browse the full Canon principle index. Returns metadata only (no full body) for efficient browsing.",
     inputSchema: {
+      filter_layers: z.array(z.string()).optional().describe("Filter by architectural layers"),
       filter_severity: z
         .enum(["rule", "strong-opinion", "convention"])
         .optional()
         .describe("Filter by severity level"),
       filter_tags: z.array(z.string()).optional().describe("Filter by tags"),
-      filter_layers: z.array(z.string()).optional().describe("Filter by architectural layers"),
       include_archived: z
         .boolean()
         .optional()
@@ -192,8 +192,8 @@ server.registerTool(
       "Returns Canon principles relevant to a file for review. The calling agent evaluates compliance — this tool provides the matched principles and code.",
     inputSchema: {
       code: z.string().describe("The code to review"),
-      file_path: z.string().describe("Path of the file being reviewed"),
       context: z.string().optional().describe("Brief description of what the code does"),
+      file_path: z.string().describe("Path of the file being reviewed"),
     },
   },
   wrapHandler(async (input) => {
@@ -229,11 +229,30 @@ server.registerTool(
 );
 
 registerToolWithUi("codebase_graph", {
-  resourceUri: "ui://canon/codebase-graph",
-  title: "Codebase Graph",
   description:
     "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
+  handler: wrapHandler(async (input) => {
+    const result = await codebaseGraph(input, projectDir, pluginDir);
+    return compactGraph(result);
+  }),
+  htmlFile: "codebase-graph.html",
   inputSchema: {
+    changed_files: z
+      .array(z.string())
+      .optional()
+      .describe("Explicit list of changed files to highlight"),
+    diff_base: z
+      .string()
+      .optional()
+      .describe("Git ref to diff against — marks changed files in the graph"),
+    exclude_dirs: z
+      .array(z.string())
+      .optional()
+      .describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
+    include_extensions: z
+      .array(z.string())
+      .optional()
+      .describe("File extensions to include (default: ts, js, py, go, rs)"),
     root_dir: z
       .string()
       .optional()
@@ -246,42 +265,23 @@ registerToolWithUi("codebase_graph", {
       .describe(
         "Directories to scan (e.g. ['src', 'lib']). Overrides directories derived from layers in .canon/config.json.",
       ),
-    include_extensions: z
-      .array(z.string())
-      .optional()
-      .describe("File extensions to include (default: ts, js, py, go, rs)"),
-    exclude_dirs: z
-      .array(z.string())
-      .optional()
-      .describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
-    diff_base: z
-      .string()
-      .optional()
-      .describe("Git ref to diff against — marks changed files in the graph"),
-    changed_files: z
-      .array(z.string())
-      .optional()
-      .describe("Explicit list of changed files to highlight"),
   },
-  htmlFile: "codebase-graph.html",
-  handler: wrapHandler(async (input) => {
-    const result = await codebaseGraph(input, projectDir, pluginDir);
-    return compactGraph(result);
-  }),
+  resourceUri: "ui://canon/codebase-graph",
+  title: "Codebase Graph",
 });
 
 registerToolWithUi("get_file_context", {
-  resourceUri: "ui://canon/file-context",
-  title: "File Context",
   description:
     "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data.",
-  inputSchema: {
-    file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
-  },
-  htmlFile: "file-context.html",
   handler: wrapHandler(async (input) => {
     return getFileContext(input, projectDir);
   }),
+  htmlFile: "file-context.html",
+  inputSchema: {
+    file_path: z.string().describe("Project-relative file path (e.g. 'src/api/handler.ts')"),
+  },
+  resourceUri: "ui://canon/file-context",
+  title: "File Context",
 });
 
 server.registerTool(
@@ -311,9 +311,9 @@ server.registerTool(
     description:
       "Returns a full drift report — compliance rates, most violated principles, hotspot directories, trend, recommendations, and PR review history.",
     inputSchema: {
+      directory: z.string().optional().describe("Filter to files in a specific directory"),
       last_n: z.number().optional().describe("Only analyze the last N reviews"),
       principle_id: z.string().optional().describe("Filter to a specific principle"),
-      directory: z.string().optional().describe("Filter to files in a specific directory"),
     },
   },
   wrapHandler(async (input) => {
@@ -341,19 +341,19 @@ server.registerTool(
     description:
       "Initialize a Canon workspace for flow execution. Creates workspace directory and initializes SQLite store. Resumes from existing store if present.",
     inputSchema: {
-      flow_name: z.string(),
-      task: z.string(),
-      branch: z.string(),
       base_commit: z.string(),
-      tier: z.enum(["small", "medium", "large"]),
+      branch: z.string(),
+      flow_name: z.string(),
       original_input: z.string().optional(),
-      skip_flags: z.array(z.string()).optional(),
       preflight: z
         .boolean()
         .optional()
         .describe(
           "Run pre-flight checks (git status, lock, stale sessions) before creating workspace",
         ),
+      skip_flags: z.array(z.string()).optional(),
+      task: z.string(),
+      tier: z.enum(["small", "medium", "large"]),
     },
   },
   wrapHandler(async (input) => {
@@ -367,97 +367,26 @@ server.registerTool(
     description:
       "Report an agent's result. Normalizes status, evaluates transitions, updates board state, checks stuck detection. Returns next state and whether HITL is required.",
     inputSchema: {
-      workspace: z.string(),
-      state_id: z.string(),
-      status_keyword: z.string(),
-      flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
-      artifacts: z.array(z.string()).optional(),
-      concern_text: z.string().optional(),
-      error: z.string().optional(),
-      metrics: z
-        .object({
-          duration_ms: z.number(),
-          spawns: z.number(),
-          model: z.string(),
-          tool_calls: z.number().optional(),
-          orientation_calls: z.number().optional(),
-          input_tokens: z.number().optional(),
-          output_tokens: z.number().optional(),
-          cache_read_tokens: z.number().optional(),
-          cache_write_tokens: z.number().optional(),
-          turns: z.number().optional(),
-        })
-        .optional(),
-      principle_ids: z
-        .array(z.string())
-        .optional()
-        .describe("Violation principle IDs for same_violations stuck detection"),
-      file_paths: z
-        .array(z.string())
-        .optional()
-        .describe("Violating file paths for same_violations stuck detection"),
-      file_test_pairs: z
-        .array(z.object({ file: z.string(), test: z.string() }))
-        .optional()
-        .describe("File/test pairs for same_file_test stuck detection"),
-      commit_sha: z
-        .string()
-        .optional()
-        .describe("Current commit SHA for no_progress stuck detection"),
       artifact_count: z
         .number()
         .optional()
         .describe("Current artifact count for no_progress stuck detection"),
-      parallel_results: z
+      artifacts: z.array(z.string()).optional(),
+      commit_sha: z
+        .string()
+        .optional()
+        .describe("Current commit SHA for no_progress stuck detection"),
+      compete_results: z
         .array(
           z.object({
-            item: z.string(),
-            status: z.string(),
             artifacts: z.array(z.string()).optional(),
+            lens: z.string().optional(),
+            status: z.string(),
           }),
         )
         .optional()
-        .describe("Results from parallel-per execution — triggers aggregation"),
-      gate_results: z
-        .array(
-          z.object({
-            passed: z.boolean(),
-            gate: z.string(),
-            command: z.string().optional(),
-            output: z.string().optional(),
-            exitCode: z.number().optional(),
-          }),
-        )
-        .optional()
-        .describe("Quality gate results reported by the agent"),
-      postcondition_results: z
-        .array(
-          z.object({
-            passed: z.boolean(),
-            name: z.string(),
-            type: z.string(),
-            output: z.string().optional(),
-          }),
-        )
-        .optional()
-        .describe("Postcondition check results reported by the agent"),
-      violation_count: z.number().optional().describe("Total number of principle violations found"),
-      violation_severities: z
-        .object({
-          blocking: z.number(),
-          warning: z.number(),
-        })
-        .optional()
-        .describe("Violation counts broken down by severity"),
-      test_results: z
-        .object({
-          passed: z.number(),
-          failed: z.number(),
-          skipped: z.number(),
-        })
-        .optional()
-        .describe("Test suite results"),
-      files_changed: z.number().optional().describe("Number of files changed in this state's work"),
+        .describe("Results from competitive execution — persisted to board state"),
+      concern_text: z.string().optional(),
       discovered_gates: z
         .array(
           z.object({
@@ -470,6 +399,9 @@ server.registerTool(
       discovered_postconditions: z
         .array(
           z.object({
+            command: z.string().optional(),
+            pattern: z.string().optional(),
+            target: z.string().optional(),
             type: z.enum([
               "file_exists",
               "file_changed",
@@ -477,37 +409,105 @@ server.registerTool(
               "no_pattern",
               "bash_check",
             ]),
-            target: z.string().optional(),
-            pattern: z.string().optional(),
-            command: z.string().optional(),
           }),
         )
         .optional()
         .describe("Postcondition assertions discovered by the agent for future runs"),
-      compete_results: z
+      error: z.string().optional(),
+      file_paths: z
+        .array(z.string())
+        .optional()
+        .describe("Violating file paths for same_violations stuck detection"),
+      file_test_pairs: z
+        .array(z.object({ file: z.string(), test: z.string() }))
+        .optional()
+        .describe("File/test pairs for same_file_test stuck detection"),
+      files_changed: z.number().optional().describe("Number of files changed in this state's work"),
+      flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
+      gate_results: z
         .array(
           z.object({
-            lens: z.string().optional(),
-            status: z.string(),
-            artifacts: z.array(z.string()).optional(),
+            command: z.string().optional(),
+            exitCode: z.number().optional(),
+            gate: z.string(),
+            output: z.string().optional(),
+            passed: z.boolean(),
           }),
         )
         .optional()
-        .describe("Results from competitive execution — persisted to board state"),
-      synthesized: z
-        .boolean()
+        .describe("Quality gate results reported by the agent"),
+      metrics: z
+        .object({
+          cache_read_tokens: z.number().optional(),
+          cache_write_tokens: z.number().optional(),
+          duration_ms: z.number(),
+          input_tokens: z.number().optional(),
+          model: z.string(),
+          orientation_calls: z.number().optional(),
+          output_tokens: z.number().optional(),
+          spawns: z.number(),
+          tool_calls: z.number().optional(),
+          turns: z.number().optional(),
+        })
+        .optional(),
+      parallel_results: z
+        .array(
+          z.object({
+            artifacts: z.array(z.string()).optional(),
+            item: z.string(),
+            status: z.string(),
+          }),
+        )
         .optional()
-        .describe("Whether the compete results have been synthesized into a single output"),
+        .describe("Results from parallel-per execution — triggers aggregation"),
+      postcondition_results: z
+        .array(
+          z.object({
+            name: z.string(),
+            output: z.string().optional(),
+            passed: z.boolean(),
+            type: z.string(),
+          }),
+        )
+        .optional()
+        .describe("Postcondition check results reported by the agent"),
+      principle_ids: z
+        .array(z.string())
+        .optional()
+        .describe("Violation principle IDs for same_violations stuck detection"),
       progress_line: z
         .string()
         .optional()
         .describe(
           "One-line progress entry to append to progress.md (e.g. '- [state_id] done: summary')",
         ),
+      state_id: z.string(),
+      status_keyword: z.string(),
+      synthesized: z
+        .boolean()
+        .optional()
+        .describe("Whether the compete results have been synthesized into a single output"),
+      test_results: z
+        .object({
+          failed: z.number(),
+          passed: z.number(),
+          skipped: z.number(),
+        })
+        .optional()
+        .describe("Test suite results"),
       transcript_path: z
         .string()
         .optional()
         .describe("Path to the agent transcript JSONL file (ADR-015)"),
+      violation_count: z.number().optional().describe("Total number of principle violations found"),
+      violation_severities: z
+        .object({
+          blocking: z.number(),
+          warning: z.number(),
+        })
+        .optional()
+        .describe("Violation counts broken down by severity"),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => {
@@ -521,14 +521,14 @@ server.registerTool(
     description:
       "Record agent performance metrics (tool_calls, orientation_calls, turns) directly to the execution store. Agents call this at the end of their work, before returning status. Merges with existing metrics — does not overwrite orchestrator-tracked fields.",
     inputSchema: {
-      workspace: z.string().describe("Workspace path"),
-      state_id: z.string().describe("Current state ID the agent is working in"),
-      tool_calls: z.number().optional().describe("Total tool invocations the agent made"),
       orientation_calls: z
         .number()
         .optional()
         .describe("Read/Glob/Grep calls made for orientation before writing"),
+      state_id: z.string().describe("Current state ID the agent is working in"),
+      tool_calls: z.number().optional().describe("Total tool invocations the agent made"),
       turns: z.number().optional().describe("Number of assistant turns in the agent conversation"),
+      workspace: z.string().describe("Workspace path"),
     },
   },
   wrapHandler(async (input) => {
@@ -542,14 +542,14 @@ server.registerTool(
     description:
       "Retrieve the transcript of a specialist agent's conversation for a given state execution. Supports full mode (all entries) and summary mode (assistant messages only, ~20% of full).",
     inputSchema: {
-      workspace: z.string(),
-      state_id: z.string().describe("State ID to retrieve transcript for"),
       mode: z
         .enum(["full", "summary"])
         .optional()
         .describe(
           "full returns all entries, summary returns only assistant messages (default: full)",
         ),
+      state_id: z.string().describe("State ID to retrieve transcript for"),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => {
@@ -563,7 +563,6 @@ server.registerTool(
     description:
       "Perform board state mutations. Supports entering, skipping, blocking, unblocking states, completing flow, and setting wave progress.",
     inputSchema: {
-      workspace: z.string(),
       action: z.enum([
         "enter_state",
         "skip_state",
@@ -573,28 +572,29 @@ server.registerTool(
         "set_wave_progress",
         "set_metadata",
       ]),
-      state_id: z
-        .string()
-        .optional()
-        .describe("Required for enter_state, skip_state, block, unblock, set_wave_progress"),
-      next_state_id: z
-        .string()
-        .optional()
-        .describe("Next state to advance to (used with skip_state)"),
-      blocked_reason: z.string().optional(),
-      wave_data: z
-        .object({
-          wave: z.number(),
-          wave_total: z.number(),
-          tasks: z.array(z.string()),
-        })
-        .optional(),
-      result: z.string().optional(),
       artifacts: z.array(z.string()).optional(),
+      blocked_reason: z.string().optional(),
       metadata: z
         .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
         .optional()
         .describe("Key-value metadata to merge into board (used with set_metadata)"),
+      next_state_id: z
+        .string()
+        .optional()
+        .describe("Next state to advance to (used with skip_state)"),
+      result: z.string().optional(),
+      state_id: z
+        .string()
+        .optional()
+        .describe("Required for enter_state, skip_state, block, unblock, set_wave_progress"),
+      wave_data: z
+        .object({
+          tasks: z.array(z.string()),
+          wave: z.number(),
+          wave_total: z.number(),
+        })
+        .optional(),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => {
@@ -608,7 +608,15 @@ server.registerTool(
     description:
       "Inject a user event into a running wave execution. Events are applied at wave boundaries (between waves). Use to add tasks, skip tasks, inject context, provide guidance, or pause execution.",
     inputSchema: {
-      workspace: z.string(),
+      payload: z.object({
+        context: z.string().optional().describe("Additional context"),
+        description: z
+          .string()
+          .optional()
+          .describe("Description for add_task, inject_context, or guidance"),
+        task_id: z.string().optional().describe("Task ID to skip or reprioritize"),
+        wave: z.number().optional().describe("Target wave number (defaults to next wave)"),
+      }),
       type: z.enum([
         "add_task",
         "skip_task",
@@ -617,15 +625,7 @@ server.registerTool(
         "guidance",
         "pause",
       ]),
-      payload: z.object({
-        task_id: z.string().optional().describe("Task ID to skip or reprioritize"),
-        description: z
-          .string()
-          .optional()
-          .describe("Description for add_task, inject_context, or guidance"),
-        context: z.string().optional().describe("Additional context"),
-        wave: z.number().optional().describe("Target wave number (defaults to next wave)"),
-      }),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => {
@@ -639,17 +639,17 @@ server.registerTool(
     description:
       "Resolve a pending wave event by applying or rejecting it. Returns agent routing from resolveEventAgents so the orchestrator knows which agents to spawn. Use after processing events from get_messages.",
     inputSchema: {
-      workspace: z.string(),
-      event_id: z.string().describe("ID of the pending event to resolve"),
       action: z.enum(["apply", "reject"]).describe("Whether to apply or reject the event"),
-      resolution: z
-        .record(z.string(), z.unknown())
-        .optional()
-        .describe("Resolution data to attach (apply only)"),
+      event_id: z.string().describe("ID of the pending event to resolve"),
       reason: z
         .string()
         .optional()
         .describe("Reason for rejection (required when action is reject)"),
+      resolution: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe("Resolution data to attach (apply only)"),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => {
@@ -663,10 +663,10 @@ server.registerTool(
     description:
       "Resolve 'after' consultation prompts for a state. Call after the last wave completes and before report_result. Returns consultation prompt entries for the orchestrator to spawn.",
     inputSchema: {
-      workspace: z.string(),
-      state_id: z.string(),
       flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
+      state_id: z.string(),
       variables: z.record(z.string(), z.string()),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => {
@@ -680,12 +680,12 @@ server.registerTool(
     description:
       "Post a message to a workspace channel for inter-agent communication. Messages are markdown files that agents read at spawn time.",
     inputSchema: {
-      workspace: z.string(),
       channel: z
         .string()
         .describe("Channel name (e.g. 'wave-000', 'debate-preflight', 'consultation')"),
-      from: z.string().describe("Sender identity (e.g. task ID, agent name)"),
       content: z.string().describe("Markdown message content"),
+      from: z.string().describe("Sender identity (e.g. task ID, agent name)"),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => {
@@ -699,10 +699,10 @@ server.registerTool(
     description:
       "Read messages from a workspace channel. Returns messages ordered by sequence number. Optionally includes pending wave events.",
     inputSchema: {
-      workspace: z.string(),
       channel: z.string().describe("Channel name to read from"),
-      since: z.string().optional().describe("ISO timestamp — only return messages after this time"),
       include_events: z.boolean().optional().describe("Also return pending wave events"),
+      since: z.string().optional().describe("ISO timestamp — only return messages after this time"),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => {
@@ -716,39 +716,7 @@ server.registerTool(
     description:
       "Store a PR review result for drift tracking. Server generates review_id and timestamp.",
     inputSchema: {
-      pr_number: z.number().optional().describe("GitHub PR number"),
       branch: z.string().optional().describe("Branch name reviewed"),
-      last_reviewed_sha: z.string().optional().describe("Last commit SHA that was reviewed"),
-      verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).describe("Overall review verdict"),
-      files: z.array(z.string()).describe("File paths that were reviewed"),
-      violations: z
-        .array(
-          z.object({
-            principle_id: z.string(),
-            severity: z.string(),
-            file_path: z.string().optional().describe("Specific file where violation occurred"),
-            impact_score: z.number().optional().describe("Graph-derived impact score"),
-            message: z.string().optional().describe("Human-readable violation reason"),
-          }),
-        )
-        .describe("Principle violations found"),
-      honored: z.array(z.string()).describe("IDs of principles honored"),
-      score: z
-        .object({
-          rules: z.object({
-            passed: z.number().int().min(0),
-            total: z.number().int().min(0),
-          }),
-          opinions: z.object({
-            passed: z.number().int().min(0),
-            total: z.number().int().min(0),
-          }),
-          conventions: z.object({
-            passed: z.number().int().min(0),
-            total: z.number().int().min(0),
-          }),
-        })
-        .describe("Compliance score breakdown"),
       file_priorities: z
         .array(
           z.object({
@@ -758,21 +726,53 @@ server.registerTool(
         )
         .optional()
         .describe("Graph-derived file review priorities"),
+      files: z.array(z.string()).describe("File paths that were reviewed"),
+      honored: z.array(z.string()).describe("IDs of principles honored"),
+      last_reviewed_sha: z.string().optional().describe("Last commit SHA that was reviewed"),
+      pr_number: z.number().optional().describe("GitHub PR number"),
       recommendations: z
         .array(
           z.object({
             file_path: z.string().optional().describe("File the recommendation applies to"),
-            title: z.string().describe("Short label for the recommendation (≤ 60 chars)"),
             message: z.string().describe("Concrete explanation with suggested fix"),
             source: z
               .enum(["principle", "holistic"])
               .describe("Whether derived from a principle violation or holistic observation"),
+            title: z.string().describe("Short label for the recommendation (≤ 60 chars)"),
           }),
         )
         .optional()
         .describe(
           "Top-5 prioritized recommendations mixing principle violations and holistic suggestions",
         ),
+      score: z
+        .object({
+          conventions: z.object({
+            passed: z.number().int().min(0),
+            total: z.number().int().min(0),
+          }),
+          opinions: z.object({
+            passed: z.number().int().min(0),
+            total: z.number().int().min(0),
+          }),
+          rules: z.object({
+            passed: z.number().int().min(0),
+            total: z.number().int().min(0),
+          }),
+        })
+        .describe("Compliance score breakdown"),
+      verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).describe("Overall review verdict"),
+      violations: z
+        .array(
+          z.object({
+            file_path: z.string().optional().describe("Specific file where violation occurred"),
+            impact_score: z.number().optional().describe("Graph-derived impact score"),
+            message: z.string().optional().describe("Human-readable violation reason"),
+            principle_id: z.string(),
+            severity: z.string(),
+          }),
+        )
+        .describe("Principle violations found"),
     },
   },
   wrapHandler(async (input) => {
@@ -786,22 +786,9 @@ server.registerTool(
     description:
       "Query the codebase knowledge graph for callers, callees, blast radius, dead code, search, and more. Requires the knowledge graph to be built first via codebase_graph.",
     inputSchema: {
-      query_type: z
-        .enum(["callers", "callees", "blast_radius", "dead_code", "search", "ancestors"])
-        .describe("Type of query to perform"),
-      target: z
-        .string()
-        .optional()
-        .describe("Target entity name or file path (not needed for dead_code)"),
       options: z
         .object({
-          max_depth: z
-            .number()
-            .int()
-            .min(1)
-            .max(10)
-            .optional()
-            .describe("Max depth for blast_radius (default 3)"),
+          include_tests: z.boolean().optional().describe("Include test files in dead_code results"),
           limit: z
             .number()
             .int()
@@ -809,9 +796,22 @@ server.registerTool(
             .max(500)
             .optional()
             .describe("Max results for search (default 50)"),
-          include_tests: z.boolean().optional().describe("Include test files in dead_code results"),
+          max_depth: z
+            .number()
+            .int()
+            .min(1)
+            .max(10)
+            .optional()
+            .describe("Max depth for blast_radius (default 3)"),
         })
         .optional(),
+      query_type: z
+        .enum(["callers", "callees", "blast_radius", "dead_code", "search", "ancestors"])
+        .describe("Type of query to perform"),
+      target: z
+        .string()
+        .optional()
+        .describe("Target entity name or file path (not needed for dead_code)"),
     },
   },
   wrapHandler(async (input) => {
@@ -825,17 +825,10 @@ server.registerTool(
     description:
       "Search the codebase with natural language. Finds code entities and summaries by meaning, not just name matching. Requires the knowledge graph to be built first via codebase_graph.",
     inputSchema: {
-      query: z
-        .string()
-        .describe("Natural language search query (e.g., 'error handling middleware')"),
       kind_filter: z
         .array(z.string())
         .optional()
         .describe("Filter results by entity kind (e.g., ['function', 'class'])"),
-      scope: z
-        .enum(["entities", "summaries", "both"])
-        .optional()
-        .describe("Search scope: entity signatures, AI summaries, or both (default: both)"),
       limit: z
         .number()
         .int()
@@ -843,6 +836,13 @@ server.registerTool(
         .max(100)
         .optional()
         .describe("Max results to return (default: 20)"),
+      query: z
+        .string()
+        .describe("Natural language search query (e.g., 'error handling middleware')"),
+      scope: z
+        .enum(["entities", "summaries", "both"])
+        .optional()
+        .describe("Search scope: entity signatures, AI summaries, or both (default: both)"),
       threshold: z
         .number()
         .optional()
@@ -860,17 +860,17 @@ server.registerTool(
     description:
       "Write a structured plan index (INDEX.md) for wave execution. Accepts typed task entries and produces normalized markdown that parseTaskIdsForWave can reliably parse.",
     inputSchema: {
-      workspace: z.string(),
       slug: z.string(),
       tasks: z.array(
         z.object({
-          task_id: z.string().describe("Task identifier — alphanumeric, hyphens, underscores only"),
-          wave: z.number().min(1).describe("Wave number (1-based)"),
           depends_on: z.array(z.string()).optional(),
           files: z.array(z.string()).optional(),
           principles: z.array(z.string()).optional(),
+          task_id: z.string().describe("Task identifier — alphanumeric, hyphens, underscores only"),
+          wave: z.number().min(1).describe("Wave number (1-based)"),
         }),
       ),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => writePlanIndex(input)),
@@ -882,22 +882,22 @@ server.registerTool(
     description:
       "Write a structured test report. Accepts typed test results and produces normalized TEST-REPORT.md with a companion .meta.json sidecar for machine reading.",
     inputSchema: {
-      workspace: z.string(),
-      slug: z.string(),
-      summary: z.string().describe("Human-readable summary of test results"),
-      passed: z.number().int().min(0),
       failed: z.number().int().min(0),
-      skipped: z.number().int().min(0),
       issues: z
         .array(
           z.object({
-            test: z.string().describe("Test name or identifier"),
-            error: z.string().describe("Error message"),
             category: z.string().optional().describe("Error category"),
+            error: z.string().describe("Error message"),
             file: z.string().optional().describe("Test file path"),
+            test: z.string().describe("Test name or identifier"),
           }),
         )
         .optional(),
+      passed: z.number().int().min(0),
+      skipped: z.number().int().min(0),
+      slug: z.string(),
+      summary: z.string().describe("Human-readable summary of test results"),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => writeTestReport(input)),
@@ -909,21 +909,10 @@ server.registerTool(
     description:
       "Write a structured code review. Accepts typed review data with verdict, violations, and scores. Maps ADR-010 verdict vocabulary to DriftStore vocabulary. Produces REVIEW.md + .meta.json sidecar.",
     inputSchema: {
-      workspace: z.string(),
-      slug: z.string(),
-      verdict: z.enum(["approved", "approved_with_concerns", "changes_required", "blocked"]),
-      violations: z.array(
-        z.object({
-          principle_id: z.string(),
-          severity: z.string(),
-          file_path: z.string().optional(),
-          description: z.string().optional(),
-          fix: z.string().optional(),
-        }),
-      ),
+      files: z.array(z.string()),
       honored: z.array(z.string()),
       score: z.object({
-        rules: z.object({
+        conventions: z.object({
           passed: z.number().int().min(0),
           total: z.number().int().min(0),
         }),
@@ -931,12 +920,23 @@ server.registerTool(
           passed: z.number().int().min(0),
           total: z.number().int().min(0),
         }),
-        conventions: z.object({
+        rules: z.object({
           passed: z.number().int().min(0),
           total: z.number().int().min(0),
         }),
       }),
-      files: z.array(z.string()),
+      slug: z.string(),
+      verdict: z.enum(["approved", "approved_with_concerns", "changes_required", "blocked"]),
+      violations: z.array(
+        z.object({
+          description: z.string().optional(),
+          file_path: z.string().optional(),
+          fix: z.string().optional(),
+          principle_id: z.string(),
+          severity: z.string(),
+        }),
+      ),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => writeReview(input)),
@@ -948,15 +948,6 @@ server.registerTool(
     description:
       "Write a structured implementation summary. Accepts typed file changes, decisions applied, deviations, and tests. Produces IMPLEMENTATION-SUMMARY.md + .meta.json sidecar.",
     inputSchema: {
-      workspace: z.string(),
-      slug: z.string(),
-      task_id: z.string(),
-      files_changed: z.array(
-        z.object({
-          path: z.string(),
-          action: z.enum(["added", "modified", "deleted"]),
-        }),
-      ),
       decisions_applied: z.array(z.string()).optional(),
       deviations: z
         .array(
@@ -966,7 +957,16 @@ server.registerTool(
           }),
         )
         .optional(),
+      files_changed: z.array(
+        z.object({
+          action: z.enum(["added", "modified", "deleted"]),
+          path: z.string(),
+        }),
+      ),
+      slug: z.string(),
+      task_id: z.string(),
       tests_added: z.array(z.string()).optional(),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => writeImplementationSummary(input)),
@@ -978,36 +978,35 @@ server.registerTool(
     description:
       "Drive the Canon state machine loop server-side. Turn-by-turn protocol: first call (no result) enters the current state and returns SpawnRequest[]; subsequent calls (with result) report the agent's result, advance the loop, and return the next action. Returns spawn, hitl, or done.",
     inputSchema: {
-      workspace: z.string().describe("Workspace directory path"),
       flow: ResolvedFlowSchema.describe("Resolved flow object from load_flow"),
       result: z
         .object({
-          state_id: z.string().describe("State ID that just completed"),
-          status: z
-            .string()
-            .describe("Agent status keyword (e.g. DONE, DONE_WITH_CONCERNS, BLOCKED)"),
-          artifacts: z
-            .array(z.string())
-            .optional()
-            .describe("Artifact paths produced by the agent"),
-          parallel_results: z
-            .array(
-              z.object({
-                item: z.string(),
-                status: z.string(),
-                artifacts: z.array(z.string()).optional(),
-              }),
-            )
-            .optional()
-            .describe("Results from parallel-per execution"),
-          metrics: z
-            .record(z.string(), z.unknown())
-            .optional()
-            .describe("Agent performance metrics"),
           agent_session_id: z
             .string()
             .optional()
             .describe("Agent session ID for ADR-009a continue_from support"),
+          artifacts: z
+            .array(z.string())
+            .optional()
+            .describe("Artifact paths produced by the agent"),
+          metrics: z
+            .record(z.string(), z.unknown())
+            .optional()
+            .describe("Agent performance metrics"),
+          parallel_results: z
+            .array(
+              z.object({
+                artifacts: z.array(z.string()).optional(),
+                item: z.string(),
+                status: z.string(),
+              }),
+            )
+            .optional()
+            .describe("Results from parallel-per execution"),
+          state_id: z.string().describe("State ID that just completed"),
+          status: z
+            .string()
+            .describe("Agent status keyword (e.g. DONE, DONE_WITH_CONCERNS, BLOCKED)"),
           task_id: z
             .string()
             .optional()
@@ -1016,19 +1015,20 @@ server.registerTool(
         .strip()
         .optional()
         .describe("Result from the most recently completed agent. Omit on the first call."),
+      workspace: z.string().describe("Workspace directory path"),
     },
   },
   wrapHandler(async (input) => driveFlow(input)),
 );
 
 const FailureEntrySchema = z.object({
-  file: z.string().describe("Test file path"),
-  test_name: z.string().optional().describe("Test name"),
   error_message: z.string().describe("Error message from the failure"),
   error_type: z
     .string()
     .optional()
     .describe("Error type or class (e.g. TypeError, AssertionError)"),
+  file: z.string().describe("Test file path"),
+  test_name: z.string().optional().describe("Test name"),
 });
 
 server.registerTool(
@@ -1037,7 +1037,6 @@ server.registerTool(
     description:
       "Group test failures by root cause using pattern matching with confidence scoring. Returns categorized failures and a needs_refinement flag indicating whether LLM review is needed for low-confidence groupings.",
     inputSchema: {
-      workspace: z.string().describe("Workspace directory path"),
       failures: z
         .array(FailureEntrySchema)
         .min(1)
@@ -1054,6 +1053,7 @@ server.registerTool(
         .describe(
           "LLM-provided refined categories. When present, skips pattern matching and applies these groupings directly (confidence 1.0).",
         ),
+      workspace: z.string().describe("Workspace directory path"),
     },
   },
   wrapHandler(async (input) =>
@@ -1079,6 +1079,23 @@ server.registerTool(
     description:
       "Submit a background codebase graph generation job. Returns immediately with a job_id for polling. In CI mode (process.env.CI or CANON_SYNC_JOBS=1), runs synchronously and returns a complete result.",
     inputSchema: {
+      changed_files: z
+        .array(z.string())
+        .optional()
+        .describe("Explicit list of changed files to highlight"),
+      diff_base: z
+        .string()
+        .optional()
+        .describe("Git ref to diff against — marks changed files in the graph"),
+      exclude_dirs: z
+        .array(z.string())
+        .optional()
+        .describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
+      force: z.boolean().optional().describe("Skip cache, force new run"),
+      include_extensions: z
+        .array(z.string())
+        .optional()
+        .describe("File extensions to include (default: ts, js, py, go, rs)"),
       root_dir: z
         .string()
         .optional()
@@ -1091,23 +1108,6 @@ server.registerTool(
         .describe(
           "Directories to scan (e.g. ['src', 'lib']). Overrides directories derived from layers in .canon/config.json.",
         ),
-      include_extensions: z
-        .array(z.string())
-        .optional()
-        .describe("File extensions to include (default: ts, js, py, go, rs)"),
-      exclude_dirs: z
-        .array(z.string())
-        .optional()
-        .describe("Directories to exclude (default: node_modules, .git, dist, etc.)"),
-      diff_base: z
-        .string()
-        .optional()
-        .describe("Git ref to diff against — marks changed files in the graph"),
-      changed_files: z
-        .array(z.string())
-        .optional()
-        .describe("Explicit list of changed files to highlight"),
-      force: z.boolean().optional().describe("Skip cache, force new run"),
     },
   },
   wrapHandler(async (input) => codebaseGraphSubmit(input, projectDir, pluginDir)),
@@ -1126,16 +1126,11 @@ server.registerTool(
 );
 
 registerToolWithUi("codebase_graph_materialize", {
-  resourceUri: "ui://canon/codebase-graph",
-  title: "Codebase Graph",
   description:
     "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
+  handler: wrapHandler(async (input) => codebaseGraphMaterialize(input, projectDir, pluginDir)),
+  htmlFile: "codebase-graph.html",
   inputSchema: {
-    job_id: z.string().describe("Job ID of a completed codebase graph job"),
-    diff_base: z
-      .string()
-      .optional()
-      .describe("Git ref to diff against — marks changed files in the graph"),
     changed_files: z
       .array(z.string())
       .optional()
@@ -1144,9 +1139,14 @@ registerToolWithUi("codebase_graph_materialize", {
       .enum(["file", "entity"])
       .optional()
       .describe("Graph resolution: file (default) or entity"),
+    diff_base: z
+      .string()
+      .optional()
+      .describe("Git ref to diff against — marks changed files in the graph"),
+    job_id: z.string().describe("Job ID of a completed codebase graph job"),
   },
-  htmlFile: "codebase-graph.html",
-  handler: wrapHandler(async (input) => codebaseGraphMaterialize(input, projectDir, pluginDir)),
+  resourceUri: "ui://canon/codebase-graph",
+  title: "Codebase Graph",
 });
 
 // --- Signal handlers for child process cleanup ---

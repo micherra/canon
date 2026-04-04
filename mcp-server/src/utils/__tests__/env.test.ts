@@ -15,14 +15,12 @@
  * - isCI() returns false when CI is not set
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'vitest';
-import { isSyncMode, isCI } from '../env.ts';
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { isCI, isSyncMode } from "../env.ts";
 
-// ---------------------------------------------------------------------------
 // Helper — clean environment for each test
-// ---------------------------------------------------------------------------
 
-const WATCHED_VARS = ['CI', 'CANON_SYNC_JOBS'];
+const WATCHED_VARS = ["CI", "CANON_SYNC_JOBS"];
 
 function clearWatchedVars() {
   for (const v of WATCHED_VARS) {
@@ -33,75 +31,69 @@ function clearWatchedVars() {
 beforeEach(clearWatchedVars);
 afterEach(clearWatchedVars);
 
-// ---------------------------------------------------------------------------
 // isCI()
-// ---------------------------------------------------------------------------
 
-describe('isCI()', () => {
-  test('returns true when CI=true', () => {
-    process.env.CI = 'true';
+describe("isCI()", () => {
+  test("returns true when CI=true", () => {
+    process.env.CI = "true";
     expect(isCI()).toBe(true);
   });
 
-  test('returns true when CI=1', () => {
-    process.env.CI = '1';
+  test("returns true when CI=1", () => {
+    process.env.CI = "1";
     expect(isCI()).toBe(true);
   });
 
-  test('returns true when CI is set to any non-undefined value', () => {
-    process.env.CI = 'yes';
+  test("returns true when CI is set to any non-undefined value", () => {
+    process.env.CI = "yes";
     expect(isCI()).toBe(true);
   });
 
-  test('returns false when CI is not set', () => {
+  test("returns false when CI is not set", () => {
     expect(isCI()).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // isSyncMode() — CANON_SYNC_JOBS takes precedence
-// ---------------------------------------------------------------------------
 
-describe('isSyncMode() — CANON_SYNC_JOBS override', () => {
-  test('returns true when CANON_SYNC_JOBS=1', () => {
-    process.env.CANON_SYNC_JOBS = '1';
+describe("isSyncMode() — CANON_SYNC_JOBS override", () => {
+  test("returns true when CANON_SYNC_JOBS=1", () => {
+    process.env.CANON_SYNC_JOBS = "1";
     expect(isSyncMode()).toBe(true);
   });
 
-  test('returns true when CANON_SYNC_JOBS=true', () => {
-    process.env.CANON_SYNC_JOBS = 'true';
+  test("returns true when CANON_SYNC_JOBS=true", () => {
+    process.env.CANON_SYNC_JOBS = "true";
     expect(isSyncMode()).toBe(true);
   });
 
-  test('returns false when CANON_SYNC_JOBS=0, even with CI=true', () => {
-    process.env.CANON_SYNC_JOBS = '0';
-    process.env.CI = 'true';
+  test("returns false when CANON_SYNC_JOBS=0, even with CI=true", () => {
+    process.env.CANON_SYNC_JOBS = "0";
+    process.env.CI = "true";
     expect(isSyncMode()).toBe(false);
   });
 
-  test('returns false when CANON_SYNC_JOBS=false, even with CI=true', () => {
-    process.env.CANON_SYNC_JOBS = 'false';
-    process.env.CI = 'true';
+  test("returns false when CANON_SYNC_JOBS=false, even with CI=true", () => {
+    process.env.CANON_SYNC_JOBS = "false";
+    process.env.CI = "true";
     expect(isSyncMode()).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // isSyncMode() — CI fallback when CANON_SYNC_JOBS not set
-// ---------------------------------------------------------------------------
 
-describe('isSyncMode() — CI fallback', () => {
-  test('returns true when CI=true and no CANON_SYNC_JOBS', () => {
-    process.env.CI = 'true';
+describe("isSyncMode() — CI fallback", () => {
+  test("returns true when CI=true and no CANON_SYNC_JOBS", () => {
+    process.env.CI = "true";
     expect(isSyncMode()).toBe(true);
   });
 
-  test('returns true when CI=1 and no CANON_SYNC_JOBS', () => {
-    process.env.CI = '1';
+  test("returns true when CI=1 and no CANON_SYNC_JOBS", () => {
+    process.env.CI = "1";
     expect(isSyncMode()).toBe(true);
   });
 
-  test('returns false when neither CI nor CANON_SYNC_JOBS is set', () => {
+  test("returns false when neither CI nor CANON_SYNC_JOBS is set", () => {
     expect(isSyncMode()).toBe(false);
   });
 });

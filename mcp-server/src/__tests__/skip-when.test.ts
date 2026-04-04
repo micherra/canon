@@ -4,7 +4,13 @@ import { evaluateSkipWhen, matchGlob } from "../orchestration/skip-when.ts";
 
 // Hoist the mock factory so it runs before module import.
 // gitExecImpl is a mutable reference we swap per test.
-type GitExecResult = { ok: boolean; stdout: string; stderr: string; exitCode: number; timedOut: boolean };
+type GitExecResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+};
 let gitExecImpl: (() => GitExecResult) | null = null;
 let lastGitExecArgs: { args: string[]; cwd: string } | null = null;
 
@@ -13,28 +19,30 @@ vi.mock("../adapters/git-adapter.ts", () => ({
     lastGitExecArgs = { args, cwd };
     if (gitExecImpl) return gitExecImpl();
     // Default: simulate git failure (safe default — do not skip)
-    return { ok: false, stdout: "", stderr: "gitExec not configured in test", exitCode: 1, timedOut: false };
+    return {
+      exitCode: 1,
+      ok: false,
+      stderr: "gitExec not configured in test",
+      stdout: "",
+      timedOut: false,
+    };
   },
 }));
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeBoard(overrides?: Partial<Board>): Board {
   return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test-flow",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
     ...overrides,
   };
 }
@@ -44,9 +52,7 @@ beforeEach(() => {
   lastGitExecArgs = null;
 });
 
-// ---------------------------------------------------------------------------
 // matchGlob unit tests
-// ---------------------------------------------------------------------------
 
 describe("matchGlob", () => {
   it("matches exact file names", () => {
@@ -78,9 +84,7 @@ describe("matchGlob", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // evaluateSkipWhen — no_fix_requested
-// ---------------------------------------------------------------------------
 
 describe("evaluateSkipWhen — no_fix_requested", () => {
   it("skips when board has no metadata", async () => {
@@ -108,9 +112,7 @@ describe("evaluateSkipWhen — no_fix_requested", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // evaluateSkipWhen — auto_approved
-// ---------------------------------------------------------------------------
 
 describe("evaluateSkipWhen — auto_approved", () => {
   it("skips when board.metadata.auto_approve is true", async () => {
@@ -138,9 +140,7 @@ describe("evaluateSkipWhen — auto_approved", () => {
     expect(result.skip).toBe(false);
   });
 
-  // -------------------------------------------------------------------------
   // Truthy non-boolean values — strict === true check (declared known gap)
-  // -------------------------------------------------------------------------
 
   it("does not skip when board.metadata.auto_approve is the string 'true' (strict equality)", async () => {
     // Implementation uses === true so non-boolean truthy values should NOT skip
@@ -162,9 +162,7 @@ describe("evaluateSkipWhen — auto_approved", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // SkipWhenSchema — schema validation
-// ---------------------------------------------------------------------------
 
 describe("SkipWhenSchema", () => {
   it("accepts auto_approved as a valid value", async () => {
@@ -191,9 +189,7 @@ describe("SkipWhenSchema", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // evaluateSkipWhen — unknown condition
-// ---------------------------------------------------------------------------
 
 describe("evaluateSkipWhen — unknown condition", () => {
   it("returns skip: false and logs a console.error warning", async () => {
@@ -212,9 +208,7 @@ describe("evaluateSkipWhen — unknown condition", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // evaluateSkipWhen — no_open_questions
-// ---------------------------------------------------------------------------
 
 describe("evaluateSkipWhen — no_open_questions", () => {
   it("skips when board has no metadata (has_open_questions not set)", async () => {
@@ -251,13 +245,17 @@ describe("evaluateSkipWhen — no_open_questions", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // evaluateSkipWhen — no_contract_changes
-// ---------------------------------------------------------------------------
 
 describe("evaluateSkipWhen — no_contract_changes", () => {
   it("returns skip: true when only non-contract files changed", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "src/some-internal.ts\nsrc/utils/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "src/some-internal.ts\nsrc/utils/helper.ts\n",
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -266,7 +264,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when API files changed", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "src/api/users.ts\nsrc/internal/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "src/api/users.ts\nsrc/internal/helper.ts\n",
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -274,7 +278,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when index.ts changed", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "src/index.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "src/index.ts\n",
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -282,7 +292,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when package.json changed", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "package.json\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "package.json\n",
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -291,7 +307,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
 
   it("returns skip: true when contract files are only deleted (not added/modified)", async () => {
     // --diff-filter=d excludes deleted files, so git returns only the non-contract file
-    gitExecImpl = () => ({ ok: true, stdout: "src/utils/helper.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "src/utils/helper.ts\n",
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -300,7 +322,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("passes --diff-filter=d to gitExec to exclude deleted files from contract check", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -308,7 +330,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: true when diff output is empty (no changes at all)", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -316,7 +338,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("returns skip: false when gitExec returns ok: false (non-zero exit)", async () => {
-    gitExecImpl = () => ({ ok: false, stdout: "", stderr: "fatal: not a repository", exitCode: 128, timedOut: false });
+    gitExecImpl = () => ({
+      exitCode: 128,
+      ok: false,
+      stderr: "fatal: not a repository",
+      stdout: "",
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -326,7 +354,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
 
   it("returns skip: false when gitExec returns ok: false (timeout)", async () => {
     // Risk 9: adapter returns timedOut: true → function degrades gracefully
-    gitExecImpl = () => ({ ok: false, stdout: "", stderr: "", exitCode: 1, timedOut: true });
+    gitExecImpl = () => ({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: true });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -334,9 +362,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
     expect(result.skip).toBe(false);
   });
 
-  // -------------------------------------------------------------------------
   // Security: input validation — malicious base_commit strings
-  // -------------------------------------------------------------------------
 
   it("rejects base_commit with shell metacharacters (command injection attempt)", async () => {
     // gitExecImpl should never be called — validation rejects before reaching adapter
@@ -390,7 +416,7 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("accepts a valid 7-char short SHA", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     const board = makeBoard({ base_commit: "abc1234" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 
@@ -399,7 +425,13 @@ describe("evaluateSkipWhen — no_contract_changes", () => {
   });
 
   it("accepts a valid 40-char full SHA", async () => {
-    gitExecImpl = () => ({ ok: true, stdout: "src/internal.ts\n", stderr: "", exitCode: 0, timedOut: false });
+    gitExecImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "src/internal.ts\n",
+      timedOut: false,
+    });
     const board = makeBoard({ base_commit: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2" });
     const result = await evaluateSkipWhen("no_contract_changes", "/tmp/ws", board);
 

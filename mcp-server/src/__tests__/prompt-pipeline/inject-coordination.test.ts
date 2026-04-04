@@ -12,24 +12,18 @@
  * - Metrics footer appended even when prompts have different content
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../../orchestration/messages.ts", () => ({
   buildMessageInstructions: vi.fn().mockReturnValue("## Wave Coordination\n\nInstructions here"),
 }));
 
+import type { ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
 import { buildMessageInstructions } from "../../orchestration/messages.ts";
 import { injectCoordination } from "../../tools/prompt-pipeline/inject-coordination.ts";
 import type { PromptContext, SpawnPromptEntry } from "../../tools/prompt-pipeline/types.ts";
-import type { ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {
@@ -40,33 +34,45 @@ function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry 
   };
 }
 
-function makeCtx(overrides: Partial<PromptContext> & { workspace?: string; state_id?: string; flow?: ResolvedFlow; variables?: Record<string, string>; role?: string; wave?: number; peer_count?: number } = {}): PromptContext {
+function makeCtx(
+  overrides: Partial<PromptContext> & {
+    workspace?: string;
+    state_id?: string;
+    flow?: ResolvedFlow;
+    variables?: Record<string, string>;
+    role?: string;
+    wave?: number;
+    peer_count?: number;
+  } = {},
+): PromptContext {
   const { workspace, state_id, flow, variables, role, wave, peer_count, ...rest } = overrides;
   return {
+    basePrompt: "Do the thing",
     input: {
-      workspace: workspace ?? "/tmp/test-workspace",
+      flow:
+        flow ??
+        ({
+          description: "Test",
+          entry: "implement",
+          name: "test-flow",
+          spawn_instructions: { implement: "Do the thing" },
+          states: {
+            done: { type: "terminal" },
+            implement: { agent: "canon-implementor", type: "single" },
+          },
+        } as ResolvedFlow),
       state_id: state_id ?? "implement",
-      flow: flow ?? {
-        name: "test-flow",
-        description: "Test",
-        entry: "implement",
-        states: {
-          implement: { type: "single", agent: "canon-implementor" },
-          done: { type: "terminal" },
-        },
-        spawn_instructions: { implement: "Do the thing" },
-      } as ResolvedFlow,
       variables: variables ?? {},
+      workspace: workspace ?? "/tmp/test-workspace",
       ...("role" in overrides ? { role } : {}),
       ...("wave" in overrides ? { wave } : {}),
       ...("peer_count" in overrides ? { peer_count } : {}),
     },
-    state: { type: "single", agent: "canon-implementor" } as StateDefinition,
-    rawInstruction: "Do the thing",
-    basePrompt: "Do the thing",
-    prompts: [makeEntry()],
-    warnings: [],
     mergedVariables: {},
+    prompts: [makeEntry()],
+    rawInstruction: "Do the thing",
+    state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+    warnings: [],
     ...rest,
   };
 }
@@ -76,16 +82,14 @@ beforeEach(() => {
   vi.mocked(buildMessageInstructions).mockReturnValue("## Wave Coordination\n\nInstructions here");
 });
 
-// ---------------------------------------------------------------------------
 // Role substitution
-// ---------------------------------------------------------------------------
 
 describe("injectCoordination — role substitution", () => {
   it("substitutes role variable in prompt for single state when ctx.role is set", async () => {
     const ctx = makeCtx({
-      state: { type: "single", agent: "canon-implementor" } as StateDefinition,
-      role: "frontend",
       prompts: [makeEntry({ prompt: "Implement the ${role} layer" })],
+      role: "frontend",
+      state: { agent: "canon-implementor", type: "single" } as StateDefinition,
     });
 
     const result = await injectCoordination(ctx);
@@ -96,12 +100,12 @@ describe("injectCoordination — role substitution", () => {
 
   it("applies role substitution to all prompts (for cluster-fanned single state)", async () => {
     const ctx = makeCtx({
-      state: { type: "single", agent: "canon-reviewer" } as StateDefinition,
-      role: "tech-lead",
       prompts: [
         makeEntry({ prompt: "Review cluster 1 as ${role}" }),
         makeEntry({ prompt: "Review cluster 2 as ${role}" }),
       ],
+      role: "tech-lead",
+      state: { agent: "canon-reviewer", type: "single" } as StateDefinition,
     });
 
     const result = await injectCoordination(ctx);
@@ -114,9 +118,9 @@ describe("injectCoordination — role substitution", () => {
 
   it("does NOT apply role substitution when state type is not single", async () => {
     const ctx = makeCtx({
-      state: { type: "wave", agent: "canon-implementor" } as StateDefinition,
-      role: "frontend",
       prompts: [makeEntry({ prompt: "Implement the ${role} layer" })],
+      role: "frontend",
+      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
     });
 
     const result = await injectCoordination(ctx);
@@ -128,9 +132,9 @@ describe("injectCoordination — role substitution", () => {
 
   it("does NOT apply role substitution when ctx.role is not set", async () => {
     const ctx = makeCtx({
-      state: { type: "single", agent: "canon-implementor" } as StateDefinition,
-      role: undefined,
       prompts: [makeEntry({ prompt: "Implement the ${role} layer" })],
+      role: undefined,
+      state: { agent: "canon-implementor", type: "single" } as StateDefinition,
     });
 
     const result = await injectCoordination(ctx);
@@ -140,16 +144,17 @@ describe("injectCoordination — role substitution", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Messaging instructions
-// ---------------------------------------------------------------------------
 
 describe("injectCoordination — messaging instructions", () => {
   it("appends messaging instructions to each prompt for wave state with wave set", async () => {
     const ctx = makeCtx({
-      state: { type: "wave", agent: "canon-implementor" } as StateDefinition,
+      prompts: [
+        makeEntry({ prompt: "Implement task A" }),
+        makeEntry({ prompt: "Implement task B" }),
+      ],
+      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
       wave: 2,
-      prompts: [makeEntry({ prompt: "Implement task A" }), makeEntry({ prompt: "Implement task B" })],
     });
 
     const result = await injectCoordination(ctx);
@@ -161,9 +166,9 @@ describe("injectCoordination — messaging instructions", () => {
 
   it("appends messaging instructions for parallel-per state with wave set", async () => {
     const ctx = makeCtx({
-      state: { type: "parallel-per", agent: "canon-implementor" } as StateDefinition,
-      wave: 1,
       prompts: [makeEntry()],
+      state: { agent: "canon-implementor", type: "parallel-per" } as StateDefinition,
+      wave: 1,
     });
 
     const result = await injectCoordination(ctx);
@@ -174,9 +179,9 @@ describe("injectCoordination — messaging instructions", () => {
 
   it("does NOT append messaging instructions when wave is null/undefined", async () => {
     const ctx = makeCtx({
-      state: { type: "wave", agent: "canon-implementor" } as StateDefinition,
-      wave: undefined,
       prompts: [makeEntry()],
+      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      wave: undefined,
     });
 
     const result = await injectCoordination(ctx);
@@ -187,22 +192,22 @@ describe("injectCoordination — messaging instructions", () => {
 
   it("does NOT append messaging instructions for single state", async () => {
     const ctx = makeCtx({
-      state: { type: "single", agent: "canon-implementor" } as StateDefinition,
-      wave: 1,
       prompts: [makeEntry()],
+      state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+      wave: 1,
     });
 
-    const result = await injectCoordination(ctx);
+    const _result = await injectCoordination(ctx);
 
     expect(buildMessageInstructions).not.toHaveBeenCalled();
   });
 
   it("uses peer_count from ctx when provided", async () => {
     const ctx = makeCtx({
-      state: { type: "wave", agent: "canon-implementor" } as StateDefinition,
-      wave: 1,
       peer_count: 5,
       prompts: [makeEntry(), makeEntry()],
+      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      wave: 1,
     });
 
     await injectCoordination(ctx);
@@ -216,10 +221,10 @@ describe("injectCoordination — messaging instructions", () => {
 
   it("defaults peer_count to prompts.length - 1 when not provided", async () => {
     const ctx = makeCtx({
-      state: { type: "wave", agent: "canon-implementor" } as StateDefinition,
-      wave: 1,
       peer_count: undefined,
       prompts: [makeEntry(), makeEntry(), makeEntry()],
+      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      wave: 1,
     });
 
     await injectCoordination(ctx);
@@ -233,9 +238,9 @@ describe("injectCoordination — messaging instructions", () => {
 
   it("formats wave channel with zero-padding (wave-001, wave-002)", async () => {
     const ctx = makeCtx({
-      state: { type: "wave", agent: "canon-implementor" } as StateDefinition,
-      wave: 12,
       prompts: [makeEntry()],
+      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      wave: 12,
     });
 
     await injectCoordination(ctx);
@@ -248,9 +253,7 @@ describe("injectCoordination — messaging instructions", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Metrics footer
-// ---------------------------------------------------------------------------
 
 describe("injectCoordination — metrics footer", () => {
   it("appends metrics footer to every prompt entry", async () => {
@@ -266,8 +269,8 @@ describe("injectCoordination — metrics footer", () => {
 
   it("metrics footer contains correct workspace value", async () => {
     const ctx = makeCtx({
-      workspace: "/Users/michelle/projects/my-workspace",
       prompts: [makeEntry()],
+      workspace: "/Users/michelle/projects/my-workspace",
     });
 
     const result = await injectCoordination(ctx);
@@ -277,8 +280,8 @@ describe("injectCoordination — metrics footer", () => {
 
   it("metrics footer contains correct state_id value", async () => {
     const ctx = makeCtx({
-      state_id: "review-code",
       prompts: [makeEntry()],
+      state_id: "review-code",
     });
 
     const result = await injectCoordination(ctx);

@@ -5,6 +5,7 @@
 
 - **Language**: TypeScript (ES modules) with Node.js 25.x (pinned to 25.8.0 in .tool-versions)
 - **Naming**: camelCase for functions and variables, PascalCase for types and interfaces
+- **Functions**: Prefer arrow functions (`const foo = () => {}`) over function declarations; exception: exported functions that need hoisting
 - **File naming**: kebab-case for files and directories
 - **Module structure**: One tool per file in `tools/`, one subsystem per directory (`drift/`, `graph/`, `utils/`)
 - **Schema validation**: Zod schemas at API/tool boundaries

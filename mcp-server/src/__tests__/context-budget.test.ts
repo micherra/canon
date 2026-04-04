@@ -4,7 +4,7 @@
  * Tests getItemCountCap tier-to-cap mapping and default fallback.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { getItemCountCap } from "../orchestration/context-budget.ts";
 
 describe("getItemCountCap", () => {

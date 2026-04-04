@@ -179,11 +179,11 @@ function clusterNewFeatures(files: ClusterInput[]): {
     if (dirFiles.length >= 2 && dirFiles.every((f) => f.status === "added")) {
       const label = dir.split("/").pop() ?? dir;
       clusters.push({
+        description: synthesizeDescription(dirFiles),
+        files: dirFiles,
         id: slugify(`new-${label}`),
         title: `New: ${label}`,
         type: "new-feature",
-        description: synthesizeDescription(dirFiles),
-        files: dirFiles,
       });
       for (const f of dirFiles) clustered.add(f.path);
     }
@@ -210,11 +210,11 @@ function clusterRemovals(files: ClusterInput[]): {
     if (dirFiles.length >= 2 && dirFiles.every((f) => f.status === "deleted")) {
       const label = dir.split("/").pop() ?? dir;
       clusters.push({
+        description: synthesizeDescription(dirFiles),
+        files: dirFiles,
         id: slugify(`removed-${label}`),
         title: `Removed: ${label}`,
         type: "removal",
-        description: synthesizeDescription(dirFiles),
-        files: dirFiles,
       });
       for (const f of dirFiles) clustered.add(f.path);
     }
@@ -266,7 +266,7 @@ function findBestPrefix(prefixMap: Map<string, ClusterInput[]>): {
       bestGroup = group;
     }
   }
-  return { prefix: bestPrefix, group: bestGroup };
+  return { group: bestGroup, prefix: bestPrefix };
 }
 
 function clusterByPrefix(files: ClusterInput[]): {
@@ -289,11 +289,11 @@ function clusterByPrefix(files: ClusterInput[]): {
 
       const label = bestPrefix.replace(/[-_.]$/, "");
       clusters.push({
+        description: synthesizeDescription(bestGroup),
+        files: bestGroup,
         id: slugify(`prefix-${dir}-${label}`),
         title: `${label} files`,
         type: "prefix-group",
-        description: synthesizeDescription(bestGroup),
-        files: bestGroup,
       });
       for (const f of bestGroup) clustered.add(f.path);
       unclustered = unclustered.filter((f) => !clustered.has(f.path));
@@ -323,11 +323,11 @@ function clusterByLayer(files: ClusterInput[]): { clusters: Cluster[]; remaining
   for (const [layer, layerFiles] of byLayer) {
     if (layerFiles.length >= 2) {
       clusters.push({
+        description: synthesizeDescription(layerFiles),
+        files: layerFiles,
         id: slugify(`layer-${layer}`),
         title: `${layer} changes`,
         type: "layer-group",
-        description: synthesizeDescription(layerFiles),
-        files: layerFiles,
       });
       for (const f of layerFiles) clustered.add(f.path);
     }
@@ -349,11 +349,11 @@ function mergeSmallClusters(clusters: Cluster[], orphans: ClusterInput[]): Clust
   if (allSmallFiles.length === 0) return large;
 
   const otherCluster: Cluster = {
+    description: synthesizeDescription(allSmallFiles),
+    files: allSmallFiles,
     id: "other-modifications",
     title: "Other modifications",
     type: "other",
-    description: synthesizeDescription(allSmallFiles),
-    files: allSmallFiles,
   };
 
   return [...large, otherCluster];
@@ -369,11 +369,11 @@ function splitBySubdirectory(cluster: Cluster, bySubdir: Map<string, ClusterInpu
   for (const [subdir, subdirFiles] of bySubdir) {
     const label = subdir.split("/").pop() ?? subdir;
     const sub: Cluster = {
+      description: synthesizeDescription(subdirFiles),
+      files: subdirFiles,
       id: slugify(`${cluster.id}-${label}`),
       title: `${cluster.title} / ${label}`,
       type: cluster.type,
-      description: synthesizeDescription(subdirFiles),
-      files: subdirFiles,
     };
     if (subdirFiles.length > 30) {
       result.push(...splitLargeClusters([sub]));
@@ -391,11 +391,11 @@ function splitIntoChunks(cluster: Cluster): Cluster[] {
   for (let i = 0; i < cluster.files.length; i += chunkSize) {
     const chunk = cluster.files.slice(i, i + chunkSize);
     result.push({
+      description: synthesizeDescription(chunk),
+      files: chunk,
       id: slugify(`${cluster.id}-part-${part}`),
       title: `${cluster.title} (${part})`,
       type: cluster.type,
-      description: synthesizeDescription(chunk),
-      files: chunk,
     });
     part++;
   }

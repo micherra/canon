@@ -17,41 +17,41 @@ export function initBoard(flow: ResolvedFlow, task: string, baseCommit: string):
   const iterations: Board["iterations"] = {};
 
   for (const [key, stateDef] of Object.entries(flow.states)) {
-    states[key] = { status: "pending", entries: 0 };
+    states[key] = { entries: 0, status: "pending" };
 
     // max_revisions (ADR-017) takes precedence over max_iterations for revision budget
     const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
     if (maxIter !== undefined) {
       iterations[key] = {
-        count: 0,
-        max: maxIter,
-        history: [],
         cannot_fix: [],
+        count: 0,
+        history: [],
+        max: maxIter,
       };
     } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
       // Default revision budget for explicitly gated states without explicit limit
       iterations[key] = {
-        count: 0,
-        max: 3,
-        history: [],
         cannot_fix: [],
+        count: 0,
+        history: [],
+        max: 3,
       };
     }
   }
 
   return {
-    flow: flow.name,
-    task,
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: baseCommit,
-    started: now,
-    last_updated: now,
-    states,
-    iterations,
     blocked: null,
     concerns: [],
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
+    iterations,
+    last_updated: now,
     skipped: [],
+    started: now,
+    states,
+    task,
   };
 }
 
@@ -67,9 +67,9 @@ export function enterState(board: Board, stateId: string): Board {
     ...board.states,
     [stateId]: {
       ...prev,
-      status: "in_progress" as const,
-      entries: (prev?.entries ?? 0) + 1,
       entered_at: now,
+      entries: (prev?.entries ?? 0) + 1,
+      status: "in_progress" as const,
     },
   };
 
@@ -88,24 +88,29 @@ export function enterState(board: Board, stateId: string): Board {
   return {
     ...board,
     current_state: stateId,
-    states: newStates,
     iterations: newIterations,
     last_updated: now,
+    states: newStates,
   };
 }
 
 /**
  * Complete a state — sets status to done, records result and optional artifacts.
  */
-export function completeState(board: Board, stateId: string, result: string, artifacts?: string[]): Board {
+export function completeState(
+  board: Board,
+  stateId: string,
+  result: string,
+  artifacts?: string[],
+): Board {
   const now = new Date().toISOString();
   const prev = board.states[stateId];
 
   const updated: Board["states"][string] = {
     ...prev,
-    status: "done" as const,
-    result,
     completed_at: now,
+    result,
+    status: "done" as const,
   };
 
   if (artifacts) {
@@ -114,11 +119,11 @@ export function completeState(board: Board, stateId: string, result: string, art
 
   return {
     ...board,
+    last_updated: now,
     states: {
       ...board.states,
       [stateId]: updated,
     },
-    last_updated: now,
   };
 }
 
@@ -130,7 +135,8 @@ export function setBlocked(board: Board, stateId: string, reason: string): Board
 
   return {
     ...board,
-    blocked: { state: stateId, reason, since: now },
+    blocked: { reason, since: now, state: stateId },
+    last_updated: now,
     states: {
       ...board.states,
       [stateId]: {
@@ -138,9 +144,15 @@ export function setBlocked(board: Board, stateId: string, reason: string): Board
         status: "blocked" as const,
       },
     },
-    last_updated: now,
   };
 }
+
+export type RecordConsultationOpts = {
+  waveKey: string;
+  breakpoint: "before" | "between" | "after";
+  name: string;
+  result: ConsultationResult;
+};
 
 /**
  * Record a consultation result into the board. Pure — returns a new Board.
@@ -148,13 +160,11 @@ export function setBlocked(board: Board, stateId: string, reason: string): Board
 export function recordConsultationResult(
   board: Board,
   stateId: string,
-  waveKey: string,
-  breakpoint: "before" | "between" | "after",
-  name: string,
-  result: ConsultationResult,
+  opts: RecordConsultationOpts,
 ): Board {
-  const stateEntry = board.states[stateId] ?? { status: "pending" as const, entries: 0 };
-  const waveResult = stateEntry.wave_results?.[waveKey] ?? { tasks: [], status: "in_progress" };
+  const { waveKey, breakpoint, name, result } = opts;
+  const stateEntry = board.states[stateId] ?? { entries: 0, status: "pending" as const };
+  const waveResult = stateEntry.wave_results?.[waveKey] ?? { status: "in_progress", tasks: [] };
   const consultations = waveResult.consultations ?? {};
   const breakpointMap = consultations[breakpoint] ?? {};
 
@@ -184,18 +194,19 @@ export function recordConsultationResult(
   };
 }
 
+export type RecordGateOpts = {
+  waveKey: string;
+  gate: string;
+  gateOutput: string;
+};
+
 /**
  * Record a gate result (gate name + output) into the board. Pure — returns a new Board.
  */
-export function recordGateResult(
-  board: Board,
-  stateId: string,
-  waveKey: string,
-  gate: string,
-  gateOutput: string,
-): Board {
-  const stateEntry = board.states[stateId] ?? { status: "pending" as const, entries: 0 };
-  const waveResult = stateEntry.wave_results?.[waveKey] ?? { tasks: [], status: "in_progress" };
+export function recordGateResult(board: Board, stateId: string, opts: RecordGateOpts): Board {
+  const { waveKey, gate, gateOutput } = opts;
+  const stateEntry = board.states[stateId] ?? { entries: 0, status: "pending" as const };
+  const waveResult = stateEntry.wave_results?.[waveKey] ?? { status: "in_progress", tasks: [] };
 
   const newWaveResult = {
     ...waveResult,

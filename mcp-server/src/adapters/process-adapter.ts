@@ -14,11 +14,11 @@ const MAX_OUTPUT_BYTES = 512_000; // 512KB output truncation
 export function runShell(command: string, cwd: string, timeout = DEFAULT_TIMEOUT): ProcessResult {
   const start = performance.now();
   const result = spawnSync(command, {
-    shell: true,
     cwd,
     encoding: "utf-8",
-    timeout,
     maxBuffer: MAX_OUTPUT_BYTES,
+    shell: true,
+    timeout,
   });
   const duration_ms = Math.round(performance.now() - start);
 
@@ -28,14 +28,14 @@ export function runShell(command: string, cwd: string, timeout = DEFAULT_TIMEOUT
   const stderr = rawStderr || (result.error ? result.error.message : "");
 
   return {
-    ok: result.status === 0 && !result.error,
-    stdout: result.stdout ?? "",
-    stderr,
+    duration_ms,
     exitCode: result.status ?? 1,
+    ok: result.status === 0 && !result.error,
+    stderr,
+    stdout: result.stdout ?? "",
     timedOut:
       result.error?.message?.includes("ETIMEDOUT") === true ||
       result.error?.message?.includes("timed out") === true ||
       result.signal === "SIGTERM",
-    duration_ms,
   };
 }

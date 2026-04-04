@@ -46,15 +46,16 @@
           "options": { "maxAllowedComplexity": 12 }
         },
         "noExcessiveLinesPerFunction": {
-          "level": "warn",
+          "level": "error",
           "options": { "maxLines": 60 }
         },
         "useMaxParams": {
-          "level": "warn",
+          "level": "error",
           "options": { "max": 4 }
         },
-        "noForEach": "off",
-        "useLiteralKeys": "off"
+        "useArrowFunction": "error",
+        "noForEach": "error",
+        "useLiteralKeys": "error"
       },
 
       "correctness": {
@@ -92,7 +93,7 @@
         "useImportType": "error",
         "useNodejsImportProtocol": "error",
         "useTemplate": "error",
-        "noParameterAssign": "off",
+        "noParameterAssign": "on",
         "useConsistentTypeDefinitions": {
           "level": "warn",
           "options": { "style": "type" }
@@ -104,11 +105,13 @@
         "noEmptyBlockStatements": "error",
         "noConsole": "off",
         "noTemplateCurlyInString": "off",
-        "noAssignInExpressions": "off"
+        "noAssignInExpressions": "on"
       },
 
       "performance": {
-        "noDelete": "off"
+        "noDelete": "on",
+        "noBarrelFile": "on",
+        "noAwaitInLoops": "on"
       }
     }
   },
@@ -125,7 +128,10 @@
     "enabled": true,
     "actions": {
       "source": {
-        "organizeImports": "on"
+        "organizeImports": "on",
+        "useSortedKeys": "on",
+        "useSortedAttributes": "on",
+        "useSortedInterfaceMembers": "on"
       }
     }
   },

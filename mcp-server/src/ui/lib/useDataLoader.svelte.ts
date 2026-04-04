@@ -31,11 +31,11 @@
 
 export type LoaderStatus = "loading" | "done" | "error";
 
-export interface DataLoaderState<T> {
+export type DataLoaderState<T> = {
   readonly status: LoaderStatus;
   readonly data: T | null;
   readonly errorMsg: string;
-}
+};
 
 export function useDataLoader<T>(loader: () => Promise<T>): DataLoaderState<T> {
   let status = $state<LoaderStatus>("loading");
@@ -64,14 +64,14 @@ export function useDataLoader<T>(loader: () => Promise<T>): DataLoaderState<T> {
   // Return a plain object backed by rune state. Because $state is reactive,
   // any Svelte component reading these properties will re-render on change.
   return {
-    get status() {
-      return status;
-    },
     get data() {
       return data;
     },
     get errorMsg() {
       return errorMsg;
+    },
+    get status() {
+      return status;
     },
   };
 }

@@ -15,10 +15,10 @@ import { WaveResultSchema, WorktreeEntrySchema } from "../orchestration/flow-sch
 describe("WorktreeEntrySchema", () => {
   it("parses a valid worktree entry with all fields", () => {
     const result = WorktreeEntrySchema.parse({
-      task_id: "rwf-01",
-      worktree_path: "/tmp/worktrees/rwf-01",
       branch: "feat/rwf-01",
       status: "active",
+      task_id: "rwf-01",
+      worktree_path: "/tmp/worktrees/rwf-01",
     });
 
     expect(result.task_id).toBe("rwf-01");
@@ -29,9 +29,9 @@ describe("WorktreeEntrySchema", () => {
 
   it("defaults status to 'active' when omitted", () => {
     const result = WorktreeEntrySchema.parse({
+      branch: "feat/rwf-02",
       task_id: "rwf-02",
       worktree_path: "/tmp/worktrees/rwf-02",
-      branch: "feat/rwf-02",
     });
 
     expect(result.status).toBe("active");
@@ -39,10 +39,10 @@ describe("WorktreeEntrySchema", () => {
 
   it("accepts 'merged' status", () => {
     const result = WorktreeEntrySchema.parse({
-      task_id: "rwf-03",
-      worktree_path: "/tmp/worktrees/rwf-03",
       branch: "feat/rwf-03",
       status: "merged",
+      task_id: "rwf-03",
+      worktree_path: "/tmp/worktrees/rwf-03",
     });
 
     expect(result.status).toBe("merged");
@@ -50,10 +50,10 @@ describe("WorktreeEntrySchema", () => {
 
   it("accepts 'failed' status", () => {
     const result = WorktreeEntrySchema.parse({
-      task_id: "rwf-04",
-      worktree_path: "/tmp/worktrees/rwf-04",
       branch: "feat/rwf-04",
       status: "failed",
+      task_id: "rwf-04",
+      worktree_path: "/tmp/worktrees/rwf-04",
     });
 
     expect(result.status).toBe("failed");
@@ -62,10 +62,10 @@ describe("WorktreeEntrySchema", () => {
   it("rejects invalid status values", () => {
     expect(() =>
       WorktreeEntrySchema.parse({
-        task_id: "rwf-05",
-        worktree_path: "/tmp/worktrees/rwf-05",
         branch: "feat/rwf-05",
         status: "unknown",
+        task_id: "rwf-05",
+        worktree_path: "/tmp/worktrees/rwf-05",
       }),
     ).toThrow();
   });
@@ -74,20 +74,20 @@ describe("WorktreeEntrySchema", () => {
 describe("WaveResultSchema — worktree_entries", () => {
   it("parses WaveResult with worktree_entries present", () => {
     const result = WaveResultSchema.parse({
-      tasks: ["rwf-01", "rwf-02"],
       status: "done",
+      tasks: ["rwf-01", "rwf-02"],
       worktree_entries: [
         {
-          task_id: "rwf-01",
-          worktree_path: "/tmp/worktrees/rwf-01",
           branch: "feat/rwf-01",
           status: "active",
+          task_id: "rwf-01",
+          worktree_path: "/tmp/worktrees/rwf-01",
         },
         {
-          task_id: "rwf-02",
-          worktree_path: "/tmp/worktrees/rwf-02",
           branch: "feat/rwf-02",
           status: "merged",
+          task_id: "rwf-02",
+          worktree_path: "/tmp/worktrees/rwf-02",
         },
       ],
     });
@@ -100,8 +100,8 @@ describe("WaveResultSchema — worktree_entries", () => {
   it("parses WaveResult without worktree_entries — backward compat", () => {
     // Existing wave results without worktree_entries must parse cleanly
     const result = WaveResultSchema.parse({
-      tasks: ["task-01", "task-02"],
       status: "done",
+      tasks: ["task-01", "task-02"],
     });
 
     expect(result.tasks).toEqual(["task-01", "task-02"]);
@@ -110,13 +110,13 @@ describe("WaveResultSchema — worktree_entries", () => {
 
   it("parses WaveResult with all existing fields and no worktree_entries", () => {
     const result = WaveResultSchema.parse({
-      tasks: ["task-01"],
-      status: "pending",
-      gate: "npm test",
-      gate_output: "All tests passed",
       consultations: {
         before: { "canon-guide": { status: "done", summary: "OK" } },
       },
+      gate: "npm test",
+      gate_output: "All tests passed",
+      status: "pending",
+      tasks: ["task-01"],
     });
 
     expect(result.worktree_entries).toBeUndefined();
@@ -125,13 +125,13 @@ describe("WaveResultSchema — worktree_entries", () => {
 
   it("defaults status field in nested worktree entries when omitted", () => {
     const result = WaveResultSchema.parse({
-      tasks: ["rwf-01"],
       status: "done",
+      tasks: ["rwf-01"],
       worktree_entries: [
         {
+          branch: "feat/rwf-01",
           task_id: "rwf-01",
           worktree_path: "/tmp/worktrees/rwf-01",
-          branch: "feat/rwf-01",
           // no status
         },
       ],

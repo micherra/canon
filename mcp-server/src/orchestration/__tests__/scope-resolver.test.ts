@@ -7,43 +7,35 @@
  * Uses strict TDD: tests written before implementation.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Board } from "../../orchestration/flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // We test resolveTaskScope via a workspace with temp dirs and board objects
-// ---------------------------------------------------------------------------
 
 import { resolveTaskScope } from "../scope-resolver.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {
-    flow: "build",
-    task: "Test task",
-    entry: "research",
-    current_state: "research",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "research",
+    entry: "research",
+    flow: "build",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "Test task",
     ...overrides,
   };
 }
 
-// ---------------------------------------------------------------------------
 // Tests: board artifact source
-// ---------------------------------------------------------------------------
 
 describe("resolveTaskScope — board artifact source", () => {
   let tmpDir: string;
@@ -53,7 +45,7 @@ describe("resolveTaskScope — board artifact source", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("returns file paths from board artifacts containing backtick-quoted paths", () => {
@@ -66,17 +58,17 @@ describe("resolveTaskScope — board artifact source", () => {
     const board = makeBoard({
       states: {
         research: {
-          status: "done",
-          entries: 1,
           artifacts: [artifactPath],
+          entries: 1,
+          status: "done",
         },
       },
     });
 
     const result = resolveTaskScope({
-      workspace: tmpDir,
-      stateId: "research",
       board,
+      stateId: "research",
+      workspace: tmpDir,
     });
 
     expect(result).toContain("mcp-server/src/adapters/git-adapter.ts");
@@ -87,17 +79,17 @@ describe("resolveTaskScope — board artifact source", () => {
     const board = makeBoard({
       states: {
         research: {
-          status: "done",
-          entries: 1,
           artifacts: [],
+          entries: 1,
+          status: "done",
         },
       },
     });
 
     const result = resolveTaskScope({
-      workspace: tmpDir,
-      stateId: "research",
       board,
+      stateId: "research",
+      workspace: tmpDir,
     });
 
     expect(result).toEqual([]);
@@ -107,52 +99,45 @@ describe("resolveTaskScope — board artifact source", () => {
     const board = makeBoard({
       states: {
         research: {
-          status: "done",
-          entries: 1,
           artifacts: [join(tmpDir, "nonexistent-file.md")],
+          entries: 1,
+          status: "done",
         },
       },
     });
 
-    expect(() =>
-      resolveTaskScope({ workspace: tmpDir, stateId: "research", board }),
-    ).not.toThrow();
+    expect(() => resolveTaskScope({ board, stateId: "research", workspace: tmpDir })).not.toThrow();
 
     const result = resolveTaskScope({
-      workspace: tmpDir,
-      stateId: "research",
       board,
+      stateId: "research",
+      workspace: tmpDir,
     });
     expect(result).toEqual([]);
   });
 
   it("caps file reads at 50KB to avoid memory issues", () => {
     // Create a file just over 50KB
-    const bigContent =
-      "`mcp-server/src/first.ts`\n" + "x".repeat(51 * 1024) + "\n`mcp-server/src/after.ts`\n";
+    const bigContent = `\`mcp-server/src/first.ts\`\n${"x".repeat(51 * 1024)}\n\`mcp-server/src/after.ts\`\n`;
     const artifactPath = join(tmpDir, "big-analysis.md");
     writeFileSync(artifactPath, bigContent);
 
     const board = makeBoard({
       states: {
         research: {
-          status: "done",
-          entries: 1,
           artifacts: [artifactPath],
+          entries: 1,
+          status: "done",
         },
       },
     });
 
     // Should not throw and should extract paths from within the cap
-    expect(() =>
-      resolveTaskScope({ workspace: tmpDir, stateId: "research", board }),
-    ).not.toThrow();
+    expect(() => resolveTaskScope({ board, stateId: "research", workspace: tmpDir })).not.toThrow();
   });
 });
 
-// ---------------------------------------------------------------------------
 // Tests: task plan files source
-// ---------------------------------------------------------------------------
 
 describe("resolveTaskScope — task plan YAML frontmatter source", () => {
   let tmpDir: string;
@@ -162,7 +147,7 @@ describe("resolveTaskScope — task plan YAML frontmatter source", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("returns file paths from task plan YAML frontmatter files: field", () => {
@@ -184,11 +169,11 @@ files:
     const board = makeBoard();
 
     const result = resolveTaskScope({
-      workspace: tmpDir,
-      stateId: "implement",
       board,
       planSlug: "my-slug",
+      stateId: "implement",
       taskId: "enr-01",
+      workspace: tmpDir,
     });
 
     expect(result).toContain("mcp-server/src/orchestration/scope-resolver.ts");
@@ -199,11 +184,11 @@ files:
     const board = makeBoard();
 
     const result = resolveTaskScope({
-      workspace: tmpDir,
-      stateId: "implement",
       board,
       planSlug: "nonexistent-slug",
+      stateId: "implement",
       taskId: "enr-01",
+      workspace: tmpDir,
     });
 
     expect(result).toEqual([]);
@@ -225,20 +210,18 @@ wave: 1
     const board = makeBoard();
 
     const result = resolveTaskScope({
-      workspace: tmpDir,
-      stateId: "implement",
       board,
       planSlug: "my-slug",
+      stateId: "implement",
       taskId: "enr-01",
+      workspace: tmpDir,
     });
 
     expect(result).toEqual([]);
   });
 });
 
-// ---------------------------------------------------------------------------
 // Tests: empty fallback
-// ---------------------------------------------------------------------------
 
 describe("resolveTaskScope — fallback", () => {
   let tmpDir: string;
@@ -248,16 +231,16 @@ describe("resolveTaskScope — fallback", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
   });
 
   it("returns empty array when no scope sources are available", () => {
     const board = makeBoard();
 
     const result = resolveTaskScope({
-      workspace: tmpDir,
-      stateId: "implement",
       board,
+      stateId: "implement",
+      workspace: tmpDir,
     });
 
     expect(result).toEqual([]);
@@ -279,17 +262,17 @@ describe("resolveTaskScope — fallback", () => {
     const board = makeBoard({
       states: {
         research: {
-          status: "done",
-          entries: 1,
           artifacts: [artifact1, artifact2],
+          entries: 1,
+          status: "done",
         },
       },
     });
 
     const result = resolveTaskScope({
-      workspace: tmpDir,
-      stateId: "research",
       board,
+      stateId: "research",
+      workspace: tmpDir,
     });
 
     // Should not contain duplicate paths

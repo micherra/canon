@@ -1,8 +1,8 @@
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
-export interface WritePlanIndexInput {
+export type WritePlanIndexInput = {
   workspace: string;
   slug: string;
   tasks: Array<{
@@ -12,13 +12,13 @@ export interface WritePlanIndexInput {
     files?: string[];
     principles?: string[];
   }>;
-}
+};
 
-export interface WritePlanIndexResult {
+export type WritePlanIndexResult = {
   path: string;
   task_count: number;
   wave_count: number;
-}
+};
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -53,10 +53,7 @@ export async function writePlanIndex(
   const ids = input.tasks.map((t) => t.task_id);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
   if (dupes.length > 0) {
-    return toolError(
-      "INVALID_INPUT",
-      `Duplicate task IDs: ${[...new Set(dupes)].join(", ")}`,
-    );
+    return toolError("INVALID_INPUT", `Duplicate task IDs: ${[...new Set(dupes)].join(", ")}`);
   }
 
   // Build normalized markdown table
@@ -74,7 +71,7 @@ export async function writePlanIndex(
 
   const plansDir = resolve(join(input.workspace, "plans", input.slug));
   const plansRoot = resolve(join(input.workspace, "plans"));
-  if (!plansDir.startsWith(plansRoot + "/")) {
+  if (!plansDir.startsWith(`${plansRoot}/`)) {
     return toolError(
       "INVALID_INPUT",
       `Slug "${input.slug}" resolves outside workspace plans directory`,

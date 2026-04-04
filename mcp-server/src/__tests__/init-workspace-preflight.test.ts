@@ -16,11 +16,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "fast-path",
     description: "test",
     entry: "build",
-    states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
+    name: "fast-path",
     spawn_instructions: {},
+    states: {
+      build: { transitions: { done: "done" }, type: "single" },
+      done: { type: "terminal" },
+    },
   }),
 }));
 
@@ -49,16 +52,16 @@ async function makeTmpGitRepo(): Promise<string> {
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
 const baseInput = {
+  base_commit: "abc123",
+  branch: "main",
   flow_name: "fast-path",
   task: "fix the bug",
-  branch: "main",
-  base_commit: "abc123",
   tier: "small" as const,
 };
 
@@ -75,7 +78,11 @@ describe("init_workspace — preflight checks", () => {
   it("returns no issues on clean state with preflight: true", async () => {
     const projectDir = await makeTmpGitRepo();
 
-    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, preflight: true },
+      projectDir,
+      "/fake/plugin",
+    );
 
     // Clean state — should proceed to create workspace
     expect(result.created).toBe(true);
@@ -88,7 +95,11 @@ describe("init_workspace — preflight checks", () => {
     // Create dirty state
     writeFileSync(join(projectDir, "dirty.txt"), "uncommitted");
 
-    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, preflight: true },
+      projectDir,
+      "/fake/plugin",
+    );
 
     expect(result.created).toBe(false);
     expect(result.preflight_issues).toBeDefined();
@@ -101,7 +112,11 @@ describe("init_workspace — preflight checks", () => {
     // Create dirty state
     writeFileSync(join(projectDir, "dirty.txt"), "uncommitted");
 
-    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, preflight: true },
+      projectDir,
+      "/fake/plugin",
+    );
 
     // workspace must be empty string (not a real path) when preflight fails
     expect(result.workspace).toBe("");
@@ -116,7 +131,11 @@ describe("init_workspace — preflight checks", () => {
   it("workspace contains path and candidate_workspace is undefined when preflight passes", async () => {
     const projectDir = await makeTmpGitRepo();
 
-    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, preflight: true },
+      projectDir,
+      "/fake/plugin",
+    );
 
     // When preflight passes, workspace is set and candidate_workspace is not
     expect(result.workspace).toBeTruthy();
@@ -141,10 +160,14 @@ describe("init_workspace — preflight checks", () => {
     spawnSync("git", ["add", "."], { cwd: projectDir });
     spawnSync("git", ["commit", "-m", "init", "--allow-empty"], { cwd: projectDir });
 
-    const result = await initWorkspaceFlow({ ...baseInput, preflight: true }, projectDir, "/fake/plugin");
+    const result = await initWorkspaceFlow(
+      { ...baseInput, preflight: true },
+      projectDir,
+      "/fake/plugin",
+    );
 
     // .lock file is ignored — SQLite WAL handles concurrency
     // The workspace may be created (no lock issues reported)
-    expect(result.preflight_issues?.some(i => i.includes("lock"))).toBeFalsy();
+    expect(result.preflight_issues?.some((i) => i.includes("lock"))).toBeFalsy();
   });
 });

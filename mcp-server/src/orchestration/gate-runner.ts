@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runShell } from "../adapters/process-adapter.ts";
-import type { GateResult, StateDefinition, ResolvedFlow, BoardStateEntry } from "./flow-schema.ts";
+import type { BoardStateEntry, GateResult, ResolvedFlow, StateDefinition } from "./flow-schema.ts";
 
 // GateResult is the source of truth from flow-schema.ts — no local interface needed.
 export type { GateResult };
@@ -21,7 +21,11 @@ export type { GateResult };
  * 2. If gateName is "test-suite", auto-detect from package.json scripts.test.
  * 3. Otherwise return null (gate is not configured — caller should fail-closed).
  */
-export function resolveGateCommand(gateName: string, flow: ResolvedFlow, cwd?: string): string | null {
+export function resolveGateCommand(
+  gateName: string,
+  flow: ResolvedFlow,
+  cwd?: string,
+): string | null {
   // 1. Check flow.gates map first
   if (flow.gates && Object.hasOwn(flow.gates, gateName)) {
     return flow.gates[gateName];
@@ -70,11 +74,11 @@ export function runGate(gateName: string, flow: ResolvedFlow, cwd: string): Gate
   // Gate not configured — fail-closed (never silently pass an unresolved gate)
   if (command === null) {
     return {
-      passed: false,
-      gate: gateName,
       command: "",
-      output: `Gate '${gateName}' not configured — failed (fail-closed)`,
       exitCode: 1,
+      gate: gateName,
+      output: `Gate '${gateName}' not configured — failed (fail-closed)`,
+      passed: false,
     };
   }
 
@@ -82,11 +86,11 @@ export function runGate(gateName: string, flow: ResolvedFlow, cwd: string): Gate
   const output = (result.stdout + result.stderr).trim();
 
   return {
-    passed: result.exitCode === 0,
-    gate: gateName,
     command,
-    output,
     exitCode: result.exitCode,
+    gate: gateName,
+    output,
+    passed: result.exitCode === 0,
   };
 }
 
@@ -103,11 +107,14 @@ export function normalizeGates(
   flow: ResolvedFlow,
   cwd: string,
   _boardState?: BoardStateEntry,
-): { commands: Array<{ name: string; command: string }>; source: "gates" | "gate" | "discovered" | "none" } {
+): {
+  commands: Array<{ name: string; command: string }>;
+  source: "gates" | "gate" | "discovered" | "none";
+} {
   // Tier 1: Explicit gates array — direct shell commands
   if (stateDef.gates?.length) {
     return {
-      commands: stateDef.gates.map((cmd) => ({ name: cmd, command: cmd })),
+      commands: stateDef.gates.map((cmd) => ({ command: cmd, name: cmd })),
       source: "gates",
     };
   }
@@ -117,12 +124,12 @@ export function normalizeGates(
     const resolved = resolveGateCommand(stateDef.gate, flow, cwd);
     if (resolved === null) {
       return {
-        commands: [{ name: stateDef.gate, command: "" }],
+        commands: [{ command: "", name: stateDef.gate }],
         source: "gate",
       };
     }
     return {
-      commands: [{ name: stateDef.gate, command: resolved }],
+      commands: [{ command: resolved, name: stateDef.gate }],
       source: "gate",
     };
   }
@@ -153,11 +160,11 @@ export function runGates(
   return normalized.commands.map(({ name, command }) => {
     if (!command) {
       return {
-        passed: false,
-        gate: name,
         command: "",
-        output: `Gate '${name}' not configured — failed (fail-closed)`,
         exitCode: 1,
+        gate: name,
+        output: `Gate '${name}' not configured — failed (fail-closed)`,
+        passed: false,
       };
     }
 
@@ -165,11 +172,11 @@ export function runGates(
     const output = (result.stdout + result.stderr).trim();
 
     return {
-      passed: result.exitCode === 0,
-      gate: name,
       command,
-      output,
       exitCode: result.exitCode,
+      gate: name,
+      output,
+      passed: result.exitCode === 0,
     };
   });
 }

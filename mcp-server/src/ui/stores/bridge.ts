@@ -48,6 +48,11 @@ let toolResultResolve: ((data: unknown) => void) | null = null;
 let toolResultReject: ((err: Error) => void) | null = null;
 
 export const bridge = {
+  async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
+    if (!app) throw new Error("Bridge not initialized");
+    const result = await app.callServerTool({ arguments: args, name });
+    return extractToolJson(result);
+  },
   async init() {
     const instance = new App({ name: "Canon", version: "0.1.0" }, {}, { autoResize: true });
 
@@ -79,6 +84,14 @@ export const bridge = {
     if (ctx?.styles?.variables) applyHostStyleVariables(ctx.styles.variables);
   },
 
+  async sendMessage(text: string): Promise<void> {
+    if (!app) throw new Error("Bridge not initialized");
+    await app.sendMessage({
+      content: [{ text, type: "text" }],
+      role: "user",
+    });
+  },
+
   /** Wait for the host to deliver the tool result via ontoolresult notification. */
   waitForToolResult(): Promise<unknown> {
     // If result arrived before this call, return it immediately
@@ -91,20 +104,6 @@ export const bridge = {
     return new Promise((resolve, reject) => {
       toolResultResolve = resolve;
       toolResultReject = reject;
-    });
-  },
-
-  async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
-    if (!app) throw new Error("Bridge not initialized");
-    const result = await app.callServerTool({ name, arguments: args });
-    return extractToolJson(result);
-  },
-
-  async sendMessage(text: string): Promise<void> {
-    if (!app) throw new Error("Bridge not initialized");
-    await app.sendMessage({
-      role: "user",
-      content: [{ type: "text", text }],
     });
   },
 };

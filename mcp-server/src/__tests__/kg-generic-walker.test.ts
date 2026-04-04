@@ -13,17 +13,11 @@ import { LANGUAGE_CONFIGS } from "../graph/kg-language-configs.ts";
 import type { AdapterResult } from "../graph/kg-types.ts";
 import { getParser, initParsers } from "../graph/kg-wasm-parser.ts";
 
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
-
 beforeAll(async () => {
   await initParsers();
 });
 
-// ---------------------------------------------------------------------------
 // Helper
-// ---------------------------------------------------------------------------
 
 function parseTs(source: string, filePath = "test.ts"): AdapterResult {
   const parser = getParser("typescript");
@@ -53,9 +47,7 @@ function parseJava(source: string, filePath = "Test.java"): AdapterResult {
   return walkTree(tree, filePath, config);
 }
 
-// ---------------------------------------------------------------------------
 // TypeScript parity tests
-// ---------------------------------------------------------------------------
 
 describe("walkTree — TypeScript", () => {
   it("extracts exported function entity with correct fields", () => {
@@ -212,9 +204,7 @@ describe("walkTree — TypeScript", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Python parity tests
-// ---------------------------------------------------------------------------
 
 describe("walkTree — Python", () => {
   it("extracts top-level function definition", () => {
@@ -318,9 +308,7 @@ describe("walkTree — Python", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Bash parity tests
-// ---------------------------------------------------------------------------
 
 describe("walkTree — Bash", () => {
   it("extracts function definition", () => {
@@ -358,7 +346,9 @@ describe("walkTree — Bash", () => {
     const result = parseBash(src);
     const callEdges = result.intraFileEdges.filter((e) => e.edge_type === "calls");
     expect(callEdges.length).toBeGreaterThanOrEqual(1);
-    const edge = callEdges.find((e) => e.source_qualified.endsWith("::main") && e.target_qualified.endsWith("::greet"));
+    const edge = callEdges.find(
+      (e) => e.source_qualified.endsWith("::main") && e.target_qualified.endsWith("::greet"),
+    );
     expect(edge).toBeDefined();
   });
 
@@ -376,9 +366,7 @@ describe("walkTree — Bash", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Java parity tests
-// ---------------------------------------------------------------------------
 
 describe("walkTree — Java", () => {
   it("extracts class with methods — class entity, method entities, contains edges", () => {

@@ -66,6 +66,18 @@ export async function scanSourceFiles(
     }
   }
 
+  async function processEntry(
+    entry: import("node:fs").Dirent,
+    dir: string,
+    depth: number,
+  ): Promise<void> {
+    if (entry.isDirectory() && !excludeDirs.has(entry.name)) {
+      await walk(join(dir, entry.name), depth + 1);
+    } else if (entry.isFile()) {
+      collectFile(entry, dir);
+    }
+  }
+
   async function walk(dir: string, depth: number): Promise<void> {
     if (depth > MAX_DEPTH) return;
 
@@ -77,11 +89,8 @@ export async function scanSourceFiles(
     if (!entries) return;
 
     for (const entry of entries) {
-      if (entry.isDirectory() && !excludeDirs.has(entry.name)) {
-        await walk(join(dir, entry.name), depth + 1);
-      } else if (entry.isFile()) {
-        collectFile(entry, dir);
-      }
+      // biome-ignore lint/performance/noAwaitInLoops: sequential walk required — processEntry mutates shared visitedDirs/files state
+      await processEntry(entry, dir, depth);
     }
   }
 

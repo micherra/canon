@@ -1,15 +1,15 @@
 export const UNKNOWN_LAYER_COLOR = "#BDC3C7";
 
 export const VERDICT_COLORS: Record<string, string> = {
+  BLOCKING: "#e74c3c",
   CLEAN: "#27ae60",
   WARNING: "#f39c12",
-  BLOCKING: "#e74c3c",
 };
 
 export const SEVERITY_COLORS: Record<string, string> = {
+  convention: "#3498db",
   rule: "#e74c3c",
   "strong-opinion": "#f39c12",
-  convention: "#3498db",
 };
 
 export const NODE_DEFAULT = "#c8cad4";

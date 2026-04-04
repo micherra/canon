@@ -13,7 +13,7 @@ import { type ClusterInput, clusterFiles, findCommonPrefix } from "../lib/cluste
 // ---------------------------------------------------------------------------
 
 function makeFile(path: string, status: ClusterInput["status"], layer: string): ClusterInput {
-  return { path, status, layer };
+  return { layer, path, status };
 }
 
 // Real-world fixture: file list reflecting the current branch git status

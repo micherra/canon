@@ -34,19 +34,15 @@ vi.mock("../tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
 
+import { initExecutionDb } from "../orchestration/execution-schema.ts";
+import { clearStoreCache, ExecutionStore } from "../orchestration/execution-store.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
-import { isToolError } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { isToolError } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 
@@ -60,19 +56,19 @@ function makeStore(workspace: string): ExecutionStore {
   const db = initExecutionDb(join(workspace, "orchestration.db"));
   const store = new ExecutionStore(db);
   store.initExecution({
-    flow: "test-flow",
-    task: "build feature",
-    entry: "research",
-    current_state: "research",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
     branch: "feat/test",
-    sanitized: "feat-test",
     created: new Date().toISOString(),
-    tier: "medium",
+    current_state: "research",
+    entry: "research",
+    flow: "test-flow",
     flow_name: "test-flow",
+    last_updated: new Date().toISOString(),
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: new Date().toISOString(),
+    task: "build feature",
+    tier: "medium",
   });
   return store;
 }
@@ -80,23 +76,23 @@ function makeStore(workspace: string): ExecutionStore {
 /** A minimal resolved flow with research → implement → terminal */
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "test",
     entry: "research",
+    name: "test-flow",
     spawn_instructions: {
-      research: "Do research",
       implement: "Do implement",
+      research: "Do research",
     },
     states: {
-      research: {
-        type: "single",
-        agent: "canon:canon-researcher",
-        transitions: { done: "implement" },
-      },
       implement: {
-        type: "single",
         agent: "canon:canon-implementor",
         transitions: { done: "terminal" },
+        type: "single",
+      },
+      research: {
+        agent: "canon:canon-researcher",
+        transitions: { done: "implement" },
+        type: "single",
       },
       terminal: {
         type: "terminal",
@@ -108,21 +104,21 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 
 /** Build a fake EnterAndPrepareStateResult for a single-state that can enter */
 function makeEnterResult(
-  overrides: Partial<EnterAndPrepareStateResult> = {}
+  overrides: Partial<EnterAndPrepareStateResult> = {},
 ): ToolResult<EnterAndPrepareStateResult> {
   return {
-    ok: true,
     can_enter: true,
-    iteration_count: 1,
-    max_iterations: 3,
     cannot_fix_items: [],
     history: [],
+    iteration_count: 1,
+    max_iterations: 3,
+    ok: true,
     prompts: [
       {
         agent: "canon:canon-researcher",
         prompt: "Do research task",
-        template_paths: [],
         role: "main",
+        template_paths: [],
       },
     ],
     state_type: "single",
@@ -133,26 +129,26 @@ function makeEnterResult(
 /** Build a fake reportResult output for a successful transition */
 function makeReportResult(nextState: string | null, overrides: Record<string, unknown> = {}) {
   return {
-    ok: true,
-    transition_condition: "done",
-    next_state: nextState,
-    stuck: false,
-    hitl_required: false,
     board: {
-      flow: "test-flow",
-      task: "build feature",
-      entry: "research",
-      current_state: nextState ?? "terminal",
       base_commit: "abc123",
-      started: new Date().toISOString(),
-      last_updated: new Date().toISOString(),
       blocked: null,
       concerns: [],
-      skipped: [],
-      states: {},
+      current_state: nextState ?? "terminal",
+      entry: "research",
+      flow: "test-flow",
       iterations: {},
+      last_updated: new Date().toISOString(),
+      skipped: [],
+      started: new Date().toISOString(),
+      states: {},
+      task: "build feature",
     },
+    hitl_required: false,
     log_entry: {},
+    next_state: nextState,
+    ok: true,
+    stuck: false,
+    transition_condition: "done",
     ...overrides,
   };
 }
@@ -160,15 +156,13 @@ function makeReportResult(nextState: string | null, overrides: Record<string, un
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.resetAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // 1. First call (no result) — enters entry state, returns spawn requests
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — first call (no result)", () => {
   it("returns spawn action with request derived from enterAndPrepareState prompts", async () => {
@@ -181,15 +175,15 @@ describe("driveFlow — first call (no result)", () => {
           {
             agent: "canon:canon-researcher",
             prompt: "Research the codebase",
-            template_paths: [],
             role: "main",
+            template_paths: [],
           },
         ],
-      })
+      }),
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -208,10 +202,10 @@ describe("driveFlow — first call (no result)", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(makeEnterResult());
 
     const flow = makeFlow();
-    await driveFlow({ workspace, flow });
+    await driveFlow({ flow, workspace });
 
     expect(enterAndPrepareState).toHaveBeenCalledWith(
-      expect.objectContaining({ state_id: "research", workspace })
+      expect.objectContaining({ state_id: "research", workspace }),
     );
   });
 
@@ -224,26 +218,29 @@ describe("driveFlow — first call (no result)", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-implementor", prompt: "Implement", template_paths: [], role: "main" },
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
         ],
         state_type: "single",
-      })
+      }),
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     // Should have entered implement, not research
     expect(enterAndPrepareState).toHaveBeenCalledWith(
-      expect.objectContaining({ state_id: "implement" })
+      expect.objectContaining({ state_id: "implement" }),
     );
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Subsequent call (with result) — advances to next state
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — call with result", () => {
   it("calls reportResult with the provided result and returns next spawn requests", async () => {
@@ -254,21 +251,26 @@ describe("driveFlow — call with result", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-implementor", prompt: "Implement", template_paths: [], role: "main" },
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
         ],
         state_type: "single",
-      })
+      }),
     );
 
     const flow = makeFlow();
     const result = await driveFlow({
-      workspace,
       flow,
       result: { state_id: "research", status: "done" },
+      workspace,
     });
 
     expect(reportResult).toHaveBeenCalledWith(
-      expect.objectContaining({ state_id: "research", status_keyword: "done" })
+      expect.objectContaining({ state_id: "research", status_keyword: "done" }),
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -286,9 +288,9 @@ describe("driveFlow — call with result", () => {
 
     const flow = makeFlow();
     const result = await driveFlow({
-      workspace,
       flow,
       result: { state_id: "implement", status: "done" },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -306,9 +308,9 @@ describe("driveFlow — call with result", () => {
 
     const flow = makeFlow();
     const result = await driveFlow({
-      workspace,
       flow,
       result: { state_id: "research", status: "done" },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -317,9 +319,7 @@ describe("driveFlow — call with result", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. HITL — convergence exhaustion
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — HITL breakpoints", () => {
   it("returns hitl when enterAndPrepareState returns can_enter:false", async () => {
@@ -327,19 +327,19 @@ describe("driveFlow — HITL breakpoints", () => {
     makeStore(workspace);
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce({
-      ok: true,
       can_enter: false,
+      cannot_fix_items: [],
+      convergence_reason: "Max iterations reached",
+      history: [],
       iteration_count: 3,
       max_iterations: 3,
-      cannot_fix_items: [],
-      history: [],
+      ok: true,
       prompts: [],
       state_type: "single",
-      convergence_reason: "Max iterations reached",
     });
 
     const flow = makeFlow();
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -354,15 +354,15 @@ describe("driveFlow — HITL breakpoints", () => {
 
     vi.mocked(reportResult).mockResolvedValueOnce({
       ...makeReportResult(null),
-      hitl_required: true,
       hitl_reason: "Agent is stuck in state 'research'",
+      hitl_required: true,
     } as any);
 
     const flow = makeFlow();
     const result = await driveFlow({
-      workspace,
       flow,
       result: { state_id: "research", status: "done" },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -373,9 +373,7 @@ describe("driveFlow — HITL breakpoints", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. Skip-state loop
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — skip-state auto-advancement", () => {
   it("auto-advances through a skipped state without returning to caller", async () => {
@@ -384,22 +382,22 @@ describe("driveFlow — skip-state auto-advancement", () => {
 
     const flow = makeFlow({
       states: {
-        research: {
-          type: "single",
-          agent: "canon:canon-researcher",
-          transitions: { done: "security", skipped: "implement" },
-          skip_when: "no_contract_changes",
-        },
-        security: {
-          type: "single",
-          agent: "canon:canon-security",
-          transitions: { done: "implement" },
-          skip_when: "no_contract_changes",
-        },
         implement: {
-          type: "single",
           agent: "canon:canon-implementor",
           transitions: { done: "terminal" },
+          type: "single",
+        },
+        research: {
+          agent: "canon:canon-researcher",
+          skip_when: "no_contract_changes",
+          transitions: { done: "security", skipped: "implement" },
+          type: "single",
+        },
+        security: {
+          agent: "canon:canon-security",
+          skip_when: "no_contract_changes",
+          transitions: { done: "implement" },
+          type: "single",
         },
         terminal: { type: "terminal" },
       },
@@ -407,15 +405,15 @@ describe("driveFlow — skip-state auto-advancement", () => {
 
     // research: skip
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce({
-      ok: true,
       can_enter: true,
-      iteration_count: 0,
-      max_iterations: 3,
       cannot_fix_items: [],
       history: [],
+      iteration_count: 0,
+      max_iterations: 3,
+      ok: true,
       prompts: [],
-      state_type: "single",
       skip_reason: "Skipping research: no_contract_changes condition met",
+      state_type: "single",
     });
     // reportResult for skipped research → next_state = implement (or security, depends on transitions)
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement") as any);
@@ -423,13 +421,18 @@ describe("driveFlow — skip-state auto-advancement", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-implementor", prompt: "Implement", template_paths: [], role: "main" },
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
         ],
         state_type: "single",
-      })
+      }),
     );
 
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -440,14 +443,12 @@ describe("driveFlow — skip-state auto-advancement", () => {
     // reportResult should have been called once (for the skip)
     expect(reportResult).toHaveBeenCalledTimes(1);
     expect(reportResult).toHaveBeenCalledWith(
-      expect.objectContaining({ status_keyword: "skipped" })
+      expect.objectContaining({ status_keyword: "skipped" }),
     );
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. Terminal state returns done
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — terminal state", () => {
   it("returns done immediately when current state is terminal type", async () => {
@@ -456,7 +457,7 @@ describe("driveFlow — terminal state", () => {
     store.updateExecution({ current_state: "terminal" });
 
     const flow = makeFlow();
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -468,9 +469,7 @@ describe("driveFlow — terminal state", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. Consultation prompts
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — consultation prompts", () => {
   it("includes consultation prompts in SpawnRequest array with role consultation", async () => {
@@ -479,22 +478,27 @@ describe("driveFlow — consultation prompts", () => {
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [
-          { agent: "canon:canon-researcher", prompt: "Research task", template_paths: [], role: "main" },
-        ],
         consultation_prompts: [
           {
-            name: "security-check",
             agent: "canon:canon-security",
+            name: "security-check",
             prompt: "Check security",
             role: "consultation",
           },
         ],
-      })
+        prompts: [
+          {
+            agent: "canon:canon-researcher",
+            prompt: "Research task",
+            role: "main",
+            template_paths: [],
+          },
+        ],
+      }),
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -508,9 +512,7 @@ describe("driveFlow — consultation prompts", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. ADR-009a — continue_from for fix-loop sessions
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — ADR-009a agent session continuation", () => {
   it("includes continue_from when session exists and is fresh (<10min)", async () => {
@@ -518,21 +520,26 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
     const store = makeStore(workspace);
     store.updateExecution({ current_state: "implement" });
     // Set up state row first (upsert so agent session can update it)
-    store.upsertState("implement", { status: "pending", entries: 0 });
+    store.upsertState("implement", { entries: 0, status: "pending" });
     // Record a fresh agent session (last activity just now)
     store.updateAgentSession("implement", "agent-id-abc123");
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-implementor", prompt: "Fix the issue", template_paths: [], role: "main" },
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Fix the issue",
+            role: "main",
+            template_paths: [],
+          },
         ],
         state_type: "single",
-      })
+      }),
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -547,26 +554,33 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
     store.updateExecution({ current_state: "implement" });
-    store.upsertState("implement", { status: "pending", entries: 0 });
+    store.upsertState("implement", { entries: 0, status: "pending" });
 
     // Manually insert a stale session (>10 minutes ago)
     const staleTime = new Date(Date.now() - 11 * 60 * 1000).toISOString();
     // Use the store's underlying update to set stale timestamp
-    (store as any).db.prepare(
-      `UPDATE execution_states SET agent_session_id = ?, last_agent_activity = ? WHERE state_id = ?`
-    ).run("stale-agent-id", staleTime, "implement");
+    (store as any).db
+      .prepare(
+        `UPDATE execution_states SET agent_session_id = ?, last_agent_activity = ? WHERE state_id = ?`,
+      )
+      .run("stale-agent-id", staleTime, "implement");
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-implementor", prompt: "Fix the issue", template_paths: [], role: "main" },
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Fix the issue",
+            role: "main",
+            template_paths: [],
+          },
         ],
         state_type: "single",
-      })
+      }),
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -578,26 +592,31 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
   it("stores agent_session_id from result into execution store", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.upsertState("research", { status: "in_progress", entries: 1 });
+    store.upsertState("research", { entries: 1, status: "in_progress" });
 
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement") as any);
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
         prompts: [
-          { agent: "canon:canon-implementor", prompt: "Implement", template_paths: [], role: "main" },
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
         ],
-      })
+      }),
     );
 
     const flow = makeFlow();
     await driveFlow({
-      workspace,
       flow,
       result: {
+        agent_session_id: "session-xyz-456",
         state_id: "research",
         status: "done",
-        agent_session_id: "session-xyz-456",
       },
+      workspace,
     });
 
     const session = store.getAgentSession("research");
@@ -605,9 +624,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 8. Parallel state handling
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — parallel state", () => {
   it("returns all role prompts for a parallel state on first entry", async () => {
@@ -618,10 +635,10 @@ describe("driveFlow — parallel state", () => {
       entry: "review",
       states: {
         review: {
-          type: "parallel",
-          roles: ["reviewer-a", "reviewer-b"],
           agent: "canon:canon-reviewer",
+          roles: ["reviewer-a", "reviewer-b"],
           transitions: { done: "terminal" },
+          type: "parallel",
         },
         terminal: { type: "terminal" },
       },
@@ -629,20 +646,30 @@ describe("driveFlow — parallel state", () => {
     store.updateExecution({ current_state: "review" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce({
-      ok: true,
       can_enter: true,
-      iteration_count: 1,
-      max_iterations: 3,
       cannot_fix_items: [],
       history: [],
+      iteration_count: 1,
+      max_iterations: 3,
+      ok: true,
       prompts: [
-        { agent: "canon:canon-reviewer", prompt: "Review A", template_paths: [], role: "reviewer-a" },
-        { agent: "canon:canon-reviewer", prompt: "Review B", template_paths: [], role: "reviewer-b" },
+        {
+          agent: "canon:canon-reviewer",
+          prompt: "Review A",
+          role: "reviewer-a",
+          template_paths: [],
+        },
+        {
+          agent: "canon:canon-reviewer",
+          prompt: "Review B",
+          role: "reviewer-b",
+          template_paths: [],
+        },
       ],
       state_type: "parallel",
     });
 
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -662,10 +689,10 @@ describe("driveFlow — parallel state", () => {
       entry: "review",
       states: {
         review: {
-          type: "parallel",
-          roles: ["reviewer-a", "reviewer-b"],
           agent: "canon:canon-reviewer",
+          roles: ["reviewer-a", "reviewer-b"],
           transitions: { done: "terminal" },
+          type: "parallel",
         },
         terminal: { type: "terminal" },
       },
@@ -680,9 +707,13 @@ describe("driveFlow — parallel state", () => {
     } as any);
 
     const result = await driveFlow({
-      workspace,
       flow,
-      result: { state_id: "review", status: "done", parallel_results: [{ item: "reviewer-a", status: "done" }] },
+      result: {
+        parallel_results: [{ item: "reviewer-a", status: "done" }],
+        state_id: "review",
+        status: "done",
+      },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -694,16 +725,14 @@ describe("driveFlow — parallel state", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 9. Error case — workspace not found
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — error handling", () => {
   it("returns WORKSPACE_NOT_FOUND error when workspace does not exist", async () => {
     const flow = makeFlow();
     const result = await driveFlow({
-      workspace: "/nonexistent/path/workspace",
       flow,
+      workspace: "/nonexistent/path/workspace",
     });
 
     expect(isToolError(result)).toBe(true);
@@ -716,14 +745,14 @@ describe("driveFlow — error handling", () => {
     makeStore(workspace);
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce({
-      ok: false,
       error_code: "WORKSPACE_NOT_FOUND",
       message: "No execution found",
+      ok: false,
       recoverable: false,
     });
 
     const flow = makeFlow();
-    const result = await driveFlow({ workspace, flow });
+    const result = await driveFlow({ flow, workspace });
 
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;
@@ -735,17 +764,17 @@ describe("driveFlow — error handling", () => {
     makeStore(workspace);
 
     vi.mocked(reportResult).mockResolvedValueOnce({
-      ok: false,
       error_code: "WORKSPACE_NOT_FOUND",
       message: "No execution found",
+      ok: false,
       recoverable: false,
     });
 
     const flow = makeFlow();
     const result = await driveFlow({
-      workspace,
       flow,
       result: { state_id: "research", status: "done" },
+      workspace,
     });
 
     expect(isToolError(result)).toBe(true);

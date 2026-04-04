@@ -4,17 +4,17 @@ import type { ReviewEntry } from "../schema.ts";
 
 function makeReview(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {
-    review_id: "rev_1",
     files: ["src/a.ts"],
-    violations: [],
     honored: [],
+    review_id: "rev_1",
     score: {
-      rules: { passed: 1, total: 1 },
-      opinions: { passed: 1, total: 1 },
       conventions: { passed: 0, total: 0 },
+      opinions: { passed: 1, total: 1 },
+      rules: { passed: 1, total: 1 },
     },
-    verdict: "CLEAN",
     timestamp: "2026-03-15T00:00:00Z",
+    verdict: "CLEAN",
+    violations: [],
     ...overrides,
   };
 }
@@ -31,12 +31,12 @@ describe("analyzeDrift", () => {
   it("counts violations and computes compliance rate", () => {
     const reviews = [
       makeReview({
-        violations: [{ principle_id: "p1", severity: "rule" }],
         honored: ["p2"],
+        violations: [{ principle_id: "p1", severity: "rule" }],
       }),
       makeReview({
-        violations: [{ principle_id: "p1", severity: "rule" }],
         honored: ["p1", "p2"],
+        violations: [{ principle_id: "p1", severity: "rule" }],
       }),
     ];
     const report = analyzeDrift(reviews, ["p1", "p2"]);
@@ -72,16 +72,16 @@ describe("analyzeDrift", () => {
     const reviews = [
       makeReview({
         score: {
-          rules: { passed: 2, total: 4 },
-          opinions: { passed: 3, total: 3 },
           conventions: { passed: 1, total: 2 },
+          opinions: { passed: 3, total: 3 },
+          rules: { passed: 2, total: 4 },
         },
       }),
       makeReview({
         score: {
-          rules: { passed: 2, total: 4 },
-          opinions: { passed: 3, total: 3 },
           conventions: { passed: 1, total: 2 },
+          opinions: { passed: 3, total: 3 },
+          rules: { passed: 2, total: 4 },
         },
       }),
     ];
@@ -155,8 +155,8 @@ describe("analyzeDrift", () => {
   it("filters by principleId", () => {
     const reviews = [
       makeReview({
-        violations: [{ principle_id: "p1", severity: "rule" }],
         honored: ["p2"],
+        violations: [{ principle_id: "p1", severity: "rule" }],
       }),
       makeReview({ honored: ["p2"] }),
     ];

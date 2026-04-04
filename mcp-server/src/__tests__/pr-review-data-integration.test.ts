@@ -21,8 +21,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriftStore } from "../drift/store.ts";
 
-// ── helpers ──
-
 function makeMockExecFile(stdout: string, err: Error | null = null) {
   return (
     _cmd: string,
@@ -35,10 +33,10 @@ function makeMockExecFile(stdout: string, err: Error | null = null) {
 /** Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout. */
 function mockGitExecAsyncOk(stdout: string) {
   return vi.fn().mockResolvedValue({
-    ok: true,
-    stdout,
-    stderr: "",
     exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout,
     timedOut: false,
   });
 }
@@ -46,15 +44,13 @@ function mockGitExecAsyncOk(stdout: string) {
 /** Build a mock gitExecAsync that returns an error ProcessResult. */
 function mockGitExecAsyncFail(stderr = "fatal: not a git repository") {
   return vi.fn().mockResolvedValue({
-    ok: false,
-    stdout: "",
-    stderr,
     exitCode: 128,
+    ok: false,
+    stderr,
+    stdout: "",
     timedOut: false,
   });
 }
-
-// ── 1. Parsing edge cases ──
 
 describe("getPrReviewData — rename similarity score edge cases", () => {
   let tmpDir: string;
@@ -67,7 +63,7 @@ describe("getPrReviewData — rename similarity score edge cases", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("R0 rename (0% similarity) still uses destination path and maps to renamed", async () => {
@@ -130,8 +126,6 @@ describe("getPrReviewData — rename similarity score edge cases", () => {
   });
 });
 
-// ── 2. Incremental mode — no prior review in store ──
-
 describe("getPrReviewData — incremental mode without prior review", () => {
   let tmpDir: string;
 
@@ -143,7 +137,7 @@ describe("getPrReviewData — incremental mode without prior review", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("falls back to full diff when incremental=true but no prior review exists", async () => {
@@ -153,7 +147,7 @@ describe("getPrReviewData — incremental mode without prior review", () => {
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     // PR 999 has no prior review in the store
-    const result = await fn({ pr_number: 999, incremental: true }, tmpDir);
+    const result = await fn({ incremental: true, pr_number: 999 }, tmpDir);
 
     // Should fall back to gh pr diff (pr number mode), NOT incremental
     expect(result.incremental).toBe(false);
@@ -165,18 +159,18 @@ describe("getPrReviewData — incremental mode without prior review", () => {
     // Store a review WITHOUT a last_reviewed_sha field
     const store = new DriftStore(tmpDir);
     await store.appendReview({
-      review_id: "rev_no_sha",
-      timestamp: "2026-03-25T00:00:00Z",
-      pr_number: 7,
-      verdict: "CLEAN",
       files: [],
-      violations: [],
       honored: [],
+      pr_number: 7,
+      review_id: "rev_no_sha",
       score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
       },
+      timestamp: "2026-03-25T00:00:00Z",
+      verdict: "CLEAN",
+      violations: [],
       // last_reviewed_sha intentionally omitted
     });
 
@@ -185,14 +179,12 @@ describe("getPrReviewData — incremental mode without prior review", () => {
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    const result = await fn({ pr_number: 7, incremental: true }, tmpDir);
+    const result = await fn({ incremental: true, pr_number: 7 }, tmpDir);
 
     expect(result.incremental).toBe(false);
     expect(result.last_reviewed_sha).toBeUndefined();
   });
 });
-
-// ── 3. pr_number validation ──
 
 describe("getPrReviewData — pr_number validation", () => {
   let tmpDir: string;
@@ -205,7 +197,7 @@ describe("getPrReviewData — pr_number validation", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("rejects pr_number of zero", async () => {
@@ -224,8 +216,6 @@ describe("getPrReviewData — pr_number validation", () => {
   });
 });
 
-// ── 4. kg_freshness_ms and priority data passthrough ──
-
 describe("getPrReviewData — kg_freshness_ms and priority data passthrough", () => {
   let tmpDir: string;
 
@@ -237,7 +227,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("populates kg_freshness_ms when KG DB exists with indexed files", async () => {
@@ -247,7 +237,14 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
-    store.upsertFile({ path: "src/a.ts", mtime_ms: Date.now(), content_hash: "a", language: "typescript", layer: "tools", last_indexed_at: Date.now() - 1000 });
+    store.upsertFile({
+      content_hash: "a",
+      language: "typescript",
+      last_indexed_at: Date.now() - 1000,
+      layer: "tools",
+      mtime_ms: Date.now(),
+      path: "src/a.ts",
+    });
     db.close();
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
@@ -279,10 +276,31 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
-    const fileA = store.upsertFile({ path: "src/a.ts", mtime_ms: Date.now(), content_hash: "a", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
-    const fileB = store.upsertFile({ path: "src/b.ts", mtime_ms: Date.now(), content_hash: "b", language: "tools", layer: "tools", last_indexed_at: Date.now() });
+    const fileA = store.upsertFile({
+      content_hash: "a",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "tools",
+      mtime_ms: Date.now(),
+      path: "src/a.ts",
+    });
+    const fileB = store.upsertFile({
+      content_hash: "b",
+      language: "tools",
+      last_indexed_at: Date.now(),
+      layer: "tools",
+      mtime_ms: Date.now(),
+      path: "src/b.ts",
+    });
     // a imports b → b has in_degree=1
-    store.insertFileEdge({ source_file_id: fileA.file_id!, target_file_id: fileB.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+    store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+    });
     db.close();
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
@@ -324,8 +342,6 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
   });
 });
 
-// ── 5. data.error with empty files (co-occurrence) ──
-
 describe("getPrReviewData — error field co-occurrence with empty files", () => {
   let tmpDir: string;
 
@@ -337,7 +353,7 @@ describe("getPrReviewData — error field co-occurrence with empty files", () =>
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("error is absent from output on success (no error key in result)", async () => {
@@ -368,8 +384,6 @@ describe("getPrReviewData — error field co-occurrence with empty files", () =>
   });
 });
 
-// ── 6. sanitizeGitRef on last_reviewed_sha from store ──
-
 describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () => {
   let tmpDir: string;
 
@@ -381,48 +395,50 @@ describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () =>
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("rejects a stored last_reviewed_sha containing shell-injection chars", async () => {
     // Simulate a tampered store entry where the SHA contains dangerous characters
     const store = new DriftStore(tmpDir);
     await store.appendReview({
-      review_id: "rev_tampered",
-      timestamp: "2026-03-25T00:00:00Z",
-      pr_number: 42,
-      last_reviewed_sha: "abc123; rm -rf /",
-      verdict: "CLEAN",
       files: [],
-      violations: [],
       honored: [],
+      last_reviewed_sha: "abc123; rm -rf /",
+      pr_number: 42,
+      review_id: "rev_tampered",
       score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
       },
+      timestamp: "2026-03-25T00:00:00Z",
+      verdict: "CLEAN",
+      violations: [],
     });
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await expect(fn({ pr_number: 42, incremental: true }, tmpDir)).rejects.toThrow("Invalid git ref");
+    await expect(fn({ incremental: true, pr_number: 42 }, tmpDir)).rejects.toThrow(
+      "Invalid git ref",
+    );
   });
 
   it("valid hex SHA as last_reviewed_sha passes sanitizeGitRef", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview({
-      review_id: "rev_valid_sha",
-      timestamp: "2026-03-25T00:00:00Z",
-      pr_number: 42,
-      last_reviewed_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-      verdict: "CLEAN",
       files: [],
-      violations: [],
       honored: [],
+      last_reviewed_sha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      pr_number: 42,
+      review_id: "rev_valid_sha",
       score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
       },
+      timestamp: "2026-03-25T00:00:00Z",
+      verdict: "CLEAN",
+      violations: [],
     });
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
@@ -430,14 +446,12 @@ describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () =>
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    const result = await fn({ pr_number: 42, incremental: true }, tmpDir);
+    const result = await fn({ incremental: true, pr_number: 42 }, tmpDir);
 
     expect(result.incremental).toBe(true);
     expect(result.diff_command).toContain("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2..HEAD");
   });
 });
-
-// ── 7. Cross-subsystem integration: layer grouping + priority score merge ──
 
 describe("getPrReviewData — cross-subsystem integration: layer + priority", () => {
   let tmpDir: string;
@@ -450,7 +464,7 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("full pipeline: layer config + diff output produces correct grouped output", async () => {
@@ -459,9 +473,9 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
         layers: {
-          tools: ["src/tools"],
           graph: ["src/graph"],
           tests: ["src/__tests__"],
+          tools: ["src/tools"],
         },
       }),
     );
@@ -502,7 +516,10 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
   });
 
   it("multiple files in one layer: all grouped together", async () => {
-    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { tools: ["src/tools"] } }));
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ layers: { tools: ["src/tools"] } }),
+    );
 
     const diffOutput = ["M\tsrc/tools/a.ts", "A\tsrc/tools/b.ts", "D\tsrc/tools/c.ts"].join("\n");
 

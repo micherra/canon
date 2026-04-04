@@ -55,7 +55,7 @@ function makeClusterInput(
   status: ClusterInput["status"],
   layer: string,
 ): ClusterInput {
-  return { path, status, layer };
+  return { layer, path, status };
 }
 
 // =============================================================================
@@ -274,36 +274,36 @@ describe("ChangeStoryGrid buildPrompt — default case (prv2-05 declared gap / p
 
   it("other clusters produce the 'Explain the changes' default prompt", () => {
     const cluster: Cluster = {
+      description: "1 file modified. Includes: lone-file.",
+      files: [makeClusterInput("src/tools/lone-file.ts", "modified", "tools")],
       id: "other-modifications",
       title: "Other modifications",
       type: "other",
-      description: "1 file modified. Includes: lone-file.",
-      files: [makeClusterInput("src/tools/lone-file.ts", "modified", "tools")],
     };
     expect(buildPrompt(cluster)).toBe("Explain the changes in Other modifications");
   });
 
   it("layer-group clusters produce the 'Explain the changes' default prompt", () => {
     const cluster: Cluster = {
-      id: "layer-tools",
-      title: "tools changes",
-      type: "layer-group",
       description: "2 files modified.",
       files: [
         makeClusterInput("src/a/foo.ts", "modified", "tools"),
         makeClusterInput("src/b/bar.ts", "modified", "tools"),
       ],
+      id: "layer-tools",
+      title: "tools changes",
+      type: "layer-group",
     };
     expect(buildPrompt(cluster)).toBe("Explain the changes in tools changes");
   });
 
   it("new-feature prompt is distinct from the default", () => {
     const cluster: Cluster = {
+      description: "2 files added.",
+      files: [],
       id: "new-feature-xyz",
       title: "New: auth-module",
       type: "new-feature",
-      description: "2 files added.",
-      files: [],
     };
     const prompt = buildPrompt(cluster);
     expect(prompt).not.toMatch(/^Explain the changes/);
@@ -518,7 +518,7 @@ describe("ViolationCard description fallback and severity labels (prv2-04 declar
 
 describe("SEVERITY_COLORS contract (cross-task: constants → ViolationCard)", () => {
   it("rule severity maps to a red-family hex color (#e74c3c)", () => {
-    expect(SEVERITY_COLORS["rule"]).toBe("#e74c3c");
+    expect(SEVERITY_COLORS.rule).toBe("#e74c3c");
   });
 
   it("strong-opinion severity maps to an orange-family hex color (#f39c12)", () => {
@@ -526,15 +526,15 @@ describe("SEVERITY_COLORS contract (cross-task: constants → ViolationCard)", (
   });
 
   it("convention severity maps to a blue-family hex color (#3498db)", () => {
-    expect(SEVERITY_COLORS["convention"]).toBe("#3498db");
+    expect(SEVERITY_COLORS.convention).toBe("#3498db");
   });
 
   it("rule color is distinct from strong-opinion color", () => {
-    expect(SEVERITY_COLORS["rule"]).not.toBe(SEVERITY_COLORS["strong-opinion"]);
+    expect(SEVERITY_COLORS.rule).not.toBe(SEVERITY_COLORS["strong-opinion"]);
   });
 
   it("strong-opinion color is distinct from convention color", () => {
-    expect(SEVERITY_COLORS["strong-opinion"]).not.toBe(SEVERITY_COLORS["convention"]);
+    expect(SEVERITY_COLORS["strong-opinion"]).not.toBe(SEVERITY_COLORS.convention);
   });
 
   it("all three severity types are present in SEVERITY_COLORS", () => {
@@ -621,23 +621,23 @@ describe("ImpactTabs Tab C — criticalDeps excludes files in diff (prv2-05 decl
     }
 
     return [...depMap.entries()].map(([path, dependents]) => ({
-      path,
       changedFileDependents: dependents,
+      path,
     }));
   }
 
   it("excludes paths that ARE in the diff", () => {
     const files: ImpactFile[] = [
-      { path: "src/a.ts", bucket: "low-risk" },
-      { path: "src/b.ts", bucket: "low-risk" },
+      { bucket: "low-risk", path: "src/a.ts" },
+      { bucket: "low-risk", path: "src/b.ts" },
     ];
     const blastRadius: BlastEntry[] = [
       {
-        file: "src/a.ts",
         affected: [
-          { path: "src/b.ts", depth: 1 }, // in diff — excluded
-          { path: "src/external.ts", depth: 1 }, // not in diff — included
+          { depth: 1, path: "src/b.ts" }, // in diff — excluded
+          { depth: 1, path: "src/external.ts" }, // not in diff — included
         ],
+        file: "src/a.ts",
       },
     ];
     const result = computeCriticalDeps(files, blastRadius);
@@ -648,31 +648,31 @@ describe("ImpactTabs Tab C — criticalDeps excludes files in diff (prv2-05 decl
 
   it("returns empty array when all blast radius affected paths are in the diff", () => {
     const files: ImpactFile[] = [
-      { path: "src/a.ts", bucket: "low-risk" },
-      { path: "src/b.ts", bucket: "low-risk" },
+      { bucket: "low-risk", path: "src/a.ts" },
+      { bucket: "low-risk", path: "src/b.ts" },
     ];
     const blastRadius: BlastEntry[] = [
       {
+        affected: [{ depth: 1, path: "src/b.ts" }], // in diff
         file: "src/a.ts",
-        affected: [{ path: "src/b.ts", depth: 1 }], // in diff
       },
     ];
     expect(computeCriticalDeps(files, blastRadius)).toHaveLength(0);
   });
 
   it("returns empty array when blastRadius is empty", () => {
-    const files: ImpactFile[] = [{ path: "src/a.ts", bucket: "low-risk" }];
+    const files: ImpactFile[] = [{ bucket: "low-risk", path: "src/a.ts" }];
     expect(computeCriticalDeps(files, [])).toHaveLength(0);
   });
 
   it("collects multiple changedFileDependents when a path appears in multiple blast entries", () => {
     const files: ImpactFile[] = [
-      { path: "src/a.ts", bucket: "low-risk" },
-      { path: "src/b.ts", bucket: "low-risk" },
+      { bucket: "low-risk", path: "src/a.ts" },
+      { bucket: "low-risk", path: "src/b.ts" },
     ];
     const blastRadius: BlastEntry[] = [
-      { file: "src/a.ts", affected: [{ path: "src/external.ts", depth: 1 }] },
-      { file: "src/b.ts", affected: [{ path: "src/external.ts", depth: 1 }] },
+      { affected: [{ depth: 1, path: "src/external.ts" }], file: "src/a.ts" },
+      { affected: [{ depth: 1, path: "src/external.ts" }], file: "src/b.ts" },
     ];
     const result = computeCriticalDeps(files, blastRadius);
     expect(result).toHaveLength(1);
@@ -683,10 +683,10 @@ describe("ImpactTabs Tab C — criticalDeps excludes files in diff (prv2-05 decl
   });
 
   it("does not duplicate a changedFileDependent when it appears twice for the same affected path", () => {
-    const files: ImpactFile[] = [{ path: "src/a.ts", bucket: "low-risk" }];
+    const files: ImpactFile[] = [{ bucket: "low-risk", path: "src/a.ts" }];
     const blastRadius: BlastEntry[] = [
-      { file: "src/a.ts", affected: [{ path: "src/external.ts", depth: 1 }] },
-      { file: "src/a.ts", affected: [{ path: "src/external.ts", depth: 1 }] }, // duplicate
+      { affected: [{ depth: 1, path: "src/external.ts" }], file: "src/a.ts" },
+      { affected: [{ depth: 1, path: "src/external.ts" }], file: "src/a.ts" }, // duplicate
     ];
     const result = computeCriticalDeps(files, blastRadius);
     expect(result[0].changedFileDependents).toHaveLength(1); // deduped
@@ -721,21 +721,21 @@ describe("ImpactTabs depRiskAnnotation and depRelationship (prv2-05 declared gap
 
   it("depRiskAnnotation returns undefined for exactly 1 dependent", () => {
     expect(
-      depRiskAnnotation({ path: "src/x.ts", changedFileDependents: ["src/a.ts"] }),
+      depRiskAnnotation({ changedFileDependents: ["src/a.ts"], path: "src/x.ts" }),
     ).toBeUndefined();
   });
 
   it("depRiskAnnotation returns 'affects 2 changed files' for 2 dependents", () => {
     expect(
-      depRiskAnnotation({ path: "src/x.ts", changedFileDependents: ["src/a.ts", "src/b.ts"] }),
+      depRiskAnnotation({ changedFileDependents: ["src/a.ts", "src/b.ts"], path: "src/x.ts" }),
     ).toBe("affects 2 changed files");
   });
 
   it("depRiskAnnotation returns 'affects 3 changed files' for 3 dependents", () => {
     expect(
       depRiskAnnotation({
-        path: "src/x.ts",
         changedFileDependents: ["src/a.ts", "src/b.ts", "src/c.ts"],
+        path: "src/x.ts",
       }),
     ).toBe("affects 3 changed files");
   });
@@ -743,8 +743,8 @@ describe("ImpactTabs depRiskAnnotation and depRelationship (prv2-05 declared gap
   it("depRelationship uses filename (not full path) for a single dependent", () => {
     expect(
       depRelationship({
-        path: "src/x.ts",
         changedFileDependents: ["src/graph/kg-store.ts"],
+        path: "src/x.ts",
       }),
     ).toBe("used by kg-store.ts");
   });
@@ -752,8 +752,8 @@ describe("ImpactTabs depRiskAnnotation and depRelationship (prv2-05 declared gap
   it("depRelationship uses count summary for multiple dependents", () => {
     expect(
       depRelationship({
-        path: "src/x.ts",
         changedFileDependents: ["src/a.ts", "src/b.ts"],
+        path: "src/x.ts",
       }),
     ).toBe("used by 2 changed files");
   });
@@ -785,28 +785,28 @@ describe("ImpactTabs Tab A — highImpactFiles filter and maxScore (prv2-05 decl
 
   it("includes files with priority_score exactly 15 (boundary — inclusive)", () => {
     const files: ImpactFile[] = [
-      { path: "src/a.ts", priority_score: 15, bucket: "needs-attention" },
+      { bucket: "needs-attention", path: "src/a.ts", priority_score: 15 },
     ];
     expect(computeHighImpact(files)).toHaveLength(1);
   });
 
   it("excludes files with priority_score of 14 (just below threshold)", () => {
     const files: ImpactFile[] = [
-      { path: "src/a.ts", priority_score: 14, bucket: "needs-attention" },
+      { bucket: "needs-attention", path: "src/a.ts", priority_score: 14 },
     ];
     expect(computeHighImpact(files)).toHaveLength(0);
   });
 
   it("excludes files with undefined priority_score (treated as 0)", () => {
-    const files: ImpactFile[] = [{ path: "src/a.ts", bucket: "low-risk" }];
+    const files: ImpactFile[] = [{ bucket: "low-risk", path: "src/a.ts" }];
     expect(computeHighImpact(files)).toHaveLength(0);
   });
 
   it("sorts results by priority_score descending", () => {
     const files: ImpactFile[] = [
-      { path: "src/a.ts", priority_score: 15, bucket: "needs-attention" },
-      { path: "src/b.ts", priority_score: 30, bucket: "needs-attention" },
-      { path: "src/c.ts", priority_score: 22, bucket: "needs-attention" },
+      { bucket: "needs-attention", path: "src/a.ts", priority_score: 15 },
+      { bucket: "needs-attention", path: "src/b.ts", priority_score: 30 },
+      { bucket: "needs-attention", path: "src/c.ts", priority_score: 22 },
     ];
     const result = computeHighImpact(files);
     expect(result[0].priority_score).toBe(30);
@@ -816,8 +816,8 @@ describe("ImpactTabs Tab A — highImpactFiles filter and maxScore (prv2-05 decl
 
   it("maxScore derived value equals highest priority_score in high-impact set", () => {
     const files: ImpactFile[] = [
-      { path: "src/a.ts", priority_score: 15, bucket: "needs-attention" },
-      { path: "src/b.ts", priority_score: 30, bucket: "needs-attention" },
+      { bucket: "needs-attention", path: "src/a.ts", priority_score: 15 },
+      { bucket: "needs-attention", path: "src/b.ts", priority_score: 30 },
     ];
     const highImpact = computeHighImpact(files);
     const maxScore =
@@ -827,8 +827,8 @@ describe("ImpactTabs Tab A — highImpactFiles filter and maxScore (prv2-05 decl
 
   it("highest score file gets 100% bar width via maxScore normalization", () => {
     const files: ImpactFile[] = [
-      { path: "src/a.ts", priority_score: 15, bucket: "needs-attention" },
-      { path: "src/b.ts", priority_score: 30, bucket: "needs-attention" },
+      { bucket: "needs-attention", path: "src/a.ts", priority_score: 15 },
+      { bucket: "needs-attention", path: "src/b.ts", priority_score: 30 },
     ];
     const highImpact = computeHighImpact(files);
     const maxScore = Math.max(...highImpact.map((f) => f.priority_score ?? 0));
@@ -861,9 +861,9 @@ describe("ImpactTabs Tab B — violation sort order (prv2-05 declared gap)", () 
   };
 
   const SEVERITY_ORDER: Record<string, number> = {
+    convention: 2,
     rule: 0,
     "strong-opinion": 1,
-    convention: 2,
   };
 
   function sortViolations(violations: FlatViolation[]): FlatViolation[] {
@@ -980,20 +980,20 @@ describe("Cross-task: buildFileViolationMap → ImpactTabs violation flattening 
   it("buildFileViolationMap output correctly populates per-file violations for ImpactTabs", () => {
     const reviews: ReviewEntry[] = [
       {
-        review_id: "rev_cross_1",
-        timestamp: "2026-03-25T10:00:00Z",
         files: ["src/a.ts"],
-        violations: [
-          { principle_id: "thin-handlers", severity: "strong-opinion", file_path: "src/a.ts" },
-          { principle_id: "errors-are-values", severity: "rule", file_path: "src/b.ts" },
-        ],
         honored: [],
+        review_id: "rev_cross_1",
         score: {
-          rules: { passed: 0, total: 1 },
-          opinions: { passed: 0, total: 1 },
           conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 1 },
+          rules: { passed: 0, total: 1 },
         },
+        timestamp: "2026-03-25T10:00:00Z",
         verdict: "BLOCKING",
+        violations: [
+          { file_path: "src/a.ts", principle_id: "thin-handlers", severity: "strong-opinion" },
+          { file_path: "src/b.ts", principle_id: "errors-are-values", severity: "rule" },
+        ],
       },
     ];
 
@@ -1010,8 +1010,8 @@ describe("Cross-task: buildFileViolationMap → ImpactTabs violation flattening 
     const flatViolations = files.flatMap((f) =>
       (f.violations ?? []).map((v) => ({
         filePath: f.path,
-        violation: v,
         inDegree: 0,
+        violation: v,
       })),
     );
 
@@ -1031,7 +1031,7 @@ describe("Cross-task: buildFileViolationMap → ImpactTabs violation flattening 
     ];
 
     const flatViolations = files.flatMap((f) =>
-      (f.violations ?? []).map((v) => ({ filePath: f.path, violation: v, inDegree: 0 })),
+      (f.violations ?? []).map((v) => ({ filePath: f.path, inDegree: 0, violation: v })),
     );
 
     expect(flatViolations).toHaveLength(0);
@@ -1040,32 +1040,32 @@ describe("Cross-task: buildFileViolationMap → ImpactTabs violation flattening 
   it("accumulated violations across multiple reviews appear in the flat list", () => {
     const reviews: ReviewEntry[] = [
       {
-        review_id: "rev_a",
-        timestamp: "2026-03-24T10:00:00Z",
         files: ["src/shared.ts"],
-        violations: [{ principle_id: "p-rule", severity: "rule", file_path: "src/shared.ts" }],
         honored: [],
+        review_id: "rev_a",
         score: {
-          rules: { passed: 0, total: 1 },
-          opinions: { passed: 0, total: 0 },
           conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
         },
+        timestamp: "2026-03-24T10:00:00Z",
         verdict: "BLOCKING",
+        violations: [{ file_path: "src/shared.ts", principle_id: "p-rule", severity: "rule" }],
       },
       {
-        review_id: "rev_b",
-        timestamp: "2026-03-25T10:00:00Z",
         files: ["src/shared.ts"],
-        violations: [
-          { principle_id: "p-convention", severity: "convention", file_path: "src/shared.ts" },
-        ],
         honored: [],
+        review_id: "rev_b",
         score: {
-          rules: { passed: 0, total: 0 },
-          opinions: { passed: 0, total: 0 },
           conventions: { passed: 0, total: 1 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 0 },
         },
+        timestamp: "2026-03-25T10:00:00Z",
         verdict: "WARNING",
+        violations: [
+          { file_path: "src/shared.ts", principle_id: "p-convention", severity: "convention" },
+        ],
       },
     ];
 
@@ -1075,8 +1075,8 @@ describe("Cross-task: buildFileViolationMap → ImpactTabs violation flattening 
     // Simulate ImpactTabs flattening for this one file
     const flatViolations = sharedViolations.map((v) => ({
       filePath: "src/shared.ts",
-      violation: v,
       inDegree: 0,
+      violation: v,
     }));
 
     expect(flatViolations).toHaveLength(2);
@@ -1123,8 +1123,8 @@ describe("bridge.sendMessage() — uninitialized guard (prv2-03 declared gap)", 
     vi.doMock("@modelcontextprotocol/ext-apps", () => ({
       App: MockApp,
       applyDocumentTheme: vi.fn(),
-      applyHostStyleVariables: vi.fn(),
       applyHostFonts: vi.fn(),
+      applyHostStyleVariables: vi.fn(),
     }));
 
     // Import bridge AFTER vi.resetModules() but BEFORE calling init() — app stays null
