@@ -7,7 +7,11 @@ canon-cursor-cli/bundle/*.tgz
 cursor-extension/media/dashboard.js
 .idea/
 .air/
-.claude/
+.claude/*
+# Plugin-owned .claude/ directories (committed to repo)
+!.claude/rules/
+!.claude/subagents/
+.claude/settings.local.json
 .junie/
 .ai/
 # Subdirectory scoped CLAUDE.md files (opt-mcp-02: scoped out of root agent context)
