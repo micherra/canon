@@ -16,7 +16,11 @@ afterEach(async () => {
 const makeInput = (overrides: Partial<Parameters<typeof writeResearchSynthesis>[0]> = {}) => ({
   affected_subsystems: ["orchestration", "board"],
   key_findings: [
-    { confidence: "high" as const, finding: "Board uses SQLite", source: "src/orchestration/board.ts" },
+    {
+      confidence: "high" as const,
+      finding: "Board uses SQLite",
+      source: "src/orchestration/board.ts",
+    },
     { confidence: "medium" as const, finding: "No retry on failure" },
   ],
   open_questions: ["Should gates be async?", "Is retry needed?"],
@@ -93,9 +97,7 @@ describe("writeResearchSynthesis — happy path", () => {
   it("empty key_findings still produces valid output", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(
-      makeInput({ key_findings: [], workspace: tmpDir }),
-    );
+    const result = await writeResearchSynthesis(makeInput({ key_findings: [], workspace: tmpDir }));
 
     assertOk(result);
     expect(result.finding_count).toBe(0);
@@ -158,9 +160,7 @@ describe("writeResearchSynthesis — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (special chars)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
-    const result = await writeResearchSynthesis(
-      makeInput({ slug: "my/epic!", workspace: tmpDir }),
-    );
+    const result = await writeResearchSynthesis(makeInput({ slug: "my/epic!", workspace: tmpDir }));
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -172,9 +172,7 @@ describe("writeResearchSynthesis — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
 
     // slug with traversal chars is caught by SLUG_PATTERN before path check
-    const result = await writeResearchSynthesis(
-      makeInput({ slug: "../evil", workspace: tmpDir }),
-    );
+    const result = await writeResearchSynthesis(makeInput({ slug: "../evil", workspace: tmpDir }));
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

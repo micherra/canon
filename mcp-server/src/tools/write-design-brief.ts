@@ -1,38 +1,49 @@
-import { writeFile, mkdir } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute } from "node:path";
-import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+import { mkdir, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
   return value.replace(/\|/g, "&#124;").replace(/\r\n?|\n/g, " ");
 }
 
-export interface WriteDesignBriefInput {
-  workspace: string;
-  slug: string;
-  task_id: string;
+export type WriteDesignBriefInput = {
+  constraints: string[];
+  decisions_referenced?: string[];
+  dependencies?: string[];
   file_targets: Array<{
     path: string;
     action: "create" | "modify" | "delete";
     description?: string;
   }>;
-  constraints: string[];
+  slug: string;
+  task_id: string;
   test_expectations: Array<{
     description: string;
     file?: string;
   }>;
-  decisions_referenced?: string[];
-  dependencies?: string[];
-}
+  workspace: string;
+};
 
-export interface WriteDesignBriefResult {
-  path: string;
-  meta_path: string;
-  file_target_count: number;
+export type WriteDesignBriefResult = {
   constraint_count: number;
-}
+  file_target_count: number;
+  meta_path: string;
+  path: string;
+};
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function appendOptionalList(lines: string[], heading: string, items?: string[]): void {
+  if (items && items.length > 0) {
+    lines.push(`### ${heading}`);
+    lines.push("");
+    for (const item of items) {
+      lines.push(`- ${escapeMdCell(item)}`);
+    }
+    lines.push("");
+  }
+}
 
 function generateMarkdown(input: WriteDesignBriefInput): string {
   const lines: string[] = [];
@@ -45,9 +56,7 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
   lines.push("|------|--------|-------------|");
   for (const ft of input.file_targets) {
     const desc = ft.description ?? "—";
-    lines.push(
-      `| ${escapeMdCell(ft.path)} | ${escapeMdCell(ft.action)} | ${escapeMdCell(desc)} |`,
-    );
+    lines.push(`| ${escapeMdCell(ft.path)} | ${escapeMdCell(ft.action)} | ${escapeMdCell(desc)} |`);
   }
   lines.push("");
 
@@ -68,23 +77,8 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
   }
   lines.push("");
 
-  if (input.decisions_referenced && input.decisions_referenced.length > 0) {
-    lines.push("### Decisions Referenced");
-    lines.push("");
-    for (const d of input.decisions_referenced) {
-      lines.push(`- ${escapeMdCell(d)}`);
-    }
-    lines.push("");
-  }
-
-  if (input.dependencies && input.dependencies.length > 0) {
-    lines.push("### Dependencies");
-    lines.push("");
-    for (const dep of input.dependencies) {
-      lines.push(`- ${escapeMdCell(dep)}`);
-    }
-    lines.push("");
-  }
+  appendOptionalList(lines, "Decisions Referenced", input.decisions_referenced);
+  appendOptionalList(lines, "Dependencies", input.dependencies);
 
   return lines.join("\n");
 }
@@ -121,10 +115,10 @@ export async function writeDesignBrief(
   const meta: Record<string, unknown> = {
     _type: "design_brief",
     _version: 1,
-    task_id: input.task_id,
-    slug: input.slug,
-    file_targets: input.file_targets,
     constraints: input.constraints,
+    file_targets: input.file_targets,
+    slug: input.slug,
+    task_id: input.task_id,
     test_expectations: input.test_expectations,
   };
   if (input.decisions_referenced !== undefined) {
@@ -142,9 +136,9 @@ export async function writeDesignBrief(
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
 
   return toolOk({
-    path: briefPath,
-    meta_path: metaPath,
-    file_target_count: input.file_targets.length,
     constraint_count: input.constraints.length,
+    file_target_count: input.file_targets.length,
+    meta_path: metaPath,
+    path: briefPath,
   });
 }

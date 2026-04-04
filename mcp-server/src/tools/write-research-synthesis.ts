@@ -43,10 +43,7 @@ function validateInput(input: WriteResearchSynthesisInput): ToolResult<{ handoff
   const handoffsDir = resolve(join(input.workspace, "handoffs"));
   const workspaceResolved = resolve(input.workspace);
   if (!handoffsDir.startsWith(`${workspaceResolved}/`) && handoffsDir !== workspaceResolved) {
-    return toolError(
-      "INVALID_INPUT",
-      `Handoffs directory resolves outside workspace`,
-    );
+    return toolError("INVALID_INPUT", `Handoffs directory resolves outside workspace`);
   }
   return toolOk({ handoffsDir });
 }

@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { writeDesignBrief } from "../tools/write-design-brief.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
@@ -9,7 +9,7 @@ let tmpDir: string;
 
 afterEach(async () => {
   if (tmpDir) {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   }
 });
 
@@ -22,16 +22,14 @@ describe("writeDesignBrief — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: ["Max 60 lines per function"],
+      file_targets: [{ action: "create", description: "New tool", path: "src/tools/foo.ts" }],
       slug: "my-epic",
       task_id: "task-01",
-      file_targets: [
-        { path: "src/tools/foo.ts", action: "create", description: "New tool" },
-      ],
-      constraints: ["Max 60 lines per function"],
       test_expectations: [
         { description: "happy path creates file", file: "src/__tests__/foo.test.ts" },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -52,12 +50,12 @@ describe("writeDesignBrief — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "my-epic",
       task_id: "task-02",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -71,16 +69,16 @@ describe("writeDesignBrief — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [
+        { action: "create", description: "Brand new", path: "src/a.ts" },
+        { action: "modify", path: "src/b.ts" },
+        { action: "delete", description: "Remove it", path: "src/c.ts" },
+      ],
       slug: "test-epic",
       task_id: "task-01",
-      file_targets: [
-        { path: "src/a.ts", action: "create", description: "Brand new" },
-        { path: "src/b.ts", action: "modify" },
-        { path: "src/c.ts", action: "delete", description: "Remove it" },
-      ],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -102,12 +100,12 @@ describe("writeDesignBrief — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: ["Use TypeScript strict mode", "No any types"],
+      file_targets: [],
       slug: "test-epic",
       task_id: "task-01",
-      file_targets: [],
-      constraints: ["Use TypeScript strict mode", "No any types"],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -121,15 +119,15 @@ describe("writeDesignBrief — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "test-epic",
       task_id: "task-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [
         { description: "creates output file", file: "src/__tests__/foo.test.ts" },
         { description: "returns INVALID_INPUT on bad slug" },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -146,16 +144,16 @@ describe("writeDesignBrief — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: ["c1", "c2"],
+      file_targets: [
+        { action: "create", path: "a.ts" },
+        { action: "modify", path: "b.ts" },
+        { action: "delete", path: "c.ts" },
+      ],
       slug: "my-epic",
       task_id: "task-01",
-      file_targets: [
-        { path: "a.ts", action: "create" },
-        { path: "b.ts", action: "modify" },
-        { path: "c.ts", action: "delete" },
-      ],
-      constraints: ["c1", "c2"],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -167,12 +165,12 @@ describe("writeDesignBrief — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "new-slug",
       task_id: "t-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -189,12 +187,12 @@ describe("writeDesignBrief — optional fields absent", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "my-epic",
       task_id: "task-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -209,12 +207,12 @@ describe("writeDesignBrief — optional fields absent", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "my-epic",
       task_id: "task-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -235,13 +233,13 @@ describe("writeDesignBrief — optional fields present", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      decisions_referenced: ["dec-001", "dec-005"],
+      file_targets: [],
       slug: "my-epic",
       task_id: "task-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
-      decisions_referenced: ["dec-001", "dec-005"],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -258,13 +256,13 @@ describe("writeDesignBrief — optional fields present", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      dependencies: ["task-00", "task-03"],
+      file_targets: [],
       slug: "my-epic",
       task_id: "task-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
-      dependencies: ["task-00", "task-03"],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -281,14 +279,14 @@ describe("writeDesignBrief — optional fields present", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
-      slug: "full-epic",
-      task_id: "full-task-01",
-      file_targets: [{ path: "src/a.ts", action: "create" }],
       constraints: ["constraint-one"],
-      test_expectations: [{ description: "passes", file: "src/__tests__/a.test.ts" }],
       decisions_referenced: ["dec-01"],
       dependencies: ["task-00"],
+      file_targets: [{ action: "create", path: "src/a.ts" }],
+      slug: "full-epic",
+      task_id: "full-task-01",
+      test_expectations: [{ description: "passes", file: "src/__tests__/a.test.ts" }],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -316,12 +314,12 @@ describe("writeDesignBrief — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "invalid slug",
       task_id: "task-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -335,12 +333,12 @@ describe("writeDesignBrief — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "my/epic!",
       task_id: "task-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -353,12 +351,12 @@ describe("writeDesignBrief — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "my-epic",
       task_id: "task 01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -372,12 +370,12 @@ describe("writeDesignBrief — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
 
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "my-epic",
       task_id: "task@01!",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -391,12 +389,12 @@ describe("writeDesignBrief — validation errors", () => {
 
     // The slug pattern validation catches this before path traversal check
     const result = await writeDesignBrief({
-      workspace: tmpDir,
+      constraints: [],
+      file_targets: [],
       slug: "../evil",
       task_id: "task-01",
-      file_targets: [],
-      constraints: [],
       test_expectations: [],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
