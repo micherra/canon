@@ -16,7 +16,7 @@ Harden Canon flow loading with strict schema validation, hard-blocking error thr
 - All new Zod schema fields use `.optional()` for backward compat
 - Reachability warnings (non-blocking) use `"Warning:"` prefix; hard errors do not
 - DB schema migrations version-gated via `meta.schema_version`; all DDL uses `IF NOT EXISTS`; current version: `'5'` (v4 = `cache_prefix` on `execution` via ADR-006a; v5 = `transcript_path` on `execution_states` via ADR-015)
-- Agent self-reporting metrics: `get_spawn_prompt` injects a `record_agent_metrics` footer into every prompt; agents call the tool before returning status; metrics merge into execution state, preserving orchestrator fields
+- Agent self-reporting metrics: `drive_flow` injects a `record_agent_metrics` footer into every prompt; agents call the tool before returning status; metrics merge into execution state, preserving orchestrator fields
 - Agent transcript recording (ADR-015): each workspace has a `transcripts/` subdir; `report_result` accepts optional `transcript_path` (best-effort); `get_transcript` MCP tool reads stored JSONL transcripts in `full` or `summary` (assistant-only) mode; `TranscriptEntry` type lives in `flow-schema.ts`
 
 ### Known Issues

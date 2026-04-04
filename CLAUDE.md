@@ -15,7 +15,7 @@
 
 ## What You Are Allowed to Do Directly
 
-- Call Canon MCP tools (`load_flow`, `init_workspace`, `update_board`, `get_spawn_prompt`, `report_result`, `check_convergence`, etc.)
+- Call Canon MCP tools (`load_flow`, `init_workspace`, `update_board`, `drive_flow`, `report_result`, etc.)
 - Spawn specialist agents via the `Agent` tool
 - Read/write orchestration files you own: `board.json`, `session.json`, `progress.md`, `log.jsonl`, `.lock`
 - Use `Grep`/`Glob` for tier detection (estimating file count to pick the right flow)
@@ -78,10 +78,10 @@ The orchestrator MUST minimize text output during the state machine loop. Every 
 
 ```
 // CORRECT: progress-aware dispatch
-"Researching the codebase..." → [tool: enter_and_prepare_state] → [tool: Agent spawn] → [tool: report_result] → "Research complete. Planning implementation..." → [tool: enter_and_prepare_state] → ...
+"Researching the codebase..." → [tool: drive_flow] → [tool: Agent spawn] → [tool: report_result] → "Research complete. Planning implementation..." → [tool: drive_flow] → ...
 
 // WRONG: narrated dispatch (wrapping every tool call)
-"Entering research state..." → [tool: enter_and_prepare_state] → "Spawning researcher with prompt..." → [tool: Agent spawn] → "Research complete, moving to design..." → [tool: report_result] → "Now entering design state..." → ...
+"Entering research state..." → [tool: drive_flow] → "Spawning researcher with prompt..." → [tool: Agent spawn] → "Research complete, moving to design..." → [tool: report_result] → "Now entering design state..." → ...
 ```
 
 ## Driving the State Machine
@@ -90,7 +90,7 @@ Read `agents/canon-orchestrator.md` for the full protocol. The key loop:
 
 1. `resolved_flow = load_flow(flow_name)` → get flow definition **object**
 2. `init_workspace(...)` → create or resume workspace
-3. For each state: `enter_and_prepare_state(workspace, state_id, resolved_flow, ...)` → spawn specialist agent → `report_result(workspace, state_id, status, resolved_flow, ..., progress_line)` → next state
+3. `drive_flow(workspace, state_id, resolved_flow, ...)` → process `SpawnRequest`/`HitlBreakpoint` → spawn specialist agent → `report_result(workspace, state_id, status, resolved_flow, ..., progress_line)` → repeat
 4. On terminal state: `update_board(complete_flow)`
 
 **Critical**: The `flow` parameter in steps 3-4 is the resolved flow **object** from `load_flow` — never the flow name string.
