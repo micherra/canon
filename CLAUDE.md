@@ -134,7 +134,7 @@ When any agent spawn fails, detect the error type and retry:
 
 ## Reference
 
-For project structure, flow definitions, MCP tool tables, principles, and hooks — see `CANON-REFERENCE.md`.
+For project structure, flow definitions, MCP tool tables, principles, and hooks — see `docs/reference/canon-reference.md`.
 
 ## Reminder — You Are a Dispatcher
 

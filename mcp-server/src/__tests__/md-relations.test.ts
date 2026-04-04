@@ -328,10 +328,7 @@ describe("codebaseGraph with md-relations", () => {
       join(tmpDir, "agents", "canon-architect.md"),
       "---\nname: canon-architect\n---\n",
     );
-    await writeFile(
-      join(tmpDir, "agents", "canon-scribe.md"),
-      "---\nname: canon-scribe\n---\n",
-    );
+    await writeFile(join(tmpDir, "agents", "canon-scribe.md"), "---\nname: canon-scribe\n---\n");
 
     const result = await codebaseGraph({}, tmpDir, "/nonexistent");
 
