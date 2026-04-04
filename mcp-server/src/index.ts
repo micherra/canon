@@ -46,10 +46,10 @@ import { showPrImpact } from "./tools/show-pr-impact.ts";
 import { storePrReview } from "./tools/store-pr-review.ts";
 import { storeSummaries } from "./tools/store-summaries.ts";
 import { updateBoard } from "./tools/update-board.ts";
+import { writeDesignBrief } from "./tools/write-design-brief.ts";
 import { writeImplementationSummary } from "./tools/write-implementation-summary.ts";
 import { writePlanIndex } from "./tools/write-plan-index.ts";
 import { writeResearchSynthesis } from "./tools/write-research-synthesis.ts";
-import { writeDesignBrief } from "./tools/write-design-brief.ts";
 import { writeReview } from "./tools/write-review.ts";
 import { writeTestReport } from "./tools/write-test-report.ts";
 import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
@@ -980,25 +980,25 @@ server.registerTool(
     description:
       "Write a structured research synthesis for researcher-to-architect handoff. Produces RESEARCH-SYNTHESIS.md + .meta.json sidecar in workspace handoffs/ directory.",
     inputSchema: {
-      workspace: z.string(),
-      slug: z.string(),
+      affected_subsystems: z.array(z.string()),
       key_findings: z.array(
         z.object({
-          finding: z.string(),
           confidence: z.enum(["high", "medium", "low"]),
+          finding: z.string(),
           source: z.string().optional(),
         }),
       ),
-      affected_subsystems: z.array(z.string()),
+      open_questions: z.array(z.string()),
       risk_areas: z.array(
         z.object({
           area: z.string(),
-          severity: z.enum(["high", "medium", "low"]),
           mitigation: z.string().optional(),
+          severity: z.enum(["high", "medium", "low"]),
         }),
       ),
-      open_questions: z.array(z.string()),
+      slug: z.string(),
       sources: z.array(z.string()).optional(),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => writeResearchSynthesis(input)),
@@ -1010,25 +1010,25 @@ server.registerTool(
     description:
       "Write a structured design brief for architect-to-implementor handoff. Produces DESIGN-BRIEF.md + .meta.json sidecar in workspace handoffs/ directory.",
     inputSchema: {
-      workspace: z.string(),
-      slug: z.string(),
-      task_id: z.string(),
+      constraints: z.array(z.string()),
+      decisions_referenced: z.array(z.string()).optional(),
+      dependencies: z.array(z.string()).optional(),
       file_targets: z.array(
         z.object({
-          path: z.string(),
           action: z.enum(["create", "modify", "delete"]),
           description: z.string().optional(),
+          path: z.string(),
         }),
       ),
-      constraints: z.array(z.string()),
+      slug: z.string(),
+      task_id: z.string(),
       test_expectations: z.array(
         z.object({
           description: z.string(),
           file: z.string().optional(),
         }),
       ),
-      decisions_referenced: z.array(z.string()).optional(),
-      dependencies: z.array(z.string()).optional(),
+      workspace: z.string(),
     },
   },
   wrapHandler(async (input) => writeDesignBrief(input)),
