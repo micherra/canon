@@ -40,7 +40,6 @@ function setupStoreWithWave(workspace: string, stateId = "implement"): void {
   });
 }
 
-
 let workspace: string;
 
 beforeEach(async () => {

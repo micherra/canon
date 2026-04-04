@@ -50,7 +50,6 @@ function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<Fi
   };
 }
 
-
 // 1. KgQuery.getFileMetrics with changedFiles option
 //
 // Gap declared in adr005-01: "getFileMetrics with changedFiles option — impact_score

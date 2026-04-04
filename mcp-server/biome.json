@@ -1,16 +1,19 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
 
-  "vcs": {
-    "enabled": true,
-    "clientKind": "git",
-    "useIgnoreFile": true,
-    "defaultBranch": "main",
-    "root": ".."
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on",
+        "useSortedAttributes": "on",
+        "useSortedInterfaceMembers": "on",
+        "useSortedKeys": "on"
+      }
+    },
+    "enabled": true
   },
 
   "files": {
-    "maxSize": 400000,
     "ignoreUnknown": true,
     "includes": [
       "src/**/*.{ts,tsx,js,jsx,mts,cts,cjs,mjs,json,jsonc}",
@@ -18,14 +21,15 @@
       "!**/*.generated.*",
       "!**/*.min.*",
 
-      "!dist/**",
-      "!build/**",
-      "!.next/**",
-      "!coverage/**",
-      "!.turbo/**",
-      "!tmp/**",
-      "!.cache/**"
-    ]
+      "!dist",
+      "!build",
+      "!.next",
+      "!coverage",
+      "!.turbo",
+      "!tmp",
+      "!.cache"
+    ],
+    "maxSize": 400000
   },
 
   "formatter": {
@@ -35,11 +39,17 @@
     "lineWidth": 100
   },
 
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
-
       "complexity": {
         "noExcessiveCognitiveComplexity": {
           "level": "error",
@@ -49,19 +59,16 @@
           "level": "error",
           "options": { "maxLines": 60 }
         },
+        "noForEach": "error",
+        "useArrowFunction": "error",
+        "useLiteralKeys": "error",
         "useMaxParams": {
           "level": "error",
           "options": { "max": 4 }
-        },
-        "useArrowFunction": "error",
-        "noForEach": "error",
-        "useLiteralKeys": "error"
+        }
       },
 
       "correctness": {
-        "noUnusedVariables": "error",
-        "noUnusedImports": "error",
-        "noUnusedFunctionParameters": "warn",
         "noUndeclaredDependencies": {
           "level": "error",
           "options": {
@@ -80,68 +87,49 @@
               "**/.storybook/**",
               "**/scripts/**"
             ],
-            "peerDependencies": true,
-            "optionalDependencies": true
+            "optionalDependencies": true,
+            "peerDependencies": true
           }
         },
+        "noUnusedFunctionParameters": "warn",
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
         "useExhaustiveDependencies": "off"
       },
 
+      "performance": {
+        "noAwaitInLoops": "on",
+        "noBarrelFile": "on",
+        "noDelete": "on"
+      },
+      "recommended": true,
+
       "style": {
         "noNonNullAssertion": "off",
-        "useConst": "error",
-        "useImportType": "error",
-        "useNodejsImportProtocol": "error",
-        "useTemplate": "error",
         "noParameterAssign": "on",
         "useConsistentTypeDefinitions": {
           "level": "warn",
           "options": { "style": "type" }
-        }
+        },
+        "useConst": "error",
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error",
+        "useTemplate": "error"
       },
 
       "suspicious": {
-        "noExplicitAny": "error",
-        "noEmptyBlockStatements": "error",
+        "noAssignInExpressions": "on",
         "noConsole": "off",
-        "noTemplateCurlyInString": "off",
-        "noAssignInExpressions": "on"
-      },
-
-      "performance": {
-        "noDelete": "on",
-        "noBarrelFile": "on",
-        "noAwaitInLoops": "on"
-      }
-    }
-  },
-
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double",
-      "trailingCommas": "all",
-      "semicolons": "always"
-    }
-  },
-
-  "assist": {
-    "enabled": true,
-    "actions": {
-      "source": {
-        "organizeImports": "on",
-        "useSortedKeys": "on",
-        "useSortedAttributes": "on",
-        "useSortedInterfaceMembers": "on"
+        "noEmptyBlockStatements": "error",
+        "noExplicitAny": "error",
+        "noTemplateCurlyInString": "off"
       }
     }
   },
 
   "overrides": [
     {
-      "includes": [
-        "src/**/*.test.{ts,tsx,js,jsx}",
-        "src/**/*.spec.{ts,tsx,js,jsx}"
-      ],
+      "includes": ["src/**/*.test.{ts,tsx,js,jsx}", "src/**/*.spec.{ts,tsx,js,jsx}"],
       "linter": {
         "rules": {
           "complexity": {
@@ -163,8 +151,8 @@
       "linter": {
         "rules": {
           "correctness": {
-            "noUnusedVariables": "off",
-            "noUnusedFunctionParameters": "off"
+            "noUnusedFunctionParameters": "off",
+            "noUnusedVariables": "off"
           }
         }
       }
@@ -179,5 +167,13 @@
         }
       }
     }
-  ]
+  ],
+
+  "vcs": {
+    "clientKind": "git",
+    "defaultBranch": "main",
+    "enabled": true,
+    "root": "..",
+    "useIgnoreFile": true
+  }
 }

@@ -28,7 +28,6 @@ function makeBoard(): Board {
   return initBoard(makeMinimalFlow(), "build feature X", "abc123");
 }
 
-
 // initBoard
 
 describe("initBoard", () => {
