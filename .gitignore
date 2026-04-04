@@ -10,7 +10,7 @@ cursor-extension/media/dashboard.js
 .claude/*
 # Plugin-owned .claude/ directories (committed to repo)
 !.claude/rules/
-!.claude/subagents/
+!.claude/agents/
 .claude/settings.local.json
 .junie/
 .ai/

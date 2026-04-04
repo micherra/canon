@@ -7,7 +7,7 @@
 ```
 canon/
 ├── .claude/
-│   ├── subagents/        # Agent definitions (YAML frontmatter + markdown instructions)
+│   ├── agents/           # Agent definitions (YAML frontmatter + markdown instructions)
 │   └── rules/            # Agent-behavior rules (agent-rules, loaded per agent)
 ├── flows/                # Flow state machine definitions (YAML frontmatter + spawn instructions)
 │   └── fragments/        # Reusable state groups included by flows

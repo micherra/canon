@@ -35,7 +35,7 @@ function isExcludedDoc(filePath: string): boolean {
 const DEFAULT_KIND_RULES: MdKindRule[] = [
   { kind: "fragment", prefix: "flows/fragments/" },
   { kind: "flow", prefix: "flows/" },
-  { kind: "agent", prefix: ".claude/subagents/" },
+  { kind: "agent", prefix: ".claude/agents/" },
   { kind: "template", prefix: "templates/" },
   { kind: "principle", prefix: "principles/" },
   { kind: "principle", prefix: ".canon/principles/" },
