@@ -25,7 +25,7 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { CANON_DIR, CANON_FILES } from "../../constants.ts";
+import { CANON_DIR, CANON_FILES } from "../../shared/constants.ts";
 import { computeFileInsightMaps, KgQuery } from "../../graph/kg-query.ts";
 import { initDatabase } from "../../graph/kg-schema.ts";
 import { KgStore } from "../../graph/kg-store.ts";

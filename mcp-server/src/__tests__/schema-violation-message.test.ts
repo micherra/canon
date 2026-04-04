@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { reportInputSchema } from "../schema.ts";
+import { reportInputSchema } from "../shared/schema.ts";
 
 // Shared test data
 

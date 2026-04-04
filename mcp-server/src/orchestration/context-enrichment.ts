@@ -22,7 +22,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { gitLog } from "../adapters/git-adapter.ts";
 import { DriftStore } from "../drift/store.ts";
-import type { ReviewEntry } from "../schema.ts";
+import type { ReviewEntry } from "../shared/schema.ts";
 import type { Board, ResolvedFlow } from "./flow-schema.ts";
 import { resolveTaskScope } from "./scope-resolver.ts";
 import { escapeDollarBrace } from "./wave-variables.ts";

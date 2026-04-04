@@ -1,5 +1,5 @@
 import { dirname, join, normalize } from "node:path";
-import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../constants.ts";
+import { JS_EXTENSIONS, PY_EXTENSIONS, RESOLVE_EXTENSIONS } from "../shared/constants.ts";
 import { toPosix } from "../utils/paths.ts";
 
 /** Registry of import extractors by file extension. Add new languages here. */

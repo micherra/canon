@@ -13,9 +13,9 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CANON_DIR } from "../constants.ts";
+import { CANON_DIR } from "../shared/constants.ts";
 import { DriftStore } from "../drift/store.ts";
-import type { ReviewEntry } from "../schema.ts";
+import type { ReviewEntry } from "../shared/schema.ts";
 
 function makeTmpDir(): string {
   return mkdtempSync(join(tmpdir(), "canon-store-test-"));

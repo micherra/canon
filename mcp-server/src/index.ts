@@ -15,7 +15,7 @@ import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-com
 import { z } from "zod";
 import { getJobManager } from "./jobs/job-manager.ts";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
-import { reportInputSchema } from "./schema.ts";
+import { reportInputSchema } from "./shared/schema.ts";
 import type { FailureEntry } from "./tools/categorize-failures.ts";
 import { categorizeFailures } from "./tools/categorize-failures.ts";
 import { codebaseGraph, compactGraph } from "./tools/codebase-graph.ts";

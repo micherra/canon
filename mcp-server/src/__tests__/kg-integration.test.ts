@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { getAdapter, getLanguage } from "../graph/kg-adapter-registry.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";

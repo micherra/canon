@@ -11,7 +11,7 @@
  */
 
 import { type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
-import { EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL } from "../constants.ts";
+import { EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL } from "../shared/constants.ts";
 
 // Pipeline factory — injectable for testing
 

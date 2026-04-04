@@ -1,5 +1,5 @@
 import { DriftStore } from "../drift/store.ts";
-import type { ReviewViolation } from "../schema.ts";
+import type { ReviewViolation } from "../shared/schema.ts";
 import { generateId } from "../utils/id.ts";
 
 export type StorePrReviewInput = {

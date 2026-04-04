@@ -26,7 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriftDb } from "../drift/drift-db.ts";
 import { initDriftDb } from "../drift/drift-schema.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import type { ReviewEntry } from "../schema.ts";
+import type { ReviewEntry } from "../shared/schema.ts";
 
 // Module mocks for context-enrichment tests
 

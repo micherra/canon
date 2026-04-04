@@ -1,6 +1,6 @@
 /** Graph-aware file priority scoring for PR review — pure functions, no I/O */
 
-import { LAYER_CENTRALITY } from "../constants.ts";
+import { LAYER_CENTRALITY } from "../shared/constants.ts";
 import { buildDegreeMaps } from "./degree.ts";
 
 export type FilePriorityScore = {

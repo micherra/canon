@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { initBoard } from "../orchestration/board.ts";

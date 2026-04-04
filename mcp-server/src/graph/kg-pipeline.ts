@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import type { Database } from "better-sqlite3";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { inferLayer } from "../matcher.ts";
 import { resolveImport } from "./import-parser.ts";
 import { getAdapter, getLanguage } from "./kg-adapter-registry.ts";

@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { FlowRunEntry } from "../drift/analytics.ts";
 import { DriftDb, getDriftDb } from "../drift/drift-db.ts";
 import { DRIFT_SCHEMA_VERSION, initDriftDb } from "../drift/drift-schema.ts";
-import type { ReviewEntry } from "../schema.ts";
+import type { ReviewEntry } from "../shared/schema.ts";
 
 function makeReviewEntry(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {

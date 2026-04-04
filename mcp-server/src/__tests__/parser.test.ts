@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFrontmatter, parsePrinciple } from "../parser.ts";
+import { parseFrontmatter, parsePrinciple } from "../shared/parser.ts";
 
 describe("parseFrontmatter", () => {
   it("extracts top-level key-value pairs", () => {

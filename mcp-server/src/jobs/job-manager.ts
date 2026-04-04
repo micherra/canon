@@ -19,7 +19,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Database } from "better-sqlite3";
 import { forkJob, type JobMessage, killJob, sendWorkerInput } from "../adapters/job-adapter.ts";
-import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "../constants.ts";
+import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "../shared/constants.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import type { CodebaseGraphInput } from "../tools/codebase-graph.ts";

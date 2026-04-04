@@ -24,7 +24,7 @@ import {
   getExecutionStore,
 } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import type { ReviewEntry } from "../schema.ts";
+import type { ReviewEntry } from "../shared/schema.ts";
 import { getMessages } from "../tools/get-messages.ts";
 import { postMessage } from "../tools/post-message.ts";
 import { reportResult } from "../tools/report-result.ts";

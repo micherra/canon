@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { parseFrontmatter } from "../parser.ts";
+import { parseFrontmatter } from "../shared/parser.ts";
 import type { GraphEdge } from "../tools/codebase-graph.ts";
 import { isNotFound } from "../utils/errors.ts";
 import { toPosix } from "../utils/paths.ts";

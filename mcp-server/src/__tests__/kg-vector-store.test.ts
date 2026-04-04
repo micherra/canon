@@ -8,7 +8,7 @@
 
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { EMBEDDING_MODEL_ID } from "../constants.ts";
+import { EMBEDDING_MODEL_ID } from "../shared/constants.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { EntityRow } from "../graph/kg-types.ts";
