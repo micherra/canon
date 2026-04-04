@@ -71,6 +71,8 @@ const server = new McpServer({
 installFuzzyValidation(server);
 
 /** Helper to register a tool + resource pair for an MCP App UI. */
+const registeredResources = new Set<string>();
+
 function registerToolWithUi<Schema extends ZodRawShapeCompat>(
   toolName: string,
   resourceUri: string,
@@ -92,10 +94,13 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
     handler,
   );
 
-  registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
-    const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
-    return { contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }] };
-  });
+  if (!registeredResources.has(resourceUri)) {
+    registerAppResource(server, title, resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => {
+      const html = await readFile(join(mcpServerRoot, "dist", "ui", htmlFile), "utf-8");
+      return { contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: html }] };
+    });
+    registeredResources.add(resourceUri);
+  }
 }
 
 // --- MCP App tool UIs ---
@@ -845,9 +850,9 @@ server.registerTool(
       honored: z.array(z.string()).describe("IDs of principles honored"),
       score: z
         .object({
-          rules: z.object({ passed: z.number(), total: z.number() }),
-          opinions: z.object({ passed: z.number(), total: z.number() }),
-          conventions: z.object({ passed: z.number(), total: z.number() }),
+          rules: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+          opinions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+          conventions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
         })
         .describe("Compliance score breakdown"),
       file_priorities: z
