@@ -11,7 +11,7 @@ includes:
 states:
   execute:
     type: single
-    agent: canon-generalist
+    agent: canon-implementor
     template: implementation-log
     max_iterations: 1
     stuck_when: same_status
@@ -24,6 +24,6 @@ states:
 ## Spawn Instructions
 
 ### execute
-FAST PATH — single-agent mode. Task: ${task}. You are the generalist: implement the change (TDD), verify all tests pass, self-review against Canon principles, and commit. Save summary to ${WORKSPACE}/plans/${slug}/SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Your summary MUST include a `### Self-Review` section with Canon principle compliance declarations and a `### Verification` section confirming all tests pass.
+FAST PATH — single-agent mode. Task: ${task}. You are the implementor: implement the change (TDD), verify all tests pass, self-review against Canon principles, and commit. Save summary to ${WORKSPACE}/plans/${slug}/SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md. Your summary MUST include a `### Self-Review` section with Canon principle compliance declarations and a `### Verification` section confirming all tests pass.
 
 ${progress}
