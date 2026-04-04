@@ -1038,6 +1038,7 @@ async function enterStateAndBuildSpawn(
   let currentStateId = stateId;
 
   for (let i = 0; i < MAX_SKIP_ITERATIONS; i++) {
+    // biome-ignore lint/performance/noAwaitInLoops: state machine loop — each iteration depends on the previous state's result
     const result = await tryEnterSingleState(workspace, flow, currentStateId, store);
     if ("nextStateId" in result) {
       currentStateId = result.nextStateId;

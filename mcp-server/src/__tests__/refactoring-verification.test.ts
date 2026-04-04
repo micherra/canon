@@ -249,6 +249,7 @@ describe("FlowEventBus — no listener leaks across repeated operations", () => 
       const store = getExecutionStore(workspace);
       store.upsertState("build", { entries: 0, status: "pending" });
       store.upsertIteration("build", { cannot_fix: [], count: 0, history: [], max: 3 });
+      // biome-ignore lint/performance/noAwaitInLoops: sequential board operations per cycle — each cycle resets and must complete before the next
       await updateBoard({ action: "enter_state", state_id: "build", workspace });
       await reportResult({
         flow,

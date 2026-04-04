@@ -101,9 +101,11 @@ describe("initWorkspace", () => {
   it("creates all subdirectories", async () => {
     const ws = await initWorkspace(tmpDir, "my-branch");
     const expected = ["research", "decisions", "plans", "reviews"];
-    for (const dir of expected) {
-      await expect(access(path.join(ws, dir)).then(() => true)).resolves.toBe(true);
-    }
+    await Promise.all(
+      expected.map((dir) =>
+        expect(access(path.join(ws, dir)).then(() => true)).resolves.toBe(true),
+      ),
+    );
   });
 
   it("does not create a notes/ directory", async () => {

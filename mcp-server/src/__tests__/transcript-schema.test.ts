@@ -480,8 +480,8 @@ describe("initWorkspace — transcripts subdirectory", () => {
     const ws = await initWorkspace(projectDir, "my-branch");
 
     const expected = ["research", "decisions", "plans", "reviews", "transcripts"];
-    for (const dir of expected) {
-      await expect(access(join(ws, dir)).then(() => true)).resolves.toBe(true);
-    }
+    await Promise.all(
+      expected.map((dir) => expect(access(join(ws, dir)).then(() => true)).resolves.toBe(true)),
+    );
   });
 });

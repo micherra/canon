@@ -686,12 +686,14 @@ describe("jsonl-store.ts migration completeness", () => {
     for (const dir of dirsToCheck) {
       let files: string[];
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: sequential directory scan — results accumulate into shared array
         files = await readdir(join(srcRoot, dir));
       } catch {
         continue;
       }
       for (const file of files) {
         if (!file.endsWith(".ts") || file.endsWith(".test.ts")) continue;
+        // biome-ignore lint/performance/noAwaitInLoops: sequential file reads — results accumulate into shared array
         const content = await readFile(join(srcRoot, dir, file), "utf-8");
         if (content.includes("jsonl-store")) {
           importsJsonlStore.push(`${dir}/${file}`);

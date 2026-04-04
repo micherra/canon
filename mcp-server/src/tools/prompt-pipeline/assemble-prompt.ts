@@ -160,6 +160,7 @@ export async function assemblePrompt(input: SpawnPromptInput): Promise<SpawnProm
   };
 
   for (const stage of PIPELINE) {
+    // biome-ignore lint/performance/noAwaitInLoops: pipeline stages are ordered — each stage receives the output of the previous
     ctx = await stage(ctx);
     if (ctx.skip_reason) break;
   }

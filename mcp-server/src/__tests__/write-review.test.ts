@@ -416,15 +416,17 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
     ];
     const expectedMapped = ["CLEAN", "WARNING", "WARNING", "BLOCKING"] as const;
 
-    for (let i = 0; i < verdicts.length; i++) {
-      const subDir = await mkdtemp(join(tmpdir(), "write-review-test-v-"));
-      const result = await writeReview({ ...makeInput(), verdict: verdicts[i], workspace: subDir });
-      assertOk(result);
-      const md = await readFile(result.path, "utf-8");
-      const parsed = parseReviewArtifact(md);
-      expect(parsed).not.toBeNull();
-      expect(parsed!.verdict).toBe(expectedMapped[i]);
-      await rm(subDir, { force: true, recursive: true });
-    }
+    await Promise.all(
+      verdicts.map(async (verdict, i) => {
+        const subDir = await mkdtemp(join(tmpdir(), "write-review-test-v-"));
+        const result = await writeReview({ ...makeInput(), verdict, workspace: subDir });
+        assertOk(result);
+        const md = await readFile(result.path, "utf-8");
+        const parsed = parseReviewArtifact(md);
+        expect(parsed).not.toBeNull();
+        expect(parsed!.verdict).toBe(expectedMapped[i]);
+        await rm(subDir, { force: true, recursive: true });
+      }),
+    );
   });
 });
