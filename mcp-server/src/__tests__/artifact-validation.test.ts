@@ -163,7 +163,8 @@ describe("validateRequiredArtifacts", () => {
     expect(result?.ok).toBe(false);
     expect(result?.error_code).toBe("INVALID_INPUT");
     expect(result?.message).toContain("IMPLEMENTATION-SUMMARY");
-    expect(result?.message).toContain("not found");
+    // Primary artifact .md is matched, but its sidecar .meta.json is missing — reports "not readable"
+    expect(result?.message).toContain("not readable");
   });
 
   it("returns INVALID_INPUT when .meta.json has wrong _type", async () => {
@@ -364,23 +365,26 @@ describe("reportResult with required_artifacts", () => {
     expect(result.transition_condition).toBe("done");
   });
 
-  it("skips validation when artifacts is absent even with required_artifacts declared", async () => {
+  it("validates even when artifacts is absent — required_artifacts triggers validation with empty list", async () => {
     const workspace = makeTmpWorkspace();
     // required_artifacts declared but caller passes no artifacts
     const flow = makeFlow([{ name: "REVIEW", type: "review" }]);
     setupWorkspace(workspace, flow);
 
-    // No artifacts array — validation is skipped (both conditions must be truthy)
+    // No artifacts array — validation still runs (empty list passed to validateRequiredArtifacts)
     const result = await reportResult({
       workspace,
       state_id: "implement",
       status_keyword: "DONE",
       flow,
-      // artifacts: undefined — absent
+      // artifacts: undefined — absent, but validation still runs
     });
 
-    assertOk(result);
-    expect(result.transition_condition).toBe("done");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("REVIEW");
+    }
   });
 
   it("returns INVALID_INPUT when .meta.json has wrong _type — board NOT mutated", async () => {

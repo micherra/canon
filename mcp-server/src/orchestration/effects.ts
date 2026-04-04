@@ -5,13 +5,33 @@
  */
 
 import { readFile, readdir } from "fs/promises";
-import { join, basename } from "path";
+import { join, basename, isAbsolute } from "path";
+import { z } from "zod";
 import { DriftStore } from "../drift/store.ts";
 import { generateId } from "../utils/id.ts";
 import type { StateDefinition, Effect } from "./flow-schema.ts";
 import type { ReviewEntry } from "../schema.ts";
 import { getExecutionStore } from "./execution-store.ts";
 import { resolvePostconditions, evaluatePostconditions } from "./contract-checker.ts";
+
+/** Zod schema for validating REVIEW.meta.json structure before using it. */
+const ReviewMetaSchema = z.object({
+  _type: z.literal("review"),
+  _version: z.literal(1),
+  verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]),
+  files: z.array(z.string()).optional(),
+  violations: z.array(z.object({
+    principle_id: z.string(),
+    severity: z.string(),
+    file_path: z.string().optional(),
+  })).optional(),
+  honored: z.array(z.string()).optional(),
+  score: z.object({
+    rules: z.object({ passed: z.number(), total: z.number() }),
+    opinions: z.object({ passed: z.number(), total: z.number() }),
+    conventions: z.object({ passed: z.number(), total: z.number() }),
+  }).optional(),
+});
 
 export interface EffectResult {
   type: string;
@@ -127,8 +147,10 @@ async function persistReview(
   const metaContent = await resolveAndRead(metaName, workspace, artifacts);
   if (metaContent) {
     try {
-      const meta = JSON.parse(metaContent);
-      if (meta._type === "review" && meta._version === 1) {
+      const raw = JSON.parse(metaContent);
+      const parsed = ReviewMetaSchema.safeParse(raw);
+      if (parsed.success) {
+        const meta = parsed.data;
         const entry: ReviewEntry = {
           review_id: generateId("rev"),
           timestamp: new Date().toISOString(),
@@ -141,6 +163,7 @@ async function persistReview(
         await store.appendReview(entry);
         return { type: "persist_review", recorded: 1, errors: [] };
       }
+      // Zod validation failed — fall through to legacy parse
     } catch { /* fall through to legacy parse */ }
   }
 
@@ -188,8 +211,11 @@ interface ParsedReview {
 /**
  * Parse a REVIEW.md following the review-checklist template.
  * Extracts: YAML frontmatter verdict, violations table, honored list, score table.
+ *
+ * Exported for backward compat tests — internal callers prefer the .meta.json
+ * structured path in persistReview.
  */
-function parseReviewArtifact(content: string): ParsedReview | null {
+export function parseReviewArtifact(content: string): ParsedReview | null {
   // Parse YAML frontmatter for verdict
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
   let verdict: ParsedReview["verdict"] = "CLEAN";
@@ -297,7 +323,7 @@ async function resolveAndRead(
   // First try matching against reported artifacts list
   const match = artifacts.find((a) => basename(a) === artifactName || a.endsWith(artifactName));
   if (match) {
-    const fullPath = match.startsWith("/") ? match : join(workspace, match);
+    const fullPath = isAbsolute(match) ? match : join(workspace, match);
     try {
       return await readFile(fullPath, "utf-8");
     } catch {
