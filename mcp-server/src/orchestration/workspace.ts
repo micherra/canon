@@ -58,6 +58,7 @@ export async function checkSlugCollision(parentDir: string, slug: string): Promi
   if (!(await exists(slug))) return slug;
 
   let counter = 2;
+  // biome-ignore lint/performance/noAwaitInLoops: sequential slug collision resolution; each check depends on the previous result
   while (await exists(`${slug}-${counter}`)) {
     if (counter > 999) {
       throw new Error(`Slug collision limit exceeded for "${slug}"`);
@@ -74,7 +75,7 @@ export async function checkSlugCollision(parentDir: string, slug: string): Promi
  */
 export async function initWorkspace(projectDir: string, sanitized: string): Promise<string> {
   const workspace = path.join(projectDir, ".canon", "workspaces", sanitized);
-  const subdirs = ["research", "decisions", "plans", "reviews", "transcripts", "handoffs"];
+  const subdirs = ["decisions", "handoffs", "plans", "research", "reviews", "transcripts"];
   await Promise.all(subdirs.map((dir) => mkdir(path.join(workspace, dir), { recursive: true })));
   return workspace;
 }
