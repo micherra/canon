@@ -39,7 +39,7 @@ import { checkConvergence } from "../tools/check-convergence.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

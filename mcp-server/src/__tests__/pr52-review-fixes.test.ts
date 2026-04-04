@@ -311,7 +311,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
 
 // Fix 4: wrap-handler — docstring accuracy (verified via import + behavior test)
 
-import { wrapHandler } from "../utils/wrap-handler.ts";
+import { wrapHandler } from "../shared/lib/wrap-handler.ts";
 
 describe("Fix 4: wrapHandler — ok:false ToolResult passes through jsonResponse (not converted to MCP error)", () => {
   it("returns ok:false result as JSON (not converted to SDK error format)", async () => {

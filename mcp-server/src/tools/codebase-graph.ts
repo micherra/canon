@@ -18,8 +18,8 @@ import {
   loadLayerMappings,
   loadLayerMappingsStrict,
 } from "../utils/config.ts";
-import { isNotFound } from "../utils/errors.ts";
-import { sanitizeGitRef } from "../utils/git-ref.ts";
+import { isNotFound } from "../shared/lib/errors.ts";
+import { sanitizeGitRef } from "../shared/lib/git-ref.ts";
 import { loadPathAliases, toPosix } from "../utils/paths.ts";
 
 const FALLBACK_LAYER_COLOR = "#BDC3C7";

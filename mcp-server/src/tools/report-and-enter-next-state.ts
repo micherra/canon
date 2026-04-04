@@ -23,7 +23,7 @@ import type {
   TestResults,
   ViolationSeverities,
 } from "../orchestration/flow-schema.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
 import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";

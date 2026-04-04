@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseReviewArtifact } from "../orchestration/effects.ts";
 import { VERDICT_MAP, type WriteReviewInput, writeReview } from "../tools/write-review.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDir: string;
 

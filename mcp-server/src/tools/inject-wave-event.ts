@@ -1,7 +1,7 @@
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { WaveEvent, WaveEventType } from "../orchestration/flow-schema.ts";
-import { generateId } from "../utils/id.ts";
+import { generateId } from "../shared/lib/id.ts";
 
 export type InjectWaveEventInput = {
   workspace: string;

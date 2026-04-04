@@ -22,9 +22,9 @@ import {
   deriveSourceDirsFromLayers,
   loadLayerMappings,
 } from "../utils/config.ts";
-import { isNotFound } from "../utils/errors.ts";
+import { isNotFound } from "../shared/lib/errors.ts";
 import { loadPathAliases, toPosix } from "../utils/paths.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 export type FileContextInput = {
   file_path: string;

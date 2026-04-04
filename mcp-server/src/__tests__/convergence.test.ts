@@ -7,7 +7,7 @@ import { clearStoreCache, getExecutionStore } from "../orchestration/execution-s
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { checkConvergence } from "../tools/check-convergence.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {

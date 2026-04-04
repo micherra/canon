@@ -29,7 +29,7 @@ vi.mock("../../adapters/job-adapter.ts", () => ({
 }));
 
 // Mock env helper so we can control sync mode in tests
-vi.mock("../../utils/env.ts", () => ({
+vi.mock("../../shared/lib/env.ts", () => ({
   isSyncMode: vi.fn().mockReturnValue(false),
 }));
 
@@ -48,7 +48,7 @@ import { forkJob, killJob, sendWorkerInput } from "../../adapters/job-adapter.ts
 import { runPipeline } from "../../graph/kg-pipeline.ts";
 // Import mocked modules AFTER vi.mock declarations
 import { computeJobFingerprint } from "../../jobs/job-fingerprint.ts";
-import { isSyncMode } from "../../utils/env.ts";
+import { isSyncMode } from "../../shared/lib/env.ts";
 import { _resetJobManagerSingleton, getOrCreateJobManager, JobManager } from "../job-manager.ts";
 
 function makeDb() {

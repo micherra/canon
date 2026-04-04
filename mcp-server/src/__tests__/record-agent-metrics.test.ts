@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import { recordAgentMetrics } from "../tools/record-agent-metrics.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

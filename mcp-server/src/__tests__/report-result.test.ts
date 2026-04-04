@@ -18,7 +18,7 @@ import { clearStoreCache, getExecutionStore } from "../orchestration/execution-s
 import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
 import { writeMessage } from "../orchestration/messages.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 function makeMinimalFlow(overrides?: Partial<FlowType>): FlowType {
   return {

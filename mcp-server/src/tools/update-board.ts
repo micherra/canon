@@ -3,8 +3,8 @@ import { enterState, setBlocked } from "../orchestration/board.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board } from "../orchestration/flow-schema.ts";
-import { generateId } from "../utils/id.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { generateId } from "../shared/lib/id.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 type UpdateBoardInput = {
   workspace: string;

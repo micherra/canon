@@ -37,7 +37,7 @@ vi.mock("../orchestration/events.ts", () => ({
 
 import { appendFlowRun } from "../drift/analytics.ts";
 import { updateBoard } from "../tools/update-board.ts";
-import { wrapHandler } from "../utils/wrap-handler.ts";
+import { wrapHandler } from "../shared/lib/wrap-handler.ts";
 
 let tmpDirs: string[] = [];
 

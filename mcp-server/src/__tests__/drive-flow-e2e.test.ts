@@ -56,7 +56,7 @@ import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-stat
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

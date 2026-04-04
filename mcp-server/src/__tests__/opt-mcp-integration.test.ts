@@ -45,7 +45,7 @@ import { resolveContextInjections } from "../orchestration/inject-context.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt, truncateProgress } from "../tools/get-spawn-prompt.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

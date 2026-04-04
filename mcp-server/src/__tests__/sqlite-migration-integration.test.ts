@@ -28,7 +28,7 @@ import type { ReviewEntry } from "../schema.ts";
 import { getMessages } from "../tools/get-messages.ts";
 import { postMessage } from "../tools/post-message.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../utils/tool-result.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

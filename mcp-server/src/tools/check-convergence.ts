@@ -7,7 +7,7 @@
 import { canEnterState } from "../orchestration/convergence.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { CannotFixItem, HistoryEntry } from "../orchestration/flow-schema.ts";
-import { type ToolResult, toolError } from "../utils/tool-result.ts";
+import { type ToolResult, toolError } from "../shared/lib/tool-result.ts";
 
 type CheckConvergenceInput = {
   workspace: string;

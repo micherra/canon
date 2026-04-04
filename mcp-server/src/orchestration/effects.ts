@@ -9,7 +9,7 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { DriftStore } from "../drift/store.ts";
 import type { ReviewEntry } from "../schema.ts";
-import { generateId } from "../utils/id.ts";
+import { generateId } from "../shared/lib/id.ts";
 import { evaluatePostconditions, resolvePostconditions } from "./contract-checker.ts";
 import { getExecutionStore } from "./execution-store.ts";
 import type { Effect, StateDefinition } from "./flow-schema.ts";

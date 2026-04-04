@@ -7,7 +7,7 @@ import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import type { EntityKind, SemanticSearchResult } from "../graph/kg-types.ts";
 import { KgVectorQuery } from "../graph/kg-vector-query.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 export type SemanticSearchInput = {
   query: string;
