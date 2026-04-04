@@ -139,19 +139,21 @@ function extractFrontmatterEdges(
 
   // Match `key: value` (single values)
   const singleRe = /^[ \t]*(\w[\w-]*):\s*["']?([a-z][\w-]*)["']?\s*$/gm;
-  let m: RegExpExecArray | null;
-  while ((m = singleRe.exec(frontmatterText)) !== null) {
+  let m = singleRe.exec(frontmatterText);
+  while (m !== null) {
     const [, field, value] = m;
     const target = resolveName(value, maps);
     if (target && target !== filePath && !seen.has(`${field}:${target}`)) {
       seen.add(`${field}:${target}`);
       edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.9, `${field}: ${value}`));
     }
+    m = singleRe.exec(frontmatterText);
   }
 
   // Match `key: [val1, val2, ...]` (inline arrays)
   const listRe = /^[ \t]*(\w[\w-]*):\s*\[([^\]]+)\]/gm;
-  while ((m = listRe.exec(frontmatterText)) !== null) {
+  m = listRe.exec(frontmatterText);
+  while (m !== null) {
     const [, field, rawList] = m;
     const items = rawList
       .split(",")
@@ -164,17 +166,20 @@ function extractFrontmatterEdges(
         edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.85, `${field}: [${item}]`));
       }
     }
+    m = listRe.exec(frontmatterText);
   }
 
   // Match `- key: value` patterns inside nested structures (e.g., `- fragment: name`)
   const nestedRe = /^[ \t]*-?\s*(\w[\w-]*):\s*["']?([a-z][\w-]*)["']?\s*$/gm;
-  while ((m = nestedRe.exec(frontmatterText)) !== null) {
+  m = nestedRe.exec(frontmatterText);
+  while (m !== null) {
     const [, field, value] = m;
     const target = resolveName(value, maps);
     if (target && target !== filePath && !seen.has(`${field}:${target}`)) {
       seen.add(`${field}:${target}`);
       edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.9, `${field}: ${value}`));
     }
+    m = nestedRe.exec(frontmatterText);
   }
 
   return edges;
@@ -189,15 +194,17 @@ function extractBacktickEdges(filePath: string, body: string, maps: MdNameMaps):
   const seen = new Set<string>();
 
   const backtickRe = /`([a-z][\w-]*)`/g;
-  let m: RegExpExecArray | null;
-  while ((m = backtickRe.exec(body)) !== null) {
+  let m = backtickRe.exec(body);
+  while (m !== null) {
     const id = m[1];
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const target = resolveName(id, maps);
-    if (target && target !== filePath) {
-      edges.push(compositionEdge(filePath, target, "ref:id", 0.8, `\`${id}\``));
+    if (!seen.has(id)) {
+      seen.add(id);
+      const target = resolveName(id, maps);
+      if (target && target !== filePath) {
+        edges.push(compositionEdge(filePath, target, "ref:id", 0.8, `\`${id}\``));
+      }
     }
+    m = backtickRe.exec(body);
   }
 
   return edges;
@@ -216,16 +223,18 @@ function extractPathEdges(filePath: string, content: string, fileSet: Set<string
 
   // Match paths ending in .md (with optional ${VAR}/ prefix)
   const pathRe = /(?:\$\{[\w]+\}\/)?([\w][\w./-]*\.md)\b/g;
-  let m: RegExpExecArray | null;
-  while ((m = pathRe.exec(content)) !== null) {
+  let m = pathRe.exec(content);
+  while (m !== null) {
     const refPath = m[1];
-    if (seen.has(refPath)) continue;
-    seen.add(refPath);
+    if (!seen.has(refPath)) {
+      seen.add(refPath);
 
-    const posix = toPosix(refPath);
-    if (fileSet.has(posix) && posix !== filePath) {
-      edges.push(compositionEdge(filePath, posix, "ref:path", 0.7, refPath));
+      const posix = toPosix(refPath);
+      if (fileSet.has(posix) && posix !== filePath) {
+        edges.push(compositionEdge(filePath, posix, "ref:path", 0.7, refPath));
+      }
     }
+    m = pathRe.exec(content);
   }
 
   return edges;

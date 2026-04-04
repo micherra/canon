@@ -28,9 +28,10 @@ function extractJsImports(content: string): string[] {
   const imports: string[] = [];
 
   for (const re of JS_IMPORT_RES) {
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(content)) !== null) {
+    let match = re.exec(content);
+    while (match !== null) {
       imports.push(match[1]);
+      match = re.exec(content);
     }
   }
 
@@ -43,15 +44,18 @@ function extractPyImports(content: string): string[] {
 
   // from X import Y
   const fromImportRe = /^from\s+([\w.]+)\s+import/gm;
-  let match: RegExpExecArray | null;
-  while ((match = fromImportRe.exec(content)) !== null) {
+  let match = fromImportRe.exec(content);
+  while (match !== null) {
     imports.push(match[1]);
+    match = fromImportRe.exec(content);
   }
 
   // import X
   const importRe = /^import\s+([\w.]+)/gm;
-  while ((match = importRe.exec(content)) !== null) {
+  match = importRe.exec(content);
+  while (match !== null) {
     imports.push(match[1]);
+    match = importRe.exec(content);
   }
 
   return imports;

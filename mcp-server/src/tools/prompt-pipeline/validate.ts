@@ -95,24 +95,27 @@ function scanForUnresolved(text: string, stateId: string, out: string[]): void {
   // Match ${...} patterns — use a regex that captures the variable name
   // We need to check the character before the match to detect escaping
   const pattern = /\$\{([^}]+)\}/g;
-  let match: RegExpExecArray | null;
+  let match = pattern.exec(text);
 
-  while ((match = pattern.exec(text)) !== null) {
+  while (match !== null) {
     const varName = match[1];
     const matchStart = match.index;
 
     // Skip escaped patterns — character before ${ is a backslash
     if (matchStart > 0 && text[matchStart - 1] === "\\") {
+      match = pattern.exec(text);
       continue;
     }
 
     // Skip allowed/known variables
     if (isAllowed(varName)) {
+      match = pattern.exec(text);
       continue;
     }
 
     out.push(
       `ERROR: unresolved variable \${${varName}} in prompt for state "${stateId}"`,
     );
+    match = pattern.exec(text);
   }
 }
