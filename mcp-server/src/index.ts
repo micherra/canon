@@ -853,9 +853,9 @@ server.registerTool(
       honored: z.array(z.string()).describe("IDs of principles honored"),
       score: z
         .object({
-          rules: z.object({ passed: z.number(), total: z.number() }),
-          opinions: z.object({ passed: z.number(), total: z.number() }),
-          conventions: z.object({ passed: z.number(), total: z.number() }),
+          rules: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+          opinions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
+          conventions: z.object({ passed: z.number().int().min(0), total: z.number().int().min(0) }),
         })
         .describe("Compliance score breakdown"),
       file_priorities: z
