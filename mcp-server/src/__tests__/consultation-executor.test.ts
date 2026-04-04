@@ -6,49 +6,43 @@ import {
 } from "../orchestration/consultation-executor.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
-    description: "Test flow",
-    entry: "start",
-    states: {
-      start: { type: "terminal" },
-    },
-    spawn_instructions: {
-      "security-check": "Run security audit for ${task}.",
-      "perf-check": "Run performance check.",
-    },
     consultations: {
-      "security-check": {
-        fragment: "security-check",
-        agent: "canon:canon-security",
-        role: "security",
-        description: "Security review consultation",
-        timeout: "5m",
-      },
       "perf-check": {
-        fragment: "perf-check",
         agent: "canon:canon-researcher",
+        fragment: "perf-check",
         role: "researcher",
       },
+      "security-check": {
+        agent: "canon:canon-security",
+        description: "Security review consultation",
+        fragment: "security-check",
+        role: "security",
+        timeout: "5m",
+      },
+    },
+    description: "Test flow",
+    entry: "start",
+    name: "test-flow",
+    spawn_instructions: {
+      "perf-check": "Run performance check.",
+      "security-check": "Run security audit for ${task}.",
+    },
+    states: {
+      start: { type: "terminal" },
     },
     ...overrides,
   };
 }
 
-// ---------------------------------------------------------------------------
 // executeConsultations
-// ---------------------------------------------------------------------------
 
 describe("executeConsultations", () => {
   it("returns pending results for valid consultations", async () => {
     const input: ConsultationInput = {
-      consultationNames: ["security-check", "perf-check"],
       breakpoint: "before",
+      consultationNames: ["security-check", "perf-check"],
       flow: makeFlow(),
       variables: { task: "my-task" },
     };
@@ -62,8 +56,8 @@ describe("executeConsultations", () => {
 
   it("warns and skips unknown consultation names", async () => {
     const input: ConsultationInput = {
-      consultationNames: ["missing-consultation"],
       breakpoint: "before",
+      consultationNames: ["missing-consultation"],
       flow: makeFlow(),
       variables: {},
     };
@@ -80,8 +74,8 @@ describe("executeConsultations", () => {
     const flow = makeFlow({
       consultations: {
         "orphan-consult": {
-          fragment: "orphan-consult",
           agent: "canon:canon-security",
+          fragment: "orphan-consult",
           role: "security",
         },
       },
@@ -90,8 +84,8 @@ describe("executeConsultations", () => {
     });
 
     const input: ConsultationInput = {
-      consultationNames: ["orphan-consult"],
       breakpoint: "before",
+      consultationNames: ["orphan-consult"],
       flow,
       variables: {},
     };
@@ -106,8 +100,8 @@ describe("executeConsultations", () => {
 
   it("handles empty consultationNames array", async () => {
     const input: ConsultationInput = {
-      consultationNames: [],
       breakpoint: "before",
+      consultationNames: [],
       flow: makeFlow(),
       variables: {},
     };
@@ -120,8 +114,8 @@ describe("executeConsultations", () => {
 
   it("processes valid entries and warns for invalid entries in the same call", async () => {
     const input: ConsultationInput = {
-      consultationNames: ["security-check", "nonexistent"],
       breakpoint: "between",
+      consultationNames: ["security-check", "nonexistent"],
       flow: makeFlow(),
       variables: {},
     };
@@ -129,15 +123,13 @@ describe("executeConsultations", () => {
     const output = await executeConsultations(input);
 
     expect(output.results["security-check"]).toEqual({ status: "pending" });
-    expect(output.results["nonexistent"]).toBeUndefined();
+    expect(output.results.nonexistent).toBeUndefined();
     expect(output.warnings).toHaveLength(1);
     expect(output.warnings[0]).toContain("nonexistent");
   });
 });
 
-// ---------------------------------------------------------------------------
 // resolveConsultationPrompt
-// ---------------------------------------------------------------------------
 
 describe("resolveConsultationPrompt", () => {
   it("substitutes variables in spawn instruction", () => {
@@ -161,8 +153,8 @@ describe("resolveConsultationPrompt", () => {
     const flow = makeFlow({
       consultations: {
         "no-spawn": {
-          fragment: "no-spawn",
           agent: "canon:canon-security",
+          fragment: "no-spawn",
           role: "security",
         },
       },
@@ -212,8 +204,8 @@ describe("resolveConsultationPrompt", () => {
     const flow = makeFlow({
       consultations: {
         "section-check": {
-          fragment: "section-check",
           agent: "canon:canon-security",
+          fragment: "section-check",
           role: "security",
           section: "## Security Review",
         },

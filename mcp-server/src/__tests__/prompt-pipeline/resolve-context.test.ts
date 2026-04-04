@@ -5,13 +5,11 @@
  * One behavior per test.
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
+import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
 
-// ---------------------------------------------------------------------------
 // Hoist vi.mock calls to top — must come before any imports that use the mocks
-// ---------------------------------------------------------------------------
 
 vi.mock("../../orchestration/inject-context.ts", () => ({
   resolveContextInjections: vi.fn(),
@@ -20,55 +18,51 @@ vi.mock("../../orchestration/inject-context.ts", () => ({
 import { resolveContextInjections } from "../../orchestration/inject-context.ts";
 import { resolveContext } from "../../tools/prompt-pipeline/resolve-context.ts";
 
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
 function makeBoard(): Board {
   return {
-    flow: "test",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
   };
 }
 
 function makeFlow(): ResolvedFlow {
   return {
-    name: "test",
     description: "test flow",
     entry: "start",
-    states: {
-      start: { type: "single", agent: "test-agent" },
-      done: { type: "terminal" },
-    },
+    name: "test",
     spawn_instructions: { start: "Do the thing" },
+    states: {
+      done: { type: "terminal" },
+      start: { agent: "test-agent", type: "single" },
+    },
   };
 }
 
 function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
-  const state: StateDefinition = { type: "single", agent: "test-agent" };
+  const state: StateDefinition = { agent: "test-agent", type: "single" };
   return {
-    input: {
-      workspace: "/tmp/test-workspace",
-      state_id: "start",
-      flow: makeFlow(),
-      variables: { task: "test task" },
-    },
-    state,
-    rawInstruction: "Do the thing",
-    board: makeBoard(),
-    mergedVariables: { task: "test task" },
     basePrompt: "",
+    board: makeBoard(),
+    input: {
+      flow: makeFlow(),
+      state_id: "start",
+      variables: { task: "test task" },
+      workspace: "/tmp/test-workspace",
+    },
+    mergedVariables: { task: "test task" },
     prompts: [],
+    rawInstruction: "Do the thing",
+    state,
     warnings: [],
     ...overrides,
   };
@@ -77,10 +71,6 @@ function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
 afterEach(() => {
   vi.clearAllMocks();
 });
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("resolveContext (Stage 1)", () => {
   it("returns ctx unchanged when state has no inject_context", async () => {
@@ -92,7 +82,7 @@ describe("resolveContext (Stage 1)", () => {
   });
 
   it("returns ctx unchanged when inject_context is an empty array", async () => {
-    const state: StateDefinition = { type: "single", agent: "test-agent", inject_context: [] };
+    const state: StateDefinition = { agent: "test-agent", inject_context: [], type: "single" };
     const ctx = makeCtx({ state });
     const result = await resolveContext(ctx);
     expect(result).toBe(ctx);
@@ -101,9 +91,9 @@ describe("resolveContext (Stage 1)", () => {
 
   it("merges injection variables into mergedVariables", async () => {
     const state: StateDefinition = {
-      type: "single",
       agent: "test-agent",
-      inject_context: [{ from: "research", as: "research_output" }],
+      inject_context: [{ as: "research_output", from: "research" }],
+      type: "single",
     };
     const ctx = makeCtx({ state });
 
@@ -119,9 +109,9 @@ describe("resolveContext (Stage 1)", () => {
 
   it("escapes ${...} patterns in injected content (closes injection gap)", async () => {
     const state: StateDefinition = {
-      type: "single",
       agent: "test-agent",
-      inject_context: [{ from: "research", as: "research_output" }],
+      inject_context: [{ as: "research_output", from: "research" }],
+      type: "single",
     };
     const ctx = makeCtx({ state });
 
@@ -139,9 +129,9 @@ describe("resolveContext (Stage 1)", () => {
     // escapeDollarBrace is NOT idempotent — calling twice produces \\${
     // This test documents the current behavior (single escape at read boundary)
     const state: StateDefinition = {
-      type: "single",
       agent: "test-agent",
-      inject_context: [{ from: "research", as: "output" }],
+      inject_context: [{ as: "output", from: "research" }],
+      type: "single",
     };
     const ctx = makeCtx({ state });
 
@@ -160,15 +150,15 @@ describe("resolveContext (Stage 1)", () => {
 
   it("sets skip_reason when HITL injection is required", async () => {
     const state: StateDefinition = {
-      type: "single",
       agent: "test-agent",
-      inject_context: [{ from: "user", as: "user_input", prompt: "Please provide context" }],
+      inject_context: [{ as: "user_input", from: "user", prompt: "Please provide context" }],
+      type: "single",
     };
     const ctx = makeCtx({ state });
 
     vi.mocked(resolveContextInjections).mockResolvedValue({
+      hitl: { as: "user_input", prompt: "Please provide context" },
       variables: {},
-      hitl: { prompt: "Please provide context", as: "user_input" },
       warnings: [],
     });
 
@@ -180,9 +170,9 @@ describe("resolveContext (Stage 1)", () => {
 
   it("propagates injection warnings to ctx.warnings", async () => {
     const state: StateDefinition = {
-      type: "single",
       agent: "test-agent",
-      inject_context: [{ from: "research", as: "data" }],
+      inject_context: [{ as: "data", from: "research" }],
+      type: "single",
     };
     const ctx = makeCtx({ state });
 
@@ -197,9 +187,9 @@ describe("resolveContext (Stage 1)", () => {
 
   it("preserves existing ctx.warnings when adding new ones", async () => {
     const state: StateDefinition = {
-      type: "single",
       agent: "test-agent",
-      inject_context: [{ from: "research", as: "data" }],
+      inject_context: [{ as: "data", from: "research" }],
+      type: "single",
     };
     const ctx = makeCtx({ state, warnings: ["pre-existing warning"] });
 

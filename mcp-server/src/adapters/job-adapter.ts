@@ -1,28 +1,28 @@
-import { fork, type ChildProcess } from "node:child_process";
+import { type ChildProcess, fork } from "node:child_process";
 
 /** Message types sent from child to parent via IPC. */
-export interface JobProgressMessage {
+export type JobProgressMessage = {
   type: "progress";
   phase: string;
   current: number;
   total: number;
-}
+};
 
-export interface JobCompleteMessage {
+export type JobCompleteMessage = {
   type: "complete";
   result: Record<string, unknown>;
-}
+};
 
-export interface JobErrorMessage {
+export type JobErrorMessage = {
   type: "error";
   message: string;
   stack?: string;
-}
+};
 
 export type JobMessage = JobProgressMessage | JobCompleteMessage | JobErrorMessage;
 
 /** Input passed to the worker process via IPC after fork. */
-export interface WorkerInput {
+export type WorkerInput = {
   type: "start";
   projectDir: string;
   dbPath: string;
@@ -31,9 +31,9 @@ export interface WorkerInput {
   include_extensions?: string[];
   /** Directories to exclude when scanning (forwarded from CodebaseGraphInput). */
   exclude_dirs?: string[];
-}
+};
 
-export interface ForkJobOptions {
+export type ForkJobOptions = {
   workerPath: string;
   /**
    * Working directory for the forked process.
@@ -44,7 +44,7 @@ export interface ForkJobOptions {
   cwd: string;
   onMessage: (msg: JobMessage) => void;
   onExit: (code: number | null, signal: string | null) => void;
-}
+};
 
 /**
  * Fork a child process to run a background job.
@@ -56,16 +56,20 @@ export interface ForkJobOptions {
 export function forkJob(options: ForkJobOptions): ChildProcess {
   const child = fork(options.workerPath, [], {
     cwd: options.cwd,
-    stdio: ["ignore", "pipe", "pipe", "ipc"],
     // Ensure the child can resolve TypeScript modules.
     // cwd must point to the directory containing node_modules (mcp-server/).
     execArgv: ["--import", "tsx"],
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
 
   // Drain stdout/stderr to prevent pipe backpressure from blocking the child
   // (stdio is ['ignore','pipe','pipe','ipc'], so pipes must be consumed).
-  child.stdout?.on("data", () => {});
-  child.stderr?.on("data", () => {});
+  child.stdout?.on("data", () => {
+    /* drain */
+  });
+  child.stderr?.on("data", () => {
+    /* drain */
+  });
 
   child.on("message", (msg: unknown) => {
     options.onMessage(msg as JobMessage);
@@ -76,7 +80,7 @@ export function forkJob(options: ForkJobOptions): ChildProcess {
   });
 
   child.on("error", (err) => {
-    options.onMessage({ type: "error", message: err.message, stack: err.stack });
+    options.onMessage({ message: err.message, stack: err.stack, type: "error" });
   });
 
   return child;

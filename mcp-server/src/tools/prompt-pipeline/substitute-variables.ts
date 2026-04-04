@@ -9,8 +9,8 @@
  * (added by adr006-03). Returns empty string when no prefix has been set.
  */
 
-import { substituteVariables } from "../../orchestration/variables.ts";
 import { getExecutionStore } from "../../orchestration/execution-store.ts";
+import { substituteVariables } from "../../orchestration/variables.ts";
 import type { PromptContext } from "./types.ts";
 
 /**

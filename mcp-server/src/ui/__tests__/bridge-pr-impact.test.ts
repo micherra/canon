@@ -34,8 +34,8 @@ class MockApp {
 vi.mock("@modelcontextprotocol/ext-apps", () => ({
   App: MockApp,
   applyDocumentTheme: vi.fn(),
-  applyHostStyleVariables: vi.fn(),
   applyHostFonts: vi.fn(),
+  applyHostStyleVariables: vi.fn(),
 }));
 
 // Import bridge after mocking
@@ -47,7 +47,7 @@ const { bridge } = await import("../stores/bridge.js");
 
 function makeToolResult(json: unknown) {
   return {
-    content: [{ type: "text" as const, text: JSON.stringify(json) }],
+    content: [{ text: JSON.stringify(json), type: "text" as const }],
   };
 }
 
@@ -66,30 +66,30 @@ describe("bridge.callTool()", () => {
   it("calls show_pr_impact with no arguments", async () => {
     // UnifiedPrOutput: status always "ok", prep always present, has_review boolean
     const payload = {
-      status: "ok",
+      has_review: false,
+      hotspots: [],
       prep: {
+        blast_radius: [],
+        diff_command: "git diff main",
         files: [],
         impact_files: [],
+        incremental: false,
         layers: [],
+        narrative: "No changes found.",
+        net_new_files: 0,
         total_files: 0,
         total_violations: 0,
-        net_new_files: 0,
-        incremental: false,
-        diff_command: "git diff main",
-        narrative: "No changes found.",
-        blast_radius: [],
       },
-      hotspots: [],
-      subgraph: { nodes: [], edges: [], layers: [] },
-      has_review: false,
+      status: "ok",
+      subgraph: { edges: [], layers: [], nodes: [] },
     };
     mockCallServerTool.mockResolvedValue(makeToolResult(payload));
 
     const result = await bridge.callTool("show_pr_impact");
 
     expect(mockCallServerTool).toHaveBeenCalledWith({
-      name: "show_pr_impact",
       arguments: {},
+      name: "show_pr_impact",
     });
     expect(result).toEqual(payload);
   });
@@ -97,23 +97,23 @@ describe("bridge.callTool()", () => {
   it("returns parsed JSON with prep field when no stored review", async () => {
     // status is always "ok" in UnifiedPrOutput — has_review: false signals no stored review
     const payload = {
-      status: "ok",
+      empty_state: "No stored review — run the Canon reviewer first",
+      has_review: false,
+      hotspots: [],
       prep: {
-        files: [{ path: "src/a.ts", layer: "tools", status: "modified" }],
+        blast_radius: [],
+        diff_command: "git diff main",
+        files: [{ layer: "tools", path: "src/a.ts", status: "modified" }],
         impact_files: [],
-        layers: [{ name: "tools", file_count: 1 }],
+        incremental: false,
+        layers: [{ file_count: 1, name: "tools" }],
+        narrative: "1 file changed.",
+        net_new_files: 0,
         total_files: 1,
         total_violations: 0,
-        net_new_files: 0,
-        incremental: false,
-        diff_command: "git diff main",
-        narrative: "1 file changed.",
-        blast_radius: [],
       },
-      hotspots: [],
-      subgraph: { nodes: [], edges: [], layers: [] },
-      has_review: false,
-      empty_state: "No stored review — run the Canon reviewer first",
+      status: "ok",
+      subgraph: { edges: [], layers: [], nodes: [] },
     };
     mockCallServerTool.mockResolvedValue(makeToolResult(payload));
 
@@ -130,8 +130,8 @@ describe("bridge.callTool()", () => {
     await bridge.callTool("get_compliance", { principle_id: "deep-modules" });
 
     expect(mockCallServerTool).toHaveBeenCalledWith({
-      name: "get_compliance",
       arguments: { principle_id: "deep-modules" },
+      name: "get_compliance",
     });
   });
 });

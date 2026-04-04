@@ -10,26 +10,26 @@
 
 import type { SpawnPromptEntry } from "../tools/get-spawn-prompt.ts";
 
-export interface CompeteConfig {
+export type CompeteConfig = {
   count: number;
   strategy: "synthesize" | "select";
   lenses?: string[];
-}
+};
 
-export interface CompetitorPrompt {
+export type CompetitorPrompt = {
   index: number;
   lens?: string;
   prompt: string;
   agent: string;
   template_paths: string[];
-}
+};
 
-export interface CompetitorOutput {
+export type CompetitorOutput = {
   index: number;
   lens?: string;
   content: string;
   artifacts?: string[];
-}
+};
 
 /**
  * Expand a single state's base prompt into N competitor prompts.
@@ -41,7 +41,10 @@ export interface CompetitorOutput {
  * If lenses are not provided or fewer than count, competitors without
  * explicit lenses get a generic "general-purpose" framing.
  */
-export function expandCompetitorPrompts(basePrompt: SpawnPromptEntry, config: CompeteConfig): CompetitorPrompt[] {
+export function expandCompetitorPrompts(
+  basePrompt: SpawnPromptEntry,
+  config: CompeteConfig,
+): CompetitorPrompt[] {
   const teamLabels = ["A", "B", "C", "D", "E"];
   const prompts: CompetitorPrompt[] = [];
 
@@ -64,10 +67,10 @@ Other teams are independently solving the same problem — your work will be com
     }
 
     prompts.push({
+      agent: basePrompt.agent,
       index: i,
       lens,
       prompt: basePrompt.prompt + lensSection,
-      agent: basePrompt.agent,
       template_paths: basePrompt.template_paths,
     });
   }
@@ -93,7 +96,9 @@ export function buildSynthesizerPrompt(
 ): string {
   const outputSections = competitorOutputs
     .map((out) => {
-      const label = out.lens ? `Team ${out.index + 1} (lens: ${out.lens})` : `Team ${out.index + 1}`;
+      const label = out.lens
+        ? `Team ${out.index + 1} (lens: ${out.lens})`
+        : `Team ${out.index + 1}`;
       return `### ${label}\n\n${out.content}`;
     })
     .join("\n\n---\n\n");

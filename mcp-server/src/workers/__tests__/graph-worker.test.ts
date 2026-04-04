@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Tests for graph-worker.ts
 //
 // graph-worker.ts is a child process entry point. Its core logic is:
@@ -16,21 +15,18 @@ import { describe, it, expect, vi } from "vitest";
 // in mcp-server/src/tools/__tests__/codebase-graph-integration.test.ts, which
 // forks real child processes via the full JobManager → job-adapter → graph-worker
 // pipeline against a temporary project directory.
-// ---------------------------------------------------------------------------
 
 vi.mock("../../graph/kg-pipeline.ts", () => ({
   runPipeline: vi.fn().mockResolvedValue({
+    durationMs: 1,
+    edgesTotal: 0,
+    entitiesTotal: 0,
     filesScanned: 0,
     filesUpdated: 0,
-    entitiesTotal: 0,
-    edgesTotal: 0,
-    durationMs: 1,
   }),
 }));
 
-// ---------------------------------------------------------------------------
 // Structural / interface tests
-// ---------------------------------------------------------------------------
 
 describe("graph-worker — module imports and type contracts", () => {
   it("runPipeline has the expected signature (projectDir + options)", async () => {
@@ -40,12 +36,12 @@ describe("graph-worker — module imports and type contracts", () => {
     // Invoke it to verify the mock shape
     const result = await runPipeline("/test", {
       dbPath: "/test/.canon/knowledge-graph.db",
-      sourceDirs: ["src"],
       onProgress: (phase: string, current: number, total: number) => {
         void phase;
         void current;
         void total;
       },
+      sourceDirs: ["src"],
     });
 
     expect(result).toHaveProperty("filesScanned");
@@ -64,49 +60,47 @@ describe("graph-worker — module imports and type contracts", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // graph-worker — message handling simulation
-// ---------------------------------------------------------------------------
 
 describe("graph-worker — message handling logic", () => {
   it("sends complete message after runPipeline succeeds", async () => {
     const { runPipeline } = await import("../../graph/kg-pipeline.ts");
     vi.mocked(runPipeline).mockResolvedValueOnce({
+      durationMs: 50,
+      edgesTotal: 10,
+      entitiesTotal: 20,
       filesScanned: 5,
       filesUpdated: 3,
-      entitiesTotal: 20,
-      edgesTotal: 10,
-      durationMs: 50,
     });
 
     const sentMessages: unknown[] = [];
 
     // Simulate the worker's message handler inline
     const input = {
-      type: "start" as const,
-      projectDir: "/project",
       dbPath: "/project/.canon/knowledge-graph.db",
+      projectDir: "/project",
       sourceDirs: ["src"],
+      type: "start" as const,
     };
 
     try {
       const result = await runPipeline(input.projectDir, {
         dbPath: input.dbPath,
-        sourceDirs: input.sourceDirs,
         onProgress: (phase: string, current: number, total: number) => {
-          sentMessages.push({ type: "progress", phase, current, total });
+          sentMessages.push({ current, phase, total, type: "progress" });
         },
+        sourceDirs: input.sourceDirs,
       });
-      sentMessages.push({ type: "complete", result });
+      sentMessages.push({ result, type: "complete" });
     } catch (err) {
       const error = err as Error;
-      sentMessages.push({ type: "error", message: error.message });
+      sentMessages.push({ message: error.message, type: "error" });
     }
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]).toMatchObject({
-      type: "complete",
       result: expect.objectContaining({ filesScanned: 5, filesUpdated: 3 }),
+      type: "complete",
     });
   });
 
@@ -117,23 +111,23 @@ describe("graph-worker — message handling logic", () => {
     const sentMessages: unknown[] = [];
 
     const input = {
-      type: "start" as const,
-      projectDir: "/project",
       dbPath: "/project/.canon/knowledge-graph.db",
+      projectDir: "/project",
+      type: "start" as const,
     };
 
     try {
       const result = await runPipeline(input.projectDir, { dbPath: input.dbPath });
-      sentMessages.push({ type: "complete", result });
+      sentMessages.push({ result, type: "complete" });
     } catch (err) {
       const error = err as Error;
-      sentMessages.push({ type: "error", message: error.message });
+      sentMessages.push({ message: error.message, type: "error" });
     }
 
     expect(sentMessages).toHaveLength(1);
     expect(sentMessages[0]).toMatchObject({
-      type: "error",
       message: "pipeline failed",
+      type: "error",
     });
   });
 
@@ -157,40 +151,48 @@ describe("graph-worker — message handling logic", () => {
       options?.onProgress?.("scan", 10, 10);
       options?.onProgress?.("parse", 5, 10);
       return {
+        durationMs: 200,
+        edgesTotal: 8,
+        entitiesTotal: 20,
         filesScanned: 10,
         filesUpdated: 5,
-        entitiesTotal: 20,
-        edgesTotal: 8,
-        durationMs: 200,
       };
     });
 
     const sentMessages: unknown[] = [];
 
     const input = {
-      type: "start" as const,
-      projectDir: "/project",
       dbPath: "/project/.canon/knowledge-graph.db",
+      projectDir: "/project",
+      type: "start" as const,
     };
 
     const result = await runPipeline(input.projectDir, {
       dbPath: input.dbPath,
       onProgress: (phase: string, current: number, total: number) => {
-        sentMessages.push({ type: "progress", phase, current, total });
+        sentMessages.push({ current, phase, total, type: "progress" });
       },
     });
-    sentMessages.push({ type: "complete", result });
+    sentMessages.push({ result, type: "complete" });
 
     const progressMsgs = sentMessages.filter((m) => (m as { type: string }).type === "progress");
     expect(progressMsgs).toHaveLength(3);
-    expect(progressMsgs[0]).toMatchObject({ type: "progress", phase: "scan", current: 0, total: 0 });
-    expect(progressMsgs[2]).toMatchObject({ type: "progress", phase: "parse", current: 5, total: 10 });
+    expect(progressMsgs[0]).toMatchObject({
+      current: 0,
+      phase: "scan",
+      total: 0,
+      type: "progress",
+    });
+    expect(progressMsgs[2]).toMatchObject({
+      current: 5,
+      phase: "parse",
+      total: 10,
+      type: "progress",
+    });
   });
 });
 
-// ---------------------------------------------------------------------------
 // graph-worker — IPC input validation (Comment #5)
-// ---------------------------------------------------------------------------
 
 /**
  * isValidWorkerInput — inline simulation of the validation logic in graph-worker.ts.
@@ -199,19 +201,19 @@ describe("graph-worker — message handling logic", () => {
 function isValidWorkerInput(msg: unknown): boolean {
   if (typeof msg !== "object" || msg === null) return false;
   const m = msg as Record<string, unknown>;
-  if (m["type"] !== "start") return false;
-  if (typeof m["projectDir"] !== "string") return false;
-  if (typeof m["canonDir"] !== "string") return false;
+  if (m.type !== "start") return false;
+  if (typeof m.projectDir !== "string") return false;
+  if (typeof m.canonDir !== "string") return false;
   return true;
 }
 
 describe("graph-worker — IPC input validation", () => {
   it("accepts a well-formed WorkerInput message", () => {
     const msg = {
-      type: "start",
-      projectDir: "/project",
       canonDir: "/project/.canon",
       dbPath: "/project/.canon/knowledge-graph.db",
+      projectDir: "/project",
+      type: "start",
     };
     expect(isValidWorkerInput(msg)).toBe(true);
   });
@@ -230,51 +232,49 @@ describe("graph-worker — IPC input validation", () => {
 
   it("rejects message with wrong type field", () => {
     const msg = {
-      type: "stop",
-      projectDir: "/project",
       canonDir: "/project/.canon",
+      projectDir: "/project",
+      type: "stop",
     };
     expect(isValidWorkerInput(msg)).toBe(false);
   });
 
   it("rejects message missing projectDir", () => {
     const msg = {
-      type: "start",
       canonDir: "/project/.canon",
+      type: "start",
     };
     expect(isValidWorkerInput(msg)).toBe(false);
   });
 
   it("rejects message missing canonDir", () => {
     const msg = {
-      type: "start",
       projectDir: "/project",
+      type: "start",
     };
     expect(isValidWorkerInput(msg)).toBe(false);
   });
 
   it("rejects message where projectDir is not a string", () => {
     const msg = {
-      type: "start",
-      projectDir: 42,
       canonDir: "/project/.canon",
+      projectDir: 42,
+      type: "start",
     };
     expect(isValidWorkerInput(msg)).toBe(false);
   });
 
   it("rejects message where canonDir is not a string", () => {
     const msg = {
-      type: "start",
-      projectDir: "/project",
       canonDir: null,
+      projectDir: "/project",
+      type: "start",
     };
     expect(isValidWorkerInput(msg)).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // graph-worker — exit code behavior (Comment #6)
-// ---------------------------------------------------------------------------
 
 describe("graph-worker — exit code behavior", () => {
   it("exitCode is 1 when an error occurs (catch sets exitCode)", () => {
@@ -304,11 +304,6 @@ describe("graph-worker — exit code behavior", () => {
 
     const simulateSuccess = () => {
       exitCode = 0;
-      try {
-        // success — no throw
-      } catch {
-        exitCode = 1;
-      }
       return exitCode;
     };
 

@@ -13,18 +13,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { EMBEDDING_BATCH_SIZE, EMBEDDING_DIM } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /** Create a real EmbeddingService instance for lifecycle tests (no model download). */
 function makeService(): EmbeddingService {
   return new EmbeddingService();
 }
 
-// ---------------------------------------------------------------------------
 // Lifecycle tests (no model download — use mocks)
-// ---------------------------------------------------------------------------
 
 describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
   let service: EmbeddingService;
@@ -43,12 +37,10 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
 
   test("dispose() clears model; isLoaded returns false", () => {
     // Manually poke the private field to simulate loaded state
-    // biome-ignore lint/suspicious/noExplicitAny: test-only
     (service as any).pipe = {}; // simulate a loaded pipe
     expect(service.isLoaded).toBe(true);
     service.dispose();
     expect(service.isLoaded).toBe(false);
-    // biome-ignore lint/suspicious/noExplicitAny: test-only
     expect((service as any).initPromise).toBeNull();
   });
 
@@ -66,7 +58,6 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
     });
 
     // Inject mock pipeline factory
-    // biome-ignore lint/suspicious/noExplicitAny: test-only
     (service as any)._pipelineFactory = mockPipeline;
 
     // Start two concurrent inits before the first one resolves
@@ -74,7 +65,6 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
     const p2 = service.init();
 
     // The initPromise should be set after the first call
-    // biome-ignore lint/suspicious/noExplicitAny: test-only
     expect((service as any).initPromise).not.toBeNull();
 
     resolveInit();
@@ -86,10 +76,8 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
 
   test("init() is idempotent when already loaded", async () => {
     // Simulate already loaded
-    // biome-ignore lint/suspicious/noExplicitAny: test-only
     (service as any).pipe = { mockPipe: true };
     let called = false;
-    // biome-ignore lint/suspicious/noExplicitAny: test-only
     (service as any)._pipelineFactory = vi.fn().mockImplementation(async () => {
       called = true;
       return {};
@@ -100,9 +88,7 @@ describe("EmbeddingService — lifecycle (mocked pipeline)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Embedding correctness tests (require real model download)
-// ---------------------------------------------------------------------------
 
 describe("EmbeddingService — real embeddings", { timeout: 120_000 }, () => {
   let service: EmbeddingService;

@@ -20,9 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Module-level mocks — must be hoisted before imports of mocked modules
-// ---------------------------------------------------------------------------
 
 vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
@@ -51,33 +49,29 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { buildBlastRadiusByFile, detectSubsystems, showPrImpact } from "../tools/show-pr-impact.ts";
 
-// ---------------------------------------------------------------------------
-// Shared fixtures
-// ---------------------------------------------------------------------------
-
 const SAMPLE_SCORE = {
-  rules: { passed: 2, total: 3 },
-  opinions: { passed: 1, total: 2 },
   conventions: { passed: 3, total: 3 },
+  opinions: { passed: 1, total: 2 },
+  rules: { passed: 2, total: 3 },
 };
 
 /** Minimal PrReviewDataOutput stub — all tests override this via vi.mocked */
 function makePrepStub(fileOverrides: Array<{ path: string; status: string }> = []) {
   return {
+    blast_radius: [],
+    diff_command: "git diff main",
     files: fileOverrides.map((f) => ({
-      path: f.path,
       layer: "tools",
+      path: f.path,
       status: f.status,
     })),
     impact_files: [],
+    incremental: false,
     layers: [],
+    narrative: "Test narrative.",
+    net_new_files: 0,
     total_files: fileOverrides.length,
     total_violations: 0,
-    net_new_files: 0,
-    incremental: false,
-    diff_command: "git diff main",
-    narrative: "Test narrative.",
-    blast_radius: [],
   };
 }
 
@@ -89,21 +83,19 @@ function makeReview(
   }> = {},
 ) {
   return {
+    branch: "feat/test",
+    files: overrides.files ?? [],
+    honored: [],
+    pr_number: 99,
     review_id: `rev_test_${Math.random().toString(36).slice(2)}`,
+    score: SAMPLE_SCORE,
     timestamp: new Date().toISOString(),
     verdict: overrides.verdict ?? ("CLEAN" as const),
-    branch: "feat/test",
-    pr_number: 99,
-    files: overrides.files ?? [],
     violations: overrides.violations ?? [],
-    honored: [],
-    score: SAMPLE_SCORE,
   };
 }
 
-// ---------------------------------------------------------------------------
 // Suite 1: UnifiedPrOutput shape always includes new fields
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — new fields present in all output paths", () => {
   let tmpDir: string;
@@ -119,7 +111,7 @@ describe("showPrImpact — new fields present in all output paths", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
@@ -179,10 +171,8 @@ describe("showPrImpact — new fields present in all output paths", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Suite 2: showPrImpact subsystems cross-task integration
 // (prep.files status map → detectSubsystems in full pipeline)
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — subsystems populated from prep file statuses", () => {
   let tmpDir: string;
@@ -197,7 +187,7 @@ describe("showPrImpact — subsystems populated from prep file statuses", () => 
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
@@ -217,13 +207,18 @@ describe("showPrImpact — subsystems populated from prep file statuses", () => 
     expect(result.subsystems).toHaveLength(1);
     expect(result.subsystems[0]).toMatchObject({
       directory: "src/widgets",
-      label: "new",
       file_count: 3,
+      label: "new",
     });
   });
 
   it("detects a removed subsystem when 3+ review files are deleted in the same directory", async () => {
-    const reviewFiles = ["src/legacy/a.ts", "src/legacy/b.ts", "src/legacy/c.ts", "src/legacy/d.ts"];
+    const reviewFiles = [
+      "src/legacy/a.ts",
+      "src/legacy/b.ts",
+      "src/legacy/c.ts",
+      "src/legacy/d.ts",
+    ];
 
     const store = new DriftStore(tmpDir);
     await store.appendReview(makeReview({ files: reviewFiles }));
@@ -237,8 +232,8 @@ describe("showPrImpact — subsystems populated from prep file statuses", () => 
     expect(result.subsystems).toHaveLength(1);
     expect(result.subsystems[0]).toMatchObject({
       directory: "src/legacy",
-      label: "removed",
       file_count: 4,
+      label: "removed",
     });
   });
 
@@ -305,9 +300,7 @@ describe("showPrImpact — subsystems populated from prep file statuses", () => 
   });
 });
 
-// ---------------------------------------------------------------------------
 // Suite 3: showPrImpact blast_radius_by_file integration with KG
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — blast_radius_by_file populated from KG blast radius", () => {
   let tmpDir: string;
@@ -323,7 +316,7 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
     vi.restoreAllMocks();
   });
 
@@ -339,16 +332,40 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue({
-      seed_entities: ["core"],
-      total_affected: 4,
+      affected: [
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "fn1",
+          file_path: "src/dep-a.ts",
+        },
+        {
+          depth: 2,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "fn2",
+          file_path: "src/dep-a.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "class",
+          entity_name: "cls1",
+          file_path: "src/dep-b.ts",
+        },
+        {
+          depth: 2,
+          edge_type: "dependency",
+          entity_kind: "class",
+          entity_name: "cls2",
+          file_path: "src/dep-b.ts",
+        },
+      ],
       affected_files: 2,
       by_depth: { 1: 2, 2: 2 },
-      affected: [
-        { entity_name: "fn1", entity_kind: "function", file_path: "src/dep-a.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "fn2", entity_kind: "function", file_path: "src/dep-a.ts", depth: 2, edge_type: "dependency" },
-        { entity_name: "cls1", entity_kind: "class", file_path: "src/dep-b.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "cls2", entity_kind: "class", file_path: "src/dep-b.ts", depth: 2, edge_type: "dependency" },
-      ],
+      seed_entities: ["core"],
+      total_affected: 4,
     });
 
     const result = await showPrImpact(tmpDir);
@@ -373,19 +390,55 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue({
-      seed_entities: ["core"],
-      total_affected: 6,
-      affected_files: 3,
-      by_depth: { 1: 6 },
       affected: [
         // dep-low: 1 entity, dep-high: 3 entities, dep-mid: 2 entities
-        { entity_name: "e1", entity_kind: "function", file_path: "src/dep-low.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "e2", entity_kind: "function", file_path: "src/dep-high.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "e3", entity_kind: "function", file_path: "src/dep-high.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "e4", entity_kind: "function", file_path: "src/dep-high.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "e5", entity_kind: "function", file_path: "src/dep-mid.ts", depth: 1, edge_type: "dependency" },
-        { entity_name: "e6", entity_kind: "function", file_path: "src/dep-mid.ts", depth: 1, edge_type: "dependency" },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e1",
+          file_path: "src/dep-low.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e2",
+          file_path: "src/dep-high.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e3",
+          file_path: "src/dep-high.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e4",
+          file_path: "src/dep-high.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e5",
+          file_path: "src/dep-mid.ts",
+        },
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "e6",
+          file_path: "src/dep-mid.ts",
+        },
       ],
+      affected_files: 3,
+      by_depth: { 1: 6 },
+      seed_entities: ["core"],
+      total_affected: 6,
     });
 
     const result = await showPrImpact(tmpDir);
@@ -412,19 +465,19 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
 
     // 20 distinct files — should be capped at 15
     const affected = Array.from({ length: 20 }, (_, i) => ({
-      entity_name: `e${i}`,
-      entity_kind: "function",
-      file_path: `src/file${i}.ts`,
       depth: 1,
       edge_type: "dependency",
+      entity_kind: "function",
+      entity_name: `e${i}`,
+      file_path: `src/file${i}.ts`,
     }));
 
     vi.mocked(analyzeBlastRadius).mockReturnValue({
-      seed_entities: ["core"],
-      total_affected: 20,
+      affected,
       affected_files: 20,
       by_depth: { 1: 20 },
-      affected,
+      seed_entities: ["core"],
+      total_affected: 20,
     });
 
     const result = await showPrImpact(tmpDir);
@@ -444,13 +497,19 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
     const mockDb = { close: vi.fn() };
     vi.mocked(initDatabase).mockReturnValue(mockDb as never);
     vi.mocked(analyzeBlastRadius).mockReturnValue({
-      seed_entities: ["core"],
-      total_affected: 1,
+      affected: [
+        {
+          depth: 1,
+          edge_type: "dependency",
+          entity_kind: "function",
+          entity_name: "fn",
+          file_path: "src/dep.ts",
+        },
+      ],
       affected_files: 1,
       by_depth: { 1: 1 },
-      affected: [
-        { entity_name: "fn", entity_kind: "function", file_path: "src/dep.ts", depth: 1, edge_type: "dependency" },
-      ],
+      seed_entities: ["core"],
+      total_affected: 1,
     });
 
     const result = await showPrImpact(tmpDir);
@@ -464,9 +523,7 @@ describe("showPrImpact — blast_radius_by_file populated from KG blast radius",
   });
 });
 
-// ---------------------------------------------------------------------------
 // Suite 4: detectSubsystems declared known gaps (pure function tests)
-// ---------------------------------------------------------------------------
 
 describe("detectSubsystems — declared known gaps", () => {
   it("does not count 'modified' files toward subsystem threshold", () => {
@@ -554,21 +611,19 @@ describe("detectSubsystems — declared known gaps", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Suite 5: buildBlastRadiusByFile declared known gaps
-// ---------------------------------------------------------------------------
 
 describe("buildBlastRadiusByFile — declared known gaps", () => {
   it("skips entries with empty string file_path", () => {
     const blastRadius = {
-      total_affected: 3,
+      affected: [
+        { depth: 1, entity_kind: "function", entity_name: "fn1", file_path: "" },
+        { depth: 1, entity_kind: "function", entity_name: "fn2", file_path: "" },
+        { depth: 1, entity_kind: "function", entity_name: "fn3", file_path: "src/real.ts" },
+      ],
       affected_files: 1,
       by_depth: { 1: 3 },
-      affected: [
-        { entity_name: "fn1", entity_kind: "function", file_path: "", depth: 1 },
-        { entity_name: "fn2", entity_kind: "function", file_path: "", depth: 1 },
-        { entity_name: "fn3", entity_kind: "function", file_path: "src/real.ts", depth: 1 },
-      ],
+      total_affected: 3,
     };
 
     const result = buildBlastRadiusByFile(blastRadius);
@@ -581,14 +636,19 @@ describe("buildBlastRadiusByFile — declared known gaps", () => {
 
   it("skips entries with null-ish file_path (falsy guard covers undefined)", () => {
     const blastRadius = {
-      total_affected: 2,
-      affected_files: 1,
-      by_depth: { 1: 2 },
       affected: [
         // TypeScript type says file_path is string, but at runtime guard handles falsy
-        { entity_name: "fn1", entity_kind: "function", file_path: null as unknown as string, depth: 1 },
-        { entity_name: "fn2", entity_kind: "function", file_path: "src/valid.ts", depth: 1 },
+        {
+          depth: 1,
+          entity_kind: "function",
+          entity_name: "fn1",
+          file_path: null as unknown as string,
+        },
+        { depth: 1, entity_kind: "function", entity_name: "fn2", file_path: "src/valid.ts" },
       ],
+      affected_files: 1,
+      by_depth: { 1: 2 },
+      total_affected: 2,
     };
 
     const result = buildBlastRadiusByFile(blastRadius);
@@ -599,13 +659,13 @@ describe("buildBlastRadiusByFile — declared known gaps", () => {
 
   it("returns empty array when all entries have empty file_path", () => {
     const blastRadius = {
-      total_affected: 2,
+      affected: [
+        { depth: 1, entity_kind: "function", entity_name: "fn1", file_path: "" },
+        { depth: 1, entity_kind: "function", entity_name: "fn2", file_path: "" },
+      ],
       affected_files: 0,
       by_depth: { 1: 2 },
-      affected: [
-        { entity_name: "fn1", entity_kind: "function", file_path: "", depth: 1 },
-        { entity_name: "fn2", entity_kind: "function", file_path: "", depth: 1 },
-      ],
+      total_affected: 2,
     };
 
     const result = buildBlastRadiusByFile(blastRadius);
@@ -615,10 +675,10 @@ describe("buildBlastRadiusByFile — declared known gaps", () => {
 
   it("returns empty array for blastRadius with empty affected array", () => {
     const blastRadius = {
-      total_affected: 0,
+      affected: [],
       affected_files: 0,
       by_depth: {},
-      affected: [],
+      total_affected: 0,
     };
 
     const result = buildBlastRadiusByFile(blastRadius);

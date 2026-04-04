@@ -17,14 +17,12 @@
  *    - wcpl-03: consultation_outputs passed to getSpawnPrompt affects prompt
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
@@ -48,18 +46,14 @@ vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
   };
 });
 
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assertOk } from "../utils/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -71,21 +65,21 @@ function makeTmpDir(): string {
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "implement",
-    current_state: "implement",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {
-      implement: { status: "pending", entries: 0 },
-      done: { status: "pending", entries: 0 },
-    },
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "implement",
+    entry: "implement",
+    flow: "test-flow",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {
+      done: { entries: 0, status: "pending" },
+      implement: { entries: 0, status: "pending" },
+    },
+    task: "test task",
     ...overrides,
   } as Board;
 }
@@ -94,22 +88,26 @@ function seedBoard(workspace: string, board: Board): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: board.flow,
-    task: board.task,
-    entry: board.entry,
-    current_state: board.current_state,
     base_commit: board.base_commit,
-    started: board.started ?? now,
-    last_updated: board.last_updated ?? now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: board.current_state,
+    entry: board.entry,
+    flow: board.flow,
     flow_name: board.flow,
+    last_updated: board.last_updated ?? now,
+    sanitized: "main",
     slug: "test-slug",
+    started: board.started ?? now,
+    task: board.task,
+    tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+    store.upsertState(stateId, {
+      ...stateEntry,
+      entries: stateEntry.entries ?? 0,
+      status: stateEntry.status,
+    });
   }
 }
 
@@ -118,30 +116,30 @@ function seedBoard(workspace: string, board: Board): void {
  */
 function makeFlowWithBeforeConsultation(): ResolvedFlow {
   return {
-    name: "test-flow",
+    consultations: {
+      "security-review": {
+        agent: "canon:canon-security",
+        fragment: "security-review",
+        role: "security-reviewer",
+        section: "Security Review",
+        timeout: "5m",
+      },
+    },
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: {
-        type: "wave",
-        agent: "canon-implementor",
-        consultations: {
-          before: ["security-review"],
-        },
-      },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: {
       implement: "Implement ${task} for ${item}.",
       "security-review": "Review security for ${task}.",
     },
-    consultations: {
-      "security-review": {
-        fragment: "security-review",
-        agent: "canon:canon-security",
-        role: "security-reviewer",
-        timeout: "5m",
-        section: "Security Review",
+    states: {
+      done: { type: "terminal" },
+      implement: {
+        agent: "canon-implementor",
+        consultations: {
+          before: ["security-review"],
+        },
+        type: "wave",
       },
     },
   } as unknown as ResolvedFlow;
@@ -152,36 +150,36 @@ function makeFlowWithBeforeConsultation(): ResolvedFlow {
  */
 function makeFlowWithMultipleConsultations(): ResolvedFlow {
   return {
-    name: "test-flow",
+    consultations: {
+      "perf-review": {
+        agent: "canon:canon-researcher",
+        fragment: "perf-review",
+        role: "researcher",
+      },
+      "security-review": {
+        agent: "canon:canon-security",
+        fragment: "security-review",
+        role: "security-reviewer",
+        section: "Security Review",
+        timeout: "5m",
+      },
+    },
     description: "Test flow",
     entry: "implement",
+    name: "test-flow",
+    spawn_instructions: {
+      implement: "Implement ${task} for ${item}.",
+      "perf-review": "Check performance for ${task}.",
+      "security-review": "Review security for ${task}.",
+    },
     states: {
+      done: { type: "terminal" },
       implement: {
-        type: "wave",
         agent: "canon-implementor",
         consultations: {
           before: ["security-review", "perf-review"],
         },
-      },
-      done: { type: "terminal" },
-    },
-    spawn_instructions: {
-      implement: "Implement ${task} for ${item}.",
-      "security-review": "Review security for ${task}.",
-      "perf-review": "Check performance for ${task}.",
-    },
-    consultations: {
-      "security-review": {
-        fragment: "security-review",
-        agent: "canon:canon-security",
-        role: "security-reviewer",
-        timeout: "5m",
-        section: "Security Review",
-      },
-      "perf-review": {
-        fragment: "perf-review",
-        agent: "canon:canon-researcher",
-        role: "researcher",
+        type: "wave",
       },
     },
   } as unknown as ResolvedFlow;
@@ -189,18 +187,16 @@ function makeFlowWithMultipleConsultations(): ResolvedFlow {
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // 1. resolveConsultationPrompt output shape → enterAndPrepareState contract
 //
 // wcpl-01 produces { agent, prompt, role, timeout?, section? }
 // wcpl-03 must pass all five fields through into consultation_prompts entries
-// ---------------------------------------------------------------------------
 
 describe("resolveConsultationPrompt → enterAndPrepareState: output shape contract", () => {
   it("passes timeout and section from resolveConsultationPrompt into consultation_prompts entry", async () => {
@@ -215,11 +211,11 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
     expect(resolved!.section).toBe("Security Review");
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 0,
+      workspace,
     });
     assertOk(result);
 
@@ -240,44 +236,42 @@ describe("resolveConsultationPrompt → enterAndPrepareState: output shape contr
     const flow = makeFlowWithMultipleConsultations();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 0,
+      workspace,
     });
     assertOk(result);
 
     expect(result.consultation_prompts).toBeDefined();
     // perf-review has no timeout or section
-    const perfEntry = result.consultation_prompts!.find(e => e.name === "perf-review");
+    const perfEntry = result.consultation_prompts!.find((e) => e.name === "perf-review");
     expect(perfEntry).toBeDefined();
     expect("timeout" in perfEntry!).toBe(false);
     expect("section" in perfEntry!).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Known Gap (wcpl-01): fragment with both timeout AND section simultaneously
-// ---------------------------------------------------------------------------
 
 describe("resolveConsultationPrompt — both timeout and section present", () => {
   it("returns both timeout and section when fragment declares them simultaneously", () => {
     const flow: ResolvedFlow = {
-      name: "test-flow",
-      description: "Test flow",
-      entry: "start",
-      states: { start: { type: "terminal" } },
-      spawn_instructions: { "full-check": "Run full check for ${task}." },
       consultations: {
         "full-check": {
-          fragment: "full-check",
           agent: "canon:canon-security",
+          fragment: "full-check",
           role: "security",
-          timeout: "10m",
           section: "## Full Security Audit",
+          timeout: "10m",
         },
       },
+      description: "Test flow",
+      entry: "start",
+      name: "test-flow",
+      spawn_instructions: { "full-check": "Run full check for ${task}." },
+      states: { start: { type: "terminal" } },
     } as unknown as ResolvedFlow;
 
     const result = resolveConsultationPrompt("full-check", flow, { task: "my-feature" });
@@ -293,9 +287,7 @@ describe("resolveConsultationPrompt — both timeout and section present", () =>
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Known Gap (wcpl-03): multiple consultations in one breakpoint
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — multiple consultations in same breakpoint", () => {
   it("resolves all consultations in the breakpoint and returns them all in consultation_prompts", async () => {
@@ -304,18 +296,18 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
     const flow = makeFlowWithMultipleConsultations();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 0,
+      workspace,
     });
     assertOk(result);
 
     expect(result.consultation_prompts).toBeDefined();
     expect(result.consultation_prompts).toHaveLength(2);
 
-    const names = result.consultation_prompts!.map(e => e.name);
+    const names = result.consultation_prompts!.map((e) => e.name);
     expect(names).toContain("security-review");
     expect(names).toContain("perf-review");
   });
@@ -325,40 +317,40 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
     seedBoard(workspace, makeBoard());
     // Flow where second consultation has no spawn instruction
     const flow: ResolvedFlow = {
-      name: "test-flow",
+      consultations: {
+        "security-review": {
+          agent: "canon:canon-security",
+          fragment: "security-review",
+          role: "security-reviewer",
+        },
+        // "missing-consult" is also absent from flow.consultations
+      },
       description: "Test flow",
       entry: "implement",
-      states: {
-        implement: {
-          type: "wave",
-          agent: "canon-implementor",
-          consultations: {
-            before: ["security-review", "missing-consult"],
-          },
-        },
-        done: { type: "terminal" },
-      },
+      name: "test-flow",
       spawn_instructions: {
         implement: "Implement ${task}.",
         "security-review": "Review security for ${task}.",
         // "missing-consult" spawn instruction is absent
       },
-      consultations: {
-        "security-review": {
-          fragment: "security-review",
-          agent: "canon:canon-security",
-          role: "security-reviewer",
+      states: {
+        done: { type: "terminal" },
+        implement: {
+          agent: "canon-implementor",
+          consultations: {
+            before: ["security-review", "missing-consult"],
+          },
+          type: "wave",
         },
-        // "missing-consult" is also absent from flow.consultations
       },
     } as unknown as ResolvedFlow;
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 0,
+      workspace,
     });
     assertOk(result);
 
@@ -369,10 +361,8 @@ describe("enterAndPrepareState — multiple consultations in same breakpoint", (
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. Known Gap (wcpl-02): wave=null with consultation_outputs present
 //    assembleWaveBriefing NOT called because wave is null
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — wave=null with consultation_outputs does not inject briefing", () => {
   it("does not call assembleWaveBriefing when wave is null even if consultation_outputs provided", async () => {
@@ -380,26 +370,26 @@ describe("getSpawnPrompt — wave=null with consultation_outputs does not inject
     seedBoard(workspace, makeBoard());
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "Test flow",
       entry: "build",
+      name: "test-flow",
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     };
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "build",
-      flow,
-      variables: { CANON_PLUGIN_ROOT: "" },
-      items: ["task-a"],
-      wave: undefined,  // wave is null/undefined — guard must block injection
       consultation_outputs: {
         security: { section: "Security", summary: "All clear." },
       },
+      flow,
+      items: ["task-a"],
+      state_id: "build",
+      variables: { CANON_PLUGIN_ROOT: "" },
+      wave: undefined, // wave is null/undefined — guard must block injection
+      workspace,
     });
 
     // No wave → messaging/guidance/briefing injection blocks all fire on `input.wave != null`
@@ -409,11 +399,9 @@ describe("getSpawnPrompt — wave=null with consultation_outputs does not inject
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. End-to-end integration: enterAndPrepareState collects completed summaries
 //    from board wave_results → passes them to getSpawnPrompt as consultation_outputs
 //    → assembleWaveBriefing (real) injects into wave prompts
-// ---------------------------------------------------------------------------
 
 describe("consultation pipeline end-to-end: board summaries → briefing in wave prompts", () => {
   it("completed consultation summary from board appears in wave prompt via real assembleWaveBriefing", async () => {
@@ -422,13 +410,12 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
     // Board has a completed security consultation from wave 0
     const boardWithResults = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 1,
+          status: "in_progress",
           wave_results: {
             "wave-0": {
-              tasks: [],
-              status: "done",
               consultations: {
                 before: {
                   "security-review": {
@@ -437,10 +424,11 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
                   },
                 },
               },
+              status: "done",
+              tasks: [],
             },
           },
         },
-        done: { status: "pending", entries: 0 },
       },
     });
 
@@ -451,12 +439,12 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
     // Wave 1 → "between" breakpoint → no new consultation_prompts for "before"
     // But completed "before" summaries from wave_results ARE collected for briefing
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a", "task-b"],
-      wave: 1,  // Wave 1 → between breakpoint
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
+      wave: 1, // Wave 1 → between breakpoint
+      workspace,
     });
     assertOk(result);
 
@@ -481,13 +469,12 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
 
     const boardWithResults = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 1,
+          status: "in_progress",
           wave_results: {
             "wave-0": {
-              tasks: [],
-              status: "done",
               consultations: {
                 before: {
                   "security-review": {
@@ -496,10 +483,11 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
                   },
                 },
               },
+              status: "done",
+              tasks: [],
             },
           },
         },
-        done: { status: "pending", entries: 0 },
       },
     });
 
@@ -508,12 +496,12 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
     const flow = makeFlowWithBeforeConsultation();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 
@@ -530,23 +518,21 @@ describe("consultation pipeline end-to-end: board summaries → briefing in wave
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. assembleWaveBriefing (real): consultation section heading and summary
 //    appear in output — cross-module contract between wcpl-01 section field
 //    and wave-briefing output format
-// ---------------------------------------------------------------------------
 
 describe("assembleWaveBriefing — consultation section and summary contract", () => {
   it("renders consultation section heading and summary in briefing output", () => {
     const briefing = assembleWaveBriefing({
-      wave: 1,
-      summaries: [],
       consultationOutputs: {
         "security-review": {
           section: "Security Review",
           summary: "Use parameterized queries to prevent injection.",
         },
       },
+      summaries: [],
+      wave: 1,
     });
 
     expect(briefing).toContain("## Wave Briefing (from wave 1)");
@@ -556,18 +542,18 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
 
   it("renders multiple consultation sections from multiple outputs", () => {
     const briefing = assembleWaveBriefing({
-      wave: 2,
-      summaries: [],
       consultationOutputs: {
-        "security-review": {
-          section: "Security Review",
-          summary: "Validated all endpoints.",
-        },
         "perf-review": {
           section: "Performance Review",
           summary: "No bottlenecks found.",
         },
+        "security-review": {
+          section: "Security Review",
+          summary: "Validated all endpoints.",
+        },
       },
+      summaries: [],
+      wave: 2,
     });
 
     expect(briefing).toContain("### Security Review");
@@ -578,14 +564,14 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
 
   it("omits section heading when consultation output has no section, but includes summary text", () => {
     const briefing = assembleWaveBriefing({
-      wave: 1,
-      summaries: [],
       consultationOutputs: {
         "anon-review": {
           // No section field
           summary: "Use dry-run mode for destructive operations.",
         },
       },
+      summaries: [],
+      wave: 1,
     });
 
     // assembleWaveBriefing only renders `### heading` when section is set
@@ -601,14 +587,14 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
     expect(escapedSummary).toBe("Avoid \\${SECRET} in logs.");
 
     const briefing = assembleWaveBriefing({
-      wave: 1,
-      summaries: [],
       consultationOutputs: {
         "security-review": {
           section: "Security",
           summary: escapedSummary,
         },
       },
+      summaries: [],
+      wave: 1,
     });
 
     // The escaped form must survive into the briefing
@@ -618,15 +604,11 @@ describe("assembleWaveBriefing — consultation section and summary contract", (
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. enterAndPrepareState: consultation_outputs only passed to getSpawnPrompt
 //    when summaries exist — no spurious injection on empty board
-// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
 // 8. after-02: enterAndPrepareState collects "after" breakpoint summaries
 //    from wave_results and injects them into the next state's briefing
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — collects after-consultation summaries from wave_results", () => {
   it("after-consultation summary from wave_results flows into next state briefing", async () => {
@@ -635,13 +617,12 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
     // Board has a completed "after" consultation from a synthetic "after" wave key
     const boardWithAfterResults = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 1,
+          status: "in_progress",
           wave_results: {
-            "after": {
-              tasks: [],
-              status: "done",
+            after: {
               consultations: {
                 after: {
                   "security-review": {
@@ -650,10 +631,11 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
                   },
                 },
               },
+              status: "done",
+              tasks: [],
             },
           },
         },
-        done: { status: "pending", entries: 0 },
       },
     });
 
@@ -664,12 +646,12 @@ describe("enterAndPrepareState — collects after-consultation summaries from wa
 
     // Wave 1 — the "after" summary from wave_results should be picked up
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 
@@ -691,12 +673,12 @@ describe("enterAndPrepareState — consultation_outputs absent when no completed
 
     // Wave 1 with before consultation declared but no completed summaries on board
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 

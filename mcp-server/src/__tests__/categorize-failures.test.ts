@@ -1,23 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { CategorizeFailuresInput } from "../tools/categorize-failures.ts";
 import { categorizeFailures } from "../tools/categorize-failures.ts";
 import { isToolError } from "../utils/tool-result.ts";
-import type { CategorizeFailuresInput } from "../tools/categorize-failures.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeInput(overrides: Partial<CategorizeFailuresInput> = {}): CategorizeFailuresInput {
   return {
-    workspace: "/tmp/ws",
     failures: [],
+    workspace: "/tmp/ws",
     ...overrides,
   };
 }
 
-// ---------------------------------------------------------------------------
 // Edge cases
-// ---------------------------------------------------------------------------
 
 describe("categorize_failures — edge cases", () => {
   it("returns INVALID_INPUT error for empty failures array", async () => {
@@ -35,7 +29,7 @@ describe("categorize_failures — edge cases", () => {
     const result = await categorizeFailures(
       makeInput({
         failures: [
-          { file: "src/auth.test.ts", error_message: "Cannot read property 'token' of undefined" },
+          { error_message: "Cannot read property 'token' of undefined", file: "src/auth.test.ts" },
         ],
       }),
     );
@@ -47,20 +41,18 @@ describe("categorize_failures — edge cases", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Exact error match (confidence 0.95)
-// ---------------------------------------------------------------------------
 
 describe("categorize_failures — exact error match", () => {
   it("5 failures with 2 distinct error messages → 2 groups, both confidence 0.95, needs_refinement false", async () => {
     const result = await categorizeFailures(
       makeInput({
         failures: [
-          { file: "src/a.test.ts", error_message: "TypeError: Cannot read property 'x'" },
-          { file: "src/b.test.ts", error_message: "TypeError: Cannot read property 'x'" },
-          { file: "src/c.test.ts", error_message: "TypeError: Cannot read property 'x'" },
-          { file: "src/d.test.ts", error_message: "ImportError: module 'foo' not found" },
-          { file: "src/e.test.ts", error_message: "ImportError: module 'foo' not found" },
+          { error_message: "TypeError: Cannot read property 'x'", file: "src/a.test.ts" },
+          { error_message: "TypeError: Cannot read property 'x'", file: "src/b.test.ts" },
+          { error_message: "TypeError: Cannot read property 'x'", file: "src/c.test.ts" },
+          { error_message: "ImportError: module 'foo' not found", file: "src/d.test.ts" },
+          { error_message: "ImportError: module 'foo' not found", file: "src/e.test.ts" },
         ],
       }),
     );
@@ -78,8 +70,8 @@ describe("categorize_failures — exact error match", () => {
     const result = await categorizeFailures(
       makeInput({
         failures: [
-          { file: "src/a.test.ts", error_message: "same error" },
-          { file: "src/b.test.ts", error_message: "same error" },
+          { error_message: "same error", file: "src/a.test.ts" },
+          { error_message: "same error", file: "src/b.test.ts" },
         ],
       }),
     );
@@ -89,9 +81,7 @@ describe("categorize_failures — exact error match", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Error type grouping (confidence 0.9)
-// ---------------------------------------------------------------------------
 
 describe("categorize_failures — error type grouping", () => {
   it("failures grouped by error_type get confidence 0.9, needs_refinement false", async () => {
@@ -99,19 +89,19 @@ describe("categorize_failures — error type grouping", () => {
       makeInput({
         failures: [
           {
-            file: "src/a.test.ts",
             error_message: "Cannot read property 'x' of undefined",
             error_type: "TypeError",
+            file: "src/a.test.ts",
           },
           {
-            file: "src/b.test.ts",
             error_message: "Cannot read property 'y' of null",
             error_type: "TypeError",
+            file: "src/b.test.ts",
           },
           {
-            file: "src/c.test.ts",
             error_message: "Cannot read property 'z' of undefined",
             error_type: "TypeError",
+            file: "src/c.test.ts",
           },
         ],
       }),
@@ -126,9 +116,7 @@ describe("categorize_failures — error type grouping", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Same file grouping (confidence 0.85)
-// ---------------------------------------------------------------------------
 
 describe("categorize_failures — same file grouping", () => {
   it("3 failures in same test file → 1 group, confidence 0.85, needs_refinement false", async () => {
@@ -136,19 +124,19 @@ describe("categorize_failures — same file grouping", () => {
       makeInput({
         failures: [
           {
+            error_message: "expected true to be false",
             file: "src/auth.test.ts",
             test_name: "test A",
-            error_message: "expected true to be false",
           },
           {
+            error_message: "expected 1 to equal 2",
             file: "src/auth.test.ts",
             test_name: "test B",
-            error_message: "expected 1 to equal 2",
           },
           {
+            error_message: "timeout exceeded",
             file: "src/auth.test.ts",
             test_name: "test C",
-            error_message: "timeout exceeded",
           },
         ],
       }),
@@ -163,18 +151,16 @@ describe("categorize_failures — same file grouping", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Directory prefix grouping (confidence 0.7)
-// ---------------------------------------------------------------------------
 
 describe("categorize_failures — directory prefix grouping", () => {
   it("failures in same directory, no common error substring → confidence 0.7, needs_refinement true", async () => {
     const result = await categorizeFailures(
       makeInput({
         failures: [
-          { file: "src/utils/string.test.ts", error_message: "assertion failed: expected 'foo'" },
-          { file: "src/utils/number.test.ts", error_message: "timeout: test exceeded 5000ms" },
-          { file: "src/utils/array.test.ts", error_message: "expected [] to deeply equal [1,2,3]" },
+          { error_message: "assertion failed: expected 'foo'", file: "src/utils/string.test.ts" },
+          { error_message: "timeout: test exceeded 5000ms", file: "src/utils/number.test.ts" },
+          { error_message: "expected [] to deeply equal [1,2,3]", file: "src/utils/array.test.ts" },
         ],
       }),
     );
@@ -191,16 +177,16 @@ describe("categorize_failures — directory prefix grouping", () => {
       makeInput({
         failures: [
           {
-            file: "src/utils/string.test.ts",
             error_message: `${sharedSubstring} from './string'`,
+            file: "src/utils/string.test.ts",
           },
           {
-            file: "src/utils/number.test.ts",
             error_message: `${sharedSubstring} from './number'`,
+            file: "src/utils/number.test.ts",
           },
           {
-            file: "src/utils/array.test.ts",
             error_message: `${sharedSubstring} from './array'`,
+            file: "src/utils/array.test.ts",
           },
         ],
       }),
@@ -213,9 +199,7 @@ describe("categorize_failures — directory prefix grouping", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Mixed signals — priority ordering
-// ---------------------------------------------------------------------------
 
 describe("categorize_failures — mixed signals", () => {
   it("failure matching both exact error and error_type gets exact error (0.95) group", async () => {
@@ -224,25 +208,25 @@ describe("categorize_failures — mixed signals", () => {
         failures: [
           // Group 1: exact error match (0.95)
           {
-            file: "src/a.test.ts",
             error_message: "Cannot read property 'x' of undefined",
             error_type: "TypeError",
+            file: "src/a.test.ts",
           },
           {
-            file: "src/b.test.ts",
             error_message: "Cannot read property 'x' of undefined",
             error_type: "TypeError",
+            file: "src/b.test.ts",
           },
           // Group 2: same file (0.85) — different error messages but same file
           {
+            error_message: "assertion one",
             file: "src/auth.test.ts",
             test_name: "test A",
-            error_message: "assertion one",
           },
           {
+            error_message: "assertion two",
             file: "src/auth.test.ts",
             test_name: "test B",
-            error_message: "assertion two",
           },
         ],
       }),
@@ -263,9 +247,7 @@ describe("categorize_failures — mixed signals", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // needs_refinement trigger
-// ---------------------------------------------------------------------------
 
 describe("categorize_failures — needs_refinement trigger", () => {
   it("unique failures each become singleton exact-error groups (0.95), needs_refinement false", async () => {
@@ -275,9 +257,9 @@ describe("categorize_failures — needs_refinement trigger", () => {
     const result = await categorizeFailures(
       makeInput({
         failures: [
-          { file: "src/alpha/one.test.ts", error_message: "unique error alpha one" },
-          { file: "src/beta/two.test.ts", error_message: "unique error beta two" },
-          { file: "src/gamma/three.test.ts", error_message: "unique error gamma three" },
+          { error_message: "unique error alpha one", file: "src/alpha/one.test.ts" },
+          { error_message: "unique error beta two", file: "src/beta/two.test.ts" },
+          { error_message: "unique error gamma three", file: "src/gamma/three.test.ts" },
         ],
       }),
     );
@@ -294,8 +276,8 @@ describe("categorize_failures — needs_refinement trigger", () => {
     const result = await categorizeFailures(
       makeInput({
         failures: [
-          { file: "src/utils/string.test.ts", error_message: "assertion failed: expected 'foo'" },
-          { file: "src/utils/number.test.ts", error_message: "timeout: test exceeded 5000ms" },
+          { error_message: "assertion failed: expected 'foo'", file: "src/utils/string.test.ts" },
+          { error_message: "timeout: test exceeded 5000ms", file: "src/utils/number.test.ts" },
         ],
       }),
     );
@@ -305,17 +287,15 @@ describe("categorize_failures — needs_refinement trigger", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // LLM refinement pass-through
-// ---------------------------------------------------------------------------
 
 describe("categorize_failures — LLM refinement pass-through", () => {
   it("refined_categories provided → structured output with confidence 1.0, needs_refinement false", async () => {
     const result = await categorizeFailures(
       makeInput({
         failures: [
-          { file: "src/utils/string.test.ts", error_message: "unique error alpha" },
-          { file: "src/utils/number.test.ts", error_message: "unique error beta" },
+          { error_message: "unique error alpha", file: "src/utils/string.test.ts" },
+          { error_message: "unique error beta", file: "src/utils/number.test.ts" },
         ],
         refined_categories: [
           {
@@ -337,7 +317,7 @@ describe("categorize_failures — LLM refinement pass-through", () => {
   it("refined_categories with invalid file → returns error", async () => {
     const result = await categorizeFailures(
       makeInput({
-        failures: [{ file: "src/real.test.ts", error_message: "some error" }],
+        failures: [{ error_message: "some error", file: "src/real.test.ts" }],
         refined_categories: [
           {
             category: "bad-category",

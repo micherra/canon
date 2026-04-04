@@ -57,7 +57,7 @@ For build/review/security/explore/test intents, follow the orchestrator protocol
 
 1. `load_flow(flow_name)` → get flow definition
 2. `init_workspace(...)` → create or resume workspace
-3. For each state: `check_convergence` → `update_board(enter_state)` → `get_spawn_prompt` → spawn specialist agent → `report_result` → next state
+3. Loop: `drive_flow(workspace, resolved_flow)` → spawn agent (from `SpawnRequest`) or present to user (on `HitlBreakpoint`) → `report_result` → repeat until terminal
 4. On terminal state: `update_board(complete_flow)`
 
 You are a dispatcher — spawn specialist agents for task work but never write code, reviews, or artifacts yourself.

@@ -14,9 +14,7 @@ import { LANGUAGE_CONFIGS, type LanguageConfig } from "./kg-language-configs.ts"
 import type { AdapterResult, LanguageAdapter } from "./kg-types.ts";
 import { getParser } from "./kg-wasm-parser.ts";
 
-// ---------------------------------------------------------------------------
 // Factory — build a LanguageAdapter from a LanguageConfig
-// ---------------------------------------------------------------------------
 
 function makeAdapter(config: LanguageConfig): LanguageAdapter {
   return {
@@ -29,9 +27,7 @@ function makeAdapter(config: LanguageConfig): LanguageAdapter {
   };
 }
 
-// ---------------------------------------------------------------------------
 // Registry — O(1) extension lookup
-// ---------------------------------------------------------------------------
 
 const registry = new Map<string, LanguageAdapter>();
 
@@ -65,16 +61,16 @@ export function getAdapter(extension: string): LanguageAdapter | undefined {
  */
 export function getLanguage(extension: string): string {
   const langMap: Record<string, string> = {
-    ".ts": "typescript",
-    ".tsx": "typescript",
+    ".cjs": "javascript",
+    ".java": "java",
     ".js": "javascript",
     ".jsx": "javascript",
+    ".md": "markdown",
     ".mjs": "javascript",
-    ".cjs": "javascript",
     ".py": "python",
     ".sh": "bash",
-    ".java": "java",
-    ".md": "markdown",
+    ".ts": "typescript",
+    ".tsx": "typescript",
     ".yaml": "yaml",
     ".yml": "yaml",
   };

@@ -4,14 +4,14 @@
  * large diffs across multiple parallel agent spawns.
  */
 
-import { dirname } from "path";
+import { dirname } from "node:path";
 import { gitExec } from "../adapters/git-adapter.ts";
 import { inferLayer } from "../matcher.ts";
 
-export interface FileCluster {
+export type FileCluster = {
   key: string;
   files: string[];
-}
+};
 
 const BASE_COMMIT_RE = /^[a-f0-9]{7,40}$/;
 
@@ -44,7 +44,7 @@ export function clusterByDirectory(files: string[]): FileCluster[] {
   }
 
   return Array.from(groups.entries())
-    .map(([key, files]) => ({ key, files }))
+    .map(([key, files]) => ({ files, key }))
     .sort((a, b) => b.files.length - a.files.length);
 }
 
@@ -62,7 +62,7 @@ export function clusterByLayer(files: string[]): FileCluster[] {
   }
 
   return Array.from(groups.entries())
-    .map(([key, files]) => ({ key, files }))
+    .map(([key, files]) => ({ files, key }))
     .sort((a, b) => b.files.length - a.files.length);
 }
 

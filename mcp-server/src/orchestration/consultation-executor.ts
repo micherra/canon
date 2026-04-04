@@ -16,17 +16,17 @@
 import type { ConsultationResult, ResolvedFlow } from "./flow-schema.ts";
 import { substituteVariables } from "./variables.ts";
 
-export interface ConsultationInput {
+export type ConsultationInput = {
   consultationNames: string[];
   breakpoint: "before" | "between" | "after";
   flow: ResolvedFlow;
   variables: Record<string, string>;
-}
+};
 
-export interface ConsultationOutput {
+export type ConsultationOutput = {
   results: Record<string, ConsultationResult>;
   warnings: string[];
-}
+};
 
 /**
  * Prepares consultation data structures for the orchestrator to act on.
@@ -53,7 +53,9 @@ export async function executeConsultations(input: ConsultationInput): Promise<Co
 
     const spawnInstruction = flow.spawn_instructions[name];
     if (!spawnInstruction) {
-      warnings.push(`Spawn instruction for consultation "${name}" not found in flow.spawn_instructions — skipping.`);
+      warnings.push(
+        `Spawn instruction for consultation "${name}" not found in flow.spawn_instructions — skipping.`,
+      );
       continue;
     }
 

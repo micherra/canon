@@ -1,13 +1,13 @@
 import { loadAllPrinciples, matchPrinciples } from "../matcher.ts";
 
-export interface ListPrinciplesInput {
+export type ListPrinciplesInput = {
   filter_severity?: "rule" | "strong-opinion" | "convention";
   filter_tags?: string[];
   filter_layers?: string[];
   include_archived?: boolean;
-}
+};
 
-export interface ListPrinciplesOutput {
+export type ListPrinciplesOutput = {
   principles: Array<{
     id: string;
     title: string;
@@ -20,7 +20,7 @@ export interface ListPrinciplesOutput {
     };
   }>;
   total: number;
-}
+};
 
 export async function listPrinciples(
   input: ListPrinciplesInput,
@@ -30,23 +30,23 @@ export async function listPrinciples(
   const allPrinciples = await loadAllPrinciples(projectDir, pluginDir);
 
   const matched = matchPrinciples(allPrinciples, {
+    include_archived: input.include_archived,
+    layers: input.filter_layers,
     severity_filter: input.filter_severity,
     tags: input.filter_tags,
-    layers: input.filter_layers,
-    include_archived: input.include_archived,
   });
 
   return {
     principles: matched.map((p) => ({
+      archived: p.archived,
       id: p.id,
-      title: p.title,
+      scope: {
+        file_patterns: p.scope.file_patterns,
+        layers: p.scope.layers,
+      },
       severity: p.severity,
       tags: p.tags,
-      archived: p.archived,
-      scope: {
-        layers: p.scope.layers,
-        file_patterns: p.scope.file_patterns,
-      },
+      title: p.title,
     })),
     total: matched.length,
   };

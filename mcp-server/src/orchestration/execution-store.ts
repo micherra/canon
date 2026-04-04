@@ -8,27 +8,25 @@
  * Replaces: board.json, session.json, progress.md, messages, wave events, log.jsonl
  */
 
-import { existsSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import Database from 'better-sqlite3';
-import { join, resolve } from 'node:path';
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type Database from "better-sqlite3";
+import { CANON_FILES } from "../constants.ts";
+import { validateEventPayload } from "./events.ts";
+import { initExecutionDb } from "./execution-schema.ts";
 import type {
   Board,
-  Session,
   BoardStateEntry,
   IterationEntry,
-  WaveEvent,
+  Session,
   StuckWhen,
-} from './flow-schema.ts';
-import { initExecutionDb } from './execution-schema.ts';
-import { validateEventPayload } from './events.ts';
-import { CANON_FILES } from '../constants.ts';
+  WaveEvent,
+} from "./flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // Row types (internal — not exported; callers receive typed objects)
-// ---------------------------------------------------------------------------
 
-interface ExecutionRow {
+type ExecutionRow = {
   id: number;
   flow: string;
   task: string;
@@ -37,10 +35,10 @@ interface ExecutionRow {
   base_commit: string;
   started: string;
   last_updated: string;
-  blocked: string | null;       // JSON: BlockedInfo | null
-  concerns: string;             // JSON array
-  skipped: string;              // JSON array
-  metadata: string | null;      // JSON object | null
+  blocked: string | null; // JSON: BlockedInfo | null
+  concerns: string; // JSON array
+  skipped: string; // JSON array
+  metadata: string | null; // JSON object | null
   branch: string;
   sanitized: string;
   created: string;
@@ -55,70 +53,68 @@ interface ExecutionRow {
   correlation_id: string | null;
   worktree_path: string | null;
   worktree_branch: string | null;
-}
+};
 
-interface ExecutionStateRow {
+type ExecutionStateRow = {
   state_id: string;
   status: string;
   entries: number;
   entered_at: string | null;
   completed_at: string | null;
   result: string | null;
-  artifacts: string | null;             // JSON array | null
-  artifact_history: string | null;      // JSON array | null
+  artifacts: string | null; // JSON array | null
+  artifact_history: string | null; // JSON array | null
   error: string | null;
   wave: number | null;
   wave_total: number | null;
-  wave_results: string | null;          // JSON object | null
-  metrics: string | null;               // JSON object | null
-  gate_results: string | null;          // JSON array | null
+  wave_results: string | null; // JSON object | null
+  metrics: string | null; // JSON object | null
+  gate_results: string | null; // JSON array | null
   postcondition_results: string | null; // JSON array | null
-  discovered_gates: string | null;      // JSON array | null
+  discovered_gates: string | null; // JSON array | null
   discovered_postconditions: string | null; // JSON array | null
-  parallel_results: string | null;      // JSON array | null
-  compete_results: string | null;       // JSON array | null
-  synthesized: number | null;           // 0/1 | null
-  transcript_path: string | null;       // ADR-015
-}
+  parallel_results: string | null; // JSON array | null
+  compete_results: string | null; // JSON array | null
+  synthesized: number | null; // 0/1 | null
+  transcript_path: string | null; // ADR-015
+};
 
-interface IterationRow {
+type IterationRow = {
   state_id: string;
   count: number;
   max: number;
-  history: string;    // JSON array
+  history: string; // JSON array
   cannot_fix: string; // JSON array
-}
+};
 
-interface ProgressRow {
+type ProgressRow = {
   id: number;
   line: string;
   timestamp: string;
-}
+};
 
-interface MessageRow {
+type MessageRow = {
   id: number;
   channel: string;
   sender: string;
   content: string;
   timestamp: string;
-}
+};
 
-interface WaveEventRow {
+type WaveEventRow = {
   id: string;
   type: string;
-  payload: string;      // JSON
+  payload: string; // JSON
   timestamp: string;
   status: string;
   applied_at: string | null;
-  resolution: string | null;       // JSON | null
+  resolution: string | null; // JSON | null
   rejection_reason: string | null;
-}
+};
 
-// ---------------------------------------------------------------------------
 // Parameter types for public API
-// ---------------------------------------------------------------------------
 
-export interface InitExecutionParams {
+export type InitExecutionParams = {
   flow: string;
   task: string;
   entry: string;
@@ -130,7 +126,7 @@ export interface InitExecutionParams {
   sanitized: string;
   created: string;
   original_task?: string;
-  tier: 'small' | 'medium' | 'large';
+  tier: "small" | "medium" | "large";
   flow_name: string;
   slug: string;
   status?: string;
@@ -139,14 +135,14 @@ export interface InitExecutionParams {
   rolled_back_to?: string;
   worktree_path?: string;
   worktree_branch?: string;
-}
+};
 
-export interface UpdateExecutionFields {
+export type UpdateExecutionFields = {
   current_state?: string;
-  blocked?: Board['blocked'];
-  concerns?: Board['concerns'];
+  blocked?: Board["blocked"];
+  concerns?: Board["concerns"];
   skipped?: string[];
-  metadata?: Board['metadata'];
+  metadata?: Board["metadata"];
   last_updated?: string;
   status?: string;
   completed_at?: string;
@@ -154,142 +150,146 @@ export interface UpdateExecutionFields {
   rolled_back_to?: string;
   worktree_path?: string | null;
   worktree_branch?: string | null;
-}
+};
 
-export interface MessageOutput {
+export type MessageOutput = {
   id: number;
   channel: string;
   sender: string;
   content: string;
   timestamp: string;
-}
+};
 
-export interface GetMessagesOptions {
+export type GetMessagesOptions = {
   since?: string;
-}
+};
 
-export interface GetWaveEventsOptions {
+export type GetWaveEventsOptions = {
   status?: string;
-}
+};
 
-export interface UpdateWaveEventFields {
+export type UpdateWaveEventFields = {
   status?: string;
   applied_at?: string;
   resolution?: Record<string, unknown>;
   rejection_reason?: string;
-}
+};
 
-export interface GetEventsOptions {
+export type GetEventsOptions = {
   correlation_id?: string;
   type?: string;
   since?: string;
   limit?: number;
-}
+};
 
-export interface EventOutput {
+export type EventOutput = {
   id: number;
   type: string;
   payload: Record<string, unknown>;
   correlation_id: string | null;
   timestamp: string;
-}
+};
 
-// ---------------------------------------------------------------------------
 // Helper — parse nullable JSON column
-// ---------------------------------------------------------------------------
 
 function parseJson<T>(value: string | null | undefined): T | undefined {
   if (value === null || value === undefined) return undefined;
   return JSON.parse(value) as T;
 }
 
-// ---------------------------------------------------------------------------
 // Module-level constants
-// ---------------------------------------------------------------------------
 
 /** Allowlist of columns updateExecution is permitted to SET. Hoisted to avoid recreation per call. */
 const ALLOWED_UPDATE_EXECUTION_COLUMNS = new Set([
-  'current_state',
-  'blocked',
-  'concerns',
-  'skipped',
-  'metadata',
-  'status',
-  'completed_at',
-  'rolled_back_at',
-  'rolled_back_to',
-  'last_updated',
-  'worktree_path',
-  'worktree_branch',
+  "current_state",
+  "blocked",
+  "concerns",
+  "skipped",
+  "metadata",
+  "status",
+  "completed_at",
+  "rolled_back_at",
+  "rolled_back_to",
+  "last_updated",
+  "worktree_path",
+  "worktree_branch",
 ]);
 
-// ---------------------------------------------------------------------------
 // ExecutionStore
-// ---------------------------------------------------------------------------
 
 export class ExecutionStore {
   // Expose db for test introspection (tests access via `(store as any).db`)
   private readonly db: Database.Database;
 
   // ---- Execution statements ----
-  private readonly stmtInitExecution: Database.Statement;
-  private readonly stmtGetExecution: Database.Statement;
+  private stmtInitExecution!: Database.Statement;
+  private stmtGetExecution!: Database.Statement;
 
   // ---- State statements ----
-  private readonly stmtUpsertState: Database.Statement;
-  private readonly stmtGetState: Database.Statement;
-  private readonly stmtGetAllStates: Database.Statement;
+  private stmtUpsertState!: Database.Statement;
+  private stmtGetState!: Database.Statement;
+  private stmtGetAllStates!: Database.Statement;
 
   // ---- Iteration statements ----
-  private readonly stmtUpsertIteration: Database.Statement;
-  private readonly stmtGetIteration: Database.Statement;
+  private stmtUpsertIteration!: Database.Statement;
+  private stmtGetIteration!: Database.Statement;
 
   // ---- Progress statements ----
-  private readonly stmtAppendProgress: Database.Statement;
-  private readonly stmtGetProgressAll: Database.Statement;
-  private readonly stmtGetProgressLimited: Database.Statement;
+  private stmtAppendProgress!: Database.Statement;
+  private stmtGetProgressAll!: Database.Statement;
+  private stmtGetProgressLimited!: Database.Statement;
 
   // ---- Message statements ----
-  private readonly stmtAppendMessage: Database.Statement;
-  private readonly stmtGetMessages: Database.Statement;
-  private readonly stmtGetMessagesSince: Database.Statement;
-  private readonly stmtHasMessages: Database.Statement;
+  private stmtAppendMessage!: Database.Statement;
+  private stmtGetMessages!: Database.Statement;
+  private stmtGetMessagesSince!: Database.Statement;
+  private stmtHasMessages!: Database.Statement;
 
   // ---- Wave event statements ----
-  private readonly stmtPostWaveEvent: Database.Statement;
-  private readonly stmtGetWaveEvents: Database.Statement;
-  private readonly stmtGetWaveEventsByStatus: Database.Statement;
-  private readonly stmtUpdateWaveEvent: Database.Statement;
+  private stmtPostWaveEvent!: Database.Statement;
+  private stmtGetWaveEvents!: Database.Statement;
+  private stmtGetWaveEventsByStatus!: Database.Statement;
+  private stmtUpdateWaveEvent!: Database.Statement;
 
   // ---- Event statements ----
-  private readonly stmtAppendEvent: Database.Statement;
-  private readonly stmtGetEventsByCorrelation: Database.Statement;
-  private readonly stmtGetEventsByType: Database.Statement;
-  private readonly stmtGetEventsAll: Database.Statement;
+  private stmtAppendEvent!: Database.Statement;
+  private stmtGetEventsByCorrelation!: Database.Statement;
+  private stmtGetEventsByType!: Database.Statement;
+  private stmtGetEventsAll!: Database.Statement;
 
   // ---- Iteration results statements (SQL-based stuck detection) ----
-  private readonly stmtRecordIterationResult: Database.Statement;
-  private readonly stmtGetLastTwoIterationResults: Database.Statement;
+  private stmtRecordIterationResult!: Database.Statement;
+  private stmtGetLastTwoIterationResults!: Database.Statement;
 
   // ---- Transcript path statements (ADR-015) ----
-  private readonly stmtSetTranscriptPath: Database.Statement;
-  private readonly stmtGetTranscriptPath: Database.Statement;
+  private stmtSetTranscriptPath!: Database.Statement;
+  private stmtGetTranscriptPath!: Database.Statement;
 
   // ---- Metrics statements ----
-  private readonly stmtUpdateStateMetrics: Database.Statement;
+  private stmtUpdateStateMetrics!: Database.Statement;
 
   // ---- Cache prefix statements (ADR-006a) ----
-  private readonly stmtGetCachePrefix: Database.Statement;
-  private readonly stmtSetCachePrefix: Database.Statement;
+  private stmtGetCachePrefix!: Database.Statement;
+  private stmtSetCachePrefix!: Database.Statement;
 
   // ---- Agent session statements (ADR-009a) ----
-  private readonly stmtUpdateAgentSession: Database.Statement;
-  private readonly stmtGetAgentSession: Database.Statement;
+  private stmtUpdateAgentSession!: Database.Statement;
+  private stmtGetAgentSession!: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
+    this.prepareExecutionStmts(db);
+    this.prepareStateStmts(db);
+    this.prepareIterationStmts(db);
+    this.prepareProgressStmts(db);
+    this.prepareMessageStmts(db);
+    this.prepareWaveEventStmts(db);
+    this.prepareEventStmts(db);
+    this.prepareIterationResultStmts(db);
+    this.prepareMiscStmts(db);
+  }
 
-    // Execution
+  private prepareExecutionStmts(db: Database.Database): void {
     this.stmtInitExecution = db.prepare(`
       INSERT INTO execution (
         id, flow, task, entry, current_state, base_commit,
@@ -307,12 +307,10 @@ export class ExecutionStore {
         @worktree_path, @worktree_branch
       )
     `);
+    this.stmtGetExecution = db.prepare(`SELECT * FROM execution WHERE id = 1`);
+  }
 
-    this.stmtGetExecution = db.prepare(`
-      SELECT * FROM execution WHERE id = 1
-    `);
-
-    // States
+  private prepareStateStmts(db: Database.Database): void {
     this.stmtUpsertState = db.prepare(`
       INSERT INTO execution_states (
         state_id, status, entries, entered_at, completed_at,
@@ -349,16 +347,11 @@ export class ExecutionStore {
         synthesized               = excluded.synthesized
         -- transcript_path intentionally omitted: preserves existing value on update
     `);
+    this.stmtGetState = db.prepare(`SELECT * FROM execution_states WHERE state_id = ?`);
+    this.stmtGetAllStates = db.prepare(`SELECT * FROM execution_states ORDER BY state_id`);
+  }
 
-    this.stmtGetState = db.prepare(`
-      SELECT * FROM execution_states WHERE state_id = ?
-    `);
-
-    this.stmtGetAllStates = db.prepare(`
-      SELECT * FROM execution_states ORDER BY state_id
-    `);
-
-    // Iterations
+  private prepareIterationStmts(db: Database.Database): void {
     this.stmtUpsertIteration = db.prepare(`
       INSERT INTO iterations (state_id, count, max, history, cannot_fix)
       VALUES (@state_id, @count, @max, @history, @cannot_fix)
@@ -368,59 +361,43 @@ export class ExecutionStore {
         history    = excluded.history,
         cannot_fix = excluded.cannot_fix
     `);
+    this.stmtGetIteration = db.prepare(`SELECT * FROM iterations WHERE state_id = ?`);
+  }
 
-    this.stmtGetIteration = db.prepare(`
-      SELECT * FROM iterations WHERE state_id = ?
-    `);
-
-    // Progress
-    this.stmtAppendProgress = db.prepare(`
-      INSERT INTO progress_entries (line, timestamp) VALUES (@line, @timestamp)
-    `);
-
-    this.stmtGetProgressAll = db.prepare(`
-      SELECT * FROM progress_entries ORDER BY id ASC
-    `);
-
+  private prepareProgressStmts(db: Database.Database): void {
+    this.stmtAppendProgress = db.prepare(
+      `INSERT INTO progress_entries (line, timestamp) VALUES (@line, @timestamp)`,
+    );
+    this.stmtGetProgressAll = db.prepare(`SELECT * FROM progress_entries ORDER BY id ASC`);
     this.stmtGetProgressLimited = db.prepare(`
       SELECT * FROM (
         SELECT * FROM progress_entries ORDER BY id DESC LIMIT ?
       ) ORDER BY id ASC
     `);
+  }
 
-    // Messages
+  private prepareMessageStmts(db: Database.Database): void {
     this.stmtAppendMessage = db.prepare(`
       INSERT INTO messages (channel, sender, content, timestamp)
       VALUES (@channel, @sender, @content, @timestamp)
       RETURNING *
     `);
+    this.stmtGetMessages = db.prepare(`SELECT * FROM messages WHERE channel = ? ORDER BY id ASC`);
+    this.stmtGetMessagesSince = db.prepare(
+      `SELECT * FROM messages WHERE channel = ? AND timestamp > ? ORDER BY id ASC`,
+    );
+    this.stmtHasMessages = db.prepare(`SELECT 1 FROM messages WHERE channel = ? LIMIT 1`);
+  }
 
-    this.stmtGetMessages = db.prepare(`
-      SELECT * FROM messages WHERE channel = ? ORDER BY id ASC
-    `);
-
-    this.stmtGetMessagesSince = db.prepare(`
-      SELECT * FROM messages WHERE channel = ? AND timestamp > ? ORDER BY id ASC
-    `);
-
-    this.stmtHasMessages = db.prepare(`
-      SELECT 1 FROM messages WHERE channel = ? LIMIT 1
-    `);
-
-    // Wave events
+  private prepareWaveEventStmts(db: Database.Database): void {
     this.stmtPostWaveEvent = db.prepare(`
       INSERT INTO wave_events (id, type, payload, timestamp, status)
       VALUES (@id, @type, @payload, @timestamp, @status)
     `);
-
-    this.stmtGetWaveEvents = db.prepare(`
-      SELECT * FROM wave_events ORDER BY timestamp ASC
-    `);
-
-    this.stmtGetWaveEventsByStatus = db.prepare(`
-      SELECT * FROM wave_events WHERE status = ? ORDER BY timestamp ASC
-    `);
-
+    this.stmtGetWaveEvents = db.prepare(`SELECT * FROM wave_events ORDER BY timestamp ASC`);
+    this.stmtGetWaveEventsByStatus = db.prepare(
+      `SELECT * FROM wave_events WHERE status = ? ORDER BY timestamp ASC`,
+    );
     this.stmtUpdateWaveEvent = db.prepare(`
       UPDATE wave_events
       SET status           = COALESCE(@status, status),
@@ -429,60 +406,45 @@ export class ExecutionStore {
           rejection_reason = COALESCE(@rejection_reason, rejection_reason)
       WHERE id = @id AND status = 'pending'
     `);
+  }
 
-    // Events
+  private prepareEventStmts(db: Database.Database): void {
     this.stmtAppendEvent = db.prepare(`
       INSERT INTO events (type, payload, correlation_id, timestamp)
       VALUES (@type, @payload, @correlation_id, @timestamp)
     `);
+    this.stmtGetEventsByCorrelation = db.prepare(
+      `SELECT * FROM events WHERE correlation_id = ? ORDER BY id ASC`,
+    );
+    this.stmtGetEventsByType = db.prepare(`SELECT * FROM events WHERE type = ? ORDER BY id ASC`);
+    this.stmtGetEventsAll = db.prepare(`SELECT * FROM events ORDER BY id ASC`);
+  }
 
-    this.stmtGetEventsByCorrelation = db.prepare(`
-      SELECT * FROM events WHERE correlation_id = ? ORDER BY id ASC
-    `);
-
-    this.stmtGetEventsByType = db.prepare(`
-      SELECT * FROM events WHERE type = ? ORDER BY id ASC
-    `);
-
-    this.stmtGetEventsAll = db.prepare(`
-      SELECT * FROM events ORDER BY id ASC
-    `);
-
-    // Iteration results (SQL-based stuck detection)
+  private prepareIterationResultStmts(db: Database.Database): void {
     this.stmtRecordIterationResult = db.prepare(`
       INSERT OR REPLACE INTO iteration_results (state_id, iteration, status, data, timestamp)
       VALUES (@state_id, @iteration, @status, @data, @timestamp)
     `);
-
     this.stmtGetLastTwoIterationResults = db.prepare(`
       SELECT status, data FROM iteration_results
       WHERE state_id = ?
       ORDER BY iteration DESC
       LIMIT 2
     `);
+  }
 
-    // Metrics
+  private prepareMiscStmts(db: Database.Database): void {
     this.stmtUpdateStateMetrics = db.prepare(
       `UPDATE execution_states SET metrics = ? WHERE state_id = ?`,
     );
-
-    // Cache prefix (ADR-006a)
-    this.stmtGetCachePrefix = db.prepare(
-      `SELECT cache_prefix FROM execution WHERE id = 1`,
-    );
-    this.stmtSetCachePrefix = db.prepare(
-      `UPDATE execution SET cache_prefix = ? WHERE id = 1`,
-    );
-
-    // Transcript path (ADR-015)
+    this.stmtGetCachePrefix = db.prepare(`SELECT cache_prefix FROM execution WHERE id = 1`);
+    this.stmtSetCachePrefix = db.prepare(`UPDATE execution SET cache_prefix = ? WHERE id = 1`);
     this.stmtSetTranscriptPath = db.prepare(
       `UPDATE execution_states SET transcript_path = ? WHERE state_id = ?`,
     );
     this.stmtGetTranscriptPath = db.prepare(
       `SELECT transcript_path FROM execution_states WHERE state_id = ?`,
     );
-
-    // Agent session (ADR-009a)
     this.stmtUpdateAgentSession = db.prepare(
       `UPDATE execution_states SET agent_session_id = ?, last_agent_activity = ? WHERE state_id = ?`,
     );
@@ -491,41 +453,46 @@ export class ExecutionStore {
     );
   }
 
-  // --------------------------------------------------------------------------
   // Execution (board + session singleton)
-  // --------------------------------------------------------------------------
 
   initExecution(params: InitExecutionParams): void {
     this.stmtInitExecution.run({
-      flow: params.flow,
-      task: params.task,
-      entry: params.entry,
-      current_state: params.current_state,
       base_commit: params.base_commit,
-      started: params.started,
-      last_updated: params.last_updated,
       blocked: null,
-      concerns: '[]',
-      skipped: '[]',
-      metadata: null,
       branch: params.branch,
-      sanitized: params.sanitized,
-      created: params.created,
-      original_task: params.original_task ?? null,
-      tier: params.tier,
-      flow_name: params.flow_name,
-      slug: params.slug,
-      status: params.status ?? 'active',
       completed_at: params.completed_at ?? null,
+      concerns: "[]",
+      correlation_id: randomUUID(),
+      created: params.created,
+      current_state: params.current_state,
+      entry: params.entry,
+      flow: params.flow,
+      flow_name: params.flow_name,
+      last_updated: params.last_updated,
+      metadata: null,
+      original_task: params.original_task ?? null,
       rolled_back_at: params.rolled_back_at ?? null,
       rolled_back_to: params.rolled_back_to ?? null,
-      correlation_id: randomUUID(),
-      worktree_path: params.worktree_path ?? null,
+      sanitized: params.sanitized,
+      skipped: "[]",
+      slug: params.slug,
+      started: params.started,
+      status: params.status ?? "active",
+      task: params.task,
+      tier: params.tier,
       worktree_branch: params.worktree_branch ?? null,
+      worktree_path: params.worktree_path ?? null,
     });
   }
 
-  getExecution(): (ExecutionRow & { blocked: Board['blocked']; concerns: Board['concerns']; skipped: string[]; metadata: Board['metadata'] }) | null {
+  getExecution():
+    | (ExecutionRow & {
+        blocked: Board["blocked"];
+        concerns: Board["concerns"];
+        skipped: string[];
+        metadata: Board["metadata"];
+      })
+    | null {
     const row = this.stmtGetExecution.get() as ExecutionRow | undefined;
     if (!row) return null;
     return this.deserializeExecutionRow(row);
@@ -540,19 +507,19 @@ export class ExecutionStore {
     if (!row) return null;
     return {
       branch: row.branch,
-      sanitized: row.sanitized,
-      created: row.created,
-      task: row.task,
-      original_task: row.original_task ?? undefined,
-      tier: row.tier as 'small' | 'medium' | 'large',
-      flow: row.flow_name,
-      slug: row.slug,
-      status: row.status as Session['status'],
       completed_at: row.completed_at ?? undefined,
+      created: row.created,
+      flow: row.flow_name,
+      original_task: row.original_task ?? undefined,
       rolled_back_at: row.rolled_back_at ?? undefined,
       rolled_back_to: row.rolled_back_to ?? undefined,
-      worktree_path: row.worktree_path ?? undefined,
+      sanitized: row.sanitized,
+      slug: row.slug,
+      status: row.status as Session["status"],
+      task: row.task,
+      tier: row.tier as "small" | "medium" | "large",
       worktree_branch: row.worktree_branch ?? undefined,
+      worktree_path: row.worktree_path ?? undefined,
     };
   }
 
@@ -576,55 +543,53 @@ export class ExecutionStore {
       params[col] = value;
     };
 
-    if (fields.current_state !== undefined) {
-      addColumn('current_state', fields.current_state);
-    }
-    if ('blocked' in fields) {
-      addColumn('blocked', fields.blocked !== null && fields.blocked !== undefined
-        ? JSON.stringify(fields.blocked)
-        : null);
-    }
-    if (fields.concerns !== undefined) {
-      addColumn('concerns', JSON.stringify(fields.concerns));
-    }
-    if (fields.skipped !== undefined) {
-      addColumn('skipped', JSON.stringify(fields.skipped));
-    }
-    if (fields.metadata !== undefined) {
-      addColumn('metadata', fields.metadata !== null ? JSON.stringify(fields.metadata) : null);
-    }
-    if (fields.status !== undefined) {
-      addColumn('status', fields.status);
-    }
-    if (fields.completed_at !== undefined) {
-      addColumn('completed_at', fields.completed_at);
-    }
-    if (fields.rolled_back_at !== undefined) {
-      addColumn('rolled_back_at', fields.rolled_back_at);
-    }
-    if (fields.rolled_back_to !== undefined) {
-      addColumn('rolled_back_to', fields.rolled_back_to);
-    }
-    if ('worktree_path' in fields) {
-      addColumn('worktree_path', fields.worktree_path ?? null);
-    }
-    if ('worktree_branch' in fields) {
-      addColumn('worktree_branch', fields.worktree_branch ?? null);
-    }
+    this.collectJsonColumns(fields, addColumn);
+    this.collectScalarColumns(fields, addColumn);
 
     // Always update last_updated
     const now = fields.last_updated ?? new Date().toISOString();
-    addColumn('last_updated', now);
+    addColumn("last_updated", now);
 
     if (parts.length === 0) return;
 
-    const sql = `UPDATE execution SET ${parts.join(', ')} WHERE id = 1`;
+    const sql = `UPDATE execution SET ${parts.join(", ")} WHERE id = 1`;
     this.db.prepare(sql).run(params);
   }
 
-  // --------------------------------------------------------------------------
+  /** Map UpdateExecutionFields JSON-serialized columns. */
+  private collectJsonColumns(
+    fields: UpdateExecutionFields,
+    addColumn: (col: string, value: unknown) => void,
+  ): void {
+    if ("blocked" in fields) {
+      const val =
+        fields.blocked !== null && fields.blocked !== undefined
+          ? JSON.stringify(fields.blocked)
+          : null;
+      addColumn("blocked", val);
+    }
+    if (fields.concerns !== undefined) addColumn("concerns", JSON.stringify(fields.concerns));
+    if (fields.skipped !== undefined) addColumn("skipped", JSON.stringify(fields.skipped));
+    if (fields.metadata !== undefined) {
+      addColumn("metadata", fields.metadata !== null ? JSON.stringify(fields.metadata) : null);
+    }
+  }
+
+  /** Map UpdateExecutionFields scalar columns. */
+  private collectScalarColumns(
+    fields: UpdateExecutionFields,
+    addColumn: (col: string, value: unknown) => void,
+  ): void {
+    if (fields.current_state !== undefined) addColumn("current_state", fields.current_state);
+    if (fields.status !== undefined) addColumn("status", fields.status);
+    if (fields.completed_at !== undefined) addColumn("completed_at", fields.completed_at);
+    if (fields.rolled_back_at !== undefined) addColumn("rolled_back_at", fields.rolled_back_at);
+    if (fields.rolled_back_to !== undefined) addColumn("rolled_back_to", fields.rolled_back_to);
+    if ("worktree_path" in fields) addColumn("worktree_path", fields.worktree_path ?? null);
+    if ("worktree_branch" in fields) addColumn("worktree_branch", fields.worktree_branch ?? null);
+  }
+
   // Board reconstruction
-  // --------------------------------------------------------------------------
 
   /**
    * Reconstructs the full Board object from execution + execution_states + iterations.
@@ -635,67 +600,77 @@ export class ExecutionStore {
     if (!exRow) return null;
 
     const stateRows = this.stmtGetAllStates.all() as ExecutionStateRow[];
-    const iterRows = this.db.prepare('SELECT * FROM iterations').all() as IterationRow[];
+    const iterRows = this.db.prepare("SELECT * FROM iterations").all() as IterationRow[];
 
-    const states: Board['states'] = {};
+    const states: Board["states"] = {};
     for (const row of stateRows) {
       states[row.state_id] = this.deserializeStateRow(row);
     }
 
-    const iterations: Board['iterations'] = {};
+    const iterations: Board["iterations"] = {};
     for (const row of iterRows) {
       iterations[row.state_id] = {
-        count: row.count,
-        max: row.max,
-        history: JSON.parse(row.history),
         cannot_fix: JSON.parse(row.cannot_fix),
+        count: row.count,
+        history: JSON.parse(row.history),
+        max: row.max,
       };
     }
 
     return {
-      flow: exRow.flow,
-      task: exRow.task,
-      entry: exRow.entry,
-      current_state: exRow.current_state,
       base_commit: exRow.base_commit,
-      started: exRow.started,
-      last_updated: exRow.last_updated,
-      states,
-      iterations,
       blocked: exRow.blocked !== null ? JSON.parse(exRow.blocked) : null,
       concerns: JSON.parse(exRow.concerns),
-      skipped: JSON.parse(exRow.skipped),
+      current_state: exRow.current_state,
+      entry: exRow.entry,
+      flow: exRow.flow,
+      iterations,
+      last_updated: exRow.last_updated,
       metadata: exRow.metadata !== null ? JSON.parse(exRow.metadata) : undefined,
+      skipped: JSON.parse(exRow.skipped),
+      started: exRow.started,
+      states,
+      task: exRow.task,
     };
   }
 
-  // --------------------------------------------------------------------------
   // States
-  // --------------------------------------------------------------------------
 
-  upsertState(stateId: string, fields: Partial<BoardStateEntry> & { status: BoardStateEntry['status']; entries: number }): void {
-    this.stmtUpsertState.run({
+  upsertState(
+    stateId: string,
+    fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
+  ): void {
+    this.stmtUpsertState.run(this.buildUpsertStateParams(stateId, fields));
+  }
+
+  /** Serialize BoardStateEntry fields into the parameter object for stmtUpsertState. */
+  private buildUpsertStateParams(
+    stateId: string,
+    fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
+  ): Record<string, unknown> {
+    const jsonOrNull = (v: unknown) => (v !== undefined ? JSON.stringify(v) : null);
+    return {
+      artifact_history: jsonOrNull(fields.artifact_history),
+      artifacts: jsonOrNull(fields.artifacts),
+      compete_results: jsonOrNull(fields.compete_results),
+      completed_at: fields.completed_at ?? null,
+      discovered_gates: jsonOrNull(fields.discovered_gates),
+      discovered_postconditions: jsonOrNull(fields.discovered_postconditions),
+      entered_at: fields.entered_at ?? null,
+      entries: fields.entries,
+      error: fields.error ?? null,
+      gate_results: jsonOrNull(fields.gate_results),
+      metrics: jsonOrNull(fields.metrics),
+      parallel_results: jsonOrNull(fields.parallel_results),
+      postcondition_results: jsonOrNull(fields.postcondition_results),
+      result: fields.result ?? null,
       state_id: stateId,
       status: fields.status,
-      entries: fields.entries,
-      entered_at: fields.entered_at ?? null,
-      completed_at: fields.completed_at ?? null,
-      result: fields.result ?? null,
-      artifacts: fields.artifacts !== undefined ? JSON.stringify(fields.artifacts) : null,
-      artifact_history: fields.artifact_history !== undefined ? JSON.stringify(fields.artifact_history) : null,
-      error: fields.error ?? null,
-      wave: fields.wave ?? null,
-      wave_total: fields.wave_total ?? null,
-      wave_results: fields.wave_results !== undefined ? JSON.stringify(fields.wave_results) : null,
-      metrics: fields.metrics !== undefined ? JSON.stringify(fields.metrics) : null,
-      gate_results: fields.gate_results !== undefined ? JSON.stringify(fields.gate_results) : null,
-      postcondition_results: fields.postcondition_results !== undefined ? JSON.stringify(fields.postcondition_results) : null,
-      discovered_gates: fields.discovered_gates !== undefined ? JSON.stringify(fields.discovered_gates) : null,
-      discovered_postconditions: fields.discovered_postconditions !== undefined ? JSON.stringify(fields.discovered_postconditions) : null,
-      parallel_results: fields.parallel_results !== undefined ? JSON.stringify(fields.parallel_results) : null,
-      compete_results: fields.compete_results !== undefined ? JSON.stringify(fields.compete_results) : null,
       synthesized: fields.synthesized !== undefined ? (fields.synthesized ? 1 : 0) : null,
-    });
+      wave: fields.wave ?? null,
+      wave_results: jsonOrNull(fields.wave_results),
+      wave_total: fields.wave_total ?? null,
+    };
   }
 
   getState(stateId: string): BoardStateEntry | null {
@@ -706,23 +681,24 @@ export class ExecutionStore {
 
   getAllStates(): Array<BoardStateEntry & { state_id: string }> {
     const rows = this.stmtGetAllStates.all() as ExecutionStateRow[];
-    return rows.map(row => ({
+    return rows.map((row) => ({
       state_id: row.state_id,
       ...this.deserializeStateRow(row),
     }));
   }
 
-  // --------------------------------------------------------------------------
   // Iterations
-  // --------------------------------------------------------------------------
 
-  upsertIteration(stateId: string, fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] }): void {
+  upsertIteration(
+    stateId: string,
+    fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] },
+  ): void {
     this.stmtUpsertIteration.run({
-      state_id: stateId,
-      count: fields.count,
-      max: fields.max,
-      history: JSON.stringify(fields.history),
       cannot_fix: JSON.stringify(fields.cannot_fix ?? []),
+      count: fields.count,
+      history: JSON.stringify(fields.history),
+      max: fields.max,
+      state_id: stateId,
     });
   }
 
@@ -730,16 +706,14 @@ export class ExecutionStore {
     const row = this.stmtGetIteration.get(stateId) as IterationRow | undefined;
     if (!row) return null;
     return {
-      count: row.count,
-      max: row.max,
-      history: JSON.parse(row.history),
       cannot_fix: JSON.parse(row.cannot_fix),
+      count: row.count,
+      history: JSON.parse(row.history),
+      max: row.max,
     };
   }
 
-  // --------------------------------------------------------------------------
   // Iteration results (SQL-based stuck detection — ADR-004)
-  // --------------------------------------------------------------------------
 
   /**
    * Record a raw iteration result for a state.
@@ -753,10 +727,10 @@ export class ExecutionStore {
     data: Record<string, unknown>,
   ): void {
     this.stmtRecordIterationResult.run({
-      state_id: stateId,
-      iteration,
-      status,
       data: JSON.stringify(data),
+      iteration,
+      state_id: stateId,
+      status,
       timestamp: new Date().toISOString(),
     });
   }
@@ -769,7 +743,10 @@ export class ExecutionStore {
    * the `iteration_results` table rather than caller-supplied history arrays.
    */
   isStuck(stateId: string, stuckWhen: StuckWhen): boolean {
-    const rows = this.stmtGetLastTwoIterationResults.all(stateId) as Array<{ status: string; data: string }>;
+    const rows = this.stmtGetLastTwoIterationResults.all(stateId) as Array<{
+      status: string;
+      data: string;
+    }>;
 
     if (rows.length < 2) return false;
 
@@ -780,36 +757,37 @@ export class ExecutionStore {
     const prevData = JSON.parse(prev.data) as Record<string, unknown>;
 
     switch (stuckWhen) {
-      case 'same_violations':
+      case "same_violations":
         return (
-          setsEqual(currData.principle_ids as string[] ?? [], prevData.principle_ids as string[] ?? []) &&
-          setsEqual(currData.file_paths as string[] ?? [], prevData.file_paths as string[] ?? [])
+          setsEqual(
+            (currData.principle_ids as string[]) ?? [],
+            (prevData.principle_ids as string[]) ?? [],
+          ) &&
+          setsEqual(
+            (currData.file_paths as string[]) ?? [],
+            (prevData.file_paths as string[]) ?? [],
+          )
         );
-      case 'same_file_test': {
+      case "same_file_test": {
         const currPairs = (currData.pairs ?? []) as unknown[];
         const prevPairs = (prevData.pairs ?? []) as unknown[];
         return unorderedEqual(currPairs, prevPairs);
       }
-      case 'same_status':
+      case "same_status":
         return curr.status === prev.status;
-      case 'no_progress':
+      case "no_progress":
         return (
           currData.commit_sha === prevData.commit_sha &&
           currData.artifact_count === prevData.artifact_count
         );
-      case 'no_gate_progress':
-        return (
-          currData.gate_output_hash === prevData.gate_output_hash &&
-          !currData.passed
-        );
+      case "no_gate_progress":
+        return currData.gate_output_hash === prevData.gate_output_hash && !currData.passed;
       default:
         return false;
     }
   }
 
-  // --------------------------------------------------------------------------
   // Progress
-  // --------------------------------------------------------------------------
 
   appendProgress(line: string): void {
     this.stmtAppendProgress.run({
@@ -830,22 +808,20 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetProgressAll.all() as ProgressRow[];
     }
-    if (rows.length === 0) return '';
-    return rows.map(r => r.line).join('\n');
+    if (rows.length === 0) return "";
+    return rows.map((r) => r.line).join("\n");
   }
 
-  // --------------------------------------------------------------------------
   // Messages
-  // --------------------------------------------------------------------------
 
   appendMessage(channel: string, sender: string, content: string): MessageOutput {
     const timestamp = new Date().toISOString();
-    const row = this.stmtAppendMessage.get({ channel, sender, content, timestamp }) as MessageRow;
+    const row = this.stmtAppendMessage.get({ channel, content, sender, timestamp }) as MessageRow;
     return {
-      id: row.id,
       channel: row.channel,
-      sender: row.sender,
       content: row.content,
+      id: row.id,
+      sender: row.sender,
       timestamp: row.timestamp,
     };
   }
@@ -857,11 +833,11 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetMessages.all(channel) as MessageRow[];
     }
-    return rows.map(r => ({
-      id: r.id,
+    return rows.map((r) => ({
       channel: r.channel,
-      sender: r.sender,
       content: r.content,
+      id: r.id,
+      sender: r.sender,
       timestamp: r.timestamp,
     }));
   }
@@ -871,17 +847,21 @@ export class ExecutionStore {
     return this.stmtHasMessages.get(channel) !== undefined;
   }
 
-  // --------------------------------------------------------------------------
   // Wave events
-  // --------------------------------------------------------------------------
 
-  postWaveEvent(event: { id: string; type: string; payload: Record<string, unknown>; timestamp: string; status: string }): void {
+  postWaveEvent(event: {
+    id: string;
+    type: string;
+    payload: Record<string, unknown>;
+    timestamp: string;
+    status: string;
+  }): void {
     this.stmtPostWaveEvent.run({
       id: event.id,
-      type: event.type,
       payload: JSON.stringify(event.payload),
-      timestamp: event.timestamp,
       status: event.status,
+      timestamp: event.timestamp,
+      type: event.type,
     });
   }
 
@@ -892,36 +872,37 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetWaveEvents.all() as WaveEventRow[];
     }
-    return rows.map(r => this.deserializeWaveEventRow(r));
+    return rows.map((r) => this.deserializeWaveEventRow(r));
   }
 
   updateWaveEvent(id: string, fields: UpdateWaveEventFields): void {
     const result = this.stmtUpdateWaveEvent.run({
-      id,
-      status: fields.status ?? null,
       applied_at: fields.applied_at ?? null,
-      resolution: fields.resolution !== undefined ? JSON.stringify(fields.resolution) : null,
+      id,
       rejection_reason: fields.rejection_reason ?? null,
+      resolution: fields.resolution !== undefined ? JSON.stringify(fields.resolution) : null,
+      status: fields.status ?? null,
     });
     if (result.changes === 0) {
       throw new Error(`Event ${id} is already not pending — CAS update rejected (no rows changed)`);
     }
   }
 
-  // --------------------------------------------------------------------------
   // Event log
-  // --------------------------------------------------------------------------
 
   appendEvent(type: string, payload: Record<string, unknown>, correlationId?: string): void {
     const validation = validateEventPayload(type, payload);
     if (!validation.valid) {
-      console.warn(`[canon] Event payload validation failed for type "${type}":`, validation.errors);
+      console.warn(
+        `[canon] Event payload validation failed for type "${type}":`,
+        validation.errors,
+      );
     }
     this.stmtAppendEvent.run({
-      type,
-      payload: JSON.stringify(payload),
       correlation_id: correlationId ?? this.getCorrelationId(),
+      payload: JSON.stringify(payload),
       timestamp: new Date().toISOString(),
+      type,
     });
   }
 
@@ -940,7 +921,13 @@ export class ExecutionStore {
     const hasSince = since !== undefined;
     const hasLimit = limit !== undefined;
 
-    let rows: Array<{ id: number; type: string; payload: string; correlation_id: string | null; timestamp: string }>;
+    let rows: Array<{
+      id: number;
+      type: string;
+      payload: string;
+      correlation_id: string | null;
+      timestamp: string;
+    }>;
 
     if (!hasCorrelation && !hasType && !hasSince && !hasLimit) {
       rows = this.stmtGetEventsAll.all() as typeof rows;
@@ -961,11 +948,11 @@ export class ExecutionStore {
         continue;
       }
       events.push({
-        id: r.id,
-        type: r.type,
-        payload,
         correlation_id: r.correlation_id,
+        id: r.id,
+        payload,
         timestamp: r.timestamp,
+        type: r.type,
       });
     }
     return events;
@@ -984,40 +971,42 @@ export class ExecutionStore {
 
   /** Run a WAL passive checkpoint. Safe to call at any time. */
   walCheckpoint(): void {
-    this.db.pragma('wal_checkpoint(PASSIVE)');
+    this.db.pragma("wal_checkpoint(PASSIVE)");
   }
 
-  // --------------------------------------------------------------------------
   // Private helpers — event query builder
-  // --------------------------------------------------------------------------
 
-  private buildEventQuery(
-    options: GetEventsOptions,
-  ): Array<{ id: number; type: string; payload: string; correlation_id: string | null; timestamp: string }> {
+  private buildEventQuery(options: GetEventsOptions): Array<{
+    id: number;
+    type: string;
+    payload: string;
+    correlation_id: string | null;
+    timestamp: string;
+  }> {
     const { correlation_id, type, since, limit } = options;
     const conditions: string[] = [];
     const params: unknown[] = [];
 
     if (correlation_id !== undefined) {
-      conditions.push('correlation_id = ?');
+      conditions.push("correlation_id = ?");
       params.push(correlation_id);
     }
     if (type !== undefined) {
-      conditions.push('type = ?');
+      conditions.push("type = ?");
       params.push(type);
     }
     if (since !== undefined) {
-      conditions.push('timestamp > ?');
+      conditions.push("timestamp > ?");
       params.push(since);
     }
 
-    let sql = 'SELECT * FROM events';
+    let sql = "SELECT * FROM events";
     if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ');
+      sql += ` WHERE ${conditions.join(" AND ")}`;
     }
-    sql += ' ORDER BY id ASC';
+    sql += " ORDER BY id ASC";
     if (limit !== undefined) {
-      sql += ' LIMIT ?';
+      sql += " LIMIT ?";
       params.push(limit);
     }
 
@@ -1030,9 +1019,7 @@ export class ExecutionStore {
     }>;
   }
 
-  // --------------------------------------------------------------------------
   // Transaction
-  // --------------------------------------------------------------------------
 
   /**
    * Wrap a function in a SQLite transaction.
@@ -1042,68 +1029,62 @@ export class ExecutionStore {
     return this.db.transaction(fn)();
   }
 
-  // --------------------------------------------------------------------------
   // Lifecycle
-  // --------------------------------------------------------------------------
 
   close(): void {
     this.db.close();
   }
 
-  // --------------------------------------------------------------------------
   // Private helpers — deserialization
-  // --------------------------------------------------------------------------
 
   private deserializeExecutionRow(row: ExecutionRow) {
     return {
       ...row,
       blocked: row.blocked !== null ? JSON.parse(row.blocked) : null,
       concerns: JSON.parse(row.concerns),
-      skipped: JSON.parse(row.skipped),
       metadata: row.metadata !== null ? JSON.parse(row.metadata) : undefined,
+      skipped: JSON.parse(row.skipped),
     };
   }
 
   private deserializeStateRow(row: ExecutionStateRow): BoardStateEntry {
     return {
-      status: row.status as BoardStateEntry['status'],
-      entries: row.entries,
-      entered_at: row.entered_at ?? undefined,
-      completed_at: row.completed_at ?? undefined,
-      result: row.result ?? undefined,
-      artifacts: parseJson<string[]>(row.artifacts),
       artifact_history: parseJson(row.artifact_history),
-      error: row.error ?? undefined,
-      wave: row.wave ?? undefined,
-      wave_total: row.wave_total ?? undefined,
-      wave_results: parseJson(row.wave_results),
-      metrics: parseJson(row.metrics),
-      gate_results: parseJson(row.gate_results),
-      postcondition_results: parseJson(row.postcondition_results),
+      artifacts: parseJson<string[]>(row.artifacts),
+      compete_results: parseJson(row.compete_results),
+      completed_at: row.completed_at ?? undefined,
       discovered_gates: parseJson(row.discovered_gates),
       discovered_postconditions: parseJson(row.discovered_postconditions),
+      entered_at: row.entered_at ?? undefined,
+      entries: row.entries,
+      error: row.error ?? undefined,
+      gate_results: parseJson(row.gate_results),
+      metrics: parseJson(row.metrics),
       parallel_results: parseJson(row.parallel_results),
-      compete_results: parseJson(row.compete_results),
+      postcondition_results: parseJson(row.postcondition_results),
+      result: row.result ?? undefined,
+      status: row.status as BoardStateEntry["status"],
       synthesized: row.synthesized !== null ? Boolean(row.synthesized) : undefined,
+      wave: row.wave ?? undefined,
+      wave_results: parseJson(row.wave_results),
+      wave_total: row.wave_total ?? undefined,
     };
   }
 
   private deserializeWaveEventRow(row: WaveEventRow): WaveEvent {
     return {
-      id: row.id,
-      type: row.type as WaveEvent['type'],
-      payload: JSON.parse(row.payload),
-      timestamp: row.timestamp,
-      status: row.status as WaveEvent['status'],
       applied_at: row.applied_at ?? undefined,
-      resolution: row.resolution !== null ? JSON.parse(row.resolution) : undefined,
+      id: row.id,
+      payload: JSON.parse(row.payload),
       rejection_reason: row.rejection_reason ?? undefined,
+      resolution: row.resolution !== null ? JSON.parse(row.resolution) : undefined,
+      status: row.status as WaveEvent["status"],
+      timestamp: row.timestamp,
+      type: row.type as WaveEvent["type"],
     };
   }
 
-  // --------------------------------------------------------------------------
   // Targeted metrics update (ADR-003a agent performance metrics)
-  // --------------------------------------------------------------------------
 
   /**
    * Merge the provided metrics fields into the existing metrics JSON for a state.
@@ -1126,9 +1107,7 @@ export class ExecutionStore {
     return true;
   }
 
-  // --------------------------------------------------------------------------
   // Cache prefix (ADR-006a)
-  // --------------------------------------------------------------------------
 
   /**
    * Returns the shared prompt cache prefix for this workspace.
@@ -1137,7 +1116,7 @@ export class ExecutionStore {
    */
   getCachePrefix(): string {
     const row = this.stmtGetCachePrefix.get() as { cache_prefix: string } | undefined;
-    return row?.cache_prefix ?? '';
+    return row?.cache_prefix ?? "";
   }
 
   /**
@@ -1149,9 +1128,7 @@ export class ExecutionStore {
     this.stmtSetCachePrefix.run(prefix);
   }
 
-  // --------------------------------------------------------------------------
   // Transcript path (ADR-015)
-  // --------------------------------------------------------------------------
 
   /**
    * Store the transcript file path for a state.
@@ -1169,13 +1146,13 @@ export class ExecutionStore {
    * Errors-are-values: never throws for expected conditions.
    */
   getTranscriptPath(stateId: string): string | null {
-    const row = this.stmtGetTranscriptPath.get(stateId) as { transcript_path: string | null } | undefined;
+    const row = this.stmtGetTranscriptPath.get(stateId) as
+      | { transcript_path: string | null }
+      | undefined;
     return row?.transcript_path ?? null;
   }
 
-  // --------------------------------------------------------------------------
   // Agent session (ADR-009a)
-  // --------------------------------------------------------------------------
 
   /**
    * Record the agent session ID and update the last activity timestamp.
@@ -1192,11 +1169,15 @@ export class ExecutionStore {
    * Callers use last_agent_activity to determine whether the session has expired
    * (idle > 600000ms = 10 minutes) before attempting SendMessage continuation.
    */
-  getAgentSession(stateId: string): { agent_session_id: string; last_agent_activity: string } | null {
-    const row = this.stmtGetAgentSession.get(stateId) as {
-      agent_session_id: string | null;
-      last_agent_activity: string | null;
-    } | undefined;
+  getAgentSession(
+    stateId: string,
+  ): { agent_session_id: string; last_agent_activity: string } | null {
+    const row = this.stmtGetAgentSession.get(stateId) as
+      | {
+          agent_session_id: string | null;
+          last_agent_activity: string | null;
+        }
+      | undefined;
     if (!row || row.agent_session_id === null || row.last_agent_activity === null) {
       return null;
     }
@@ -1207,9 +1188,7 @@ export class ExecutionStore {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Private helpers — stuck detection
-// ---------------------------------------------------------------------------
 
 function setsEqual(a: string[], b: string[]): boolean {
   const setA = new Set(a);
@@ -1224,15 +1203,14 @@ function setsEqual(a: string[], b: string[]): boolean {
 /** Order-insensitive comparison for arrays of objects (e.g. file+test pairs). */
 function unorderedEqual(a: unknown[], b: unknown[]): boolean {
   if (a.length !== b.length) return false;
-  const serialize = (item: unknown) => JSON.stringify(item, Object.keys(item as Record<string, unknown>).sort());
+  const serialize = (item: unknown) =>
+    JSON.stringify(item, Object.keys(item as Record<string, unknown>).sort());
   const sortedA = a.map(serialize).sort();
   const sortedB = b.map(serialize).sort();
   return sortedA.every((val, i) => val === sortedB[i]);
 }
 
-// ---------------------------------------------------------------------------
 // Factory — workspace-scoped cache
-// ---------------------------------------------------------------------------
 
 /** Cache keyed by absolute workspace path. */
 const storeCache = new Map<string, ExecutionStore>();
@@ -1251,15 +1229,11 @@ const storeCache = new Map<string, ExecutionStore>();
  * the `.canon/workspaces/` segment in their paths.
  */
 export function assertWorkspacePath(workspace: string): void {
-  if (
-    process.env.CANON_SKIP_WORKSPACE_VALIDATION !== 'true' &&
-    !process.env.VITEST
-  ) {
+  if (process.env.CANON_SKIP_WORKSPACE_VALIDATION !== "true" && !process.env.VITEST) {
     // Use the raw string for the segment check so Windows-style paths work
     // cross-platform (resolve() would rewrite them on macOS).
     const hasValidSegment =
-      workspace.includes('.canon/workspaces/') ||
-      workspace.includes('.canon\\workspaces\\');
+      workspace.includes(".canon/workspaces/") || workspace.includes(".canon\\workspaces\\");
     if (!hasValidSegment) {
       throw new Error(
         `Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`,
@@ -1293,7 +1267,11 @@ export function getExecutionStore(workspace: string): ExecutionStore {
  */
 export function clearStoreCache(): void {
   for (const store of storeCache.values()) {
-    try { store.close(); } catch { /* ignore close errors */ }
+    try {
+      store.close();
+    } catch {
+      /* ignore close errors */
+    }
   }
   storeCache.clear();
 }

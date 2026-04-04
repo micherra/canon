@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildLayerInferrer, deriveSourceDirsFromLayers, loadConfigNumber } from "../utils/config.ts";
+import {
+  buildLayerInferrer,
+  deriveSourceDirsFromLayers,
+  loadConfigNumber,
+} from "../utils/config.ts";
 
 let tmpDir: string;
 
@@ -89,13 +93,13 @@ describe("buildLayerInferrer", () => {
   describe("mixed config with glob and simple patterns", () => {
     it("handles a mix of glob and simple patterns", () => {
       const infer = buildLayerInferrer({
-        "mcp-server": ["mcp-server/src/**"],
-        "dashboard-ui": ["mcp-server/ui/**"],
-        api: ["api", "routes"],
         agents: ["agents/**"],
+        api: ["api", "routes"],
+        "dashboard-ui": ["mcp-server/src/ui/**"],
+        "mcp-server": ["mcp-server/src/**"],
       });
       expect(infer("mcp-server/src/tools/codebase-graph.ts")).toBe("mcp-server");
-      expect(infer("mcp-server/ui/PrImpact.svelte")).toBe("dashboard-ui");
+      expect(infer("mcp-server/src/ui/PrReview.svelte")).toBe("dashboard-ui");
       expect(infer("src/api/handler.ts")).toBe("api");
       expect(infer("agents/canon-implementor.md")).toBe("agents");
       expect(infer("unmatched/file.ts")).toBe("unknown");
@@ -107,8 +111,8 @@ describe("deriveSourceDirsFromLayers", () => {
   it("returns directories from rooted glob patterns", async () => {
     await writeConfig({
       layers: {
-        "mcp-server": ["mcp-server/src/**"],
         agents: ["agents/**"],
+        "mcp-server": ["mcp-server/src/**"],
       },
     });
     const result = await deriveSourceDirsFromLayers(tmpDir);
@@ -164,8 +168,8 @@ describe("deriveSourceDirsFromLayers", () => {
   it("handles mixed rooted globs and plain segments, returns only rooted", async () => {
     await writeConfig({
       layers: {
-        "mcp-server": ["mcp-server/src/**"],
         api: ["api", "routes"],
+        "mcp-server": ["mcp-server/src/**"],
       },
     });
     const result = await deriveSourceDirsFromLayers(tmpDir);

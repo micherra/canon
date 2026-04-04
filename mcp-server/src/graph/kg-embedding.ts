@@ -10,15 +10,22 @@
  * should catch errors and return an appropriate ToolResult.
  */
 
-import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+import { type FeatureExtractionPipeline, pipeline } from "@huggingface/transformers";
 import { EMBEDDING_BATCH_SIZE, EMBEDDING_MODEL } from "../constants.ts";
 
-// ---------------------------------------------------------------------------
 // Pipeline factory — injectable for testing
-// ---------------------------------------------------------------------------
 
 /** Quantization dtype literal accepted by @huggingface/transformers pipeline options */
-type QuantizationDtype = "auto" | "fp32" | "fp16" | "q8" | "int8" | "uint8" | "q4" | "bnb4" | "q4f16";
+type QuantizationDtype =
+  | "auto"
+  | "fp32"
+  | "fp16"
+  | "q8"
+  | "int8"
+  | "uint8"
+  | "q4"
+  | "bnb4"
+  | "q4f16";
 
 type PipelineFactory = (
   task: "feature-extraction",
@@ -29,12 +36,10 @@ type PipelineFactory = (
 const defaultPipelineFactory: PipelineFactory = (task, model, options) =>
   // The @huggingface/transformers pipeline() overloads produce a union type too complex for
   // TypeScript to represent directly. Cast via unknown to extract the concrete type.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: pipeline() overloads produce an unrepresentable union
   pipeline(task as any, model, options as any) as unknown as Promise<FeatureExtractionPipeline>;
 
-// ---------------------------------------------------------------------------
 // EmbeddingService
-// ---------------------------------------------------------------------------
 
 export class EmbeddingService {
   private pipe: FeatureExtractionPipeline | null = null;
@@ -72,7 +77,8 @@ export class EmbeddingService {
     const results: Float32Array[] = [];
     for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
-      const output = await this.pipe!(batch, { pooling: "mean", normalize: true });
+      // biome-ignore lint/performance/noAwaitInLoops: sequential batching is intentional to cap peak memory usage
+      const output = await this.pipe!(batch, { normalize: true, pooling: "mean" });
       // output is a Tensor with dims [batch_size, EMBEDDING_DIM].
       // Use _getitem(j) to extract the j-th row as a 1-D Tensor.
       // .data returns the underlying TypedArray for that row.

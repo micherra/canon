@@ -28,16 +28,16 @@ import type { PromptContext } from "./types.ts";
 export const PIPELINE_ALLOWED_VARIABLES: Set<string> = new Set([
   ...RUNTIME_VARIABLES,
   // New variables populated by pipeline stages
-  "enrichment",         // Spawn enrichment context injection
+  "enrichment", // Spawn enrichment context injection
   // Additional runtime variables not in RUNTIME_VARIABLES
-  "item",          // Exact ${item} (covered by item.* pattern too, but be explicit)
-  "review_scope",  // Review scope filter
-  "open_questions",// Consultation open questions
-  "directory",     // Adopt flow directory
-  "severity_filter",// Adopt flow severity filter
-  "top_n",         // Adopt flow top N
-  "user_write_tests",// Verify flow
-  "write_tests",   // Verify flow
+  "item", // Exact ${item} (covered by item.* pattern too, but be explicit)
+  "review_scope", // Review scope filter
+  "open_questions", // Consultation open questions
+  "directory", // Adopt flow directory
+  "severity_filter", // Adopt flow severity filter
+  "top_n", // Adopt flow top N
+  "user_write_tests", // Verify flow
+  "write_tests", // Verify flow
 ]);
 
 /**
@@ -66,11 +66,12 @@ export async function validatePrompts(ctx: PromptContext): Promise<PromptContext
   const errorWarnings: string[] = [];
 
   // Determine which texts to scan
-  const textsToScan: string[] = ctx.prompts.length > 0
-    ? ctx.prompts.map((p) => p.prompt)
-    : ctx.basePrompt
-    ? [ctx.basePrompt]
-    : [];
+  const textsToScan: string[] =
+    ctx.prompts.length > 0
+      ? ctx.prompts.map((p) => p.prompt)
+      : ctx.basePrompt
+        ? [ctx.basePrompt]
+        : [];
 
   for (const text of textsToScan) {
     scanForUnresolved(text, stateId, errorWarnings);
@@ -95,24 +96,25 @@ function scanForUnresolved(text: string, stateId: string, out: string[]): void {
   // Match ${...} patterns — use a regex that captures the variable name
   // We need to check the character before the match to detect escaping
   const pattern = /\$\{([^}]+)\}/g;
-  let match: RegExpExecArray | null;
+  let match = pattern.exec(text);
 
-  while ((match = pattern.exec(text)) !== null) {
+  while (match !== null) {
     const varName = match[1];
     const matchStart = match.index;
 
     // Skip escaped patterns — character before ${ is a backslash
     if (matchStart > 0 && text[matchStart - 1] === "\\") {
+      match = pattern.exec(text);
       continue;
     }
 
     // Skip allowed/known variables
     if (isAllowed(varName)) {
+      match = pattern.exec(text);
       continue;
     }
 
-    out.push(
-      `ERROR: unresolved variable \${${varName}} in prompt for state "${stateId}"`,
-    );
+    out.push(`ERROR: unresolved variable \${${varName}} in prompt for state "${stateId}"`);
+    match = pattern.exec(text);
   }
 }

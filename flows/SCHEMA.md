@@ -748,7 +748,7 @@ design:
 When `compete: "auto"`, the orchestrator decides whether to compete based on the researcher's ambiguity signal.
 
 **Orchestrator protocol for competitive states:**
-1. `enter_and_prepare_state` returns `compete` config in the result
+1. `drive_flow` returns a `SpawnRequest` with `compete` config included
 2. Expand the base prompt into N competitor prompts (each gets a team label and optional lens)
 3. Spawn all N competitors concurrently
 4. Collect all outputs

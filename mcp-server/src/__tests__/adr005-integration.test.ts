@@ -21,64 +21,39 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import type { EntityRow, FileRow } from "../graph/kg-types.ts";
-import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
+import type { FileRow } from "../graph/kg-types.ts";
+import { getFileContext } from "../tools/get-file-context.ts";
+import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 import {
   buildBlastRadiusByFile,
   detectSubsystems,
   type PrImpactOutput,
 } from "../tools/show-pr-impact.ts";
-import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
-import { getFileContext } from "../tools/get-file-context.ts";
 import { storeSummaries } from "../tools/store-summaries.ts";
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
 
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {
-    path: "src/A.ts",
-    mtime_ms: 1700000000000,
     content_hash: "abc123",
     language: "typescript",
-    layer: "domain",
     last_indexed_at: Date.now(),
+    layer: "domain",
+    mtime_ms: 1700000000000,
+    path: "src/A.ts",
     ...overrides,
   };
 }
 
-function makeEntityRow(
-  fileId: number,
-  overrides: Partial<Omit<EntityRow, "entity_id" | "file_id">> = {},
-): Omit<EntityRow, "entity_id"> {
-  return {
-    file_id: fileId,
-    name: "myFunc",
-    qualified_name: "src/A.ts::myFunc",
-    kind: "function",
-    line_start: 1,
-    line_end: 10,
-    is_exported: false,
-    is_default_export: false,
-    signature: null,
-    metadata: null,
-    ...overrides,
-  };
-}
-
-// ===========================================================================
 // 1. KgQuery.getFileMetrics with changedFiles option
 //
 // Gap declared in adr005-01: "getFileMetrics with changedFiles option — impact_score
 // changes with isChanged=true, only tested at structural level."
-// ===========================================================================
 
 describe("KgQuery.getFileMetrics with changedFiles option", () => {
   let db: Database.Database;
@@ -96,16 +71,16 @@ describe("KgQuery.getFileMetrics with changedFiles option", () => {
   });
 
   it("impact_score is higher when file is in changedFiles vs not changed", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
     // Give A some in_degree by adding a file that imports it
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileA.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: "import A from './A'",
       relation: null,
+      source_file_id: fileB.file_id!,
+      target_file_id: fileA.file_id!,
     });
 
     const notChanged = query.getFileMetrics("src/A.ts", {
@@ -126,14 +101,14 @@ describe("KgQuery.getFileMetrics with changedFiles option", () => {
   });
 
   it("impact_score is 0 for isolated file with no violations and not changed", () => {
-    store.upsertFile(makeFileRow({ path: "src/isolated.ts", layer: "unknown" }));
+    store.upsertFile(makeFileRow({ layer: "unknown", path: "src/isolated.ts" }));
     const metrics = query.getFileMetrics("src/isolated.ts");
     expect(metrics).not.toBeNull();
     expect(metrics!.impact_score).toBe(0);
   });
 
   it("is_hub reflects hubPaths option correctly", () => {
-    store.upsertFile(makeFileRow({ path: "src/hub.ts", layer: "shared" }));
+    store.upsertFile(makeFileRow({ layer: "shared", path: "src/hub.ts" }));
 
     const notHub = query.getFileMetrics("src/hub.ts", {
       hubPaths: new Set([]),
@@ -147,7 +122,7 @@ describe("KgQuery.getFileMetrics with changedFiles option", () => {
   });
 
   it("in_cycle and cycle_peers reflect cycleMemberPaths option", () => {
-    store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
+    store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
 
     const notCycle = query.getFileMetrics("src/A.ts", {
       cycleMemberPaths: new Map(),
@@ -163,13 +138,11 @@ describe("KgQuery.getFileMetrics with changedFiles option", () => {
   });
 });
 
-// ===========================================================================
 // 2. KgQuery.getSubgraph with duplicate edges
 //
 // Gap declared in adr005-01: "getSubgraph with duplicate edges — not tested."
 // Current implementation does not deduplicate — this test verifies the behavior
 // and that it doesn't throw.
-// ===========================================================================
 
 describe("KgQuery.getSubgraph with duplicate edges", () => {
   let db: Database.Database;
@@ -187,14 +160,35 @@ describe("KgQuery.getSubgraph with duplicate edges", () => {
   });
 
   it("returns nodes correctly even when the same file appears in multiple edge rows", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
+    const fileC = store.upsertFile(makeFileRow({ layer: "shared", path: "src/C.ts" }));
 
     // A → B and A → C and B → C (C appears in two edges)
-    store.insertFileEdge({ source_file_id: fileA.file_id!, target_file_id: fileB.file_id!, edge_type: "imports", confidence: 1, evidence: "", relation: null });
-    store.insertFileEdge({ source_file_id: fileA.file_id!, target_file_id: fileC.file_id!, edge_type: "imports", confidence: 1, evidence: "", relation: null });
-    store.insertFileEdge({ source_file_id: fileB.file_id!, target_file_id: fileC.file_id!, edge_type: "imports", confidence: 1, evidence: "", relation: null });
+    store.insertFileEdge({
+      confidence: 1,
+      edge_type: "imports",
+      evidence: "",
+      relation: null,
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
+    });
+    store.insertFileEdge({
+      confidence: 1,
+      edge_type: "imports",
+      evidence: "",
+      relation: null,
+      source_file_id: fileA.file_id!,
+      target_file_id: fileC.file_id!,
+    });
+    store.insertFileEdge({
+      confidence: 1,
+      edge_type: "imports",
+      evidence: "",
+      relation: null,
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
+    });
 
     // Seed with A — subgraph includes A's neighbors (B and C)
     const subgraph = query.getSubgraph(["src/A.ts"]);
@@ -212,14 +206,23 @@ describe("KgQuery.getSubgraph with duplicate edges", () => {
     // Edges may include duplicates (not deduplicated per spec), but must not throw
     expect(subgraph.edges.length).toBeGreaterThan(0);
 
-    void fileA; void fileB; void fileC;
+    void fileA;
+    void fileB;
+    void fileC;
   });
 
   it("seed file with no edges is returned as isolated node", () => {
-    store.upsertFile(makeFileRow({ path: "src/orphan.ts", layer: "domain" }));
+    store.upsertFile(makeFileRow({ layer: "domain", path: "src/orphan.ts" }));
     // Insert another file but no edges involving orphan
-    store.upsertFile(makeFileRow({ path: "src/other.ts", layer: "domain" }));
-    store.insertFileEdge({ source_file_id: 2, target_file_id: 2, edge_type: "imports", confidence: 1, evidence: "", relation: null });
+    store.upsertFile(makeFileRow({ layer: "domain", path: "src/other.ts" }));
+    store.insertFileEdge({
+      confidence: 1,
+      edge_type: "imports",
+      evidence: "",
+      relation: null,
+      source_file_id: 2,
+      target_file_id: 2,
+    });
 
     const subgraph = query.getSubgraph(["src/orphan.ts"]);
     expect(subgraph.nodes).toHaveLength(1);
@@ -228,13 +231,11 @@ describe("KgQuery.getSubgraph with duplicate edges", () => {
   });
 });
 
-// ===========================================================================
 // 3. KgQuery.getKgFreshnessMs — MIN semantics (oldest file drives staleness)
 //
 // Gap: implementor tests test null and "reasonable ms value" but do not verify
 // the MIN(last_indexed_at) semantics — that the oldest timestamp determines
 // freshness, not the newest.
-// ===========================================================================
 
 describe("KgQuery.getKgFreshnessMs — MIN semantics", () => {
   let db: Database.Database;
@@ -257,17 +258,21 @@ describe("KgQuery.getKgFreshnessMs — MIN semantics", () => {
     const oneDayAgo = now - 86_400_000;
 
     // File A was indexed 1 day ago (oldest)
-    store.upsertFile(makeFileRow({
-      path: "src/old.ts",
-      last_indexed_at: oneDayAgo,
-      content_hash: "old",
-    }));
+    store.upsertFile(
+      makeFileRow({
+        content_hash: "old",
+        last_indexed_at: oneDayAgo,
+        path: "src/old.ts",
+      }),
+    );
     // File B was indexed 1 hour ago (newer)
-    store.upsertFile(makeFileRow({
-      path: "src/new.ts",
-      last_indexed_at: oneHourAgo,
-      content_hash: "new",
-    }));
+    store.upsertFile(
+      makeFileRow({
+        content_hash: "new",
+        last_indexed_at: oneHourAgo,
+        path: "src/new.ts",
+      }),
+    );
 
     const freshnessMs = query.getKgFreshnessMs();
     expect(freshnessMs).not.toBeNull();
@@ -283,20 +288,18 @@ describe("KgQuery.getKgFreshnessMs — MIN semantics", () => {
   });
 
   it("returns a positive value when at least one file is indexed", () => {
-    store.upsertFile(makeFileRow({ path: "src/A.ts", last_indexed_at: Date.now() - 1000 }));
+    store.upsertFile(makeFileRow({ last_indexed_at: Date.now() - 1000, path: "src/A.ts" }));
     const ms = query.getKgFreshnessMs();
     expect(ms).not.toBeNull();
     expect(ms!).toBeGreaterThan(0);
   });
 });
 
-// ===========================================================================
 // 4. computeFileInsightMaps hub threshold boundary (exactly 10 files)
 //
 // Gap declared in adr005-01: "computeFileInsightMaps with more than 10 files —
 // hub threshold behavior tested with 12 files; edge cases with exactly 10 not
 // exhaustively tested."
-// ===========================================================================
 
 describe("computeFileInsightMaps — hub threshold boundary at exactly 10 files", () => {
   let db: Database.Database;
@@ -315,19 +318,21 @@ describe("computeFileInsightMaps — hub threshold boundary at exactly 10 files"
     // Create 10 files all with equal total degree (1 each)
     const files = [];
     for (let i = 0; i < 10; i++) {
-      const f = store.upsertFile(makeFileRow({ path: `src/file${i}.ts`, content_hash: `hash${i}` }));
+      const f = store.upsertFile(
+        makeFileRow({ content_hash: `hash${i}`, path: `src/file${i}.ts` }),
+      );
       files.push(f);
     }
 
     // Create a chain: file0 → file1 → ... → file9 (each has in_degree=1 or out_degree=1)
     for (let i = 0; i < 9; i++) {
       store.insertFileEdge({
-        source_file_id: files[i]!.file_id!,
-        target_file_id: files[i + 1]!.file_id!,
-        edge_type: "imports",
         confidence: 1,
+        edge_type: "imports",
         evidence: "",
         relation: null,
+        source_file_id: files[i]!.file_id!,
+        target_file_id: files[i + 1]!.file_id!,
       });
     }
 
@@ -340,7 +345,9 @@ describe("computeFileInsightMaps — hub threshold boundary at exactly 10 files"
     // Create 11 files, first 10 have high degree (out_degree=2), last one has degree=0
     const files = [];
     for (let i = 0; i < 11; i++) {
-      const f = store.upsertFile(makeFileRow({ path: `src/file${i}.ts`, content_hash: `hash${i}` }));
+      const f = store.upsertFile(
+        makeFileRow({ content_hash: `hash${i}`, path: `src/file${i}.ts` }),
+      );
       files.push(f);
     }
 
@@ -350,15 +357,17 @@ describe("computeFileInsightMaps — hub threshold boundary at exactly 10 files"
     // and a common source imports them to give them in_degree
     // Simpler: give files 0–9 each a distinct target import so they have out_degree=1
     // file10 has no edges at all → total_degree=0 → should not be in top 10
-    const sharedTarget = store.upsertFile(makeFileRow({ path: "src/shared.ts", content_hash: "shared" }));
+    const sharedTarget = store.upsertFile(
+      makeFileRow({ content_hash: "shared", path: "src/shared.ts" }),
+    );
     for (let i = 0; i < 10; i++) {
       store.insertFileEdge({
-        source_file_id: files[i]!.file_id!,
-        target_file_id: sharedTarget.file_id!,
-        edge_type: "imports",
         confidence: 1,
+        edge_type: "imports",
         evidence: "",
         relation: null,
+        source_file_id: files[i]!.file_id!,
+        target_file_id: sharedTarget.file_id!,
       });
     }
     // file10 has zero edges
@@ -372,13 +381,11 @@ describe("computeFileInsightMaps — hub threshold boundary at exactly 10 files"
   });
 });
 
-// ===========================================================================
 // 5. kg-blast-radius — empty result when no file_edges (no JSON fallback)
 //
 // Gap declared in adr005-04: verified by absence of readFileSync calls; but
 // no explicit test that computeUnifiedBlastRadius returns empty gracefully
 // when a file has no edges in the DB.
-// ===========================================================================
 
 describe("computeUnifiedBlastRadius — empty result when no file_edges", () => {
   let db: Database.Database;
@@ -394,7 +401,7 @@ describe("computeUnifiedBlastRadius — empty result when no file_edges", () => 
   });
 
   it("returns report with empty affected array when file exists but has no edges", () => {
-    store.upsertFile(makeFileRow({ path: "src/isolated.ts", layer: "domain" }));
+    store.upsertFile(makeFileRow({ layer: "domain", path: "src/isolated.ts" }));
 
     const report = computeUnifiedBlastRadius(db, "src/isolated.ts", {});
     expect(report).not.toBeNull();
@@ -415,15 +422,15 @@ describe("computeUnifiedBlastRadius — empty result when no file_edges", () => 
   });
 
   it("returns report for file with edges in DB — no JSON fallback needed", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "api" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "api", path: "src/B.ts" }));
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileA.file_id!,
-      edge_type: "imports",
       confidence: 1,
+      edge_type: "imports",
       evidence: "",
       relation: null,
+      source_file_id: fileB.file_id!,
+      target_file_id: fileA.file_id!,
     });
 
     const report = computeUnifiedBlastRadius(db, "src/A.ts", {});
@@ -433,31 +440,30 @@ describe("computeUnifiedBlastRadius — empty result when no file_edges", () => 
     const affectedPaths = report!.affected.map((f) => f.path);
     expect(affectedPaths).toContain("src/B.ts");
 
-    void fileA; void fileB;
+    void fileA;
+    void fileB;
   });
 });
 
-// ===========================================================================
 // 6. classifyFile — needs-attention via high in_degree + changed (risk: adr005-03)
 //
 // Gap: adr005-03 notes no test for "layer_violation_count > 0 shape" and only
 // structural-level testing for the changed + high in_degree classifyFile path.
-// ===========================================================================
 
 describe("classifyFile — needs-attention via high in_degree + changed", () => {
   it("returns needs-attention when in_degree >= 5 and file is changed", () => {
     const result = classifyFile({
-      path: "src/core.ts",
       layer: "domain",
-      status: "modified",
-      priority_score: 20,
+      path: "src/core.ts",
       priority_factors: {
         in_degree: 6,
-        violation_count: 0,
         is_changed: true,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
+      priority_score: 20,
+      status: "modified",
     });
     expect(result.bucket).toBe("needs-attention");
     expect(result.reason).toMatch(/high impact/i);
@@ -466,17 +472,17 @@ describe("classifyFile — needs-attention via high in_degree + changed", () => 
 
   it("returns worth-a-look when in_degree >= 5 but file is NOT changed", () => {
     const result = classifyFile({
-      path: "src/core.ts",
       layer: "domain",
-      status: "modified",
-      priority_score: 20,
+      path: "src/core.ts",
       priority_factors: {
         in_degree: 6,
-        violation_count: 0,
         is_changed: false,
         layer: "domain",
         layer_centrality: 2,
+        violation_count: 0,
       },
+      priority_score: 20,
+      status: "modified",
     });
     // Not changed → cannot trigger the high-impact needs-attention rule
     // But priority_score=20 >= 5 → worth-a-look
@@ -485,17 +491,17 @@ describe("classifyFile — needs-attention via high in_degree + changed", () => 
 
   it("returns needs-attention when violation_count > 0 regardless of in_degree", () => {
     const result = classifyFile({
-      path: "src/violator.ts",
       layer: "api",
-      status: "added",
-      priority_score: 0,
+      path: "src/violator.ts",
       priority_factors: {
         in_degree: 0,
-        violation_count: 2,
         is_changed: false,
         layer: "api",
         layer_centrality: 1,
+        violation_count: 2,
       },
+      priority_score: 0,
+      status: "added",
     });
     expect(result.bucket).toBe("needs-attention");
     expect(result.reason).toContain("2 violations");
@@ -503,55 +509,53 @@ describe("classifyFile — needs-attention via high in_degree + changed", () => 
 
   it("returns low-risk when priority_score < 5 and no violations and not a high-impact changed file", () => {
     const result = classifyFile({
-      path: "src/simple.ts",
       layer: "ui",
-      status: "added",
-      priority_score: 0,
+      path: "src/simple.ts",
       priority_factors: {
         in_degree: 0,
-        violation_count: 0,
         is_changed: true,
         layer: "ui",
         layer_centrality: 0,
+        violation_count: 0,
       },
+      priority_score: 0,
+      status: "added",
     });
     expect(result.bucket).toBe("low-risk");
   });
 });
 
-// ===========================================================================
 // 7. generateNarrative — violation fallback via DriftStore violations
 //
 // Gap: adr005-04 notes that generateNarrative was updated to use
 // f.violations?.length as fallback. This path isn't explicitly integration-tested.
-// ===========================================================================
 
 describe("generateNarrative — violation count fallback via f.violations", () => {
   it("counts violations from priority_factors.violation_count when available", () => {
     const files = [
       {
-        path: "src/a.ts",
         layer: "api",
-        status: "modified" as const,
-        priority_score: 5,
+        path: "src/a.ts",
         priority_factors: {
           in_degree: 1,
-          violation_count: 3,
           is_changed: true,
           layer: "api",
           layer_centrality: 1,
+          violation_count: 3,
         },
+        priority_score: 5,
+        status: "modified" as const,
       },
     ];
-    const narrative = generateNarrative(files, [{ name: "api", file_count: 1 }]);
+    const narrative = generateNarrative(files, [{ file_count: 1, name: "api" }]);
     expect(narrative).toContain("3 principle violations");
   });
 
   it("falls back to f.violations.length when priority_factors absent", () => {
     const files = [
       {
-        path: "src/a.ts",
         layer: "api",
+        path: "src/a.ts",
         status: "modified" as const,
         violations: [
           { principle_id: "P1", severity: "rule" as const },
@@ -559,30 +563,28 @@ describe("generateNarrative — violation count fallback via f.violations", () =
         ],
       },
     ];
-    const narrative = generateNarrative(files, [{ name: "api", file_count: 1 }]);
+    const narrative = generateNarrative(files, [{ file_count: 1, name: "api" }]);
     expect(narrative).toContain("2 principle violations");
   });
 
   it("produces no violation sentence when no violations exist", () => {
     const files = [
       {
-        path: "src/clean.ts",
         layer: "domain",
+        path: "src/clean.ts",
         status: "added" as const,
         violations: [],
       },
     ];
-    const narrative = generateNarrative(files, [{ name: "domain", file_count: 1 }]);
+    const narrative = generateNarrative(files, [{ file_count: 1, name: "domain" }]);
     expect(narrative).not.toContain("violation");
   });
 });
 
-// ===========================================================================
 // 8. show-pr-impact helpers — detectSubsystems and buildBlastRadiusByFile
 //
 // Gap: adr005-04 implementor notes these are tested via unit mocks. These are
 // integration tests that verify the pure function contracts directly.
-// ===========================================================================
 
 describe("detectSubsystems", () => {
   it("detects a new subsystem when 3+ added files share a 2-segment prefix", () => {
@@ -665,11 +667,16 @@ describe("buildBlastRadiusByFile", () => {
 
   it("groups affected entries by file_path and returns top 15 by dep_count", () => {
     const affected: NonNullable<PrImpactOutput["blastRadius"]>["affected"] = [
-      { entity_name: "funcA", entity_kind: "function", file_path: "src/A.ts", depth: 1 },
-      { entity_name: "funcB", entity_kind: "function", file_path: "src/A.ts", depth: 1 },
-      { entity_name: "funcC", entity_kind: "function", file_path: "src/B.ts", depth: 2 },
+      { depth: 1, entity_kind: "function", entity_name: "funcA", file_path: "src/A.ts" },
+      { depth: 1, entity_kind: "function", entity_name: "funcB", file_path: "src/A.ts" },
+      { depth: 2, entity_kind: "function", entity_name: "funcC", file_path: "src/B.ts" },
     ];
-    const result = buildBlastRadiusByFile({ total_affected: 3, affected_files: 2, by_depth: { 1: 2, 2: 1 }, affected });
+    const result = buildBlastRadiusByFile({
+      affected,
+      affected_files: 2,
+      by_depth: { 1: 2, 2: 1 },
+      total_affected: 3,
+    });
     expect(result).toHaveLength(2);
     expect(result[0]!.file).toBe("src/A.ts");
     expect(result[0]!.dep_count).toBe(2);
@@ -678,33 +685,44 @@ describe("buildBlastRadiusByFile", () => {
   });
 
   it("limits to 15 entries when more than 15 files in blast radius", () => {
-    const affected: NonNullable<PrImpactOutput["blastRadius"]>["affected"] = Array.from({ length: 20 }, (_, i) => ({
-      entity_name: `func${i}`,
-      entity_kind: "function",
-      file_path: `src/file${i}.ts`,
-      depth: 1,
-    }));
-    const result = buildBlastRadiusByFile({ total_affected: 20, affected_files: 20, by_depth: { 1: 20 }, affected });
+    const affected: NonNullable<PrImpactOutput["blastRadius"]>["affected"] = Array.from(
+      { length: 20 },
+      (_, i) => ({
+        depth: 1,
+        entity_kind: "function",
+        entity_name: `func${i}`,
+        file_path: `src/file${i}.ts`,
+      }),
+    );
+    const result = buildBlastRadiusByFile({
+      affected,
+      affected_files: 20,
+      by_depth: { 1: 20 },
+      total_affected: 20,
+    });
     expect(result).toHaveLength(15);
   });
 
   it("skips entries with empty file_path", () => {
     const affected: NonNullable<PrImpactOutput["blastRadius"]>["affected"] = [
-      { entity_name: "funcA", entity_kind: "function", file_path: "src/A.ts", depth: 1 },
-      { entity_name: "funcB", entity_kind: "function", file_path: "", depth: 1 },
+      { depth: 1, entity_kind: "function", entity_name: "funcA", file_path: "src/A.ts" },
+      { depth: 1, entity_kind: "function", entity_name: "funcB", file_path: "" },
     ];
-    const result = buildBlastRadiusByFile({ total_affected: 2, affected_files: 1, by_depth: { 1: 2 }, affected });
+    const result = buildBlastRadiusByFile({
+      affected,
+      affected_files: 1,
+      by_depth: { 1: 2 },
+      total_affected: 2,
+    });
     expect(result).toHaveLength(1);
     expect(result[0]!.file).toBe("src/A.ts");
   });
 });
 
-// ===========================================================================
 // 9. store-summaries → get-file-context cross-task round-trip with multiple files
 //
 // Integration gap: adr005-06 tests single-file round-trip. This tests batch
 // storeSummaries → individual getFileContext reads for multiple files.
-// ===========================================================================
 
 describe("store-summaries → get-file-context cross-task round-trip (multiple files)", () => {
   let tmpDir: string;
@@ -718,7 +736,10 @@ describe("store-summaries → get-file-context cross-task round-trip (multiple f
 
     // Create actual source files on disk for getFileContext to read
     await writeFile(join(tmpDir, "src", "api", "handler.ts"), "export function handleRequest() {}");
-    await writeFile(join(tmpDir, "src", "domain", "user.ts"), "export interface User { id: string; }");
+    await writeFile(
+      join(tmpDir, "src", "domain", "user.ts"),
+      "export interface User { id: string; }",
+    );
 
     dbPath = join(tmpDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
     const db = initDatabase(dbPath);
@@ -726,27 +747,27 @@ describe("store-summaries → get-file-context cross-task round-trip (multiple f
 
     // Register both files in the KG
     store.upsertFile({
-      path: "src/api/handler.ts",
-      mtime_ms: Date.now(),
       content_hash: "h1",
       language: "typescript",
-      layer: "api",
       last_indexed_at: Date.now(),
+      layer: "api",
+      mtime_ms: Date.now(),
+      path: "src/api/handler.ts",
     });
     store.upsertFile({
-      path: "src/domain/user.ts",
-      mtime_ms: Date.now(),
       content_hash: "h2",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/domain/user.ts",
     });
 
     db.close();
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("batch store then read — each file has its own summary", async () => {
@@ -819,13 +840,11 @@ describe("store-summaries → get-file-context cross-task round-trip (multiple f
   });
 });
 
-// ===========================================================================
 // 10. DB-only workflow: kg_freshness_ms flows from KgQuery to getPrReviewData
 //
 // Gap declared in adr005-04: "pr-review-data.ts priority scoring with a fully
 // populated KG is only tested via unit tests with mock KgQuery data."
 // This test verifies the kg_freshness_ms field flows correctly with a real SQLite DB.
-// ===========================================================================
 
 describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
   let tmpDir: string;
@@ -838,7 +857,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("kg_freshness_ms is present in output when KG DB exists with indexed files", async () => {
@@ -848,22 +867,22 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
     const tenMinutesAgo = Date.now() - 600_000;
 
     store.upsertFile({
-      path: "src/some-file.ts",
-      mtime_ms: Date.now(),
       content_hash: "abc",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: tenMinutesAgo,
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/some-file.ts",
     });
     db.close();
 
     // Mock git adapter to return an empty diff
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
-        ok: true,
-        stdout: "",
-        stderr: "",
         exitCode: 0,
+        ok: true,
+        stderr: "",
+        stdout: "",
         timedOut: false,
       }),
     }));
@@ -880,10 +899,10 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
   it("kg_freshness_ms is undefined when KG DB does not exist", async () => {
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
-        ok: true,
-        stdout: "",
-        stderr: "",
         exitCode: 0,
+        ok: true,
+        stderr: "",
+        stdout: "",
         timedOut: false,
       }),
     }));

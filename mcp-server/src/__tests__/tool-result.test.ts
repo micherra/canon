@@ -1,16 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+  type CanonErrorCode,
+  isToolError,
+  type ToolResult,
   toolError,
   toolOk,
-  isToolError,
-  type CanonErrorCode,
-  type CanonToolError,
-  type ToolResult,
 } from "../utils/tool-result.ts";
 
-// ---------------------------------------------------------------------------
 // toolError()
-// ---------------------------------------------------------------------------
 
 describe("toolError — shape and defaults", () => {
   it("returns an object with ok:false", () => {
@@ -67,9 +64,7 @@ describe("toolError — shape and defaults", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // toolOk()
-// ---------------------------------------------------------------------------
 
 describe("toolOk — shape", () => {
   it("returns an object with ok:true", () => {
@@ -78,7 +73,7 @@ describe("toolOk — shape", () => {
   });
 
   it("spreads data fields directly onto the result", () => {
-    const result = toolOk({ workspace: "ws-1", flow: "build" });
+    const result = toolOk({ flow: "build", workspace: "ws-1" });
     expect(result.workspace).toBe("ws-1");
     expect(result.flow).toBe("build");
   });
@@ -94,9 +89,7 @@ describe("toolOk — shape", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // isToolError()
-// ---------------------------------------------------------------------------
 
 describe("isToolError — type guard", () => {
   it("returns true for a CanonToolError shape", () => {
@@ -122,17 +115,15 @@ describe("isToolError — type guard", () => {
   });
 
   it("returns false for an object with ok:true and error_code", () => {
-    expect(isToolError({ ok: true, error_code: "UNEXPECTED" })).toBe(false);
+    expect(isToolError({ error_code: "UNEXPECTED", ok: true })).toBe(false);
   });
 
   it("returns false for an object with ok:false but no error_code", () => {
-    expect(isToolError({ ok: false, message: "bad" })).toBe(false);
+    expect(isToolError({ message: "bad", ok: false })).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // ToolResult<T> — discriminated union usage
-// ---------------------------------------------------------------------------
 
 describe("ToolResult<T> — discriminated union", () => {
   it("ToolResult can hold a toolOk value", () => {

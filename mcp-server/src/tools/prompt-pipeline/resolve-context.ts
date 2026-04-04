@@ -40,8 +40,8 @@ export async function resolveContext(ctx: PromptContext): Promise<PromptContext>
   if (injectionResult.hitl) {
     return {
       ...ctx,
-      warnings: newWarnings,
       skip_reason: `HITL required: inject_context from user — "${injectionResult.hitl.prompt}"`,
+      warnings: newWarnings,
     };
   }
 

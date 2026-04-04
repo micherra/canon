@@ -16,10 +16,6 @@ import {
   type NodeKindMap,
 } from "../graph/kg-language-configs.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function hasRequiredNodeKindKeys(map: NodeKindMap): boolean {
   const required: (keyof NodeKindMap)[] = [
     "functionDef",
@@ -34,9 +30,7 @@ function hasRequiredNodeKindKeys(map: NodeKindMap): boolean {
   return required.every((k) => Array.isArray(map[k]));
 }
 
-// ---------------------------------------------------------------------------
 // LANGUAGE_CONFIGS map
-// ---------------------------------------------------------------------------
 
 describe("LANGUAGE_CONFIGS", () => {
   test("contains typescript config", () => {
@@ -60,9 +54,7 @@ describe("LANGUAGE_CONFIGS", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getConfigForExtension
-// ---------------------------------------------------------------------------
 
 describe("getConfigForExtension", () => {
   test(".ts returns typescript config", () => {
@@ -123,9 +115,7 @@ describe("getConfigForExtension", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // TypeScript config shape
-// ---------------------------------------------------------------------------
 
 describe("typescript config", () => {
   let cfg: LanguageConfig;
@@ -176,9 +166,7 @@ describe("typescript config", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // TSX config shape
-// ---------------------------------------------------------------------------
 
 describe("tsx config", () => {
   test("grammar file is tree-sitter-tsx.wasm", () => {
@@ -199,9 +187,7 @@ describe("tsx config", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Python config shape
-// ---------------------------------------------------------------------------
 
 describe("python config", () => {
   let cfg: LanguageConfig;
@@ -247,9 +233,7 @@ describe("python config", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Bash config shape
-// ---------------------------------------------------------------------------
 
 describe("bash config", () => {
   let cfg: LanguageConfig;
@@ -290,9 +274,7 @@ describe("bash config", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Java config shape
-// ---------------------------------------------------------------------------
 
 describe("java config", () => {
   let cfg: LanguageConfig;
@@ -389,9 +371,7 @@ describe("java config", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // All configs have required shape
-// ---------------------------------------------------------------------------
 
 describe("all configs structural invariants", () => {
   test("every config has id, extensions, grammarFile, nodeKinds", () => {

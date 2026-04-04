@@ -7,14 +7,12 @@
  * - Successful query returns { ok: true, query_type, results, count }
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // We must mock the DB layer so we don't need a real SQLite file
-// ---------------------------------------------------------------------------
 
 vi.mock("../graph/kg-schema.ts", () => ({
   initDatabase: vi.fn().mockReturnValue({
@@ -26,23 +24,18 @@ vi.mock("../graph/kg-schema.ts", () => ({
 vi.mock("../graph/kg-query.ts", () => ({
   KgQuery: vi.fn(function () {
     return {
+      findDeadCode: vi.fn().mockReturnValue([{ entity_id: 1, kind: "function", name: "orphan" }]),
+      getAncestors: vi.fn().mockReturnValue([{ depth: 1, entity_id: 5, name: "ancestor" }]),
+      getBlastRadius: vi.fn().mockReturnValue([{ depth: 1, entity_id: 4, name: "dep" }]),
+      getCallees: vi.fn().mockReturnValue([{ entity_id: 3, kind: "function", name: "callee" }]),
+      getCallers: vi.fn().mockReturnValue([{ entity_id: 2, kind: "function", name: "caller" }]),
       search: vi.fn().mockReturnValue([]),
-      findDeadCode: vi.fn().mockReturnValue([{ entity_id: 1, name: "orphan", kind: "function" }]),
-      getCallers: vi.fn().mockReturnValue([{ entity_id: 2, name: "caller", kind: "function" }]),
-      getCallees: vi.fn().mockReturnValue([{ entity_id: 3, name: "callee", kind: "function" }]),
-      getBlastRadius: vi.fn().mockReturnValue([{ entity_id: 4, name: "dep", depth: 1 }]),
-      getAncestors: vi.fn().mockReturnValue([{ entity_id: 5, name: "ancestor", depth: 1 }]),
     };
   }),
 }));
 
-import { graphQuery } from "../tools/graph-query.ts";
-import { initDatabase } from "../graph/kg-schema.ts";
 import { KgQuery } from "../graph/kg-query.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { graphQuery } from "../tools/graph-query.ts";
 
 let tmpDir: string;
 
@@ -52,21 +45,16 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(tmpDir, { recursive: true, force: true });
+  await rm(tmpDir, { force: true, recursive: true });
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // Error cases
-// ---------------------------------------------------------------------------
 
 describe("graphQuery — KG_NOT_INDEXED", () => {
   it("returns KG_NOT_INDEXED when DB file does not exist", () => {
     // DB file NOT created — existsSync returns false
-    const result = graphQuery(
-      { query_type: "search", target: "myFunc" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "search", target: "myFunc" }, tmpDir);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -84,10 +72,7 @@ describe("graphQuery — INVALID_INPUT for missing target", () => {
   });
 
   it("returns INVALID_INPUT when target is missing for 'search' query type", () => {
-    const result = graphQuery(
-      { query_type: "search" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "search" }, tmpDir);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -97,10 +82,7 @@ describe("graphQuery — INVALID_INPUT for missing target", () => {
   });
 
   it("returns INVALID_INPUT when target is missing for 'callers' query type", () => {
-    const result = graphQuery(
-      { query_type: "callers" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "callers" }, tmpDir);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -110,10 +92,7 @@ describe("graphQuery — INVALID_INPUT for missing target", () => {
   });
 
   it("returns INVALID_INPUT when target is missing for 'callees' query type", () => {
-    const result = graphQuery(
-      { query_type: "callees" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "callees" }, tmpDir);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -123,10 +102,7 @@ describe("graphQuery — INVALID_INPUT for missing target", () => {
   });
 
   it("returns INVALID_INPUT when target is missing for 'blast_radius' query type", () => {
-    const result = graphQuery(
-      { query_type: "blast_radius" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "blast_radius" }, tmpDir);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -136,10 +112,7 @@ describe("graphQuery — INVALID_INPUT for missing target", () => {
   });
 
   it("returns INVALID_INPUT when target is missing for 'ancestors' query type", () => {
-    const result = graphQuery(
-      { query_type: "ancestors" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "ancestors" }, tmpDir);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -149,9 +122,7 @@ describe("graphQuery — INVALID_INPUT for missing target", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Success cases
-// ---------------------------------------------------------------------------
 
 describe("graphQuery — success cases", () => {
   beforeEach(async () => {
@@ -160,10 +131,7 @@ describe("graphQuery — success cases", () => {
   });
 
   it("returns ok: true with query_type, results, count for 'dead_code'", () => {
-    const result = graphQuery(
-      { query_type: "dead_code" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "dead_code" }, tmpDir);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -177,19 +145,16 @@ describe("graphQuery — success cases", () => {
     // Mock search to return a hit so we can verify the result shape
     vi.mocked(KgQuery).mockImplementationOnce(function () {
       return {
-        search: vi.fn().mockReturnValue([{ entity_id: 1, name: "myFunc", kind: "function" }]),
         findDeadCode: vi.fn().mockReturnValue([]),
-        getCallers: vi.fn().mockReturnValue([]),
-        getCallees: vi.fn().mockReturnValue([]),
-        getBlastRadius: vi.fn().mockReturnValue([]),
         getAncestors: vi.fn().mockReturnValue([]),
+        getBlastRadius: vi.fn().mockReturnValue([]),
+        getCallees: vi.fn().mockReturnValue([]),
+        getCallers: vi.fn().mockReturnValue([]),
+        search: vi.fn().mockReturnValue([{ entity_id: 1, kind: "function", name: "myFunc" }]),
       };
     } as any);
 
-    const result = graphQuery(
-      { query_type: "search", target: "myFunc" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "search", target: "myFunc" }, tmpDir);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -202,19 +167,16 @@ describe("graphQuery — success cases", () => {
     // search returns empty → entity not found → empty callers
     vi.mocked(KgQuery).mockImplementationOnce(function () {
       return {
-        search: vi.fn().mockReturnValue([]), // no entity found
         findDeadCode: vi.fn().mockReturnValue([]),
-        getCallers: vi.fn().mockReturnValue([]),
-        getCallees: vi.fn().mockReturnValue([]),
-        getBlastRadius: vi.fn().mockReturnValue([]),
         getAncestors: vi.fn().mockReturnValue([]),
+        getBlastRadius: vi.fn().mockReturnValue([]),
+        getCallees: vi.fn().mockReturnValue([]),
+        getCallers: vi.fn().mockReturnValue([]),
+        search: vi.fn().mockReturnValue([]), // no entity found
       };
     } as any);
 
-    const result = graphQuery(
-      { query_type: "callers", target: "unknownFunc" },
-      tmpDir,
-    );
+    const result = graphQuery({ query_type: "callers", target: "unknownFunc" }, tmpDir);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

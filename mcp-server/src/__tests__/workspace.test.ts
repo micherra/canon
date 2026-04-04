@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, access } from "fs/promises";
-import path from "path";
-import os from "os";
+import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  sanitizeBranch,
-  generateSlug,
   checkSlugCollision,
+  generateSlug,
   initWorkspace,
+  sanitizeBranch,
 } from "../orchestration/workspace.ts";
 
 let tmpDir: string;
@@ -16,12 +16,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(tmpDir, { recursive: true, force: true });
+  await rm(tmpDir, { force: true, recursive: true });
 });
 
-// ---------------------------------------------------------------------------
 // sanitizeBranch
-// ---------------------------------------------------------------------------
 
 describe("sanitizeBranch", () => {
   it("replaces slashes with double hyphens", () => {
@@ -46,9 +44,7 @@ describe("sanitizeBranch", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // generateSlug
-// ---------------------------------------------------------------------------
 
 describe("generateSlug", () => {
   it("converts a basic task to a slug", () => {
@@ -73,9 +69,7 @@ describe("generateSlug", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // checkSlugCollision
-// ---------------------------------------------------------------------------
 
 describe("checkSlugCollision", () => {
   it("returns original slug when no collision", async () => {
@@ -101,17 +95,17 @@ describe("checkSlugCollision", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // initWorkspace
-// ---------------------------------------------------------------------------
 
 describe("initWorkspace", () => {
   it("creates all subdirectories", async () => {
     const ws = await initWorkspace(tmpDir, "my-branch");
     const expected = ["research", "decisions", "plans", "reviews"];
-    for (const dir of expected) {
-      await expect(access(path.join(ws, dir)).then(() => true)).resolves.toBe(true);
-    }
+    await Promise.all(
+      expected.map((dir) =>
+        expect(access(path.join(ws, dir)).then(() => true)).resolves.toBe(true),
+      ),
+    );
   });
 
   it("does not create a notes/ directory", async () => {
@@ -121,9 +115,6 @@ describe("initWorkspace", () => {
 
   it("returns the workspace path", async () => {
     const ws = await initWorkspace(tmpDir, "test-branch");
-    expect(ws).toBe(
-      path.join(tmpDir, ".canon", "workspaces", "test-branch"),
-    );
+    expect(ws).toBe(path.join(tmpDir, ".canon", "workspaces", "test-branch"));
   });
 });
-

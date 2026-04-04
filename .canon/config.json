@@ -2,7 +2,7 @@
   "principle_dirs": [".canon/principles"],
   "layers": {
     "mcp-server": ["mcp-server/src/**"],
-    "dashboard-ui": ["mcp-server/ui/**"],
+    "dashboard-ui": ["mcp-server/src/ui/**"],
     "agents": ["agents/**"],
     "commands": ["commands/**"],
     "flows": ["flows/**"],

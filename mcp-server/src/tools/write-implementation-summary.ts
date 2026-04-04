@@ -1,13 +1,13 @@
-import { writeFile, mkdir } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute } from "node:path";
-import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+import { mkdir, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
   return value.replace(/\|/g, "&#124;").replace(/\r\n?|\n/g, " ");
 }
 
-export interface WriteImplementationSummaryInput {
+export type WriteImplementationSummaryInput = {
   workspace: string;
   slug: string;
   task_id: string;
@@ -21,36 +21,29 @@ export interface WriteImplementationSummaryInput {
     reason: string;
   }>;
   tests_added?: string[];
-}
+};
 
-export interface WriteImplementationSummaryResult {
+export type WriteImplementationSummaryResult = {
   path: string;
   meta_path: string;
   files_changed_count: number;
-}
+};
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
-export async function writeImplementationSummary(
-  input: WriteImplementationSummaryInput,
-): Promise<ToolResult<WriteImplementationSummaryResult>> {
-  // Validate slug
+function validateSlugAndTaskId(input: WriteImplementationSummaryInput): ToolResult<never> | null {
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
       "INVALID_INPUT",
       `Invalid slug "${input.slug}": must match /^[a-zA-Z0-9_-]+$/`,
     );
   }
-
-  // Validate task_id
   if (!SLUG_PATTERN.test(input.task_id)) {
     return toolError(
       "INVALID_INPUT",
       `Invalid task_id "${input.task_id}": must match /^[a-zA-Z0-9_-]+$/; only alphanumeric, underscore, and hyphen allowed`,
     );
   }
-
-  // Validate path traversal safety
   const plansDir = resolve(join(input.workspace, "plans", input.slug));
   const plansRoot = resolve(join(input.workspace, "plans"));
   const rel = relative(plansRoot, plansDir);
@@ -60,72 +53,75 @@ export async function writeImplementationSummary(
       `Slug "${input.slug}" resolves outside workspace plans directory`,
     );
   }
+  return null;
+}
 
-  // Build normalized markdown
+function appendOptionalSection(
+  lines: string[],
+  heading: string,
+  items: string[] | undefined,
+  format: (item: string) => string,
+): void {
+  if (!items || items.length === 0) return;
+  lines.push(`### ${heading}`, "");
+  for (const item of items) lines.push(format(item));
+  lines.push("");
+}
+
+function buildSummaryMarkdown(input: WriteImplementationSummaryInput): string {
   const lines: string[] = [];
-  lines.push(`## Implementation Summary: ${input.task_id}`);
-  lines.push("");
-
-  // Files changed table
-  lines.push("### Files Changed");
-  lines.push("");
-  lines.push("| Path | Action |");
-  lines.push("|------|--------|");
+  lines.push(`## Implementation Summary: ${input.task_id}`, "");
+  lines.push("### Files Changed", "", "| Path | Action |", "|------|--------|");
   for (const file of input.files_changed) {
     lines.push(`| ${escapeMdCell(file.path)} | ${escapeMdCell(file.action)} |`);
   }
   lines.push("");
 
-  // Decisions applied
-  if (input.decisions_applied && input.decisions_applied.length > 0) {
-    lines.push("### Decisions Applied");
-    lines.push("");
-    for (const dec of input.decisions_applied) {
-      lines.push(`- ${escapeMdCell(dec)}`);
-    }
-    lines.push("");
-  }
+  appendOptionalSection(
+    lines,
+    "Decisions Applied",
+    input.decisions_applied,
+    (dec) => `- ${escapeMdCell(dec)}`,
+  );
+  appendOptionalSection(
+    lines,
+    "Deviations",
+    input.deviations?.map((d) => `**${escapeMdCell(d.decision_id)}**: ${escapeMdCell(d.reason)}`),
+    (item) => `- ${item}`,
+  );
+  appendOptionalSection(
+    lines,
+    "Tests Added",
+    input.tests_added,
+    (test) => `- ${escapeMdCell(test)}`,
+  );
 
-  // Deviations
-  if (input.deviations && input.deviations.length > 0) {
-    lines.push("### Deviations");
-    lines.push("");
-    for (const dev of input.deviations) {
-      lines.push(`- **${escapeMdCell(dev.decision_id)}**: ${escapeMdCell(dev.reason)}`);
-    }
-    lines.push("");
-  }
+  return lines.join("\n");
+}
 
-  // Tests added
-  if (input.tests_added && input.tests_added.length > 0) {
-    lines.push("### Tests Added");
-    lines.push("");
-    for (const test of input.tests_added) {
-      lines.push(`- ${escapeMdCell(test)}`);
-    }
-    lines.push("");
-  }
-
-  const content = lines.join("\n");
-
-  // Build meta JSON
+function buildSummaryMeta(input: WriteImplementationSummaryInput): Record<string, unknown> {
   const meta: Record<string, unknown> = {
     _type: "implementation_summary",
     _version: 1,
-    task_id: input.task_id,
     files_changed: input.files_changed,
+    task_id: input.task_id,
   };
-  if (input.decisions_applied !== undefined) {
-    meta.decisions_applied = input.decisions_applied;
-  }
-  if (input.deviations !== undefined) {
-    meta.deviations = input.deviations;
-  }
-  if (input.tests_added !== undefined) {
-    meta.tests_added = input.tests_added;
-  }
+  if (input.decisions_applied !== undefined) meta.decisions_applied = input.decisions_applied;
+  if (input.deviations !== undefined) meta.deviations = input.deviations;
+  if (input.tests_added !== undefined) meta.tests_added = input.tests_added;
+  return meta;
+}
 
-  // Write files
+export async function writeImplementationSummary(
+  input: WriteImplementationSummaryInput,
+): Promise<ToolResult<WriteImplementationSummaryResult>> {
+  const validationError = validateSlugAndTaskId(input);
+  if (validationError) return validationError;
+
+  const plansDir = resolve(join(input.workspace, "plans", input.slug));
+  const content = buildSummaryMarkdown(input);
+  const meta = buildSummaryMeta(input);
+
   await mkdir(plansDir, { recursive: true });
   const summaryPath = join(plansDir, "IMPLEMENTATION-SUMMARY.md");
   const metaPath = join(plansDir, "IMPLEMENTATION-SUMMARY.meta.json");
@@ -134,8 +130,8 @@ export async function writeImplementationSummary(
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
 
   return toolOk({
-    path: summaryPath,
-    meta_path: metaPath,
     files_changed_count: input.files_changed.length,
+    meta_path: metaPath,
+    path: summaryPath,
   });
 }

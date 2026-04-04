@@ -13,18 +13,18 @@
  * - deep-modules: delegates graph reading to readGraphFromDb()
  */
 
-import type { ToolResult } from '../utils/tool-result.ts';
-import { toolError, toolOk } from '../utils/tool-result.ts';
-import { getJobManager } from '../jobs/job-manager.ts';
-import { readGraphFromDb, compactGraph, type CompactGraphOutput } from './codebase-graph.ts';
-import type { CodebaseGraphInput } from './codebase-graph.ts';
+import { getJobManager } from "../jobs/job-manager.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
+import { toolError, toolOk } from "../utils/tool-result.ts";
+import type { CodebaseGraphInput } from "./codebase-graph.ts";
+import { type CompactGraphOutput, compactGraph, readGraphFromDb } from "./codebase-graph.ts";
 
-export interface GraphMaterializeInput {
+export type GraphMaterializeInput = {
   job_id: string;
   diff_base?: string;
   changed_files?: string[];
-  detail_level?: 'file' | 'entity';
-}
+  detail_level?: "file" | "entity";
+};
 
 /**
  * Materialize the results of a completed codebase graph job.
@@ -42,8 +42,8 @@ export async function codebaseGraphMaterialize(
   const manager = getJobManager();
   if (!manager) {
     return toolError(
-      'INVALID_INPUT',
-      'Job manager not initialized. Submit a job first via codebase_graph_submit.',
+      "INVALID_INPUT",
+      "Job manager not initialized. Submit a job first via codebase_graph_submit.",
     );
   }
 
@@ -52,9 +52,9 @@ export async function codebaseGraphMaterialize(
     return pollResult;
   }
 
-  if (pollResult.status !== 'complete') {
+  if (pollResult.status !== "complete") {
     return toolError(
-      'INVALID_INPUT',
+      "INVALID_INPUT",
       `Job ${input.job_id} is not complete (status: ${pollResult.status}). Poll until status is 'complete' before materializing.`,
     );
   }
@@ -62,9 +62,9 @@ export async function codebaseGraphMaterialize(
   // Step 2: Read from the KG DB the background job already populated.
   // readGraphFromDb skips runPipeline — the worker already ran the heavy pipeline work.
   const graphInput: CodebaseGraphInput = {
-    diff_base: input.diff_base,
     changed_files: input.changed_files,
     detail_level: input.detail_level,
+    diff_base: input.diff_base,
   };
 
   try {
@@ -78,6 +78,6 @@ export async function codebaseGraphMaterialize(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return toolError('UNEXPECTED', `Failed to materialize graph: ${message}`);
+    return toolError("UNEXPECTED", `Failed to materialize graph: ${message}`);
   }
 }

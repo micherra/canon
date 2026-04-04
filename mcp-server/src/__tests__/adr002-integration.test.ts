@@ -13,13 +13,11 @@
  * 7. ToolResult ok:true/ok:false discrimination end-to-end through wrapHandler JSON serialization
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Section 1: ProcessResult shape contract
 // Both adapters must return an object with all 5 ProcessResult fields.
 // These tests import the adapters through mocked child_process.
-// ---------------------------------------------------------------------------
 
 // We need separate vi.mock blocks per describe context — vitest hoists all
 // vi.mock calls to the top of the module. We accept that both adapters
@@ -42,15 +40,6 @@ let lastSpawnSyncOpts: Record<string, unknown> = {};
 let execFileImpl: ((cb: ExecFileCallback) => void) | null = null;
 
 vi.mock("node:child_process", () => ({
-  spawnSync: (cmd: string, argsOrOpts: unknown, optsArg?: unknown) => {
-    // Handle both spawnSync(cmd, opts) and spawnSync(cmd, args, opts) overloads
-    const opts = Array.isArray(argsOrOpts)
-      ? (optsArg ?? {})
-      : (argsOrOpts ?? {});
-    lastSpawnSyncOpts = opts as Record<string, unknown>;
-    if (spawnSyncImpl) return spawnSyncImpl();
-    return { stdout: "", stderr: "", status: 0, signal: null };
-  },
   execFile: (
     _cmd: string,
     _args: string[],
@@ -64,18 +53,25 @@ vi.mock("node:child_process", () => ({
     }
     return { pid: 99999 };
   },
+  spawnSync: (_cmd: string, argsOrOpts: unknown, optsArg?: unknown) => {
+    // Handle both spawnSync(cmd, opts) and spawnSync(cmd, args, opts) overloads
+    const opts = Array.isArray(argsOrOpts) ? (optsArg ?? {}) : (argsOrOpts ?? {});
+    lastSpawnSyncOpts = opts as Record<string, unknown>;
+    if (spawnSyncImpl) return spawnSyncImpl();
+    return { signal: null, status: 0, stderr: "", stdout: "" };
+  },
 }));
 
-import { gitExec, gitDiff, gitStatus } from "../adapters/git-adapter.ts";
-import { runShell } from "../adapters/process-adapter.ts";
+import { gitDiff, gitExec, gitStatus } from "../adapters/git-adapter.ts";
 import { gitExecAsync } from "../adapters/git-adapter-async.ts";
+import { runShell } from "../adapters/process-adapter.ts";
 import {
-  toolOk,
-  toolError,
-  isToolError,
   assertOk,
-  type ToolResult,
+  isToolError,
   type ProcessResult,
+  type ToolResult,
+  toolError,
+  toolOk,
 } from "../utils/tool-result.ts";
 import { wrapHandler } from "../utils/wrap-handler.ts";
 
@@ -85,13 +81,11 @@ beforeEach(() => {
   lastSpawnSyncOpts = {};
 });
 
-// ---------------------------------------------------------------------------
 // 1. ProcessResult shape contract
-// ---------------------------------------------------------------------------
 
 describe("ProcessResult shape contract — gitExec", () => {
   it("returns all 5 required fields on the success path", () => {
-    spawnSyncImpl = () => ({ stdout: "main\n", stderr: "warn\n", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "warn\n", stdout: "main\n" });
     const result = gitExec(["branch"], "/project");
     // All 5 fields must be present and correctly typed
     expect(typeof result.ok).toBe("boolean");
@@ -102,7 +96,7 @@ describe("ProcessResult shape contract — gitExec", () => {
   });
 
   it("returns all 5 required fields on the error path", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "fatal error", status: 128, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 128, stderr: "fatal error", stdout: "" });
     const result = gitExec(["status"], "/notarepo");
     expect(typeof result.ok).toBe("boolean");
     expect(result.ok).toBe(false);
@@ -114,7 +108,12 @@ describe("ProcessResult shape contract — gitExec", () => {
 
   it("stdout and stderr never return undefined (empty string fallback)", () => {
     // Simulate spawnSync returning null for stdout/stderr (can happen on some platforms)
-    spawnSyncImpl = () => ({ stdout: null as unknown as string, stderr: null as unknown as string, status: 0, signal: null });
+    spawnSyncImpl = () => ({
+      signal: null,
+      status: 0,
+      stderr: null as unknown as string,
+      stdout: null as unknown as string,
+    });
     const result = gitExec(["status"], "/project");
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("");
@@ -123,7 +122,7 @@ describe("ProcessResult shape contract — gitExec", () => {
 
 describe("ProcessResult shape contract — runShell", () => {
   it("returns all 5 required fields on the success path", () => {
-    spawnSyncImpl = () => ({ stdout: "output\n", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "output\n" });
     const result = runShell("echo hello", "/project");
     expect(typeof result.ok).toBe("boolean");
     expect(typeof result.stdout).toBe("string");
@@ -133,7 +132,7 @@ describe("ProcessResult shape contract — runShell", () => {
   });
 
   it("returns all 5 required fields on the error path", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "command not found", status: 127, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 127, stderr: "command not found", stdout: "" });
     const result = runShell("notacommand", "/project");
     expect(typeof result.ok).toBe("boolean");
     expect(result.ok).toBe(false);
@@ -167,7 +166,7 @@ describe("ProcessResult shape contract — gitExecAsync", () => {
   });
 
   it("gitDiff shapes match ProcessResult contract (convenience wrapper)", () => {
-    spawnSyncImpl = () => ({ stdout: "file.ts\n", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "file.ts\n" });
     const result = gitDiff(["HEAD~1", "HEAD"], "/project");
     const fields: Array<keyof ProcessResult> = ["ok", "stdout", "stderr", "exitCode", "timedOut"];
     for (const field of fields) {
@@ -176,7 +175,7 @@ describe("ProcessResult shape contract — gitExecAsync", () => {
   });
 
   it("gitStatus shapes match ProcessResult contract (convenience wrapper)", () => {
-    spawnSyncImpl = () => ({ stdout: "M file.ts\n", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "M file.ts\n" });
     const result = gitStatus("/project");
     const fields: Array<keyof ProcessResult> = ["ok", "stdout", "stderr", "exitCode", "timedOut"];
     for (const field of fields) {
@@ -185,9 +184,7 @@ describe("ProcessResult shape contract — gitExecAsync", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Security boundary: gitExec never sets shell; runShell always sets shell
-// ---------------------------------------------------------------------------
 
 describe("Security boundary — git adapter never uses shell", () => {
   it("gitExec does not pass shell:true when called directly", () => {
@@ -218,14 +215,12 @@ describe("Security boundary — process adapter always uses shell", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Contract-checker adapter routing
 // Declared Known Gap in adr002-02: "contract-checker.ts adapter routing is
 // verified via integration tests only (no unit-level mock verifying gitExec
 // vs runShell routing)".
 //
 // We use a fresh vi.doMock approach here to isolate the module under test.
-// ---------------------------------------------------------------------------
 
 describe("Contract-checker adapter routing — gitExec used for file_changed (not runShell)", () => {
   it("file_changed assertion calls gitExec (array args) — no shell injection possible", async () => {
@@ -235,19 +230,19 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     const runShellCalls: { cmd: string; cwd: string }[] = [];
 
     vi.doMock("../adapters/git-adapter.ts", () => ({
+      gitDiff: vi.fn(),
       gitExec: (args: string[], cwd: string) => {
         gitExecCalls.push({ args, cwd });
         // Simulate 'file changed' — non-empty stdout means changed
-        return { ok: true, stdout: "initial.ts\n", stderr: "", exitCode: 0, timedOut: false };
+        return { exitCode: 0, ok: true, stderr: "", stdout: "initial.ts\n", timedOut: false };
       },
-      gitDiff: vi.fn(),
       gitStatus: vi.fn(),
     }));
 
     vi.doMock("../adapters/process-adapter.ts", () => ({
       runShell: (cmd: string, cwd: string) => {
         runShellCalls.push({ cmd, cwd });
-        return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+        return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
       },
     }));
 
@@ -255,7 +250,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     const { evaluatePostconditions } = await import("../orchestration/contract-checker.ts");
 
     const results = evaluatePostconditions(
-      [{ type: "file_changed", target: "initial.ts" }],
+      [{ target: "initial.ts", type: "file_changed" }],
       "/project",
       "abc1234",
     );
@@ -279,18 +274,18 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     const runShellCalls: string[] = [];
 
     vi.doMock("../adapters/git-adapter.ts", () => ({
+      gitDiff: vi.fn(),
       gitExec: (args: string[]) => {
         gitExecCalls.push(args);
-        return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+        return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
       },
-      gitDiff: vi.fn(),
       gitStatus: vi.fn(),
     }));
 
     vi.doMock("../adapters/process-adapter.ts", () => ({
       runShell: (cmd: string) => {
         runShellCalls.push(cmd);
-        return { ok: true, stdout: "test passed", stderr: "", exitCode: 0, timedOut: false };
+        return { exitCode: 0, ok: true, stderr: "", stdout: "test passed", timedOut: false };
       },
     }));
 
@@ -298,7 +293,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     const { evaluatePostconditions } = await import("../orchestration/contract-checker.ts");
 
     const results = evaluatePostconditions(
-      [{ type: "bash_check", command: "echo ok" }],
+      [{ command: "echo ok", type: "bash_check" }],
       "/project",
     );
 
@@ -315,10 +310,8 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. assertOk failure path (declared Known Gap in adr002-06)
 // The assertOk helper's assertion failure path is not directly unit-tested.
-// ---------------------------------------------------------------------------
 
 describe("assertOk — failure path (declared Known Gap adr002-06)", () => {
   it("throws when result is a CanonToolError", () => {
@@ -333,7 +326,9 @@ describe("assertOk — failure path (declared Known Gap adr002-06)", () => {
 
   it("throws with a message containing the error message", () => {
     const err = toolError("FLOW_NOT_FOUND", "flow-xyz not found");
-    expect(() => assertOk(err as ToolResult<Record<string, unknown>>)).toThrow(/flow-xyz not found/);
+    expect(() => assertOk(err as ToolResult<Record<string, unknown>>)).toThrow(
+      /flow-xyz not found/,
+    );
   });
 
   it("does NOT throw when result is ok:true", () => {
@@ -349,14 +344,12 @@ describe("assertOk — failure path (declared Known Gap adr002-06)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. ToolResult ok:true/ok:false discrimination end-to-end through wrapHandler
-// ---------------------------------------------------------------------------
 
 describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
   it("ok:true result serializes with all data fields at top level (no nesting)", async () => {
     const handler = wrapHandler(async (_input: unknown) =>
-      toolOk({ workspace: "ws-abc", state: "build", count: 3 }),
+      toolOk({ count: 3, state: "build", workspace: "ws-abc" }),
     );
     const response = await handler({});
     const parsed = JSON.parse(response.content[0].text);
@@ -392,9 +385,7 @@ describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
   });
 
   it("isToolError returns false for ok:true result deserialized from JSON", async () => {
-    const handler = wrapHandler(async (_input: unknown) =>
-      toolOk({ board: { status: "done" } }),
-    );
+    const handler = wrapHandler(async (_input: unknown) => toolOk({ board: { status: "done" } }));
     const response = await handler({});
     const parsed = JSON.parse(response.content[0].text);
     expect(isToolError(parsed)).toBe(false);
@@ -437,9 +428,7 @@ describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. loadFlow ToolResult contract (cross-module: tool → wrapHandler chain)
-// ---------------------------------------------------------------------------
 
 describe("loadFlow ToolResult — ok:false error paths", () => {
   it("returns FLOW_NOT_FOUND when flow does not exist (not a throw)", async () => {
@@ -467,9 +456,7 @@ describe("loadFlow ToolResult — ok:false error paths", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. Timeout propagation through adapter chain
-// ---------------------------------------------------------------------------
 
 describe("Timeout propagation — default 30s on all adapters", () => {
   it("gitExec uses 30s default when no timeout specified", () => {
@@ -514,9 +501,7 @@ describe("Timeout propagation — gate-runner uses 300s for shell gates", () => 
   });
 });
 
-// ---------------------------------------------------------------------------
 // 8. CanonErrorCode exhaustiveness — all 9 codes produce valid CanonToolErrors
-// ---------------------------------------------------------------------------
 
 describe("CanonErrorCode exhaustiveness — all 9 codes produce valid ToolResult errors", () => {
   const ALL_CODES = [
@@ -548,14 +533,12 @@ describe("CanonErrorCode exhaustiveness — all 9 codes produce valid ToolResult
   }
 });
 
-// ---------------------------------------------------------------------------
 // 9. ProcessResult ok discriminant alignment
 // ok:true === (exitCode === 0 && !error) — both adapters must be consistent
-// ---------------------------------------------------------------------------
 
 describe("ProcessResult ok discriminant alignment across adapters", () => {
   it("gitExec: ok:true when exitCode 0 and no error", () => {
-    spawnSyncImpl = () => ({ stdout: "out", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "out" });
     const r = gitExec(["status"], "/p");
     expect(r.ok).toBe(true);
     expect(r.exitCode).toBe(0);
@@ -563,27 +546,33 @@ describe("ProcessResult ok discriminant alignment across adapters", () => {
   });
 
   it("gitExec: ok:false when exitCode nonzero", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "err", status: 1, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 1, stderr: "err", stdout: "" });
     const r = gitExec(["status"], "/p");
     expect(r.ok).toBe(false);
     expect(r.exitCode).toBe(1);
   });
 
   it("gitExec: ok:false when error is present even with status 0", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: 0, signal: null, error: new Error("spawn error") });
+    spawnSyncImpl = () => ({
+      error: new Error("spawn error"),
+      signal: null,
+      status: 0,
+      stderr: "",
+      stdout: "",
+    });
     const r = gitExec(["status"], "/p");
     expect(r.ok).toBe(false);
   });
 
   it("runShell: ok:true when exitCode 0 and no error", () => {
-    spawnSyncImpl = () => ({ stdout: "out", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "out" });
     const r = runShell("echo hello", "/p");
     expect(r.ok).toBe(true);
     expect(r.exitCode).toBe(0);
   });
 
   it("runShell: ok:false when exitCode nonzero", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "err", status: 2, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 2, stderr: "err", stdout: "" });
     const r = runShell("false", "/p");
     expect(r.ok).toBe(false);
     expect(r.exitCode).toBe(2);
@@ -605,7 +594,7 @@ describe("ProcessResult ok discriminant alignment across adapters", () => {
   });
 
   it("all three adapters agree: ok === (exitCode 0 && !timedOut) on success", async () => {
-    spawnSyncImpl = () => ({ stdout: "x", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "x" });
     execFileImpl = (cb) => cb(null, "x", "");
 
     const sync = gitExec(["status"], "/p");

@@ -22,17 +22,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { gitLog } from "../adapters/git-adapter.ts";
 import { DriftStore } from "../drift/store.ts";
-import { extractSection } from "./inject-context.ts";
-import type { Board, ResolvedFlow } from "./flow-schema.ts";
 import type { ReviewEntry } from "../schema.ts";
+import type { Board, ResolvedFlow } from "./flow-schema.ts";
 import { resolveTaskScope } from "./scope-resolver.ts";
 import { escapeDollarBrace } from "./wave-variables.ts";
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-export interface EnrichmentInput {
+export type EnrichmentInput = {
   workspace: string;
   stateId: string;
   board: Board;
@@ -40,22 +35,18 @@ export interface EnrichmentInput {
   baseCommit?: string;
   cwd: string;
   projectDir?: string;
-}
+};
 
-export interface EnrichmentResult {
+export type EnrichmentResult = {
   content: string; // The assembled ${enrichment} block, or empty string
   warnings: string[];
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+};
 
 /** Budget caps by flow tier (number of files to include per section). */
 const TIER_FILE_CAPS: Record<string, number> = {
-  small: 5,
-  medium: 15,
   large: 30,
+  medium: 15,
+  small: 5,
 };
 
 /** Default file cap when tier is not recognized. */
@@ -70,20 +61,14 @@ const MAX_WORKSPACE_REFS = 3;
 /** Maximum tension entries to emit. */
 const MAX_TENSIONS = 3;
 
-// ---------------------------------------------------------------------------
 // Internal section result type
-// ---------------------------------------------------------------------------
 
-interface SectionResult {
+type SectionResult = {
   content: string;
   warnings: string[];
   /** Parsed data for cross-section use (optional). */
   data?: unknown;
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+};
 
 /**
  * Assemble the context enrichment block for a spawned agent.
@@ -103,9 +88,9 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
 
   // Step 1: resolve task scope
   const allFilePaths = resolveTaskScope({
-    workspace: input.workspace,
-    stateId: input.stateId,
     board: input.board,
+    stateId: input.stateId,
+    workspace: input.workspace,
   });
 
   // Step 2: no scope → empty
@@ -113,15 +98,21 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
     return { content: "", warnings: ["enrichment: no task scope found"] };
   }
 
-  // Step 3: determine tier cap
+  // Step 3: determine tier cap and slice
   const tier = (input.flow as { tier?: string }).tier ?? "medium";
   const fileCap = TIER_FILE_CAPS[tier] ?? DEFAULT_FILE_CAP;
-
-  // Step 4: slice to cap
   const filePaths = allFilePaths.slice(0, fileCap);
 
-  // Step 5: assemble sections with shared budget
-  // Each section gets budget/4 of the total char budget.
+  // Step 4: assemble and concatenate sections
+  return assembleSections(filePaths, input, warnings);
+}
+
+/** Assemble all enrichment sections and concatenate into final output. */
+async function assembleSections(
+  filePaths: string[],
+  input: EnrichmentInput,
+  warnings: string[],
+): Promise<EnrichmentResult> {
   const sectionBudget = Math.floor(MAX_ENRICHMENT_CHARS / 4);
 
   const [gitSection, driftSection] = await Promise.all([
@@ -129,7 +120,12 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
     safeAssembleDriftSection(filePaths, input.projectDir, sectionBudget, warnings),
   ]);
 
-  const workspaceSection = await safeAssembleWorkspaceSection(filePaths, input.workspace, sectionBudget, warnings);
+  const workspaceSection = await safeAssembleWorkspaceSection(
+    filePaths,
+    input.workspace,
+    sectionBudget,
+    warnings,
+  );
 
   const tensionsSection = assembleTensionsSection(
     gitSection.data as Map<string, string[]> | null,
@@ -139,10 +135,12 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
   );
   warnings.push(...tensionsSection.warnings);
 
-  // Step 6: concatenate non-empty sections
-  const sections = [gitSection.content, driftSection.content, workspaceSection.content, tensionsSection.content].filter(
-    (s) => s.length > 0,
-  );
+  const sections = [
+    gitSection.content,
+    driftSection.content,
+    workspaceSection.content,
+    tensionsSection.content,
+  ].filter((s) => s.length > 0);
 
   if (sections.length === 0) {
     return { content: "", warnings };
@@ -151,7 +149,6 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
   const heading = "## Context Enrichment\n\n";
   let assembled = heading + sections.join("\n\n");
 
-  // Step 7: truncate if needed
   if (assembled.length > MAX_ENRICHMENT_CHARS) {
     assembled = `${assembled.slice(0, MAX_ENRICHMENT_CHARS - 12)}\n[truncated]`;
   }
@@ -159,9 +156,7 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
   return { content: assembled, warnings };
 }
 
-// ---------------------------------------------------------------------------
 // Section assemblers
-// ---------------------------------------------------------------------------
 
 /**
  * Assemble git section, catching all errors.
@@ -177,7 +172,7 @@ async function safeAssembleGitSection(
     return assembleGitSection(filePaths, cwd, budget, warnings);
   } catch (err) {
     warnings.push(`enrichment: git section failed — ${String(err)}`);
-    return { content: "", warnings: [], data: null };
+    return { content: "", data: null, warnings: [] };
   }
 }
 
@@ -195,7 +190,7 @@ async function safeAssembleDriftSection(
     return await assembleDriftSection(filePaths, projectDir, budget);
   } catch (err) {
     warnings.push(`enrichment: drift section failed — ${String(err)}`);
-    return { content: "", warnings: [], data: null };
+    return { content: "", data: null, warnings: [] };
   }
 }
 
@@ -216,9 +211,7 @@ async function safeAssembleWorkspaceSection(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Git section
-// ---------------------------------------------------------------------------
 
 /**
  * `assembleGitSection` — Recent Changes.
@@ -272,7 +265,7 @@ function assembleGitSection(
     if (warnings.length > 0) {
       outerWarnings.push("enrichment: git log failed for all files");
     }
-    return { content: "", warnings, data: null };
+    return { content: "", data: null, warnings };
   }
 
   outerWarnings.push(...warnings);
@@ -282,12 +275,10 @@ function assembleGitSection(
     content = content.slice(0, budget);
   }
 
-  return { content, warnings: [], data: fileCommits };
+  return { content, data: fileCommits, warnings: [] };
 }
 
-// ---------------------------------------------------------------------------
 // Drift section
-// ---------------------------------------------------------------------------
 
 /**
  * `assembleDriftSection` — Drift Signals.
@@ -301,14 +292,14 @@ async function assembleDriftSection(
   budget: number,
 ): Promise<SectionResult & { data: ReviewEntry[] | null }> {
   if (!projectDir) {
-    return { content: "", warnings: [], data: null };
+    return { content: "", data: null, warnings: [] };
   }
 
   const store = new DriftStore(projectDir);
   const reviews = await store.getReviewsForFiles(filePaths);
 
   if (reviews.length === 0) {
-    return { content: "", warnings: [], data: null };
+    return { content: "", data: null, warnings: [] };
   }
 
   const lines: string[] = [];
@@ -325,7 +316,9 @@ async function assembleDriftSection(
 
     const latest = fileReviews[0];
     const relativeTime = formatRelativeTime(latest.timestamp);
-    const violationCount = (latest.violations ?? []).filter((v) => v.file_path === filePath || !v.file_path).length;
+    const violationCount = (latest.violations ?? []).filter(
+      (v) => v.file_path === filePath || !v.file_path,
+    ).length;
 
     const verdictEscaped = escapeDollarBrace(latest.verdict);
     lines.push(
@@ -334,7 +327,7 @@ async function assembleDriftSection(
   }
 
   if (lines.length === 0) {
-    return { content: "", warnings: [], data: null };
+    return { content: "", data: null, warnings: [] };
   }
 
   let content = `### Drift Signals\n\n${lines.join("\n")}`;
@@ -342,12 +335,10 @@ async function assembleDriftSection(
     content = content.slice(0, budget);
   }
 
-  return { content, warnings: [], data: reviews };
+  return { content, data: reviews, warnings: [] };
 }
 
-// ---------------------------------------------------------------------------
 // Workspace section
-// ---------------------------------------------------------------------------
 
 /**
  * `assembleWorkspaceSection` — Prior Work.
@@ -356,7 +347,11 @@ async function assembleDriftSection(
  * and REVIEW.md files that mention any of the scoped file paths.
  * Caps at MAX_WORKSPACE_REFS references.
  */
-function assembleWorkspaceSection(filePaths: string[], workspace: string, budget: number): SectionResult {
+function assembleWorkspaceSection(
+  filePaths: string[],
+  workspace: string,
+  budget: number,
+): SectionResult {
   const branchDir = dirname(workspace);
 
   if (!existsSync(branchDir)) {
@@ -408,14 +403,12 @@ function assembleWorkspaceSection(filePaths: string[], workspace: string, budget
  * mention any of the given file paths. Returns the first matching file's
  * content, or null if none found.
  */
-function findMatchingArtifact(wsDir: string, filePaths: string[]): string | null {
+/** Collect candidate artifact files (DESIGN.md from plans, REVIEW.md from reviews). */
+function collectArtifactCandidates(wsDir: string): string[] {
+  const candidates: string[] = [];
   const plansDir = join(wsDir, "plans");
   const reviewsDir = join(wsDir, "reviews");
 
-  // Candidate artifact files to check
-  const candidates: string[] = [];
-
-  // Check plans/*/DESIGN.md
   if (existsSync(plansDir)) {
     try {
       const planDirs = readdirSync(plansDir, { withFileTypes: true })
@@ -433,17 +426,21 @@ function findMatchingArtifact(wsDir: string, filePaths: string[]): string | null
     }
   }
 
-  // Check reviews/REVIEW.md
   const reviewFile = join(reviewsDir, "REVIEW.md");
   if (existsSync(reviewFile)) {
     candidates.push(reviewFile);
   }
 
+  return candidates;
+}
+
+function findMatchingArtifact(wsDir: string, filePaths: string[]): string | null {
+  const candidates = collectArtifactCandidates(wsDir);
+
   for (const candidatePath of candidates) {
     try {
       const content = readFileSync(candidatePath, "utf-8");
-      const mentionsFile = filePaths.some((fp) => content.includes(fp));
-      if (mentionsFile) {
+      if (filePaths.some((fp) => content.includes(fp))) {
         return content;
       }
     } catch {
@@ -454,9 +451,7 @@ function findMatchingArtifact(wsDir: string, filePaths: string[]): string | null
   return null;
 }
 
-// ---------------------------------------------------------------------------
 // Tensions section
-// ---------------------------------------------------------------------------
 
 /**
  * `assembleTensionsSection` — cross-reference drift violations with recent commits.
@@ -521,15 +516,13 @@ function countViolationsForFile(reviews: ReviewEntry[], filePath: string): numbe
     if (!review.files.includes(filePath)) {
       continue;
     }
-    const fileViolations = (review.violations ?? []).filter((v) => v.file_path === filePath || !v.file_path);
+    const fileViolations = (review.violations ?? []).filter(
+      (v) => v.file_path === filePath || !v.file_path,
+    );
     count += fileViolations.length;
   }
   return count;
 }
-
-// ---------------------------------------------------------------------------
-// Utility
-// ---------------------------------------------------------------------------
 
 /**
  * Format a timestamp as a relative time string (e.g., "2 days ago").

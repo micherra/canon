@@ -7,18 +7,14 @@
  */
 
 import type Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { EMBEDDING_MODEL_ID } from "../constants.ts";
-import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import type { EntityRow } from "../graph/kg-types.ts";
+import { KgVectorQuery } from "../graph/kg-vector-query.ts";
+import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { MockEmbeddingService, randomEmbedding } from "./embedding-test-helpers.ts";
-
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
 
 function makeDb(): Database.Database {
   return initDatabase(":memory:");
@@ -34,33 +30,31 @@ function seedEntity(
   overrides: Partial<Omit<EntityRow, "entity_id" | "file_id">> = {},
 ): { fileId: number; entityId: number } {
   const fileRow = store.upsertFile({
-    path: overrides.qualified_name?.split("::")[0] ?? "src/A.ts",
-    mtime_ms: Date.now(),
     content_hash: "abc",
     language: "typescript",
-    layer: "domain",
     last_indexed_at: Date.now(),
+    layer: "domain",
+    mtime_ms: Date.now(),
+    path: overrides.qualified_name?.split("::")[0] ?? "src/A.ts",
   });
   const fileId = fileRow.file_id!;
   const entityRow = store.insertEntity({
+    is_default_export: false,
+    is_exported: false,
+    kind: "function",
+    line_end: 10,
+    line_start: 1,
+    metadata: null,
     name: "myFunc",
     qualified_name: "src/A.ts::myFunc",
-    kind: "function",
-    line_start: 1,
-    line_end: 10,
-    is_exported: false,
-    is_default_export: false,
     signature: null,
-    metadata: null,
     ...overrides,
     file_id: fileId,
   });
-  return { fileId, entityId: entityRow.entity_id! };
+  return { entityId: entityRow.entity_id!, fileId };
 }
 
-// ---------------------------------------------------------------------------
 // KgVectorStore — static helpers
-// ---------------------------------------------------------------------------
 
 describe("KgVectorStore.textHash", () => {
   test("returns a 64-char hex string", () => {
@@ -81,28 +75,28 @@ describe("KgVectorStore.textHash", () => {
 describe("KgVectorStore.compositeEntityText", () => {
   test("formats entity without signature", () => {
     const text = KgVectorStore.compositeEntityText({
+      file_path: "src/A.ts",
       kind: "function",
       qualified_name: "src/A.ts::myFunc",
       signature: null,
-      file_path: "src/A.ts",
     });
     expect(text).toBe("function: src/A.ts::myFunc\nfile: src/A.ts");
   });
 
   test("includes signature when present", () => {
     const text = KgVectorStore.compositeEntityText({
+      file_path: "src/B.ts",
       kind: "class",
       qualified_name: "src/B.ts::MyClass",
       signature: "class MyClass extends Base",
-      file_path: "src/B.ts",
     });
-    expect(text).toBe("class: src/B.ts::MyClass\nsignature: class MyClass extends Base\nfile: src/B.ts");
+    expect(text).toBe(
+      "class: src/B.ts::MyClass\nsignature: class MyClass extends Base\nfile: src/B.ts",
+    );
   });
 });
 
-// ---------------------------------------------------------------------------
 // KgVectorStore — upsert and round-trip
-// ---------------------------------------------------------------------------
 
 describe("KgVectorStore upsertEntityVector", () => {
   let db: Database.Database;
@@ -127,9 +121,9 @@ describe("KgVectorStore upsertEntityVector", () => {
     vectorStore.upsertEntityVector(entityId, embedding, hash);
 
     // Verify meta row was inserted
-    const meta = db
-      .prepare("SELECT * FROM entity_vector_meta WHERE entity_id = ?")
-      .get(entityId) as { text_hash: string; model_id: string } | undefined;
+    const meta = db.prepare("SELECT * FROM entity_vector_meta WHERE entity_id = ?").get(entityId) as
+      | { text_hash: string; model_id: string }
+      | undefined;
     expect(meta).toBeDefined();
     expect(meta!.text_hash).toBe(hash);
     expect(meta!.model_id).toBe(EMBEDDING_MODEL_ID);
@@ -145,9 +139,9 @@ describe("KgVectorStore upsertEntityVector", () => {
     vectorStore.upsertEntityVector(entityId, embedding1, hash1);
     vectorStore.upsertEntityVector(entityId, embedding2, hash2);
 
-    const meta = db
-      .prepare("SELECT * FROM entity_vector_meta WHERE entity_id = ?")
-      .get(entityId) as { text_hash: string } | undefined;
+    const meta = db.prepare("SELECT * FROM entity_vector_meta WHERE entity_id = ?").get(entityId) as
+      | { text_hash: string }
+      | undefined;
     expect(meta!.text_hash).toBe(hash2);
 
     // Only one vec row should exist
@@ -163,7 +157,9 @@ describe("KgVectorStore upsertEntityVector", () => {
     // Query with the exact same embedding — distance should be very small
     const queryBuf = Buffer.from(embedding.buffer, embedding.byteOffset, embedding.byteLength);
     const rows = db
-      .prepare("SELECT entity_id, distance FROM entity_vectors WHERE embedding MATCH ? ORDER BY distance LIMIT 5")
+      .prepare(
+        "SELECT entity_id, distance FROM entity_vectors WHERE embedding MATCH ? ORDER BY distance LIMIT 5",
+      )
       .all(queryBuf) as Array<{ entity_id: number; distance: number }>;
 
     expect(rows.length).toBe(1);
@@ -189,12 +185,12 @@ describe("KgVectorStore upsertSummaryVector", () => {
 
   function seedSummary(fileId: number): number {
     const result = store.upsertSummary({
-      file_id: fileId,
+      content_hash: null,
       entity_id: null,
+      file_id: fileId,
+      model: null,
       scope: "file",
       summary: "This file does something useful",
-      model: null,
-      content_hash: null,
       updated_at: new Date().toISOString(),
     });
     return result.summary_id!;
@@ -224,7 +220,9 @@ describe("KgVectorStore upsertSummaryVector", () => {
 
     const queryBuf = Buffer.from(embedding.buffer, embedding.byteOffset, embedding.byteLength);
     const rows = db
-      .prepare("SELECT summary_id, distance FROM summary_vectors WHERE embedding MATCH ? ORDER BY distance LIMIT 5")
+      .prepare(
+        "SELECT summary_id, distance FROM summary_vectors WHERE embedding MATCH ? ORDER BY distance LIMIT 5",
+      )
       .all(queryBuf) as Array<{ summary_id: number; distance: number }>;
 
     expect(rows.length).toBe(1);
@@ -233,9 +231,7 @@ describe("KgVectorStore upsertSummaryVector", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // KgVectorStore — staleness detection
-// ---------------------------------------------------------------------------
 
 describe("KgVectorStore.getStaleEntityVectors", () => {
   let db: Database.Database;
@@ -253,7 +249,7 @@ describe("KgVectorStore.getStaleEntityVectors", () => {
   });
 
   test("returns entities with no vector", () => {
-    seedEntity(store, { qualified_name: "src/A.ts::funcA", name: "funcA", kind: "function" });
+    seedEntity(store, { kind: "function", name: "funcA", qualified_name: "src/A.ts::funcA" });
 
     const stale = vectorStore.getStaleEntityVectors();
     expect(stale.length).toBe(1);
@@ -263,24 +259,24 @@ describe("KgVectorStore.getStaleEntityVectors", () => {
   test("excludes kind=file entities", () => {
     // A file entity (no useful signature)
     const file = store.upsertFile({
-      path: "src/A.ts",
-      mtime_ms: Date.now(),
       content_hash: "x",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/A.ts",
     });
     store.insertEntity({
       file_id: file.file_id!,
+      is_default_export: false,
+      is_exported: false,
+      kind: "file",
+      line_end: 1,
+      line_start: 1,
+      metadata: null,
       name: "A.ts",
       qualified_name: "src/A.ts",
-      kind: "file",
-      line_start: 1,
-      line_end: 1,
-      is_exported: false,
-      is_default_export: false,
       signature: null,
-      metadata: null,
     });
 
     const stale = vectorStore.getStaleEntityVectors();
@@ -288,16 +284,25 @@ describe("KgVectorStore.getStaleEntityVectors", () => {
   });
 
   test("excludes already-embedded entities with matching hash and model", () => {
-    const { entityId } = seedEntity(store, { kind: "function", signature: "function myFunc(): void" });
-    const { qualified_name, kind, signature } = store.getEntitiesByFile(
-      (db.prepare("SELECT file_id FROM entities WHERE entity_id = ?").get(entityId) as { file_id: number }).file_id,
-    ).find((e) => e.entity_id === entityId)!;
+    const { entityId } = seedEntity(store, {
+      kind: "function",
+      signature: "function myFunc(): void",
+    });
+    const { qualified_name, kind, signature } = store
+      .getEntitiesByFile(
+        (
+          db.prepare("SELECT file_id FROM entities WHERE entity_id = ?").get(entityId) as {
+            file_id: number;
+          }
+        ).file_id,
+      )
+      .find((e) => e.entity_id === entityId)!;
     const filePath = "src/A.ts";
     const compositeText = KgVectorStore.compositeEntityText({
+      file_path: filePath,
       kind,
       qualified_name,
       signature: signature ?? null,
-      file_path: filePath,
     });
     const hash = KgVectorStore.textHash(compositeText);
     const embedding = randomEmbedding(7);
@@ -324,16 +329,18 @@ describe("KgVectorStore.getStaleEntityVectors", () => {
     vectorStore.upsertEntityVector(entityId, embedding, "placeholder");
 
     // Force model_id to a different value
-    db.prepare("UPDATE entity_vector_meta SET model_id = 'old-model' WHERE entity_id = ?").run(entityId);
+    db.prepare("UPDATE entity_vector_meta SET model_id = 'old-model' WHERE entity_id = ?").run(
+      entityId,
+    );
 
     const stale = vectorStore.getStaleEntityVectors();
     expect(stale.find((r) => r.entity_id === entityId)).toBeDefined();
   });
 
   test("respects limit parameter", () => {
-    seedEntity(store, { qualified_name: "src/A.ts::a", name: "a", kind: "function" });
-    seedEntity(store, { qualified_name: "src/B.ts::b", name: "b", kind: "function" });
-    seedEntity(store, { qualified_name: "src/C.ts::c", name: "c", kind: "function" });
+    seedEntity(store, { kind: "function", name: "a", qualified_name: "src/A.ts::a" });
+    seedEntity(store, { kind: "function", name: "b", qualified_name: "src/B.ts::b" });
+    seedEntity(store, { kind: "function", name: "c", qualified_name: "src/C.ts::c" });
 
     const stale = vectorStore.getStaleEntityVectors(2);
     expect(stale.length).toBeLessThanOrEqual(2);
@@ -357,20 +364,20 @@ describe("KgVectorStore.getStaleSummaryVectors", () => {
 
   function seedFileSummary(path = "src/A.ts"): { fileId: number; summaryId: number } {
     const fileRow = store.upsertFile({
-      path,
-      mtime_ms: Date.now(),
       content_hash: "x",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path,
     });
     const summaryRow = store.upsertSummary({
-      file_id: fileRow.file_id!,
+      content_hash: null,
       entity_id: null,
+      file_id: fileRow.file_id!,
+      model: null,
       scope: "file",
       summary: "A useful summary",
-      model: null,
-      content_hash: null,
       updated_at: new Date().toISOString(),
     });
     return { fileId: fileRow.file_id!, summaryId: summaryRow.summary_id! };
@@ -392,9 +399,7 @@ describe("KgVectorStore.getStaleSummaryVectors", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // KgVectorStore — orphan cleanup
-// ---------------------------------------------------------------------------
 
 describe("KgVectorStore.cleanOrphanEntityVectors", () => {
   let db: Database.Database;
@@ -412,7 +417,7 @@ describe("KgVectorStore.cleanOrphanEntityVectors", () => {
   });
 
   test("removes vectors for deleted entities", () => {
-    const { entityId, fileId } = seedEntity(store, { kind: "function" });
+    const { entityId } = seedEntity(store, { kind: "function" });
     vectorStore.upsertEntityVector(entityId, randomEmbedding(1), "hash1");
 
     // Delete the entity (CASCADE removes entity_vector_meta but NOT entity_vectors)
@@ -442,9 +447,7 @@ describe("KgVectorStore.cleanOrphanEntityVectors", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // KgVectorStore.getVectorStats
-// ---------------------------------------------------------------------------
 
 describe("KgVectorStore.getVectorStats", () => {
   let db: Database.Database;
@@ -475,9 +478,7 @@ describe("KgVectorStore.getVectorStats", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // KgVectorQuery
-// ---------------------------------------------------------------------------
 
 describe("KgVectorQuery.semanticSearch", () => {
   let db: Database.Database;
@@ -502,35 +503,46 @@ describe("KgVectorQuery.semanticSearch", () => {
     seed = 0,
   ): { entityId: number; fileId: number } {
     const info = seedEntity(store, overrides);
-    vectorStore.upsertEntityVector(info.entityId, randomEmbedding(seed), KgVectorStore.textHash("t"));
+    vectorStore.upsertEntityVector(
+      info.entityId,
+      randomEmbedding(seed),
+      KgVectorStore.textHash("t"),
+    );
     return info;
   }
 
   /** Seed a summary + vector. */
   function seedSummaryWithVector(filePath: string, summaryText: string, seed = 100): number {
     const fileRow = store.upsertFile({
-      path: filePath,
-      mtime_ms: Date.now(),
       content_hash: "h",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: filePath,
     });
     const summaryRow = store.upsertSummary({
-      file_id: fileRow.file_id!,
+      content_hash: null,
       entity_id: null,
+      file_id: fileRow.file_id!,
+      model: null,
       scope: "file",
       summary: summaryText,
-      model: null,
-      content_hash: null,
       updated_at: new Date().toISOString(),
     });
-    vectorStore.upsertSummaryVector(summaryRow.summary_id!, randomEmbedding(seed), KgVectorStore.textHash(summaryText));
+    vectorStore.upsertSummaryVector(
+      summaryRow.summary_id!,
+      randomEmbedding(seed),
+      KgVectorStore.textHash(summaryText),
+    );
     return summaryRow.summary_id!;
   }
 
   test("returns entity results when scope=entities", async () => {
-    seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::funcA", name: "funcA" }, 10);
+    seedEntityWithVector(
+      { kind: "function", name: "funcA", qualified_name: "src/A.ts::funcA" },
+      10,
+    );
 
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     const results = await query.semanticSearch("find a function", { scope: "entities" });
@@ -552,7 +564,10 @@ describe("KgVectorQuery.semanticSearch", () => {
   });
 
   test("merges entity and summary results when scope=both", async () => {
-    seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::funcA", name: "funcA" }, 10);
+    seedEntityWithVector(
+      { kind: "function", name: "funcA", qualified_name: "src/A.ts::funcA" },
+      10,
+    );
     seedSummaryWithVector("src/C.ts", "Handles logging", 200);
 
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
@@ -565,11 +580,14 @@ describe("KgVectorQuery.semanticSearch", () => {
   });
 
   test("applies kind_filter to entity results", async () => {
-    seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::fn", name: "fn" }, 10);
-    seedEntityWithVector({ kind: "class", qualified_name: "src/B.ts::Cls", name: "Cls" }, 20);
+    seedEntityWithVector({ kind: "function", name: "fn", qualified_name: "src/A.ts::fn" }, 10);
+    seedEntityWithVector({ kind: "class", name: "Cls", qualified_name: "src/B.ts::Cls" }, 20);
 
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
-    const results = await query.semanticSearch("code", { scope: "entities", kind_filter: ["function"] });
+    const results = await query.semanticSearch("code", {
+      kind_filter: ["function"],
+      scope: "entities",
+    });
 
     expect(results.every((r) => r.kind === "function")).toBe(true);
   });
@@ -577,7 +595,7 @@ describe("KgVectorQuery.semanticSearch", () => {
   test("respects limit parameter", async () => {
     for (let i = 0; i < 5; i++) {
       seedEntityWithVector(
-        { kind: "function", qualified_name: `src/F${i}.ts::fn${i}`, name: `fn${i}` },
+        { kind: "function", name: `fn${i}`, qualified_name: `src/F${i}.ts::fn${i}` },
         i * 10,
       );
     }
@@ -588,7 +606,7 @@ describe("KgVectorQuery.semanticSearch", () => {
   });
 
   test("applies threshold to filter by distance", async () => {
-    seedEntityWithVector({ kind: "function", qualified_name: "src/A.ts::fn", name: "fn" }, 0);
+    seedEntityWithVector({ kind: "function", name: "fn", qualified_name: "src/A.ts::fn" }, 0);
 
     const query = new KgVectorQuery(db, mockEmbeddingService as any);
     // Very strict threshold — most random vectors won't be within 0.001
@@ -599,7 +617,7 @@ describe("KgVectorQuery.semanticSearch", () => {
 
   test("deduplicates by entity_id (lower distance wins)", async () => {
     const { entityId } = seedEntityWithVector(
-      { kind: "function", qualified_name: "src/A.ts::fn", name: "fn" },
+      { kind: "function", name: "fn", qualified_name: "src/A.ts::fn" },
       0,
     );
     // Also seed a summary for the same entity
@@ -607,12 +625,12 @@ describe("KgVectorQuery.semanticSearch", () => {
       .prepare("SELECT file_id FROM entities WHERE entity_id = ?")
       .get(entityId) as { file_id: number };
     const summaryRow = store.upsertSummary({
-      file_id: fileRow.file_id,
+      content_hash: null,
       entity_id: entityId,
+      file_id: fileRow.file_id,
+      model: null,
       scope: "entity",
       summary: "Function summary",
-      model: null,
-      content_hash: null,
       updated_at: new Date().toISOString(),
     });
     vectorStore.upsertSummaryVector(
@@ -633,7 +651,7 @@ describe("KgVectorQuery.semanticSearch", () => {
   test("returns results sorted by distance (ascending)", async () => {
     for (let i = 0; i < 3; i++) {
       seedEntityWithVector(
-        { kind: "function", qualified_name: `src/X${i}.ts::fn${i}`, name: `fn${i}` },
+        { kind: "function", name: `fn${i}`, qualified_name: `src/X${i}.ts::fn${i}` },
         i * 7,
       );
     }
@@ -653,9 +671,7 @@ describe("KgVectorQuery.semanticSearch", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // KgVectorStore — integer validation guards (Fix for PR #58 review)
-// ---------------------------------------------------------------------------
 
 describe("KgVectorStore integer validation guards", () => {
   let db: Database.Database;
@@ -692,7 +708,9 @@ describe("KgVectorStore integer validation guards", () => {
     const store = makeStore(db);
     const { entityId } = seedEntity(store);
     // Should not throw
-    expect(() => vectorStore.upsertEntityVector(entityId, randomEmbedding(0), "hash")).not.toThrow();
+    expect(() =>
+      vectorStore.upsertEntityVector(entityId, randomEmbedding(0), "hash"),
+    ).not.toThrow();
   });
 
   test("upsertSummaryVector throws for non-integer summaryId (float)", () => {
@@ -711,12 +729,12 @@ describe("KgVectorStore integer validation guards", () => {
     const store = makeStore(db);
     const { fileId } = seedEntity(store);
     const summaryRow = store.upsertSummary({
-      file_id: fileId,
+      content_hash: null,
       entity_id: null,
+      file_id: fileId,
+      model: null,
       scope: "file",
       summary: "test",
-      model: null,
-      content_hash: null,
       updated_at: new Date().toISOString(),
     });
     // Should not throw

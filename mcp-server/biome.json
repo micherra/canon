@@ -1,70 +1,180 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
-  "vcs": {
-    "enabled": false,
-    "clientKind": "git",
-    "useIgnoreFile": false
+
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on",
+        "useSortedAttributes": "on",
+        "useSortedInterfaceMembers": "on",
+        "useSortedKeys": "on"
+      }
+    },
+    "enabled": true
   },
+
   "files": {
-    "includes": ["src/**", "ui/**"]
+    "ignoreUnknown": true,
+    "includes": [
+      "src/**/*.{ts,tsx,js,jsx,mts,cts,cjs,mjs,json,jsonc}",
+
+      "!**/*.generated.*",
+      "!**/*.min.*",
+
+      "!dist",
+      "!build",
+      "!.next",
+      "!coverage",
+      "!.turbo",
+      "!tmp",
+      "!.cache"
+    ],
+    "maxSize": 400000
   },
+
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2,
-    "lineWidth": 120
+    "lineWidth": 100
   },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true,
-      "complexity": {
-        "noExcessiveCognitiveComplexity": {
-          "level": "warn",
-          "options": { "maxAllowedComplexity": 25 }
-        },
-        "noForEach": "off",
-        "useLiteralKeys": "off"
-      },
-      "correctness": {
-        "noUnusedVariables": "warn",
-        "noUnusedImports": "error",
-        "noUnusedFunctionParameters": "warn",
-        "useExhaustiveDependencies": "off"
-      },
-      "style": {
-        "noNonNullAssertion": "off",
-        "useConst": "error",
-        "useImportType": "error",
-        "useNodejsImportProtocol": "error",
-        "useTemplate": "error",
-        "noParameterAssign": "off"
-      },
-      "suspicious": {
-        "noExplicitAny": "warn",
-        "noEmptyBlockStatements": "warn",
-        "noConsole": "off",
-        "noTemplateCurlyInString": "off",
-        "noAssignInExpressions": "off"
-      },
-      "performance": {
-        "noDelete": "off"
-      }
-    }
-  },
+
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
-      "trailingCommas": "all",
-      "semicolons": "always"
+      "semicolons": "always",
+      "trailingCommas": "all"
     }
   },
-  "assist": {
+
+  "linter": {
     "enabled": true,
-    "actions": {
-      "source": {
-        "organizeImports": "on"
+    "rules": {
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 12 }
+        },
+        "noExcessiveLinesPerFunction": {
+          "level": "error",
+          "options": { "maxLines": 60 }
+        },
+        "noForEach": "error",
+        "useArrowFunction": "error",
+        "useLiteralKeys": "error",
+        "useMaxParams": {
+          "level": "error",
+          "options": { "max": 4 }
+        }
+      },
+
+      "correctness": {
+        "noUndeclaredDependencies": {
+          "level": "error",
+          "options": {
+            "devDependencies": [
+              "**/*.test.*",
+              "**/*.spec.*",
+              "**/test/**",
+              "**/tests/**",
+              "**/__tests__/**",
+              "**/vitest.setup.*",
+              "**/vite.config.*",
+              "**/vitest.config.*",
+              "**/jest.config.*",
+              "**/playwright.config.*",
+              "**/storybook/**",
+              "**/*.stories.*",
+              "**/.storybook/**",
+              "**/scripts/**"
+            ],
+            "optionalDependencies": true,
+            "peerDependencies": true
+          }
+        },
+        "noUnusedFunctionParameters": "warn",
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "useExhaustiveDependencies": "off"
+      },
+
+      "performance": {
+        "noAwaitInLoops": "on",
+        "noBarrelFile": "on",
+        "noDelete": "on"
+      },
+      "recommended": true,
+
+      "style": {
+        "noNonNullAssertion": "off",
+        "noParameterAssign": "on",
+        "useConsistentTypeDefinitions": {
+          "level": "warn",
+          "options": { "style": "type" }
+        },
+        "useConst": "error",
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error",
+        "useTemplate": "error"
+      },
+
+      "suspicious": {
+        "noAssignInExpressions": "on",
+        "noConsole": "off",
+        "noEmptyBlockStatements": "error",
+        "noExplicitAny": "error",
+        "noTemplateCurlyInString": "off"
       }
     }
+  },
+
+  "overrides": [
+    {
+      "includes": ["src/**/*.test.{ts,tsx,js,jsx}", "src/**/*.spec.{ts,tsx,js,jsx}"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off",
+            "noExcessiveLinesPerFunction": "off",
+            "useArrowFunction": "off"
+          },
+          "performance": {
+            "noDelete": "off"
+          },
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.d.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedFunctionParameters": "off",
+            "noUnusedVariables": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/ui/**/*.{ts,tsx,js,jsx}"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUndeclaredDependencies": "off"
+          }
+        }
+      }
+    }
+  ],
+
+  "vcs": {
+    "clientKind": "git",
+    "defaultBranch": "main",
+    "enabled": true,
+    "root": "..",
+    "useIgnoreFile": true
   }
 }

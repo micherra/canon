@@ -18,15 +18,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
 
-// ---------------------------------------------------------------------------
 // Parse explore.md and verify role structure
-// ---------------------------------------------------------------------------
 
 describe("explore.md role structure", () => {
   it("parses explore.md and finds the dependencies role marked as optional", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "explore");
 
-    const researchState = flow.states["research"];
+    const researchState = flow.states.research;
     expect(researchState).toBeDefined();
     expect(researchState.roles).toBeDefined();
 
@@ -43,9 +41,11 @@ describe("explore.md role structure", () => {
   it("parses explore.md and finds codebase role is required (not optional)", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "explore");
 
-    const researchState = flow.states["research"];
+    const researchState = flow.states.research;
     const roles = researchState.roles as RoleEntry[];
-    const codebaseRole = roles.find((r) => (typeof r === "string" ? r === "codebase" : r.name === "codebase"));
+    const codebaseRole = roles.find((r) =>
+      typeof r === "string" ? r === "codebase" : r.name === "codebase",
+    );
 
     expect(codebaseRole).toBeDefined();
     // codebase should remain as a plain string (required)
@@ -54,9 +54,7 @@ describe("explore.md role structure", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // loadAndResolveFlow("explore") succeeds with correct structure
-// ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow explore", () => {
   it("loads explore flow without throwing", async () => {
@@ -66,7 +64,7 @@ describe("loadAndResolveFlow explore", () => {
 
   it("resolves research state as parallel type with two roles", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "explore");
-    const researchState = flow.states["research"];
+    const researchState = flow.states.research;
 
     expect(researchState.type).toBe("parallel");
     expect(researchState.roles).toHaveLength(2);
@@ -74,15 +72,13 @@ describe("loadAndResolveFlow explore", () => {
 
   it("has synthesize and done states", async () => {
     const flow = await loadAndResolveFlow(pluginDir, "explore");
-    expect(flow.states["synthesize"]).toBeDefined();
-    expect(flow.states["done"]).toBeDefined();
-    expect(flow.states["done"].type).toBe("terminal");
+    expect(flow.states.synthesize).toBeDefined();
+    expect(flow.states.done).toBeDefined();
+    expect(flow.states.done.type).toBe("terminal");
   });
 });
 
-// ---------------------------------------------------------------------------
 // isRoleOptional correctly classifies explore roles
-// ---------------------------------------------------------------------------
 
 describe("isRoleOptional for explore roles", () => {
   it("returns true for dependencies role entry {name: dependencies, optional: true}", () => {

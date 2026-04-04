@@ -17,28 +17,16 @@ import { join, resolve } from "node:path";
 import type { Board } from "./flow-schema.ts";
 import { extractFilePaths } from "./wave-variables.ts";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 /** Maximum bytes to read from a single artifact file. */
 const MAX_ARTIFACT_BYTES = 50 * 1024; // 50KB
 
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
-
-export interface ScopeInput {
+export type ScopeInput = {
   workspace: string;
   stateId: string;
   board: Board;
   planSlug?: string;
   taskId?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+};
 
 /**
  * Resolve the task scope (affected file paths) from available sources.
@@ -71,9 +59,7 @@ export function resolveTaskScope(input: ScopeInput): string[] {
   return [];
 }
 
-// ---------------------------------------------------------------------------
 // Private helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Extract file paths from board state artifacts.
@@ -93,7 +79,10 @@ function resolveFromBoardArtifacts(board: Board, stateId: string, workspace: str
     try {
       // Guard: reject artifact paths that escape the workspace root
       const resolvedArtifact = resolve(artifactFile);
-      if (!resolvedArtifact.startsWith(resolvedWorkspace + "/") && resolvedArtifact !== resolvedWorkspace) {
+      if (
+        !resolvedArtifact.startsWith(`${resolvedWorkspace}/`) &&
+        resolvedArtifact !== resolvedWorkspace
+      ) {
         continue;
       }
 
@@ -119,11 +108,7 @@ function resolveFromBoardArtifacts(board: Board, stateId: string, workspace: str
  * Uses simple regex parsing (no gray-matter dependency).
  * Returns deduplicated paths.
  */
-function resolveFromTaskPlan(
-  workspace: string,
-  planSlug: string,
-  taskId: string,
-): string[] {
+function resolveFromTaskPlan(workspace: string, planSlug: string, taskId: string): string[] {
   const planPath = join(workspace, "plans", planSlug, `${taskId}-PLAN.md`);
 
   try {
@@ -168,13 +153,14 @@ function parseFrontmatterFiles(content: string): string[] {
   // Extract list items: "  - path/to/file.ts"
   const paths: string[] = [];
   const itemRegex = /^[ \t]+-\s+(.+)$/gm;
-  let m: RegExpExecArray | null;
+  let m = itemRegex.exec(filesSection);
 
-  while ((m = itemRegex.exec(filesSection)) !== null) {
+  while (m !== null) {
     const filePath = m[1].trim();
     if (filePath.length > 0) {
       paths.push(filePath);
     }
+    m = itemRegex.exec(filesSection);
   }
 
   // Deduplicate

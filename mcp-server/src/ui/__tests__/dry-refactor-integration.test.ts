@@ -26,9 +26,9 @@ const libDir = join(uiDir, "lib");
 describe("Cross-wave: getSeverityColor utility → ViolationCard integration", () => {
   it("getSeverityColor returns same value as SEVERITY_COLORS[severity] for all three valid severities", () => {
     // This is the behavioral contract: refactor must not change color values
-    expect(getSeverityColor("rule")).toBe(SEVERITY_COLORS["rule"]);
+    expect(getSeverityColor("rule")).toBe(SEVERITY_COLORS.rule);
     expect(getSeverityColor("strong-opinion")).toBe(SEVERITY_COLORS["strong-opinion"]);
-    expect(getSeverityColor("convention")).toBe(SEVERITY_COLORS["convention"]);
+    expect(getSeverityColor("convention")).toBe(SEVERITY_COLORS.convention);
   });
 
   it("getSeverityColor fallback (#636a80) differs from old inline fallback (#888888) but is intentional", () => {
@@ -49,7 +49,7 @@ describe("Cross-wave: useDataLoader composable (Wave 2) consumed by Wave 5 views
   it("useDataLoader.svelte.ts exports the DataLoaderState interface", () => {
     const content = readFileSync(join(libDir, "useDataLoader.svelte.ts"), "utf-8");
     expect(content).toContain("DataLoaderState");
-    expect(content).toContain("export interface DataLoaderState");
+    expect(content).toContain("export type DataLoaderState");
   });
 
   it("useDataLoader.svelte.ts exports LoaderStatus type", () => {

@@ -14,7 +14,7 @@ describe("storePrReview", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("calls DriftStore.appendReview with server-generated id and timestamp", async () => {
@@ -22,15 +22,15 @@ describe("storePrReview", () => {
 
     const result = await storePrReview(
       {
-        verdict: "CLEAN",
         files: ["src/foo.ts"],
-        violations: [],
         honored: ["some-principle"],
         score: {
-          rules: { passed: 1, total: 1 },
-          opinions: { passed: 1, total: 1 },
           conventions: { passed: 1, total: 1 },
+          opinions: { passed: 1, total: 1 },
+          rules: { passed: 1, total: 1 },
         },
+        verdict: "CLEAN",
+        violations: [],
       },
       tmpDir,
     );
@@ -58,15 +58,15 @@ describe("storePrReview", () => {
   it("returned review_id matches rev_ prefix pattern", async () => {
     const result = await storePrReview(
       {
-        verdict: "WARNING",
         files: [],
-        violations: [{ principle_id: "some-rule", severity: "strong-opinion" }],
         honored: [],
         score: {
-          rules: { passed: 0, total: 0 },
-          opinions: { passed: 0, total: 1 },
           conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 1 },
+          rules: { passed: 0, total: 0 },
         },
+        verdict: "WARNING",
+        violations: [{ principle_id: "some-rule", severity: "strong-opinion" }],
       },
       tmpDir,
     );
@@ -78,15 +78,15 @@ describe("storePrReview", () => {
   it("stores with minimal required fields only", async () => {
     const result = await storePrReview(
       {
-        verdict: "BLOCKING",
         files: [],
-        violations: [{ principle_id: "validate-at-trust-boundaries", severity: "rule" }],
         honored: [],
         score: {
-          rules: { passed: 0, total: 1 },
-          opinions: { passed: 0, total: 0 },
           conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 1 },
         },
+        verdict: "BLOCKING",
+        violations: [{ principle_id: "validate-at-trust-boundaries", severity: "rule" }],
       },
       tmpDir,
     );
@@ -106,28 +106,28 @@ describe("storePrReview", () => {
   it("stores with all optional fields provided", async () => {
     const result = await storePrReview(
       {
-        pr_number: 42,
         branch: "feature/my-feature",
-        last_reviewed_sha: "deadbeef123",
-        verdict: "WARNING",
-        files: ["src/a.ts", "src/b.ts"],
-        violations: [
-          {
-            principle_id: "thin-handlers",
-            severity: "strong-opinion",
-            file_path: "src/a.ts",
-            impact_score: 7.5,
-          },
-        ],
-        honored: ["errors-are-values", "validate-at-trust-boundaries"],
-        score: {
-          rules: { passed: 2, total: 2 },
-          opinions: { passed: 1, total: 2 },
-          conventions: { passed: 1, total: 1 },
-        },
         file_priorities: [
           { path: "src/a.ts", priority_score: 0.9 },
           { path: "src/b.ts", priority_score: 0.4 },
+        ],
+        files: ["src/a.ts", "src/b.ts"],
+        honored: ["errors-are-values", "validate-at-trust-boundaries"],
+        last_reviewed_sha: "deadbeef123",
+        pr_number: 42,
+        score: {
+          conventions: { passed: 1, total: 1 },
+          opinions: { passed: 1, total: 2 },
+          rules: { passed: 2, total: 2 },
+        },
+        verdict: "WARNING",
+        violations: [
+          {
+            file_path: "src/a.ts",
+            impact_score: 7.5,
+            principle_id: "thin-handlers",
+            severity: "strong-opinion",
+          },
         ],
       },
       tmpDir,
@@ -159,29 +159,29 @@ describe("storePrReview", () => {
     const recommendations = [
       {
         file_path: "src/tools/foo.ts",
-        title: "thin-handlers",
         message: "Business logic should move to a service layer.",
         source: "principle" as const,
+        title: "thin-handlers",
       },
       {
-        title: "Missing error handling",
         message: "JSON.parse on line 42 is unguarded.",
         source: "holistic" as const,
+        title: "Missing error handling",
       },
     ];
 
     const result = await storePrReview(
       {
-        verdict: "WARNING",
         files: ["src/tools/foo.ts"],
-        violations: [],
         honored: [],
-        score: {
-          rules: { passed: 1, total: 1 },
-          opinions: { passed: 0, total: 1 },
-          conventions: { passed: 1, total: 1 },
-        },
         recommendations,
+        score: {
+          conventions: { passed: 1, total: 1 },
+          opinions: { passed: 0, total: 1 },
+          rules: { passed: 1, total: 1 },
+        },
+        verdict: "WARNING",
+        violations: [],
       },
       tmpDir,
     );
@@ -199,15 +199,15 @@ describe("storePrReview", () => {
   it("recommendations field absent when not provided", async () => {
     await storePrReview(
       {
-        verdict: "CLEAN",
         files: [],
-        violations: [],
         honored: [],
         score: {
-          rules: { passed: 0, total: 0 },
-          opinions: { passed: 0, total: 0 },
           conventions: { passed: 0, total: 0 },
+          opinions: { passed: 0, total: 0 },
+          rules: { passed: 0, total: 0 },
         },
+        verdict: "CLEAN",
+        violations: [],
       },
       tmpDir,
     );
@@ -219,15 +219,15 @@ describe("storePrReview", () => {
 
   it("each call generates a unique pr_review_id", async () => {
     const minimalInput = {
-      verdict: "CLEAN" as const,
       files: [],
-      violations: [],
       honored: [],
       score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
       },
+      verdict: "CLEAN" as const,
+      violations: [],
     };
 
     const r1 = await storePrReview(minimalInput, tmpDir);

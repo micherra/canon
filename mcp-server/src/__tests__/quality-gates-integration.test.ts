@@ -12,14 +12,12 @@
  * 7. complete_flow with mixed states (one with gate data, one without) aggregates correctly
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
@@ -33,42 +31,39 @@ vi.mock("../orchestration/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-// ---------------------------------------------------------------------------
 // Imports after mocks
-// ---------------------------------------------------------------------------
 
-import { reportResult } from "../tools/report-result.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { updateBoard } from "../tools/update-board.ts";
-import { BoardSchema } from "../orchestration/flow-schema.ts";
-import { computeAnalytics, appendFlowRun } from "../drift/analytics.ts";
 import { CANON_DIR } from "../constants.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { appendFlowRun, computeAnalytics } from "../drift/analytics.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import { BoardSchema } from "../orchestration/flow-schema.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "qg-integ-"));
 }
 
-function seedBoard(workspace: string, board: ReturnType<typeof makeMinimalBoard> | ReturnType<typeof makeMultiStateBoard>): void {
+function seedBoard(
+  workspace: string,
+  board: ReturnType<typeof makeMinimalBoard> | ReturnType<typeof makeMultiStateBoard>,
+): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: board.flow,
-    task: board.task,
-    entry: board.entry,
-    current_state: board.current_state,
     base_commit: board.base_commit,
-    started: board.started,
-    last_updated: board.last_updated,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: board.current_state,
+    entry: board.entry,
+    flow: board.flow,
     flow_name: board.flow,
+    last_updated: board.last_updated,
+    sanitized: "main",
     slug: "test-slug",
+    started: board.started,
+    task: board.task,
+    tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
     store.upsertState(stateId, stateEntry as any);
@@ -80,133 +75,145 @@ function seedBoard(workspace: string, board: ReturnType<typeof makeMinimalBoard>
 
 function makeMinimalBoard() {
   return {
-    flow: "feature",
-    task: "add feature X",
-    entry: "impl",
-    current_state: "impl",
     base_commit: "abc123",
-    started: new Date(Date.now() - 120_000).toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {
-      impl: {
-        status: "in_progress" as const,
-        entries: 1,
-        entered_at: new Date().toISOString(),
-      },
-    },
+    blocked: null,
+    concerns: [],
+    current_state: "impl",
+    entry: "impl",
+    flow: "feature",
     iterations: {
       impl: {
         count: 1,
-        max: 3,
         history: [],
+        max: 3,
       },
     },
-    blocked: null,
-    concerns: [],
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date(Date.now() - 120_000).toISOString(),
+    states: {
+      impl: {
+        entered_at: new Date().toISOString(),
+        entries: 1,
+        status: "in_progress" as const,
+      },
+    },
+    task: "add feature X",
   };
 }
 
 function makeMultiStateBoard() {
   const now = new Date().toISOString();
   return {
-    flow: "feature",
-    task: "add feature Y",
-    entry: "research",
-    current_state: "review",
     base_commit: "def456",
-    started: new Date(Date.now() - 240_000).toISOString(),
-    last_updated: now,
-    states: {
-      research: {
-        status: "done" as const,
-        entries: 1,
-        entered_at: now,
-        completed_at: now,
-        metrics: {
-          duration_ms: 30_000,
-          spawns: 1,
-          model: "claude-sonnet",
-        },
-      },
-      impl: {
-        status: "done" as const,
-        entries: 1,
-        entered_at: now,
-        completed_at: now,
-        metrics: {
-          duration_ms: 60_000,
-          spawns: 1,
-          model: "claude-sonnet",
-          gate_results: [
-            { passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 },
-            { passed: false, gate: "lint", command: "npx eslint .", output: "2 errors", exitCode: 1 },
-          ],
-          postcondition_results: [
-            { passed: true, name: "postcondition-0-file_exists", type: "file_exists", output: "found" },
-          ],
-          violation_count: 2,
-          files_changed: 3,
-          test_results: { passed: 15, failed: 1, skipped: 0 },
-        },
-      },
-      review: {
-        status: "in_progress" as const,
-        entries: 1,
-        entered_at: now,
-        metrics: {
-          duration_ms: 15_000,
-          spawns: 1,
-          model: "claude-sonnet",
-          gate_results: [
-            { passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 },
-          ],
-          postcondition_results: [
-            { passed: false, name: "postcondition-0-no_pattern", type: "no_pattern", output: "found console.log" },
-          ],
-          violation_count: 1,
-          files_changed: 1,
-          test_results: { passed: 0, failed: 0, skipped: 0 },
-        },
-      },
-    },
-    iterations: {
-      research: { count: 1, max: 3, history: [] },
-      impl: { count: 1, max: 3, history: [] },
-      review: { count: 1, max: 3, history: [] },
-    },
     blocked: null,
     concerns: [],
+    current_state: "review",
+    entry: "research",
+    flow: "feature",
+    iterations: {
+      impl: { count: 1, history: [], max: 3 },
+      research: { count: 1, history: [], max: 3 },
+      review: { count: 1, history: [], max: 3 },
+    },
+    last_updated: now,
     skipped: [],
+    started: new Date(Date.now() - 240_000).toISOString(),
+    states: {
+      impl: {
+        completed_at: now,
+        entered_at: now,
+        entries: 1,
+        metrics: {
+          duration_ms: 60_000,
+          files_changed: 3,
+          gate_results: [
+            { command: "npx tsc --noEmit", exitCode: 0, gate: "tsc", output: "ok", passed: true },
+            {
+              command: "npx eslint .",
+              exitCode: 1,
+              gate: "lint",
+              output: "2 errors",
+              passed: false,
+            },
+          ],
+          model: "claude-sonnet",
+          postcondition_results: [
+            {
+              name: "postcondition-0-file_exists",
+              output: "found",
+              passed: true,
+              type: "file_exists",
+            },
+          ],
+          spawns: 1,
+          test_results: { failed: 1, passed: 15, skipped: 0 },
+          violation_count: 2,
+        },
+        status: "done" as const,
+      },
+      research: {
+        completed_at: now,
+        entered_at: now,
+        entries: 1,
+        metrics: {
+          duration_ms: 30_000,
+          model: "claude-sonnet",
+          spawns: 1,
+        },
+        status: "done" as const,
+      },
+      review: {
+        entered_at: now,
+        entries: 1,
+        metrics: {
+          duration_ms: 15_000,
+          files_changed: 1,
+          gate_results: [
+            { command: "npx tsc --noEmit", exitCode: 0, gate: "tsc", output: "ok", passed: true },
+          ],
+          model: "claude-sonnet",
+          postcondition_results: [
+            {
+              name: "postcondition-0-no_pattern",
+              output: "found console.log",
+              passed: false,
+              type: "no_pattern",
+            },
+          ],
+          spawns: 1,
+          test_results: { failed: 0, passed: 0, skipped: 0 },
+          violation_count: 1,
+        },
+        status: "in_progress" as const,
+      },
+    },
+    task: "add feature Y",
   };
 }
 
 function makeMinimalFlow() {
   return {
-    name: "feature",
     description: "feature flow",
     entry: "impl",
+    name: "feature",
+    spawn_instructions: {
+      impl: "Do the implementation",
+    },
     states: {
       impl: {
-        type: "single" as const,
         agent: "canon:canon-implementor",
         transitions: {
           done: "terminal",
         },
+        type: "single" as const,
       },
       terminal: {
         type: "terminal" as const,
       },
     },
-    spawn_instructions: {
-      impl: "Do the implementation",
-    },
   };
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("Integration: report_result discovered_gates → board stores → runGates uses them", () => {
   let workspace: string;
@@ -219,32 +226,41 @@ describe("Integration: report_result discovered_gates → board stores → runGa
 
   afterEach(() => {
     clearStoreCache();
-    rmSync(workspace, { recursive: true, force: true });
+    rmSync(workspace, { force: true, recursive: true });
   });
 
   it("discovered_gates stored by report_result are readable via readBoard but NOT executed by normalizeGates", async () => {
     // Step 1: Agent calls report_result with discovered gates
     await reportResult({
-      workspace,
-      state_id: "impl",
-      status_keyword: "done",
-      flow: makeMinimalFlow() as any,
       discovered_gates: [
         { command: "npx vitest run", source: "tester" },
         { command: "npx tsc --noEmit", source: "tester" },
       ],
+      flow: makeMinimalFlow() as any,
+      state_id: "impl",
+      status_keyword: "done",
+      workspace,
     });
 
     // Step 2: Read the board back — discovered gates should be stored on the state entry
     const board = getExecutionStore(workspace).getBoard();
-    const implState = board!.states["impl"];
+    const implState = board!.states.impl;
     expect(implState.discovered_gates).toHaveLength(2);
     expect(implState.discovered_gates![0]).toEqual({ command: "npx vitest run", source: "tester" });
-    expect(implState.discovered_gates![1]).toEqual({ command: "npx tsc --noEmit", source: "tester" });
+    expect(implState.discovered_gates![1]).toEqual({
+      command: "npx tsc --noEmit",
+      source: "tester",
+    });
 
     // Step 3: normalizeGates returns "none" — discovered gates are stored but NOT executed
     // Only YAML-defined gates (tiers 1 and 2) are executed.
-    const flow = { name: "feature", description: "test", entry: "impl", states: {}, spawn_instructions: {} };
+    const flow = {
+      description: "test",
+      entry: "impl",
+      name: "feature",
+      spawn_instructions: {},
+      states: {},
+    };
     const stateDef = { type: "single" as const }; // no explicit gates
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
     const normalized = normalizeGates(stateDef, flow as any, workspace, implState);
@@ -256,40 +272,49 @@ describe("Integration: report_result discovered_gates → board stores → runGa
   it("multiple report_result calls accumulate discovered_gates (append semantics preserved across cycle)", async () => {
     // First report — tester discovers test command
     await reportResult({
-      workspace,
+      discovered_gates: [{ command: "npx vitest run", source: "tester" }],
+      flow: makeMinimalFlow() as any,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as any,
-      discovered_gates: [{ command: "npx vitest run", source: "tester" }],
+      workspace,
     });
 
     // Re-open state for second report (simulating second agent call)
     const storeAfterFirst = getExecutionStore(workspace);
     const boardAfterFirst = storeAfterFirst.getBoard()!;
-    storeAfterFirst.upsertState("impl", { ...boardAfterFirst.states["impl"], status: "in_progress" as const });
+    storeAfterFirst.upsertState("impl", {
+      ...boardAfterFirst.states.impl,
+      status: "in_progress" as const,
+    });
 
     // Second report — reviewer discovers lint command
     await reportResult({
-      workspace,
+      discovered_gates: [{ command: "npx eslint . --ext .ts", source: "reviewer" }],
+      flow: makeMinimalFlow() as any,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as any,
-      discovered_gates: [{ command: "npx eslint . --ext .ts", source: "reviewer" }],
+      workspace,
     });
 
     const finalBoard = getExecutionStore(workspace).getBoard()!;
-    const discovered = finalBoard.states["impl"].discovered_gates ?? [];
+    const discovered = finalBoard.states.impl.discovered_gates ?? [];
 
     // Both gates accumulated — append not replace
     expect(discovered).toHaveLength(2);
-    expect(discovered.map(d => d.command)).toContain("npx vitest run");
-    expect(discovered.map(d => d.command)).toContain("npx eslint . --ext .ts");
+    expect(discovered.map((d) => d.command)).toContain("npx vitest run");
+    expect(discovered.map((d) => d.command)).toContain("npx eslint . --ext .ts");
 
     // Verify normalizeGates returns "none" — discovered gates are stored but NOT executed
     const stateDef = { type: "single" as const };
-    const flow = { name: "feature", description: "test", entry: "impl", states: {}, spawn_instructions: {} };
+    const flow = {
+      description: "test",
+      entry: "impl",
+      name: "feature",
+      spawn_instructions: {},
+      states: {},
+    };
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
-    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states["impl"]);
+    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states.impl);
 
     expect(normalized.source).toBe("none");
     expect(normalized.commands).toEqual([]);
@@ -302,26 +327,32 @@ describe("Integration: explicit gates override discovered gates (tier 1 wins)", 
 
     // Board state has discovered gates
     const boardState = {
-      status: "in_progress" as const,
-      entries: 1,
       discovered_gates: [
         { command: "pytest --tb=short", source: "tester" },
         { command: "ruff check .", source: "reviewer" },
       ],
+      entries: 1,
+      status: "in_progress" as const,
     };
 
     // StateDef has explicit gates array (tier 1)
-    const stateDef = { type: "single" as const, gates: ["npm test", "npx tsc --noEmit"] };
-    const flow = { name: "test", description: "test", entry: "s", states: {}, spawn_instructions: {} };
+    const stateDef = { gates: ["npm test", "npx tsc --noEmit"], type: "single" as const };
+    const flow = {
+      description: "test",
+      entry: "s",
+      name: "test",
+      spawn_instructions: {},
+      states: {},
+    };
 
     const result = normalizeGates(stateDef, flow as any, "/project", boardState);
 
     // Tier 1 wins — only explicit gates, discovered ignored
     expect(result.source).toBe("gates");
     expect(result.commands).toHaveLength(2);
-    expect(result.commands.map(c => c.command)).toEqual(["npm test", "npx tsc --noEmit"]);
+    expect(result.commands.map((c) => c.command)).toEqual(["npm test", "npx tsc --noEmit"]);
     // No discovered gate commands in output
-    expect(result.commands.map(c => c.command)).not.toContain("pytest --tb=short");
+    expect(result.commands.map((c) => c.command)).not.toContain("pytest --tb=short");
   });
 });
 
@@ -338,17 +369,17 @@ describe("Integration: complete_flow aggregates multi-state quality metrics", ()
 
   afterEach(() => {
     clearStoreCache();
-    rmSync(workspace, { recursive: true, force: true });
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(workspace, { force: true, recursive: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   it("aggregates gate/postcondition/violation metrics across 3 states correctly", async () => {
     seedBoard(workspace, makeMultiStateBoard());
 
     await updateBoard({
-      workspace,
       action: "complete_flow",
       project_dir: projectDir,
+      workspace,
     });
 
     const analytics = await computeAnalytics(projectDir);
@@ -366,9 +397,9 @@ describe("Integration: complete_flow aggregates multi-state quality metrics", ()
     seedBoard(workspace, makeMultiStateBoard());
 
     await updateBoard({
-      workspace,
       action: "complete_flow",
       project_dir: projectDir,
+      workspace,
     });
 
     const analytics = await computeAnalytics(projectDir);
@@ -385,114 +416,114 @@ describe("Integration: board backward compatibility (old board.json without new 
   it("BoardSchema.parse() succeeds on a board with no new quality gate fields (pre-qg format)", () => {
     // Simulate a board.json written before the qg-01 schema changes
     const oldBoard = {
-      flow: "feature",
-      task: "old task",
-      entry: "impl",
-      current_state: "impl",
       base_commit: "oldabc",
-      started: "2026-01-01T00:00:00Z",
+      blocked: null,
+      concerns: [],
+      current_state: "impl",
+      entry: "impl",
+      flow: "feature",
+      iterations: {
+        impl: { count: 1, history: [], max: 3 },
+      },
       last_updated: "2026-01-01T01:00:00Z",
+      skipped: [],
+      started: "2026-01-01T00:00:00Z",
       states: {
         impl: {
-          status: "done",
-          entries: 1,
-          entered_at: "2026-01-01T00:00:00Z",
           completed_at: "2026-01-01T01:00:00Z",
+          entered_at: "2026-01-01T00:00:00Z",
+          entries: 1,
+          status: "done",
           // No metrics, gate_results, postcondition_results, discovered_gates, discovered_postconditions
         },
       },
-      iterations: {
-        impl: { count: 1, max: 3, history: [] },
-      },
-      blocked: null,
-      concerns: [],
-      skipped: [],
+      task: "old task",
     };
 
     // Should NOT throw
     const parsed = BoardSchema.parse(oldBoard);
 
-    expect(parsed.states["impl"].gate_results).toBeUndefined();
-    expect(parsed.states["impl"].postcondition_results).toBeUndefined();
-    expect(parsed.states["impl"].discovered_gates).toBeUndefined();
-    expect(parsed.states["impl"].discovered_postconditions).toBeUndefined();
-    expect(parsed.states["impl"].metrics).toBeUndefined();
+    expect(parsed.states.impl.gate_results).toBeUndefined();
+    expect(parsed.states.impl.postcondition_results).toBeUndefined();
+    expect(parsed.states.impl.discovered_gates).toBeUndefined();
+    expect(parsed.states.impl.discovered_postconditions).toBeUndefined();
+    expect(parsed.states.impl.metrics).toBeUndefined();
   });
 
   it("BoardSchema.parse() succeeds on a board with wave_results containing gate/gate_output fields", () => {
     // WaveResultSchema has legacy gate and gate_output fields (from before qg-01).
     // Verify these still parse cleanly after adding new BoardStateEntry fields.
     const boardWithWaveGate = {
-      flow: "feature",
-      task: "old task",
-      entry: "impl",
-      current_state: "impl",
       base_commit: "oldabc",
-      started: "2026-01-01T00:00:00Z",
+      blocked: null,
+      concerns: [],
+      current_state: "impl",
+      entry: "impl",
+      flow: "feature",
+      iterations: {},
       last_updated: "2026-01-01T01:00:00Z",
+      skipped: [],
+      started: "2026-01-01T00:00:00Z",
       states: {
         impl: {
-          status: "done",
           entries: 1,
+          status: "done",
           wave_results: {
             wave_1: {
-              tasks: ["task-01", "task-02"],
-              status: "done",
               gate: "test-suite",
               gate_output: "5 passed",
+              status: "done",
+              tasks: ["task-01", "task-02"],
             },
           },
         },
       },
-      iterations: {},
-      blocked: null,
-      concerns: [],
-      skipped: [],
+      task: "old task",
     };
 
     // Should NOT throw — gate and gate_output are optional on WaveResultSchema
     const parsed = BoardSchema.parse(boardWithWaveGate);
-    expect(parsed.states["impl"].wave_results?.["wave_1"].gate).toBe("test-suite");
-    expect(parsed.states["impl"].wave_results?.["wave_1"].gate_output).toBe("5 passed");
+    expect(parsed.states.impl.wave_results?.wave_1.gate).toBe("test-suite");
+    expect(parsed.states.impl.wave_results?.wave_1.gate_output).toBe("5 passed");
     // New fields absent as expected (no gate_results on state entry, only in wave_results)
-    expect(parsed.states["impl"].gate_results).toBeUndefined();
+    expect(parsed.states.impl.gate_results).toBeUndefined();
   });
 
   it("BoardSchema.parse() succeeds when StateMetrics has only legacy fields (no new optional fields)", () => {
     const boardWithOldMetrics = {
-      flow: "feature",
-      task: "old task",
-      entry: "impl",
-      current_state: "impl",
       base_commit: "oldabc",
-      started: "2026-01-01T00:00:00Z",
+      blocked: null,
+      concerns: [],
+      current_state: "impl",
+      entry: "impl",
+      flow: "feature",
+      iterations: {
+        impl: { count: 1, history: [], max: 3 },
+      },
       last_updated: "2026-01-01T01:00:00Z",
+      skipped: [],
+      started: "2026-01-01T00:00:00Z",
       states: {
         impl: {
-          status: "done",
           entries: 1,
           metrics: {
             duration_ms: 10000,
-            spawns: 2,
             model: "claude-3-opus",
+            spawns: 2,
             // No gate_results, postcondition_results, etc.
           },
+          status: "done",
         },
       },
-      iterations: {
-        impl: { count: 1, max: 3, history: [] },
-      },
-      blocked: null,
-      concerns: [],
-      skipped: [],
+      task: "old task",
     };
 
     const parsed = BoardSchema.parse(boardWithOldMetrics);
-    expect(parsed.states["impl"].metrics?.duration_ms).toBe(10000);
-    expect(parsed.states["impl"].metrics?.spawns).toBe(2);
-    expect(parsed.states["impl"].metrics?.model).toBe("claude-3-opus");
-    expect(parsed.states["impl"].metrics?.gate_results).toBeUndefined();
-    expect(parsed.states["impl"].metrics?.violation_count).toBeUndefined();
+    expect(parsed.states.impl.metrics?.duration_ms).toBe(10000);
+    expect(parsed.states.impl.metrics?.spawns).toBe(2);
+    expect(parsed.states.impl.metrics?.model).toBe("claude-3-opus");
+    expect(parsed.states.impl.metrics?.gate_results).toBeUndefined();
+    expect(parsed.states.impl.metrics?.violation_count).toBeUndefined();
   });
 });
 
@@ -507,21 +538,21 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
 
   afterEach(() => {
     clearStoreCache();
-    rmSync(workspace, { recursive: true, force: true });
+    rmSync(workspace, { force: true, recursive: true });
   });
 
   it("violation_count=0 is explicitly stored on board (zero means clean, not absent)", async () => {
     await reportResult({
-      workspace,
+      flow: makeMinimalFlow() as any,
+      metrics: { duration_ms: 1000, model: "claude-sonnet", spawns: 1 },
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as any,
-      metrics: { duration_ms: 1000, spawns: 1, model: "claude-sonnet" },
       violation_count: 0, // explicitly clean
+      workspace,
     });
 
     const board = getExecutionStore(workspace).getBoard()!;
-    const metrics = board.states["impl"].metrics;
+    const metrics = board.states.impl.metrics;
     expect(metrics).toBeDefined();
     // violation_count=0 must be present (not undefined)
     expect(metrics?.violation_count).toBe(0);
@@ -530,16 +561,16 @@ describe("Integration: violation_count=0 is recorded distinctly from absent (edg
 
   it("violation_count absent when no quality signals provided (backward compat)", async () => {
     await reportResult({
-      workspace,
+      flow: makeMinimalFlow() as any,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as any,
+      workspace,
       // No metrics, no quality signals
     });
 
     const board = getExecutionStore(workspace).getBoard()!;
     // When no signals provided, metrics should be absent entirely
-    expect(board.states["impl"].metrics).toBeUndefined();
+    expect(board.states.impl.metrics).toBeUndefined();
   });
 });
 
@@ -557,42 +588,47 @@ describe("Integration: gate_results from report_result flow through to complete_
 
   afterEach(() => {
     clearStoreCache();
-    rmSync(workspace, { recursive: true, force: true });
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(workspace, { force: true, recursive: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   it("gate_results written via report_result are aggregated in complete_flow FlowRunEntry", async () => {
     // Step 1: Agent reports gate results via report_result
     await reportResult({
-      workspace,
+      files_changed: 2,
+      flow: makeMinimalFlow() as any,
+      gate_results: [
+        { command: "npx tsc --noEmit", exitCode: 0, gate: "tsc", output: "ok", passed: true },
+        { command: "npm test", exitCode: 0, gate: "tests", output: "10 passed", passed: true },
+        { command: "npx eslint .", exitCode: 1, gate: "lint", output: "1 error", passed: false },
+      ],
+      metrics: { duration_ms: 5000, model: "claude-sonnet", spawns: 1 },
+      postcondition_results: [
+        { name: "postcondition-0-file_exists", output: "found", passed: true, type: "file_exists" },
+        {
+          name: "postcondition-1-no_pattern",
+          output: "found console.log",
+          passed: false,
+          type: "no_pattern",
+        },
+      ],
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as any,
-      metrics: { duration_ms: 5000, spawns: 1, model: "claude-sonnet" },
-      gate_results: [
-        { passed: true, gate: "tsc", command: "npx tsc --noEmit", output: "ok", exitCode: 0 },
-        { passed: true, gate: "tests", command: "npm test", output: "10 passed", exitCode: 0 },
-        { passed: false, gate: "lint", command: "npx eslint .", output: "1 error", exitCode: 1 },
-      ],
-      postcondition_results: [
-        { passed: true, name: "postcondition-0-file_exists", type: "file_exists", output: "found" },
-        { passed: false, name: "postcondition-1-no_pattern", type: "no_pattern", output: "found console.log" },
-      ],
+      test_results: { failed: 0, passed: 10, skipped: 0 },
       violation_count: 1,
-      files_changed: 2,
-      test_results: { passed: 10, failed: 0, skipped: 0 },
+      workspace,
     });
 
     // Verify the board was updated correctly
     const board = getExecutionStore(workspace).getBoard()!;
-    expect(board.states["impl"].gate_results).toHaveLength(3);
-    expect(board.states["impl"].metrics?.gate_results).toHaveLength(3);
+    expect(board.states.impl.gate_results).toHaveLength(3);
+    expect(board.states.impl.metrics?.gate_results).toHaveLength(3);
 
     // Step 2: Call complete_flow (session data is already in the store via seedBoard/initExecution)
     await updateBoard({
-      workspace,
       action: "complete_flow",
       project_dir: projectDir,
+      workspace,
     });
 
     // Step 3: Verify analytics reflect gate data from report_result
@@ -618,30 +654,35 @@ describe("Integration: computeAnalytics aggregates across flow run history", () 
 
   afterEach(() => {
     clearStoreCache();
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   it("computes analytics across mixed runs (some with gate data, some without)", async () => {
     const baseEntry = {
-      run_id: "run_001",
-      flow: "feature",
-      tier: "small",
-      task: "task",
-      started: new Date(Date.now() - 60000).toISOString(),
       completed: new Date().toISOString(),
-      total_duration_ms: 60000,
+      flow: "feature",
+      run_id: "run_001",
+      skipped_states: [],
+      started: new Date(Date.now() - 60000).toISOString(),
       state_durations: {},
       state_iterations: {},
-      skipped_states: [],
+      task: "task",
+      tier: "small",
+      total_duration_ms: 60000,
       total_spawns: 1,
     };
 
     // Run with full gate data (gate_pass_rate = 1.0)
-    await appendFlowRun(projectDir, { ...baseEntry, run_id: "run_001", gate_pass_rate: 1.0, postcondition_pass_rate: 0.8 });
+    await appendFlowRun(projectDir, {
+      ...baseEntry,
+      gate_pass_rate: 1.0,
+      postcondition_pass_rate: 0.8,
+      run_id: "run_001",
+    });
     // Run without gate data (old entry)
     await appendFlowRun(projectDir, { ...baseEntry, run_id: "run_002" });
     // Run with partial gate data (gate_pass_rate = 0.5)
-    await appendFlowRun(projectDir, { ...baseEntry, run_id: "run_003", gate_pass_rate: 0.5 });
+    await appendFlowRun(projectDir, { ...baseEntry, gate_pass_rate: 0.5, run_id: "run_003" });
 
     const analytics = await computeAnalytics(projectDir);
 
@@ -676,43 +717,46 @@ describe("Integration: discovered_gates deduplicated when same command reported 
 
   afterEach(() => {
     clearStoreCache();
-    rmSync(workspace, { recursive: true, force: true });
+    rmSync(workspace, { force: true, recursive: true });
   });
 
   it("board accumulates duplicate commands but runGates deduplicates before execution", async () => {
     // Both tester and reviewer discover the same command
     await reportResult({
-      workspace,
+      discovered_gates: [{ command: "npm test", source: "tester" }],
+      flow: makeMinimalFlow() as any,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as any,
-      discovered_gates: [{ command: "npm test", source: "tester" }],
+      workspace,
     });
 
     const storeRef = getExecutionStore(workspace);
     const boardAfterFirst = storeRef.getBoard()!;
-    storeRef.upsertState("impl", { ...boardAfterFirst.states["impl"], status: "in_progress" as const });
+    storeRef.upsertState("impl", {
+      ...boardAfterFirst.states.impl,
+      status: "in_progress" as const,
+    });
 
     await reportResult({
-      workspace,
+      discovered_gates: [{ command: "npm test", source: "reviewer" }], // same command, different source
+      flow: makeMinimalFlow() as any,
       state_id: "impl",
       status_keyword: "done",
-      flow: makeMinimalFlow() as any,
-      discovered_gates: [{ command: "npm test", source: "reviewer" }], // same command, different source
+      workspace,
     });
 
     const finalBoard = getExecutionStore(workspace).getBoard()!;
     // Board accumulates both (append semantics — dedup is runGates' responsibility, not reportResult's)
-    const accumulated = finalBoard.states["impl"].discovered_gates ?? [];
+    const accumulated = finalBoard.states.impl.discovered_gates ?? [];
     expect(accumulated).toHaveLength(2);
     expect(accumulated[0]).toEqual({ command: "npm test", source: "tester" });
     expect(accumulated[1]).toEqual({ command: "npm test", source: "reviewer" });
 
     // normalizeGates returns "none" — discovered gates stored as metadata, not executed
     const stateDef = { type: "single" as const };
-    const flow = { name: "f", description: "f", entry: "impl", states: {}, spawn_instructions: {} };
+    const flow = { description: "f", entry: "impl", name: "f", spawn_instructions: {}, states: {} };
     const { normalizeGates } = await import("../orchestration/gate-runner.ts");
-    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states["impl"]);
+    const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states.impl);
 
     expect(normalized.source).toBe("none");
     expect(normalized.commands).toEqual([]);

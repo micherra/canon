@@ -1,36 +1,33 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
-import { writePlanIndex } from "../tools/write-plan-index.ts";
+import { afterEach, describe, expect, it } from "vitest";
 import { parseTaskIdsForWave } from "../orchestration/wave-variables.ts";
+import { writePlanIndex } from "../tools/write-plan-index.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDir: string;
 
 afterEach(async () => {
   if (tmpDir) {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   }
 });
 
-// ---------------------------------------------------------------------------
 // Valid input — happy path
-// ---------------------------------------------------------------------------
 
 describe("writePlanIndex — valid input", () => {
   it("creates INDEX.md and returns path, task_count, wave_count", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "my-epic",
       tasks: [
         { task_id: "task-01", wave: 1 },
         { task_id: "task-02", wave: 1 },
         { task_id: "task-03", wave: 2 },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -44,12 +41,18 @@ describe("writePlanIndex — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "my-epic",
       tasks: [
-        { task_id: "task-01", wave: 1, depends_on: ["task-00"], files: ["src/foo.ts"], principles: ["thin-handlers"] },
+        {
+          depends_on: ["task-00"],
+          files: ["src/foo.ts"],
+          principles: ["thin-handlers"],
+          task_id: "task-01",
+          wave: 1,
+        },
         { task_id: "task-02", wave: 2 },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -65,9 +68,9 @@ describe("writePlanIndex — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "new-slug",
       tasks: [{ task_id: "t-01", wave: 1 }],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -79,17 +82,17 @@ describe("writePlanIndex — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "test-slug",
       tasks: [
         {
-          task_id: "t-01",
-          wave: 1,
           depends_on: ["prereq-01"],
           files: ["src/a.ts", "src/b.ts"],
           principles: ["errors-are-values"],
+          task_id: "t-01",
+          wave: 1,
         },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -103,12 +106,12 @@ describe("writePlanIndex — valid input", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "single-wave",
       tasks: [
         { task_id: "t-01", wave: 3 },
         { task_id: "t-02", wave: 3 },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -116,18 +119,14 @@ describe("writePlanIndex — valid input", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Validation errors
-// ---------------------------------------------------------------------------
-
 describe("writePlanIndex — validation errors", () => {
   it("returns INVALID_INPUT for task_id with spaces", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "my-epic",
       tasks: [{ task_id: "task with spaces", wave: 1 }],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -141,9 +140,9 @@ describe("writePlanIndex — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "my-epic",
       tasks: [{ task_id: "task@01!", wave: 1 }],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -156,12 +155,12 @@ describe("writePlanIndex — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "my-epic",
       tasks: [
         { task_id: "task-01", wave: 1 },
         { task_id: "task-01", wave: 2 },
       ],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -175,9 +174,9 @@ describe("writePlanIndex — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "my-epic",
       tasks: [{ task_id: "task-01", wave: 0 }],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -191,9 +190,9 @@ describe("writePlanIndex — validation errors", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "my-epic",
       tasks: [{ task_id: "task-01", wave: -1 }],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -203,23 +202,21 @@ describe("writePlanIndex — validation errors", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Round-trip test: writePlanIndex output parsed by parseTaskIdsForWave
-// ---------------------------------------------------------------------------
 
 describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
   it("written INDEX.md can be parsed back by parseTaskIdsForWave for wave 1", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "roundtrip-test",
       tasks: [
         { task_id: "adr004-01", wave: 1 },
         { task_id: "adr004-02", wave: 1 },
         { task_id: "adr004-03", wave: 2 },
-        { task_id: "adr004-04", wave: 2, depends_on: ["adr004-01"] },
+        { depends_on: ["adr004-01"], task_id: "adr004-04", wave: 2 },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -244,9 +241,9 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
     ];
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "full-roundtrip",
       tasks,
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -266,13 +263,13 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "id-format-test",
       tasks: [
         { task_id: "my-task_01", wave: 1 },
         { task_id: "CamelCase-01", wave: 1 },
         { task_id: "ALL_CAPS_ID", wave: 2 },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -283,22 +280,20 @@ describe("writePlanIndex — round-trip with parseTaskIdsForWave", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // ADR-004 acceptance: write_plan_index + parseTaskIdsForWave (dc-05, dc-06)
-// ---------------------------------------------------------------------------
 
 describe("ADR-004 acceptance: write_plan_index round-trip (dc-05)", () => {
   it("produces INDEX.md that parseTaskIdsForWave can parse for multi-wave plans", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "test-slug",
       tasks: [
-        { task_id: "t-01", wave: 1, files: ["a.ts"] },
-        { task_id: "t-02", wave: 1, files: ["b.ts"] },
-        { task_id: "t-03", wave: 2, depends_on: ["t-01", "t-02"] },
+        { files: ["a.ts"], task_id: "t-01", wave: 1 },
+        { files: ["b.ts"], task_id: "t-02", wave: 1 },
+        { depends_on: ["t-01", "t-02"], task_id: "t-03", wave: 2 },
       ],
+      workspace: tmpDir,
     });
 
     assertOk(result);
@@ -329,9 +324,9 @@ describe("ADR-004 acceptance: parseTaskIdsForWave zero-task guard (dc-06)", () =
     tmpDir = await mkdtemp(join(tmpdir(), "canon-test-"));
 
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "empty-slug",
       tasks: [],
+      workspace: tmpDir,
     });
 
     assertOk(result);

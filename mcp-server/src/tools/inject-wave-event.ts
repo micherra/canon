@@ -1,9 +1,9 @@
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { generateId } from "../utils/id.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { WaveEvent, WaveEventType } from "../orchestration/flow-schema.ts";
+import { generateId } from "../utils/id.ts";
 
-export interface InjectWaveEventInput {
+export type InjectWaveEventInput = {
   workspace: string;
   type: WaveEventType;
   payload: {
@@ -12,21 +12,21 @@ export interface InjectWaveEventInput {
     context?: string;
     wave?: number;
   };
-}
+};
 
-export interface InjectWaveEventResult {
+export type InjectWaveEventResult = {
   event: WaveEvent;
   pending_count: number;
-}
+};
 
 export async function injectWaveEvent(input: InjectWaveEventInput): Promise<InjectWaveEventResult> {
   const store = getExecutionStore(input.workspace);
 
   // Check for an active wave state in the store
   const board = store.getBoard();
-  const hasActiveWave = board !== null && Object.values(board.states).some(
-    (s) => s.wave !== undefined && s.status === "in_progress",
-  );
+  const hasActiveWave =
+    board !== null &&
+    Object.values(board.states).some((s) => s.wave !== undefined && s.status === "in_progress");
 
   if (!hasActiveWave) {
     throw new Error(
@@ -37,19 +37,19 @@ export async function injectWaveEvent(input: InjectWaveEventInput): Promise<Inje
   // Create the event
   const event: WaveEvent = {
     id: generateId("evt"),
-    type: input.type,
     payload: input.payload,
-    timestamp: new Date().toISOString(),
     status: "pending",
+    timestamp: new Date().toISOString(),
+    type: input.type,
   };
 
   // Persist to store
   store.postWaveEvent({
     id: event.id,
-    type: event.type,
     payload: event.payload,
-    timestamp: event.timestamp,
     status: event.status,
+    timestamp: event.timestamp,
+    type: event.type,
   });
 
   // Count pending events
@@ -59,15 +59,19 @@ export async function injectWaveEvent(input: InjectWaveEventInput): Promise<Inje
   const onWaveEventInjected = (
     e: import("../orchestration/events.js").FlowEventMap["wave_event_injected"],
   ) => {
-    try { store.appendEvent("wave_event_injected", e as Record<string, unknown>); } catch { /* best-effort */ }
+    try {
+      store.appendEvent("wave_event_injected", e as Record<string, unknown>);
+    } catch {
+      /* best-effort */
+    }
   };
   flowEventBus.once("wave_event_injected", onWaveEventInjected);
   try {
     flowEventBus.emit("wave_event_injected", {
       eventId: event.id,
       eventType: event.type,
-      workspace: input.workspace,
       timestamp: event.timestamp,
+      workspace: input.workspace,
     });
   } finally {
     flowEventBus.removeListener("wave_event_injected", onWaveEventInjected);

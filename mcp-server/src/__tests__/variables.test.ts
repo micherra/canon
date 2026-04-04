@@ -15,7 +15,9 @@ describe("substituteVariables", () => {
   });
 
   it("leaves missing variables unchanged", () => {
-    expect(substituteVariables("${known} and ${unknown}", { known: "yes" })).toBe("yes and ${unknown}");
+    expect(substituteVariables("${known} and ${unknown}", { known: "yes" })).toBe(
+      "yes and ${unknown}",
+    );
   });
 
   it("handles nested ${item.field} patterns", () => {

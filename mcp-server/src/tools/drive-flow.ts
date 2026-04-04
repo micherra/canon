@@ -19,42 +19,41 @@
  */
 
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import type {
+  DriveFlowAction,
+  DriveFlowInput,
+  SpawnRequest,
+} from "../orchestration/drive-flow-types.ts";
+import { DriveFlowInputSchema } from "../orchestration/drive-flow-types.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import type { Board, StateDefinition, WaveResult } from "../orchestration/flow-schema.ts";
+import { runGates } from "../orchestration/gate-runner.ts";
+import type { WaveWorktreeResult } from "../orchestration/wave-lifecycle.ts";
+import {
+  cleanupWorktrees,
+  createWaveWorktrees,
+  getProjectDir,
+  mergeWaveResults,
+} from "../orchestration/wave-lifecycle.ts";
+import { parseTaskIdsForWave } from "../orchestration/wave-variables.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
 import { toolError } from "../utils/tool-result.ts";
-import type { DriveFlowAction, DriveFlowInput, SpawnRequest } from "../orchestration/drive-flow-types.ts";
-import { DriveFlowInputSchema } from "../orchestration/drive-flow-types.ts";
-import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
-import { reportResult } from "./report-result.ts";
+import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
 import type { SpawnPromptEntry } from "./get-spawn-prompt.ts";
-import {
-  createWaveWorktrees,
-  mergeWaveResults,
-  cleanupWorktrees,
-  getProjectDir,
-} from "../orchestration/wave-lifecycle.ts";
-import type { WaveWorktreeResult } from "../orchestration/wave-lifecycle.ts";
-import type { WaveResult, StateDefinition, Board } from "../orchestration/flow-schema.ts";
-import { runGates } from "../orchestration/gate-runner.ts";
+import { reportResult } from "./report-result.ts";
 import { resolveAfterConsultations } from "./resolve-after-consultations.ts";
-import { parseTaskIdsForWave } from "../orchestration/wave-variables.ts";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 // Re-export types for external consumers
 export type { DriveFlowAction, DriveFlowInput, SpawnRequest };
 
-// ---------------------------------------------------------------------------
 // Agent session eviction threshold (ADR-009a)
-// ---------------------------------------------------------------------------
 
 const AGENT_SESSION_EVICTION_MS = 600_000; // 10 minutes
 
-// ---------------------------------------------------------------------------
 // Approval gate helpers (ADR-017)
-// ---------------------------------------------------------------------------
 
 /**
  * Determine if a state should trigger an approval gate.
@@ -82,7 +81,8 @@ export function shouldApprovalGate(
   const tier = flow.tier;
   if (tier === "medium" || tier === "large") {
     // Default gate on design states (agent is canon-architect, with or without prefix)
-    const isArchitect = stateDef.agent === "canon-architect" || stateDef.agent === "canon:canon-architect";
+    const isArchitect =
+      stateDef.agent === "canon-architect" || stateDef.agent === "canon:canon-architect";
     if (!isArchitect) return false;
     // Only apply default gate when the state's transitions include approval-related keys.
     // This prevents gating flows like migrate.md where design only has done/has_questions.
@@ -117,9 +117,7 @@ export function shouldApprovalGateWaveBoundary(
   return tier === "large";
 }
 
-// ---------------------------------------------------------------------------
 // driveFlow
-// ---------------------------------------------------------------------------
 
 /**
  * Drive the flow state machine by one turn.
@@ -127,199 +125,234 @@ export function shouldApprovalGateWaveBoundary(
  * If `input.result` is absent: enters the current state and returns spawn requests.
  * If `input.result` is present: reports the result, advances the loop, returns the next action.
  */
-export async function driveFlow(
+/** Validate driveFlow input and return parsed data + store + board, or an error. */
+function validateDriveFlowInput(
   input: DriveFlowInput,
-): Promise<ToolResult<DriveFlowAction>> {
-  // Validate at trust boundary (validate-at-trust-boundaries)
+): ToolResult<{ data: DriveFlowInput; store: ReturnType<typeof getExecutionStore>; board: Board }> {
   const parseResult = DriveFlowInputSchema.safeParse(input);
   if (!parseResult.success) {
     return toolError("INVALID_INPUT", parseResult.error.message);
   }
-
-  const { workspace, flow } = parseResult.data;
-
-  // Guard: workspace must exist on disk (getExecutionStore throws otherwise)
+  const { workspace } = parseResult.data;
   if (!existsSync(resolve(workspace))) {
-    return toolError(
-      "WORKSPACE_NOT_FOUND",
-      `Workspace directory does not exist: ${workspace}`,
-    );
+    return toolError("WORKSPACE_NOT_FOUND", `Workspace directory does not exist: ${workspace}`);
   }
-
   const store = getExecutionStore(workspace);
-
-  // Guard: execution must exist
   const board = store.getBoard();
   if (!board) {
-    return toolError(
-      "WORKSPACE_NOT_FOUND",
-      `No execution found for workspace: ${workspace}`,
-    );
+    return toolError("WORKSPACE_NOT_FOUND", `No execution found for workspace: ${workspace}`);
   }
+  return { board, data: parseResult.data, ok: true as const, store };
+}
 
-  // ---------------------------------------------------------------------------
-  // Branch A: result provided — report it, then determine next action
-  // ---------------------------------------------------------------------------
+/** Check if a status string is an approval decision keyword. */
+function isApprovalDecisionStatus(status: string): boolean {
+  const normalized = String(status ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    normalized === "approved" ||
+    normalized === "approve" ||
+    normalized === "revise" ||
+    normalized === "reject" ||
+    normalized === "rejected"
+  );
+}
 
-  if (parseResult.data.result) {
-    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id } = parseResult.data.result;
+type HandleWaveResultOpts = {
+  state_id: string;
+  task_id: string | undefined;
+  status: string;
+  artifacts: unknown;
+  store: ReturnType<typeof getExecutionStore>;
+};
 
-    // Store agent session ID for ADR-009a continue_from support
-    if (agent_session_id) {
-      store.updateAgentSession(state_id, agent_session_id);
-    }
-
-    // ---------------------------------------------------------------------------
-    // Wave state: accumulate task result, check if all done
-    // ---------------------------------------------------------------------------
-    const stateDef = flow.states[state_id];
-    if (stateDef?.type === "wave" && task_id) {
-      return handleWaveTaskResult({
-        workspace,
-        flow,
-        state_id,
-        task_id,
-        task_status: status,
-        task_artifacts: artifacts as string[] | undefined,
-        store,
-      });
-    }
-
-    // Guard: wave state results MUST include task_id
-    if (stateDef?.type === "wave" && !task_id) {
-      return toolError(
-        "INVALID_INPUT",
-        `Wave state '${state_id}' received a result without task_id. Wave results must include task_id to identify which task completed.`,
-      );
-    }
-
-    // Report the result and evaluate transition (non-wave states)
-    const reportOut = await reportResult({
-      workspace,
-      state_id,
-      status_keyword: status,
+/** Handle the result of a wave-type state, routing to wave task handler or validating task_id. */
+function handleWaveResult(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  opts: HandleWaveResultOpts,
+): Promise<ToolResult<DriveFlowAction>> | ToolResult<DriveFlowAction> | null {
+  const { state_id, task_id, status, artifacts, store } = opts;
+  const stateDef = flow.states[state_id];
+  if (stateDef?.type !== "wave") return null;
+  if (task_id) {
+    return handleWaveTaskResult({
       flow,
-      artifacts: artifacts as string[] | undefined,
-      parallel_results: parallel_results as Array<{ item: string; status: string; artifacts?: string[] }> | undefined,
-      metrics: metrics as Parameters<typeof reportResult>[0]["metrics"],
+      state_id,
+      store,
+      task_artifacts: artifacts as string[] | undefined,
+      task_id,
+      task_status: status,
+      workspace,
     });
+  }
+  return toolError(
+    "INVALID_INPUT",
+    `Wave state '${state_id}' received a result without task_id. Wave results must include task_id to identify which task completed.`,
+  );
+}
 
-    if (!reportOut.ok) {
-      return reportOut as ToolResult<DriveFlowAction>;
-    }
+type ResolvePostReportOpts = {
+  state_id: string;
+  status: string;
+  artifacts: unknown;
+  reportOut: Awaited<ReturnType<typeof reportResult>> & { ok: true };
+  store: ReturnType<typeof getExecutionStore>;
+};
 
-    // Re-read board after reportResult so HITL/done context reflects updated state
-    const freshBoard = store.getBoard();
-    if (!freshBoard) {
-      return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
-    }
-
-    const { next_state, hitl_required, hitl_reason, stuck_reason } = reportOut;
-
-    // HITL required (stuck, no transition, debate checkpoint, etc.)
-    if (hitl_required) {
-      return {
-        ok: true as const,
-        action: "hitl",
-        breakpoint: {
-          reason: hitl_reason ?? stuck_reason ?? "HITL required",
-          context: buildHitlContext(freshBoard, state_id, reportOut),
-        },
-      };
-    }
-
-    // Parallel/parallel-per state: check if all roles are done.
-    // When next_state loops back to the same state, it means we're waiting for
-    // more parallel results. Return empty spawn to signal "waiting".
-    // Note: for non-parallel states, same-state transitions (e.g. revise: design) must NOT be
-    // short-circuited here — they are legitimate self-transitions that should proceed normally.
-    const completedDef = flow.states[state_id];
-    if (next_state === state_id && (completedDef?.type === "parallel" || completedDef?.type === "parallel-per")) {
-      return {
-        ok: true as const,
-        action: "spawn",
-        requests: [],
-      };
-    }
-
-    // Approval gate check (ADR-017) — fires on the COMPLETED state, not the next state.
-    // Placed AFTER the parallel-wait guard so it only fires when all roles are done.
-    // Skip the gate when the orchestrator is re-submitting an approval decision — otherwise
-    // the gate would fire again, creating an infinite loop.
-    const normalizedStatus = String(status ?? "").trim().toLowerCase();
-    const isApprovalDecision =
-      normalizedStatus === "approved" ||
-      normalizedStatus === "approve" ||
-      normalizedStatus === "revise" ||
-      normalizedStatus === "reject" ||
-      normalizedStatus === "rejected";
-
-    const completedStateDef = flow.states[state_id];
-    if (!isApprovalDecision && shouldApprovalGate(completedStateDef, flow, freshBoard)) {
-      return {
-        ok: true as const,
-        action: "approval" as const,
-        breakpoint: {
-          state_id,
-          agent_type: completedStateDef?.agent ?? completedStateDef?.type ?? "unknown",
-          artifacts: (artifacts as string[] | undefined) ?? [],
-          summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
-          options: ["approved", "revise", "reject"] as const,
-        },
-      };
-    }
-
-    // No next state (and not hitl_required) — terminal or unknown
-    if (!next_state) {
-      return {
-        ok: true as const,
-        action: "done",
-        terminal_state: state_id,
-        summary: buildDoneSummary(freshBoard, state_id),
-      };
-    }
-
-    // Check if next state is terminal
-    const nextStateDef = flow.states[next_state];
-    if (nextStateDef?.type === "terminal") {
-      return {
-        ok: true as const,
-        action: "done",
-        terminal_state: next_state,
-        summary: buildDoneSummary(freshBoard, next_state),
-      };
-    }
-
-    // Advance to next state — enter and return spawn requests
-    return enterStateAndBuildSpawn(workspace, flow, next_state, store);
+/** Check post-report conditions and return the appropriate action. */
+async function resolvePostReportAction(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  opts: ResolvePostReportOpts,
+): Promise<ToolResult<DriveFlowAction>> {
+  const { state_id, status, artifacts, reportOut, store } = opts;
+  const freshBoard = store.getBoard();
+  if (!freshBoard) {
+    return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
   }
 
-  // ---------------------------------------------------------------------------
-  // Branch B: no result — first call or re-entry after HITL
-  // ---------------------------------------------------------------------------
+  const { next_state, hitl_required, hitl_reason, stuck_reason } = reportOut;
 
-  // Determine which state to enter
-  const targetState = board.current_state ?? flow.entry;
-
-  // Check if the current state is already terminal
-  const targetStateDef = flow.states[targetState];
-  if (targetStateDef?.type === "terminal") {
+  if (hitl_required) {
     return {
+      action: "hitl",
+      breakpoint: {
+        context: buildHitlContext(freshBoard, state_id, reportOut),
+        reason: hitl_reason ?? stuck_reason ?? "HITL required",
+      },
       ok: true as const,
-      action: "done",
-      terminal_state: targetState,
-      summary: buildDoneSummary(board, targetState),
     };
   }
 
+  // Parallel wait guard
+  const completedDef = flow.states[state_id];
+  if (
+    next_state === state_id &&
+    (completedDef?.type === "parallel" || completedDef?.type === "parallel-per")
+  ) {
+    return { action: "spawn", ok: true as const, requests: [] };
+  }
+
+  // Approval gate
+  if (!isApprovalDecisionStatus(status) && shouldApprovalGate(completedDef, flow, freshBoard)) {
+    return {
+      action: "approval" as const,
+      breakpoint: {
+        agent_type: completedDef?.agent ?? completedDef?.type ?? "unknown",
+        artifacts: (artifacts as string[] | undefined) ?? [],
+        options: ["approved", "revise", "reject"] as const,
+        state_id,
+        summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
+      },
+      ok: true as const,
+    };
+  }
+
+  return resolveNextStateAction(workspace, flow, {
+    board: freshBoard,
+    current_state: state_id,
+    next_state,
+    store,
+  });
+}
+
+type ResolveNextStateOpts = {
+  next_state: string | null | undefined;
+  current_state: string;
+  board: Board;
+  store: ReturnType<typeof getExecutionStore>;
+};
+
+/** Determine the action for the next state (done or spawn). */
+function resolveNextStateAction(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  opts: ResolveNextStateOpts,
+): Promise<ToolResult<DriveFlowAction>> | ToolResult<DriveFlowAction> {
+  const { next_state, current_state, board, store } = opts;
+  if (!next_state) {
+    return {
+      action: "done",
+      ok: true as const,
+      summary: buildDoneSummary(board, current_state),
+      terminal_state: current_state,
+    };
+  }
+  const nextStateDef = flow.states[next_state];
+  if (nextStateDef?.type === "terminal") {
+    return {
+      action: "done",
+      ok: true as const,
+      summary: buildDoneSummary(board, next_state),
+      terminal_state: next_state,
+    };
+  }
+  return enterStateAndBuildSpawn(workspace, flow, next_state, store);
+}
+
+export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<DriveFlowAction>> {
+  const validated = validateDriveFlowInput(input);
+  if (!validated.ok) return validated;
+  const { data, store, board } = validated;
+  const { workspace, flow } = data;
+
+  // Branch A: result provided
+  if (data.result) {
+    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id } =
+      data.result;
+
+    if (agent_session_id) store.updateAgentSession(state_id, agent_session_id);
+
+    const waveAction = handleWaveResult(workspace, flow, {
+      artifacts,
+      state_id,
+      status,
+      store,
+      task_id,
+    });
+    if (waveAction) return waveAction;
+
+    const reportOut = await reportResult({
+      artifacts: artifacts as string[] | undefined,
+      flow,
+      metrics: metrics as Parameters<typeof reportResult>[0]["metrics"],
+      parallel_results: parallel_results as
+        | Array<{ item: string; status: string; artifacts?: string[] }>
+        | undefined,
+      state_id,
+      status_keyword: status,
+      workspace,
+    });
+    if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
+
+    return resolvePostReportAction(workspace, flow, {
+      artifacts,
+      reportOut,
+      state_id,
+      status,
+      store,
+    });
+  }
+
+  // Branch B: no result — first call or re-entry after HITL
+  const targetState = board.current_state ?? flow.entry;
+  const targetStateDef = flow.states[targetState];
+  if (targetStateDef?.type === "terminal") {
+    return {
+      action: "done",
+      ok: true as const,
+      summary: buildDoneSummary(board, targetState),
+      terminal_state: targetState,
+    };
+  }
   return enterStateAndBuildSpawn(workspace, flow, targetState, store);
 }
 
-// ---------------------------------------------------------------------------
 // Wave state handling
-// ---------------------------------------------------------------------------
 
-interface WaveTaskResultInput {
+type WaveTaskResultInput = {
   workspace: string;
   flow: DriveFlowInput["flow"];
   state_id: string;
@@ -327,6 +360,43 @@ interface WaveTaskResultInput {
   task_status: string;
   task_artifacts?: string[];
   store: ReturnType<typeof getExecutionStore>;
+};
+
+/** Persist a wave task result into the store atomically. */
+function persistWaveTaskResult(
+  store: ReturnType<typeof getExecutionStore>,
+  input: WaveTaskResultInput,
+  conventionWorktreePath: string,
+  conventionBranch: string,
+): void {
+  const { state_id, task_id, task_status, task_artifacts } = input;
+  store.transaction(() => {
+    const existing = store.getState(state_id);
+    const waveResults: Record<
+      string,
+      WaveResult & { worktree_path?: string; branch?: string; artifacts?: string[] }
+    > =
+      (existing?.wave_results as Record<
+        string,
+        WaveResult & { worktree_path?: string; branch?: string; artifacts?: string[] }
+      >) ?? {};
+    const existingEntry = waveResults[task_id];
+    waveResults[task_id] = {
+      branch: existingEntry?.branch ?? conventionBranch,
+      status: task_status,
+      tasks: [task_id],
+      worktree_path: existingEntry?.worktree_path ?? conventionWorktreePath,
+      ...(task_artifacts && task_artifacts.length > 0 ? { artifacts: task_artifacts } : {}),
+    };
+    const currentEntries = existing?.entries ?? 0;
+    store.upsertState(state_id, {
+      entries: currentEntries,
+      status: "in_progress",
+      wave: existing?.wave ?? 1,
+      wave_results: waveResults,
+      wave_total: existing?.wave_total,
+    });
+  });
 }
 
 /**
@@ -338,42 +408,18 @@ interface WaveTaskResultInput {
 async function handleWaveTaskResult(
   input: WaveTaskResultInput,
 ): Promise<ToolResult<DriveFlowAction>> {
-  const { workspace, flow, state_id, task_id, task_status, task_artifacts, store } = input;
+  const { workspace, flow, state_id, task_id, store } = input;
 
-  // Derive convention-based worktree info for this task so it is persisted
-  // alongside the result — completeWave can read it back without reconstructing.
   const projectDir = getProjectDir(workspace);
   const conventionWorktreePath = join(projectDir, ".canon", "worktrees", task_id);
   const conventionBranch = `canon-wave/${task_id}`;
 
-  // Atomically append the task result to wave_results (sqlite-transactions)
-  store.transaction(() => {
-    const existing = store.getState(state_id);
-    const waveResults: Record<string, WaveResult & { worktree_path?: string; branch?: string; artifacts?: string[] }> =
-      (existing?.wave_results as Record<string, WaveResult & { worktree_path?: string; branch?: string; artifacts?: string[] }>) ?? {};
-    // Prefer already-persisted worktree metadata; fall back to convention
-    const existingEntry = waveResults[task_id];
-    waveResults[task_id] = {
-      tasks: [task_id],
-      status: task_status,
-      worktree_path: existingEntry?.worktree_path ?? conventionWorktreePath,
-      branch: existingEntry?.branch ?? conventionBranch,
-      // Persist artifacts if provided (issue #22: task_artifacts previously silently dropped)
-      ...(task_artifacts && task_artifacts.length > 0 ? { artifacts: task_artifacts } : {}),
-    };
-    const currentEntries = existing?.entries ?? 0;
-    store.upsertState(state_id, {
-      status: "in_progress",
-      entries: currentEntries,
-      wave: existing?.wave ?? 1,
-      wave_total: existing?.wave_total,
-      wave_results: waveResults,
-    });
-  });
+  persistWaveTaskResult(store, input, conventionWorktreePath, conventionBranch);
 
   // Re-read after transaction
   const stateEntry = store.getState(state_id);
-  const waveResults: Record<string, WaveResult> = (stateEntry?.wave_results as Record<string, WaveResult>) ?? {};
+  const waveResults: Record<string, WaveResult> =
+    (stateEntry?.wave_results as Record<string, WaveResult>) ?? {};
   const waveTotal = stateEntry?.wave_total ?? 0;
   const currentWave = stateEntry?.wave ?? 1;
 
@@ -388,38 +434,205 @@ async function handleWaveTaskResult(
   // Not all tasks done yet — return waiting signal (empty requests)
   if (Object.keys(waveResults).length < waveTotal) {
     return {
-      ok: true as const,
       action: "spawn",
+      ok: true as const,
       requests: [],
     };
   }
 
   // All tasks for this wave are done — proceed to merge + gate + events
   return completeWave({
-    workspace,
+    currentWave,
     flow,
     state_id,
-    currentWave,
     store,
+    workspace,
   });
 }
 
-interface CompleteWaveInput {
+type CompleteWaveInput = {
   workspace: string;
   flow: DriveFlowInput["flow"];
   state_id: string;
   currentWave: number;
   store: ReturnType<typeof getExecutionStore>;
-}
+};
 
 /**
  * Complete a wave: merge worktrees, run gates, handle events, advance.
  *
  * Called after all tasks in currentWave have submitted results.
  */
-async function completeWave(
-  input: CompleteWaveInput,
+/** Build WaveWorktreeResult array from stored wave results. */
+function buildWorktreeResults(
+  waveResults: Record<string, WaveResult>,
+  projectDir: string,
+): WaveWorktreeResult[] {
+  return Object.keys(waveResults)
+    .sort()
+    .map((tid) => {
+      const entry = waveResults[tid] as
+        | (WaveResult & { worktree_path?: string; branch?: string })
+        | undefined;
+      return {
+        branch: typeof entry?.branch === "string" ? entry.branch : `canon-wave/${tid}`,
+        task_id: tid,
+        worktree_path:
+          typeof entry?.worktree_path === "string"
+            ? entry.worktree_path
+            : join(projectDir, ".canon", "worktrees", tid),
+      };
+    });
+}
+
+type HandleMergeFailureOpts = {
+  onConflict: "hitl" | "replan" | "retry-single";
+  flow: DriveFlowInput["flow"];
+  state_id: string;
+  mergeStrategy: string;
+  store: ReturnType<typeof getExecutionStore>;
+};
+
+/** Handle a merge failure — route to conflict handler or return unexpected error. */
+async function handleMergeFailure(
+  mergeResult: { ok: false; conflict_task: string; conflict_detail: string },
+  opts: HandleMergeFailureOpts,
 ): Promise<ToolResult<DriveFlowAction>> {
+  const { onConflict, flow, state_id, mergeStrategy, store } = opts;
+  const conflictTask = mergeResult.conflict_task.trim();
+  if (conflictTask) {
+    return handleMergeConflict({
+      conflictDetail: mergeResult.conflict_detail,
+      conflictTask,
+      flow,
+      onConflict,
+      state_id,
+      store,
+    });
+  }
+  const detail = mergeResult.conflict_detail.trim()
+    ? ` Details: ${mergeResult.conflict_detail.trim()}`
+    : "";
+  return toolError(
+    "UNEXPECTED",
+    `Wave merge failed for state '${state_id}' with strategy '${mergeStrategy}', but no conflicting task was reported. The merge strategy may be unsupported or not yet implemented.${detail}`,
+  );
+}
+
+type RouteReportResultOpts = {
+  state_id: string;
+  reportOut: Awaited<ReturnType<typeof reportResult>> & { ok: true };
+  store: ReturnType<typeof getExecutionStore>;
+};
+
+/** Route a report result to HITL, done, or next-state spawn. */
+async function routeReportResult(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  opts: RouteReportResultOpts,
+): Promise<ToolResult<DriveFlowAction>> {
+  const { state_id, reportOut, store } = opts;
+  const { next_state, hitl_required, hitl_reason, stuck_reason } = reportOut;
+
+  if (hitl_required) {
+    const board = store.getBoard();
+    if (!board)
+      return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
+    return {
+      action: "hitl",
+      breakpoint: {
+        context: buildHitlContext(board, state_id, reportOut),
+        reason: hitl_reason ?? stuck_reason ?? "HITL required",
+      },
+      ok: true as const,
+    };
+  }
+
+  return resolveNextStateAction(workspace, flow, {
+    board: store.getBoard()!,
+    current_state: state_id,
+    next_state,
+    store,
+  });
+}
+
+type HandleLastWaveOpts = {
+  state_id: string;
+  statusKeyword: string;
+  gateResults: ReturnType<typeof runGates>;
+  store: ReturnType<typeof getExecutionStore>;
+};
+
+/** Handle the last wave: after-consultations, report result, and advance. */
+async function handleLastWave(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  opts: HandleLastWaveOpts,
+): Promise<ToolResult<DriveFlowAction>> {
+  const { state_id, statusKeyword, gateResults, store } = opts;
+  const afterConsultationsResult = resolveAfterConsultations({
+    flow,
+    state_id,
+    variables: {},
+    workspace,
+  });
+  const afterConsultationPrompts = afterConsultationsResult?.consultation_prompts ?? [];
+
+  if (afterConsultationPrompts.length > 0) {
+    return {
+      action: "spawn",
+      ok: true as const,
+      requests: afterConsultationPrompts.map((cp) => ({
+        agent_type: cp.agent,
+        isolation: "none" as const,
+        prompt: cp.prompt,
+        role: "consultation",
+      })),
+    };
+  }
+
+  const reportOut = await reportResult({
+    flow,
+    gate_results: gateResults,
+    state_id,
+    status_keyword: statusKeyword,
+    workspace,
+  });
+  if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
+
+  return routeReportResult(workspace, flow, { reportOut, state_id, store });
+}
+
+type CheckWaveBoundaryApprovalOpts = {
+  state_id: string;
+  currentWave: number;
+  nextWaveTaskIds: string[];
+  store: ReturnType<typeof getExecutionStore>;
+};
+
+/** Check wave boundary approval gate and return approval action if needed. */
+function checkWaveBoundaryApproval(
+  stateDef: StateDefinition | undefined,
+  flow: DriveFlowInput["flow"],
+  opts: CheckWaveBoundaryApprovalOpts,
+): ToolResult<DriveFlowAction> | null {
+  const { state_id, currentWave, nextWaveTaskIds, store } = opts;
+  const board = store.getBoard();
+  if (!board || !shouldApprovalGateWaveBoundary(stateDef, flow, board)) return null;
+  return {
+    action: "approval" as const,
+    breakpoint: {
+      agent_type: stateDef?.agent ?? "wave",
+      artifacts: [],
+      options: ["approved", "revise", "reject"] as const,
+      state_id,
+      summary: `Wave ${currentWave} completed. ${nextWaveTaskIds.length} tasks in next wave. Awaiting approval to proceed.`,
+    },
+    ok: true as const,
+  };
+}
+
+async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveFlowAction>> {
   const { workspace, flow, state_id, currentWave, store } = input;
 
   const stateDef = flow.states[state_id];
@@ -428,181 +641,60 @@ async function completeWave(
   const onConflict = wavePolicy?.on_conflict ?? "hitl";
   const projectDir = getProjectDir(workspace);
 
-  // Gather worktree results from board state metadata.
-  // We reconstruct task IDs for this wave from the stored wave_results keys.
   const stateEntry = store.getState(state_id);
-  const waveResults: Record<string, WaveResult> = (stateEntry?.wave_results as Record<string, WaveResult>) ?? {};
-  const taskIds = Object.keys(waveResults).sort();
+  const waveResults: Record<string, WaveResult> =
+    (stateEntry?.wave_results as Record<string, WaveResult>) ?? {};
+  const worktreeResults = buildWorktreeResults(waveResults, projectDir);
 
-  // Build WaveWorktreeResult array from task IDs.
-  // Prefer worktree metadata persisted during wave entry; fall back to convention.
-  const worktreeResults: WaveWorktreeResult[] = taskIds.map((tid) => {
-    const entry = waveResults[tid] as (WaveResult & { worktree_path?: string; branch?: string }) | undefined;
-    return {
-      task_id: tid,
-      worktree_path: typeof entry?.worktree_path === "string" ? entry.worktree_path : join(projectDir, ".canon", "worktrees", tid),
-      branch: typeof entry?.branch === "string" ? entry.branch : `canon-wave/${tid}`,
-    };
-  });
-
-  // Merge worktrees
   const mergeResult = await mergeWaveResults(worktreeResults, projectDir, mergeStrategy);
-
   if (!mergeResult.ok) {
-    type MergeFailure = { ok: false; merged_count: number; conflict_task: string; conflict_detail: string };
-    const failMerge = mergeResult as MergeFailure;
-    const conflictTask = failMerge.conflict_task.trim();
-
-    if (conflictTask) {
-      // Merge conflict — handle per on_conflict policy (no-silent-failures)
-      return handleMergeConflict({
-        conflictTask,
-        conflictDetail: failMerge.conflict_detail,
-        onConflict,
-        flow,
-        state_id,
-        store,
-      });
-    }
-
-    // Empty conflict_task means an unimplemented merge strategy was requested
-    const detail = failMerge.conflict_detail.trim()
-      ? ` Details: ${failMerge.conflict_detail.trim()}`
-      : "";
-    return toolError(
-      "UNEXPECTED",
-      `Wave merge failed for state '${state_id}' with strategy '${mergeStrategy}', but no conflicting task was reported. The merge strategy may be unsupported or not yet implemented.${detail}`,
+    return handleMergeFailure(
+      mergeResult as { ok: false; conflict_task: string; conflict_detail: string },
+      { flow, mergeStrategy, onConflict, state_id, store },
     );
   }
 
-  // Cleanup worktrees (best-effort — errors don't fail the flow)
   await cleanupWorktrees(worktreeResults, projectDir);
 
-  // Guard: stateDef must exist (it was validated when entering the wave state)
   if (!stateDef) {
-    return toolError("UNEXPECTED", `State definition not found for state '${state_id}' during wave completion`);
+    return toolError(
+      "UNEXPECTED",
+      `State definition not found for state '${state_id}' during wave completion`,
+    );
   }
 
-  // Run gates
   const gateResults = runGates(stateDef, flow, projectDir, stateEntry ?? undefined);
-  const gateFailed = gateResults.some((g) => !g.passed);
+  const statusKeyword = gateResults.some((g) => !g.passed) ? "gate_failed" : "done";
 
-  // Determine the status keyword to report
-  const statusKeyword = gateFailed ? "gate_failed" : "done";
-
-  // Handle pending wave events between waves (before advancing)
   const eventResult = handlePendingWaveEvents(store, currentWave);
   if (eventResult !== null) return eventResult;
 
-  // Resolve next-wave task IDs from INDEX.md (filtering applied skip_task events)
   const nextWave = currentWave + 1;
   const nextWaveTaskIds = await resolveNextWaveTaskIds(workspace, store, nextWave);
 
-  const hasMoreWaves = nextWaveTaskIds.length > 0;
-
-  if (!hasMoreWaves) {
-    // Last wave — check for after-consultations
-    const afterConsultationsResult = resolveAfterConsultations({
-      workspace,
-      state_id,
-      flow,
-      variables: {},
-    });
-    const afterConsultationPrompts = afterConsultationsResult?.consultation_prompts ?? [];
-
-    if (afterConsultationPrompts.length > 0) {
-      const consultRequests: SpawnRequest[] = afterConsultationPrompts.map((cp) => ({
-        agent_type: cp.agent,
-        prompt: cp.prompt,
-        isolation: "none" as const,
-        role: "consultation",
-      }));
-      return {
-        ok: true as const,
-        action: "spawn",
-        requests: consultRequests,
-      };
-    }
-
-    // Report the wave state result and advance
-    const reportOut = await reportResult({
-      workspace,
-      state_id,
-      status_keyword: statusKeyword,
-      flow,
-      gate_results: gateResults,
-    });
-
-    if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
-
-    const { next_state, hitl_required, hitl_reason, stuck_reason } = reportOut;
-
-    if (hitl_required) {
-      const board = store.getBoard();
-      if (!board) {
-        return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
-      }
-      return {
-        ok: true as const,
-        action: "hitl",
-        breakpoint: {
-          reason: hitl_reason ?? stuck_reason ?? "HITL required",
-          context: buildHitlContext(board, state_id, reportOut),
-        },
-      };
-    }
-
-    if (!next_state || flow.states[next_state]?.type === "terminal") {
-      const board = store.getBoard();
-      if (!board) {
-        return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
-      }
-      return {
-        ok: true as const,
-        action: "done",
-        terminal_state: next_state ?? state_id,
-        summary: buildDoneSummary(board, next_state ?? state_id),
-      };
-    }
-
-    return enterStateAndBuildSpawn(workspace, flow, next_state, store);
+  if (nextWaveTaskIds.length === 0) {
+    return handleLastWave(workspace, flow, { gateResults, state_id, statusKeyword, store });
   }
 
-  // More waves — check for wave boundary approval gate before starting next wave
-  const freshBoardForApproval = store.getBoard();
-  if (freshBoardForApproval && shouldApprovalGateWaveBoundary(stateDef, flow, freshBoardForApproval)) {
-    return {
-      ok: true as const,
-      action: "approval" as const,
-      breakpoint: {
-        state_id,
-        agent_type: stateDef?.agent ?? "wave",
-        artifacts: [],
-        summary: `Wave ${currentWave} completed. ${nextWaveTaskIds.length} tasks in next wave. Awaiting approval to proceed.`,
-        options: ["approved", "revise", "reject"] as const,
-      },
-    };
-  }
-
-  return startNextWave({
-    workspace,
-    flow,
-    state_id,
-    nextWave,
+  const approvalAction = checkWaveBoundaryApproval(stateDef, flow, {
+    currentWave,
     nextWaveTaskIds,
+    state_id,
     store,
-    projectDir,
   });
+  if (approvalAction) return approvalAction;
+
+  return startNextWave({ flow, nextWave, nextWaveTaskIds, projectDir, state_id, store, workspace });
 }
 
-interface HandleMergeConflictInput {
+type HandleMergeConflictInput = {
   conflictTask: string;
   conflictDetail: string;
   onConflict: "hitl" | "replan" | "retry-single";
   flow: DriveFlowInput["flow"];
   state_id: string;
   store: ReturnType<typeof getExecutionStore>;
-}
+};
 
 /**
  * Handle a merge conflict per the WavePolicy.on_conflict strategy.
@@ -615,25 +707,29 @@ async function handleMergeConflict(
 
   if (onConflict === "hitl") {
     return {
-      ok: true as const,
       action: "hitl",
       breakpoint: {
-        reason: `Merge conflict in wave task '${conflictTask}'`,
         context: `Task: ${conflictTask}\nConflict detail: ${conflictDetail}`,
-        options: ["Resolve conflict manually and retry", "Abandon the conflicting task", "Replan the wave"],
+        options: [
+          "Resolve conflict manually and retry",
+          "Abandon the conflicting task",
+          "Replan the wave",
+        ],
+        reason: `Merge conflict in wave task '${conflictTask}'`,
       },
+      ok: true as const,
     };
   }
 
   if (onConflict === "replan") {
     return {
-      ok: true as const,
       action: "hitl",
       breakpoint: {
-        reason: `replan: Merge conflict requires replanning — conflict in task '${conflictTask}'`,
         context: `Task: ${conflictTask}\nConflict detail: ${conflictDetail}\nSuggestion: Split or reorder conflicting tasks to avoid overlap.`,
         options: ["Replan affected tasks", "Abandon conflicting task and continue"],
+        reason: `replan: Merge conflict requires replanning — conflict in task '${conflictTask}'`,
       },
+      ok: true as const,
     };
   }
 
@@ -644,17 +740,19 @@ async function handleMergeConflict(
   const spawnInstruction = flow.spawn_instructions[state_id] ?? "Retry task";
 
   const stateEntry = store.getState(state_id);
-  const waveResults = stateEntry?.wave_results as Record<string, { worktree_path?: string }> | undefined;
+  const waveResults = stateEntry?.wave_results as
+    | Record<string, { worktree_path?: string }>
+    | undefined;
   const worktreePath = waveResults?.[conflictTask]?.worktree_path;
 
   return {
-    ok: true as const,
     action: "spawn",
+    ok: true as const,
     requests: [
       {
         agent_type: stateDef?.agent ?? "canon:canon-implementor",
-        prompt: `${spawnInstruction}\n\nNote: This is a retry for task '${conflictTask}' after a merge conflict. Conflict detail:\n${conflictDetail}`,
         isolation: "worktree",
+        prompt: `${spawnInstruction}\n\nNote: This is a retry for task '${conflictTask}' after a merge conflict. Conflict detail:\n${conflictDetail}`,
         task_id: conflictTask,
         ...(worktreePath ? { worktree_path: worktreePath } : {}),
       },
@@ -662,9 +760,7 @@ async function handleMergeConflict(
   };
 }
 
-// ---------------------------------------------------------------------------
 // Wave event and next-wave helpers (extracted from completeWave for testability)
-// ---------------------------------------------------------------------------
 
 /**
  * Handle pending wave events between waves.
@@ -683,12 +779,12 @@ function handlePendingWaveEvents(
   const pauseEvent = pendingEvents.find((e) => e.type === "pause");
   if (pauseEvent) {
     return {
-      ok: true as const,
       action: "hitl",
       breakpoint: {
-        reason: `pause: wave execution paused — ${String(pauseEvent.payload["reason"] ?? "user requested pause")}`,
         context: `Wave ${currentWave} merged successfully. Pause event ID: ${pauseEvent.id}`,
+        reason: `pause: wave execution paused — ${String(pauseEvent.payload.reason ?? "user requested pause")}`,
       },
+      ok: true as const,
     };
   }
 
@@ -697,9 +793,9 @@ function handlePendingWaveEvents(
   for (const evt of skipTaskEvents) {
     try {
       store.updateWaveEvent(evt.id, {
-        status: "applied",
         applied_at: new Date().toISOString(),
         resolution: { skipped_by: "drive_flow" },
+        status: "applied",
       });
     } catch {
       // Already applied — ignore
@@ -733,15 +829,13 @@ async function resolveNextWaveTaskIds(
   // skip_task events may already be marked "applied" by handlePendingWaveEvents,
   // so we look at ALL skip_task events regardless of status.
   const allSkipEvents = store.getWaveEvents({}).filter((e) => e.type === "skip_task");
-  const skipIds = new Set(
-    allSkipEvents.map((e) => String(e.payload["task_id"] ?? "")),
-  );
+  const skipIds = new Set(allSkipEvents.map((e) => String(e.payload.task_id ?? "")));
   taskIds = taskIds.filter((tid) => !skipIds.has(tid));
 
   return taskIds;
 }
 
-interface StartNextWaveInput {
+type StartNextWaveInput = {
   workspace: string;
   flow: DriveFlowInput["flow"];
   state_id: string;
@@ -749,14 +843,12 @@ interface StartNextWaveInput {
   nextWaveTaskIds: string[];
   store: ReturnType<typeof getExecutionStore>;
   projectDir: string;
-}
+};
 
 /**
  * Start the next wave: create worktrees, update state, return spawn requests.
  */
-async function startNextWave(
-  input: StartNextWaveInput,
-): Promise<ToolResult<DriveFlowAction>> {
+async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<DriveFlowAction>> {
   const { workspace, flow, state_id, nextWave, nextWaveTaskIds, store, projectDir } = input;
 
   // Create worktrees for next wave tasks (subprocess-isolation via wave-lifecycle.ts)
@@ -772,36 +864,36 @@ async function startNextWave(
   store.transaction(() => {
     const existing = store.getState(state_id);
     store.upsertState(state_id, {
-      status: "in_progress",
       entries: (existing?.entries ?? 0) + 1,
+      status: "in_progress",
       wave: nextWave,
-      wave_total: nextWaveTaskIds.length,
       wave_results: {}, // reset for new wave
+      wave_total: nextWaveTaskIds.length,
     });
   });
 
   // Get spawn prompts for the next wave state
   const enterOut = await enterAndPrepareState({
-    workspace,
-    state_id,
     flow,
+    peer_count: nextWaveTaskIds.length,
+    state_id,
     variables: {},
     wave: nextWave,
-    peer_count: nextWaveTaskIds.length,
+    workspace,
   });
 
   if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
 
   if (!enterOut.can_enter) {
     return {
-      ok: true as const,
       action: "hitl",
       breakpoint: {
+        context: buildConvergenceContext(enterOut),
         reason: enterOut.convergence_reason
           ? `Convergence exhausted for state '${state_id}' wave ${nextWave}: ${enterOut.convergence_reason}`
           : `Max iterations reached for state '${state_id}' wave ${nextWave}`,
-        context: buildConvergenceContext(enterOut),
       },
+      ok: true as const,
     };
   }
 
@@ -815,15 +907,13 @@ async function startNextWave(
   });
 
   return {
-    ok: true as const,
     action: "spawn",
+    ok: true as const,
     requests: requestsWithWorktrees,
   };
 }
 
-// ---------------------------------------------------------------------------
 // Internal: enter state with skip-state loop
-// ---------------------------------------------------------------------------
 
 /**
  * Enter a state, handling the skip-state loop internally.
@@ -834,128 +924,129 @@ async function startNextWave(
  * For wave states: reads INDEX.md, creates worktrees, injects worktree_path
  * on each SpawnRequest, and persists wave metadata to execution_states.
  */
+/** Handle a skipped state: report and return the next state ID or a terminal action. */
+async function handleSkippedState(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  currentStateId: string,
+): Promise<{ nextStateId: string } | ToolResult<DriveFlowAction>> {
+  const reportOut = await reportResult({
+    flow,
+    state_id: currentStateId,
+    status_keyword: "skipped",
+    workspace,
+  });
+  if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
+
+  if (reportOut.hitl_required) {
+    return {
+      action: "hitl",
+      breakpoint: { context: "", reason: reportOut.hitl_reason ?? "HITL required after skip" },
+      ok: true as const,
+    };
+  }
+
+  const nextState = reportOut.next_state;
+  if (!nextState) {
+    return {
+      action: "done",
+      ok: true as const,
+      summary: buildDoneSummary(reportOut.board, currentStateId),
+      terminal_state: currentStateId,
+    };
+  }
+  if (flow.states[nextState]?.type === "terminal") {
+    return {
+      action: "done",
+      ok: true as const,
+      summary: buildDoneSummary(reportOut.board, nextState),
+      terminal_state: nextState,
+    };
+  }
+
+  return { nextStateId: nextState };
+}
+
+/** Build a terminal "done" action for a state. */
+function buildTerminalAction(
+  workspace: string,
+  stateId: string,
+  store: ReturnType<typeof getExecutionStore>,
+): ToolResult<DriveFlowAction> {
+  const board = store.getBoard();
+  if (!board)
+    return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
+  return {
+    action: "done",
+    ok: true as const,
+    summary: buildDoneSummary(board, stateId),
+    terminal_state: stateId,
+  };
+}
+
+/** Build convergence-exhausted HITL action. */
+function buildConvergenceHitl(
+  currentStateId: string,
+  enterOut: { iteration_count: number; max_iterations: number; convergence_reason?: string },
+): ToolResult<DriveFlowAction> {
+  return {
+    action: "hitl",
+    breakpoint: {
+      context: buildConvergenceContext(enterOut),
+      reason: enterOut.convergence_reason
+        ? `Convergence exhausted for state '${currentStateId}': ${enterOut.convergence_reason}`
+        : `Max iterations reached for state '${currentStateId}'`,
+    },
+    ok: true as const,
+  };
+}
+
+/** Try to enter a single state. Returns a final action, or { nextStateId } to continue the skip loop. */
+async function tryEnterSingleState(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  currentStateId: string,
+  store: ReturnType<typeof getExecutionStore>,
+): Promise<ToolResult<DriveFlowAction> | { nextStateId: string }> {
+  const stateDef = flow.states[currentStateId];
+  if (stateDef?.type === "terminal") return buildTerminalAction(workspace, currentStateId, store);
+  if (stateDef?.type === "wave") return enterWaveState(workspace, flow, currentStateId, store);
+
+  const enterOut = await enterAndPrepareState({
+    flow,
+    state_id: currentStateId,
+    variables: {},
+    workspace,
+  });
+  if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
+  if (!enterOut.can_enter) return buildConvergenceHitl(currentStateId, enterOut);
+
+  if (enterOut.skip_reason) return handleSkippedState(workspace, flow, currentStateId);
+
+  const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
+  const requestsWithSession = await applySessionContinuation(requests, currentStateId, store);
+  return { action: "spawn", ok: true as const, requests: requestsWithSession };
+}
+
 async function enterStateAndBuildSpawn(
   workspace: string,
   flow: DriveFlowInput["flow"],
   stateId: string,
   store: ReturnType<typeof getExecutionStore>,
 ): Promise<ToolResult<DriveFlowAction>> {
-  // Limit skip loops to prevent infinite cycles
   const MAX_SKIP_ITERATIONS = 50;
   let currentStateId = stateId;
 
   for (let i = 0; i < MAX_SKIP_ITERATIONS; i++) {
-    // Check if current state is terminal before entering
-    const stateDef = flow.states[currentStateId];
-    if (stateDef?.type === "terminal") {
-      const board = store.getBoard();
-      if (!board) {
-        return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
-      }
-      return {
-        ok: true as const,
-        action: "done",
-        terminal_state: currentStateId,
-        summary: buildDoneSummary(board, currentStateId),
-      };
-    }
-
-    // ---------------------------------------------------------------------------
-    // Wave state entry: create worktrees, track wave, inject worktree_path
-    // ---------------------------------------------------------------------------
-    if (stateDef?.type === "wave") {
-      return enterWaveState(workspace, flow, currentStateId, store);
-    }
-
-    const enterOut = await enterAndPrepareState({
-      workspace,
-      state_id: currentStateId,
-      flow,
-      variables: {},
-    });
-
-    if (!enterOut.ok) {
-      return enterOut as ToolResult<DriveFlowAction>;
-    }
-
-    // Convergence exhausted — cannot enter state
-    if (!enterOut.can_enter) {
-      return {
-        ok: true as const,
-        action: "hitl",
-        breakpoint: {
-          reason: enterOut.convergence_reason
-            ? `Convergence exhausted for state '${currentStateId}': ${enterOut.convergence_reason}`
-            : `Max iterations reached for state '${currentStateId}'`,
-          context: buildConvergenceContext(enterOut),
-        },
-      };
-    }
-
-    // Skip-state: auto-advance without returning to caller
-    if (enterOut.skip_reason) {
-      const reportOut = await reportResult({
-        workspace,
-        state_id: currentStateId,
-        status_keyword: "skipped",
-        flow,
-      });
-
-      if (!reportOut.ok) {
-        return reportOut as ToolResult<DriveFlowAction>;
-      }
-
-      // If HITL or no next state after skip, return done
-      if (reportOut.hitl_required) {
-        return {
-          ok: true as const,
-          action: "hitl",
-          breakpoint: {
-            reason: reportOut.hitl_reason ?? "HITL required after skip",
-            context: "",
-          },
-        };
-      }
-
-      const nextState = reportOut.next_state;
-      if (!nextState) {
-        return {
-          ok: true as const,
-          action: "done",
-          terminal_state: currentStateId,
-          summary: buildDoneSummary(reportOut.board, currentStateId),
-        };
-      }
-
-      // Check if next state is terminal
-      if (flow.states[nextState]?.type === "terminal") {
-        return {
-          ok: true as const,
-          action: "done",
-          terminal_state: nextState,
-          summary: buildDoneSummary(reportOut.board, nextState),
-        };
-      }
-
-      // Loop to the next state
-      currentStateId = nextState;
+    // biome-ignore lint/performance/noAwaitInLoops: state machine loop — each iteration depends on the previous state's result
+    const result = await tryEnterSingleState(workspace, flow, currentStateId, store);
+    if ("nextStateId" in result) {
+      currentStateId = result.nextStateId;
       continue;
     }
-
-    // Non-skipped state: build spawn requests
-    const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
-
-    // Apply ADR-009a continue_from for fix-loop states
-    const requestsWithSession = await applySessionContinuation(requests, currentStateId, store);
-
-    return {
-      ok: true as const,
-      action: "spawn",
-      requests: requestsWithSession,
-    };
+    return result;
   }
 
-  // Safety net: hit max skip iterations (shouldn't happen in practice)
   return toolError(
     "UNEXPECTED",
     `Exceeded maximum skip iterations (${MAX_SKIP_ITERATIONS}) in state loop`,
@@ -969,6 +1060,31 @@ async function enterStateAndBuildSpawn(
  * persists wave metadata (wave=1, wave_total=N), and returns spawn requests
  * with worktree_path pre-populated.
  */
+/** Read wave task IDs from INDEX.md for the given wave number. */
+async function readWaveTaskIds(
+  workspace: string,
+  slug: string | undefined,
+  wave: number,
+): Promise<string[]> {
+  if (!slug) return [];
+  const indexPath = join(workspace, "plans", slug, "INDEX.md");
+  if (!existsSync(indexPath)) return [];
+  const indexContent = await readFile(indexPath, "utf-8");
+  return parseTaskIdsForWave(indexContent, wave);
+}
+
+/** Build a unified worktree map from newly-created and previously-persisted worktrees. */
+function buildWorktreeMap(
+  newResults: Array<{ task_id: string; worktree_path: string }>,
+  existingWaveResults: Record<string, { worktree_path?: string; branch?: string }>,
+): Map<string, string> {
+  const map = new Map<string, string>(newResults.map((r) => [r.task_id, r.worktree_path]));
+  for (const [tid, entry] of Object.entries(existingWaveResults)) {
+    if (entry.worktree_path && !map.has(tid)) map.set(tid, entry.worktree_path);
+  }
+  return map;
+}
+
 async function enterWaveState(
   workspace: string,
   flow: DriveFlowInput["flow"],
@@ -976,108 +1092,67 @@ async function enterWaveState(
   store: ReturnType<typeof getExecutionStore>,
 ): Promise<ToolResult<DriveFlowAction>> {
   const session = store.getSession();
-  const slug = session?.slug;
   const projectDir = getProjectDir(workspace);
-
-  // Determine current wave number (1 on first entry)
   const existingState = store.getState(stateId);
   const currentWave = existingState?.wave ?? 1;
 
-  // Read INDEX.md to find tasks for this wave
-  let waveTaskIds: string[] = [];
-  if (slug) {
-    const indexPath = join(workspace, "plans", slug, "INDEX.md");
-    if (existsSync(indexPath)) {
-      const indexContent = await readFile(indexPath, "utf-8");
-      waveTaskIds = parseTaskIdsForWave(indexContent, currentWave);
-    }
-  }
-
-  const waveTotal = waveTaskIds.length;
-
-  // Guard: waveTotal=0 means INDEX.md is missing or has no tasks for this wave.
-  // Proceeding with zero tasks would cause a deadlock — return a structured error (issue #10).
-  if (waveTotal === 0) {
+  const waveTaskIds = await readWaveTaskIds(workspace, session?.slug, currentWave);
+  if (waveTaskIds.length === 0) {
     return toolError(
       "INVALID_INPUT",
       `Wave state '${stateId}' has no tasks for wave ${currentWave}. INDEX.md is missing or contains no tasks for this wave. Ensure write_plan_index was called before entering the wave state.`,
     );
   }
 
-  // Create worktrees for tasks that don't already have one persisted.
-  // On restart/resume, some worktrees may already exist from a previous entry —
-  // only create worktrees for tasks without an existing entry (dd-009-02, issue #14).
-  const existingWaveResults = (existingState?.wave_results ?? {}) as Record<string, { worktree_path?: string; branch?: string }>;
-  const tasksNeedingWorktrees = waveTaskIds.filter((tid) => !existingWaveResults[tid]?.worktree_path);
-  const worktreeResults = tasksNeedingWorktrees.length > 0
-    ? await createWaveWorktrees(tasksNeedingWorktrees.map((tid) => ({ task_id: tid })), projectDir)
-    : [];
-
-  // Build worktree map: newly-created worktrees + already-persisted worktrees from prior entry
-  const worktreeMap = new Map<string, string>(
-    worktreeResults.map((r) => [r.task_id, r.worktree_path]),
+  const existingWaveResults = (existingState?.wave_results ?? {}) as Record<
+    string,
+    { worktree_path?: string; branch?: string }
+  >;
+  const tasksNeedingWorktrees = waveTaskIds.filter(
+    (tid) => !existingWaveResults[tid]?.worktree_path,
   );
-  for (const [tid, entry] of Object.entries(existingWaveResults)) {
-    if (entry.worktree_path && !worktreeMap.has(tid)) {
-      worktreeMap.set(tid, entry.worktree_path);
-    }
-  }
+  const worktreeResults =
+    tasksNeedingWorktrees.length > 0
+      ? await createWaveWorktrees(
+          tasksNeedingWorktrees.map((tid) => ({ task_id: tid })),
+          projectDir,
+        )
+      : [];
 
-  // Persist wave tracking metadata atomically (sqlite-transactions)
+  const worktreeMap = buildWorktreeMap(worktreeResults, existingWaveResults);
+
   store.transaction(() => {
     store.upsertState(stateId, {
-      status: "in_progress",
       entries: (existingState?.entries ?? 0) + 1,
+      status: "in_progress",
       wave: currentWave,
-      wave_total: waveTotal,
       wave_results: existingState?.wave_results ?? {},
+      wave_total: waveTaskIds.length,
     });
   });
 
-  // Get spawn prompts via enterAndPrepareState
   const enterOut = await enterAndPrepareState({
-    workspace,
-    state_id: stateId,
     flow,
+    peer_count: waveTaskIds.length,
+    state_id: stateId,
     variables: {},
     wave: currentWave,
-    peer_count: waveTotal,
+    workspace,
   });
-
   if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
+  if (!enterOut.can_enter) return buildConvergenceHitl(stateId, enterOut);
 
-  if (!enterOut.can_enter) {
-    return {
-      ok: true as const,
-      action: "hitl",
-      breakpoint: {
-        reason: enterOut.convergence_reason
-          ? `Convergence exhausted for state '${stateId}' wave ${currentWave}: ${enterOut.convergence_reason}`
-          : `Max iterations reached for state '${stateId}' wave ${currentWave}`,
-        context: buildConvergenceContext(enterOut),
-      },
-    };
-  }
-
-  // Build spawn requests and populate worktree_path for each task
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
-  const requestsWithWorktrees = requests.map((req) => {
-    if (req.task_id && worktreeMap.has(req.task_id)) {
-      return { ...req, worktree_path: worktreeMap.get(req.task_id) };
-    }
-    return req;
-  });
+  const requestsWithWorktrees = requests.map((req) =>
+    req.task_id && worktreeMap.has(req.task_id)
+      ? { ...req, worktree_path: worktreeMap.get(req.task_id) }
+      : req,
+  );
 
-  return {
-    ok: true as const,
-    action: "spawn",
-    requests: requestsWithWorktrees,
-  };
+  return { action: "spawn", ok: true as const, requests: requestsWithWorktrees };
 }
 
-// ---------------------------------------------------------------------------
 // SpawnRequest marshalling
-// ---------------------------------------------------------------------------
 
 /**
  * Convert SpawnPromptEntry[] and consultation prompts into SpawnRequest[].
@@ -1088,15 +1163,15 @@ function buildSpawnRequests(
 ): SpawnRequest[] {
   const requests: SpawnRequest[] = prompts.map((entry) => ({
     agent_type: entry.agent,
-    prompt: entry.prompt,
     isolation: (entry.isolation ?? "worktree") as SpawnRequest["isolation"],
+    prompt: entry.prompt,
     ...(entry.role !== undefined ? { role: entry.role } : {}),
     ...(entry.item !== undefined
       ? {
           task_id:
             typeof entry.item === "string"
               ? entry.item
-              : (entry.item as Record<string, unknown>).task_id as string | undefined,
+              : ((entry.item as Record<string, unknown>).task_id as string | undefined),
         }
       : {}),
     ...(entry.worktree_path !== undefined ? { worktree_path: entry.worktree_path } : {}),
@@ -1106,8 +1181,8 @@ function buildSpawnRequests(
     for (const cp of consultationPrompts) {
       requests.push({
         agent_type: cp.agent,
-        prompt: cp.prompt,
         isolation: "none",
+        prompt: cp.prompt,
         role: "consultation",
       });
     }
@@ -1116,9 +1191,7 @@ function buildSpawnRequests(
   return requests;
 }
 
-// ---------------------------------------------------------------------------
 // ADR-009a: Session continuation
-// ---------------------------------------------------------------------------
 
 /**
  * Apply continue_from to SpawnRequests when a fresh agent session exists.
@@ -1168,19 +1241,21 @@ async function applySessionContinuation(
   ];
 }
 
-// ---------------------------------------------------------------------------
 // Context builders for HITL and done summaries
-// ---------------------------------------------------------------------------
 
 function buildHitlContext(
-  board: ReturnType<typeof getExecutionStore>["getBoard"] extends () => infer T ? NonNullable<T> : never,
+  board: ReturnType<typeof getExecutionStore>["getBoard"] extends () => infer T
+    ? NonNullable<T>
+    : never,
   stateId: string,
-  reportOut: { transition_condition: string; stuck: boolean; stuck_reason?: string; hitl_reason?: string },
+  reportOut: {
+    transition_condition: string;
+    stuck: boolean;
+    stuck_reason?: string;
+    hitl_reason?: string;
+  },
 ): string {
-  const parts: string[] = [
-    `State: ${stateId}`,
-    `Condition: ${reportOut.transition_condition}`,
-  ];
+  const parts: string[] = [`State: ${stateId}`, `Condition: ${reportOut.transition_condition}`];
   if (reportOut.stuck) {
     parts.push(`Stuck: ${reportOut.stuck_reason ?? "yes"}`);
   }
@@ -1194,9 +1269,11 @@ function buildHitlContext(
   return parts.join("\n");
 }
 
-function buildConvergenceContext(
-  enterOut: { iteration_count: number; max_iterations: number; convergence_reason?: string },
-): string {
+function buildConvergenceContext(enterOut: {
+  iteration_count: number;
+  max_iterations: number;
+  convergence_reason?: string;
+}): string {
   return [
     `Iterations: ${enterOut.iteration_count}/${enterOut.max_iterations}`,
     ...(enterOut.convergence_reason ? [`Reason: ${enterOut.convergence_reason}`] : []),
@@ -1204,7 +1281,9 @@ function buildConvergenceContext(
 }
 
 function buildDoneSummary(
-  board: ReturnType<typeof getExecutionStore>["getBoard"] extends () => infer T ? NonNullable<T> : never,
+  board: ReturnType<typeof getExecutionStore>["getBoard"] extends () => infer T
+    ? NonNullable<T>
+    : never,
   terminalState: string,
 ): string {
   const stateCount = Object.keys(board.states ?? {}).length;

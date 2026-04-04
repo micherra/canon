@@ -15,23 +15,19 @@
  *   and existing v1 DBs (IF NOT EXISTS skips tables, migration adds missing columns).
  */
 
-import Database from 'better-sqlite3';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
+import Database from "better-sqlite3";
 
-// ---------------------------------------------------------------------------
 // Schema version — increment when DDL changes require a migration
-// ---------------------------------------------------------------------------
 
-export const SCHEMA_VERSION = '8';
+export const SCHEMA_VERSION = "8";
 
-// ---------------------------------------------------------------------------
 // DDL statements — v1 base tables (no correlation_id)
 //
 // IMPORTANT: Keep these as v1 base DDL. The migration runner adds new columns
 // via ALTER TABLE after applySchema() completes. This ensures that:
 // - Fresh DBs: v1 tables created, then migration immediately runs to add v2 columns
 // - Existing v1 DBs: IF NOT EXISTS skips table creation, migration adds missing columns
-// ---------------------------------------------------------------------------
 
 const DDL_STATEMENTS = [
   // Meta table for schema versioning
@@ -146,12 +142,10 @@ const DDL_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_events_type ON events(type)`,
 ];
 
-// ---------------------------------------------------------------------------
 // columnExists — PRAGMA table_info helper
 //
 // SQLite does not support ALTER TABLE ADD COLUMN IF NOT EXISTS, so we check
 // whether a column exists before running ALTER TABLE to ensure idempotency.
-// ---------------------------------------------------------------------------
 
 /** Allowed characters for a SQLite table identifier. */
 const IDENTIFIER_RE = /^[A-Za-z0-9_]+$/;
@@ -163,34 +157,24 @@ const IDENTIFIER_RE = /^[A-Za-z0-9_]+$/;
  * Throws an Error if `table` contains characters outside `[A-Za-z0-9_]`
  * to prevent SQL injection via PRAGMA string interpolation.
  */
-export function columnExists(
-  db: Database.Database,
-  table: string,
-  column: string,
-): boolean {
+export function columnExists(db: Database.Database, table: string, column: string): boolean {
   if (!IDENTIFIER_RE.test(table)) {
     throw new Error(
       `columnExists: invalid table name "${table}" — only [A-Za-z0-9_] characters are allowed`,
     );
   }
   try {
-    const rows = db
-      .prepare(`PRAGMA table_info(${table})`)
-      .all() as Array<{ name: string }>;
+    const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
     return rows.some((row) => row.name === column);
   } catch {
     return false;
   }
 }
 
-// ---------------------------------------------------------------------------
-// Migration runner
-// ---------------------------------------------------------------------------
-
-interface Migration {
+type Migration = {
   version: string;
   up: (db: Database.Database) => void;
-}
+};
 
 /**
  * Ordered list of schema migrations.
@@ -199,17 +183,17 @@ interface Migration {
  */
 const MIGRATIONS: Migration[] = [
   {
-    // correlation_id columns — shipped on main
-    version: '2',
     up: (db) => {
-      if (!columnExists(db, 'execution', 'correlation_id')) {
+      if (!columnExists(db, "execution", "correlation_id")) {
         db.exec(`ALTER TABLE execution ADD COLUMN correlation_id TEXT`);
       }
-      if (!columnExists(db, 'events', 'correlation_id')) {
+      if (!columnExists(db, "events", "correlation_id")) {
         db.exec(`ALTER TABLE events ADD COLUMN correlation_id TEXT`);
       }
       db.exec(`CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id)`);
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_events_correlation_type ON events(correlation_id, type)`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_events_correlation_type ON events(correlation_id, type)`,
+      );
 
       // Backfill existing execution row with a UUID
       db.prepare(
@@ -218,10 +202,10 @@ const MIGRATIONS: Migration[] = [
 
       db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
     },
+    // correlation_id columns — shipped on main
+    version: "2",
   },
   {
-    // iteration_results table (ADR-004)
-    version: '3',
     up: (db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS iteration_results (
@@ -234,71 +218,73 @@ const MIGRATIONS: Migration[] = [
           UNIQUE(state_id, iteration)
         )
       `);
-      db.exec(`CREATE INDEX IF NOT EXISTS idx_iteration_results_state ON iteration_results(state_id)`);
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_iteration_results_state ON iteration_results(state_id)`,
+      );
       db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
     },
+    // iteration_results table (ADR-004)
+    version: "3",
   },
   {
-    // cache_prefix column (ADR-006a)
-    version: '4',
     up: (db) => {
-      if (!columnExists(db, 'execution', 'cache_prefix')) {
+      if (!columnExists(db, "execution", "cache_prefix")) {
         db.exec(`ALTER TABLE execution ADD COLUMN cache_prefix TEXT DEFAULT ''`);
       }
       db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
     },
+    // cache_prefix column (ADR-006a)
+    version: "4",
   },
   {
-    // transcript_path column on execution_states (ADR-015)
-    version: '5',
     up: (db) => {
       const tableRow = db
         .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='execution_states'`)
         .get() as { name: string } | undefined;
-      if (tableRow && !columnExists(db, 'execution_states', 'transcript_path')) {
+      if (tableRow && !columnExists(db, "execution_states", "transcript_path")) {
         db.exec(`ALTER TABLE execution_states ADD COLUMN transcript_path TEXT`);
       }
       db.exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`);
     },
+    // transcript_path column on execution_states (ADR-015)
+    version: "5",
   },
   {
-    // agent_session_id and last_agent_activity columns on execution_states (ADR-009a)
-    // These support session continuation: agent_session_id stores the agentId returned
-    // by Claude Code's Agent tool, used with SendMessage({ to: agentId }) to resume.
-    // last_agent_activity enables timestamp-based eviction (10-min idle threshold).
-    version: '6',
     up: (db) => {
       const tableRow = db
         .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='execution_states'`)
         .get() as { name: string } | undefined;
       if (tableRow) {
-        if (!columnExists(db, 'execution_states', 'agent_session_id')) {
+        if (!columnExists(db, "execution_states", "agent_session_id")) {
           db.exec(`ALTER TABLE execution_states ADD COLUMN agent_session_id TEXT`);
         }
-        if (!columnExists(db, 'execution_states', 'last_agent_activity')) {
+        if (!columnExists(db, "execution_states", "last_agent_activity")) {
           db.exec(`ALTER TABLE execution_states ADD COLUMN last_agent_activity TEXT`);
         }
       }
       db.exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`);
     },
+    // agent_session_id and last_agent_activity columns on execution_states (ADR-009a)
+    // These support session continuation: agent_session_id stores the agentId returned
+    // by Claude Code's Agent tool, used with SendMessage({ to: agentId }) to resume.
+    // last_agent_activity enables timestamp-based eviction (10-min idle threshold).
+    version: "6",
   },
   {
-    // worktree_path and worktree_branch columns on execution (branch variable injection)
-    // Enables spawn prompts to reference ${branch}, ${worktree_branch}, ${worktree_path}.
-    version: '7',
     up: (db) => {
-      if (!columnExists(db, 'execution', 'worktree_path')) {
+      if (!columnExists(db, "execution", "worktree_path")) {
         db.exec(`ALTER TABLE execution ADD COLUMN worktree_path TEXT`);
       }
-      if (!columnExists(db, 'execution', 'worktree_branch')) {
+      if (!columnExists(db, "execution", "worktree_branch")) {
         db.exec(`ALTER TABLE execution ADD COLUMN worktree_branch TEXT`);
       }
       db.exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`);
     },
+    // worktree_path and worktree_branch columns on execution (branch variable injection)
+    // Enables spawn prompts to reference ${branch}, ${worktree_branch}, ${worktree_path}.
+    version: "7",
   },
   {
-    // jobs and job_cache tables for background job tracking (ADR-007)
-    version: '8',
     up: (db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS jobs (
@@ -329,6 +315,8 @@ const MIGRATIONS: Migration[] = [
 
       db.exec(`UPDATE meta SET value = '8' WHERE key = 'schema_version'`);
     },
+    // jobs and job_cache tables for background job tracking (ADR-007)
+    version: "8",
   },
 ];
 
@@ -340,8 +328,10 @@ const MIGRATIONS: Migration[] = [
  * Exported for direct testing of upgrade scenarios.
  */
 export function runMigrations(db: Database.Database): void {
-  const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-  let version = currentRow?.value ?? '1';
+  const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+    | { value: string }
+    | undefined;
+  let version = currentRow?.value ?? "1";
 
   for (const migration of MIGRATIONS) {
     if (parseInt(migration.version, 10) > parseInt(version, 10)) {
@@ -352,9 +342,7 @@ export function runMigrations(db: Database.Database): void {
   }
 }
 
-// ---------------------------------------------------------------------------
 // initExecutionDb
-// ---------------------------------------------------------------------------
 
 /**
  * Open (or create) a better-sqlite3 database at `dbPath`, configure PRAGMAs,
@@ -372,11 +360,11 @@ export function initExecutionDb(dbPath: string): Database.Database {
   const db = new Database(dbPath);
 
   // WAL mode for concurrent read/write; must be set before table creation
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.pragma('synchronous = NORMAL');
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.pragma("synchronous = NORMAL");
   // Busy timeout: wait up to 5s on write contention instead of failing
-  db.pragma('busy_timeout = 5000');
+  db.pragma("busy_timeout = 5000");
 
   // Apply all DDL inside a single transaction for atomicity and speed
   const applySchema = db.transaction(() => {

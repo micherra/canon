@@ -11,46 +11,40 @@
  * - Role substitution still works on fanned-out single prompts
  */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module import
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/wave-briefing.ts", () => ({
-  readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
+  readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("../orchestration/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
-import { clusterDiff } from "../orchestration/diff-cluster.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { FileCluster } from "../orchestration/diff-cluster.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { clusterDiff } from "../orchestration/diff-cluster.ts";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
 const mockBoard: Board = {
-  flow: "test",
-  task: "test",
-  entry: "review",
-  current_state: "review",
   base_commit: "abc1234",
-  started: new Date().toISOString(),
-  last_updated: new Date().toISOString(),
-  states: {},
-  iterations: {},
   blocked: null,
   concerns: [],
+  current_state: "review",
+  entry: "review",
+  flow: "test",
+  iterations: {},
+  last_updated: new Date().toISOString(),
   skipped: [],
+  started: new Date().toISOString(),
+  states: {},
+  task: "test",
 };
 
 let tmpDirs: string[] = [];
@@ -63,40 +57,41 @@ function makeTmpDir(): string {
 
 function makeSingleReviewFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-review-flow",
     description: "Test review flow",
     entry: "review",
-    states: {
-      review: {
-        type: "single",
-        agent: "canon-reviewer",
-        large_diff_threshold: 5,
-      },
-      done: { type: "terminal" },
-    },
+    name: "test-review-flow",
     spawn_instructions: {
       review: "Review cluster ${item.cluster_key} files: ${item.files} (${item.file_count} files)",
+    },
+    states: {
+      done: { type: "terminal" },
+      review: {
+        agent: "canon-reviewer",
+        large_diff_threshold: 5,
+        type: "single",
+      },
     },
     ...overrides,
   };
 }
 
 const sampleClusters: FileCluster[] = [
-  { key: "src/api", files: ["src/api/orders.ts", "src/api/users.ts"] },
-  { key: "src/ui", files: ["src/ui/Dashboard.svelte", "src/ui/Sidebar.svelte", "src/ui/Header.svelte"] },
+  { files: ["src/api/orders.ts", "src/api/users.ts"], key: "src/api" },
+  {
+    files: ["src/ui/Dashboard.svelte", "src/ui/Sidebar.svelte", "src/ui/Header.svelte"],
+    key: "src/ui",
+  },
 ];
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // Fan-out when clusters are present
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — single state fan-out with clusters", () => {
   it("produces one prompt per cluster when clusters are present", async () => {
@@ -105,11 +100,11 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
     const flow = makeSingleReviewFlow();
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: { task: "review the PR" },
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: { task: "review the PR" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(sampleClusters.length);
@@ -121,11 +116,11 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
     const flow = makeSingleReviewFlow();
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: { task: "review the PR" },
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: { task: "review the PR" },
+      workspace,
     });
 
     expect(result.fanned_out).toBe(true);
@@ -137,11 +132,11 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
     const flow = makeSingleReviewFlow();
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: { task: "review the PR" },
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: { task: "review the PR" },
+      workspace,
     });
 
     // First cluster
@@ -161,11 +156,11 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
     const flow = makeSingleReviewFlow();
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: { task: "review the PR" },
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: { task: "review the PR" },
+      workspace,
     });
 
     const firstEntry = result.prompts[0];
@@ -182,11 +177,11 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
     const flow = makeSingleReviewFlow();
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: {},
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: {},
+      workspace,
     });
 
     for (const entry of result.prompts) {
@@ -200,22 +195,22 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
 
     const flow = makeSingleReviewFlow({
       states: {
+        done: { type: "terminal" },
         review: {
-          type: "single",
           agent: "canon-reviewer",
           large_diff_threshold: 5,
           template: "review-template",
+          type: "single",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: { CANON_PLUGIN_ROOT: "/plugin", task: "test" },
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: { CANON_PLUGIN_ROOT: "/plugin", task: "test" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(sampleClusters.length);
@@ -235,12 +230,12 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: {},
-      role: "security-reviewer",
       _board: mockBoard,
+      flow,
+      role: "security-reviewer",
+      state_id: "review",
+      variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(sampleClusters.length);
@@ -249,12 +244,9 @@ describe("getSpawnPrompt — single state fan-out with clusters", () => {
       expect(entry.role).toBe("security-reviewer");
     }
   });
-
 });
 
-// ---------------------------------------------------------------------------
 // No fan-out when clusters are absent
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — single state without clusters (no fan-out)", () => {
   it("produces exactly one prompt when clusters are null (below threshold)", async () => {
@@ -266,11 +258,11 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: {},
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -282,11 +274,11 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
 
     const flow = makeSingleReviewFlow();
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: {},
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: {},
+      workspace,
     });
 
     expect(result.fanned_out).toBeUndefined();
@@ -298,21 +290,21 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "Test",
       entry: "review",
-      states: {
-        review: { type: "single", agent: "canon-reviewer" },
-        done: { type: "terminal" },
-      },
+      name: "test-flow",
       spawn_instructions: { review: "Review everything." },
+      states: {
+        done: { type: "terminal" },
+        review: { agent: "canon-reviewer", type: "single" },
+      },
     };
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: {},
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -326,11 +318,11 @@ describe("getSpawnPrompt — single state without clusters (no fan-out)", () => 
 
     const flow = makeSingleReviewFlow();
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: {},
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: {},
+      workspace,
     });
 
     // Empty clusters array should fall through to single prompt
@@ -346,25 +338,25 @@ describe("getSpawnPrompt — compete expansion", () => {
 
     const flow = makeSingleReviewFlow({
       states: {
+        done: { type: "terminal" },
         review: {
-          type: "single",
           agent: "canon-reviewer",
           compete: {
             count: 3,
-            strategy: "synthesize",
             lenses: ["speed", "safety", "simplicity"],
+            strategy: "synthesize",
           },
+          type: "single",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: { task: "review the PR" },
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: { task: "review the PR" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(3);
@@ -380,21 +372,21 @@ describe("getSpawnPrompt — compete expansion", () => {
 
     const flow = makeSingleReviewFlow({
       states: {
+        done: { type: "terminal" },
         review: {
-          type: "single",
           agent: "canon-reviewer",
           compete: "auto",
+          type: "single",
         },
-        done: { type: "terminal" },
       },
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "review",
-      flow,
-      variables: { task: "review the PR" },
       _board: mockBoard,
+      flow,
+      state_id: "review",
+      variables: { task: "review the PR" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(3);

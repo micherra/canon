@@ -4,40 +4,46 @@
  * All effects are best-effort: parse failures are logged but never block the flow.
  */
 
-import { readFile, readdir } from "fs/promises";
-import { join, basename, isAbsolute, resolve, relative } from "path";
+import { readdir, readFile } from "node:fs/promises";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { DriftStore } from "../drift/store.ts";
-import { generateId } from "../utils/id.ts";
-import type { StateDefinition, Effect } from "./flow-schema.ts";
 import type { ReviewEntry } from "../schema.ts";
+import { generateId } from "../utils/id.ts";
+import { evaluatePostconditions, resolvePostconditions } from "./contract-checker.ts";
 import { getExecutionStore } from "./execution-store.ts";
-import { resolvePostconditions, evaluatePostconditions } from "./contract-checker.ts";
+import type { Effect, StateDefinition } from "./flow-schema.ts";
 
 /** Zod schema for validating REVIEW.meta.json structure before using it. */
 const ReviewMetaSchema = z.object({
   _type: z.literal("review"),
   _version: z.literal(1),
-  verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]),
   files: z.array(z.string()).optional(),
-  violations: z.array(z.object({
-    principle_id: z.string(),
-    severity: z.string(),
-    file_path: z.string().optional(),
-  })).optional(),
   honored: z.array(z.string()).optional(),
-  score: z.object({
-    rules: z.object({ passed: z.number(), total: z.number() }),
-    opinions: z.object({ passed: z.number(), total: z.number() }),
-    conventions: z.object({ passed: z.number(), total: z.number() }),
-  }).optional(),
+  score: z
+    .object({
+      conventions: z.object({ passed: z.number(), total: z.number() }),
+      opinions: z.object({ passed: z.number(), total: z.number() }),
+      rules: z.object({ passed: z.number(), total: z.number() }),
+    })
+    .optional(),
+  verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]),
+  violations: z
+    .array(
+      z.object({
+        file_path: z.string().optional(),
+        principle_id: z.string(),
+        severity: z.string(),
+      }),
+    )
+    .optional(),
 });
 
-export interface EffectResult {
+export type EffectResult = {
   type: string;
   recorded: number;
   errors: string[];
-}
+};
 
 /**
  * Execute all effects declared on a state definition.
@@ -46,13 +52,18 @@ export interface EffectResult {
  * @param stateName - Optional state name used to look up discovered postconditions on the board.
  *                    Required when check_postconditions effect is used.
  */
+export type ExecuteEffectsOpts = {
+  workspace: string;
+  artifacts: string[];
+  projectDir: string;
+  stateName?: string;
+};
+
 export async function executeEffects(
   stateDef: StateDefinition,
-  workspace: string,
-  artifacts: string[],
-  projectDir: string,
-  stateName?: string,
+  opts: ExecuteEffectsOpts,
 ): Promise<EffectResult[]> {
+  const { workspace, artifacts, projectDir, stateName } = opts;
   if (!stateDef.effects?.length) return [];
 
   const store = new DriftStore(projectDir);
@@ -60,13 +71,20 @@ export async function executeEffects(
 
   for (const effect of stateDef.effects) {
     try {
-      const result = await executeOneEffect(effect, store, workspace, artifacts, projectDir, stateName, stateDef);
+      // biome-ignore lint/performance/noAwaitInLoops: effects execute sequentially; each may have side effects that later effects depend on
+      const result = await executeOneEffect(effect, store, {
+        artifacts,
+        projectDir,
+        stateDef,
+        stateName,
+        workspace,
+      });
       results.push(result);
     } catch (err) {
       results.push({
-        type: effect.type,
-        recorded: 0,
         errors: [err instanceof Error ? err.message : String(err)],
+        recorded: 0,
+        type: effect.type,
       });
     }
   }
@@ -74,15 +92,20 @@ export async function executeEffects(
   return results;
 }
 
+type ExecuteOneEffectOpts = {
+  workspace: string;
+  artifacts: string[];
+  projectDir: string;
+  stateName?: string;
+  stateDef?: StateDefinition;
+};
+
 async function executeOneEffect(
   effect: Effect,
   store: DriftStore,
-  workspace: string,
-  artifacts: string[],
-  projectDir: string,
-  stateName?: string,
-  stateDef?: StateDefinition,
+  opts: ExecuteOneEffectOpts,
 ): Promise<EffectResult> {
+  const { workspace, artifacts, projectDir, stateName, stateDef } = opts;
   switch (effect.type) {
     case "persist_review":
       return persistReview(effect, store, workspace, artifacts);
@@ -91,9 +114,7 @@ async function executeOneEffect(
   }
 }
 
-// ---------------------------------------------------------------------------
 // check_postconditions — resolve and evaluate assertions from YAML or board
-// ---------------------------------------------------------------------------
 
 async function checkPostconditions(
   stateDef: StateDefinition | undefined,
@@ -124,15 +145,13 @@ async function checkPostconditions(
   const errors = results.filter((r) => !r.passed).map((r) => r.output ?? "");
 
   return {
-    type: "check_postconditions",
-    recorded: results.length,
     errors,
+    recorded: results.length,
+    type: "check_postconditions",
   };
 }
 
-// ---------------------------------------------------------------------------
 // persist_review — read REVIEW.meta.json first, fall back to REVIEW.md regex
-// ---------------------------------------------------------------------------
 
 async function persistReview(
   effect: Effect,
@@ -152,47 +171,53 @@ async function persistReview(
       if (parsed.success) {
         const meta = parsed.data;
         const entry: ReviewEntry = {
+          files: meta.files ?? [],
+          honored: meta.honored ?? [],
           review_id: generateId("rev"),
+          score: meta.score ?? {
+            conventions: { passed: 0, total: 0 },
+            opinions: { passed: 0, total: 0 },
+            rules: { passed: 0, total: 0 },
+          },
           timestamp: new Date().toISOString(),
           verdict: meta.verdict,
-          files: meta.files ?? [],
           violations: meta.violations ?? [],
-          honored: meta.honored ?? [],
-          score: meta.score ?? { rules: { passed: 0, total: 0 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 0 } },
         };
         await store.appendReview(entry);
-        return { type: "persist_review", recorded: 1, errors: [] };
+        return { errors: [], recorded: 1, type: "persist_review" };
       }
       // Zod validation failed — fall through to legacy parse
-    } catch { /* fall through to legacy parse */ }
+    } catch {
+      /* fall through to legacy parse */
+    }
   }
 
   // Legacy fallback: regex parse REVIEW.md
   const content = await resolveAndRead(artifactName, workspace, artifacts);
   if (!content) {
-    return { type: "persist_review", recorded: 0, errors: ["Artifact not found: " + artifactName] };
+    return { errors: [`Artifact not found: ${artifactName}`], recorded: 0, type: "persist_review" };
   }
 
   const parsed = parseReviewArtifact(content);
   if (!parsed) {
-    return { type: "persist_review", recorded: 0, errors: ["Failed to parse review artifact"] };
+    return { errors: ["Failed to parse review artifact"], recorded: 0, type: "persist_review" };
   }
 
   const entry: ReviewEntry = {
+    files: parsed.files,
+    honored: parsed.honored,
     review_id: generateId("rev"),
+    score: parsed.score,
     timestamp: new Date().toISOString(),
     verdict: parsed.verdict,
-    files: parsed.files,
     violations: parsed.violations,
-    honored: parsed.honored,
-    score: parsed.score,
   };
 
   await store.appendReview(entry);
-  return { type: "persist_review", recorded: 1, errors: [] };
+  return { errors: [], recorded: 1, type: "persist_review" };
 }
 
-interface ParsedReview {
+type ParsedReview = {
   verdict: "BLOCKING" | "WARNING" | "CLEAN";
   files: string[];
   violations: Array<{
@@ -206,7 +231,7 @@ interface ParsedReview {
     opinions: { passed: number; total: number };
     conventions: { passed: number; total: number };
   };
-}
+};
 
 /**
  * Parse a REVIEW.md following the review-checklist template.
@@ -215,104 +240,153 @@ interface ParsedReview {
  * Exported for backward compat tests — internal callers prefer the .meta.json
  * structured path in persistReview.
  */
-export function parseReviewArtifact(content: string): ParsedReview | null {
-  // Parse YAML frontmatter for verdict
+/** Parse verdict from YAML frontmatter and heading fallback. */
+function parseVerdict(content: string): ParsedReview["verdict"] {
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-  let verdict: ParsedReview["verdict"] = "CLEAN";
-  const filesReviewed: string[] = [];
-
   if (fmMatch) {
-    const fm = fmMatch[1];
-    const verdictMatch = fm.match(/verdict:\s*"?(BLOCKING|WARNING|CLEAN)"?/i);
+    const verdictMatch = fmMatch[1].match(/verdict:\s*"?(BLOCKING|WARNING|CLEAN)"?/i);
     if (verdictMatch) {
-      verdict = verdictMatch[1].toUpperCase() as ParsedReview["verdict"];
+      return verdictMatch[1].toUpperCase() as ParsedReview["verdict"];
     }
   }
 
   // Fallback: parse verdict from heading
   const headingMatch = content.match(/## Canon Review — Verdict:\s*(BLOCKING|WARNING|CLEAN)/i);
   if (headingMatch) {
-    verdict = headingMatch[1].toUpperCase() as ParsedReview["verdict"];
+    return headingMatch[1].toUpperCase() as ParsedReview["verdict"];
   }
 
-  // Parse violations table
+  return "CLEAN";
+}
+
+/** Parse violations table from review content. Returns violations and collected file paths. */
+function parseViolationsTable(content: string): {
+  violations: ParsedReview["violations"];
+  filesReviewed: string[];
+} {
   const violations: ParsedReview["violations"] = [];
-  const violationTableMatch = content.match(
+  const filesReviewed: string[] = [];
+  const tableMatch = content.match(
     /#### Violations\s*\n(?:<!--.*?-->\s*\n)?\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/,
   );
-  if (violationTableMatch) {
-    const rows = violationTableMatch[1].trim().split("\n");
-    for (const row of rows) {
-      const cells = row.split("|").map((c) => c.trim()).filter(Boolean);
-      if (cells.length >= 3) {
-        const filePath = cells[2]?.replace(/`/g, "").split(":")[0];
-        violations.push({
-          principle_id: cells[0],
-          severity: cells[1],
-          ...(filePath ? { file_path: filePath } : {}),
-        });
-        // Collect files from violations for the files array
-        if (filePath && !filesReviewed.includes(filePath)) {
-          filesReviewed.push(filePath);
-        }
-      }
+  if (!tableMatch) return { filesReviewed, violations };
+
+  const rows = tableMatch[1].trim().split("\n");
+  for (const row of rows) {
+    const cells = row
+      .split("|")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (cells.length < 3) continue;
+    const filePath = cells[2]?.replace(/`/g, "").split(":")[0];
+    violations.push({
+      principle_id: cells[0],
+      severity: cells[1],
+      ...(filePath ? { file_path: filePath } : {}),
+    });
+    if (filePath && !filesReviewed.includes(filePath)) {
+      filesReviewed.push(filePath);
     }
   }
+  return { filesReviewed, violations };
+}
 
-  // Parse honored list
+/** Parse honored principle IDs from review content. */
+function parseHonoredList(content: string): string[] {
   const honored: string[] = [];
   const honoredMatch = content.match(/#### Honored\s*\n(?:<!--.*?-->\s*\n)?((?:- \*\*.*\n)*)/);
-  if (honoredMatch) {
-    const lines = honoredMatch[1].trim().split("\n");
-    for (const line of lines) {
-      const idMatch = line.match(/- \*\*([^*]+)\*\*/);
-      if (idMatch) {
-        honored.push(idMatch[1]);
-      }
-    }
-  }
+  if (!honoredMatch) return honored;
 
-  // Parse score table
-  let score: ParsedReview["score"] = {
-    rules: { passed: 0, total: 0 },
-    opinions: { passed: 0, total: 0 },
-    conventions: { passed: 0, total: 0 },
-  };
+  for (const line of honoredMatch[1].trim().split("\n")) {
+    const idMatch = line.match(/- \*\*([^*]+)\*\*/);
+    if (idMatch) honored.push(idMatch[1]);
+  }
+  return honored;
+}
+
+/** Parse a "N / M" score string into { passed, total }. */
+function parseScoreCell(s: string): { passed: number; total: number } {
+  const m = s.match(/(\d+)\s*\/\s*(\d+)/);
+  return m ? { passed: parseInt(m[1], 10), total: parseInt(m[2], 10) } : { passed: 0, total: 0 };
+}
+
+/** Parse the score table from review content. */
+function parseScoreTable(content: string): ParsedReview["score"] {
   const scoreTableMatch = content.match(
     /#### Score\s*\n\|.*?\|\s*\n\|[-| ]+\|\s*\n((?:\|.*\|\s*\n)*)/,
   );
-  if (scoreTableMatch) {
-    const rows = scoreTableMatch[1].trim().split("\n");
-    // Aggregate across all layer rows
-    let rulesP = 0, rulesT = 0, opinionsP = 0, opinionsT = 0, convsP = 0, convsT = 0;
-    for (const row of rows) {
-      const cells = row.split("|").map((c) => c.trim()).filter(Boolean);
-      if (cells.length >= 4) {
-        const parseScore = (s: string) => {
-          const m = s.match(/(\d+)\s*\/\s*(\d+)/);
-          return m ? { passed: parseInt(m[1]), total: parseInt(m[2]) } : { passed: 0, total: 0 };
-        };
-        const r = parseScore(cells[1]);
-        const o = parseScore(cells[2]);
-        const c = parseScore(cells[3]);
-        rulesP += r.passed; rulesT += r.total;
-        opinionsP += o.passed; opinionsT += o.total;
-        convsP += c.passed; convsT += c.total;
-      }
-    }
-    score = {
-      rules: { passed: rulesP, total: rulesT },
-      opinions: { passed: opinionsP, total: opinionsT },
-      conventions: { passed: convsP, total: convsT },
+  if (!scoreTableMatch) {
+    return {
+      conventions: { passed: 0, total: 0 },
+      opinions: { passed: 0, total: 0 },
+      rules: { passed: 0, total: 0 },
     };
   }
 
-  return { verdict, files: filesReviewed, violations, honored, score };
+  let rulesP = 0,
+    rulesT = 0,
+    opinionsP = 0,
+    opinionsT = 0,
+    convsP = 0,
+    convsT = 0;
+  for (const row of scoreTableMatch[1].trim().split("\n")) {
+    const cells = row
+      .split("|")
+      .map((c) => c.trim())
+      .filter(Boolean);
+    if (cells.length < 4) continue;
+    const r = parseScoreCell(cells[1]);
+    const o = parseScoreCell(cells[2]);
+    const c = parseScoreCell(cells[3]);
+    rulesP += r.passed;
+    rulesT += r.total;
+    opinionsP += o.passed;
+    opinionsT += o.total;
+    convsP += c.passed;
+    convsT += c.total;
+  }
+  return {
+    conventions: { passed: convsP, total: convsT },
+    opinions: { passed: opinionsP, total: opinionsT },
+    rules: { passed: rulesP, total: rulesT },
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+export function parseReviewArtifact(content: string): ParsedReview | null {
+  const verdict = parseVerdict(content);
+  const { violations, filesReviewed } = parseViolationsTable(content);
+  const honored = parseHonoredList(content);
+  const score = parseScoreTable(content);
+
+  return { files: filesReviewed, honored, score, verdict, violations };
+}
+
+/** Check if a resolved path is contained within the workspace directory. */
+function isWithinWorkspace(resolvedWorkspace: string, resolvedPath: string): boolean {
+  const rel = relative(resolvedWorkspace, resolvedPath);
+  return !isAbsolute(rel) && rel !== ".." && !rel.startsWith("../") && !rel.startsWith("..\\");
+}
+
+/** Try to read an artifact from the reported artifacts list. */
+async function tryReadFromArtifactsList(
+  artifactName: string,
+  workspace: string,
+  artifacts: string[],
+): Promise<string | null> {
+  const resolvedWorkspace = resolve(workspace);
+  const match = artifacts.find((a) => basename(a) === artifactName || a.endsWith(artifactName));
+  if (!match) return null;
+
+  const fullPath = isAbsolute(match) ? match : join(workspace, match);
+  const resolvedPath = resolve(fullPath);
+  if (!isWithinWorkspace(resolvedWorkspace, resolvedPath)) return null;
+
+  try {
+    return await readFile(resolvedPath, "utf-8");
+  } catch {
+    return null;
+  }
+}
 
 /** Resolve an artifact name to a file path and read its content. */
 async function resolveAndRead(
@@ -320,45 +394,23 @@ async function resolveAndRead(
   workspace: string,
   artifacts: string[],
 ): Promise<string | null> {
-  const resolvedWorkspace = resolve(workspace);
-
   // First try matching against reported artifacts list
-  const match = artifacts.find((a) => basename(a) === artifactName || a.endsWith(artifactName));
-  if (match) {
-    const fullPath = isAbsolute(match) ? match : join(workspace, match);
-    const resolvedPath = resolve(fullPath);
-    // Workspace containment check — prevent path traversal via crafted artifacts
-    const rel = relative(resolvedWorkspace, resolvedPath);
-    if (isAbsolute(rel) || rel === ".." || rel.startsWith("../") || rel.startsWith("..\\")) {
-      // Path escapes workspace — skip this match
-    } else {
-      try {
-        return await readFile(resolvedPath, "utf-8");
-      } catch {
-        // fall through to directory scan
-      }
-    }
-  }
+  const fromArtifacts = await tryReadFromArtifactsList(artifactName, workspace, artifacts);
+  if (fromArtifacts) return fromArtifacts;
 
   // Scan common artifact locations
-  const directPaths = [
-    join(workspace, "reviews", artifactName),
-  ];
-
-  for (const p of directPaths) {
-    try {
-      return await readFile(p, "utf-8");
-    } catch { /* continue */ }
-  }
+  const reviewPath = join(workspace, "reviews", artifactName);
+  const reviewContent = await readFile(reviewPath, "utf-8").catch(() => null);
+  if (reviewContent) return reviewContent;
 
   // Search in plans subdirectories
   const plansDir = join(workspace, "plans");
   const subdirs = await readdir(plansDir).catch(() => []);
-  for (const sub of subdirs) {
-    const candidate = join(plansDir, sub, artifactName);
-    const content = await readFile(candidate, "utf-8").catch(() => null);
-    if (content) return content;
-  }
+  const candidates = await Promise.all(
+    subdirs.map((sub) => readFile(join(plansDir, sub, artifactName), "utf-8").catch(() => null)),
+  );
+  const found = candidates.find((c) => c !== null);
+  if (found) return found;
 
   return null;
 }

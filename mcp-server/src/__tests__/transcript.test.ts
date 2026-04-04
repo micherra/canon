@@ -11,20 +11,15 @@
  * - report_result without transcript_path does not affect existing transcript_path
  */
 
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import type { ResolvedFlow, TranscriptEntry } from "../orchestration/flow-schema.ts";
 import { getTranscript } from "../tools/get-transcript.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import type { TranscriptEntry } from "../orchestration/flow-schema.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -36,16 +31,16 @@ function makeTmpWorkspace(): string {
 
 function makeMinimalFlow(): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "A test flow",
     entry: "build",
+    name: "test-flow",
     spawn_instructions: {},
     states: {
       build: {
-        type: "single",
         transitions: {
           done: "done_state",
         },
+        type: "single",
       },
       done_state: { type: "terminal" },
     },
@@ -57,65 +52,65 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
   const now = new Date().toISOString();
 
   store.initExecution({
-    flow: flow.name,
-    task: "test task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc123",
-    started: now,
-    last_updated: now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
 
   for (const stateId of Object.keys(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
   }
 }
 
 function makeTranscriptEntries(): TranscriptEntry[] {
   return [
     {
+      content: "Please implement the feature.",
       role: "user",
       timestamp: "2026-04-02T00:00:00Z",
-      content: "Please implement the feature.",
       turn_number: 1,
     },
     {
+      content: "I will implement the feature now.",
+      cumulative_tokens: 200,
       role: "assistant",
       timestamp: "2026-04-02T00:00:01Z",
-      content: "I will implement the feature now.",
-      turn_number: 1,
       tokens: 100,
-      cumulative_tokens: 200,
+      turn_number: 1,
     },
     {
+      content: '{"tool":"Read","path":"/foo.ts"}',
+      cumulative_tokens: 250,
       role: "tool_use",
       timestamp: "2026-04-02T00:00:02Z",
-      content: '{"tool":"Read","path":"/foo.ts"}',
-      tool_name: "Read",
       tokens: 50,
-      cumulative_tokens: 250,
+      tool_name: "Read",
       turn_number: 2,
     },
     {
+      content: "file contents here",
+      cumulative_tokens: 330,
       role: "tool_result",
       timestamp: "2026-04-02T00:00:03Z",
-      content: "file contents here",
       tokens: 80,
-      cumulative_tokens: 330,
       turn_number: 2,
     },
     {
+      content: "I've read the file. Implementation complete.",
+      cumulative_tokens: 390,
       role: "assistant",
       timestamp: "2026-04-02T00:00:04Z",
-      content: "I've read the file. Implementation complete.",
       tokens: 60,
-      cumulative_tokens: 390,
       turn_number: 3,
     },
   ];
@@ -129,14 +124,12 @@ function writeTranscriptFile(path: string, entries: TranscriptEntry[]): void {
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
-// ---------------------------------------------------------------------------
 // get_transcript — full mode
-// ---------------------------------------------------------------------------
 
 describe("getTranscript — full mode", () => {
   it("returns all entries from a valid JSONL file", async () => {
@@ -154,8 +147,8 @@ describe("getTranscript — full mode", () => {
     store.setTranscriptPath("build", transcriptPath);
 
     const result = await getTranscript({
-      workspace,
       state_id: "build",
+      workspace,
     });
 
     assertOk(result);
@@ -180,7 +173,7 @@ describe("getTranscript — full mode", () => {
     writeTranscriptFile(transcriptPath, entries);
     store.setTranscriptPath("build", transcriptPath);
 
-    const result = await getTranscript({ workspace, state_id: "build" });
+    const result = await getTranscript({ state_id: "build", workspace });
 
     assertOk(result);
     expect(result.total_tokens).toBe(390); // last entry's cumulative_tokens
@@ -197,21 +190,19 @@ describe("getTranscript — full mode", () => {
 
     const transcriptPath = join(transcriptsDir, "build-001.jsonl");
     const entries: TranscriptEntry[] = [
-      { role: "user", timestamp: "2026-04-02T00:00:00Z", content: "Hello", turn_number: 1 },
+      { content: "Hello", role: "user", timestamp: "2026-04-02T00:00:00Z", turn_number: 1 },
     ];
     writeTranscriptFile(transcriptPath, entries);
     store.setTranscriptPath("build", transcriptPath);
 
-    const result = await getTranscript({ workspace, state_id: "build" });
+    const result = await getTranscript({ state_id: "build", workspace });
 
     assertOk(result);
     expect(result.total_tokens).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // get_transcript — summary mode
-// ---------------------------------------------------------------------------
 
 describe("getTranscript — summary mode", () => {
   it("returns only assistant role entries in summary mode", async () => {
@@ -229,9 +220,9 @@ describe("getTranscript — summary mode", () => {
     store.setTranscriptPath("build", transcriptPath);
 
     const result = await getTranscript({
-      workspace,
-      state_id: "build",
       mode: "summary",
+      state_id: "build",
+      workspace,
     });
 
     assertOk(result);
@@ -258,7 +249,7 @@ describe("getTranscript — summary mode", () => {
     writeTranscriptFile(transcriptPath, entries);
     store.setTranscriptPath("build", transcriptPath);
 
-    const result = await getTranscript({ workspace, state_id: "build", mode: "summary" });
+    const result = await getTranscript({ mode: "summary", state_id: "build", workspace });
 
     assertOk(result);
     // total_tokens is always computed from ALL entries (before filtering),
@@ -268,9 +259,7 @@ describe("getTranscript — summary mode", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // get_transcript — error cases
-// ---------------------------------------------------------------------------
 
 describe("getTranscript — error cases", () => {
   it("returns TRANSCRIPT_NOT_FOUND error when no transcript_path recorded for state", async () => {
@@ -279,8 +268,8 @@ describe("getTranscript — error cases", () => {
     setupWorkspace(workspace, flow);
 
     const result = await getTranscript({
-      workspace,
       state_id: "build",
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -300,8 +289,8 @@ describe("getTranscript — error cases", () => {
     store.setTranscriptPath("build", transcriptPath);
 
     const result = await getTranscript({
-      workspace,
       state_id: "build",
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -323,8 +312,8 @@ describe("getTranscript — error cases", () => {
     store.setTranscriptPath("build", maliciousPath);
 
     const result = await getTranscript({
-      workspace,
       state_id: "build",
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -335,9 +324,7 @@ describe("getTranscript — error cases", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // report_result — transcript_path wiring
-// ---------------------------------------------------------------------------
 
 describe("reportResult — transcript_path persistence", () => {
   it("persists transcript_path to execution_states when provided", async () => {
@@ -348,11 +335,11 @@ describe("reportResult — transcript_path persistence", () => {
     const transcriptPath = join(workspace, "transcripts", "build-001.jsonl");
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "done",
-      flow,
       transcript_path: transcriptPath,
+      workspace,
     });
 
     assertOk(result);
@@ -374,10 +361,10 @@ describe("reportResult — transcript_path persistence", () => {
 
     // Now call reportResult WITHOUT transcript_path
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "done",
-      flow,
+      workspace,
       // No transcript_path field
     });
 
@@ -397,11 +384,11 @@ describe("reportResult — transcript_path persistence", () => {
     const transcriptPath = join(workspace, "transcripts", "build-001.jsonl");
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "done",
-      flow,
       transcript_path: transcriptPath,
+      workspace,
     });
 
     // report_result should succeed regardless
@@ -417,11 +404,11 @@ describe("reportResult — transcript_path persistence", () => {
     const maliciousPath = join(workspace, "..", "etc", "passwd");
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "build",
       status_keyword: "done",
-      flow,
       transcript_path: maliciousPath,
+      workspace,
     });
 
     // report_result must still succeed (best-effort, never blocks)

@@ -13,73 +13,66 @@
  * - updateJobStatus builds SQL dynamically based on optional fields — not cached.
  */
 
-import type { Database, Statement } from 'better-sqlite3';
+import type { Database, Statement } from "better-sqlite3";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+export type JobStatus = "pending" | "running" | "complete" | "failed" | "cancelled" | "timed_out";
 
-export type JobStatus =
-  | 'pending'
-  | 'running'
-  | 'complete'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
-
-export interface JobRow {
+export type JobRow = {
   job_id: string;
   job_type: string;
   fingerprint: string;
   status: JobStatus;
   pid: number | null;
-  progress: string | null;   // JSON
+  progress: string | null; // JSON
   error: string | null;
   started_at: string;
   completed_at: string | null;
   timeout_ms: number;
-}
+};
 
-export interface JobCacheRow {
+export type JobCacheRow = {
   fingerprint: string;
   job_type: string;
-  result_summary: string;    // JSON
+  result_summary: string; // JSON
   cached_at: string;
   expires_at: string | null;
-}
+};
 
-// ---------------------------------------------------------------------------
 // JobStore
-// ---------------------------------------------------------------------------
 
 export class JobStore {
   constructor(private db: Database) {}
 
-  // ---------------------------------------------------------------------------
   // Cached prepared statements (Comment #12: lazily initialized on first use)
-  // ---------------------------------------------------------------------------
 
   private _createJobStmt?: Statement;
   private get createJobStmt(): Statement {
-    return (this._createJobStmt ??= this.db.prepare(`
+    if (!this._createJobStmt) {
+      this._createJobStmt = this.db.prepare(`
       INSERT INTO jobs (job_id, job_type, fingerprint, status, pid, progress, error, started_at, completed_at, timeout_ms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-    `));
+    `);
+    }
+    return this._createJobStmt;
   }
 
   private _getJobStmt?: Statement;
   private get getJobStmt(): Statement {
-    return (this._getJobStmt ??= this.db.prepare(`
+    if (!this._getJobStmt) {
+      this._getJobStmt = this.db.prepare(`
       SELECT job_id, job_type, fingerprint, status, pid, progress, error,
              started_at, completed_at, timeout_ms
       FROM jobs
       WHERE job_id = ?
-    `));
+    `);
+    }
+    return this._getJobStmt;
   }
 
   private _getRunningJobByFingerprintStmt?: Statement;
   private get getRunningJobByFingerprintStmt(): Statement {
-    return (this._getRunningJobByFingerprintStmt ??= this.db.prepare(`
+    if (!this._getRunningJobByFingerprintStmt) {
+      this._getRunningJobByFingerprintStmt = this.db.prepare(`
       SELECT job_id, job_type, fingerprint, status, pid, progress, error,
              started_at, completed_at, timeout_ms
       FROM jobs
@@ -87,62 +80,77 @@ export class JobStore {
         AND status IN ('pending', 'running')
       ORDER BY started_at DESC
       LIMIT 1
-    `));
+    `);
+    }
+    return this._getRunningJobByFingerprintStmt;
   }
 
   private _updateJobProgressStmt?: Statement;
   private get updateJobProgressStmt(): Statement {
-    return (this._updateJobProgressStmt ??= this.db.prepare(
-      `UPDATE jobs SET progress = ? WHERE job_id = ?`,
-    ));
+    if (!this._updateJobProgressStmt) {
+      this._updateJobProgressStmt = this.db.prepare(
+        `UPDATE jobs SET progress = ? WHERE job_id = ?`,
+      );
+    }
+    return this._updateJobProgressStmt;
   }
 
   private _getCacheStmt?: Statement;
   private get getCacheStmt(): Statement {
-    return (this._getCacheStmt ??= this.db.prepare(`
+    if (!this._getCacheStmt) {
+      this._getCacheStmt = this.db.prepare(`
       SELECT fingerprint, job_type, result_summary, cached_at, expires_at
       FROM job_cache
       WHERE fingerprint = ?
         AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
-    `));
+    `);
+    }
+    return this._getCacheStmt;
   }
 
   private _setCacheStmt?: Statement;
   private get setCacheStmt(): Statement {
-    return (this._setCacheStmt ??= this.db.prepare(`
+    if (!this._setCacheStmt) {
+      this._setCacheStmt = this.db.prepare(`
       INSERT OR REPLACE INTO job_cache (fingerprint, job_type, result_summary, cached_at, expires_at)
       VALUES (?, ?, ?, ?, ?)
-    `));
+    `);
+    }
+    return this._setCacheStmt;
   }
 
   private _markStaleJobsFailedStmt?: Statement;
   private get markStaleJobsFailedStmt(): Statement {
-    return (this._markStaleJobsFailedStmt ??= this.db.prepare(`
+    if (!this._markStaleJobsFailedStmt) {
+      this._markStaleJobsFailedStmt = this.db.prepare(`
       UPDATE jobs
       SET status = 'failed', error = ?
       WHERE status IN ('pending', 'running')
-    `));
+    `);
+    }
+    return this._markStaleJobsFailedStmt;
   }
 
   private _getTimedOutJobsStmt?: Statement;
   private get getTimedOutJobsStmt(): Statement {
-    return (this._getTimedOutJobsStmt ??= this.db.prepare(`
+    if (!this._getTimedOutJobsStmt) {
+      this._getTimedOutJobsStmt = this.db.prepare(`
       SELECT job_id, job_type, fingerprint, status, pid, progress, error,
              started_at, completed_at, timeout_ms
       FROM jobs
       WHERE status = 'running'
         AND datetime(started_at, '+' || (timeout_ms / 1000) || ' seconds') < datetime('now')
-    `));
+    `);
+    }
+    return this._getTimedOutJobsStmt;
   }
 
-  // ---------------------------------------------------------------------------
   // Public methods
-  // ---------------------------------------------------------------------------
 
   /**
    * Insert a new job row. started_at is required; completed_at defaults to NULL.
    */
-  createJob(job: Omit<JobRow, 'completed_at'>): void {
+  createJob(job: Omit<JobRow, "completed_at">): void {
     this.createJobStmt.run(
       job.job_id,
       job.job_type,
@@ -186,24 +194,24 @@ export class JobStore {
     extra?: { pid?: number; error?: string; completed_at?: string },
   ): void {
     // Build SET clause dynamically based on provided extra fields
-    const sets: string[] = ['status = ?'];
+    const sets: string[] = ["status = ?"];
     const params: unknown[] = [status];
 
     if (extra?.pid !== undefined) {
-      sets.push('pid = ?');
+      sets.push("pid = ?");
       params.push(extra.pid);
     }
     if (extra?.error !== undefined) {
-      sets.push('error = ?');
+      sets.push("error = ?");
       params.push(extra.error);
     }
     if (extra?.completed_at !== undefined) {
-      sets.push('completed_at = ?');
+      sets.push("completed_at = ?");
       params.push(extra.completed_at);
     }
 
     params.push(jobId);
-    this.db.prepare(`UPDATE jobs SET ${sets.join(', ')} WHERE job_id = ?`).run(...params);
+    this.db.prepare(`UPDATE jobs SET ${sets.join(", ")} WHERE job_id = ?`).run(...params);
   }
 
   /**

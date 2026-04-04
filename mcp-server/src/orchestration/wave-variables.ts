@@ -8,10 +8,10 @@
  * before entering the variables map to prevent unintended prompt injection.
  */
 
-import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { gitExec } from "../adapters/git-adapter.ts";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { gitExec } from "../adapters/git-adapter.ts";
 
 /**
  * Escapes `${` patterns in agent-sourced text to prevent unintended
@@ -38,38 +38,40 @@ export function escapeDollarBrace(text: string): string {
  * Follows graceful degradation: missing files emit warnings and return
  * partial data. Never throws.
  */
+export type WaveVariableOpts = {
+  wave: number;
+  slug: string;
+  totalWaves: number;
+  projectDir?: string;
+};
+
 export async function resolveWaveVariables(
   workspace: string,
-  wave: number,
-  slug: string,
-  _totalWaves: number,
-  projectDir?: string,
+  opts: WaveVariableOpts,
 ): Promise<Record<string, string>> {
+  const { wave, slug, projectDir } = opts;
   const plansDir = path.join(workspace, "plans", slug);
 
-  const [wave_plans, wave_summaries, wave_files, all_summaries] =
-    await Promise.all([
-      readWavePlans(plansDir, wave),
-      readWaveSummaries(plansDir, wave),
-      readWaveFiles(plansDir, wave),
-      readAllSummaries(plansDir),
-    ]);
+  const [wave_plans, wave_summaries, wave_files, all_summaries] = await Promise.all([
+    readWavePlans(plansDir, wave),
+    readWaveSummaries(plansDir, wave),
+    readWaveFiles(plansDir, wave),
+    readAllSummaries(plansDir),
+  ]);
 
   const resolvedProjectDir = projectDir ?? process.env.CANON_PROJECT_DIR ?? process.cwd();
   const wave_diff = readWaveDiff(resolvedProjectDir);
 
   return {
+    all_summaries,
+    wave_diff,
+    wave_files,
     wave_plans,
     wave_summaries,
-    wave_files,
-    wave_diff,
-    all_summaries,
   };
 }
 
-// ---------------------------------------------------------------------------
 // Private helpers — each resolves one variable
-// ---------------------------------------------------------------------------
 
 /**
  * Read and concatenate plan files for the current wave.
@@ -78,16 +80,15 @@ export async function resolveWaveVariables(
 async function readWavePlans(plansDir: string, wave: number): Promise<string> {
   const taskIds = await parseIndexForWave(plansDir, wave);
   if (taskIds.length === 0) {
-    console.error(`parseIndexForWave: zero tasks found for wave ${wave} — this may indicate an INDEX.md formatting issue`);
+    console.error(
+      `parseIndexForWave: zero tasks found for wave ${wave} — this may indicate an INDEX.md formatting issue`,
+    );
     return "";
   }
 
   const contents = await Promise.all(
     taskIds.map((taskId) =>
-      safeReadFile(
-        path.join(plansDir, `${taskId}-PLAN.md`),
-        `wave_plans: plan file for ${taskId}`,
-      ),
+      safeReadFile(path.join(plansDir, `${taskId}-PLAN.md`), `wave_plans: plan file for ${taskId}`),
     ),
   );
 
@@ -148,7 +149,9 @@ async function readWaveFiles(plansDir: string, wave: number): Promise<string> {
 
   for (const content of contents) {
     if (content !== null) {
-      extractFilePaths(content).forEach((p) => allPaths.add(p));
+      for (const p of extractFilePaths(content)) {
+        allPaths.add(p);
+      }
     }
   }
 
@@ -195,21 +198,15 @@ async function readAllSummaries(plansDir: string): Promise<string> {
     return "";
   }
 
-  const contents: string[] = [];
-  for (const taskId of taskIds) {
-    const summaryPath = path.join(plansDir, `${taskId}-SUMMARY.md`);
-    const content = await safeReadFile(summaryPath, null); // silent — not all may be done
-    if (content !== null) {
-      contents.push(content);
-    }
-  }
+  const summaryResults = await Promise.all(
+    taskIds.map((taskId) => safeReadFile(path.join(plansDir, `${taskId}-SUMMARY.md`), null)),
+  );
+  const contents = summaryResults.filter((c): c is string => c !== null);
 
   return escapeDollarBrace(contents.join("\n\n"));
 }
 
-// ---------------------------------------------------------------------------
 // INDEX.md parsing helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Parse INDEX.md and return task IDs that belong to the given wave number.
@@ -285,9 +282,7 @@ function parseAllTaskIds(indexContent: string): string[] {
   return taskIds;
 }
 
-// ---------------------------------------------------------------------------
 // File path extraction
-// ---------------------------------------------------------------------------
 
 /**
  * Extract file paths from summary content.
@@ -297,22 +292,25 @@ export function extractFilePaths(content: string): string[] {
   const paths = new Set<string>();
 
   // Match backtick-quoted paths: `src/foo/bar.ts`
-  const backtickPattern = /`([a-zA-Z0-9_./\\-]+\.[a-zA-Z]{1,10})`/g;
-  let m: RegExpExecArray | null;
-  while ((m = backtickPattern.exec(content)) !== null) {
+  const backtickPattern = /`([a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})`/g;
+  let m = backtickPattern.exec(content);
+  while (m !== null) {
     const candidate = m[1];
     if (looksLikeFilePath(candidate)) {
       paths.add(candidate);
     }
+    m = backtickPattern.exec(content);
   }
 
   // Match lines that start with a path-like token (e.g., in "| `path` | created |" table rows)
-  const linePattern = /\|\s*`?([a-zA-Z0-9_./\\-]+\.[a-zA-Z]{1,10})`?\s*\|/g;
-  while ((m = linePattern.exec(content)) !== null) {
-    const candidate = m[1].trim();
+  const linePattern = /\|\s*`?([a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})`?\s*\|/g;
+  let m2 = linePattern.exec(content);
+  while (m2 !== null) {
+    const candidate = m2[1].trim();
     if (looksLikeFilePath(candidate)) {
       paths.add(candidate);
     }
+    m2 = linePattern.exec(content);
   }
 
   return Array.from(paths);
@@ -323,9 +321,7 @@ function looksLikeFilePath(s: string): boolean {
   return (s.includes("/") || s.includes("\\")) && s.includes(".");
 }
 
-// ---------------------------------------------------------------------------
 // Safe file read
-// ---------------------------------------------------------------------------
 
 /**
  * Read a file, returning null if it doesn't exist or can't be read.

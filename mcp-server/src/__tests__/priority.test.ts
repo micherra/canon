@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeFilePriorities } from "../graph/priority.ts";
 
 function makeNode(id: string, overrides: Record<string, unknown> = {}) {
-  return { id, layer: "domain", violation_count: 0, changed: true, ...overrides };
+  return { changed: true, id, layer: "domain", violation_count: 0, ...overrides };
 }
 
 describe("computeFilePriorities", () => {
@@ -45,11 +45,11 @@ describe("computeFilePriorities", () => {
 
   it("applies correct layer centrality for each layer", () => {
     const expected: Record<string, number> = {
-      shared: 3,
-      domain: 2,
-      data: 1.5,
       api: 1,
+      data: 1.5,
+      domain: 2,
       infra: 1,
+      shared: 3,
       ui: 0.5,
       unknown: 0,
     };

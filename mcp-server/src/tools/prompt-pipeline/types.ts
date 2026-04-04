@@ -5,13 +5,13 @@
  * Stages communicate via PromptContext — immutable input fields, accumulated mutable fields.
  */
 
-import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
 import type { FileCluster } from "../../orchestration/diff-cluster.ts";
+import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
 
 /** A task item passed to wave/parallel-per states — either a name or a structured plan. */
 export type TaskItem = string | Record<string, string | number | boolean | string[]>;
 
-export interface SpawnPromptEntry {
+export type SpawnPromptEntry = {
   agent: string;
   prompt: string;
   role?: string;
@@ -19,9 +19,9 @@ export interface SpawnPromptEntry {
   template_paths: string[];
   isolation?: "worktree";
   worktree_path?: string;
-}
+};
 
-export interface SpawnPromptResult {
+export type SpawnPromptResult = {
   prompts: SpawnPromptEntry[];
   state_type: string;
   skip_reason?: string;
@@ -29,13 +29,13 @@ export interface SpawnPromptResult {
   clusters?: FileCluster[];
   timeout_ms?: number;
   fanned_out?: boolean;
-}
+};
 
 /**
  * Input to the prompt assembly pipeline.
  * Carried unchanged through all stages.
  */
-export interface SpawnPromptInput {
+export type SpawnPromptInput = {
   workspace: string;
   state_id: string;
   flow: ResolvedFlow;
@@ -58,13 +58,13 @@ export interface SpawnPromptInput {
    * to avoid a redundant round-trip.
    */
   _board?: Board;
-}
+};
 
 /**
  * Context object passed between pipeline stages.
  * Each stage returns a new PromptContext (or a mutated copy).
  */
-export interface PromptContext {
+export type PromptContext = {
   // Input (immutable after construction)
   input: SpawnPromptInput;
   state: StateDefinition;
@@ -83,7 +83,7 @@ export interface PromptContext {
 
   // Cache prefix (read from store in stage 4)
   cachePrefix?: string;
-}
+};
 
 /**
  * A single pipeline stage function.

@@ -8,20 +8,20 @@
  */
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { toolError, toolOk } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
+import { toolError, toolOk } from "../utils/tool-result.ts";
 
-interface RecordAgentMetricsInput {
+type RecordAgentMetricsInput = {
   workspace: string;
   state_id: string;
   tool_calls?: number;
   orientation_calls?: number;
   turns?: number;
-}
+};
 
-interface RecordAgentMetricsResult {
+type RecordAgentMetricsResult = {
   recorded: Record<string, number>;
-}
+};
 
 export async function recordAgentMetrics(
   input: RecordAgentMetricsInput,
@@ -60,21 +60,17 @@ export async function recordAgentMetrics(
   try {
     store = getExecutionStore(workspace);
   } catch (err) {
-    return toolError(
-      "WORKSPACE_NOT_FOUND",
-      `Workspace not found or invalid: ${workspace}`,
-      false,
-      { workspace, cause: String(err) },
-    );
+    return toolError("WORKSPACE_NOT_FOUND", `Workspace not found or invalid: ${workspace}`, false, {
+      cause: String(err),
+      workspace,
+    });
   }
   const state = store.getState(state_id);
   if (!state) {
-    return toolError(
-      "INVALID_INPUT",
-      `State "${state_id}" not found in workspace`,
-      false,
-      { workspace, state_id },
-    );
+    return toolError("INVALID_INPUT", `State "${state_id}" not found in workspace`, false, {
+      state_id,
+      workspace,
+    });
   }
 
   // Merge agent fields into existing metrics (preserves orchestrator fields)

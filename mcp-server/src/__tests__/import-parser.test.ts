@@ -80,7 +80,12 @@ import json
 });
 
 describe("resolveImport", () => {
-  const allFiles = new Set(["src/foo.ts", "src/bar/index.ts", "src/baz.tsx", "src/utils/helper.ts"]);
+  const allFiles = new Set([
+    "src/foo.ts",
+    "src/bar/index.ts",
+    "src/baz.tsx",
+    "src/utils/helper.ts",
+  ]);
 
   it("resolves relative import with extension", () => {
     const result = resolveImport("./foo", "src/main.ts", allFiles);
@@ -119,22 +124,30 @@ describe("resolveImport", () => {
   });
 
   it("resolves path alias to index file", () => {
-    const result = resolveImport("@/bar", "src/app/page.ts", allFiles, [{ prefix: "@/", target: "src/" }]);
+    const result = resolveImport("@/bar", "src/app/page.ts", allFiles, [
+      { prefix: "@/", target: "src/" },
+    ]);
     expect(result).toBe("src/bar/index.ts");
   });
 
   it("resolves path alias with tsx extension", () => {
-    const result = resolveImport("@/baz", "src/app/page.ts", allFiles, [{ prefix: "@/", target: "src/" }]);
+    const result = resolveImport("@/baz", "src/app/page.ts", allFiles, [
+      { prefix: "@/", target: "src/" },
+    ]);
     expect(result).toBe("src/baz.tsx");
   });
 
   it("returns null for unmatched alias prefix", () => {
-    const result = resolveImport("~/foo", "src/main.ts", allFiles, [{ prefix: "@/", target: "src/" }]);
+    const result = resolveImport("~/foo", "src/main.ts", allFiles, [
+      { prefix: "@/", target: "src/" },
+    ]);
     expect(result).toBeNull();
   });
 
   it("returns null for npm packages even with aliases", () => {
-    const result = resolveImport("react", "src/main.ts", allFiles, [{ prefix: "@/", target: "src/" }]);
+    const result = resolveImport("react", "src/main.ts", allFiles, [
+      { prefix: "@/", target: "src/" },
+    ]);
     expect(result).toBeNull();
   });
 });
@@ -143,7 +156,12 @@ describe("resolveImport — TS ESM .js extension convention", () => {
   // TypeScript ESM projects write `.js` in import specifiers even though the
   // actual source files are `.ts`. `tryResolve` must strip the fake JS
   // extension and probe TS equivalents.
-  const allFiles = new Set(["src/drift/store.ts", "src/utils/helper.tsx", "src/module/index.ts", "src/esm/pure.mts"]);
+  const allFiles = new Set([
+    "src/drift/store.ts",
+    "src/utils/helper.tsx",
+    "src/module/index.ts",
+    "src/esm/pure.mts",
+  ]);
 
   it("resolves .js import to .ts file", () => {
     // import { DriftStore } from "../drift/store.ts"

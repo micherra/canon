@@ -10,23 +10,26 @@
 import { parse as parseYaml } from "yaml";
 import type { AdapterResult, LanguageAdapter } from "./kg-types.ts";
 
+/** Extract state names from a data object's `states` field. */
+function extractStateNames(data: Record<string, unknown>): string[] {
+  return data.states && typeof data.states === "object" ? Object.keys(data.states) : [];
+}
+
 /** Classify entity kind and collect metadata from file path and parsed data */
 function classifyEntity(
   filePath: string,
   data: Record<string, unknown>,
 ): { kind: "flow" | "flow-fragment" | "hook" | "file"; metadata: Record<string, unknown> } {
-  // Normalize to forward slashes for pattern matching
   const normalized = filePath.replace(/\\/g, "/");
 
   if (/flows\/fragments\/[^/]+\.ya?ml$/.test(normalized)) {
-    const states = data.states && typeof data.states === "object" ? Object.keys(data.states) : [];
-    return { kind: "flow-fragment", metadata: { states } };
+    return { kind: "flow-fragment", metadata: { states: extractStateNames(data) } };
   }
 
   if (/flows\/[^/]+\.ya?ml$/.test(normalized)) {
+    const states = extractStateNames(data);
     const tier = typeof data.tier === "string" ? data.tier : undefined;
-    const states = data.states && typeof data.states === "object" ? Object.keys(data.states) : [];
-    return { kind: "flow", metadata: tier !== undefined ? { tier, states } : { states } };
+    return { kind: "flow", metadata: tier !== undefined ? { states, tier } : { states } };
   }
 
   if (/hooks\/[^/]+\.ya?ml$/.test(normalized)) {
@@ -38,13 +41,16 @@ function classifyEntity(
 }
 
 /** Extract fragment include specifiers from a flow's includes array. */
-function extractFragmentIncludes(includes: unknown, specifiers: Array<{ specifier: string; names: string[] }>): void {
+function extractFragmentIncludes(
+  includes: unknown,
+  specifiers: Array<{ specifier: string; names: string[] }>,
+): void {
   if (!Array.isArray(includes)) return;
   for (const inc of includes) {
     if (!inc || typeof inc !== "object") continue;
     const fragment = (inc as Record<string, unknown>).fragment;
     if (typeof fragment === "string") {
-      specifiers.push({ specifier: fragment, names: ["fragment"] });
+      specifiers.push({ names: ["fragment"], specifier: fragment });
     }
   }
 }
@@ -55,25 +61,27 @@ function extractStateSpecifiers(
   specifiers: Array<{ specifier: string; names: string[] }>,
 ): void {
   if (typeof state.agent === "string") {
-    specifiers.push({ specifier: state.agent, names: ["agent"] });
+    specifiers.push({ names: ["agent"], specifier: state.agent });
   }
 
   if (typeof state.template === "string") {
-    specifiers.push({ specifier: state.template, names: ["template"] });
+    specifiers.push({ names: ["template"], specifier: state.template });
     return;
   }
 
   if (Array.isArray(state.template)) {
     for (const tmpl of state.template) {
       if (typeof tmpl === "string") {
-        specifiers.push({ specifier: tmpl, names: ["template"] });
+        specifiers.push({ names: ["template"], specifier: tmpl });
       }
     }
   }
 }
 
 /** Extract import specifiers from a flow's states and includes */
-function extractImportSpecifiers(data: Record<string, unknown>): Array<{ specifier: string; names: string[] }> {
+function extractImportSpecifiers(
+  data: Record<string, unknown>,
+): Array<{ specifier: string; names: string[] }> {
   const specifiers: Array<{ specifier: string; names: string[] }> = [];
 
   extractFragmentIncludes(data.includes, specifiers);
@@ -97,12 +105,12 @@ export const yamlAdapter: LanguageAdapter = {
     try {
       const parsed = parseYaml(content);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return { entities: [], intraFileEdges: [], importSpecifiers: [] };
+        return { entities: [], importSpecifiers: [], intraFileEdges: [] };
       }
       data = parsed as Record<string, unknown>;
     } catch {
       // Return empty result on parse errors
-      return { entities: [], intraFileEdges: [], importSpecifiers: [] };
+      return { entities: [], importSpecifiers: [], intraFileEdges: [] };
     }
 
     const { kind, metadata } = classifyEntity(filePath, data);
@@ -119,24 +127,24 @@ export const yamlAdapter: LanguageAdapter = {
     const qualifiedName = filePath;
 
     const entity: AdapterResult["entities"][number] = {
+      is_default_export: false,
+      is_exported: true,
+      kind,
+      line_end: content.split("\n").length,
+      line_start: 1,
+      metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
       name: baseName,
       qualified_name: qualifiedName,
-      kind,
-      line_start: 1,
-      line_end: content.split("\n").length,
-      is_exported: true,
-      is_default_export: false,
       signature: null,
-      metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
     };
 
     // file -> entity "contains" edge
     const intraFileEdges: AdapterResult["intraFileEdges"] = [
       {
+        confidence: 1.0,
+        edge_type: "contains",
         source_qualified: filePath,
         target_qualified: qualifiedName,
-        edge_type: "contains",
-        confidence: 1.0,
       },
     ];
 
@@ -146,8 +154,8 @@ export const yamlAdapter: LanguageAdapter = {
 
     return {
       entities: [entity],
-      intraFileEdges,
       importSpecifiers,
+      intraFileEdges,
     };
   },
 };

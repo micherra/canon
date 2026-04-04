@@ -12,11 +12,11 @@
  * - No board.json or .lock file created
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 
 // Mock analytics so appendFlowRun doesn't need drift.db during most tests
 vi.mock("../drift/analytics.ts", () => ({
@@ -35,13 +35,9 @@ vi.mock("../orchestration/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
+import { appendFlowRun } from "../drift/analytics.ts";
 import { updateBoard } from "../tools/update-board.ts";
 import { wrapHandler } from "../utils/wrap-handler.ts";
-import { appendFlowRun } from "../drift/analytics.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -54,36 +50,39 @@ function makeTmpDir(): string {
 /**
  * Seed a workspace with a minimal execution row + state rows.
  */
-function seedWorkspace(workspace: string, overrides: {
-  currentState?: string;
-  states?: Record<string, { status: string; entries: number }>;
-  blocked?: { state: string; reason: string; since: string } | null;
-} = {}) {
+function seedWorkspace(
+  workspace: string,
+  overrides: {
+    currentState?: string;
+    states?: Record<string, { status: string; entries: number }>;
+    blocked?: { state: string; reason: string; since: string } | null;
+  } = {},
+) {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: "test-flow",
-    task: "test task",
-    entry: "research",
-    current_state: overrides.currentState ?? "research",
     base_commit: "abc123",
-    started: now,
-    last_updated: now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: overrides.currentState ?? "research",
+    entry: "research",
+    flow: "test-flow",
     flow_name: "test-flow",
+    last_updated: now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
 
   const states = overrides.states ?? {
-    research: { status: "pending", entries: 0 },
-    implement: { status: "pending", entries: 0 },
-    done: { status: "pending", entries: 0 },
+    done: { entries: 0, status: "pending" },
+    implement: { entries: 0, status: "pending" },
+    research: { entries: 0, status: "pending" },
   };
   for (const [stateId, state] of Object.entries(states)) {
-    store.upsertState(stateId, { status: state.status as any, entries: state.entries });
+    store.upsertState(stateId, { entries: state.entries, status: state.status as any });
   }
 
   return store;
@@ -94,15 +93,11 @@ afterEach(() => {
   clearStoreCache();
 
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("updateBoard — enter_state", () => {
   it("sets state to in_progress with entries=1", async () => {
@@ -110,15 +105,15 @@ describe("updateBoard — enter_state", () => {
     const store = seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "enter_state",
       state_id: "research",
+      workspace,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.board.states["research"].status).toBe("in_progress");
-    expect(result.board.states["research"].entries).toBe(1);
+    expect(result.board.states.research.status).toBe("in_progress");
+    expect(result.board.states.research.entries).toBe(1);
 
     // Verify persisted in SQLite
     const state = store.getState("research");
@@ -131,9 +126,9 @@ describe("updateBoard — enter_state", () => {
     const store = seedWorkspace(workspace, { currentState: "research" });
 
     await updateBoard({
-      workspace,
       action: "enter_state",
       state_id: "implement",
+      workspace,
     });
 
     const exec = store.getExecution();
@@ -145,9 +140,9 @@ describe("updateBoard — enter_state", () => {
     seedWorkspace(workspace);
 
     await updateBoard({
-      workspace,
       action: "enter_state",
       state_id: "research",
+      workspace,
     });
 
     expect(existsSync(join(workspace, "board.json"))).toBe(false);
@@ -159,8 +154,8 @@ describe("updateBoard — enter_state", () => {
     seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "enter_state",
+      workspace,
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -174,9 +169,9 @@ describe("updateBoard — enter_state", () => {
     seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "enter_state",
       state_id: "research",
+      workspace,
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -191,14 +186,14 @@ describe("updateBoard — skip_state", () => {
     const store = seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "skip_state",
       state_id: "research",
+      workspace,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.board.states["research"].status).toBe("skipped");
+    expect(result.board.states.research.status).toBe("skipped");
     expect(result.board.skipped).toContain("research");
 
     const state = store.getState("research");
@@ -210,10 +205,10 @@ describe("updateBoard — skip_state", () => {
     const store = seedWorkspace(workspace, { currentState: "research" });
 
     const result = await updateBoard({
-      workspace,
       action: "skip_state",
-      state_id: "research",
       next_state_id: "implement",
+      state_id: "research",
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -230,10 +225,10 @@ describe("updateBoard — block", () => {
     const store = seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "block",
-      state_id: "research",
       blocked_reason: "External API is down",
+      state_id: "research",
+      workspace,
     });
 
     expect(result.ok).toBe(true);
@@ -252,8 +247,8 @@ describe("updateBoard — block", () => {
     seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "block",
+      workspace,
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -268,24 +263,24 @@ describe("updateBoard — unblock", () => {
     const workspace = makeTmpDir();
     const store = seedWorkspace(workspace, {
       states: {
-        research: { status: "blocked", entries: 1 },
-        done: { status: "pending", entries: 0 },
+        done: { entries: 0, status: "pending" },
+        research: { entries: 1, status: "blocked" },
       },
     });
     store.updateExecution({
-      blocked: { state: "research", reason: "API down", since: new Date().toISOString() },
+      blocked: { reason: "API down", since: new Date().toISOString(), state: "research" },
     });
 
     const result = await updateBoard({
-      workspace,
       action: "unblock",
       state_id: "research",
+      workspace,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.board.blocked).toBeNull();
-    expect(result.board.states["research"].status).toBe("in_progress");
+    expect(result.board.states.research.status).toBe("in_progress");
 
     const exec = store.getExecution();
     expect(exec?.blocked).toBeNull();
@@ -298,20 +293,20 @@ describe("updateBoard — complete_flow", () => {
     const store = seedWorkspace(workspace, {
       currentState: "done",
       states: {
-        research: { status: "done", entries: 1 },
-        done: { status: "in_progress", entries: 1 },
+        done: { entries: 1, status: "in_progress" },
+        research: { entries: 1, status: "done" },
       },
     });
 
     const result = await updateBoard({
-      workspace,
       action: "complete_flow",
+      workspace,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.board.states["done"].status).toBe("done");
-    expect(result.board.states["done"].completed_at).toBeDefined();
+    expect(result.board.states.done.status).toBe("done");
+    expect(result.board.states.done.completed_at).toBeDefined();
     expect(result.board.blocked).toBeNull();
 
     // Session status updated in execution row
@@ -324,12 +319,12 @@ describe("updateBoard — complete_flow", () => {
     const workspace = makeTmpDir();
     seedWorkspace(workspace, {
       currentState: "done",
-      states: { done: { status: "in_progress", entries: 1 } },
+      states: { done: { entries: 1, status: "in_progress" } },
     });
 
     await updateBoard({
-      workspace,
       action: "complete_flow",
+      workspace,
     });
 
     expect(appendFlowRun).toHaveBeenCalled();
@@ -342,22 +337,22 @@ describe("updateBoard — set_wave_progress", () => {
     const store = seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "set_wave_progress",
       state_id: "research",
-      wave_data: { wave: 1, wave_total: 3, tasks: ["task-01", "task-02"] },
+      wave_data: { tasks: ["task-01", "task-02"], wave: 1, wave_total: 3 },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.board.states["research"].wave).toBe(1);
-    expect(result.board.states["research"].wave_total).toBe(3);
-    expect(result.board.states["research"].wave_results?.["wave_1"]).toBeDefined();
+    expect(result.board.states.research.wave).toBe(1);
+    expect(result.board.states.research.wave_total).toBe(3);
+    expect(result.board.states.research.wave_results?.wave_1).toBeDefined();
 
     const state = store.getState("research");
     expect(state?.wave).toBe(1);
     expect(state?.wave_total).toBe(3);
-    expect(state?.wave_results?.["wave_1"].tasks).toEqual(["task-01", "task-02"]);
+    expect(state?.wave_results?.wave_1.tasks).toEqual(["task-01", "task-02"]);
   });
 
   it("returns INVALID_INPUT when wave_data is not provided", async () => {
@@ -365,9 +360,9 @@ describe("updateBoard — set_wave_progress", () => {
     seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "set_wave_progress",
       state_id: "research",
+      workspace,
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -383,18 +378,18 @@ describe("updateBoard — set_metadata", () => {
     const store = seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "set_metadata",
-      metadata: { foo: "bar", count: 42 },
+      metadata: { count: 42, foo: "bar" },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.board.metadata?.["foo"]).toBe("bar");
-    expect(result.board.metadata?.["count"]).toBe(42);
+    expect(result.board.metadata?.foo).toBe("bar");
+    expect(result.board.metadata?.count).toBe(42);
 
     const exec = store.getExecution();
-    expect(exec?.metadata?.["foo"]).toBe("bar");
+    expect(exec?.metadata?.foo).toBe("bar");
   });
 
   it("merges with existing metadata", async () => {
@@ -403,15 +398,15 @@ describe("updateBoard — set_metadata", () => {
     store.updateExecution({ metadata: { existing: "value" } });
 
     const result = await updateBoard({
-      workspace,
       action: "set_metadata",
       metadata: { new_key: "new_value" },
+      workspace,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.board.metadata?.["existing"]).toBe("value");
-    expect(result.board.metadata?.["new_key"]).toBe("new_value");
+    expect(result.board.metadata?.existing).toBe("value");
+    expect(result.board.metadata?.new_key).toBe("new_value");
   });
 
   it("returns INVALID_INPUT when metadata is not provided", async () => {
@@ -419,8 +414,8 @@ describe("updateBoard — set_metadata", () => {
     seedWorkspace(workspace);
 
     const result = await updateBoard({
-      workspace,
       action: "set_metadata",
+      workspace,
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -436,9 +431,9 @@ describe("updateBoard — error returns", () => {
     // Do NOT seed — no execution store for this workspace
 
     const result = await updateBoard({
-      workspace,
       action: "enter_state",
       state_id: "research",
+      workspace,
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -450,16 +445,21 @@ describe("updateBoard — error returns", () => {
 
 describe("updateBoard — missing directory", () => {
   it("returns WORKSPACE_NOT_FOUND via wrapHandler when workspace directory does not exist", async () => {
-    const missingWorkspace = join(tmpdir(), ".canon", "workspaces", "nonexistent-dir-for-update-board");
+    const missingWorkspace = join(
+      tmpdir(),
+      ".canon",
+      "workspaces",
+      "nonexistent-dir-for-update-board",
+    );
 
     const wrappedUpdateBoard = wrapHandler(async (input: Parameters<typeof updateBoard>[0]) =>
-      updateBoard(input)
+      updateBoard(input),
     );
 
     const response = await wrappedUpdateBoard({
-      workspace: missingWorkspace,
       action: "enter_state",
       state_id: "research",
+      workspace: missingWorkspace,
     });
     const result = JSON.parse(response.content[0].text);
 

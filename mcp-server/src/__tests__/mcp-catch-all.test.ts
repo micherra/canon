@@ -8,14 +8,14 @@
  * 4. Handle non-Error throws (strings, objects) gracefully
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { wrapHandler } from "../utils/wrap-handler.ts";
 
 describe("wrapHandler — happy path (ok:true)", () => {
   it("passes through result with ok:true and data fields unchanged", async () => {
     const handler = wrapHandler(async (_input: unknown) => ({
-      ok: true,
       data: "x",
+      ok: true,
     }));
 
     const response = await handler({});
@@ -27,8 +27,8 @@ describe("wrapHandler — happy path (ok:true)", () => {
   it("passes through result with ok:true and nested structure unchanged", async () => {
     const handler = wrapHandler(async (_input: unknown) => ({
       ok: true,
-      workspace: "ws-1",
       status: "complete",
+      workspace: "ws-1",
     }));
 
     const response = await handler({});
@@ -42,9 +42,9 @@ describe("wrapHandler — happy path (ok:true)", () => {
 describe("wrapHandler — ok:false ToolResult passthrough", () => {
   it("passes through ok:false CanonToolError result unchanged", async () => {
     const handler = wrapHandler(async (_input: unknown) => ({
-      ok: false,
       error_code: "INVALID_INPUT",
       message: "bad",
+      ok: false,
       recoverable: false,
     }));
 
@@ -58,9 +58,9 @@ describe("wrapHandler — ok:false ToolResult passthrough", () => {
 
   it("does NOT transform ok:false result — no extra wrapping", async () => {
     const handler = wrapHandler(async (_input: unknown) => ({
-      ok: false,
       error_code: "WORKSPACE_NOT_FOUND",
       message: "not found",
+      ok: false,
       recoverable: false,
     }));
 
@@ -183,7 +183,7 @@ describe("wrapHandler — input passthrough", () => {
     let receivedInput: unknown = null;
     const handler = wrapHandler(async (input: { value: string }) => {
       receivedInput = input;
-      return { ok: true, echoed: input.value };
+      return { echoed: input.value, ok: true };
     });
 
     await handler({ value: "hello" });

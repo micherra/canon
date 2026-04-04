@@ -1,20 +1,18 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriftStore } from "../drift/store.ts";
-
-// ── helpers ──
 
 /**
  * Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout.
  */
 function mockGitExecAsyncOk(stdout: string) {
   return vi.fn().mockResolvedValue({
-    ok: true,
-    stdout,
-    stderr: "",
     exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout,
     timedOut: false,
   });
 }
@@ -24,10 +22,10 @@ function mockGitExecAsyncOk(stdout: string) {
  */
 function mockGitExecAsyncFail(stderr = "fatal: not a git repository") {
   return vi.fn().mockResolvedValue({
-    ok: false,
-    stdout: "",
-    stderr,
     exitCode: 128,
+    ok: false,
+    stderr,
+    stdout: "",
     timedOut: false,
   });
 }
@@ -37,10 +35,10 @@ function mockGitExecAsyncFail(stderr = "fatal: not a git repository") {
  */
 function mockRunShellOk(stdout: string) {
   return vi.fn().mockReturnValue({
-    ok: true,
-    stdout,
-    stderr: "",
     exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout,
     timedOut: false,
   });
 }
@@ -50,15 +48,13 @@ function mockRunShellOk(stdout: string) {
  */
 function mockRunShellFail(stderr = "gh: command not found") {
   return vi.fn().mockReturnValue({
-    ok: false,
-    stdout: "",
-    stderr,
     exitCode: 1,
+    ok: false,
+    stderr,
+    stdout: "",
     timedOut: false,
   });
 }
-
-// ── diff command construction tests ──
 
 describe("getPrReviewData — diff command construction", () => {
   let tmpDir: string;
@@ -71,7 +67,7 @@ describe("getPrReviewData — diff command construction", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("constructs gh pr diff command for PR number", async () => {
@@ -106,8 +102,6 @@ describe("getPrReviewData — diff command construction", () => {
   });
 });
 
-// ── output parsing tests ──
-
 describe("getPrReviewData — name-status parsing", () => {
   let tmpDir: string;
 
@@ -119,7 +113,7 @@ describe("getPrReviewData — name-status parsing", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("maps A/M/D/R status letters to full status names", async () => {
@@ -185,8 +179,6 @@ describe("getPrReviewData — name-status parsing", () => {
   });
 });
 
-// ── layer inference tests ──
-
 describe("getPrReviewData — layer inference", () => {
   let tmpDir: string;
 
@@ -198,7 +190,7 @@ describe("getPrReviewData — layer inference", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("infers layer from file path using config mappings", async () => {
@@ -208,8 +200,8 @@ describe("getPrReviewData — layer inference", () => {
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
         layers: {
-          tools: ["src/tools"],
           tests: ["src/__tests__"],
+          tools: ["src/tools"],
         },
       }),
     );
@@ -235,8 +227,8 @@ describe("getPrReviewData — layer inference", () => {
       join(tmpDir, ".canon", "config.json"),
       JSON.stringify({
         layers: {
-          tools: ["src/tools"],
           graph: ["src/graph"],
+          tools: ["src/tools"],
         },
       }),
     );
@@ -268,8 +260,6 @@ describe("getPrReviewData — layer inference", () => {
   });
 });
 
-// ── priority score merging tests ──
-
 describe("getPrReviewData — priority score merging", () => {
   let tmpDir: string;
 
@@ -281,7 +271,7 @@ describe("getPrReviewData — priority score merging", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("merges priority_score and priority_factors into matching file entries (from KG DB)", async () => {
@@ -293,10 +283,31 @@ describe("getPrReviewData — priority score merging", () => {
     const store = new KgStore(db);
 
     // Insert files — pr-review-data.ts has in_degree=1 (scanner imports it)
-    const prFile = store.upsertFile({ path: "src/tools/pr-review-data.ts", mtime_ms: Date.now(), content_hash: "a", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
-    const scannerFile = store.upsertFile({ path: "src/graph/scanner.ts", mtime_ms: Date.now(), content_hash: "b", language: "typescript", layer: "graph", last_indexed_at: Date.now() });
+    const prFile = store.upsertFile({
+      content_hash: "a",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "tools",
+      mtime_ms: Date.now(),
+      path: "src/tools/pr-review-data.ts",
+    });
+    const scannerFile = store.upsertFile({
+      content_hash: "b",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "graph",
+      mtime_ms: Date.now(),
+      path: "src/graph/scanner.ts",
+    });
     // scanner imports pr-review-data → pr-review-data has in_degree=1
-    store.insertFileEdge({ source_file_id: scannerFile.file_id!, target_file_id: prFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+    store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
+      source_file_id: scannerFile.file_id!,
+      target_file_id: prFile.file_id!,
+    });
     db.close();
 
     const output = ["M\tsrc/tools/pr-review-data.ts", "M\tsrc/graph/scanner.ts"].join("\n");
@@ -331,8 +342,6 @@ describe("getPrReviewData — priority score merging", () => {
   });
 });
 
-// ── error handling tests ──
-
 describe("getPrReviewData — error handling", () => {
   let tmpDir: string;
 
@@ -344,7 +353,7 @@ describe("getPrReviewData — error handling", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("returns empty files with error field when git diff fails", async () => {
@@ -381,8 +390,6 @@ describe("getPrReviewData — error handling", () => {
   });
 });
 
-// ── incremental mode tests ──
-
 describe("getPrReviewData — incremental mode", () => {
   let tmpDir: string;
 
@@ -394,25 +401,25 @@ describe("getPrReviewData — incremental mode", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("uses last_reviewed_sha as base when incremental=true", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview({
-      review_id: "rev_test",
-      timestamp: "2026-03-16T00:00:00Z",
-      pr_number: 42,
-      last_reviewed_sha: "abc123",
-      verdict: "WARNING",
       files: ["src/foo.ts"],
-      violations: [{ principle_id: "p1", severity: "strong-opinion" }],
       honored: [],
+      last_reviewed_sha: "abc123",
+      pr_number: 42,
+      review_id: "rev_test",
       score: {
-        rules: { passed: 1, total: 1 },
-        opinions: { passed: 0, total: 1 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 1 },
+        rules: { passed: 1, total: 1 },
       },
+      timestamp: "2026-03-16T00:00:00Z",
+      verdict: "WARNING",
+      violations: [{ principle_id: "p1", severity: "strong-opinion" }],
     });
 
     // Incremental mode with last_reviewed_sha switches to git diff (not gh)
@@ -421,7 +428,7 @@ describe("getPrReviewData — incremental mode", () => {
     }));
 
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    const result = await fn({ pr_number: 42, incremental: true }, tmpDir);
+    const result = await fn({ incremental: true, pr_number: 42 }, tmpDir);
 
     expect(result.incremental).toBe(true);
     expect(result.last_reviewed_sha).toBe("abc123");
@@ -430,8 +437,6 @@ describe("getPrReviewData — incremental mode", () => {
     expect(result.diff_command).toContain("--name-status");
   });
 });
-
-// ── git ref sanitization tests ──
 
 describe("getPrReviewData — git ref sanitization", () => {
   let tmpDir: string;
@@ -444,12 +449,14 @@ describe("getPrReviewData — git ref sanitization", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("throws on invalid git ref characters", async () => {
     const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
-    await expect(fn({ branch: "feat/x; rm -rf /", diff_base: "main" }, tmpDir)).rejects.toThrow("Invalid git ref");
+    await expect(fn({ branch: "feat/x; rm -rf /", diff_base: "main" }, tmpDir)).rejects.toThrow(
+      "Invalid git ref",
+    );
   });
 
   it("throws on ref starting with dash", async () => {
@@ -463,8 +470,6 @@ describe("getPrReviewData — git ref sanitization", () => {
   });
 });
 
-// ── DriftStore review tests ──
-
 describe("DriftStore — review methods", () => {
   let tmpDir: string;
 
@@ -474,38 +479,38 @@ describe("DriftStore — review methods", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("filters reviews by PR number", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview({
-      review_id: "rev_1",
-      timestamp: "2026-03-16T00:00:00Z",
-      pr_number: 42,
-      verdict: "CLEAN",
       files: [],
-      violations: [],
       honored: [],
+      pr_number: 42,
+      review_id: "rev_1",
       score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
       },
+      timestamp: "2026-03-16T00:00:00Z",
+      verdict: "CLEAN",
+      violations: [],
     });
     await store.appendReview({
-      review_id: "rev_2",
-      timestamp: "2026-03-16T01:00:00Z",
-      pr_number: 99,
-      verdict: "WARNING",
       files: [],
-      violations: [],
       honored: [],
+      pr_number: 99,
+      review_id: "rev_2",
       score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
       },
+      timestamp: "2026-03-16T01:00:00Z",
+      verdict: "WARNING",
+      violations: [],
     });
 
     const all = await store.getReviews();
@@ -519,34 +524,34 @@ describe("DriftStore — review methods", () => {
   it("gets last review for a PR", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview({
-      review_id: "rev_1",
-      timestamp: "2026-03-16T00:00:00Z",
-      pr_number: 42,
-      last_reviewed_sha: "sha1",
-      verdict: "WARNING",
       files: [],
-      violations: [],
       honored: [],
+      last_reviewed_sha: "sha1",
+      pr_number: 42,
+      review_id: "rev_1",
       score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
       },
+      timestamp: "2026-03-16T00:00:00Z",
+      verdict: "WARNING",
+      violations: [],
     });
     await store.appendReview({
-      review_id: "rev_2",
-      timestamp: "2026-03-16T01:00:00Z",
-      pr_number: 42,
-      last_reviewed_sha: "sha2",
-      verdict: "CLEAN",
       files: [],
-      violations: [],
       honored: [],
+      last_reviewed_sha: "sha2",
+      pr_number: 42,
+      review_id: "rev_2",
       score: {
-        rules: { passed: 0, total: 0 },
-        opinions: { passed: 0, total: 0 },
         conventions: { passed: 0, total: 0 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 0 },
       },
+      timestamp: "2026-03-16T01:00:00Z",
+      verdict: "CLEAN",
+      violations: [],
     });
 
     const last = await store.getLastReviewForPr(42);
@@ -562,8 +567,6 @@ describe("DriftStore — review methods", () => {
   });
 });
 
-// ── Blast radius — KG-backed tests ──
-
 describe("getPrReviewData — blast radius from KG", () => {
   let tmpDir: string;
 
@@ -575,7 +578,7 @@ describe("getPrReviewData — blast radius from KG", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("returns empty blast_radius when KG does not exist", async () => {
@@ -597,12 +600,47 @@ describe("getPrReviewData — blast radius from KG", () => {
     const store = new KgStore(db);
 
     // handler.ts is imported by 3 service files (in_degree=3, meets blast radius threshold)
-    const handler = store.upsertFile({ path: "src/api/handler.ts", mtime_ms: Date.now(), content_hash: "h", language: "typescript", layer: "api", last_indexed_at: Date.now() });
-    const svc1 = store.upsertFile({ path: "src/services/svc1.ts", mtime_ms: Date.now(), content_hash: "s1", language: "typescript", layer: "services", last_indexed_at: Date.now() });
-    const svc2 = store.upsertFile({ path: "src/services/svc2.ts", mtime_ms: Date.now(), content_hash: "s2", language: "typescript", layer: "services", last_indexed_at: Date.now() });
-    const svc3 = store.upsertFile({ path: "src/services/svc3.ts", mtime_ms: Date.now(), content_hash: "s3", language: "typescript", layer: "services", last_indexed_at: Date.now() });
+    const handler = store.upsertFile({
+      content_hash: "h",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "api",
+      mtime_ms: Date.now(),
+      path: "src/api/handler.ts",
+    });
+    const svc1 = store.upsertFile({
+      content_hash: "s1",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "services",
+      mtime_ms: Date.now(),
+      path: "src/services/svc1.ts",
+    });
+    const svc2 = store.upsertFile({
+      content_hash: "s2",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "services",
+      mtime_ms: Date.now(),
+      path: "src/services/svc2.ts",
+    });
+    const svc3 = store.upsertFile({
+      content_hash: "s3",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "services",
+      mtime_ms: Date.now(),
+      path: "src/services/svc3.ts",
+    });
     for (const svc of [svc1, svc2, svc3]) {
-      store.insertFileEdge({ source_file_id: svc.file_id!, target_file_id: handler.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+      store.insertFileEdge({
+        confidence: 1.0,
+        edge_type: "imports",
+        evidence: null,
+        relation: null,
+        source_file_id: svc.file_id!,
+        target_file_id: handler.file_id!,
+      });
     }
     db.close();
 
@@ -619,8 +657,6 @@ describe("getPrReviewData — blast radius from KG", () => {
   });
 });
 
-// ── adapter routing tests (new for adr002-05) ──
-
 describe("getPrReviewData — adapter routing", () => {
   let tmpDir: string;
 
@@ -632,7 +668,7 @@ describe("getPrReviewData — adapter routing", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("routes git commands to gitExecAsync (not child_process)", async () => {

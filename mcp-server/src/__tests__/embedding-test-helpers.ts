@@ -6,9 +6,7 @@
  * utilities avoids copy-paste drift between test files.
  */
 
-// ---------------------------------------------------------------------------
 // randomEmbedding
-// ---------------------------------------------------------------------------
 
 /**
  * Returns a deterministic pseudo-random normalized 384-dim Float32Array.
@@ -30,9 +28,7 @@ export function randomEmbedding(seed = 0): Float32Array {
   return vec;
 }
 
-// ---------------------------------------------------------------------------
 // MockEmbeddingService
-// ---------------------------------------------------------------------------
 
 /**
  * Mock EmbeddingService that returns deterministic vectors without loading

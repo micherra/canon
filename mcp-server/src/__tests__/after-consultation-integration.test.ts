@@ -26,9 +26,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
@@ -52,14 +50,10 @@ vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
 });
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
 import { assertOk } from "../utils/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -71,7 +65,7 @@ function makeTmpDir(): string {
 
 afterEach(() => {
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
@@ -79,22 +73,22 @@ afterEach(() => {
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "implement",
-    current_state: "implement",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {
-      implement: { status: "pending", entries: 0 },
-      review: { status: "pending", entries: 0 },
-      done: { status: "pending", entries: 0 },
-    },
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "implement",
+    entry: "implement",
+    flow: "test-flow",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {
+      done: { entries: 0, status: "pending" },
+      implement: { entries: 0, status: "pending" },
+      review: { entries: 0, status: "pending" },
+    },
+    task: "test task",
     ...overrides,
   } as Board;
 }
@@ -107,29 +101,33 @@ function seedBoard(workspace: string, board: Board): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: board.flow,
-    task: board.task,
-    entry: board.entry,
-    current_state: board.current_state,
     base_commit: board.base_commit,
-    started: board.started ?? now,
-    last_updated: board.last_updated ?? now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: board.current_state,
+    entry: board.entry,
+    flow: board.flow,
     flow_name: board.flow,
+    last_updated: board.last_updated ?? now,
+    sanitized: "main",
     slug: "test-slug",
+    started: board.started ?? now,
+    task: board.task,
+    tier: "medium",
   });
   for (const [stateId, stateEntry] of Object.entries(board.states)) {
-    store.upsertState(stateId, { ...stateEntry, status: stateEntry.status, entries: stateEntry.entries ?? 0 });
+    store.upsertState(stateId, {
+      ...stateEntry,
+      entries: stateEntry.entries ?? 0,
+      status: stateEntry.status,
+    });
   }
   for (const [stateId, iterEntry] of Object.entries(board.iterations ?? {})) {
     store.upsertIteration(stateId, {
-      count: iterEntry.count,
-      max: iterEntry.max,
-      history: iterEntry.history ?? [],
       cannot_fix: iterEntry.cannot_fix ?? [],
+      count: iterEntry.count,
+      history: iterEntry.history ?? [],
+      max: iterEntry.max,
     });
   }
 }
@@ -142,37 +140,37 @@ function seedBoard(workspace: string, board: Board): void {
  */
 function makeFlowWithAfterAndNextState(): ResolvedFlow {
   return {
-    name: "test-flow",
+    consultations: {
+      "post-impl-check": {
+        agent: "canon:canon-security",
+        fragment: "post-impl-check",
+        role: "security-reviewer",
+        section: "Post-Implementation Check",
+      },
+    },
     description: "Test flow",
     entry: "implement",
+    name: "test-flow",
+    spawn_instructions: {
+      implement: "Implement ${task}.",
+      "post-impl-check": "Run post-implementation check for ${task}.",
+      review: "Review ${task}.",
+    },
     states: {
+      done: { type: "terminal" },
       implement: {
-        type: "wave",
         agent: "canon-implementor",
         consultations: {
           after: ["post-impl-check"],
         },
+        type: "wave",
       },
       review: {
-        type: "single",
         agent: "canon-reviewer",
         consultations: {
           before: ["post-impl-check"],
         },
-      },
-      done: { type: "terminal" },
-    },
-    spawn_instructions: {
-      implement: "Implement ${task}.",
-      review: "Review ${task}.",
-      "post-impl-check": "Run post-implementation check for ${task}.",
-    },
-    consultations: {
-      "post-impl-check": {
-        fragment: "post-impl-check",
-        agent: "canon:canon-security",
-        role: "security-reviewer",
-        section: "Post-Implementation Check",
+        type: "single",
       },
     },
   } as unknown as ResolvedFlow;
@@ -180,50 +178,48 @@ function makeFlowWithAfterAndNextState(): ResolvedFlow {
 
 function makeFlowWithAfterNoSection(): ResolvedFlow {
   return {
-    name: "test-flow",
+    consultations: {
+      "quick-check": {
+        agent: "canon:canon-researcher",
+        fragment: "quick-check",
+        role: "researcher",
+        // No "section" — deliberate gap from after-02 Known Gaps
+      },
+    },
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: {
-        type: "wave",
-        agent: "canon-implementor",
-        consultations: {
-          after: ["quick-check"],
-        },
-      },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: {
       implement: "Implement ${task}.",
       "quick-check": "Quick check for ${task}.",
     },
-    consultations: {
-      "quick-check": {
-        fragment: "quick-check",
-        agent: "canon:canon-researcher",
-        role: "researcher",
-        // No "section" — deliberate gap from after-02 Known Gaps
+    states: {
+      done: { type: "terminal" },
+      implement: {
+        agent: "canon-implementor",
+        consultations: {
+          after: ["quick-check"],
+        },
+        type: "wave",
       },
     },
   } as unknown as ResolvedFlow;
 }
 
-// ---------------------------------------------------------------------------
 // Known Gap: after-01 — MCP tool registration smoke test
 //
 // Verifies that resolveAfterConsultations is exported correctly and returns
 // the contract shape expected by index.ts registration (the registration
 // passes input directly and JSON.stringifies the result).
-// ---------------------------------------------------------------------------
 
 describe("resolve_after_consultations: registration contract (after-01 gap)", () => {
   it("result is JSON-serializable — registration jsonResponse(result) does not throw", () => {
     const flow = makeFlowWithAfterAndNextState();
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "implement",
       flow,
+      state_id: "implement",
       variables: { task: "my-feature" },
+      workspace: "/tmp/ws",
     });
 
     // index.ts does: return { content: [{ type: "text", text: JSON.stringify(result) }] }
@@ -240,10 +236,10 @@ describe("resolve_after_consultations: registration contract (after-01 gap)", ()
   it("result shape matches ResolveAfterConsultationsResult — all entry fields serializable", () => {
     const flow = makeFlowWithAfterAndNextState();
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "implement",
       flow,
+      state_id: "implement",
       variables: { task: "integration-test" },
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(1);
@@ -262,10 +258,10 @@ describe("resolve_after_consultations: registration contract (after-01 gap)", ()
   it("empty state returns well-formed empty result — registration path does not error", () => {
     const flow = makeFlowWithAfterAndNextState();
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "nonexistent",
       flow,
+      state_id: "nonexistent",
       variables: {},
+      workspace: "/tmp/ws",
     });
 
     expect(() => JSON.stringify(result)).not.toThrow();
@@ -274,12 +270,10 @@ describe("resolve_after_consultations: registration contract (after-01 gap)", ()
   });
 });
 
-// ---------------------------------------------------------------------------
 // Known Gap: after-02 — "after" breakpoint with status !== "done"
 //
 // The guard `cResult.status === "done"` is identical for all three breakpoints.
 // The after-02 implementor explicitly called this out as untested for "after".
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — after breakpoint with non-done status not injected (after-02 gap)", () => {
   it("after-consultation with status 'pending' is not collected into briefing", async () => {
@@ -287,13 +281,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
 
     const boardWithPendingAfter = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 1,
+          status: "in_progress",
           wave_results: {
             after: {
-              tasks: [],
-              status: "done",
               consultations: {
                 after: {
                   "post-impl-check": {
@@ -302,11 +295,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
                   },
                 },
               },
+              status: "done",
+              tasks: [],
             },
           },
         },
-        review: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
+        review: { entries: 0, status: "pending" },
       },
     });
 
@@ -315,12 +309,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
     const flow = makeFlowWithAfterAndNextState();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 
@@ -335,13 +329,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
 
     const boardWithErrorAfter = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 1,
+          status: "in_progress",
           wave_results: {
             after: {
-              tasks: [],
-              status: "done",
               consultations: {
                 after: {
                   "post-impl-check": {
@@ -350,11 +343,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
                   },
                 },
               },
+              status: "done",
+              tasks: [],
             },
           },
         },
-        review: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
+        review: { entries: 0, status: "pending" },
       },
     });
 
@@ -363,12 +357,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
     const flow = makeFlowWithAfterAndNextState();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 
@@ -382,13 +376,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
 
     const boardWithNullSummary = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 1,
+          status: "in_progress",
           wave_results: {
             after: {
-              tasks: [],
-              status: "done",
               consultations: {
                 after: {
                   "post-impl-check": {
@@ -397,11 +390,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
                   },
                 },
               },
+              status: "done",
+              tasks: [],
             },
           },
         },
-        review: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
+        review: { entries: 0, status: "pending" },
       },
     });
 
@@ -410,12 +404,12 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
     const flow = makeFlowWithAfterAndNextState();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 
@@ -424,13 +418,11 @@ describe("enterAndPrepareState — after breakpoint with non-done status not inj
   });
 });
 
-// ---------------------------------------------------------------------------
 // Known Gap: after-02 — "after" breakpoint with no section on fragment
 //
 // The after-02 implementor noted: "no section on consultation fragment — not
 // tested for the 'after' case specifically." The "before" path had this test
 // but not "after".
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — after breakpoint with no section on fragment (after-02 gap)", () => {
   it("after-consultation summary without section appears in briefing without heading", async () => {
@@ -438,13 +430,12 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
 
     const boardWithAfterNoSection = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 1,
+          status: "in_progress",
           wave_results: {
             after: {
-              tasks: [],
-              status: "done",
               consultations: {
                 after: {
                   "quick-check": {
@@ -453,10 +444,11 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
                   },
                 },
               },
+              status: "done",
+              tasks: [],
             },
           },
         },
-        done: { status: "pending", entries: 0 },
       },
     });
 
@@ -465,12 +457,12 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
     const flow = makeFlowWithAfterNoSection();
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my-task", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my-task" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 
@@ -489,10 +481,10 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
   it("resolveAfterConsultations includes entry without section key when fragment has no section", () => {
     const flow = makeFlowWithAfterNoSection();
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "implement",
       flow,
+      state_id: "implement",
       variables: { task: "my-feature" },
+      workspace: "/tmp/ws",
     });
 
     expect(result.warnings).toHaveLength(0);
@@ -505,7 +497,6 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
   });
 });
 
-// ---------------------------------------------------------------------------
 // Cross-task integration: resolveAfterConsultations → board storage →
 // enterAndPrepareState in next state picks up the summary
 //
@@ -513,7 +504,6 @@ describe("enterAndPrepareState — after breakpoint with no section on fragment 
 // (briefing fix): orchestrator calls resolveAfterConsultations, spawns agents,
 // records summaries on the board under consultations.after, then the NEXT
 // STATE's enterAndPrepareState picks them up via the briefing injection pipeline.
-// ---------------------------------------------------------------------------
 
 describe("cross-task: resolveAfterConsultations → board → same state next wave briefing injection", () => {
   it("after-consultation summary stored on board flows into same state's next wave briefing", async () => {
@@ -522,10 +512,10 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
     // Step 1: Call resolveAfterConsultations for "implement" state after wave 0
     const flow = makeFlowWithAfterAndNextState();
     const afterResult = resolveAfterConsultations({
-      workspace,
-      state_id: "implement",
       flow,
+      state_id: "implement",
       variables: { task: "cross-task-feature" },
+      workspace,
     });
 
     // Verify the tool returned a valid prompt entry
@@ -539,13 +529,12 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
     // so the after-summary must live on the implement state's wave_results.
     const boardWithAfterSummary = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 1,
+          status: "in_progress",
           wave_results: {
             after: {
-              tasks: [],
-              status: "done",
               consultations: {
                 after: {
                   "post-impl-check": {
@@ -554,11 +543,12 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
                   },
                 },
               },
+              status: "done",
+              tasks: [],
             },
           },
         },
-        review: { status: "pending", entries: 0 },
-        done: { status: "pending", entries: 0 },
+        review: { entries: 0, status: "pending" },
       },
     });
 
@@ -568,12 +558,12 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
     // board.states["implement"].wave_results and picks up the after-consultation summary
     // via the briefing injection scan (which includes "after" breakpoint per after-02).
     const wave1Result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "cross-task-feature", CANON_PLUGIN_ROOT: "" },
       items: ["task-b"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "cross-task-feature" },
       wave: 1,
+      workspace,
     });
 
     assertOk(wave1Result);
@@ -590,10 +580,10 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
   it("after-consultation prompt entry produced by resolveAfterConsultations has correct structure for orchestrator spawn", () => {
     const flow = makeFlowWithAfterAndNextState();
     const afterResult = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "implement",
       flow,
+      state_id: "implement",
       variables: { task: "cross-task-feature" },
+      workspace: "/tmp/ws",
     });
 
     // Orchestrator reads these fields to spawn the consultation agent
@@ -611,46 +601,44 @@ describe("cross-task: resolveAfterConsultations → board → same state next wa
   });
 });
 
-// ---------------------------------------------------------------------------
 // Cross-task: resolveAfterConsultations output shape matches what
 // enterAndPrepareState expects when constructing ConsultationPromptEntry
 //
 // after-01 produces entries; the orchestrator must be able to spawn agents
 // using them. Verify the output type contract is complete.
-// ---------------------------------------------------------------------------
 
 describe("resolveAfterConsultations → ConsultationPromptEntry shape contract", () => {
   it("output entry has all required ConsultationPromptEntry fields", () => {
     const flow: ResolvedFlow = {
-      name: "test-flow",
-      description: "Test",
-      entry: "review",
-      states: {
-        review: {
-          type: "single",
-          agent: "canon-reviewer",
-          consultations: { after: ["final-audit"] },
+      consultations: {
+        "final-audit": {
+          agent: "canon:canon-security",
+          fragment: "final-audit",
+          role: "security",
+          section: "Final Audit",
+          timeout: "10m",
         },
       },
+      description: "Test",
+      entry: "review",
+      name: "test-flow",
       spawn_instructions: {
         "final-audit": "Audit ${component} after implementation.",
       },
-      consultations: {
-        "final-audit": {
-          fragment: "final-audit",
-          agent: "canon:canon-security",
-          role: "security",
-          timeout: "10m",
-          section: "Final Audit",
+      states: {
+        review: {
+          agent: "canon-reviewer",
+          consultations: { after: ["final-audit"] },
+          type: "single",
         },
       },
     } as unknown as ResolvedFlow;
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: { component: "auth-module" },
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(1);
@@ -675,33 +663,33 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
 
   it("multiple after entries returned in declaration order", () => {
     const flow: ResolvedFlow = {
-      name: "test-flow",
+      consultations: {
+        "check-a": { agent: "canon:agent-a", fragment: "check-a", role: "role-a" },
+        "check-b": { agent: "canon:agent-b", fragment: "check-b", role: "role-b" },
+        "check-c": { agent: "canon:agent-c", fragment: "check-c", role: "role-c" },
+      },
       description: "Test",
       entry: "review",
-      states: {
-        review: {
-          type: "single",
-          agent: "canon-reviewer",
-          consultations: { after: ["check-a", "check-b", "check-c"] },
-        },
-      },
+      name: "test-flow",
       spawn_instructions: {
         "check-a": "Check A for ${task}.",
         "check-b": "Check B for ${task}.",
         "check-c": "Check C for ${task}.",
       },
-      consultations: {
-        "check-a": { fragment: "check-a", agent: "canon:agent-a", role: "role-a" },
-        "check-b": { fragment: "check-b", agent: "canon:agent-b", role: "role-b" },
-        "check-c": { fragment: "check-c", agent: "canon:agent-c", role: "role-c" },
+      states: {
+        review: {
+          agent: "canon-reviewer",
+          consultations: { after: ["check-a", "check-b", "check-c"] },
+          type: "single",
+        },
       },
     } as unknown as ResolvedFlow;
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: { task: "order-test" },
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(3);
@@ -712,12 +700,10 @@ describe("resolveAfterConsultations → ConsultationPromptEntry shape contract",
   });
 });
 
-// ---------------------------------------------------------------------------
 // Cross-task: "after" and "before"/"between" summaries coexist correctly
 //
 // Ensures the after-02 fix does not disrupt existing "before"/"between"
 // collection — all three breakpoints are collected simultaneously.
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — all three breakpoints coexist in briefing collection", () => {
   it("before, between, and after summaries are all collected and injected into briefing", async () => {
@@ -725,14 +711,19 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
 
     const boardWithAllBreakpoints = makeBoard({
       states: {
+        done: { entries: 0, status: "pending" },
         implement: {
-          status: "in_progress",
           entries: 2,
+          status: "in_progress",
           wave_results: {
             "wave-0": {
-              tasks: ["task-a"],
-              status: "done",
               consultations: {
+                after: {
+                  "post-check": {
+                    status: "done",
+                    summary: "Post-check: wave completed successfully.",
+                  },
+                },
                 before: {
                   "pre-check": {
                     status: "done",
@@ -745,17 +736,12 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
                     summary: "Mid-check: progress looks good.",
                   },
                 },
-                after: {
-                  "post-check": {
-                    status: "done",
-                    summary: "Post-check: wave completed successfully.",
-                  },
-                },
               },
+              status: "done",
+              tasks: ["task-a"],
             },
           },
         },
-        done: { status: "pending", entries: 0 },
       },
     });
 
@@ -765,53 +751,53 @@ describe("enterAndPrepareState — all three breakpoints coexist in briefing col
     // collection block in enterAndPrepareState to be entered (line 171:
     // `if (stateDef?.consultations)`). Without it the whole collection is skipped.
     const flow: ResolvedFlow = {
-      name: "test-flow",
+      consultations: {
+        "mid-check": {
+          agent: "canon:canon-researcher",
+          fragment: "mid-check",
+          role: "researcher",
+          section: "Mid-Check",
+        },
+        "post-check": {
+          agent: "canon:canon-security",
+          fragment: "post-check",
+          role: "security",
+          section: "Post-Check",
+        },
+        "pre-check": {
+          agent: "canon:canon-security",
+          fragment: "pre-check",
+          role: "security",
+          section: "Pre-Check",
+        },
+      },
       description: "Test",
       entry: "implement",
+      name: "test-flow",
+      spawn_instructions: {
+        implement: "Implement ${task}.",
+      },
       states: {
+        done: { type: "terminal" },
         implement: {
-          type: "wave",
           agent: "canon-implementor",
           // Declare an empty between array — this makes stateDef.consultations truthy
           // so the collection block runs and collects prior wave summaries.
           consultations: {
             between: [],
           },
-        },
-        done: { type: "terminal" },
-      },
-      spawn_instructions: {
-        implement: "Implement ${task}.",
-      },
-      consultations: {
-        "pre-check": {
-          fragment: "pre-check",
-          agent: "canon:canon-security",
-          role: "security",
-          section: "Pre-Check",
-        },
-        "mid-check": {
-          fragment: "mid-check",
-          agent: "canon:canon-researcher",
-          role: "researcher",
-          section: "Mid-Check",
-        },
-        "post-check": {
-          fragment: "post-check",
-          agent: "canon:canon-security",
-          role: "security",
-          section: "Post-Check",
+          type: "wave",
         },
       },
     } as unknown as ResolvedFlow;
 
     const result = await enterAndPrepareState({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "all-breakpoints-test", CANON_PLUGIN_ROOT: "" },
       items: ["task-a"],
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "all-breakpoints-test" },
       wave: 1,
+      workspace,
     });
     assertOk(result);
 

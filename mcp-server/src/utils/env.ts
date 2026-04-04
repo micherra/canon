@@ -9,7 +9,7 @@
 export function isSyncMode(): boolean {
   const explicit = process.env.CANON_SYNC_JOBS;
   if (explicit !== undefined) {
-    return explicit === '1' || explicit.toLowerCase() === 'true';
+    return explicit === "1" || explicit.toLowerCase() === "true";
   }
   return isCI();
 }

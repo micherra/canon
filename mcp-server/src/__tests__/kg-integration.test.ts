@@ -15,7 +15,7 @@
  * All DB-bound tests use in-memory SQLite (:memory:).
  */
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
@@ -28,15 +28,11 @@ import { runPipeline } from "../graph/kg-pipeline.ts";
 import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import type { EdgeType, EntityRow, FileRow } from "../graph/kg-types.ts";
+import type { EntityRow, FileRow } from "../graph/kg-types.ts";
 import { initParsers } from "../graph/kg-wasm-parser.ts";
-import { graphQuery } from "../tools/graph-query.ts";
 import { getFileContext } from "../tools/get-file-context.ts";
+import { graphQuery } from "../tools/graph-query.ts";
 import { storeSummaries } from "../tools/store-summaries.ts";
-
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
 
 function makeTempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "kg-integration-test-"));
@@ -50,12 +46,12 @@ function writeProjectFile(dir: string, relPath: string, content: string): void {
 
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {
-    path: "src/A.ts",
-    mtime_ms: 1700000000000,
     content_hash: "abc123",
     language: "typescript",
-    layer: "domain",
     last_indexed_at: Date.now(),
+    layer: "domain",
+    mtime_ms: 1700000000000,
+    path: "src/A.ts",
     ...overrides,
   };
 }
@@ -66,15 +62,15 @@ function makeEntityRow(
 ): Omit<EntityRow, "entity_id"> {
   return {
     file_id: fileId,
+    is_default_export: false,
+    is_exported: false,
+    kind: "function",
+    line_end: 10,
+    line_start: 1,
+    metadata: null,
     name: "myFunc",
     qualified_name: "src/A.ts::myFunc",
-    kind: "function",
-    line_start: 1,
-    line_end: 10,
-    is_exported: false,
-    is_default_export: false,
     signature: null,
-    metadata: null,
     ...overrides,
   };
 }
@@ -84,64 +80,78 @@ function makeEntityRow(
  * funcD is dead code (unexported, unreferenced, in fileB).
  */
 function populateTestGraph(store: KgStore) {
-  const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
-  const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
-  const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+  const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
+  const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
+  const fileC = store.upsertFile(makeFileRow({ layer: "shared", path: "src/C.ts" }));
 
   const funcA = store.insertEntity(
-    makeEntityRow(fileA.file_id!, { name: "funcA", qualified_name: "src/A.ts::funcA", is_exported: true }),
+    makeEntityRow(fileA.file_id!, {
+      is_exported: true,
+      name: "funcA",
+      qualified_name: "src/A.ts::funcA",
+    }),
   );
   const funcB = store.insertEntity(
-    makeEntityRow(fileB.file_id!, { name: "funcB", qualified_name: "src/B.ts::funcB", is_exported: true }),
+    makeEntityRow(fileB.file_id!, {
+      is_exported: true,
+      name: "funcB",
+      qualified_name: "src/B.ts::funcB",
+    }),
   );
   const funcC = store.insertEntity(
-    makeEntityRow(fileC.file_id!, { name: "funcC", qualified_name: "src/C.ts::funcC", is_exported: true }),
+    makeEntityRow(fileC.file_id!, {
+      is_exported: true,
+      name: "funcC",
+      qualified_name: "src/C.ts::funcC",
+    }),
   );
   const funcD = store.insertEntity(
-    makeEntityRow(fileB.file_id!, { name: "funcD", qualified_name: "src/B.ts::funcD", is_exported: false }),
+    makeEntityRow(fileB.file_id!, {
+      is_exported: false,
+      name: "funcD",
+      qualified_name: "src/B.ts::funcD",
+    }),
   );
 
   // Entity edges: funcA → funcB → funcC
   store.insertEdge({
+    confidence: 1.0,
+    edge_type: "calls",
+    metadata: null,
     source_entity_id: funcA.entity_id!,
     target_entity_id: funcB.entity_id!,
-    edge_type: "calls",
-    confidence: 1.0,
-    metadata: null,
   });
   store.insertEdge({
+    confidence: 1.0,
+    edge_type: "calls",
+    metadata: null,
     source_entity_id: funcB.entity_id!,
     target_entity_id: funcC.entity_id!,
-    edge_type: "calls",
-    confidence: 1.0,
-    metadata: null,
   });
 
   // File edges
   store.insertFileEdge({
-    source_file_id: fileA.file_id!,
-    target_file_id: fileB.file_id!,
-    edge_type: "imports",
     confidence: 1.0,
+    edge_type: "imports",
     evidence: "import { funcB } from './B'",
     relation: null,
+    source_file_id: fileA.file_id!,
+    target_file_id: fileB.file_id!,
   });
   store.insertFileEdge({
-    source_file_id: fileB.file_id!,
-    target_file_id: fileC.file_id!,
-    edge_type: "imports",
     confidence: 1.0,
+    edge_type: "imports",
     evidence: "import { funcC } from './C'",
     relation: null,
+    source_file_id: fileB.file_id!,
+    target_file_id: fileC.file_id!,
   });
 
   return { fileA, fileB, fileC, funcA, funcB, funcC, funcD };
 }
 
-// ===========================================================================
 // 1. Pipeline → KgQuery end-to-end flow
 // (view-materializer.ts deleted — ADR-005; graph-data.json write path removed)
-// ===========================================================================
 
 describe("Pipeline → KgQuery end-to-end flow", () => {
   let projectDir: string;
@@ -151,7 +161,7 @@ describe("Pipeline → KgQuery end-to-end flow", () => {
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   test("pipeline populates DB and KgQuery returns correct nodes and edges", async () => {
@@ -177,7 +187,9 @@ describe("Pipeline → KgQuery end-to-end flow", () => {
         )
         .all() as Array<{ edge_type: string; source_path: string; target_path: string }>;
 
-      const importEdge = fileEdgeRows.find((e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts");
+      const importEdge = fileEdgeRows.find(
+        (e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts",
+      );
       expect(importEdge).toBeDefined();
       expect(importEdge!.edge_type).toBe("imports");
     } finally {
@@ -203,7 +215,9 @@ describe("Pipeline → KgQuery end-to-end flow", () => {
       )
       .all() as Array<{ source_path: string; target_path: string }>;
     dbBefore.close();
-    const edgeBefore = edgesBefore.find((e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts");
+    const edgeBefore = edgesBefore.find(
+      (e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts",
+    );
     expect(edgeBefore).toBeUndefined();
 
     // Update b.ts to import from a.ts
@@ -223,14 +237,14 @@ describe("Pipeline → KgQuery end-to-end flow", () => {
       .all() as Array<{ source_path: string; target_path: string }>;
     dbAfter.close();
 
-    const edgeAfter = edgesAfter.find((e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts");
+    const edgeAfter = edgesAfter.find(
+      (e) => e.source_path === "src/b.ts" && e.target_path === "src/a.ts",
+    );
     expect(edgeAfter).toBeDefined();
   });
 });
 
-// ===========================================================================
 // 4. Blast Radius Analysis — analyzeBlastRadius (0% covered before)
-// ===========================================================================
 
 describe("analyzeBlastRadius", () => {
   let db: Database.Database;
@@ -335,62 +349,68 @@ describe("analyzeBlastRadius", () => {
 
   test("excludes test file entities when includeTests is false", () => {
     const testFile = store.upsertFile(
-      makeFileRow({ path: "src/__tests__/helpers.test.ts", layer: "test", content_hash: "testhash" }),
+      makeFileRow({
+        content_hash: "testhash",
+        layer: "test",
+        path: "src/__tests__/helpers.test.ts",
+      }),
     );
     const testEntity = store.insertEntity(
       makeEntityRow(testFile.file_id!, {
+        is_exported: false,
         name: "testHelper",
         qualified_name: "src/__tests__/helpers.test.ts::testHelper",
-        is_exported: false,
       }),
     );
 
     // testHelper calls funcC — so funcC's blast radius (reverse) includes testHelper
     const { funcC } = populateTestGraph(store);
     store.insertEdge({
+      confidence: 0.8,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: testEntity.entity_id!,
       target_entity_id: funcC.entity_id!,
-      edge_type: "calls",
-      confidence: 0.8,
-      metadata: null,
     });
 
-    const report = analyzeBlastRadius(db, ["funcC"], { maxDepth: 2, includeTests: false });
+    const report = analyzeBlastRadius(db, ["funcC"], { includeTests: false, maxDepth: 2 });
     const names = report.affected.map((e) => e.entity_name);
     expect(names).not.toContain("testHelper");
   });
 
   test("includes test file entities when includeTests is true (default)", () => {
     const testFile = store.upsertFile(
-      makeFileRow({ path: "src/__tests__/helpers.test.ts", layer: "test", content_hash: "testhash" }),
+      makeFileRow({
+        content_hash: "testhash",
+        layer: "test",
+        path: "src/__tests__/helpers.test.ts",
+      }),
     );
     const testEntity = store.insertEntity(
       makeEntityRow(testFile.file_id!, {
+        is_exported: false,
         name: "testHelper",
         qualified_name: "src/__tests__/helpers.test.ts::testHelper",
-        is_exported: false,
       }),
     );
 
     // testHelper calls funcC — so funcC's blast radius (reverse) includes testHelper
     const { funcC } = populateTestGraph(store);
     store.insertEdge({
+      confidence: 0.8,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: testEntity.entity_id!,
       target_entity_id: funcC.entity_id!,
-      edge_type: "calls",
-      confidence: 0.8,
-      metadata: null,
     });
 
-    const report = analyzeBlastRadius(db, ["funcC"], { maxDepth: 2, includeTests: true });
+    const report = analyzeBlastRadius(db, ["funcC"], { includeTests: true, maxDepth: 2 });
     const names = report.affected.map((e) => e.entity_name);
     expect(names).toContain("testHelper");
   });
 });
 
-// ===========================================================================
 // 5. Blast Radius — deeper graph CTE correctness
-// ===========================================================================
 
 describe("analyzeBlastRadius — deeper graph CTE correctness", () => {
   let db: Database.Database;
@@ -408,47 +428,55 @@ describe("analyzeBlastRadius — deeper graph CTE correctness", () => {
   test("CTE traverses 4-level deep chain correctly", () => {
     // Build: root → a → b → c → d (4 hops, forward/outgoing direction)
     // With reverse traversal, seed = d reaches c (1), b (2), a (3), root (4)
-    const fileRoot = store.upsertFile(makeFileRow({ path: "root.ts", content_hash: "h0" }));
-    const fileA = store.upsertFile(makeFileRow({ path: "A.ts", content_hash: "h1" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "B.ts", content_hash: "h2" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "C.ts", content_hash: "h3" }));
-    const fileD = store.upsertFile(makeFileRow({ path: "D.ts", content_hash: "h4" }));
+    const fileRoot = store.upsertFile(makeFileRow({ content_hash: "h0", path: "root.ts" }));
+    const fileA = store.upsertFile(makeFileRow({ content_hash: "h1", path: "A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ content_hash: "h2", path: "B.ts" }));
+    const fileC = store.upsertFile(makeFileRow({ content_hash: "h3", path: "C.ts" }));
+    const fileD = store.upsertFile(makeFileRow({ content_hash: "h4", path: "D.ts" }));
 
     const root = store.insertEntity(
       makeEntityRow(fileRoot.file_id!, { name: "root", qualified_name: "root.ts::root" }),
     );
-    const a = store.insertEntity(makeEntityRow(fileA.file_id!, { name: "a", qualified_name: "A.ts::a" }));
-    const b = store.insertEntity(makeEntityRow(fileB.file_id!, { name: "b", qualified_name: "B.ts::b" }));
-    const c = store.insertEntity(makeEntityRow(fileC.file_id!, { name: "c", qualified_name: "C.ts::c" }));
-    const d = store.insertEntity(makeEntityRow(fileD.file_id!, { name: "d", qualified_name: "D.ts::d" }));
+    const a = store.insertEntity(
+      makeEntityRow(fileA.file_id!, { name: "a", qualified_name: "A.ts::a" }),
+    );
+    const b = store.insertEntity(
+      makeEntityRow(fileB.file_id!, { name: "b", qualified_name: "B.ts::b" }),
+    );
+    const c = store.insertEntity(
+      makeEntityRow(fileC.file_id!, { name: "c", qualified_name: "C.ts::c" }),
+    );
+    const d = store.insertEntity(
+      makeEntityRow(fileD.file_id!, { name: "d", qualified_name: "D.ts::d" }),
+    );
 
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: root.entity_id!,
       target_entity_id: a.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: a.entity_id!,
       target_entity_id: b.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: b.entity_id!,
       target_entity_id: c.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: c.entity_id!,
       target_entity_id: d.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
 
     // seed = d; maxDepth=4 — should reach all 5 entities (d at depth 0, c at 1, b at 2, a at 3, root at 4)
@@ -473,46 +501,54 @@ describe("analyzeBlastRadius — deeper graph CTE correctness", () => {
   test("CTE handles diamond dependency pattern without duplicates", () => {
     // Diamond: root → a, root → b, a → c, b → c
     // With reverse traversal, seed = c → a (depth 1), b (depth 1), root (depth 2)
-    const fileRoot = store.upsertFile(makeFileRow({ path: "root.ts", content_hash: "h0" }));
-    const fileA = store.upsertFile(makeFileRow({ path: "A.ts", content_hash: "h1" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "B.ts", content_hash: "h2" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "C.ts", content_hash: "h3" }));
+    const fileRoot = store.upsertFile(makeFileRow({ content_hash: "h0", path: "root.ts" }));
+    const fileA = store.upsertFile(makeFileRow({ content_hash: "h1", path: "A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ content_hash: "h2", path: "B.ts" }));
+    const fileC = store.upsertFile(makeFileRow({ content_hash: "h3", path: "C.ts" }));
 
-    store.insertEntity(makeEntityRow(fileRoot.file_id!, { name: "root", qualified_name: "root.ts::root" }));
-    const a = store.insertEntity(makeEntityRow(fileA.file_id!, { name: "a", qualified_name: "A.ts::a" }));
-    const b = store.insertEntity(makeEntityRow(fileB.file_id!, { name: "b", qualified_name: "B.ts::b" }));
-    const c = store.insertEntity(makeEntityRow(fileC.file_id!, { name: "c", qualified_name: "C.ts::c" }));
+    store.insertEntity(
+      makeEntityRow(fileRoot.file_id!, { name: "root", qualified_name: "root.ts::root" }),
+    );
+    const a = store.insertEntity(
+      makeEntityRow(fileA.file_id!, { name: "a", qualified_name: "A.ts::a" }),
+    );
+    const b = store.insertEntity(
+      makeEntityRow(fileB.file_id!, { name: "b", qualified_name: "B.ts::b" }),
+    );
+    const c = store.insertEntity(
+      makeEntityRow(fileC.file_id!, { name: "c", qualified_name: "C.ts::c" }),
+    );
     const root = store.insertEntity(
       makeEntityRow(fileRoot.file_id!, { name: "root2", qualified_name: "root.ts::root2" }),
     );
 
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: root.entity_id!,
       target_entity_id: a.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: root.entity_id!,
       target_entity_id: b.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: a.entity_id!,
       target_entity_id: c.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: b.entity_id!,
       target_entity_id: c.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
 
     // seed = c; a and b both call c, root calls both a and b
@@ -528,25 +564,29 @@ describe("analyzeBlastRadius — deeper graph CTE correctness", () => {
 
   test("CTE does not follow cycle infinitely", () => {
     // Cycle: a → b → a (would be infinite without DISTINCT + depth guard)
-    const fileA = store.upsertFile(makeFileRow({ path: "A.ts", content_hash: "h1" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "B.ts", content_hash: "h2" }));
+    const fileA = store.upsertFile(makeFileRow({ content_hash: "h1", path: "A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ content_hash: "h2", path: "B.ts" }));
 
-    const a = store.insertEntity(makeEntityRow(fileA.file_id!, { name: "a", qualified_name: "A.ts::a" }));
-    const b = store.insertEntity(makeEntityRow(fileB.file_id!, { name: "b", qualified_name: "B.ts::b" }));
+    const a = store.insertEntity(
+      makeEntityRow(fileA.file_id!, { name: "a", qualified_name: "A.ts::a" }),
+    );
+    const b = store.insertEntity(
+      makeEntityRow(fileB.file_id!, { name: "b", qualified_name: "B.ts::b" }),
+    );
 
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: a.entity_id!,
       target_entity_id: b.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: b.entity_id!,
       target_entity_id: a.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
 
     // Should terminate and return both entities without infinite loop
@@ -557,9 +597,7 @@ describe("analyzeBlastRadius — deeper graph CTE correctness", () => {
   });
 });
 
-// ===========================================================================
 // 6. graph_query tool dispatch
-// ===========================================================================
 
 describe("graphQuery tool dispatch", () => {
   let projectDir: string;
@@ -569,7 +607,7 @@ describe("graphQuery tool dispatch", () => {
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   function seedDb(projectDir: string): string {
@@ -582,11 +620,11 @@ describe("graphQuery tool dispatch", () => {
     return dbPath;
   }
 
-  test('throws when DB does not exist', () => {
-    const result = graphQuery({ query_type: 'search', target: 'funcA' }, projectDir);
+  test("throws when DB does not exist", () => {
+    const result = graphQuery({ query_type: "search", target: "funcA" }, projectDir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe('KG_NOT_INDEXED');
+      expect(result.error_code).toBe("KG_NOT_INDEXED");
       expect(result.recoverable).toBe(true);
       expect(result.message).toMatch(/knowledge graph database not found/i);
     }
@@ -594,9 +632,9 @@ describe("graphQuery tool dispatch", () => {
 
   test("search query returns matching entities", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'search', target: 'funcA' }, projectDir);
+    const result = graphQuery({ query_type: "search", target: "funcA" }, projectDir);
     if (!result.ok) throw new Error(result.message);
-    expect(result.query_type).toBe('search');
+    expect(result.query_type).toBe("search");
     expect(result.count).toBeGreaterThanOrEqual(1);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
     expect(names).toContain("funcA");
@@ -604,9 +642,9 @@ describe("graphQuery tool dispatch", () => {
 
   test("dead_code query returns unexported unreferenced entities", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'dead_code' }, projectDir);
+    const result = graphQuery({ query_type: "dead_code" }, projectDir);
     if (!result.ok) throw new Error(result.message);
-    expect(result.query_type).toBe('dead_code');
+    expect(result.query_type).toBe("dead_code");
     expect(result.count).toBeGreaterThanOrEqual(1);
     // funcD is dead code
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -615,7 +653,7 @@ describe("graphQuery tool dispatch", () => {
 
   test("callers query returns callers of funcB", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'callers', target: 'funcB' }, projectDir);
+    const result = graphQuery({ query_type: "callers", target: "funcB" }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.count).toBeGreaterThanOrEqual(1);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -624,7 +662,7 @@ describe("graphQuery tool dispatch", () => {
 
   test("callees query returns callees of funcA", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'callees', target: 'funcA' }, projectDir);
+    const result = graphQuery({ query_type: "callees", target: "funcA" }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.count).toBeGreaterThanOrEqual(1);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -634,7 +672,10 @@ describe("graphQuery tool dispatch", () => {
   test("blast_radius query returns reachable entities", () => {
     seedDb(projectDir);
     // seed = funcC (funcB calls funcC, funcA calls funcB); reverse blast radius includes funcB and funcA
-    const result = graphQuery({ query_type: 'blast_radius', target: 'funcC', options: { max_depth: 3 } }, projectDir);
+    const result = graphQuery(
+      { options: { max_depth: 3 }, query_type: "blast_radius", target: "funcC" },
+      projectDir,
+    );
     if (!result.ok) throw new Error(result.message);
     expect(result.count).toBeGreaterThanOrEqual(2);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -653,22 +694,22 @@ describe("graphQuery tool dispatch", () => {
     const fileA = store.getFile("src/A.ts")!;
     const classContainer = store.insertEntity(
       makeEntityRow(fileA.file_id!, {
+        is_exported: true,
+        kind: "class",
         name: "MyClass",
         qualified_name: "src/A.ts::MyClass",
-        kind: "class",
-        is_exported: true,
       }),
     );
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "contains",
+      metadata: null,
       source_entity_id: classContainer.entity_id!,
       target_entity_id: funcA.entity_id!,
-      edge_type: "contains",
-      confidence: 1.0,
-      metadata: null,
     });
     store.close();
 
-    const result = graphQuery({ query_type: 'ancestors', target: 'funcA' }, projectDir);
+    const result = graphQuery({ query_type: "ancestors", target: "funcA" }, projectDir);
     if (!result.ok) throw new Error(result.message);
     expect(result.count).toBeGreaterThanOrEqual(1);
     const names = (result.results as Array<{ name: string }>).map((r) => r.name);
@@ -678,7 +719,7 @@ describe("graphQuery tool dispatch", () => {
   test("entity-not-found returns empty result set instead of throwing", () => {
     seedDb(projectDir);
     const result = graphQuery(
-      { query_type: 'callers', target: 'nonexistent_entity_xyz' },
+      { query_type: "callers", target: "nonexistent_entity_xyz" },
       projectDir,
     );
     if (!result.ok) throw new Error(result.message);
@@ -688,20 +729,20 @@ describe("graphQuery tool dispatch", () => {
 
   test("search requires target — throws when missing", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'search' }, projectDir);
+    const result = graphQuery({ query_type: "search" }, projectDir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe('INVALID_INPUT');
+      expect(result.error_code).toBe("INVALID_INPUT");
       expect(result.message).toMatch(/requires a target/i);
     }
   });
 
   test("callers requires target — throws when missing", () => {
     seedDb(projectDir);
-    const result = graphQuery({ query_type: 'callers' }, projectDir);
+    const result = graphQuery({ query_type: "callers" }, projectDir);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error_code).toBe('INVALID_INPUT');
+      expect(result.error_code).toBe("INVALID_INPUT");
       expect(result.message).toMatch(/requires a target/i);
     }
   });
@@ -709,7 +750,7 @@ describe("graphQuery tool dispatch", () => {
   test("search respects options.limit", () => {
     seedDb(projectDir);
     const result = graphQuery(
-      { query_type: 'search', target: 'func*', options: { limit: 2 } },
+      { options: { limit: 2 }, query_type: "search", target: "func*" },
       projectDir,
     );
     if (!result.ok) throw new Error(result.message);
@@ -717,9 +758,7 @@ describe("graphQuery tool dispatch", () => {
   });
 });
 
-// ===========================================================================
 // 7. Adapter Registry contract
-// ===========================================================================
 
 describe("Adapter Registry", () => {
   beforeAll(async () => {
@@ -779,9 +818,7 @@ describe("Adapter Registry", () => {
   });
 });
 
-// ===========================================================================
 // 8. KgStore — gaps: upsert conflict, cascade verification, boolean coercion
-// ===========================================================================
 
 describe("KgStore — coverage gaps", () => {
   let db: Database.Database;
@@ -797,8 +834,8 @@ describe("KgStore — coverage gaps", () => {
   });
 
   test("upsertFile ON CONFLICT updates mtime and hash, keeps same file_id", () => {
-    const original = store.upsertFile(makeFileRow({ mtime_ms: 1000, content_hash: "hash1" }));
-    const updated = store.upsertFile(makeFileRow({ mtime_ms: 2000, content_hash: "hash2" }));
+    const original = store.upsertFile(makeFileRow({ content_hash: "hash1", mtime_ms: 1000 }));
+    const updated = store.upsertFile(makeFileRow({ content_hash: "hash2", mtime_ms: 2000 }));
     expect(updated.file_id).toBe(original.file_id);
     expect(updated.mtime_ms).toBe(2000);
     expect(updated.content_hash).toBe("hash2");
@@ -825,10 +862,10 @@ describe("KgStore — coverage gaps", () => {
     const file = store.upsertFile(makeFileRow());
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_default_export: true,
+        is_exported: true,
         name: "exported",
         qualified_name: "src/A.ts::exported",
-        is_exported: true,
-        is_default_export: true,
       }),
     );
     const entities = store.getEntitiesByFile(file.file_id!);
@@ -842,10 +879,10 @@ describe("KgStore — coverage gaps", () => {
     const file = store.upsertFile(makeFileRow());
     store.insertEntity(
       makeEntityRow(file.file_id!, {
+        is_default_export: false,
+        is_exported: false,
         name: "private",
         qualified_name: "src/A.ts::private",
-        is_exported: false,
-        is_default_export: false,
       }),
     );
     const entities = store.getEntitiesByFile(file.file_id!);
@@ -898,9 +935,7 @@ describe("KgStore — coverage gaps", () => {
   });
 });
 
-// ===========================================================================
 // 9. KgQuery — gaps: getAncestors, getAdjacencyList
-// ===========================================================================
 
 describe("KgQuery — coverage gaps (getAncestors, getAdjacencyList)", () => {
   let db: Database.Database;
@@ -920,17 +955,25 @@ describe("KgQuery — coverage gaps (getAncestors, getAdjacencyList)", () => {
   test("getAncestors returns parent entities via contains edges", () => {
     const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts" }));
     const classA = store.insertEntity(
-      makeEntityRow(fileA.file_id!, { name: "ClassA", qualified_name: "src/A.ts::ClassA", kind: "class" }),
+      makeEntityRow(fileA.file_id!, {
+        kind: "class",
+        name: "ClassA",
+        qualified_name: "src/A.ts::ClassA",
+      }),
     );
     const method = store.insertEntity(
-      makeEntityRow(fileA.file_id!, { name: "method", qualified_name: "src/A.ts::ClassA.method", kind: "function" }),
+      makeEntityRow(fileA.file_id!, {
+        kind: "function",
+        name: "method",
+        qualified_name: "src/A.ts::ClassA.method",
+      }),
     );
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "contains",
+      metadata: null,
       source_entity_id: classA.entity_id!,
       target_entity_id: method.entity_id!,
-      edge_type: "contains",
-      confidence: 1.0,
-      metadata: null,
     });
 
     const ancestors = query.getAncestors(method.entity_id!);
@@ -975,23 +1018,29 @@ describe("KgQuery — coverage gaps (getAncestors, getAdjacencyList)", () => {
     const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts" }));
     const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts" }));
 
-    const a = store.insertEntity(makeEntityRow(fileA.file_id!, { name: "a", qualified_name: "src/A.ts::a" }));
-    const b = store.insertEntity(makeEntityRow(fileB.file_id!, { name: "b", qualified_name: "src/B.ts::b" }));
-    const c = store.insertEntity(makeEntityRow(fileC.file_id!, { name: "c", qualified_name: "src/C.ts::c" }));
+    const a = store.insertEntity(
+      makeEntityRow(fileA.file_id!, { name: "a", qualified_name: "src/A.ts::a" }),
+    );
+    const b = store.insertEntity(
+      makeEntityRow(fileB.file_id!, { name: "b", qualified_name: "src/B.ts::b" }),
+    );
+    const c = store.insertEntity(
+      makeEntityRow(fileC.file_id!, { name: "c", qualified_name: "src/C.ts::c" }),
+    );
 
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: a.entity_id!,
       target_entity_id: b.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: a.entity_id!,
       target_entity_id: c.entity_id!,
-      edge_type: "calls",
-      confidence: 1,
-      metadata: null,
     });
 
     const adj = query.getAdjacencyList();
@@ -1003,9 +1052,7 @@ describe("KgQuery — coverage gaps (getAncestors, getAdjacencyList)", () => {
   });
 });
 
-// ===========================================================================
 // 10. Adapter edge cases — malformed input and empty files
-// ===========================================================================
 
 describe("Adapter edge cases — malformed input and empty files", () => {
   beforeAll(async () => {
@@ -1109,14 +1156,12 @@ describe("Adapter edge cases — malformed input and empty files", () => {
   });
 });
 
-// ===========================================================================
 // 11. DB-only workflow integration — risk mitigation for combined migration state
 //
 // Verifies: "KG present, DB-only summaries, no JSON files" works end-to-end.
 // This is the primary risk mitigation test for the ADR-005 consolidation.
 // All three tools (get_file_context, store_summaries) must return correct data
 // when the KG DB is the sole data source and no JSON artifact files exist on disk.
-// ===========================================================================
 
 describe("DB-only workflow — get_file_context + store_summaries without JSON artifacts", () => {
   let tmpDir: string;
@@ -1141,22 +1186,22 @@ describe("DB-only workflow — get_file_context + store_summaries without JSON a
     store = new KgStore(db);
 
     const fileRow = store.upsertFile({
-      path: "src/api/handler.ts",
-      mtime_ms: Date.now(),
       content_hash: "abc123",
       language: "typescript",
-      layer: "api",
       last_indexed_at: Date.now(),
+      layer: "api",
+      mtime_ms: Date.now(),
+      path: "src/api/handler.ts",
     });
 
     // Pre-seed a summary directly into the DB (no JSON file)
     store.upsertSummary({
-      file_id: fileRow.file_id!,
+      content_hash: "abc123",
       entity_id: null,
+      file_id: fileRow.file_id!,
+      model: null,
       scope: "file",
       summary: "DB-only summary for handler",
-      model: null,
-      content_hash: "abc123",
       updated_at: new Date().toISOString(),
     });
 
@@ -1164,7 +1209,7 @@ describe("DB-only workflow — get_file_context + store_summaries without JSON a
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   test("get_file_context returns DB summary when no summaries.json exists", async () => {
@@ -1222,7 +1267,9 @@ describe("DB-only workflow — get_file_context + store_summaries without JSON a
   });
 
   test("store_summaries is idempotent — calling twice with same data produces same DB state", async () => {
-    const summaryInput = { summaries: [{ file_path: "src/api/handler.ts", summary: "Stable summary" }] };
+    const summaryInput = {
+      summaries: [{ file_path: "src/api/handler.ts", summary: "Stable summary" }],
+    };
 
     // Call twice
     await storeSummaries(summaryInput, tmpDir);

@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../orchestration/wave-briefing.ts", () => ({
-  readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
+  readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("../orchestration/diff-cluster.ts", () => ({
@@ -13,9 +13,9 @@ vi.mock("../orchestration/diff-cluster.ts", () => ({
 }));
 
 import { clusterDiff } from "../orchestration/diff-cluster.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { writeMessage } from "../orchestration/messages.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
 let tmpDirs: string[] = [];
 
@@ -25,48 +25,30 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function makeBoard(overrides: Record<string, unknown> = {}): Board {
-  return {
-    flow: "debate-flow",
-    task: "test task",
-    entry: "research",
-    current_state: "research",
-    base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
-    blocked: null,
-    concerns: [],
-    skipped: [],
-    ...overrides,
-  } as Board;
-}
-
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "debate-flow",
-    description: "Test debate flow",
-    entry: "research",
     debate: {
-      teams: 2,
       composition: ["canon-researcher", "canon-architect"],
-      min_rounds: 2,
-      max_rounds: 4,
+      continue_to_build: true,
       convergence_check_after: 3,
       hitl_checkpoint: true,
-      continue_to_build: true,
+      max_rounds: 4,
+      min_rounds: 2,
+      teams: 2,
     },
-    states: {
-      research: {
-        type: "single",
-        agent: "canon-researcher",
-        transitions: { done: "build" },
-      },
-      build: { type: "terminal" },
-    },
+    description: "Test debate flow",
+    entry: "research",
+    name: "debate-flow",
     spawn_instructions: {
       research: "Research ${task}.",
+    },
+    states: {
+      build: { type: "terminal" },
+      research: {
+        agent: "canon-researcher",
+        transitions: { done: "build" },
+        type: "single",
+      },
     },
     ...overrides,
   };
@@ -74,7 +56,7 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
@@ -86,10 +68,10 @@ describe("getSpawnPrompt — debate expansion", () => {
     vi.mocked(clusterDiff).mockReturnValue(null);
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "research",
       flow: makeFlow(),
+      state_id: "research",
       variables: { task: "design auth" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(4);
@@ -102,14 +84,24 @@ describe("getSpawnPrompt — debate expansion", () => {
     const workspace = makeTmpDir();
     vi.mocked(clusterDiff).mockReturnValue(null);
 
-    await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "Use event sourcing.");
-    await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-architect", "Prefer CRUD plus audit.");
+    await writeMessage(
+      workspace,
+      "debate-round-1",
+      "round-1-team-a-canon-researcher",
+      "Use event sourcing.",
+    );
+    await writeMessage(
+      workspace,
+      "debate-round-1",
+      "round-1-team-b-canon-architect",
+      "Prefer CRUD plus audit.",
+    );
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "research",
       flow: makeFlow(),
+      state_id: "research",
       variables: { task: "design auth" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(4);

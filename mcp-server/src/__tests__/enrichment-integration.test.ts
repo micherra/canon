@@ -19,24 +19,16 @@
  * - Budget: combined section chars do not exceed 6000 with all sections populated
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  mkdtempSync,
-  mkdirSync,
-  writeFileSync,
-  rmSync,
-} from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import Database from "better-sqlite3";
-import { initDriftDb } from "../drift/drift-schema.ts";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DriftDb } from "../drift/drift-db.ts";
+import { initDriftDb } from "../drift/drift-schema.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { ReviewEntry } from "../schema.ts";
 
-// ---------------------------------------------------------------------------
 // Module mocks for context-enrichment tests
-// ---------------------------------------------------------------------------
 
 vi.mock("../adapters/git-adapter.ts", () => ({
   gitLog: vi.fn(),
@@ -54,86 +46,82 @@ vi.mock("../orchestration/scope-resolver.ts", () => ({
   resolveTaskScope: vi.fn(),
 }));
 
-// ---------------------------------------------------------------------------
 // Imports (after mocks)
-// ---------------------------------------------------------------------------
 
-import { assembleEnrichment, type EnrichmentInput } from "../orchestration/context-enrichment.ts";
 import { gitLog } from "../adapters/git-adapter.ts";
 import { DriftStore } from "../drift/store.ts";
+import { assembleEnrichment, type EnrichmentInput } from "../orchestration/context-enrichment.ts";
 import { resolveTaskScope } from "../orchestration/scope-resolver.ts";
 
-// ---------------------------------------------------------------------------
 // Helpers shared across sections
-// ---------------------------------------------------------------------------
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {
-    flow: "build",
-    task: "Test task",
-    entry: "implement",
-    current_state: "implement",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "implement",
+    entry: "implement",
+    flow: "build",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "Test task",
     ...overrides,
   };
 }
 
 function makeFlow(tier = "feature"): ResolvedFlow {
   return {
-    name: "build",
-    tier,
     description: "Build flow",
     entry: "implement",
+    name: "build",
     params: {},
     states: {
       implement: {
-        type: "single",
         spawn: { agent: "canon-implementor", prompt: "implement" },
         transitions: { done: "terminal" },
+        type: "single",
       },
       terminal: { type: "terminal" },
     },
+    tier,
   } as unknown as ResolvedFlow;
 }
 
 function makeInput(overrides: Partial<EnrichmentInput> = {}): EnrichmentInput {
   return {
-    workspace: "/tmp/workspace",
-    stateId: "implement",
     board: makeBoard(),
-    flow: makeFlow(),
     cwd: "/tmp/project",
+    flow: makeFlow(),
     projectDir: "/tmp/project",
+    stateId: "implement",
+    workspace: "/tmp/workspace",
     ...overrides,
   };
 }
 
 function makeGitOk(stdout: string) {
   return {
-    ok: true,
-    stdout,
-    stderr: "",
-    exitCode: 0,
-    timedOut: false,
     duration_ms: 20,
+    exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout,
+    timedOut: false,
   };
 }
 
 function makeGitFail() {
   return {
-    ok: false,
-    stdout: "",
-    stderr: "fatal: not a git repo",
-    exitCode: 128,
-    timedOut: false,
     duration_ms: 5,
+    exitCode: 128,
+    ok: false,
+    stderr: "fatal: not a git repo",
+    stdout: "",
+    timedOut: false,
   };
 }
 
@@ -144,9 +132,16 @@ function makeReviewEntry(
   nullFilePath = false,
 ): ReviewEntry {
   return {
-    review_id: `rev_${Math.random().toString(36).slice(2, 8)}`,
-    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     files,
+    honored: [],
+    review_id: `rev_${Math.random().toString(36).slice(2, 8)}`,
+    score: {
+      conventions: { passed: 1, total: 1 },
+      opinions: { passed: 1, total: 1 },
+      rules: { passed: 0, total: 1 },
+    },
+    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    verdict,
     violations: Array.from({ length: violationCount }, (_, i) => ({
       principle_id: `principle-${i}`,
       severity: "rule" as const,
@@ -154,19 +149,10 @@ function makeReviewEntry(
       ...(nullFilePath && i % 2 === 0 ? {} : { file_path: files[0] }),
       message: `Violation ${i}`,
     })),
-    honored: [],
-    score: {
-      rules: { passed: 0, total: 1 },
-      opinions: { passed: 1, total: 1 },
-      conventions: { passed: 1, total: 1 },
-    },
-    verdict,
   };
 }
 
-// ---------------------------------------------------------------------------
 // 1. End-to-end: scope resolver → enrichment assembler → pipeline integration
-// ---------------------------------------------------------------------------
 
 describe("enrichment integration — scope resolver → assembler pipeline", () => {
   let tmpDir: string;
@@ -183,7 +169,7 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
     vi.clearAllMocks();
   });
 
@@ -197,10 +183,10 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
 
     const result = await assembleEnrichment(
       makeInput({
-        workspace: tmpDir,
-        stateId: "research",
         board: makeBoard(),
         projectDir: undefined, // no drift
+        stateId: "research",
+        workspace: tmpDir,
       }),
     );
 
@@ -226,10 +212,10 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
 
     const result = await assembleEnrichment(
       makeInput({
-        workspace: tmpDir,
-        stateId: "implement",
         board: makeBoard(),
         projectDir: undefined,
+        stateId: "implement",
+        workspace: tmpDir,
       }),
     );
 
@@ -241,9 +227,7 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. Budget cap enforcement across all sections combined
-// ---------------------------------------------------------------------------
 
 describe("enrichment integration — combined budget cap enforcement", () => {
   beforeEach(() => {
@@ -258,25 +242,23 @@ describe("enrichment integration — combined budget cap enforcement", () => {
     // Long git output per file (forces budget trimming)
     const longMsg = "refactor-long-commit-message-to-stress-budget ".repeat(10);
     vi.mocked(gitLog).mockReturnValue(
-      makeGitOk(
-        Array.from({ length: 3 }, (_, i) => `sha${i} ${longMsg}`).join("\n"),
-      ),
+      makeGitOk(Array.from({ length: 3 }, (_, i) => `sha${i} ${longMsg}`).join("\n")),
     );
 
     // Drift has many violations
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(files.slice(0, 5), 5, "BLOCKING"),
-        makeReviewEntry(files.slice(5, 10), 3, "WARNING"),
-      ]),
+      getReviewsForFiles: vi
+        .fn()
+        .mockResolvedValue([
+          makeReviewEntry(files.slice(0, 5), 5, "BLOCKING"),
+          makeReviewEntry(files.slice(5, 10), 3, "WARNING"),
+        ]),
     };
     vi.mocked(DriftStore).mockImplementation(function () {
       return mockStore as any;
     });
 
-    const result = await assembleEnrichment(
-      makeInput({ flow: makeFlow("epic") }),
-    );
+    const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
     expect(result.content.length).toBeLessThanOrEqual(6000);
   });
@@ -288,23 +270,17 @@ describe("enrichment integration — combined budget cap enforcement", () => {
     // Maximally long per-file output
     const veryLongMsg = "x".repeat(300);
     vi.mocked(gitLog).mockReturnValue(
-      makeGitOk(
-        Array.from({ length: 5 }, (_, i) => `sha${i} ${veryLongMsg}`).join("\n"),
-      ),
+      makeGitOk(Array.from({ length: 5 }, (_, i) => `sha${i} ${veryLongMsg}`).join("\n")),
     );
 
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(files, 10, "BLOCKING"),
-      ]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 10, "BLOCKING")]),
     };
     vi.mocked(DriftStore).mockImplementation(function () {
       return mockStore as any;
     });
 
-    const result = await assembleEnrichment(
-      makeInput({ flow: makeFlow("epic") }),
-    );
+    const result = await assembleEnrichment(makeInput({ flow: makeFlow("epic") }));
 
     // Content must be <= 6000 chars
     expect(result.content.length).toBeLessThanOrEqual(6000);
@@ -328,9 +304,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
       return mockStore as any;
     });
 
-    const result = await assembleEnrichment(
-      makeInput({ flow: makeFlow("feature") }),
-    );
+    const result = await assembleEnrichment(makeInput({ flow: makeFlow("feature") }));
 
     // Count unique file entries in output: feature tier cap = 15
     const fileMatches = result.content.match(/`src\/file-\d+\.ts`/g) ?? [];
@@ -339,9 +313,7 @@ describe("enrichment integration — combined budget cap enforcement", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. Tensions section with conflicting signals
-// ---------------------------------------------------------------------------
 
 describe("enrichment integration — tensions section conflicting signals", () => {
   beforeEach(() => {
@@ -351,14 +323,12 @@ describe("enrichment integration — tensions section conflicting signals", () =
   it("tensions entry shows correct counts: violations N and commits M", async () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/foo.ts"]);
 
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1 First fix\nbcd2 Second fix\ncde3 Third fix"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1 First fix\nbcd2 Second fix\ncde3 Third fix"));
 
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(["src/foo.ts"], 4, "BLOCKING"),
-      ]),
+      getReviewsForFiles: vi
+        .fn()
+        .mockResolvedValue([makeReviewEntry(["src/foo.ts"], 4, "BLOCKING")]),
     };
     vi.mocked(DriftStore).mockImplementation(function () {
       return mockStore as any;
@@ -375,16 +345,14 @@ describe("enrichment integration — tensions section conflicting signals", () =
   it("tensions counts violations with null file_path (global violations count for file)", async () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/foo.ts"]);
 
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1 Add feature"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1 Add feature"));
 
     // makeReviewEntry with nullFilePath=true: violations alternate between
     // file_path=files[0] and no file_path (global). Both should count.
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(["src/foo.ts"], 4, "BLOCKING", true),
-      ]),
+      getReviewsForFiles: vi
+        .fn()
+        .mockResolvedValue([makeReviewEntry(["src/foo.ts"], 4, "BLOCKING", true)]),
     };
     vi.mocked(DriftStore).mockImplementation(function () {
       return mockStore as any;
@@ -404,9 +372,9 @@ describe("enrichment integration — tensions section conflicting signals", () =
     vi.mocked(gitLog).mockReturnValue(makeGitOk(""));
 
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(["src/no-git.ts"], 3, "WARNING"),
-      ]),
+      getReviewsForFiles: vi
+        .fn()
+        .mockResolvedValue([makeReviewEntry(["src/no-git.ts"], 3, "WARNING")]),
     };
     vi.mocked(DriftStore).mockImplementation(function () {
       return mockStore as any;
@@ -425,9 +393,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
     vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Fix bug"));
 
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(files, 2, "WARNING"),
-      ]),
+      getReviewsForFiles: vi.fn().mockResolvedValue([makeReviewEntry(files, 2, "WARNING")]),
     };
     vi.mocked(DriftStore).mockImplementation(function () {
       return mockStore as any;
@@ -435,9 +401,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
 
     const result = await assembleEnrichment(makeInput());
 
-    const tensionSection = result.content
-      .split("\n")
-      .filter((line) => line.match(/^- \*\*`/));
+    const tensionSection = result.content.split("\n").filter((line) => line.match(/^- \*\*`/));
     // Maximum 3 tension entries even with 5 conflicting files
     expect(tensionSection.length).toBeLessThanOrEqual(3);
     expect(tensionSection.length).toBeGreaterThan(0);
@@ -449,9 +413,9 @@ describe("enrichment integration — tensions section conflicting signals", () =
     vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Add feature\nbcd5678 Fix test"));
 
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(["src/a.ts", "src/b.ts"], 0, "CLEAN"),
-      ]),
+      getReviewsForFiles: vi
+        .fn()
+        .mockResolvedValue([makeReviewEntry(["src/a.ts", "src/b.ts"], 0, "CLEAN")]),
     };
     vi.mocked(DriftStore).mockImplementation(function () {
       return mockStore as any;
@@ -466,9 +430,7 @@ describe("enrichment integration — tensions section conflicting signals", () =
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. Graceful degradation when data sources are missing
-// ---------------------------------------------------------------------------
 
 describe("enrichment integration — graceful degradation", () => {
   beforeEach(() => {
@@ -508,9 +470,9 @@ describe("enrichment integration — graceful degradation", () => {
     vi.mocked(gitLog).mockReturnValue(makeGitFail());
 
     const mockStore = {
-      getReviewsForFiles: vi.fn().mockResolvedValue([
-        makeReviewEntry(["src/foo.ts"], 2, "WARNING"),
-      ]),
+      getReviewsForFiles: vi
+        .fn()
+        .mockResolvedValue([makeReviewEntry(["src/foo.ts"], 2, "WARNING")]),
     };
     vi.mocked(DriftStore).mockImplementation(function () {
       return mockStore as any;
@@ -577,11 +539,9 @@ describe("enrichment integration — graceful degradation", () => {
 
     let result: Awaited<ReturnType<typeof assembleEnrichment>> | undefined;
     try {
-      result = await assembleEnrichment(
-        makeInput({ workspace: currentWs, projectDir: undefined }),
-      );
+      result = await assembleEnrichment(makeInput({ projectDir: undefined, workspace: currentWs }));
     } finally {
-      rmSync(emptyWs, { recursive: true, force: true });
+      rmSync(emptyWs, { force: true, recursive: true });
     }
 
     expect(result).toBeDefined();
@@ -591,9 +551,7 @@ describe("enrichment integration — graceful degradation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. escapeDollarBrace on git commit messages containing ${...}
-// ---------------------------------------------------------------------------
 
 describe("enrichment integration — escapeDollarBrace on git commit messages", () => {
   beforeEach(() => {
@@ -626,9 +584,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
     vi.mocked(resolveTaskScope).mockReturnValue(["src/spawn.ts"]);
 
     vi.mocked(gitLog).mockReturnValue(
-      makeGitOk(
-        "abc1234 Add ${task} and ${enrichment} and ${progress} to prompt",
-      ),
+      makeGitOk("abc1234 Add ${task} and ${enrichment} and ${progress} to prompt"),
     );
 
     const mockStore = {
@@ -652,9 +608,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
   it("commit SHA prefix is not treated as part of subject (SHA has no dollar signs)", async () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/foo.ts"]);
 
-    vi.mocked(gitLog).mockReturnValue(
-      makeGitOk("abc1234 Normal commit without dollar braces"),
-    );
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Normal commit without dollar braces"));
 
     const mockStore = {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
@@ -672,9 +626,7 @@ describe("enrichment integration — escapeDollarBrace on git commit messages", 
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. DriftDb.getReviewsByFiles: malformed JSON in files column (Known Gap enr-01)
-// ---------------------------------------------------------------------------
 
 describe("DriftDb.getReviewsByFiles — malformed JSON in files column", () => {
   it("silently skips reviews with malformed files JSON and returns only valid matching reviews", () => {
@@ -683,17 +635,17 @@ describe("DriftDb.getReviewsByFiles — malformed JSON in files column", () => {
 
     // Insert a valid review
     const validEntry: ReviewEntry = {
-      review_id: "rev_valid_001",
-      timestamp: new Date().toISOString(),
       files: ["src/foo.ts"],
-      violations: [],
       honored: [],
+      review_id: "rev_valid_001",
       score: {
-        rules: { passed: 1, total: 1 },
-        opinions: { passed: 1, total: 1 },
         conventions: { passed: 1, total: 1 },
+        opinions: { passed: 1, total: 1 },
+        rules: { passed: 1, total: 1 },
       },
+      timestamp: new Date().toISOString(),
       verdict: "CLEAN",
+      violations: [],
     };
     store.appendReview(validEntry);
 
@@ -730,9 +682,7 @@ describe("DriftDb.getReviewsByFiles — malformed JSON in files column", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. assembleWorkspaceSection: REVIEW.md file type and 3-workspace cap
-// ---------------------------------------------------------------------------
 
 describe("enrichment integration — workspace section edge cases", () => {
   let tmpDir: string;
@@ -749,7 +699,7 @@ describe("enrichment integration — workspace section edge cases", () => {
   });
 
   afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
+    rmSync(tmpDir, { force: true, recursive: true });
     vi.clearAllMocks();
   });
 
@@ -770,7 +720,7 @@ describe("enrichment integration — workspace section edge cases", () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/important.ts"]);
 
     const result = await assembleEnrichment(
-      makeInput({ workspace: currentWs, projectDir: undefined }),
+      makeInput({ projectDir: undefined, workspace: currentWs }),
     );
 
     expect(result.content).toContain("Prior Work");
@@ -794,7 +744,7 @@ describe("enrichment integration — workspace section edge cases", () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/shared.ts"]);
 
     const result = await assembleEnrichment(
-      makeInput({ workspace: currentWs, projectDir: undefined }),
+      makeInput({ projectDir: undefined, workspace: currentWs }),
     );
 
     // Count "sibling-N" references in the output
@@ -819,7 +769,7 @@ describe("enrichment integration — workspace section edge cases", () => {
     vi.mocked(resolveTaskScope).mockReturnValue(["src/important.ts"]);
 
     const result = await assembleEnrichment(
-      makeInput({ workspace: currentWs, projectDir: undefined }),
+      makeInput({ projectDir: undefined, workspace: currentWs }),
     );
 
     expect(result.content).not.toContain("sibling-irrelevant");

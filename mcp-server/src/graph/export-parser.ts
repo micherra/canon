@@ -25,27 +25,37 @@ const JS_EXPORT_RES = [
   { re: /export\s+default\s+class\s+(\w+)/g, type: "defaultClass" },
 ];
 
-function extractJsExports(content: string): string[] {
-  const exports = new Set<string>();
-
-  for (const { re } of JS_EXPORT_RES) {
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(content)) !== null) {
-      if (match[1]) exports.add(match[1].trim());
-    }
+function collectRegexMatches(re: RegExp, content: string, exports: Set<string>): void {
+  let match = re.exec(content);
+  while (match !== null) {
+    if (match[1]) exports.add(match[1].trim());
+    match = re.exec(content);
   }
+}
 
-  // Named exports: export { a, b, c }
+function resolveExportedName(rawName: string): string {
+  const parts = rawName.trim().split(/\s+as\s+/);
+  return (parts.length > 1 ? parts[1] : parts[0]).trim();
+}
+
+function collectNamedExports(content: string, exports: Set<string>): void {
   const namedRe = /export\s*\{([^}]+)\}/g;
-  let match: RegExpExecArray | null;
-  while ((match = namedRe.exec(content)) !== null) {
+  let match = namedRe.exec(content);
+  while (match !== null) {
     for (const name of match[1].split(",")) {
-      const parts = name.trim().split(/\s+as\s+/);
-      const exported = (parts.length > 1 ? parts[1] : parts[0]).trim();
+      const exported = resolveExportedName(name);
       if (exported) exports.add(exported);
     }
+    match = namedRe.exec(content);
   }
+}
 
+function extractJsExports(content: string): string[] {
+  const exports = new Set<string>();
+  for (const { re } of JS_EXPORT_RES) {
+    collectRegexMatches(re, content, exports);
+  }
+  collectNamedExports(content, exports);
   return Array.from(exports);
 }
 
@@ -76,14 +86,17 @@ function extractPyExports(content: string): string[] {
 
   // Top-level def and class definitions
   const defRe = /^def\s+(\w+)/gm;
-  let match: RegExpExecArray | null;
-  while ((match = defRe.exec(content)) !== null) {
+  let match = defRe.exec(content);
+  while (match !== null) {
     add(match[1]);
+    match = defRe.exec(content);
   }
 
   const classRe = /^class\s+(\w+)/gm;
-  while ((match = classRe.exec(content)) !== null) {
+  match = classRe.exec(content);
+  while (match !== null) {
     add(match[1]);
+    match = classRe.exec(content);
   }
 
   return exports;

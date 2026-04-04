@@ -4,15 +4,12 @@
  * Tests now go against ExecutionStore (SQLite), not the file-based JSONL ops.
  * The resolveEventAgents pure function is tested here too.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import Database from "better-sqlite3";
+
+import type Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import { ExecutionStore } from "../orchestration/execution-store.ts";
 import { resolveEventAgents } from "../orchestration/wave-events.ts";
-
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
 
 let db: Database.Database;
 let store: ExecutionStore;
@@ -26,18 +23,16 @@ afterEach(() => {
   db.close();
 });
 
-// ---------------------------------------------------------------------------
 // Store-backed wave event operations
-// ---------------------------------------------------------------------------
 
 describe("postWaveEvent (store)", () => {
   it("inserts a pending event with id, type, timestamp, and payload", () => {
     store.postWaveEvent({
       id: "evt_test_001",
-      type: "add_task",
       payload: { description: "New task to add" },
-      timestamp: new Date().toISOString(),
       status: "pending",
+      timestamp: new Date().toISOString(),
+      type: "add_task",
     });
 
     const events = store.getWaveEvents();
@@ -49,9 +44,27 @@ describe("postWaveEvent (store)", () => {
   });
 
   it("inserts multiple events that can all be read back", () => {
-    store.postWaveEvent({ id: "evt-1", type: "add_task", payload: { description: "First" }, timestamp: "2026-01-01T00:00:00.000Z", status: "pending" });
-    store.postWaveEvent({ id: "evt-2", type: "skip_task", payload: { task_id: "task-01" }, timestamp: "2026-01-01T00:01:00.000Z", status: "pending" });
-    store.postWaveEvent({ id: "evt-3", type: "pause", payload: {}, timestamp: "2026-01-01T00:02:00.000Z", status: "pending" });
+    store.postWaveEvent({
+      id: "evt-1",
+      payload: { description: "First" },
+      status: "pending",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      type: "add_task",
+    });
+    store.postWaveEvent({
+      id: "evt-2",
+      payload: { task_id: "task-01" },
+      status: "pending",
+      timestamp: "2026-01-01T00:01:00.000Z",
+      type: "skip_task",
+    });
+    store.postWaveEvent({
+      id: "evt-3",
+      payload: {},
+      status: "pending",
+      timestamp: "2026-01-01T00:02:00.000Z",
+      type: "pause",
+    });
 
     const events = store.getWaveEvents();
     expect(events).toHaveLength(3);
@@ -63,10 +76,10 @@ describe("postWaveEvent (store)", () => {
   it("preserves payload fields", () => {
     store.postWaveEvent({
       id: "evt-payload",
-      type: "reprioritize",
       payload: { task_id: "task-03", wave: 2 },
-      timestamp: new Date().toISOString(),
       status: "pending",
+      timestamp: new Date().toISOString(),
+      type: "reprioritize",
     });
 
     const events = store.getWaveEvents();
@@ -81,9 +94,21 @@ describe("getWaveEvents (store)", () => {
   });
 
   it("returns all events regardless of status", () => {
-    store.postWaveEvent({ id: "evt-1", type: "add_task", payload: {}, timestamp: "2026-01-01T00:00:00.000Z", status: "pending" });
-    store.postWaveEvent({ id: "evt-2", type: "guidance", payload: {}, timestamp: "2026-01-01T00:01:00.000Z", status: "pending" });
-    store.updateWaveEvent("evt-1", { status: "applied", applied_at: new Date().toISOString() });
+    store.postWaveEvent({
+      id: "evt-1",
+      payload: {},
+      status: "pending",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      type: "add_task",
+    });
+    store.postWaveEvent({
+      id: "evt-2",
+      payload: {},
+      status: "pending",
+      timestamp: "2026-01-01T00:01:00.000Z",
+      type: "guidance",
+    });
+    store.updateWaveEvent("evt-1", { applied_at: new Date().toISOString(), status: "applied" });
 
     const all = store.getWaveEvents();
     expect(all).toHaveLength(2);
@@ -93,11 +118,29 @@ describe("getWaveEvents (store)", () => {
   });
 
   it("filters by status=pending", () => {
-    store.postWaveEvent({ id: "evt-1", type: "add_task", payload: {}, timestamp: "2026-01-01T00:00:00.000Z", status: "pending" });
-    store.postWaveEvent({ id: "evt-2", type: "guidance", payload: {}, timestamp: "2026-01-01T00:01:00.000Z", status: "pending" });
-    store.postWaveEvent({ id: "evt-3", type: "pause", payload: {}, timestamp: "2026-01-01T00:02:00.000Z", status: "pending" });
-    store.updateWaveEvent("evt-1", { status: "applied", applied_at: new Date().toISOString() });
-    store.updateWaveEvent("evt-2", { status: "rejected", rejection_reason: "Not relevant" });
+    store.postWaveEvent({
+      id: "evt-1",
+      payload: {},
+      status: "pending",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      type: "add_task",
+    });
+    store.postWaveEvent({
+      id: "evt-2",
+      payload: {},
+      status: "pending",
+      timestamp: "2026-01-01T00:01:00.000Z",
+      type: "guidance",
+    });
+    store.postWaveEvent({
+      id: "evt-3",
+      payload: {},
+      status: "pending",
+      timestamp: "2026-01-01T00:02:00.000Z",
+      type: "pause",
+    });
+    store.updateWaveEvent("evt-1", { applied_at: new Date().toISOString(), status: "applied" });
+    store.updateWaveEvent("evt-2", { rejection_reason: "Not relevant", status: "rejected" });
 
     const pending = store.getWaveEvents({ status: "pending" });
     expect(pending).toHaveLength(1);
@@ -109,9 +152,15 @@ describe("getWaveEvents (store)", () => {
 describe("updateWaveEvent (store)", () => {
   it("transitions pending to applied, sets applied_at", () => {
     const before = new Date().toISOString();
-    store.postWaveEvent({ id: "evt-apply", type: "add_task", payload: { description: "Apply me" }, timestamp: new Date().toISOString(), status: "pending" });
+    store.postWaveEvent({
+      id: "evt-apply",
+      payload: { description: "Apply me" },
+      status: "pending",
+      timestamp: new Date().toISOString(),
+      type: "add_task",
+    });
 
-    store.updateWaveEvent("evt-apply", { status: "applied", applied_at: new Date().toISOString() });
+    store.updateWaveEvent("evt-apply", { applied_at: new Date().toISOString(), status: "applied" });
 
     const events = store.getWaveEvents();
     const updated = events.find((e) => e.id === "evt-apply")!;
@@ -122,9 +171,18 @@ describe("updateWaveEvent (store)", () => {
   });
 
   it("transitions pending to rejected, sets rejection_reason", () => {
-    store.postWaveEvent({ id: "evt-reject", type: "add_task", payload: {}, timestamp: new Date().toISOString(), status: "pending" });
+    store.postWaveEvent({
+      id: "evt-reject",
+      payload: {},
+      status: "pending",
+      timestamp: new Date().toISOString(),
+      type: "add_task",
+    });
 
-    store.updateWaveEvent("evt-reject", { status: "rejected", rejection_reason: "Out of scope for this wave" });
+    store.updateWaveEvent("evt-reject", {
+      rejection_reason: "Out of scope for this wave",
+      status: "rejected",
+    });
 
     const events = store.getWaveEvents();
     const updated = events.find((e) => e.id === "evt-reject")!;
@@ -133,7 +191,13 @@ describe("updateWaveEvent (store)", () => {
   });
 
   it("attaches resolution when provided", () => {
-    store.postWaveEvent({ id: "evt-res", type: "add_task", payload: {}, timestamp: new Date().toISOString(), status: "pending" });
+    store.postWaveEvent({
+      id: "evt-res",
+      payload: {},
+      status: "pending",
+      timestamp: new Date().toISOString(),
+      type: "add_task",
+    });
 
     const resolution = {
       agents_spawned: ["canon-architect"],
@@ -141,7 +205,11 @@ describe("updateWaveEvent (store)", () => {
       summary: "Task planned and slotted",
     };
 
-    store.updateWaveEvent("evt-res", { status: "applied", applied_at: new Date().toISOString(), resolution });
+    store.updateWaveEvent("evt-res", {
+      applied_at: new Date().toISOString(),
+      resolution,
+      status: "applied",
+    });
 
     const events = store.getWaveEvents();
     const updated = events.find((e) => e.id === "evt-res")!;
@@ -150,10 +218,25 @@ describe("updateWaveEvent (store)", () => {
   });
 
   it("does not modify other events", () => {
-    store.postWaveEvent({ id: "evt-target", type: "add_task", payload: {}, timestamp: "2026-01-01T00:00:00.000Z", status: "pending" });
-    store.postWaveEvent({ id: "evt-other", type: "pause", payload: {}, timestamp: "2026-01-01T00:01:00.000Z", status: "pending" });
+    store.postWaveEvent({
+      id: "evt-target",
+      payload: {},
+      status: "pending",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      type: "add_task",
+    });
+    store.postWaveEvent({
+      id: "evt-other",
+      payload: {},
+      status: "pending",
+      timestamp: "2026-01-01T00:01:00.000Z",
+      type: "pause",
+    });
 
-    store.updateWaveEvent("evt-target", { status: "applied", applied_at: new Date().toISOString() });
+    store.updateWaveEvent("evt-target", {
+      applied_at: new Date().toISOString(),
+      status: "applied",
+    });
 
     const events = store.getWaveEvents();
     const untouched = events.find((e) => e.id === "evt-other")!;
@@ -161,8 +244,17 @@ describe("updateWaveEvent (store)", () => {
   });
 
   it("resolution is absent when not provided on apply", () => {
-    store.postWaveEvent({ id: "evt-no-res", type: "skip_task", payload: {}, timestamp: new Date().toISOString(), status: "pending" });
-    store.updateWaveEvent("evt-no-res", { status: "applied", applied_at: new Date().toISOString() });
+    store.postWaveEvent({
+      id: "evt-no-res",
+      payload: {},
+      status: "pending",
+      timestamp: new Date().toISOString(),
+      type: "skip_task",
+    });
+    store.updateWaveEvent("evt-no-res", {
+      applied_at: new Date().toISOString(),
+      status: "applied",
+    });
 
     const events = store.getWaveEvents();
     const updated = events.find((e) => e.id === "evt-no-res")!;
@@ -171,9 +263,7 @@ describe("updateWaveEvent (store)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // resolveEventAgents (pure function — unchanged)
-// ---------------------------------------------------------------------------
 
 describe("resolveEventAgents", () => {
   it("add_task returns canon-architect", () => {

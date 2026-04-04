@@ -12,18 +12,14 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { EntityRow, FileRow } from "../graph/kg-types.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {
-    path: "src/A.ts",
-    mtime_ms: 1700000000000,
     content_hash: "abc123",
     language: "typescript",
-    layer: "domain",
     last_indexed_at: Date.now(),
+    layer: "domain",
+    mtime_ms: 1700000000000,
+    path: "src/A.ts",
     ...overrides,
   };
 }
@@ -34,22 +30,20 @@ function makeEntityRow(
 ): Omit<EntityRow, "entity_id"> {
   return {
     file_id: fileId,
+    is_default_export: false,
+    is_exported: false,
+    kind: "function",
+    line_end: 10,
+    line_start: 1,
+    metadata: null,
     name: "myFunc",
     qualified_name: "src/A.ts::myFunc",
-    kind: "function",
-    line_start: 1,
-    line_end: 10,
-    is_exported: false,
-    is_default_export: false,
     signature: null,
-    metadata: null,
     ...overrides,
   };
 }
 
-// ---------------------------------------------------------------------------
 // getBlastRadius
-// ---------------------------------------------------------------------------
 
 describe("KgQuery.getBlastRadius()", () => {
   let db: Database.Database;
@@ -68,8 +62,8 @@ describe("KgQuery.getBlastRadius()", () => {
 
   test("returns entities that DEPEND ON the seed (callers), not callees", () => {
     // Setup: entity A calls entity B. Seed = B. Expected: A is in results.
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
 
     const entityA = store.insertEntity(
       makeEntityRow(fileA.file_id!, {
@@ -86,11 +80,11 @@ describe("KgQuery.getBlastRadius()", () => {
 
     // A calls B (A depends on B)
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: entityA.entity_id!,
       target_entity_id: entityB.entity_id!,
-      edge_type: "calls",
-      confidence: 1.0,
-      metadata: null,
     });
 
     // Blast radius of B should include A (A depends on B, so changes to B affect A)
@@ -109,29 +103,29 @@ describe("KgQuery.getBlastRadius()", () => {
 
   test("does NOT follow contains edges", () => {
     // Setup: file entity "contains" funcA. Seed = funcA. Result should NOT include file.
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
     const fileEntity = store.insertEntity(
       makeEntityRow(fileA.file_id!, {
+        kind: "file",
         name: "A",
         qualified_name: "src/A.ts",
-        kind: "file",
       }),
     );
     const funcA = store.insertEntity(
       makeEntityRow(fileA.file_id!, {
+        kind: "function",
         name: "funcA",
         qualified_name: "src/A.ts::funcA",
-        kind: "function",
       }),
     );
 
     // File entity "contains" funcA
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "contains",
+      metadata: null,
       source_entity_id: fileEntity.entity_id!,
       target_entity_id: funcA.entity_id!,
-      edge_type: "contains",
-      confidence: 1.0,
-      metadata: null,
     });
 
     // Blast radius of funcA should NOT include fileEntity (contains is excluded)
@@ -143,10 +137,10 @@ describe("KgQuery.getBlastRadius()", () => {
   test("respects maxDepth", () => {
     // Setup: A calls B calls C calls D. Seed = D. maxDepth = 2.
     // Expected: C (depth 1) and B (depth 2) are included, A (depth 3) is NOT.
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "domain" }));
-    const fileD = store.upsertFile(makeFileRow({ path: "src/D.ts", layer: "shared" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
+    const fileC = store.upsertFile(makeFileRow({ layer: "domain", path: "src/C.ts" }));
+    const fileD = store.upsertFile(makeFileRow({ layer: "shared", path: "src/D.ts" }));
 
     const entityA = store.insertEntity(
       makeEntityRow(fileA.file_id!, { name: "funcA", qualified_name: "src/A.ts::funcA" }),
@@ -163,25 +157,25 @@ describe("KgQuery.getBlastRadius()", () => {
 
     // A->B->C->D call chain
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: entityA.entity_id!,
       target_entity_id: entityB.entity_id!,
-      edge_type: "calls",
-      confidence: 1.0,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: entityB.entity_id!,
       target_entity_id: entityC.entity_id!,
-      edge_type: "calls",
-      confidence: 1.0,
-      metadata: null,
     });
     store.insertEdge({
+      confidence: 1.0,
+      edge_type: "calls",
+      metadata: null,
       source_entity_id: entityC.entity_id!,
       target_entity_id: entityD.entity_id!,
-      edge_type: "calls",
-      confidence: 1.0,
-      metadata: null,
     });
 
     // Seed = D, maxDepth = 2 → should include C (depth 1) and B (depth 2)
@@ -199,7 +193,7 @@ describe("KgQuery.getBlastRadius()", () => {
   });
 
   test("returns only seed at depth 0 when there are no callers", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
     const entityA = store.insertEntity(
       makeEntityRow(fileA.file_id!, { name: "funcA", qualified_name: "src/A.ts::funcA" }),
     );
@@ -212,9 +206,7 @@ describe("KgQuery.getBlastRadius()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getFileBlastRadius
-// ---------------------------------------------------------------------------
 
 describe("KgQuery.getFileBlastRadius()", () => {
   let db: Database.Database;
@@ -233,16 +225,20 @@ describe("KgQuery.getFileBlastRadius()", () => {
 
   test("returns files that reference the seed file via file_edges", () => {
     // Setup: File A imports File B. Seed = B. Expected: A is in results.
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api", language: "typescript" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain", language: "typescript" }));
+    const fileA = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "api", path: "src/A.ts" }),
+    );
+    const fileB = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "domain", path: "src/B.ts" }),
+    );
 
     store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileB.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: "import { funcB } from './B'",
       relation: "imports",
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
     });
 
     const results = query.getFileBlastRadius(fileB.file_id!);
@@ -255,25 +251,31 @@ describe("KgQuery.getFileBlastRadius()", () => {
 
   test("returns correct depth for multi-hop paths", () => {
     // Setup: A imports B, B imports C. Seed = C. Expected: B(depth 1), A(depth 2).
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api", language: "typescript" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain", language: "typescript" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared", language: "typescript" }));
+    const fileA = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "api", path: "src/A.ts" }),
+    );
+    const fileB = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "domain", path: "src/B.ts" }),
+    );
+    const fileC = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "shared", path: "src/C.ts" }),
+    );
 
     store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileB.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: "import { funcB } from './B'",
       relation: "imports",
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
     });
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: "import { funcC } from './C'",
       relation: "imports",
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
     });
 
     const results = query.getFileBlastRadius(fileC.file_id!, 2);
@@ -286,7 +288,7 @@ describe("KgQuery.getFileBlastRadius()", () => {
   });
 
   test("returns empty array when no file_edges point to the seed", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
 
     const results = query.getFileBlastRadius(fileA.file_id!);
     expect(results).toEqual([]);
@@ -294,36 +296,42 @@ describe("KgQuery.getFileBlastRadius()", () => {
 
   test("uses shortest path depth when a file is reachable via multiple routes", () => {
     // Setup: A->C (direct), A->B->C. Seed = C. A should appear at depth 1 (shortest).
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api", language: "typescript" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain", language: "typescript" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared", language: "typescript" }));
+    const fileA = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "api", path: "src/A.ts" }),
+    );
+    const fileB = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "domain", path: "src/B.ts" }),
+    );
+    const fileC = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "shared", path: "src/C.ts" }),
+    );
 
     // A imports C directly (depth 1)
     store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: "import { funcC } from './C'",
       relation: "imports",
+      source_file_id: fileA.file_id!,
+      target_file_id: fileC.file_id!,
     });
     // A imports B (depth 1 route to B)
     store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileB.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: "import { funcB } from './B'",
       relation: "imports",
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
     });
     // B imports C (depth 2 route from A to C via B)
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: "import { funcC } from './C'",
       relation: "imports",
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
     });
 
     const results = query.getFileBlastRadius(fileC.file_id!, 3);
@@ -338,34 +346,42 @@ describe("KgQuery.getFileBlastRadius()", () => {
   test("respects maxDepth", () => {
     // A imports B, B imports C, C imports D. Seed = D. maxDepth = 1.
     // Expected: only C (depth 1). B and A are excluded.
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api", language: "typescript" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain", language: "typescript" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "domain", language: "typescript" }));
-    const fileD = store.upsertFile(makeFileRow({ path: "src/D.ts", layer: "shared", language: "typescript" }));
+    const fileA = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "api", path: "src/A.ts" }),
+    );
+    const fileB = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "domain", path: "src/B.ts" }),
+    );
+    const fileC = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "domain", path: "src/C.ts" }),
+    );
+    const fileD = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "shared", path: "src/D.ts" }),
+    );
 
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileA.file_id!,
       target_file_id: fileB.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileB.file_id!,
       target_file_id: fileC.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
-      source_file_id: fileC.file_id!,
-      target_file_id: fileD.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileC.file_id!,
+      target_file_id: fileD.file_id!,
     });
 
     const results = query.getFileBlastRadius(fileD.file_id!, 1);
@@ -377,16 +393,20 @@ describe("KgQuery.getFileBlastRadius()", () => {
   });
 
   test("includes layer and language fields in results", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api", language: "typescript" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "shared", language: "typescript" }));
+    const fileA = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "api", path: "src/A.ts" }),
+    );
+    const fileB = store.upsertFile(
+      makeFileRow({ language: "typescript", layer: "shared", path: "src/B.ts" }),
+    );
 
     store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileB.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
     });
 
     const results = query.getFileBlastRadius(fileB.file_id!);
@@ -397,9 +417,7 @@ describe("KgQuery.getFileBlastRadius()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getFileDegrees
-// ---------------------------------------------------------------------------
 
 describe("KgQuery.getFileDegrees()", () => {
   let db: Database.Database;
@@ -417,35 +435,35 @@ describe("KgQuery.getFileDegrees()", () => {
   });
 
   test("returns correct in_degree and out_degree for a file with known edges", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "domain" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
+    const fileC = store.upsertFile(makeFileRow({ layer: "domain", path: "src/C.ts" }));
 
     // A imports B and C (out_degree = 2)
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileA.file_id!,
       target_file_id: fileB.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileA.file_id!,
+      target_file_id: fileC.file_id!,
     });
     // B also imports C (so C has in_degree = 2)
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
     });
 
     const degreesA = query.getFileDegrees(fileA.file_id!);
@@ -462,16 +480,14 @@ describe("KgQuery.getFileDegrees()", () => {
   });
 
   test("returns zero degrees for a file with no edges", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
     const degrees = query.getFileDegrees(fileA.file_id!);
     expect(degrees.in_degree).toBe(0);
     expect(degrees.out_degree).toBe(0);
   });
 });
 
-// ---------------------------------------------------------------------------
 // getAllFileDegrees
-// ---------------------------------------------------------------------------
 
 describe("KgQuery.getAllFileDegrees()", () => {
   let db: Database.Database;
@@ -489,34 +505,34 @@ describe("KgQuery.getAllFileDegrees()", () => {
   });
 
   test("returns degree map matching manual count", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
+    const fileC = store.upsertFile(makeFileRow({ layer: "shared", path: "src/C.ts" }));
 
     // A -> B, A -> C, B -> C
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileA.file_id!,
       target_file_id: fileB.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileA.file_id!,
       target_file_id: fileC.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
     });
 
     const map = query.getAllFileDegrees();
@@ -532,9 +548,7 @@ describe("KgQuery.getAllFileDegrees()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getFileAdjacencyList
-// ---------------------------------------------------------------------------
 
 describe("KgQuery.getFileAdjacencyList()", () => {
   let db: Database.Database;
@@ -552,26 +566,26 @@ describe("KgQuery.getFileAdjacencyList()", () => {
   });
 
   test("returns correct adjacency structure", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
+    const fileC = store.upsertFile(makeFileRow({ layer: "shared", path: "src/C.ts" }));
 
     // A -> B, A -> C
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileA.file_id!,
       target_file_id: fileB.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileA.file_id!,
+      target_file_id: fileC.file_id!,
     });
 
     const adj = query.getFileAdjacencyList();
@@ -590,9 +604,7 @@ describe("KgQuery.getFileAdjacencyList()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getFileMetrics
-// ---------------------------------------------------------------------------
 
 describe("KgQuery.getFileMetrics()", () => {
   let db: Database.Database;
@@ -615,16 +627,16 @@ describe("KgQuery.getFileMetrics()", () => {
   });
 
   test("returns FileMetrics with correct values for a basic file", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "domain" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "shared" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "shared", path: "src/B.ts" }));
 
     store.insertFileEdge({
-      source_file_id: fileA.file_id!,
-      target_file_id: fileB.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileA.file_id!,
+      target_file_id: fileB.file_id!,
     });
 
     const metrics = query.getFileMetrics("src/A.ts");
@@ -642,24 +654,24 @@ describe("KgQuery.getFileMetrics()", () => {
 
   test("returns FileMetrics for a hub file (many in_degree)", () => {
     // Create a shared file that many files import — will be a hub
-    const sharedFile = store.upsertFile(makeFileRow({ path: "src/shared.ts", layer: "shared" }));
+    const sharedFile = store.upsertFile(makeFileRow({ layer: "shared", path: "src/shared.ts" }));
     // Create 12 files that all import shared.ts (top 10 by degree makes it a hub)
     for (let i = 0; i < 12; i++) {
-      const f = store.upsertFile(makeFileRow({ path: `src/module${i}.ts`, layer: "domain" }));
+      const f = store.upsertFile(makeFileRow({ layer: "domain", path: `src/module${i}.ts` }));
       store.insertFileEdge({
-        source_file_id: f.file_id!,
-        target_file_id: sharedFile.file_id!,
-        edge_type: "imports",
         confidence: 1.0,
+        edge_type: "imports",
         evidence: null,
         relation: null,
+        source_file_id: f.file_id!,
+        target_file_id: sharedFile.file_id!,
       });
     }
 
     const hubMaps = computeFileInsightMaps(db);
     const metrics = query.getFileMetrics("src/shared.ts", {
-      hubPaths: hubMaps.hubPaths,
       cycleMemberPaths: hubMaps.cycleMemberPaths,
+      hubPaths: hubMaps.hubPaths,
       layerViolationsByPath: hubMaps.layerViolationsByPath,
     });
 
@@ -669,25 +681,25 @@ describe("KgQuery.getFileMetrics()", () => {
   });
 
   test("returns FileMetrics for a cycle member", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/cycle-a.ts", layer: "domain" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/cycle-b.ts", layer: "domain" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/cycle-a.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/cycle-b.ts" }));
 
     // A -> B and B -> A (cycle)
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileA.file_id!,
       target_file_id: fileB.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileA.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileB.file_id!,
+      target_file_id: fileA.file_id!,
     });
 
     const maps = computeFileInsightMaps(db);
@@ -702,16 +714,16 @@ describe("KgQuery.getFileMetrics()", () => {
 
   test("returns FileMetrics with layer violations", () => {
     // shared -> domain is a violation (shared should not depend on domain)
-    const sharedFile = store.upsertFile(makeFileRow({ path: "src/shared.ts", layer: "shared" }));
-    const domainFile = store.upsertFile(makeFileRow({ path: "src/domain.ts", layer: "domain" }));
+    const sharedFile = store.upsertFile(makeFileRow({ layer: "shared", path: "src/shared.ts" }));
+    const domainFile = store.upsertFile(makeFileRow({ layer: "domain", path: "src/domain.ts" }));
 
     store.insertFileEdge({
-      source_file_id: sharedFile.file_id!,
-      target_file_id: domainFile.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: sharedFile.file_id!,
+      target_file_id: domainFile.file_id!,
     });
 
     const maps = computeFileInsightMaps(db);
@@ -728,9 +740,7 @@ describe("KgQuery.getFileMetrics()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getKgFreshnessMs
-// ---------------------------------------------------------------------------
 
 describe("KgQuery.getKgFreshnessMs()", () => {
   let db: Database.Database;
@@ -786,9 +796,7 @@ describe("KgQuery.getKgFreshnessMs()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getSubgraph
-// ---------------------------------------------------------------------------
 
 describe("KgQuery.getSubgraph()", () => {
   let db: Database.Database;
@@ -806,28 +814,28 @@ describe("KgQuery.getSubgraph()", () => {
   });
 
   test("returns correct nodes and edges for a subset of files", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
-    const fileC = store.upsertFile(makeFileRow({ path: "src/C.ts", layer: "shared" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
+    const fileC = store.upsertFile(makeFileRow({ layer: "shared", path: "src/C.ts" }));
     // fileD is unrelated
-    store.upsertFile(makeFileRow({ path: "src/D.ts", layer: "infra" }));
+    store.upsertFile(makeFileRow({ layer: "infra", path: "src/D.ts" }));
 
     // A -> B, B -> C
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileA.file_id!,
       target_file_id: fileB.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileC.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileB.file_id!,
+      target_file_id: fileC.file_id!,
     });
 
     const subgraph = query.getSubgraph(["src/A.ts", "src/B.ts"]);
@@ -859,8 +867,8 @@ describe("KgQuery.getSubgraph()", () => {
   });
 
   test("includes file_id and layer in nodes", () => {
-    store.upsertFile(makeFileRow({ path: "src/A.ts", layer: "api" }));
-    store.upsertFile(makeFileRow({ path: "src/B.ts", layer: "domain" }));
+    store.upsertFile(makeFileRow({ layer: "api", path: "src/A.ts" }));
+    store.upsertFile(makeFileRow({ layer: "domain", path: "src/B.ts" }));
 
     const subgraph = query.getSubgraph(["src/A.ts"]);
     // With no edges, only A is returned (no connected files)
@@ -871,9 +879,7 @@ describe("KgQuery.getSubgraph()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // computeFileInsightMaps
-// ---------------------------------------------------------------------------
 
 describe("computeFileInsightMaps()", () => {
   let db: Database.Database;
@@ -890,16 +896,16 @@ describe("computeFileInsightMaps()", () => {
 
   test("correctly identifies hubs (top 10 by total degree)", () => {
     // Create 12 files where one file has many connections
-    const hubFile = store.upsertFile(makeFileRow({ path: "src/hub.ts", layer: "shared" }));
+    const hubFile = store.upsertFile(makeFileRow({ layer: "shared", path: "src/hub.ts" }));
     for (let i = 0; i < 11; i++) {
-      const f = store.upsertFile(makeFileRow({ path: `src/mod${i}.ts`, layer: "domain" }));
+      const f = store.upsertFile(makeFileRow({ layer: "domain", path: `src/mod${i}.ts` }));
       store.insertFileEdge({
-        source_file_id: f.file_id!,
-        target_file_id: hubFile.file_id!,
-        edge_type: "imports",
         confidence: 1.0,
+        edge_type: "imports",
         evidence: null,
         relation: null,
+        source_file_id: f.file_id!,
+        target_file_id: hubFile.file_id!,
       });
     }
 
@@ -908,25 +914,25 @@ describe("computeFileInsightMaps()", () => {
   });
 
   test("correctly identifies cycle membership", () => {
-    const fileA = store.upsertFile(makeFileRow({ path: "src/cycle-a.ts", layer: "domain" }));
-    const fileB = store.upsertFile(makeFileRow({ path: "src/cycle-b.ts", layer: "domain" }));
+    const fileA = store.upsertFile(makeFileRow({ layer: "domain", path: "src/cycle-a.ts" }));
+    const fileB = store.upsertFile(makeFileRow({ layer: "domain", path: "src/cycle-b.ts" }));
 
     // A -> B and B -> A (cycle)
     store.insertFileEdge({
+      confidence: 1.0,
+      edge_type: "imports",
+      evidence: null,
+      relation: null,
       source_file_id: fileA.file_id!,
       target_file_id: fileB.file_id!,
-      edge_type: "imports",
-      confidence: 1.0,
-      evidence: null,
-      relation: null,
     });
     store.insertFileEdge({
-      source_file_id: fileB.file_id!,
-      target_file_id: fileA.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: fileB.file_id!,
+      target_file_id: fileA.file_id!,
     });
 
     const maps = computeFileInsightMaps(db);
@@ -937,16 +943,16 @@ describe("computeFileInsightMaps()", () => {
 
   test("correctly identifies layer violations", () => {
     // shared -> domain is a violation
-    const sharedFile = store.upsertFile(makeFileRow({ path: "src/shared.ts", layer: "shared" }));
-    const domainFile = store.upsertFile(makeFileRow({ path: "src/domain.ts", layer: "domain" }));
+    const sharedFile = store.upsertFile(makeFileRow({ layer: "shared", path: "src/shared.ts" }));
+    const domainFile = store.upsertFile(makeFileRow({ layer: "domain", path: "src/domain.ts" }));
 
     store.insertFileEdge({
-      source_file_id: sharedFile.file_id!,
-      target_file_id: domainFile.file_id!,
-      edge_type: "imports",
       confidence: 1.0,
+      edge_type: "imports",
       evidence: null,
       relation: null,
+      source_file_id: sharedFile.file_id!,
+      target_file_id: domainFile.file_id!,
     });
 
     const maps = computeFileInsightMaps(db);

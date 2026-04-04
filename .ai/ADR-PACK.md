@@ -1334,6 +1334,748 @@ interface AgentMetrics {
 
 ---
 
+## ADR-019: Execution History and Decision Traceability
+
+### Context
+
+Canon has a `.canon/history/` concept in `clean.md` and `post-merge-cleanup.sh` that copies workspace files (decisions/, notes/) to an archive directory before deletion. This was designed for the file-based world — but ADR-001 moves execution state to SQLite, ADR-015 records transcripts, and ADR-016 feeds learnings from transcripts. The file-copy archive model is disconnected from all of these.
+
+The deeper problem: Canon produces rich data across multiple layers — git commits, flow executions, design documents, review verdicts, transcripts, principle changes — but there's no connective tissue between them. You can't answer "why was it built this way?", "what led to this regression?", or "what principle emerged from that work?" without manually correlating across systems.
+
+History should serve four lenses:
+
+1. **What** — what changed, what was built (git commits + flow runs)
+2. **How** — what approach was taken, what was tried and rejected (designs + transcripts)
+3. **Why** — what motivated the decision, what constraints shaped it (task context + rationale)
+4. **Learnings** — what patterns emerged, what principles changed as a result (learner output + provenance)
+
+### Decision
+
+Replace the file-copy archive model with structured history in SQLite. History is the connective tissue between git, flows, decisions, and principles — all stored as queryable records with cross-references.
+
+**Commit-flow linkage:**
+
+When `report_result` records a completed implementation state, record the commit SHAs produced by the implementor's worktree merge. At `complete_flow`, aggregate into `flow_runs.commits`. Enables bidirectional traversal: commit → flow that produced it, flow → commits it generated.
+
+```typescript
+// Added to execution_states
+interface StateCommits {
+  shas: string[];          // merge commits from worktree
+  files_changed: string[]; // paths touched
+}
+
+// Added to flow_runs
+interface FlowCommits {
+  shas: string[];          // all commits across all states
+  diff_stat: string;       // summary stat line
+}
+```
+
+**Decision extraction at flow completion:**
+
+Instead of archiving DESIGN.md to `.canon/history/`, extract structured decision records into a `decisions` table at `complete_flow` time. The scribe agent (context sync) or a dedicated extraction step reads the architect's DESIGN.md and reviewer's REVIEW.md and produces decision records.
+
+```sql
+CREATE TABLE decisions (
+  id              TEXT PRIMARY KEY,
+  flow_run_id     TEXT NOT NULL REFERENCES flow_runs(id),
+  decision_type   TEXT NOT NULL,  -- 'architecture' | 'tradeoff' | 'rejection' | 'constraint'
+  summary         TEXT NOT NULL,  -- one-line description
+  rationale       TEXT NOT NULL,  -- why this choice was made
+  alternatives    TEXT,           -- JSON array of considered alternatives
+  evidence_ref    TEXT,           -- transcript path + turn range, or file path
+  files_affected  TEXT,           -- JSON array of file paths this decision touches
+  created_at      TEXT NOT NULL
+);
+
+CREATE INDEX idx_decisions_flow ON decisions(flow_run_id);
+CREATE INDEX idx_decisions_files ON decisions(files_affected);
+```
+
+Decision types:
+- **architecture** — structural choice (e.g., "use SQLite instead of file-based storage")
+- **tradeoff** — explicit tradeoff acknowledged (e.g., "accepting migration cost for query benefits")
+- **rejection** — approach considered and rejected, with reason (valuable for avoiding re-exploration)
+- **constraint** — external constraint that shaped the design (e.g., "must support Node 24+")
+
+**Regression provenance chain:**
+
+When a reviewer or tester finds a regression, the trace is: failing test → `git blame` → commit SHA → `flow_runs.commits` → `execution_states` → `decisions` → transcript excerpt. All SQL joins, no file archaeology.
+
+**Learning provenance:**
+
+ADR-016's learner output gains provenance fields:
+
+```typescript
+interface LearningProposal {
+  // ... existing fields from ADR-016 ...
+  provenance: {
+    flow_run_ids: string[];         // flows that surfaced the pattern
+    transcript_refs: TranscriptRef[]; // specific transcript excerpts as evidence
+    decision_ids?: string[];        // decisions that informed the insight
+    drift_entries?: string[];       // drift report entries
+  };
+}
+
+interface TranscriptRef {
+  transcript_path: string;
+  turn_start: number;
+  turn_end: number;
+  summary: string;   // one-line description of what this excerpt shows
+}
+```
+
+When a proposal is accepted and becomes a principle update, the principle's metadata records the learning ID. The chain: "why does this principle exist?" → learning record → flow evidence → transcripts → decisions.
+
+**Evolution timeline query:**
+
+A `get_history` MCP tool that takes a file path, principle ID, or topic keyword and returns the timeline of related activity:
+
+```typescript
+interface HistoryQuery {
+  scope: string;              // file path, principle ID, or keyword
+  scope_type: 'file' | 'principle' | 'topic';
+  limit?: number;             // max entries (default 20)
+  since?: string;             // ISO date filter
+}
+
+interface HistoryEntry {
+  timestamp: string;
+  type: 'flow_run' | 'decision' | 'regression' | 'principle_change' | 'learning';
+  summary: string;
+  flow_run_id?: string;
+  decision_id?: string;
+  commit_shas?: string[];
+  links: Record<string, string>;  // cross-references to related entries
+}
+```
+
+For file paths: joins `flow_runs.commits` → git diff → matching files, plus `decisions.files_affected`. For principles: joins learning provenance + drift entries. For topics: full-text search across decision summaries and learning observations.
+
+**Elimination of file-copy archive:**
+
+- `clean` command drops `--archive` flag and `.canon/history/` directory
+- `post-merge-cleanup.sh` drops the archive step — just deletes workspace dirs
+- `commands/init.md` drops `mkdir .canon/history`
+- Decision extraction runs asynchronously via the background janitor (ADR-020), not inline at `complete_flow` — the janitor queries unextracted flow runs and processes them in batch
+
+### Consequences
+
+Positive: full traceability from any entry point (commit, file, principle, regression) to the complete context of why; queryable history replaces opaque file archives; regression investigation becomes SQL joins instead of manual archaeology; learning provenance creates accountability for principle evolution; no stale archive files that drift from reality.
+
+Negative: `decisions` table requires structured output from architect/reviewer (ADR-010 output contracts help); `get_history` tool is a new query surface; commit-flow linkage requires implementor agents to report SHAs (already available from worktree merge); decision extraction is eventually consistent (janitor may not run immediately after flow completion).
+
+### Dependencies
+
+ADR-001 (SQLite foundation — `flow_runs`, `execution_states` tables), ADR-010 (structured output from architect/reviewer for decision extraction), ADR-015 (transcripts as evidence layer), ADR-016 (learner provenance fields).
+
+### Implementation
+
+- Add `commits` TEXT column to `execution_states` (JSON array of SHAs)
+- Add `commits` and `diff_stat` TEXT columns to `flow_runs`
+- Record merge commit SHAs in `report_result` for implementation states
+- Aggregate commits into `flow_runs` at `complete_flow`
+- Create `decisions` table with indexes on `flow_run_id` and `files_affected`
+- Implement decision extraction: scribe reads DESIGN.md + REVIEW.md at context-sync state, produces structured decision records, writes to DB
+- Add `provenance` fields to ADR-016 `LearningProposal` type
+- Add learning-to-principle linkage: principle metadata `learned_from` field
+- Implement `get_history` MCP tool with file, principle, and topic query modes
+- Remove `--archive` from `clean` command; remove `.canon/history/` directory support
+- Remove archive logic from `post-merge-cleanup.sh`
+- Update `commands/doctor.md` to drop `.canon/history/` check
+
+---
+
+## ADR-020: Background Janitor Agent
+
+### Context
+
+Canon accumulates housekeeping responsibilities across multiple trigger points and owners:
+
+| Task | Current owner | Trigger | Problem |
+|------|--------------|---------|---------|
+| Decision extraction | Scribe at `complete_flow` (ADR-019) | Inline | Blocks flow completion |
+| Workspace cleanup | User via `/canon:clean` | Manual | Rarely happens |
+| Branch/worktree cleanup | `post-merge-cleanup.sh` | Git hook | May not be installed |
+| Stale worktree pruning | Nobody | None | Orphaned worktrees accumulate indefinitely |
+| Transcript size management | Nobody | None | ADR-015 mentions cleanup but assigns no owner |
+| Learn gate evaluation | Server at `complete_flow` (ADR-016) | Inline | Adds latency to flow completion |
+| KG freshness refresh | Nobody consistently | None | ADR-007 mentions background refresh but no trigger |
+| SQLite WAL checkpoint | Nobody | None | WAL files grow unbounded during long sessions |
+| Drift DB maintenance | JSONL auto-rotation | Inline | Legacy mechanism, will be SQLite post ADR-001 |
+
+Half of these run inline at `complete_flow` (making the terminal path heavier with each new ADR) and the other half depend on manual action or optional hooks. The pattern keeps growing — every new ADR adds another "and also do X at completion time" clause.
+
+Claude Code's approach: background consolidation tasks (Auto-Dream) run on session boundaries with gating logic. Canon needs the same but scoped to flow lifecycle, not session lifecycle.
+
+### Decision
+
+Introduce a background janitor agent that consolidates all housekeeping into a single, idempotent, asynchronous process. The janitor runs as a background job (ADR-007) and is the sole owner of maintenance work that doesn't need to block flow execution.
+
+**Trigger model (two triggers):**
+
+1. **Post-flow signal.** When `complete_flow` finishes recording the terminal state, it queues a janitor run instead of performing housekeeping inline. The `drive_flow` terminal response includes `{ janitor_queued: true }`. The orchestrator spawns the janitor as a background agent (fire-and-forget).
+
+2. **Session-start sweep.** On first `init_workspace` or `load_flow` call in a session, check if a janitor run is overdue (last run > N hours ago). If so, queue one. Catches accumulated work from sessions that ended without completing a flow.
+
+**Gating (prevent thrashing):**
+
+```typescript
+interface JanitorGateConfig {
+  enabled: boolean;                  // default: true
+  min_hours_between_runs: number;    // default: 1
+  lock_stale_after_minutes: number;  // default: 30
+}
+```
+
+Gate evaluation: feature check → time gate → lock acquisition. Lock file: `.canon/janitor.lock` (PID + mtime, same pattern as ADR-016 learn lock). If a janitor is already running or ran recently, skip.
+
+**Task list (ordered cheapest-first):**
+
+```typescript
+interface JanitorManifest {
+  tasks: JanitorTask[];
+  started_at: string;
+  completed_at?: string;
+  results: JanitorTaskResult[];
+}
+
+type JanitorTask =
+  | 'prune_worktrees'        // 1. git worktree list → remove orphans (seconds)
+  | 'prune_workspaces'       // 2. delete workspaces for merged branches (seconds)
+  | 'wal_checkpoint'         // 3. PRAGMA wal_checkpoint on all SQLite DBs (seconds)
+  | 'extract_decisions'      // 4. ADR-019: extract from completed flows not yet extracted (moderate)
+  | 'trim_transcripts'       // 5. ADR-015: compress/remove transcripts older than retention window (moderate)
+  | 'evaluate_learn_gate'    // 6. ADR-016: check gate, spawn learner if passed (cheap check, expensive spawn)
+  | 'refresh_kg'             // 7. ADR-007: re-index KG if stale beyond threshold (expensive)
+  | 'vacuum_dbs';            // 8. VACUUM on SQLite DBs if fragmentation exceeds threshold (expensive, infrequent)
+```
+
+Each task is independently skippable — if a task fails, log the error and continue to the next. The manifest records per-task results for diagnostics (ADR-003).
+
+**Task details:**
+
+1. **Prune worktrees.** `git worktree list --porcelain` → identify worktrees whose branch no longer exists or whose `.canon/worktrees/` or `.claude/worktrees/` directory entry is stale. `git worktree remove --force` for confirmed orphans. Safety: never prune a worktree with uncommitted changes.
+
+2. **Prune workspaces.** `git branch --merged main` → for each merged branch, delete `.canon/workspaces/{sanitized}/` if it exists. Subsumes `post-merge-cleanup.sh` entirely — the hook becomes a one-liner that signals the janitor instead of doing the work.
+
+3. **WAL checkpoint.** `PRAGMA wal_checkpoint(TRUNCATE)` on `orchestration.db`, `knowledge-graph.db`, `drift.db`. Prevents WAL files from growing during long sessions.
+
+4. **Extract decisions.** Query `flow_runs` for completed flows where `decisions_extracted = false` (new boolean column). For each, read workspace DESIGN.md/REVIEW.md (if workspace still exists) or reconstruct from execution state. Write to `decisions` table (ADR-019). Mark `decisions_extracted = true`. This removes decision extraction from the `complete_flow` inline path.
+
+5. **Trim transcripts.** Configurable retention: `transcript_retention_days` (default: 30). Transcripts older than retention and belonging to completed flows get compressed (gzip) or deleted. Transcript summary (assistant messages only) preserved in `execution_states.transcript_summary` before deletion.
+
+6. **Evaluate learn gate.** Identical to ADR-016 gate logic, but pulled out of the `complete_flow` path. If gate passes, spawn `canon-learner` as a background agent. The janitor doesn't wait for the learner to finish.
+
+7. **Refresh KG.** Query `KgQuery.getKgFreshnessMs()`. If stale beyond threshold (default: 24h), queue a `codebase_graph` background job (ADR-007).
+
+8. **Vacuum DBs.** `PRAGMA freelist_count` / `PRAGMA page_count` → if fragmentation > 20%, run `VACUUM`. Expensive and infrequent — only after significant data deletion (workspace pruning, transcript trimming).
+
+**What `complete_flow` sheds:**
+
+After ADR-020, the `complete_flow` path does only:
+- Record terminal state + aggregate metrics into `flow_runs` (existing)
+- Queue janitor signal (new, trivial)
+
+Everything else — decision extraction, learn gate, cleanup — is the janitor's job.
+
+**What `clean` command becomes:**
+
+`/canon:clean` becomes "run the janitor now, synchronously, for a specific scope":
+- `clean` (no args) → janitor sweep for current branch workspace
+- `clean --all` → janitor sweep for all workspaces
+- `clean --force` → skip confirmation, run all tasks
+
+The janitor does the same work either way; `clean` just provides the interactive UX and scoping.
+
+**What `post-merge-cleanup.sh` becomes:**
+
+The hook shrinks to:
+
+```bash
+# Signal the janitor — actual cleanup happens asynchronously
+touch .canon/janitor.trigger
+```
+
+Or it can be removed entirely if session-start sweep is frequent enough.
+
+**Janitor agent profile (ADR-014 tool scoping):**
+
+```yaml
+janitor:
+  tools:
+    allow: [Bash, Read, Glob, Grep]  # needs git and filesystem ops
+    deny: [Edit, Write, Agent]        # never modifies source code or spawns sub-agents
+  bash:
+    allow_patterns:
+      - "git worktree *"
+      - "git branch *"
+      - "rm -rf .canon/workspaces/*"
+      - "rm -rf .canon/worktrees/*"
+      - "rm -rf .claude/worktrees/*"
+    deny_patterns:
+      - "git push *"
+      - "git reset *"
+      - "rm -rf [^.]*"               # only delete dotfile directories
+```
+
+The janitor can delete workspace/worktree directories and run git worktree commands, but cannot modify source code, push to remotes, or spawn other agents (except via the learn-gate task which signals rather than spawns directly).
+
+**Diagnostics integration (ADR-003):**
+
+Janitor runs are recorded as events in the `events` table:
+
+```typescript
+interface JanitorEvent {
+  type: 'janitor_run';
+  correlation_id: string;
+  trigger: 'post_flow' | 'session_start' | 'manual';
+  tasks_run: number;
+  tasks_skipped: number;
+  tasks_failed: number;
+  duration_ms: number;
+  details: JanitorTaskResult[];
+}
+```
+
+The `diagnose` command includes a janitor health section: last run time, tasks that consistently fail, worktree/workspace accumulation trends.
+
+### Consequences
+
+Positive: `complete_flow` stays fast (no inline housekeeping); single owner for all maintenance work eliminates "nobody's job" gaps; idempotent design means missed runs self-heal on next trigger; `clean` command and `post-merge-cleanup.sh` become thin wrappers instead of independent implementations; worktree/workspace accumulation finally has an automated solution; diagnostic visibility into maintenance health.
+
+Negative: background job dependency (ADR-007 must land first); janitor failures are silent by default (mitigated by diagnostics events and `diagnose` command); another agent definition to maintain; lock contention possible if manual `clean` and background janitor overlap (mitigated by shared lock file).
+
+### Dependencies
+
+ADR-001 (SQLite for state queries and event recording), ADR-007 (background job infrastructure), ADR-014 (tool scoping profile), ADR-019 (decision extraction task). Soft dependencies: ADR-003 (diagnostics events), ADR-015 (transcript management), ADR-016 (learn gate evaluation).
+
+### Implementation
+
+- Define `JanitorGateConfig` in `.canon/config` schema
+- Implement lock file management (shared pattern with ADR-016 learn lock)
+- Implement janitor task runner: ordered task list, per-task error isolation, manifest recording
+- Implement each task:
+  - `prune_worktrees`: parse `git worktree list --porcelain`, safety checks, removal
+  - `prune_workspaces`: `git branch --merged`, sanitize, delete workspace dirs
+  - `wal_checkpoint`: iterate `.canon/*.db`, run pragma
+  - `extract_decisions`: query unextracted flow runs, read artifacts, write to `decisions` table
+  - `trim_transcripts`: query old transcripts, summarize, compress/delete
+  - `evaluate_learn_gate`: port gate logic from ADR-016 inline path
+  - `refresh_kg`: check freshness, queue background job
+  - `vacuum_dbs`: check fragmentation, conditional vacuum
+- Add `janitor_queued` signal to `drive_flow` terminal response
+- Add `decisions_extracted` boolean column to `flow_runs`
+- Add `transcript_summary` TEXT column to `execution_states`
+- Add `transcript_retention_days` to config schema
+- Create `agents/canon-janitor.md` agent definition with tool scoping profile
+- Refactor `clean` command to invoke janitor tasks directly
+- Refactor `post-merge-cleanup.sh` to signal janitor (or remove entirely)
+- Add janitor health section to `diagnose` command
+- Record `janitor_run` events in `events` table
+
+---
+
+## ADR-021: Agent Memory Across Flows
+
+### Context
+
+Every agent spawn starts cold. ADR-008 (context assembly) injects static file affinity and KG summaries. ADR-009a (continue-vs-spawn) preserves context within a fix loop. ADR-016 (auto-learn) captures long-horizon patterns — but with a 48-hour gate and 5-flow minimum, its output is too coarse and too slow to help the next flow that runs 20 minutes later.
+
+The gap: when a developer runs three feature flows touching the same subsystem in a week, each researcher re-discovers the same architecture, each implementor re-learns the same patterns, each reviewer re-identifies the same hotspots. There is no short-term operational memory — the middle ground between "what does this file do" (ADR-008 static context) and "what principle matters" (ADR-016 learned patterns).
+
+### Decision
+
+Add a per-subsystem working memory layer stored in the project's KG database (ADR-005). When an agent completes a state, structured output (ADR-010) summaries are recorded as memory entries alongside the `report_result` call. The prompt pipeline (ADR-006, stage 1) queries this table at spawn time and injects a compact "recent work in this area" block.
+
+**Storage — project-scoped by architecture:**
+
+Each project has its own `.canon/knowledge-graph.db`. The memory table lives there, inheriting project isolation automatically. No project ID column needed — the database file is the boundary. No cross-project contamination is possible because the MCP server resolves `projectDir` at startup and operates on a single project's databases per session.
+
+```sql
+CREATE TABLE subsystem_memory (
+  id              TEXT PRIMARY KEY,
+  layer           TEXT NOT NULL,     -- KG layer (e.g., 'src/tools', 'src/db')
+  directory_prefix TEXT NOT NULL,    -- directory prefix for scoping
+  agent_type      TEXT NOT NULL,     -- which agent produced this memory
+  flow_run_id     TEXT NOT NULL,     -- which flow produced it
+  summary         TEXT NOT NULL,     -- compact factual context
+  patterns        TEXT,              -- JSON array of observed patterns
+  gotchas         TEXT,              -- JSON array of known issues/surprises
+  files_touched   TEXT,              -- JSON array of file paths
+  updated_at      TEXT NOT NULL,
+  ttl_expires_at  TEXT NOT NULL      -- default: 7 days from updated_at
+);
+
+CREATE INDEX idx_subsystem_memory_layer ON subsystem_memory(layer, directory_prefix);
+CREATE INDEX idx_subsystem_memory_expiry ON subsystem_memory(ttl_expires_at);
+```
+
+**Memory content (factual, not opinionated):**
+
+- Files recently changed and why
+- Architectural patterns observed (e.g., "this module uses repository pattern with SQLite")
+- Known gotchas (e.g., "tests require WAL mode enabled", "circular dependency between X and Y")
+- Recent review findings in this area
+
+This is distinct from ADR-016 principle proposals which require human review. Memory entries are factual observations that expire — they inform but don't prescribe.
+
+**Injection via prompt pipeline (ADR-006):**
+
+Stage 1 (`resolve-context.ts`) queries `subsystem_memory` for entries matching the task's file affinity (already computed by ADR-008). Entries are formatted as a `## Recent Work in This Area` block, capped at ~500 tokens, newest first. Stale entries (past TTL) are excluded from injection but not yet deleted (that's the janitor's job).
+
+**Population at `report_result`:**
+
+When `report_result` processes a completed state with structured output (ADR-010), it extracts memory-worthy observations from the agent's summary. Not every state produces memory — only states where the agent's output includes file-level observations (researcher findings, implementor summaries, reviewer verdicts). A `memory_entries` optional field on structured output tools enables agents to explicitly contribute memory.
+
+**TTL and expiry:**
+
+Default TTL: 7 days. Configurable per-project in `.canon/config`. The janitor (ADR-020) handles expiry as a scheduled task — query `ttl_expires_at < now()`, delete expired rows. If the same subsystem is revisited before expiry, the entry is updated (upsert on `layer + directory_prefix + agent_type`), resetting the TTL.
+
+### Consequences
+
+Positive: agents start warm instead of cold when revisiting recent work areas; reduces orientation ratio (ADR-003a) for repeat-area flows; factual context with TTL avoids the staleness risk of permanent storage; project-scoped by default via existing DB architecture; builds on existing pipeline and output contract infrastructure.
+
+Negative: memory population adds a write to the `report_result` path (mitigated by async insert); prompt pipeline injection adds a DB query per spawn (mitigated by indexed lookup); memory can become misleading if the codebase changes significantly within the TTL window (mitigated by short default TTL and recency-first ordering).
+
+### Dependencies
+
+ADR-001 (SQLite foundation), ADR-005 (KG database), ADR-006 (prompt pipeline injection point), ADR-008 (file affinity for memory scoping), ADR-010 (structured output for memory population). Soft: ADR-020 (janitor for TTL expiry).
+
+### Implementation
+
+- Create `subsystem_memory` table in KG database schema
+- Add `memory_entries` optional field to structured output tool schemas (ADR-010)
+- Implement memory extraction in `report_result` for applicable state types
+- Add memory query to prompt pipeline stage 1 (`resolve-context.ts`)
+- Format memory block with token cap (~500 tokens)
+- Add memory TTL config to `.canon/config` schema
+- Add `expire_memory` task to janitor manifest (ADR-020)
+- Add memory stats to `diagnose` command (entry count, hit rate, average age)
+
+---
+
+## ADR-009b: Orchestrator Tool Surface Consolidation
+
+### Context
+
+ADR-009 introduced `drive_flow` to reduce orchestrator LLM calls from O(states) to O(hitl_points). The implementation exists (1215 lines), with typed response shapes (`SpawnRequest`, `HitlBreakpoint`, `ApprovalBreakpoint`). However, the old manual orchestration tools — `enter_and_prepare_state`, `get_spawn_prompt`, `check_convergence` — still exist as public MCP tools alongside `drive_flow`, creating two parallel execution paths.
+
+`canon-orchestrator.md` (363 lines) contains extensive prose about how to drive the state machine manually. `CLAUDE.md` duplicates orchestration rules. `report_and_enter_next_state` coexists with separate `report_result`. The orchestrator LLM sometimes falls back to the manual path when `drive_flow` would suffice, wasting calls and risking inconsistent state.
+
+This is not a new ADR — it's the completion of ADR-009's promise, whose consequences for tool surface reduction haven't been executed.
+
+### Decision
+
+Deprecate the manual orchestration path. Internalize `enter_and_prepare_state`, `get_spawn_prompt`, and `check_convergence` as private functions called only by `drive_flow`. Remove them from the MCP tool registry.
+
+**Tool surface after consolidation:**
+
+| Tool | Status | Purpose |
+|------|--------|---------|
+| `load_flow` | Keep | Entry point — returns resolved flow object |
+| `init_workspace` | Keep | Creates/resumes workspace |
+| `drive_flow` | Keep (primary) | Drives state machine, returns spawn requests or HITL breakpoints |
+| `report_result` | Keep | Reports agent completion, consumed by `drive_flow` on next call |
+| `update_board` | Keep | Board management |
+| `enter_and_prepare_state` | **Remove** | Internalized into `drive_flow` |
+| `get_spawn_prompt` | **Remove** | Internalized into `drive_flow` — prompt returned in `SpawnRequest` |
+| `check_convergence` | **Remove** | Internalized into `drive_flow` — convergence checked at state transitions |
+| `report_and_enter_next_state` | **Remove** | Replaced by `report_result` + `drive_flow` next call |
+
+**Orchestrator agent simplification:**
+
+`canon-orchestrator.md` shrinks from ~363 lines to ~150, covering three concerns only:
+1. **Intent classification** — detect build/plan/review/question/chat and select flow
+2. **`drive_flow` loop** — call `drive_flow`, process response (spawn agent or present HITL), call `report_result`, repeat
+3. **HITL handling** — present breakpoints to user, relay decisions back
+
+All prose about manual state transitions, spawn prompt assembly, convergence checking, and state preparation is deleted.
+
+**`CLAUDE.md` consolidation:**
+
+The "Driving the State Machine" section in `CLAUDE.md` currently describes a 4-step manual loop (`load_flow` → `init_workspace` → `enter_and_prepare_state` → `report_result`). This becomes a 3-step loop (`load_flow` → `init_workspace` → `drive_flow`/`report_result` cycle). The section shrinks proportionally.
+
+### Consequences
+
+Positive: eliminates dual-path confusion; reduces orchestrator LLM context by ~200 lines of instructions; prevents fallback to manual path; fewer MCP tools to maintain and document; `drive_flow` becomes the single source of truth for state transition logic.
+
+Negative: breaking change for any external consumers of the removed tools (mitigated by Canon being pre-1.0 with no external API contract); requires updating all orchestrator instructions simultaneously.
+
+### Dependencies
+
+ADR-009 (the implementation this completes).
+
+### Implementation
+
+- Remove `enter_and_prepare_state`, `get_spawn_prompt`, `check_convergence`, `report_and_enter_next_state` from MCP tool registry
+- Keep their logic as internal functions called by `drive_flow`
+- Rewrite `canon-orchestrator.md` to three-concern structure (~150 lines)
+- Update `CLAUDE.md` "Driving the State Machine" section
+- Update `CANON-REFERENCE.md` MCP tool tables
+- Remove references to deprecated tools from all agent instruction files
+- Update any tests that call deprecated tools directly
+
+---
+
+## ADR-022: Flow-Level Cost Budgets
+
+### Context
+
+The ADR pack has no cost awareness. ADR-003a tracks agent performance metrics (token counts, tool calls, duration) retrospectively via `record_agent_metrics`, but there is no mechanism to constrain execution cost proactively. A stuck fixer in a retry loop can burn tokens disproportionate to the task before stuck detection triggers (which requires 2+ matching iterations on the same status — ADR-004).
+
+The orientation ratio metric (ADR-003a) is useful for optimization but provides no guardrail. ADR-017's plan approval gates set expectations at planning time, but there is no checkpoint that detects when reality diverges from those expectations during execution.
+
+### Decision
+
+Add a `budget` block to flow definitions, evaluated by `drive_flow` (ADR-009) at each state boundary.
+
+**Flow-level budget definition:**
+
+```yaml
+feature:
+  budget:
+    max_total_tokens: 500000       # total across all states
+    max_state_tokens: 150000       # per individual state
+    warn_at_pct: 80                # inject warning into next spawn prompt
+```
+
+Budgets are optional. Flows without a `budget` block run unconstrained (current behavior). Budget values are validated at flow load time (ADR-004).
+
+**Budget evaluation in `drive_flow`:**
+
+When `report_result` records agent metrics (ADR-003a fields: `input_tokens`, `output_tokens`, `cache_read_tokens`), `drive_flow` accumulates totals into a running `flow_cost` tracker on the execution record.
+
+At each state transition:
+1. **Under warn threshold** — proceed normally
+2. **At warn threshold (e.g., 80%)** — `drive_flow` adds a `budget_warning` field to the next `SpawnRequest` prompt suffix: "Budget is at X% — be concise and focused"
+3. **At limit (100%)** — `drive_flow` returns a `HitlBreakpoint` with type `budget_exceeded`: "Flow has used N tokens (budget: M). Approve additional spend or abort."
+
+**Per-state budget:**
+
+`max_state_tokens` catches individual agents that spiral. If a single state exceeds the per-state budget, `drive_flow` records the state as `budget_exceeded` and transitions to the HITL breakpoint. This catches fix loops faster than stuck detection (which needs pattern matching across iterations).
+
+**Budget override at HITL:**
+
+When the orchestrator presents a `budget_exceeded` breakpoint, the user can:
+- **Approve** — budget extended by the original amount (another 500K tokens)
+- **Approve with new limit** — user specifies a new total
+- **Abort** — flow terminates with `budget_exceeded` status
+
+**Interaction with ADR-017 (approval gates):**
+
+Plan approval (ADR-017) tells you the expected shape. Budget gates tell you when reality diverges. Together they form a cost-awareness loop: plan → approve → execute → budget check → course-correct if needed.
+
+### Consequences
+
+Positive: prevents runaway token consumption; gives users visibility into flow cost at execution time; per-state budget catches spiraling agents faster than stuck detection; warning threshold enables soft course-correction before hard stop; optional design means no impact on existing flows.
+
+Negative: budget values are hard to calibrate until you have historical data (mitigated by making budgets optional and using ADR-003a metrics to inform initial values); token counting across providers may vary; budget overhead adds a comparison at each state boundary (negligible).
+
+### Dependencies
+
+ADR-003a (agent metrics — provides token counts), ADR-009 (`drive_flow` — evaluation point), ADR-004 (flow validation — budget schema validation).
+
+### Implementation
+
+- Add `BudgetSchema` to flow validation (ADR-004)
+- Add `flow_cost` accumulator to execution record in `orchestration.db`
+- Implement budget evaluation in `drive_flow` state transition logic
+- Add `budget_warning` field to `SpawnRequest` type
+- Add `budget_exceeded` type to `HitlBreakpoint`
+- Add budget status to flow completion summary
+- Add budget usage to `diagnose` command output
+- Document recommended budget values per flow type based on ADR-003a historical data
+
+---
+
+## ADR-023: Deterministic Agent Evaluation
+
+### Context
+
+Canon records rich data about what agents do — ADR-015 transcripts capture full conversations, ADR-003a metrics track performance, ADR-010 structured outputs provide typed results. But there is no systematic way to evaluate whether agents are getting better or worse after changes.
+
+When you change an agent's instructions, refine the prompt pipeline (ADR-006), or adjust context assembly policy (ADR-008), you have no baseline to compare against. ADR-013's `simulate_flow` tests flow *structure* (transitions, reachability), but not flow *quality* (do agents produce good output given specific inputs?). Improvements to agents are vibes-driven — you make a change, run a flow, eyeball the result.
+
+The ADR-010 structured output tools make evaluation tractable in a way free-form markdown never could. Each tool (`write_review`, `write_plan_index`, `write_test_report`, `write_implementation_summary`) has a typed schema. Schema-level diffing is deterministic.
+
+### Decision
+
+Build an agent evaluation framework on top of ADR-013 (simulation) and ADR-015 (transcripts). Record "golden" input/output pairs from successful flows as evaluation fixtures. A `canon flow eval` command replays inputs through current agent definitions and compares structured outputs against the golden baseline.
+
+**Golden fixture capture:**
+
+When a flow completes successfully and the user marks it as high-quality (or it passes review with no violations), the system can capture an evaluation fixture:
+
+```typescript
+interface EvalFixture {
+  id: string;
+  agent_type: string;              // e.g., 'researcher', 'reviewer'
+  flow_type: string;               // e.g., 'feature', 'refactor'
+  state_id: string;                // which state this fixture covers
+  input: {
+    spawn_prompt: string;          // the full prompt sent to the agent
+    context_block: string;         // injected context (ADR-008)
+    files_snapshot: Record<string, string>;  // relevant file contents at time of run
+  };
+  expected_output: {
+    structured: Record<string, unknown>;  // the structured output tool call
+    key_fields: string[];          // which fields to diff (not all fields matter)
+  };
+  metadata: {
+    flow_run_id: string;
+    captured_at: string;
+    captured_by: string;           // user who approved
+  };
+}
+```
+
+**Evaluation execution:**
+
+`canon flow eval` runs each fixture:
+1. Reconstruct the spawn prompt using current agent instructions + prompt pipeline
+2. Send to the LLM with the fixture's input context
+3. Capture the structured output tool call
+4. Diff `key_fields` between actual and expected
+
+**Diff semantics (schema-level, not text-level):**
+
+- `write_review`: compare `verdict` (pass/fail), violation count, violation categories
+- `write_plan_index`: compare wave count, task count, task grouping structure
+- `write_test_report`: compare pass/fail counts, coverage delta direction
+- `write_implementation_summary`: compare files_changed list, key decisions
+
+Non-deterministic fields (exact wording, timestamps) are excluded via `key_fields`.
+
+**Evaluation report:**
+
+```typescript
+interface EvalReport {
+  fixtures_run: number;
+  fixtures_passed: number;         // key_fields match within tolerance
+  fixtures_regressed: number;      // key_fields diverged
+  fixtures_improved: number;       // output was strictly better (more violations caught, etc.)
+  per_agent: Record<string, AgentEvalSummary>;
+  diff_details: EvalDiff[];
+}
+```
+
+**Fixture management:**
+
+Fixtures are stored in `.canon/eval/fixtures/` as JSON files, checked into git. They form the regression test suite for agent behavior. The `canon flow eval --capture` flag records a new fixture from the most recent successful flow run.
+
+### Consequences
+
+Positive: empirically measurable agent improvements; regression detection when changing prompts, pipeline, or context assembly; builds on existing structured output infrastructure (ADR-010); fixtures are version-controlled and reviewable; enables CI integration for agent quality gates.
+
+Negative: LLM non-determinism means exact field matches aren't always possible (mitigated by tolerance thresholds on key_fields and semantic comparison for text fields); fixture capture requires user judgment on what constitutes "golden" output; running eval fixtures costs API tokens (mitigated by running only on-demand, not in every flow); fixtures can become stale as the codebase evolves (mitigated by including file snapshots and TTL-based fixture rotation).
+
+### Dependencies
+
+ADR-010 (structured output schemas — the diffable surface), ADR-013 (simulation infrastructure — execution framework), ADR-015 (transcripts — input fixture source). Soft: ADR-003a (metrics for comparison), ADR-006 (prompt pipeline — must be deterministic given same inputs).
+
+### Implementation
+
+- Define `EvalFixture` and `EvalReport` types in flow schema
+- Create `.canon/eval/fixtures/` directory structure
+- Implement `canon flow eval --capture` to record fixtures from completed flows
+- Implement `canon flow eval` to replay fixtures and generate diff reports
+- Implement schema-level diffing for each structured output tool type
+- Add tolerance configuration for non-deterministic fields
+- Add eval results to `diagnose` command (last eval run, regression count)
+- Document fixture authoring and maintenance practices
+
+---
+
+## ADR-024: Fragment Testing
+
+### Context
+
+Fragments are Canon's primary composition unit — 13 fragments power all medium+ flows. ADR-004 validates them structurally at load time, and ADR-013 simulates full-flow transitions. But there is no way to test a fragment in isolation.
+
+When you modify `test-fix-loop` (used by `feature`, `refactor`, `migrate`, `epic`), you must mentally trace its behavior across four consuming flows. ADR-011's composite fragments and typed ports make fragments more powerful but also more compositional — a bug in `try-fix-retry` propagates to every consumer.
+
+Full-flow simulation (ADR-013) is the integration test layer. Fragment tests are the missing unit test layer for flow composition.
+
+### Decision
+
+Add a `fragment_test` block to fragment definition frontmatter that declares minimal test harnesses. Each harness is a stub flow containing only the fragment's states plus synthetic entry/exit states. `simulate_flow` (ADR-013) runs these harnesses.
+
+**Fragment test definition:**
+
+```yaml
+# In test-fix-loop.md frontmatter
+fragment_test:
+  - name: "passes on first try"
+    scenario:
+      - { state_id: test, status: done }
+    expect_terminal: exit_success
+
+  - name: "fix loop converges after one iteration"
+    scenario:
+      - { state_id: test, status: has_failures }
+      - { state_id: fix, status: done }
+      - { state_id: test, status: done }
+    expect_terminal: exit_success
+
+  - name: "fix loop exhausts retries"
+    scenario:
+      - { state_id: test, status: has_failures }
+      - { state_id: fix, status: done }
+      - { state_id: test, status: has_failures }
+      - { state_id: fix, status: done }
+      - { state_id: test, status: has_failures }
+    expect_terminal: exit_failure
+```
+
+**Harness generation:**
+
+For each test case, the framework generates a minimal flow:
+1. Synthetic `entry` state that transitions to the fragment's first state
+2. The fragment's states (with ports resolved to synthetic endpoints)
+3. Synthetic `exit_success` and `exit_failure` terminal states
+
+Typed ports (ADR-011) are resolved to the synthetic terminals. This means fragments with ports are testable without their consumer flows.
+
+**Execution via `simulate_flow` (ADR-013):**
+
+Fragment tests reuse the existing simulation infrastructure. The `scenario` array provides the sequence of `(state_id, status)` pairs that the simulator feeds as mock agent results. The simulator walks the state machine and verifies it reaches `expect_terminal`.
+
+**Integration with `canon flow validate`:**
+
+`canon flow validate` (ADR-013) already validates full flows. Add a `--fragments` flag (or run by default) that also executes all fragment tests. Fragment tests run first — if a fragment test fails, full-flow simulation is likely to fail too, so fragment failures are reported with higher priority.
+
+**Test coverage reporting:**
+
+For each fragment, report:
+- Number of test cases
+- States exercised vs total states in fragment
+- Transition paths exercised vs total transition paths
+- Consuming flows (from `simulate_flow` full-flow results)
+
+### Consequences
+
+Positive: fragments become independently verifiable; catch composition bugs before they propagate to multiple flows; reuses existing `simulate_flow` infrastructure (no new simulation engine); test cases serve as executable documentation of fragment behavior; fast execution (no LLM calls, pure state machine simulation).
+
+Negative: test maintenance burden — fragment changes require updating test scenarios (mitigated by keeping scenarios minimal and focused on key paths); harness generation adds complexity to the simulation framework; some fragment behaviors depend on context from the consuming flow (mitigated by typed ports which make the interface explicit).
+
+### Dependencies
+
+ADR-004 (flow validation — fragment schema), ADR-013 (`simulate_flow` — execution engine), ADR-011 (typed ports — clean fragment interfaces for harness generation).
+
+### Implementation
+
+- Add `fragment_test` schema to fragment frontmatter validation (ADR-004)
+- Implement harness generation: synthetic entry/exit states + port resolution
+- Implement scenario replay: feed mock `(state_id, status)` pairs to simulator
+- Implement terminal assertion: verify simulator reaches `expect_terminal`
+- Add `--fragments` flag to `canon flow validate`
+- Add fragment test coverage reporting
+- Write fragment tests for all 13 existing fragments
+- Document fragment test authoring in flow authoring guide
+
+---
+
 ## Adoption Order
 
 | Order | ADR | Rationale |
@@ -1356,14 +2098,23 @@ interface AgentMetrics {
 | 16 | 013 Flow Simulation | Builds on validateFlow (004); parallel with 010, 011, 017 |
 | 17 | 016 Auto-Learn | After 007 (background jobs) + 015 (transcripts) + 014 (learner tool restrictions) |
 | 18 | 012 Conditional States | After 009 (server driver evaluates conditions); needs validated flow schema (004) |
+| 19 | 019 Execution History | After 001 (SQLite), 010 (structured output for decision extraction), 015 (transcripts), 016 (learner provenance) |
+| 20 | 020 Background Janitor | After 007 (background jobs), 014 (tool scoping), 019 (decision extraction task); subsumes inline housekeeping from 016 and 019 |
+| 21 | 009b Orchestrator Consolidation | Completes 009; removes deprecated manual tools; shrinks orchestrator instructions |
+| 22 | 021 Agent Memory | After 005 (KG database), 006 (prompt pipeline), 008 (file affinity), 010 (structured output); soft dep on 020 (janitor for TTL expiry) |
+| 23 | 022 Cost Budgets | After 003a (agent metrics), 009 (drive_flow), 004 (flow validation for budget schema) |
+| 24 | 023 Agent Evaluation | After 010 (structured output), 013 (simulation), 015 (transcripts) |
+| 25 | 024 Fragment Testing | After 004 (fragment schema), 013 (simulate_flow), 011 (typed ports) |
 
 **First cohort (foundation):** ADRs 001, 002, 003, 004, 005, 015 — can progress in parallel once 001 schema is defined. ADR 015 (transcripts) slots in early because it's low-effort and unblocks the learning pipeline.
 
-**Second cohort (execution + pipeline):** ADRs 009, 006, 014, 008, 018 — server-side loop moves up as the centerpiece that unblocks tool scoping (014), approval gates (017), and conditional states (012). Prompt pipeline and context assembly follow, with tool scoping now correctly placed after its 009 dependency.
+**Second cohort (execution + pipeline):** ADRs 009, 009b, 006, 014, 008, 018 — server-side loop moves up as the centerpiece that unblocks tool scoping (014), approval gates (017), and conditional states (012). 009b lands immediately after 009 to consolidate the tool surface before other ADRs build on it. Prompt pipeline and context assembly follow, with tool scoping now correctly placed after its 009 dependency.
 
-**Third cohort (contracts + composition):** ADRs 007, 010, 011, 013, 017 — background jobs, output contracts, flow composition, simulation, and approval gates. These extend the execution and pipeline layers and can develop in parallel.
+**Third cohort (contracts + composition + quality):** ADRs 007, 010, 011, 013, 017, 022, 024 — background jobs, output contracts, flow composition, simulation, approval gates, cost budgets, and fragment testing. Cost budgets extend drive_flow with budget evaluation. Fragment testing extends simulate_flow with unit-level coverage. These develop in parallel.
 
-**Fourth cohort (automation):** ADR 016 (auto-learn) and 012 (conditional states) — these depend on the full stack being stable. Auto-learn needs transcripts (015), background jobs (007), and tool restrictions (014). Conditional states need the server-side driver (009).
+**Fourth cohort (automation + history + maintenance):** ADRs 016 (auto-learn), 012 (conditional states), 019 (execution history), 020 (background janitor) — these depend on the full stack being stable. Auto-learn needs transcripts (015), background jobs (007), and tool restrictions (014). Conditional states need the server-side driver (009). Execution history needs structured output (010), transcripts (015), and learner provenance (016). The janitor consolidates inline housekeeping from 016 and 019 into an asynchronous background process, keeping `complete_flow` fast.
+
+**Fifth cohort (intelligence):** ADRs 021 (agent memory), 023 (agent evaluation) — these require the full pipeline to be stable and instrumented. Agent memory needs the KG, prompt pipeline, structured output, and context assembly layers. Agent evaluation needs structured output, simulation, and transcripts. Both represent the shift from "agents that work" to "agents that learn and improve."
 
 ## Decision Summary
 
@@ -1386,3 +2137,10 @@ interface AgentMetrics {
 - Auto-triggered learning: gated background consolidation (time + flow count thresholds) that proposes principle/convention updates from transcript analysis
 - Plan approval gates: optional positive confirmation step after architect states, with revision cycles and tier-based defaults
 - Formalized workspace communication structure: `handoffs/` directory with structured cross-agent files injected by prompt pipeline
+- Execution history as connective tissue: commit-flow linkage, structured decision extraction (replacing file-copy archives), regression provenance chains, learning-to-principle traceability, queryable evolution timeline via `get_history` tool
+- Background janitor agent: single owner for all maintenance work (worktree pruning, workspace cleanup, decision extraction, transcript trimming, learn gate evaluation, KG refresh, WAL checkpoint, DB vacuum); triggered post-flow and on session start; `complete_flow` sheds all inline housekeeping; `clean` command and `post-merge-cleanup.sh` become thin wrappers
+- Agent memory across flows: per-subsystem working memory in KG database, project-scoped by architecture, populated from structured output at `report_result`, injected by prompt pipeline at spawn time, TTL-based expiry via janitor — the short-term operational memory between static context assembly and long-horizon principle learning
+- Orchestrator tool surface consolidation: deprecate manual orchestration tools (`enter_and_prepare_state`, `get_spawn_prompt`, `check_convergence`), internalize into `drive_flow`, shrink orchestrator instructions to three concerns (intent classification, drive_flow loop, HITL handling)
+- Flow-level cost budgets: optional `budget` block in flow definitions with per-flow and per-state token limits, evaluated by `drive_flow` at state boundaries, warning injection at threshold, HITL breakpoint at limit
+- Deterministic agent evaluation: golden fixture capture from successful flows, schema-level diffing of structured outputs, regression detection for agent instruction and pipeline changes
+- Fragment testing: `fragment_test` blocks in fragment frontmatter with scenario-based harnesses, executed via `simulate_flow`, unit test layer for flow composition complementing full-flow integration simulation

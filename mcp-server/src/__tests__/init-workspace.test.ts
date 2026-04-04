@@ -10,25 +10,28 @@
  * - Progress entry exists in DB after init
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { access } from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock loadAndResolveFlow to avoid needing real flow files
 vi.mock("../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "fast-path",
     description: "test",
     entry: "build",
-    states: { build: { type: "single", transitions: { done: "done" } }, done: { type: "terminal" } },
+    name: "fast-path",
     spawn_instructions: {},
+    states: {
+      build: { transitions: { done: "done" }, type: "single" },
+      done: { type: "terminal" },
+    },
   }),
 }));
 
-import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 
@@ -40,22 +43,20 @@ function makeTmpProjectDir(): string {
 
 afterEach(() => {
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
 const baseInput = {
+  base_commit: "abc123",
+  branch: "main",
   flow_name: "fast-path",
   task: "fix the bug",
-  branch: "main",
-  base_commit: "abc123",
   tier: "small" as const,
 };
 
-// ---------------------------------------------------------------------------
 // initWorkspaceFlow — SQLite creation
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — SQLite creation", () => {
   it("creates orchestration.db in the workspace directory", async () => {
@@ -127,15 +128,15 @@ describe("initWorkspaceFlow — SQLite creation", () => {
     const projectDir = makeTmpProjectDir();
     const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
 
-    for (const dir of ["research", "decisions", "plans", "reviews"]) {
-      await expect(access(join(result.workspace, dir))).resolves.toBeUndefined();
-    }
+    await Promise.all(
+      ["research", "decisions", "plans", "reviews"].map((dir) =>
+        expect(access(join(result.workspace, dir))).resolves.toBeUndefined(),
+      ),
+    );
   });
 });
 
-// ---------------------------------------------------------------------------
 // initWorkspaceFlow — resume detection
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — resume detection via store", () => {
   it("returns created:false and existing board when workspace already exists", async () => {
@@ -153,9 +154,7 @@ describe("initWorkspaceFlow — resume detection via store", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // listBranchWorkspaces
-// ---------------------------------------------------------------------------
 
 describe("listBranchWorkspaces", () => {
   it("returns workspaces with SQLite DB", async () => {
@@ -194,9 +193,7 @@ describe("listBranchWorkspaces", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // initWorkspaceFlow — concurrent initialization (P1 fix)
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — concurrent initialization race (P1)", () => {
   it("concurrent calls for the same task/branch both succeed — loser resumes instead of throwing", async () => {

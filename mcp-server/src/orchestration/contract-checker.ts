@@ -31,7 +31,7 @@ export function resolvePostconditions(
   if (discovered?.length) {
     // Security: strip bash_check entries from agent-discovered postconditions.
     // Only YAML-committed (explicit) postconditions may execute arbitrary commands.
-    const safe = discovered.filter(a => a.type !== "bash_check");
+    const safe = discovered.filter((a) => a.type !== "bash_check");
     if (safe.length > 0) return safe;
   }
   return [];
@@ -49,9 +49,7 @@ export function evaluatePostconditions(
   return assertions.map((a, i) => evaluateOne(a, i, cwd, baseCommit));
 }
 
-// ---------------------------------------------------------------------------
 // Internal — single assertion evaluation
-// ---------------------------------------------------------------------------
 
 function evaluateOne(
   assertion: PostconditionAssertion,
@@ -88,10 +86,10 @@ function evaluateFileExists(
   const fullPath = resolve(cwd, target);
   const passed = existsSync(fullPath);
   return {
-    passed,
     name,
-    type: assertion.type,
     output: passed ? `File exists: ${target}` : `File not found: ${target}`,
+    passed,
+    type: assertion.type,
   };
 }
 
@@ -103,10 +101,10 @@ function evaluateFileChanged(
 ): PostconditionResult {
   if (!baseCommit) {
     return {
-      passed: false,
       name,
-      type: assertion.type,
       output: "No base commit for file_changed check",
+      passed: false,
+      type: assertion.type,
     };
   }
 
@@ -116,22 +114,20 @@ function evaluateFileChanged(
   if (!result.ok) {
     const errMsg = result.stderr.trim() || "git command failed";
     return {
-      passed: false,
       name,
-      type: assertion.type,
       output: `git diff failed: ${errMsg}`,
+      passed: false,
+      type: assertion.type,
     };
   }
 
   const output = result.stdout.trim();
   const passed = output.length > 0;
   return {
-    passed,
     name,
+    output: passed ? `File changed: ${target}` : `File not changed since ${baseCommit}: ${target}`,
+    passed,
     type: assertion.type,
-    output: passed
-      ? `File changed: ${target}`
-      : `File not changed since ${baseCommit}: ${target}`,
   };
 }
 
@@ -162,12 +158,12 @@ function evaluatePatternMatch(
   const matched = regex.test(content);
   const passed = invert ? !matched : matched;
   return {
-    passed,
     name,
-    type: assertion.type,
     output: passed
       ? `Pattern ${invert ? "not found" : "found"} in ${target}`
       : `Pattern ${invert ? "found (should be absent)" : "not found"} in ${target}: ${patternStr}`,
+    passed,
+    type: assertion.type,
   };
 }
 
@@ -185,10 +181,10 @@ function evaluateBashCheck(
 
   if (BASH_DENYLIST.includes(baseToken)) {
     return {
-      passed: false,
       name,
-      type: assertion.type,
       output: `Command blocked by security denylist: ${firstToken}`,
+      passed: false,
+      type: assertion.type,
     };
   }
 
@@ -196,10 +192,10 @@ function evaluateBashCheck(
   const output = (result.stdout + result.stderr).trim();
 
   return {
-    passed: result.exitCode === 0,
     name,
-    type: assertion.type,
     output,
+    passed: result.exitCode === 0,
+    type: assertion.type,
   };
 }
 
@@ -212,9 +208,9 @@ function failResult(
 ): PostconditionResult {
   const errMsg = err instanceof Error ? err.message : String(err);
   return {
-    passed: false,
     name,
-    type,
     output: `${message} — ${errMsg}`,
+    passed: false,
+    type,
   };
 }

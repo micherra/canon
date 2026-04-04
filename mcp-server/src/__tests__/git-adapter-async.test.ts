@@ -1,8 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 type ExecFileCallback = (err: Error | null, stdout: string, stderr: string) => void;
 
@@ -16,13 +14,8 @@ let execFileImpl: ((cb: ExecFileCallback) => void) | null = null;
 let execFileCalls: ExecFileCallRecord[] = [];
 
 vi.mock("node:child_process", () => ({
-  execFile: (
-    cmd: string,
-    args: string[],
-    opts: Record<string, unknown>,
-    cb: ExecFileCallback,
-  ) => {
-    execFileCalls.push({ cmd, args, opts });
+  execFile: (cmd: string, args: string[], opts: Record<string, unknown>, cb: ExecFileCallback) => {
+    execFileCalls.push({ args, cmd, opts });
     if (execFileImpl) {
       execFileImpl(cb);
     } else {
@@ -33,9 +26,7 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-// ---------------------------------------------------------------------------
 // Import after mocks
-// ---------------------------------------------------------------------------
 
 import { gitExecAsync } from "../adapters/git-adapter-async.ts";
 
@@ -44,9 +35,7 @@ beforeEach(() => {
   execFileCalls = [];
 });
 
-// ---------------------------------------------------------------------------
 // gitExecAsync — call shape
-// ---------------------------------------------------------------------------
 
 describe("gitExecAsync — execFile call shape", () => {
   it("calls execFile with 'git' as the command", async () => {
@@ -76,9 +65,7 @@ describe("gitExecAsync — execFile call shape", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitExecAsync — resolves with ok:true on success
-// ---------------------------------------------------------------------------
 
 describe("gitExecAsync — resolves ok:true on success", () => {
   it("resolves with ok:true when no error", async () => {
@@ -112,9 +99,7 @@ describe("gitExecAsync — resolves ok:true on success", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitExecAsync — resolves with ok:false on error (never rejects)
-// ---------------------------------------------------------------------------
 
 describe("gitExecAsync — resolves ok:false on error (never rejects)", () => {
   it("resolves (not rejects) with ok:false when error is provided", async () => {
@@ -141,13 +126,11 @@ describe("gitExecAsync — resolves ok:false on error (never rejects)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitExecAsync — timeout detection
-// ---------------------------------------------------------------------------
 
 describe("gitExecAsync — timeout detection", () => {
   it("sets timedOut:true when error has killed:true", async () => {
-    const err = Object.assign(new Error("Process killed"), { killed: true, code: 1 });
+    const err = Object.assign(new Error("Process killed"), { code: 1, killed: true });
     execFileImpl = (cb) => cb(err, "", "");
     const result = await gitExecAsync(["log"], "/project");
     expect(result.timedOut).toBe(true);

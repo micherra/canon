@@ -1,6 +1,13 @@
 import { EventEmitter } from "node:events";
 import { z } from "zod";
-import type { HistoryEntry, ConcernEntry, GateResult, PostconditionResult, ViolationSeverities, TestResults } from "./flow-schema.ts";
+import type {
+  ConcernEntry,
+  GateResult,
+  HistoryEntry,
+  PostconditionResult,
+  TestResults,
+  ViolationSeverities,
+} from "./flow-schema.ts";
 
 export type FlowEventType =
   | "state_entered"
@@ -15,7 +22,7 @@ export type FlowEventType =
   | "wave_event_resolved"
   | "stuck_detected";
 
-export interface FlowEventMap {
+export type FlowEventMap = {
   state_entered: {
     stateId: string;
     stateType: string;
@@ -114,123 +121,120 @@ export interface FlowEventMap {
     timestamp: string;
     correlation_id?: string;
   };
-}
+};
 
-// ---------------------------------------------------------------------------
 // Zod schemas for event payloads — co-located with FlowEventMap interfaces
-// ---------------------------------------------------------------------------
 
 /** Optional correlation_id field shared by all event shapes. */
 const correlationId = z.string().optional();
 
 export const EventPayloadSchemas = {
-  state_entered: z.object({
-    stateId: z.string(),
-    stateType: z.string(),
-    timestamp: z.string(),
-    iterationCount: z.number(),
-    correlation_id: correlationId,
-  }),
-
-  state_completed: z.object({
-    stateId: z.string(),
-    result: z.string(),
-    duration_ms: z.number(),
-    artifacts: z.array(z.string()),
-    timestamp: z.string(),
-    gate_results: z.array(z.unknown()).optional(),
-    postcondition_results: z.array(z.unknown()).optional(),
-    violation_count: z.number().optional(),
-    violation_severities: z.unknown().optional(),
-    test_results: z.unknown().optional(),
-    files_changed: z.number().optional(),
-    discovered_gates_count: z.number().optional(),
-    discovered_postconditions_count: z.number().optional(),
-    correlation_id: correlationId,
-  }),
-
   agent_spawned: z.object({
-    stateId: z.string(),
     agent: z.string(),
-    role: z.string().optional(),
+    correlation_id: correlationId,
     model: z.string(),
-    timestamp: z.string(),
-    correlation_id: correlationId,
-  }),
-
-  transition_evaluated: z.object({
+    role: z.string().optional(),
     stateId: z.string(),
-    statusKeyword: z.string(),
-    normalizedCondition: z.string(),
-    nextState: z.string(),
     timestamp: z.string(),
-    correlation_id: correlationId,
-  }),
-
-  hitl_triggered: z.object({
-    stateId: z.string(),
-    reason: z.string(),
-    iterationCount: z.number().optional(),
-    stuckHistory: z.array(z.unknown()).optional(),
-    timestamp: z.string(),
-    correlation_id: correlationId,
-  }),
-
-  flow_started: z.object({
-    flowName: z.string(),
-    task: z.string(),
-    tier: z.string(),
-    workspace: z.string(),
-    timestamp: z.string(),
-    correlation_id: correlationId,
-  }),
-
-  flow_completed: z.object({
-    flowName: z.string(),
-    task: z.string(),
-    concerns: z.array(z.unknown()),
-    skipped: z.array(z.string()),
-    duration_ms: z.number(),
-    totalSpawns: z.number(),
-    timestamp: z.string(),
-    correlation_id: correlationId,
   }),
 
   board_updated: z.object({
     action: z.string(),
+    correlation_id: correlationId,
     stateId: z.string().optional(),
     timestamp: z.string(),
-    correlation_id: correlationId,
   }),
 
-  wave_event_injected: z.object({
-    eventId: z.string(),
-    eventType: z.string(),
-    workspace: z.string(),
-    timestamp: z.string(),
+  flow_completed: z.object({
+    concerns: z.array(z.unknown()),
     correlation_id: correlationId,
+    duration_ms: z.number(),
+    flowName: z.string(),
+    skipped: z.array(z.string()),
+    task: z.string(),
+    timestamp: z.string(),
+    totalSpawns: z.number(),
   }),
 
-  wave_event_resolved: z.object({
-    eventId: z.string(),
-    eventType: z.string(),
-    action: z.enum(["apply", "reject"]),
-    workspace: z.string(),
-    timestamp: z.string(),
+  flow_started: z.object({
     correlation_id: correlationId,
+    flowName: z.string(),
+    task: z.string(),
+    tier: z.string(),
+    timestamp: z.string(),
+    workspace: z.string(),
+  }),
+
+  hitl_triggered: z.object({
+    correlation_id: correlationId,
+    iterationCount: z.number().optional(),
+    reason: z.string(),
+    stateId: z.string(),
+    stuckHistory: z.array(z.unknown()).optional(),
+    timestamp: z.string(),
+  }),
+
+  state_completed: z.object({
+    artifacts: z.array(z.string()),
+    correlation_id: correlationId,
+    discovered_gates_count: z.number().optional(),
+    discovered_postconditions_count: z.number().optional(),
+    duration_ms: z.number(),
+    files_changed: z.number().optional(),
+    gate_results: z.array(z.unknown()).optional(),
+    postcondition_results: z.array(z.unknown()).optional(),
+    result: z.string(),
+    stateId: z.string(),
+    test_results: z.unknown().optional(),
+    timestamp: z.string(),
+    violation_count: z.number().optional(),
+    violation_severities: z.unknown().optional(),
+  }),
+  state_entered: z.object({
+    correlation_id: correlationId,
+    iterationCount: z.number(),
+    stateId: z.string(),
+    stateType: z.string(),
+    timestamp: z.string(),
   }),
 
   stuck_detected: z.object({
+    comparison: z.object({
+      current: z.record(z.string(), z.unknown()),
+      previous: z.record(z.string(), z.unknown()),
+    }),
+    correlation_id: correlationId,
+    iteration_count: z.number(),
+    reason: z.string(),
     stateId: z.string(),
     strategy: z.string(),
-    reason: z.string(),
-    iteration_count: z.number(),
-    comparison: z.object({
-      previous: z.record(z.string(), z.unknown()),
-      current: z.record(z.string(), z.unknown()),
-    }),
     timestamp: z.string(),
+  }),
+
+  transition_evaluated: z.object({
     correlation_id: correlationId,
+    nextState: z.string(),
+    normalizedCondition: z.string(),
+    stateId: z.string(),
+    statusKeyword: z.string(),
+    timestamp: z.string(),
+  }),
+
+  wave_event_injected: z.object({
+    correlation_id: correlationId,
+    eventId: z.string(),
+    eventType: z.string(),
+    timestamp: z.string(),
+    workspace: z.string(),
+  }),
+
+  wave_event_resolved: z.object({
+    action: z.enum(["apply", "reject"]),
+    correlation_id: correlationId,
+    eventId: z.string(),
+    eventType: z.string(),
+    timestamp: z.string(),
+    workspace: z.string(),
   }),
 } satisfies Record<FlowEventType, z.ZodTypeAny>;
 
@@ -242,13 +246,13 @@ export const EventPayloadSchemas = {
  */
 export function validateEventPayload(
   type: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
 ): { valid: boolean; errors?: string[] } {
   const schema = EventPayloadSchemas[type as FlowEventType];
   if (!schema) return { valid: true };
   const result = schema.safeParse(payload);
   if (result.success) return { valid: true };
-  return { valid: false, errors: result.error.issues.map((i: { message: string }) => i.message) };
+  return { errors: result.error.issues.map((i: { message: string }) => i.message), valid: false };
 }
 
 export class FlowEventBus extends EventEmitter {
@@ -295,10 +299,10 @@ export function createMetricsAccumulator(): {
   };
 
   const getMetrics = () => ({
-    totalSpawns,
-    totalDuration,
     perState,
+    totalDuration,
+    totalSpawns,
   });
 
-  return { handler, getMetrics };
+  return { getMetrics, handler };
 }

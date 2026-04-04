@@ -1,13 +1,13 @@
-import { writeFile, mkdir } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute } from "node:path";
-import { toolOk, toolError, type ToolResult } from "../utils/tool-result.ts";
+import { mkdir, writeFile } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
   return value.replace(/\|/g, "&#124;").replace(/\r\n?|\n/g, " ");
 }
 
-export interface WriteReviewInput {
+export type WriteReviewInput = {
   workspace: string;
   slug: string;
   verdict: "approved" | "approved_with_concerns" | "changes_required" | "blocked";
@@ -25,20 +25,20 @@ export interface WriteReviewInput {
     conventions: { passed: number; total: number };
   };
   files: string[];
-}
+};
 
-export interface WriteReviewResult {
+export type WriteReviewResult = {
   path: string;
   meta_path: string;
   verdict: "BLOCKING" | "WARNING" | "CLEAN";
   violation_count: number;
-}
+};
 
 export const VERDICT_MAP: Record<WriteReviewInput["verdict"], "BLOCKING" | "WARNING" | "CLEAN"> = {
   approved: "CLEAN",
   approved_with_concerns: "WARNING",
-  changes_required: "WARNING",
   blocked: "BLOCKING",
+  changes_required: "WARNING",
 };
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -54,7 +54,10 @@ const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
  * - #### Honored list (- **principle_id**)
  * - #### Score table (layer | rules | opinions | conventions)
  */
-function generateMarkdown(input: WriteReviewInput, mappedVerdict: "BLOCKING" | "WARNING" | "CLEAN"): string {
+function generateMarkdown(
+  input: WriteReviewInput,
+  mappedVerdict: "BLOCKING" | "WARNING" | "CLEAN",
+): string {
   const lines: string[] = [];
 
   // YAML frontmatter — parseReviewArtifact matches /verdict:\s*"?(BLOCKING|WARNING|CLEAN)"?/i
@@ -76,7 +79,9 @@ function generateMarkdown(input: WriteReviewInput, mappedVerdict: "BLOCKING" | "
   lines.push("|-----------|----------|----------|");
   for (const v of input.violations) {
     const filePath = v.file_path ?? "(none)";
-    lines.push(`| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} |`);
+    lines.push(
+      `| ${escapeMdCell(v.principle_id)} | ${escapeMdCell(v.severity)} | ${escapeMdCell(filePath)} |`,
+    );
   }
   lines.push("");
 
@@ -106,9 +111,7 @@ function generateMarkdown(input: WriteReviewInput, mappedVerdict: "BLOCKING" | "
   return lines.join("\n");
 }
 
-export async function writeReview(
-  input: WriteReviewInput,
-): Promise<ToolResult<WriteReviewResult>> {
+export async function writeReview(input: WriteReviewInput): Promise<ToolResult<WriteReviewResult>> {
   // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
@@ -122,10 +125,7 @@ export async function writeReview(
   const workspaceResolved = resolve(input.workspace);
   const rel = relative(workspaceResolved, reviewsDir);
   if (rel.startsWith("..") || isAbsolute(rel)) {
-    return toolError(
-      "INVALID_INPUT",
-      `Workspace resolves outside expected path`,
-    );
+    return toolError("INVALID_INPUT", `Workspace resolves outside expected path`);
   }
 
   // Map verdict
@@ -155,19 +155,19 @@ export async function writeReview(
   const meta = {
     _type: "review" as const,
     _version: 1,
-    slug: input.slug,
-    verdict_original: input.verdict,
-    verdict: mappedVerdict,
-    violations: input.violations,
+    files: input.files,
     honored: input.honored,
     score: input.score,
-    files: input.files,
+    slug: input.slug,
+    verdict: mappedVerdict,
+    verdict_original: input.verdict,
+    violations: input.violations,
   };
   await writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
 
   return toolOk({
-    path: reviewPath,
     meta_path: metaPath,
+    path: reviewPath,
     verdict: mappedVerdict,
     violation_count: input.violations.length,
   });

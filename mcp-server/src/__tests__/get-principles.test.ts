@@ -46,7 +46,7 @@ describe("getPrinciples", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("returns principles up to the default cap", async () => {

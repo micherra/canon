@@ -17,22 +17,18 @@ import type { ReviewEntry, ReviewViolation } from "../schema.ts";
 import type { FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
 import { initDriftDb } from "./drift-schema.ts";
 
-// ---------------------------------------------------------------------------
 // Re-export WeeklyTrendPoint so callers can import from drift-db
-// ---------------------------------------------------------------------------
 
-export interface WeeklyTrendPoint {
+export type WeeklyTrendPoint = {
   week: string; // ISO week: "2026-W12"
   pass_rate: number; // 0-1
   violations: number;
   reviews: number;
-}
+};
 
-// ---------------------------------------------------------------------------
 // Internal row types
-// ---------------------------------------------------------------------------
 
-interface ReviewRow {
+type ReviewRow = {
   id: number;
   review_id: string;
   timestamp: string;
@@ -45,9 +41,9 @@ interface ReviewRow {
   last_reviewed_sha: string | null;
   file_priorities: string | null;
   recommendations: string | null;
-}
+};
 
-interface ViolationRow {
+type ViolationRow = {
   id: number;
   review_id: string;
   principle_id: string;
@@ -55,9 +51,9 @@ interface ViolationRow {
   file_path: string | null;
   impact_score: number | null;
   message: string | null;
-}
+};
 
-interface FlowRunRow {
+type FlowRunRow = {
   id: number;
   run_id: string;
   flow: string;
@@ -75,11 +71,7 @@ interface FlowRunRow {
   total_violations: number | null;
   total_test_results: string | null;
   total_files_changed: number | null;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+};
 
 /**
  * Convert an ISO timestamp to ISO week string (e.g., "2026-W12").
@@ -118,11 +110,11 @@ export function toISOWeek(timestamp: string): string {
 /** Deserialize a ReviewRow + ViolationRow[] into a ReviewEntry. */
 function rowToReviewEntry(row: ReviewRow, violations: ViolationRow[]): ReviewEntry {
   const entry: ReviewEntry = {
-    review_id: row.review_id,
-    timestamp: row.timestamp,
     files: JSON.parse(row.files) as string[],
     honored: JSON.parse(row.honored) as string[],
+    review_id: row.review_id,
     score: JSON.parse(row.score) as ReviewEntry["score"],
+    timestamp: row.timestamp,
     verdict: row.verdict as ReviewEntry["verdict"],
     violations: violations.map((v) => {
       const violation: ReviewViolation = {
@@ -148,30 +140,31 @@ function rowToReviewEntry(row: ReviewRow, violations: ViolationRow[]): ReviewEnt
 /** Deserialize a FlowRunRow into a FlowRunEntry. */
 function _rowToFlowRunEntry(row: FlowRunRow): FlowRunEntry {
   const entry: FlowRunEntry = {
-    run_id: row.run_id,
-    flow: row.flow,
-    tier: row.tier,
-    task: row.task,
-    started: row.started,
     completed: row.completed,
-    total_duration_ms: row.total_duration_ms,
+    flow: row.flow,
+    run_id: row.run_id,
+    skipped_states: JSON.parse(row.skipped_states) as string[],
+    started: row.started,
     state_durations: JSON.parse(row.state_durations) as Record<string, number>,
     state_iterations: JSON.parse(row.state_iterations) as Record<string, number>,
-    skipped_states: JSON.parse(row.skipped_states) as string[],
+    task: row.task,
+    tier: row.tier,
+    total_duration_ms: row.total_duration_ms,
     total_spawns: row.total_spawns,
   };
   if (row.gate_pass_rate !== null) entry.gate_pass_rate = row.gate_pass_rate;
-  if (row.postcondition_pass_rate !== null) entry.postcondition_pass_rate = row.postcondition_pass_rate;
+  if (row.postcondition_pass_rate !== null)
+    entry.postcondition_pass_rate = row.postcondition_pass_rate;
   if (row.total_violations !== null) entry.total_violations = row.total_violations;
   if (row.total_test_results !== null)
-    entry.total_test_results = JSON.parse(row.total_test_results) as FlowRunEntry["total_test_results"];
+    entry.total_test_results = JSON.parse(
+      row.total_test_results,
+    ) as FlowRunEntry["total_test_results"];
   if (row.total_files_changed !== null) entry.total_files_changed = row.total_files_changed;
   return entry;
 }
 
-// ---------------------------------------------------------------------------
 // DriftDb
-// ---------------------------------------------------------------------------
 
 export class DriftDb {
   private readonly db: Database.Database;
@@ -266,9 +259,7 @@ export class DriftDb {
     `);
   }
 
-  // --------------------------------------------------------------------------
   // Reviews
-  // --------------------------------------------------------------------------
 
   /**
    * INSERT a ReviewEntry into the reviews table and its violations into
@@ -276,33 +267,42 @@ export class DriftDb {
    */
   appendReview(entry: ReviewEntry): void {
     const insertReviewAndViolations = this.db.transaction(() => {
-      this.stmtInsertReview.run({
-        review_id: entry.review_id,
-        timestamp: entry.timestamp,
-        files: JSON.stringify(entry.files),
-        honored: JSON.stringify(entry.honored),
-        score: JSON.stringify(entry.score),
-        verdict: entry.verdict,
-        pr_number: entry.pr_number ?? null,
-        branch: entry.branch ?? null,
-        last_reviewed_sha: entry.last_reviewed_sha ?? null,
-        file_priorities: entry.file_priorities != null ? JSON.stringify(entry.file_priorities) : null,
-        recommendations: entry.recommendations != null ? JSON.stringify(entry.recommendations) : null,
-      });
-
-      for (const v of entry.violations ?? []) {
-        this.stmtInsertViolation.run({
-          review_id: entry.review_id,
-          principle_id: v.principle_id,
-          severity: v.severity,
-          file_path: v.file_path ?? null,
-          impact_score: v.impact_score ?? null,
-          message: v.message ?? null,
-        });
-      }
+      this.stmtInsertReview.run(this.buildReviewParams(entry));
+      this.insertViolations(entry.review_id, entry.violations ?? []);
     });
 
     insertReviewAndViolations();
+  }
+
+  /** Build the parameter object for stmtInsertReview. */
+  private buildReviewParams(entry: ReviewEntry): Record<string, unknown> {
+    return {
+      branch: entry.branch ?? null,
+      file_priorities: entry.file_priorities != null ? JSON.stringify(entry.file_priorities) : null,
+      files: JSON.stringify(entry.files),
+      honored: JSON.stringify(entry.honored),
+      last_reviewed_sha: entry.last_reviewed_sha ?? null,
+      pr_number: entry.pr_number ?? null,
+      recommendations: entry.recommendations != null ? JSON.stringify(entry.recommendations) : null,
+      review_id: entry.review_id,
+      score: JSON.stringify(entry.score),
+      timestamp: entry.timestamp,
+      verdict: entry.verdict,
+    };
+  }
+
+  /** Insert violation rows for a review. */
+  private insertViolations(reviewId: string, violations: ReviewEntry["violations"]): void {
+    for (const v of violations ?? []) {
+      this.stmtInsertViolation.run({
+        file_path: v.file_path ?? null,
+        impact_score: v.impact_score ?? null,
+        message: v.message ?? null,
+        principle_id: v.principle_id,
+        review_id: reviewId,
+        severity: v.severity,
+      });
+    }
   }
 
   /**
@@ -310,7 +310,11 @@ export class DriftDb {
    * Returns ReviewEntry[] with violations reconstituted from violations table.
    * Returns empty array when no reviews exist (define-errors-out-of-existence).
    */
-  getReviews(options?: { principleId?: string; branch?: string; prNumber?: number }): ReviewEntry[] {
+  getReviews(options?: {
+    principleId?: string;
+    branch?: string;
+    prNumber?: number;
+  }): ReviewEntry[] {
     const { principleId, branch, prNumber } = options ?? {};
 
     let rows: ReviewRow[];
@@ -328,25 +332,31 @@ export class DriftDb {
     // Apply principleId filter: keep rows that either have a matching violation
     // or have the principle in their honored JSON array.
     if (principleId !== undefined) {
-      const violationReviewIds = new Set(
-        (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map((r) => r.review_id),
-      );
-      rows = rows.filter((row) => {
-        if (violationReviewIds.has(row.review_id)) return true;
-        // Check honored JSON array
-        try {
-          const honored = JSON.parse(row.honored) as string[];
-          return honored.includes(principleId);
-        } catch {
-          return false;
-        }
-      });
+      rows = this.filterByPrincipleId(rows, principleId);
     }
 
     // Reconstitute violations for each review row
     return rows.map((row) => {
       const violations = this.stmtGetViolationsByReviewId.all(row.review_id) as ViolationRow[];
       return rowToReviewEntry(row, violations);
+    });
+  }
+
+  /** Filter review rows to those matching a principle ID (via violation or honored list). */
+  private filterByPrincipleId(rows: ReviewRow[], principleId: string): ReviewRow[] {
+    const violationReviewIds = new Set(
+      (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map(
+        (r) => r.review_id,
+      ),
+    );
+    return rows.filter((row) => {
+      if (violationReviewIds.has(row.review_id)) return true;
+      try {
+        const honored = JSON.parse(row.honored) as string[];
+        return honored.includes(principleId);
+      } catch {
+        return false;
+      }
     });
   }
 
@@ -409,7 +419,9 @@ export class DriftDb {
   getComplianceTrend(principleId: string, weeks?: number): WeeklyTrendPoint[] {
     // Build set of review_ids that have a violation for this principle
     const violationReviewIds = new Set(
-      (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map((r) => r.review_id),
+      (this.stmtGetReviewIdsByPrinciple.all(principleId) as Array<{ review_id: string }>).map(
+        (r) => r.review_id,
+      ),
     );
 
     // Fetch all reviews, then filter in JS to those that either:
@@ -433,7 +445,7 @@ export class DriftDb {
 
     for (const row of relevant) {
       const week = toISOWeek(row.timestamp);
-      const bucket = weekBuckets.get(week) ?? { violations: 0, passes: 0 };
+      const bucket = weekBuckets.get(week) ?? { passes: 0, violations: 0 };
 
       if (violationReviewIds.has(row.review_id)) bucket.violations++;
 
@@ -454,39 +466,38 @@ export class DriftDb {
     return limited.map(([week, data]) => {
       const total = data.violations + data.passes;
       return {
-        week,
         pass_rate: total > 0 ? Math.round((data.passes / total) * 100) / 100 : 0,
-        violations: data.violations,
         reviews: total,
+        violations: data.violations,
+        week,
       };
     });
   }
 
-  // --------------------------------------------------------------------------
   // Flow runs
-  // --------------------------------------------------------------------------
 
   /**
    * INSERT a FlowRunEntry into the flow_runs table.
    */
   appendFlowRun(entry: FlowRunEntry): void {
     this.stmtInsertFlowRun.run({
-      run_id: entry.run_id,
-      flow: entry.flow,
-      tier: entry.tier,
-      task: entry.task,
-      started: entry.started,
       completed: entry.completed,
-      total_duration_ms: entry.total_duration_ms,
-      state_durations: JSON.stringify(entry.state_durations),
-      state_iterations: JSON.stringify(entry.state_iterations),
-      skipped_states: JSON.stringify(entry.skipped_states),
-      total_spawns: entry.total_spawns,
+      flow: entry.flow,
       gate_pass_rate: entry.gate_pass_rate ?? null,
       postcondition_pass_rate: entry.postcondition_pass_rate ?? null,
-      total_violations: entry.total_violations ?? null,
-      total_test_results: entry.total_test_results != null ? JSON.stringify(entry.total_test_results) : null,
+      run_id: entry.run_id,
+      skipped_states: JSON.stringify(entry.skipped_states),
+      started: entry.started,
+      state_durations: JSON.stringify(entry.state_durations),
+      state_iterations: JSON.stringify(entry.state_iterations),
+      task: entry.task,
+      tier: entry.tier,
+      total_duration_ms: entry.total_duration_ms,
       total_files_changed: entry.total_files_changed ?? null,
+      total_spawns: entry.total_spawns,
+      total_test_results:
+        entry.total_test_results != null ? JSON.stringify(entry.total_test_results) : null,
+      total_violations: entry.total_violations ?? null,
     });
   }
 
@@ -498,7 +509,7 @@ export class DriftDb {
   computeAnalytics(): FlowAnalytics {
     const rows = this.stmtGetAllFlowRuns.all() as FlowRunRow[];
     if (rows.length === 0) {
-      return { total_runs: 0, avg_duration_ms: 0 };
+      return { avg_duration_ms: 0, total_runs: 0 };
     }
 
     let totalDuration = 0;
@@ -520,28 +531,25 @@ export class DriftDb {
     }
 
     const result: FlowAnalytics = {
-      total_runs: rows.length,
       avg_duration_ms: totalDuration / rows.length,
+      total_runs: rows.length,
     };
 
     if (gateCount > 0) result.avg_gate_pass_rate = gateSum / gateCount;
-    if (postconditionCount > 0) result.avg_postcondition_pass_rate = postconditionSum / postconditionCount;
+    if (postconditionCount > 0)
+      result.avg_postcondition_pass_rate = postconditionSum / postconditionCount;
 
     return result;
   }
 
-  // --------------------------------------------------------------------------
   // Lifecycle
-  // --------------------------------------------------------------------------
 
   close(): void {
     this.db.close();
   }
 }
 
-// ---------------------------------------------------------------------------
 // getDriftDb — lazy-init cache, project-scoped singleton
-// ---------------------------------------------------------------------------
 
 const cache = new Map<string, DriftDb>();
 

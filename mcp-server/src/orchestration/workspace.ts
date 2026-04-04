@@ -5,8 +5,8 @@
  * (writeSession) have been removed — SQLite WAL handles write serialization.
  */
 
-import { access, mkdir } from "fs/promises";
-import path from "path";
+import { access, mkdir } from "node:fs/promises";
+import path from "node:path";
 
 /**
  * Sanitize a git branch name into a filesystem-safe string.
@@ -58,6 +58,7 @@ export async function checkSlugCollision(parentDir: string, slug: string): Promi
   if (!(await exists(slug))) return slug;
 
   let counter = 2;
+  // biome-ignore lint/performance/noAwaitInLoops: sequential slug collision resolution; each check depends on the previous result
   while (await exists(`${slug}-${counter}`)) {
     if (counter > 999) {
       throw new Error(`Slug collision limit exceeded for "${slug}"`);
@@ -78,4 +79,3 @@ export async function initWorkspace(projectDir: string, sanitized: string): Prom
   await Promise.all(subdirs.map((dir) => mkdir(path.join(workspace, dir), { recursive: true })));
   return workspace;
 }
-

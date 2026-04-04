@@ -5,20 +5,18 @@
  * DriveFlowInput: validated input for the drive_flow tool.
  */
 
-import { z } from 'zod';
-import { ResolvedFlowSchema } from './flow-schema.ts';
+import { z } from "zod";
+import { ResolvedFlowSchema } from "./flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // SpawnRequest — one agent spawn instruction
-// ---------------------------------------------------------------------------
 
-export interface SpawnRequest {
+export type SpawnRequest = {
   /** Agent type identifier (e.g., "canon:canon-implementor") */
   agent_type: string;
   /** Prompt to pass to the agent */
   prompt: string;
   /** Workspace isolation mode */
-  isolation: 'worktree' | 'branch' | 'none';
+  isolation: "worktree" | "branch" | "none";
   /** Optional role name (for parallel-per states) */
   role?: string;
   /** Optional task ID (for wave implementors) */
@@ -36,26 +34,22 @@ export interface SpawnRequest {
     /** Summary of context from previous session */
     context_summary: string;
   };
-}
+};
 
-// ---------------------------------------------------------------------------
 // HitlBreakpoint — human-in-the-loop pause point
-// ---------------------------------------------------------------------------
 
-export interface HitlBreakpoint {
+export type HitlBreakpoint = {
   /** Why execution is paused */
   reason: string;
   /** Contextual information for the human */
   context: string;
   /** Optional list of choices to present */
   options?: string[];
-}
+};
 
-// ---------------------------------------------------------------------------
 // ApprovalBreakpoint — approval gate pause point (ADR-017)
-// ---------------------------------------------------------------------------
 
-export interface ApprovalBreakpoint {
+export type ApprovalBreakpoint = {
   /** Which state just completed and requires approval */
   state_id: string;
   /** Agent type that produced the work */
@@ -66,23 +60,19 @@ export interface ApprovalBreakpoint {
   summary: string;
   /** Available response options */
   options: readonly ["approved", "revise", "reject"];
-}
+};
 
-// ---------------------------------------------------------------------------
 // DriveFlowAction — discriminated union: what drive_flow does next
-// ---------------------------------------------------------------------------
 
 export type DriveFlowAction =
-  | { action: 'spawn'; requests: SpawnRequest[] }
-  | { action: 'hitl'; breakpoint: HitlBreakpoint }
-  | { action: 'approval'; breakpoint: ApprovalBreakpoint }
-  | { action: 'done'; terminal_state: string; summary: string };
+  | { action: "spawn"; requests: SpawnRequest[] }
+  | { action: "hitl"; breakpoint: HitlBreakpoint }
+  | { action: "approval"; breakpoint: ApprovalBreakpoint }
+  | { action: "done"; terminal_state: string; summary: string };
 
-// ---------------------------------------------------------------------------
 // DriveFlowInput — validated input for the drive_flow tool
-// ---------------------------------------------------------------------------
 
-export interface DriveFlowInput {
+export type DriveFlowInput = {
   /** Workspace directory path */
   workspace: string;
   /** Resolved flow definition */
@@ -102,29 +92,31 @@ export interface DriveFlowInput {
     /** Optional task ID for wave implementors. */
     task_id?: string;
   };
-}
+};
 
-// ---------------------------------------------------------------------------
 // Zod schemas for runtime validation
-// ---------------------------------------------------------------------------
 
 export const DriveFlowResultSchema = z.object({
+  agent_session_id: z.string().optional(),
+  artifacts: z.array(z.string()).optional(),
+  metrics: z.record(z.string(), z.unknown()).optional(),
+  parallel_results: z
+    .array(
+      z.object({
+        artifacts: z.array(z.string()).optional(),
+        item: z.string(),
+        status: z.string(),
+      }),
+    )
+    .optional(),
   state_id: z.string(),
   status: z.string(),
-  artifacts: z.array(z.string()).optional(),
-  parallel_results: z.array(z.object({
-    item: z.string(),
-    status: z.string(),
-    artifacts: z.array(z.string()).optional(),
-  })).optional(),
-  metrics: z.record(z.string(), z.unknown()).optional(),
-  agent_session_id: z.string().optional(),
   /** Optional task ID for wave implementors — typed here so callers don't need a type assertion. */
   task_id: z.string().optional(),
 });
 
 export const DriveFlowInputSchema = z.object({
-  workspace: z.string().min(1),
   flow: ResolvedFlowSchema,
   result: DriveFlowResultSchema.optional(),
+  workspace: z.string().min(1),
 });

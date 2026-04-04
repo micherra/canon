@@ -4,30 +4,30 @@ import { z } from "zod";
 
 export const reportInputSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("review"),
     files: z.array(z.string()).max(1000).describe("File paths that were reviewed"),
+    honored: z.array(z.string()).max(1000).describe("IDs of principles honored"),
+    score: z.object({
+      conventions: z.object({ passed: z.number(), total: z.number() }),
+      opinions: z.object({ passed: z.number(), total: z.number() }),
+      rules: z.object({ passed: z.number(), total: z.number() }),
+    }),
+    type: z.literal("review"),
+    verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).optional(),
     violations: z
       .array(
         z.object({
-          principle_id: z.string(),
-          severity: z.string(),
           file_path: z.string().optional().describe("Specific file where violation occurred"),
           impact_score: z
             .number()
             .optional()
             .describe("Graph-derived impact score (higher = more dependents affected)"),
           message: z.string().optional().describe("Human-readable violation reason"),
+          principle_id: z.string(),
+          severity: z.string(),
         }),
       )
       .max(1000)
       .describe("Principle violations found"),
-    honored: z.array(z.string()).max(1000).describe("IDs of principles honored"),
-    score: z.object({
-      rules: z.object({ passed: z.number(), total: z.number() }),
-      opinions: z.object({ passed: z.number(), total: z.number() }),
-      conventions: z.object({ passed: z.number(), total: z.number() }),
-    }),
-    verdict: z.enum(["BLOCKING", "WARNING", "CLEAN"]).optional(),
   }),
 ]);
 

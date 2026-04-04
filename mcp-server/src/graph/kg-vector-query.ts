@@ -67,9 +67,7 @@ export class KgVectorQuery {
     return this._mergeAndRank(allResults, limit);
   }
 
-  // ---------------------------------------------------------------------------
   // Private helpers
-  // ---------------------------------------------------------------------------
 
   private _queryEntityVectors(
     queryBuf: Buffer,
@@ -113,7 +111,9 @@ export class KgVectorQuery {
       ORDER BY ev.distance
     `;
 
-    const rows = this.db.prepare(sql).all(queryBuf, limit, ...kindParams, ...thresholdParams) as Array<{
+    const rows = this.db
+      .prepare(sql)
+      .all(queryBuf, limit, ...kindParams, ...thresholdParams) as Array<{
       entity_id: number;
       distance: number;
       file_id: number;
@@ -124,14 +124,14 @@ export class KgVectorQuery {
     }>;
 
     return rows.map((row) => ({
+      distance: row.distance,
       entity_id: row.entity_id,
       file_id: row.file_id,
+      file_path: row.file_path,
+      kind: row.kind,
       name: row.name,
       qualified_name: row.qualified_name,
-      kind: row.kind,
-      distance: row.distance,
       source: "entity" as const,
-      file_path: row.file_path,
     }));
   }
 
@@ -183,15 +183,15 @@ export class KgVectorQuery {
     }>;
 
     return rows.map((row) => ({
+      distance: row.distance,
       entity_id: row.entity_id ?? 0,
       file_id: row.file_id,
+      file_path: row.file_path,
+      kind: (row.kind ?? "file") as EntityKind,
       name: row.name ?? row.file_path,
       qualified_name: row.qualified_name ?? row.file_path,
-      kind: (row.kind ?? "file") as EntityKind,
-      distance: row.distance,
       source: "summary" as const,
       summary: row.summary,
-      file_path: row.file_path,
     }));
   }
 

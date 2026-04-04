@@ -10,26 +10,26 @@
  * 5. Return combined result.
  */
 
-import { reportResult } from "./report-result.ts";
-import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
+import type { FileCluster } from "../orchestration/diff-cluster.ts";
 import type {
-  ResolvedFlow,
   Board,
   CannotFixItem,
-  HistoryEntry,
-  GateResult,
-  PostconditionResult,
   DiscoveredGate,
+  GateResult,
+  HistoryEntry,
   PostconditionAssertion,
-  ViolationSeverities,
+  PostconditionResult,
+  ResolvedFlow,
   TestResults,
+  ViolationSeverities,
 } from "../orchestration/flow-schema.ts";
-import type { TaskItem, SpawnPromptEntry } from "./get-spawn-prompt.ts";
-import type { FileCluster } from "../orchestration/diff-cluster.ts";
+import type { ToolResult } from "../utils/tool-result.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
+import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
+import { reportResult } from "./report-result.ts";
 
-export interface ReportAndEnterNextStateInput {
+export type ReportAndEnterNextStateInput = {
   // All fields from ReportResultInput
   workspace: string;
   state_id: string;
@@ -66,9 +66,9 @@ export interface ReportAndEnterNextStateInput {
   role?: string;
   wave?: number;
   peer_count?: number;
-}
+};
 
-export interface ReportAndEnterNextStateResult {
+export type ReportAndEnterNextStateResult = {
   // Report phase results (always present)
   report: {
     transition_condition: string;
@@ -100,72 +100,43 @@ export interface ReportAndEnterNextStateResult {
 
   // Final board state
   board: Board;
-}
+};
 
-export async function reportAndEnterNextState(
+async function enterNextState(
   input: ReportAndEnterNextStateInput,
+  nextStateId: string,
+  result: ReportAndEnterNextStateResult,
 ): Promise<ToolResult<ReportAndEnterNextStateResult>> {
-  // Step 1: Report result for current state
-  // Destructure enter-specific fields; the rest maps 1:1 to reportResult input.
-  const { variables, items, role, wave, peer_count, ...reportInput } = input;
-  const reportOutput = await reportResult(reportInput);
-
-  if (!reportOutput.ok) return reportOutput;
-
-  const result: ReportAndEnterNextStateResult = {
-    report: {
-      transition_condition: reportOutput.transition_condition,
-      next_state: reportOutput.next_state,
-      stuck: reportOutput.stuck,
-      stuck_reason: reportOutput.stuck_reason,
-      hitl_required: reportOutput.hitl_required,
-      hitl_reason: reportOutput.hitl_reason,
-    },
-    board: reportOutput.board,
-  };
-
-  // Step 2: If HITL required or no next state (terminal flow), return report only
-  if (reportOutput.hitl_required || !reportOutput.next_state) {
-    return { ok: true as const, ...result };
-  }
-
-  // Step 3: Check if next state is terminal or a virtual sink (e.g. "no_items", "hitl")
-  const nextStateDef = input.flow.states[reportOutput.next_state];
-  if (!nextStateDef || nextStateDef.type === "terminal") {
-    return { ok: true as const, ...result };
-  }
-
-  // Step 4: Enter and prepare the next state
   const enterOutput = await enterAndPrepareState({
-    workspace: input.workspace,
-    state_id: reportOutput.next_state,
     flow: input.flow,
-    variables: input.variables,
     items: input.items,
-    role: input.role,
-    wave: input.wave,
     peer_count: input.peer_count,
     project_dir: input.project_dir,
+    role: input.role,
+    state_id: nextStateId,
+    variables: input.variables,
+    wave: input.wave,
+    workspace: input.workspace,
   });
 
   if (!enterOutput.ok) return enterOutput;
 
   result.enter = {
+    board: enterOutput.board,
     can_enter: enterOutput.can_enter,
+    cannot_fix_items: enterOutput.cannot_fix_items,
+    clusters: enterOutput.clusters,
+    consultation_prompts: enterOutput.consultation_prompts,
+    convergence_reason: enterOutput.convergence_reason,
+    fanned_out: enterOutput.fanned_out,
+    history: enterOutput.history,
     iteration_count: enterOutput.iteration_count,
     max_iterations: enterOutput.max_iterations,
-    cannot_fix_items: enterOutput.cannot_fix_items,
-    history: enterOutput.history,
-    convergence_reason: enterOutput.convergence_reason,
     prompts: enterOutput.prompts,
-    state_type: enterOutput.state_type,
     skip_reason: enterOutput.skip_reason,
-    warnings: enterOutput.warnings,
-    clusters: enterOutput.clusters,
+    state_type: enterOutput.state_type,
     timeout_ms: enterOutput.timeout_ms,
-    fanned_out: enterOutput.fanned_out,
-    consultation_prompts: enterOutput.consultation_prompts,
-    board: enterOutput.board,
+    warnings: enterOutput.warnings,
   };
 
   if (enterOutput.board) {
@@ -173,4 +144,36 @@ export async function reportAndEnterNextState(
   }
 
   return { ok: true as const, ...result };
+}
+
+export async function reportAndEnterNextState(
+  input: ReportAndEnterNextStateInput,
+): Promise<ToolResult<ReportAndEnterNextStateResult>> {
+  const { variables, items, role, wave, peer_count, ...reportInput } = input;
+  const reportOutput = await reportResult(reportInput);
+
+  if (!reportOutput.ok) return reportOutput;
+
+  const result: ReportAndEnterNextStateResult = {
+    board: reportOutput.board,
+    report: {
+      hitl_reason: reportOutput.hitl_reason,
+      hitl_required: reportOutput.hitl_required,
+      next_state: reportOutput.next_state,
+      stuck: reportOutput.stuck,
+      stuck_reason: reportOutput.stuck_reason,
+      transition_condition: reportOutput.transition_condition,
+    },
+  };
+
+  if (reportOutput.hitl_required || !reportOutput.next_state) {
+    return { ok: true as const, ...result };
+  }
+
+  const nextStateDef = input.flow.states[reportOutput.next_state];
+  if (!nextStateDef || nextStateDef.type === "terminal") {
+    return { ok: true as const, ...result };
+  }
+
+  return enterNextState(input, reportOutput.next_state, result);
 }

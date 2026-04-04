@@ -4,18 +4,18 @@ import { assembleWaveBriefing, type WaveBriefingInput } from "../orchestration/w
 describe("assembleWaveBriefing", () => {
   it("assembles briefing with all sections populated", () => {
     const input: WaveBriefingInput = {
-      wave: 2,
-      summaries: [
-        "created src/utils/formatter.ts with formatDate helper",
-        "established a pattern of barrel exports via index.ts",
-        "found a gotcha: unexpected empty-string edge case in parser",
-      ],
       consultationOutputs: {
         "advisor-1": {
           section: "Security notes",
           summary: "Sanitise all user input before passing to the template engine.",
         },
       },
+      summaries: [
+        "created src/utils/formatter.ts with formatDate helper",
+        "established a pattern of barrel exports via index.ts",
+        "found a gotcha: unexpected empty-string edge case in parser",
+      ],
+      wave: 2,
     };
 
     const result = assembleWaveBriefing(input);
@@ -33,9 +33,9 @@ describe("assembleWaveBriefing", () => {
 
   it("omits empty sections when no matching lines are found", () => {
     const input: WaveBriefingInput = {
-      wave: 1,
-      summaries: ["Did some work, everything went smoothly."],
       consultationOutputs: {},
+      summaries: ["Did some work, everything went smoothly."],
+      wave: 1,
     };
 
     const result = assembleWaveBriefing(input);
@@ -48,8 +48,6 @@ describe("assembleWaveBriefing", () => {
 
   it("includes consultation output under its declared section heading", () => {
     const input: WaveBriefingInput = {
-      wave: 3,
-      summaries: [],
       consultationOutputs: {
         c1: {
           section: "API decisions",
@@ -60,6 +58,8 @@ describe("assembleWaveBriefing", () => {
           summary: "Cache query results for 60 seconds.",
         },
       },
+      summaries: [],
+      wave: 3,
     };
 
     const result = assembleWaveBriefing(input);
@@ -72,9 +72,9 @@ describe("assembleWaveBriefing", () => {
 
   it("handles empty summaries array — produces minimal briefing with header only", () => {
     const input: WaveBriefingInput = {
-      wave: 4,
-      summaries: [],
       consultationOutputs: {},
+      summaries: [],
+      wave: 4,
     };
 
     const result = assembleWaveBriefing(input);
@@ -86,9 +86,9 @@ describe("assembleWaveBriefing", () => {
 
   it("handles empty consultationOutputs — produces briefing without consultation sections", () => {
     const input: WaveBriefingInput = {
-      wave: 5,
-      summaries: ["added src/helpers/math.ts with add and multiply"],
       consultationOutputs: {},
+      summaries: ["added src/helpers/math.ts with add and multiply"],
+      wave: 5,
     };
 
     const result = assembleWaveBriefing(input);
@@ -100,11 +100,13 @@ describe("assembleWaveBriefing", () => {
 
   it("truncates output exceeding ~2000 characters and appends truncation marker", () => {
     // Generate a very long summary well over 2000 chars
-    const longLine = "created src/shared/very-long-module.ts with exports and helpers — ".repeat(50);
+    const longLine = "created src/shared/very-long-module.ts with exports and helpers — ".repeat(
+      50,
+    );
     const input: WaveBriefingInput = {
-      wave: 6,
-      summaries: [longLine],
       consultationOutputs: {},
+      summaries: [longLine],
+      wave: 6,
     };
 
     const result = assembleWaveBriefing(input);
@@ -116,14 +118,14 @@ describe("assembleWaveBriefing", () => {
   it("preserves pre-escaped \\${...} in input without double-escaping or stripping", () => {
     // The caller is responsible for escaping. Simulate already-escaped input.
     const input: WaveBriefingInput = {
-      wave: 7,
-      summaries: ["created src/template.ts — value is \\${foo} not expanded"],
       consultationOutputs: {
         c1: {
           section: "Injection safety",
           summary: "Variable \\${user_input} is safely escaped.",
         },
       },
+      summaries: ["created src/template.ts — value is \\${foo} not expanded"],
+      wave: 7,
     };
 
     const result = assembleWaveBriefing(input);
@@ -137,14 +139,14 @@ describe("assembleWaveBriefing", () => {
 
   it("omits consultation output that has no section key", () => {
     const input: WaveBriefingInput = {
-      wave: 8,
-      summaries: [],
       consultationOutputs: {
         "no-section": {
           // section is intentionally absent
           summary: "This output has no section heading.",
         },
       },
+      summaries: [],
+      wave: 8,
     };
 
     const result = assembleWaveBriefing(input);

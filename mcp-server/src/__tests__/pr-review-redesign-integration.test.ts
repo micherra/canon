@@ -31,42 +31,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
 import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 
-// ── helpers ──
-
-function makeMockExecFile(stdout: string, err: Error | null = null) {
-  return (
-    _cmd: string,
-    _args: string[],
-    _opts: unknown,
-    cb: (err: Error | null, stdout: string, stderr: string) => void,
-  ) => cb(err, err ? "" : stdout, "");
-}
-
 /** Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout. */
 function mockGitExecAsyncOk(stdout: string) {
   return vi.fn().mockResolvedValue({
-    ok: true,
-    stdout,
-    stderr: "",
     exitCode: 0,
+    ok: true,
+    stderr: "",
+    stdout,
     timedOut: false,
   });
 }
 
 function makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {
   return {
-    path,
-    layer,
-    status: "modified",
     bucket: "low-risk",
+    layer,
+    path,
     reason: "",
+    status: "modified",
     ...overrides,
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 1. Cross-task integration: bucket + reason fields wired end-to-end
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integration)", () => {
   let tmpDir: string;
@@ -79,7 +66,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("every returned file has a bucket field (never undefined)", async () => {
@@ -115,17 +102,21 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
     const { DriftStore } = await import("../drift/store.js");
     const store = new DriftStore(tmpDir);
     await store.appendReview({
+      files: ["src/tools/bad.ts"],
+      honored: [],
       review_id: "rev_bucket_test",
+      score: {
+        conventions: { passed: 0, total: 1 },
+        opinions: { passed: 0, total: 1 },
+        rules: { passed: 0, total: 1 },
+      },
       timestamp: "2026-03-25T00:00:00Z",
       verdict: "WARNING",
-      files: ["src/tools/bad.ts"],
       violations: [
-        { principle_id: "p1", severity: "rule", file_path: "src/tools/bad.ts" },
-        { principle_id: "p2", severity: "convention", file_path: "src/tools/bad.ts" },
-        { principle_id: "p3", severity: "strong-opinion", file_path: "src/tools/bad.ts" },
+        { file_path: "src/tools/bad.ts", principle_id: "p1", severity: "rule" },
+        { file_path: "src/tools/bad.ts", principle_id: "p2", severity: "convention" },
+        { file_path: "src/tools/bad.ts", principle_id: "p3", severity: "strong-opinion" },
       ],
-      honored: [],
-      score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 1 }, conventions: { passed: 0, total: 1 } },
     });
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
@@ -157,9 +148,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 2. Cross-task integration: narrative field wired end-to-end
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 integration)", () => {
   let tmpDir: string;
@@ -172,7 +161,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("narrative is a non-empty string in every response", async () => {
@@ -188,7 +177,10 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
   });
 
   it("narrative mentions total file count and layer when files are present", async () => {
-    await writeFile(join(tmpDir, ".canon", "config.json"), JSON.stringify({ layers: { tools: ["src/tools"] } }));
+    await writeFile(
+      join(tmpDir, ".canon", "config.json"),
+      JSON.stringify({ layers: { tools: ["src/tools"] } }),
+    );
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nA\tsrc/tools/b.ts"),
@@ -221,16 +213,20 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
     const { DriftStore } = await import("../drift/store.js");
     const store = new DriftStore(tmpDir);
     await store.appendReview({
+      files: ["src/tools/bad.ts"],
+      honored: [],
       review_id: "rev_narrative_test",
+      score: {
+        conventions: { passed: 0, total: 1 },
+        opinions: { passed: 0, total: 0 },
+        rules: { passed: 0, total: 1 },
+      },
       timestamp: "2026-03-25T00:00:00Z",
       verdict: "WARNING",
-      files: ["src/tools/bad.ts"],
       violations: [
-        { principle_id: "p1", severity: "rule", file_path: "src/tools/bad.ts" },
-        { principle_id: "p2", severity: "convention", file_path: "src/tools/bad.ts" },
+        { file_path: "src/tools/bad.ts", principle_id: "p1", severity: "rule" },
+        { file_path: "src/tools/bad.ts", principle_id: "p2", severity: "convention" },
       ],
-      honored: [],
-      score: { rules: { passed: 0, total: 1 }, opinions: { passed: 0, total: 0 }, conventions: { passed: 0, total: 1 } },
     });
 
     vi.doMock("../adapters/git-adapter-async.ts", () => ({
@@ -244,9 +240,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 3. computeBlastRadius() via getPrReviewData() — declared known gap (Task 01)
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("getPrReviewData — computeBlastRadius() with real graph edges (known gap)", () => {
   let tmpDir: string;
@@ -259,7 +253,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("blast_radius is an empty array when no KG DB is present", async () => {
@@ -294,11 +288,32 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
-    const hubFile = store.upsertFile({ path: "src/hub.ts", mtime_ms: 1, content_hash: "h", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+    const hubFile = store.upsertFile({
+      content_hash: "h",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "tools",
+      mtime_ms: 1,
+      path: "src/hub.ts",
+    });
     for (let i = 1; i <= 4; i++) {
-      const c = store.upsertFile({ path: `src/consumer${i}.ts`, mtime_ms: 1, content_hash: `c${i}`, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+      const c = store.upsertFile({
+        content_hash: `c${i}`,
+        language: "typescript",
+        last_indexed_at: Date.now(),
+        layer: "tools",
+        mtime_ms: 1,
+        path: `src/consumer${i}.ts`,
+      });
       // consumerX imports hub → file_edge source=consumer, target=hub
-      store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+      store.insertFileEdge({
+        confidence: 1.0,
+        edge_type: "imports",
+        evidence: null,
+        relation: null,
+        source_file_id: c.file_id!,
+        target_file_id: hubFile.file_id!,
+      });
     }
     db.close();
 
@@ -327,10 +342,31 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
-    const hubFile = store.upsertFile({ path: "src/hub.ts", mtime_ms: 1, content_hash: "h", language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+    const hubFile = store.upsertFile({
+      content_hash: "h",
+      language: "typescript",
+      last_indexed_at: Date.now(),
+      layer: "tools",
+      mtime_ms: 1,
+      path: "src/hub.ts",
+    });
     for (let i = 0; i < 15; i++) {
-      const c = store.upsertFile({ path: `src/consumer${i}.ts`, mtime_ms: 1, content_hash: `c${i}`, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
-      store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+      const c = store.upsertFile({
+        content_hash: `c${i}`,
+        language: "typescript",
+        last_indexed_at: Date.now(),
+        layer: "tools",
+        mtime_ms: 1,
+        path: `src/consumer${i}.ts`,
+      });
+      store.insertFileEdge({
+        confidence: 1.0,
+        edge_type: "imports",
+        evidence: null,
+        relation: null,
+        source_file_id: c.file_id!,
+        target_file_id: hubFile.file_id!,
+      });
     }
     db.close();
 
@@ -356,16 +392,37 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     const store = new KgStore(db);
 
     const hubs = ["hub1", "hub2", "hub3", "hub4", "hub5"].map((name, i) => ({
-      name: `src/${name}.ts`,
       consumers: 4 + i, // hub1=4, hub2=5, hub3=6, hub4=7, hub5=8
+      name: `src/${name}.ts`,
     }));
 
     for (const hub of hubs) {
-      const hubFile = store.upsertFile({ path: hub.name, mtime_ms: 1, content_hash: hub.name, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
+      const hubFile = store.upsertFile({
+        content_hash: hub.name,
+        language: "typescript",
+        last_indexed_at: Date.now(),
+        layer: "tools",
+        mtime_ms: 1,
+        path: hub.name,
+      });
       for (let j = 0; j < hub.consumers; j++) {
         const cPath = `src/c_${hub.name.replace(/\W/g, "_")}_${j}.ts`;
-        const c = store.upsertFile({ path: cPath, mtime_ms: 1, content_hash: cPath, language: "typescript", layer: "tools", last_indexed_at: Date.now() });
-        store.insertFileEdge({ source_file_id: c.file_id!, target_file_id: hubFile.file_id!, edge_type: "imports", confidence: 1.0, evidence: null, relation: null });
+        const c = store.upsertFile({
+          content_hash: cPath,
+          language: "typescript",
+          last_indexed_at: Date.now(),
+          layer: "tools",
+          mtime_ms: 1,
+          path: cPath,
+        });
+        store.insertFileEdge({
+          confidence: 1.0,
+          edge_type: "imports",
+          evidence: null,
+          relation: null,
+          source_file_id: c.file_id!,
+          target_file_id: hubFile.file_id!,
+        });
       }
     }
     db.close();
@@ -404,9 +461,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 4. classifyFile() — coverage gap: both violations AND high in_degree
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("classifyFile() — coverage gap: violations + high in_degree both present", () => {
   it("violation check takes precedence over high in_degree (violations win)", () => {
@@ -415,10 +470,10 @@ describe("classifyFile() — coverage gap: violations + high in_degree both pres
     const file = makeFile("src/a.ts", "tools", {
       priority_factors: {
         in_degree: 10,
-        violation_count: 2,
         is_changed: true,
         layer: "tools",
         layer_centrality: 3,
+        violation_count: 2,
       },
     });
 
@@ -433,10 +488,10 @@ describe("classifyFile() — coverage gap: violations + high in_degree both pres
     const file = makeFile("src/a.ts", "tools", {
       priority_factors: {
         in_degree: 0,
-        violation_count: 1,
         is_changed: true,
         layer: "tools",
         layer_centrality: 1,
+        violation_count: 1,
       },
     });
 
@@ -450,10 +505,10 @@ describe("classifyFile() — coverage gap: violations + high in_degree both pres
     const file = makeFile("src/a.ts", "tools", {
       priority_factors: {
         in_degree: 0,
-        violation_count: 5,
         is_changed: true,
         layer: "tools",
         layer_centrality: 1,
+        violation_count: 5,
       },
     });
 
@@ -464,14 +519,14 @@ describe("classifyFile() — coverage gap: violations + high in_degree both pres
   it("classifyFile falls through to worth-a-look when in_degree < 5 (changed) and score >= 5", () => {
     // in_degree=4 (not needs-attention) + priority_score=6 (worth-a-look)
     const file = makeFile("src/a.ts", "tools", {
-      priority_score: 6,
       priority_factors: {
         in_degree: 4,
-        violation_count: 0,
         is_changed: true,
         layer: "tools",
         layer_centrality: 2,
+        violation_count: 0,
       },
+      priority_score: 6,
     });
 
     const result = classifyFile(file);
@@ -487,14 +542,12 @@ describe("classifyFile() — coverage gap: violations + high in_degree both pres
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 5. generateNarrative() — singular wording coverage gaps
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("generateNarrative() — singular/plural wording (coverage gaps)", () => {
   it("uses 'file' (singular) when total_files is 1", () => {
     const files = [makeFile("src/tools/only.ts", "tools")];
-    const layers = [{ name: "tools", file_count: 1 }];
+    const layers = [{ file_count: 1, name: "tools" }];
 
     const narrative = generateNarrative(files, layers);
     // Should say "1 file" not "1 files"
@@ -504,7 +557,7 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
 
   it("uses 'layer' (singular) when there is exactly one layer", () => {
     const files = [makeFile("src/tools/a.ts", "tools"), makeFile("src/tools/b.ts", "tools")];
-    const layers = [{ name: "tools", file_count: 2 }];
+    const layers = [{ file_count: 2, name: "tools" }];
 
     const narrative = generateNarrative(files, layers);
     // Should say "1 layer" not "1 layers"
@@ -517,14 +570,14 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
       makeFile("src/tools/hub.ts", "tools", {
         priority_factors: {
           in_degree: 1,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 0,
         },
       }),
     ];
-    const layers = [{ name: "tools", file_count: 1 }];
+    const layers = [{ file_count: 1, name: "tools" }];
 
     const narrative = generateNarrative(files, layers);
     // in_degree=1 > 0 so the impact sentence fires
@@ -538,14 +591,14 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
       makeFile("src/tools/hub.ts", "tools", {
         priority_factors: {
           in_degree: 5,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 2,
+          violation_count: 0,
         },
       }),
     ];
-    const layers = [{ name: "tools", file_count: 1 }];
+    const layers = [{ file_count: 1, name: "tools" }];
 
     const narrative = generateNarrative(files, layers);
     expect(narrative).toMatch(/5 files depend/);
@@ -556,14 +609,14 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
       makeFile("src/tools/bad.ts", "tools", {
         priority_factors: {
           in_degree: 0,
-          violation_count: 1,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 1,
         },
       }),
     ];
-    const layers = [{ name: "tools", file_count: 1 }];
+    const layers = [{ file_count: 1, name: "tools" }];
 
     const narrative = generateNarrative(files, layers);
     // "There is 1 principle violation to address."
@@ -576,23 +629,23 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
       makeFile("src/tools/bad.ts", "tools", {
         priority_factors: {
           in_degree: 0,
-          violation_count: 2,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 2,
         },
       }),
       makeFile("src/tools/also-bad.ts", "tools", {
         priority_factors: {
           in_degree: 0,
-          violation_count: 1,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 1,
         },
       }),
     ];
-    const layers = [{ name: "tools", file_count: 2 }];
+    const layers = [{ file_count: 2, name: "tools" }];
 
     const narrative = generateNarrative(files, layers);
     // Total = 3 violations → "There are 3 principle violations"
@@ -605,14 +658,14 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
       makeFile("src/tools/leaf.ts", "tools", {
         priority_factors: {
           in_degree: 0,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 1,
+          violation_count: 0,
         },
       }),
     ];
-    const layers = [{ name: "tools", file_count: 1 }];
+    const layers = [{ file_count: 1, name: "tools" }];
 
     const narrative = generateNarrative(files, layers);
     // max in_degree = 0 → condition `maxInDegree > 0` is false → no impact sentence
@@ -629,8 +682,8 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
     ];
     // graph has 3 files, tools has 1 — graph should be the top layer
     const layers = [
-      { name: "tools", file_count: 1 },
-      { name: "graph", file_count: 3 },
+      { file_count: 1, name: "tools" },
+      { file_count: 3, name: "graph" },
     ];
 
     const narrative = generateNarrative(files, layers);
@@ -641,11 +694,9 @@ describe("generateNarrative() — singular/plural wording (coverage gaps)", () =
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 6. UI helper pure-logic tests (extracted from Svelte source)
 //    These test the *logic* of helper functions whose behavior was only
 //    verified structurally in the entry-point tests.
-// ─────────────────────────────────────────────────────────────────────────────
 
 // The helpers are not exported from PrReview.svelte, so we reproduce the
 // exact logic here (copied verbatim from the component) and test it as a unit.
@@ -710,9 +761,12 @@ describe("PrReview helper: statusIcon()", () => {
 
 describe("PrReview helper: statusClass()", () => {
   it("returns 'status-added' for added", () => expect(statusClass("added")).toBe("status-added"));
-  it("returns 'status-deleted' for deleted", () => expect(statusClass("deleted")).toBe("status-deleted"));
-  it("returns 'status-renamed' for renamed", () => expect(statusClass("renamed")).toBe("status-renamed"));
-  it("returns 'status-modified' for modified", () => expect(statusClass("modified")).toBe("status-modified"));
+  it("returns 'status-deleted' for deleted", () =>
+    expect(statusClass("deleted")).toBe("status-deleted"));
+  it("returns 'status-renamed' for renamed", () =>
+    expect(statusClass("renamed")).toBe("status-renamed"));
+  it("returns 'status-modified' for modified", () =>
+    expect(statusClass("modified")).toBe("status-modified"));
 });
 
 describe("PrReview helper: shortPath()", () => {
@@ -761,16 +815,16 @@ describe("PrReview helper: formatAge()", () => {
 
 describe("PrReview helper: groupByDepth()", () => {
   it("groups a single depth-1 entry correctly", () => {
-    const result = groupByDepth([{ path: "src/a.ts", depth: 1 }]);
+    const result = groupByDepth([{ depth: 1, path: "src/a.ts" }]);
     expect(result.get(1)).toEqual(["src/a.ts"]);
     expect(result.size).toBe(1);
   });
 
   it("groups multiple paths at the same depth together", () => {
     const result = groupByDepth([
-      { path: "src/a.ts", depth: 1 },
-      { path: "src/b.ts", depth: 1 },
-      { path: "src/c.ts", depth: 2 },
+      { depth: 1, path: "src/a.ts" },
+      { depth: 1, path: "src/b.ts" },
+      { depth: 2, path: "src/c.ts" },
     ]);
     expect(result.get(1)).toEqual(["src/a.ts", "src/b.ts"]);
     expect(result.get(2)).toEqual(["src/c.ts"]);
@@ -784,17 +838,15 @@ describe("PrReview helper: groupByDepth()", () => {
 
   it("preserves insertion order within each depth group", () => {
     const result = groupByDepth([
-      { path: "src/first.ts", depth: 1 },
-      { path: "src/second.ts", depth: 1 },
-      { path: "src/third.ts", depth: 1 },
+      { depth: 1, path: "src/first.ts" },
+      { depth: 1, path: "src/second.ts" },
+      { depth: 1, path: "src/third.ts" },
     ]);
     expect(result.get(1)).toEqual(["src/first.ts", "src/second.ts", "src/third.ts"]);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 7. setActiveLayer() toggle logic — declared gap (Task 02)
-// ─────────────────────────────────────────────────────────────────────────────
 
 // The toggle logic is: activeLayer === layer ? null : layer
 // This behavior is declared untested in Task 02 Coverage Notes.
@@ -830,9 +882,7 @@ describe("PrReview setActiveLayer() toggle logic (declared gap)", () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 8. filteredFiles derived state logic — declared gap (Task 02)
-// ─────────────────────────────────────────────────────────────────────────────
 
 // The component uses: activeLayer ? files.filter(f => f.layer === activeLayer) : files
 // This is the "No test verifying that activeLayer actually filters file display" gap.
@@ -893,16 +943,14 @@ describe("filteredFiles derived state logic (declared gap)", () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 9. Svelte component structural contract: truncate used from lib/constants
-// ─────────────────────────────────────────────────────────────────────────────
 
 import { readFileSync } from "node:fs";
 import { dirname, join as pathJoin } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const uiDir = pathJoin(__dirname, "../../ui");
+const uiDir = pathJoin(__dirname, "../ui");
 
 describe("PrReview.svelte — v2 container structural contract", () => {
   // Updated 2026-03-25: PrReviewPrep.svelte merged into PrReview.svelte (unified view)

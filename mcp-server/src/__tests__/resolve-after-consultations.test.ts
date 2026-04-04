@@ -2,58 +2,52 @@ import { describe, expect, it } from "vitest";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
+    consultations: {
+      "perf-check": {
+        agent: "canon:canon-researcher",
+        fragment: "perf-check",
+        role: "researcher",
+        section: "## Performance",
+      },
+      "post-review-check": {
+        agent: "canon:canon-security",
+        fragment: "post-review-check",
+        role: "security",
+        timeout: "5m",
+      },
+    },
     description: "Test flow",
     entry: "review",
+    name: "test-flow",
+    spawn_instructions: {
+      "perf-check": "Run performance check.",
+      "post-review-check": "Run post-review check for ${task}.",
+    },
     states: {
       review: {
-        type: "single",
         agent: "canon:canon-reviewer",
         consultations: {
           after: ["post-review-check"],
         },
-      },
-    },
-    spawn_instructions: {
-      "post-review-check": "Run post-review check for ${task}.",
-      "perf-check": "Run performance check.",
-    },
-    consultations: {
-      "post-review-check": {
-        fragment: "post-review-check",
-        agent: "canon:canon-security",
-        role: "security",
-        timeout: "5m",
-      },
-      "perf-check": {
-        fragment: "perf-check",
-        agent: "canon:canon-researcher",
-        role: "researcher",
-        section: "## Performance",
+        type: "single",
       },
     },
     ...overrides,
   };
 }
 
-// ---------------------------------------------------------------------------
 // resolveAfterConsultations
-// ---------------------------------------------------------------------------
 
 describe("resolveAfterConsultations", () => {
   it("returns consultation prompts for valid after consultations", () => {
     const flow = makeFlow();
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: { task: "my-feature" },
+      workspace: "/tmp/ws",
     });
 
     expect(result.warnings).toHaveLength(0);
@@ -68,18 +62,18 @@ describe("resolveAfterConsultations", () => {
     const flow = makeFlow({
       states: {
         review: {
-          type: "single",
           agent: "canon:canon-reviewer",
+          type: "single",
           // no consultations key at all
         },
       },
     });
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: {},
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(0);
@@ -90,21 +84,21 @@ describe("resolveAfterConsultations", () => {
     const flow = makeFlow({
       states: {
         review: {
-          type: "single",
           agent: "canon:canon-reviewer",
           consultations: {
             before: ["post-review-check"],
             // no "after" key
           },
+          type: "single",
         },
       },
     });
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: {},
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(0);
@@ -115,19 +109,19 @@ describe("resolveAfterConsultations", () => {
     const flow = makeFlow({
       states: {
         review: {
-          type: "single",
           consultations: {
             after: ["missing-consultation"],
           },
+          type: "single",
         },
       },
     });
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: {},
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(0);
@@ -137,31 +131,31 @@ describe("resolveAfterConsultations", () => {
 
   it("returns warnings for consultation names without spawn instructions", () => {
     const flow = makeFlow({
-      states: {
-        review: {
-          type: "single",
-          consultations: {
-            after: ["orphan-consult"],
-          },
-        },
-      },
       consultations: {
         "orphan-consult": {
-          fragment: "orphan-consult",
           agent: "canon:canon-security",
+          fragment: "orphan-consult",
           role: "security",
         },
       },
       spawn_instructions: {
         // "orphan-consult" intentionally missing
       },
+      states: {
+        review: {
+          consultations: {
+            after: ["orphan-consult"],
+          },
+          type: "single",
+        },
+      },
     });
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: {},
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(0);
@@ -173,19 +167,19 @@ describe("resolveAfterConsultations", () => {
     const flow = makeFlow({
       states: {
         review: {
-          type: "single",
           consultations: {
             after: ["perf-check"],
           },
+          type: "single",
         },
       },
     });
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: {},
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(1);
@@ -198,33 +192,35 @@ describe("resolveAfterConsultations", () => {
   it("substitutes variables in spawn instruction prompt text", () => {
     const flow = makeFlow();
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: { task: "substituted-value" },
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(1);
-    expect(result.consultation_prompts[0].prompt).toBe("Run post-review check for substituted-value.");
+    expect(result.consultation_prompts[0].prompt).toBe(
+      "Run post-review check for substituted-value.",
+    );
   });
 
   it("handles mixed valid and invalid consultation names (partial success)", () => {
     const flow = makeFlow({
       states: {
         review: {
-          type: "single",
           consultations: {
             after: ["post-review-check", "nonexistent"],
           },
+          type: "single",
         },
       },
     });
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "review",
       flow,
+      state_id: "review",
       variables: { task: "mixed-test" },
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(1);
@@ -237,10 +233,10 @@ describe("resolveAfterConsultations", () => {
     const flow = makeFlow();
 
     const result = resolveAfterConsultations({
-      workspace: "/tmp/ws",
-      state_id: "nonexistent-state",
       flow,
+      state_id: "nonexistent-state",
       variables: {},
+      workspace: "/tmp/ws",
     });
 
     expect(result.consultation_prompts).toHaveLength(0);

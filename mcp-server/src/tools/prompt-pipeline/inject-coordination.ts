@@ -18,8 +18,8 @@
  * operations, all concerning coordination and observability metadata.
  */
 
-import { substituteVariables } from "../../orchestration/variables.ts";
 import { buildMessageInstructions } from "../../orchestration/messages.ts";
+import { substituteVariables } from "../../orchestration/variables.ts";
 import type { PromptContext } from "./types.ts";
 
 /**

@@ -15,9 +15,7 @@
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-// ---------------------------------------------------------------------------
 // Levenshtein distance
-// ---------------------------------------------------------------------------
 
 function levenshtein(a: string, b: string): number {
   const m = a.length;
@@ -27,15 +25,16 @@ function levenshtein(a: string, b: string): number {
   for (let j = 0; j <= n; j++) dp[0][j] = j;
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
     }
   }
   return dp[m][n];
 }
 
-// ---------------------------------------------------------------------------
 // Suggestion logic
-// ---------------------------------------------------------------------------
 
 const MAX_DISTANCE = 3;
 
@@ -68,14 +67,16 @@ export function suggestField(unknown: string, knownKeys: string[]): string | nul
   return best;
 }
 
-// ---------------------------------------------------------------------------
 // Pre-validation check
-// ---------------------------------------------------------------------------
 
 /**
  * Check raw input for unknown fields and return error messages with suggestions.
  */
-export function checkUnknownFields(toolName: string, input: Record<string, unknown>, knownKeys: string[]): string[] {
+export function checkUnknownFields(
+  toolName: string,
+  input: Record<string, unknown>,
+  knownKeys: string[],
+): string[] {
   const knownSet = new Set(knownKeys);
   const errors: string[] = [];
 
@@ -90,9 +91,7 @@ export function checkUnknownFields(toolName: string, input: Record<string, unkno
   return errors;
 }
 
-// ---------------------------------------------------------------------------
 // Server patch
-// ---------------------------------------------------------------------------
 
 /**
  * Extract known field names from a tool's inputSchema.
@@ -110,7 +109,8 @@ function getSchemaKeys(inputSchema: unknown): string[] | null {
     ([, v]) =>
       typeof v === "object" &&
       v !== null &&
-      ((v as { _def?: unknown })._def !== undefined || typeof (v as { parse?: unknown }).parse === "function"),
+      ((v as { _def?: unknown })._def !== undefined ||
+        typeof (v as { parse?: unknown }).parse === "function"),
   );
   if (isRawShape) {
     return entries.map(([k]) => k);
@@ -139,7 +139,8 @@ export function installFuzzyValidation(server: McpServer): void {
   // biome-ignore lint/suspicious/noExplicitAny: patching private SDK internals requires dynamic access
   const serverAny = server as any;
   const originalValidate: ((...args: unknown[]) => unknown) | undefined =
-    serverAny.validateToolInput?.bind(server) ?? Object.getPrototypeOf(server).validateToolInput?.bind(server);
+    serverAny.validateToolInput?.bind(server) ??
+    Object.getPrototypeOf(server).validateToolInput?.bind(server);
 
   if (!originalValidate) {
     // SDK version doesn't have validateToolInput — skip gracefully

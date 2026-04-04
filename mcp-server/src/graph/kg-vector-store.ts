@@ -12,13 +12,11 @@
  * handler). Callers that need graceful degradation should catch errors.
  */
 
-import type Database from "better-sqlite3";
 import { createHash } from "node:crypto";
+import type Database from "better-sqlite3";
 import { EMBEDDING_DIM, EMBEDDING_MODEL_ID } from "../constants.ts";
 
-// ---------------------------------------------------------------------------
 // KgVectorStore
-// ---------------------------------------------------------------------------
 
 export class KgVectorStore {
   private readonly db: Database.Database;
@@ -26,8 +24,6 @@ export class KgVectorStore {
   // Prepared statements for meta table operations (regular SQLite tables work fine)
   private readonly stmtUpsertEntityMeta: Database.Statement;
   private readonly stmtUpsertSummaryMeta: Database.Statement;
-  private readonly stmtDeleteEntityMeta: Database.Statement;
-  private readonly stmtDeleteSummaryMeta: Database.Statement;
   private readonly stmtCountEntityVectorMeta: Database.Statement;
   private readonly stmtCountSummaryVectorMeta: Database.Statement;
 
@@ -53,22 +49,12 @@ export class KgVectorStore {
         updated_at = excluded.updated_at
     `);
 
-    this.stmtDeleteEntityMeta = db.prepare(`
-      DELETE FROM entity_vector_meta WHERE entity_id = ?
-    `);
-
-    this.stmtDeleteSummaryMeta = db.prepare(`
-      DELETE FROM summary_vector_meta WHERE summary_id = ?
-    `);
-
     // Stats via meta tables (meta tables stay in sync with vec0 rows via upsert/cleanup)
     this.stmtCountEntityVectorMeta = db.prepare(`SELECT COUNT(*) AS n FROM entity_vector_meta`);
     this.stmtCountSummaryVectorMeta = db.prepare(`SELECT COUNT(*) AS n FROM summary_vector_meta`);
   }
 
-  // ---------------------------------------------------------------------------
   // Static helpers
-  // ---------------------------------------------------------------------------
 
   /** Compute SHA-256 hash of text for staleness detection. */
   static textHash(text: string): string {
@@ -88,9 +74,7 @@ export class KgVectorStore {
     return text;
   }
 
-  // ---------------------------------------------------------------------------
   // Upsert operations
-  // ---------------------------------------------------------------------------
 
   /**
    * Upsert an entity vector + meta row.
@@ -106,14 +90,12 @@ export class KgVectorStore {
       throw new Error(`entityId must be a finite integer, got: ${entityId}`);
     }
     if (embedding.length !== EMBEDDING_DIM) {
-      throw new Error(
-        `embedding must have length ${EMBEDDING_DIM}, got ${embedding.length}`,
-      );
+      throw new Error(`embedding must have length ${EMBEDDING_DIM}, got ${embedding.length}`);
     }
     if (embedding.some((v) => !Number.isFinite(v))) {
       throw new Error("embedding contains non-finite values (NaN or Infinity)");
     }
-    const jsonVec = "[" + Array.from(embedding).join(",") + "]";
+    const jsonVec = `[${Array.from(embedding).join(",")}]`;
     const updatedAt = new Date().toISOString();
 
     const doUpsert = this.db.transaction(() => {
@@ -128,8 +110,8 @@ export class KgVectorStore {
       // Upsert meta row (regular table — prepared statements work fine)
       this.stmtUpsertEntityMeta.run({
         entity_id: entityId,
-        text_hash: textHash,
         model_id: EMBEDDING_MODEL_ID,
+        text_hash: textHash,
         updated_at: updatedAt,
       });
     });
@@ -146,14 +128,12 @@ export class KgVectorStore {
       throw new Error(`summaryId must be a finite integer, got: ${summaryId}`);
     }
     if (embedding.length !== EMBEDDING_DIM) {
-      throw new Error(
-        `embedding must have length ${EMBEDDING_DIM}, got ${embedding.length}`,
-      );
+      throw new Error(`embedding must have length ${EMBEDDING_DIM}, got ${embedding.length}`);
     }
     if (embedding.some((v) => !Number.isFinite(v))) {
       throw new Error("embedding contains non-finite values (NaN or Infinity)");
     }
-    const jsonVec = "[" + Array.from(embedding).join(",") + "]";
+    const jsonVec = `[${Array.from(embedding).join(",")}]`;
     const updatedAt = new Date().toISOString();
 
     const doUpsert = this.db.transaction(() => {
@@ -167,9 +147,9 @@ export class KgVectorStore {
 
       // Upsert meta row
       this.stmtUpsertSummaryMeta.run({
+        model_id: EMBEDDING_MODEL_ID,
         summary_id: summaryId,
         text_hash: textHash,
-        model_id: EMBEDDING_MODEL_ID,
         updated_at: updatedAt,
       });
     });
@@ -177,9 +157,7 @@ export class KgVectorStore {
     doUpsert();
   }
 
-  // ---------------------------------------------------------------------------
   // Orphan cleanup
-  // ---------------------------------------------------------------------------
 
   /**
    * Delete orphan entity vectors where the source entity no longer exists.
@@ -191,9 +169,9 @@ export class KgVectorStore {
    */
   cleanOrphanEntityVectors(): number {
     // Enumerate all entity_ids present in the vec0 table (direct SELECT works without MATCH)
-    const vecRows = this.db
-      .prepare("SELECT entity_id FROM entity_vectors")
-      .all() as Array<{ entity_id: number }>;
+    const vecRows = this.db.prepare("SELECT entity_id FROM entity_vectors").all() as Array<{
+      entity_id: number;
+    }>;
 
     if (vecRows.length === 0) return 0;
 
@@ -201,9 +179,7 @@ export class KgVectorStore {
     let deleted = 0;
     const doClean = this.db.transaction(() => {
       for (const { entity_id } of vecRows) {
-        const exists = this.db
-          .prepare("SELECT 1 FROM entities WHERE entity_id = ?")
-          .get(entity_id);
+        const exists = this.db.prepare("SELECT 1 FROM entities WHERE entity_id = ?").get(entity_id);
         if (!exists) {
           if (!Number.isInteger(entity_id) || !Number.isFinite(entity_id)) {
             throw new Error(`entity_id must be a finite integer, got: ${entity_id}`);
@@ -223,9 +199,9 @@ export class KgVectorStore {
    * Returns count of rows deleted.
    */
   cleanOrphanSummaryVectors(): number {
-    const vecRows = this.db
-      .prepare("SELECT summary_id FROM summary_vectors")
-      .all() as Array<{ summary_id: number }>;
+    const vecRows = this.db.prepare("SELECT summary_id FROM summary_vectors").all() as Array<{
+      summary_id: number;
+    }>;
 
     if (vecRows.length === 0) return 0;
 
@@ -249,9 +225,7 @@ export class KgVectorStore {
     return deleted;
   }
 
-  // ---------------------------------------------------------------------------
   // Staleness detection
-  // ---------------------------------------------------------------------------
 
   /**
    * Get entities needing (re-)embedding.
@@ -322,10 +296,10 @@ export class KgVectorStore {
 
     for (const row of allCandidates) {
       const compositeText = KgVectorStore.compositeEntityText({
+        file_path: row.file_path,
         kind: row.kind,
         qualified_name: row.qualified_name,
         signature: row.signature,
-        file_path: row.file_path,
       });
       const currentHash = KgVectorStore.textHash(compositeText);
 
@@ -336,12 +310,12 @@ export class KgVectorStore {
 
       if (isStale) {
         result.push({
+          current_hash: currentHash,
           entity_id: row.entity_id,
+          file_path: row.file_path,
           kind: row.kind,
           qualified_name: row.qualified_name,
           signature: row.signature,
-          file_path: row.file_path,
-          current_hash: currentHash,
         });
       }
     }
@@ -408,11 +382,11 @@ export class KgVectorStore {
 
       if (isStale) {
         result.push({
-          summary_id: row.summary_id,
-          summary: row.summary,
+          current_hash: currentHash,
           entity_id: row.entity_id,
           file_id: row.file_id,
-          current_hash: currentHash,
+          summary: row.summary,
+          summary_id: row.summary_id,
         });
       }
     }
@@ -420,9 +394,7 @@ export class KgVectorStore {
     return limit != null ? result.slice(0, limit) : result;
   }
 
-  // ---------------------------------------------------------------------------
   // Stats
-  // ---------------------------------------------------------------------------
 
   /** Get vector counts for stats. */
   getVectorStats(): { entityVectors: number; summaryVectors: number } {

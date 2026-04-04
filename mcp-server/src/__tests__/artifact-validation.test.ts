@@ -9,22 +9,15 @@
  * - no-silent-failures: missing/malformed artifacts produce explicit INVALID_INPUT errors
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
-import { writeFile, mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import { validateRequiredArtifacts } from "../tools/report-result.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
+import { afterEach, describe, expect, it } from "vitest";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import type { RequiredArtifact, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { reportResult, validateRequiredArtifacts } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import type { RequiredArtifact } from "../orchestration/flow-schema.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -37,7 +30,7 @@ function makeTmpWorkspace(): string {
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
@@ -54,18 +47,18 @@ async function writeMetaJson(
 function makeFlow(requiredArtifacts?: RequiredArtifact[]): ResolvedFlow {
   const stateDef = requiredArtifacts
     ? {
-        type: "single" as const,
-        transitions: { done: "terminal" },
         required_artifacts: requiredArtifacts,
+        transitions: { done: "terminal" },
+        type: "single" as const,
       }
     : {
-        type: "single" as const,
         transitions: { done: "terminal" },
+        type: "single" as const,
       };
   return {
-    name: "test-flow",
     description: "Artifact validation test flow",
     entry: "implement",
+    name: "test-flow",
     spawn_instructions: { implement: "Implement." },
     states: {
       implement: stateDef,
@@ -78,36 +71,34 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: flow.name,
-    task: "task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc1234",
-    started: now,
-    last_updated: now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "main",
     slug: "test-slug",
+    started: now,
+    task: "task",
+    tier: "medium",
   });
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
     if ("max_iterations" in stateDef && stateDef.max_iterations !== undefined) {
       store.upsertIteration(stateId, {
-        count: 0,
-        max: stateDef.max_iterations,
-        history: [],
         cannot_fix: [],
+        count: 0,
+        history: [],
+        max: stateDef.max_iterations,
       });
     }
   }
 }
 
-// ---------------------------------------------------------------------------
 // Unit tests: validateRequiredArtifacts
-// ---------------------------------------------------------------------------
 
 describe("validateRequiredArtifacts", () => {
   it("returns null when required array is empty", async () => {
@@ -136,11 +127,7 @@ describe("validateRequiredArtifacts", () => {
   it("returns null when .meta.json in artifacts list has correct _type", async () => {
     const workspace = makeTmpWorkspace();
     const metaPath = join(workspace, "REVIEW.meta.json");
-    await writeFile(
-      metaPath,
-      JSON.stringify({ _type: "review", _version: 1 }),
-      "utf-8",
-    );
+    await writeFile(metaPath, JSON.stringify({ _type: "review", _version: 1 }), "utf-8");
 
     const result = await validateRequiredArtifacts(
       workspace,
@@ -190,11 +177,7 @@ describe("validateRequiredArtifacts", () => {
   it("returns INVALID_INPUT when .meta.json is malformed JSON", async () => {
     const workspace = makeTmpWorkspace();
     await mkdir(join(workspace, "reviews"), { recursive: true });
-    await writeFile(
-      join(workspace, "reviews", "REVIEW.meta.json"),
-      "not valid json {{{",
-      "utf-8",
-    );
+    await writeFile(join(workspace, "reviews", "REVIEW.meta.json"), "not valid json {{{", "utf-8");
 
     const result = await validateRequiredArtifacts(
       workspace,
@@ -287,9 +270,7 @@ describe("validateRequiredArtifacts", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Integration tests: reportResult with required_artifacts on state definition
-// ---------------------------------------------------------------------------
 
 describe("reportResult with required_artifacts", () => {
   it("returns INVALID_INPUT when required artifact is missing — board NOT mutated", async () => {
@@ -301,11 +282,11 @@ describe("reportResult with required_artifacts", () => {
     const boardBefore = store.getBoard();
 
     const result = await reportResult({
-      workspace,
+      artifacts: ["plans/task/some-plan.md"], // no REVIEW.meta.json
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["plans/task/some-plan.md"], // no REVIEW.meta.json
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -316,10 +297,8 @@ describe("reportResult with required_artifacts", () => {
 
     // Board state must NOT be mutated
     const boardAfter = store.getBoard();
-    expect(boardAfter?.states["implement"]?.status).toBe(
-      boardBefore?.states["implement"]?.status,
-    );
-    expect(boardAfter?.states["implement"]?.result).toBeUndefined();
+    expect(boardAfter?.states.implement?.status).toBe(boardBefore?.states.implement?.status);
+    expect(boardAfter?.states.implement?.result).toBeUndefined();
   });
 
   it("succeeds when required artifact .meta.json exists with correct type", async () => {
@@ -335,11 +314,11 @@ describe("reportResult with required_artifacts", () => {
     });
 
     const result = await reportResult({
-      workspace,
+      artifacts: ["reviews/REVIEW.md"],
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["reviews/REVIEW.md"],
+      workspace,
     });
 
     assertOk(result);
@@ -354,11 +333,11 @@ describe("reportResult with required_artifacts", () => {
 
     // No .meta.json files present at all — validation should be skipped
     const result = await reportResult({
-      workspace,
+      artifacts: ["some-output.md"],
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["some-output.md"],
+      workspace,
     });
 
     assertOk(result);
@@ -373,10 +352,10 @@ describe("reportResult with required_artifacts", () => {
 
     // No artifacts array — validation still runs (empty list passed to validateRequiredArtifacts)
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
+      workspace,
       // artifacts: undefined — absent, but validation still runs
     });
 
@@ -399,11 +378,11 @@ describe("reportResult with required_artifacts", () => {
     });
 
     const result = await reportResult({
-      workspace,
+      artifacts: ["reviews/REVIEW.md"],
+      flow,
       state_id: "implement",
       status_keyword: "DONE",
-      flow,
-      artifacts: ["reviews/REVIEW.md"],
+      workspace,
     });
 
     expect(result.ok).toBe(false);
@@ -416,7 +395,7 @@ describe("reportResult with required_artifacts", () => {
     // Board NOT mutated
     const store = getExecutionStore(workspace);
     const board = store.getBoard();
-    expect(board?.states["implement"]?.status).toBe("pending");
-    expect(board?.states["implement"]?.result).toBeUndefined();
+    expect(board?.states.implement?.status).toBe("pending");
+    expect(board?.states.implement?.result).toBeUndefined();
   });
 });

@@ -1,8 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 type SpawnSyncResult = {
   stdout: string;
@@ -33,26 +31,22 @@ vi.mock("node:child_process", () => ({
       resolvedArgs = [];
       resolvedOpts = (args ?? {}) as Record<string, unknown>;
     }
-    spawnSyncCalls.push({ cmd, args: resolvedArgs, opts: resolvedOpts });
+    spawnSyncCalls.push({ args: resolvedArgs, cmd, opts: resolvedOpts });
     if (spawnSyncImpl) return spawnSyncImpl();
-    return { stdout: "", stderr: "", status: 0, signal: null };
+    return { signal: null, status: 0, stderr: "", stdout: "" };
   },
 }));
 
-// ---------------------------------------------------------------------------
 // Import after mocks
-// ---------------------------------------------------------------------------
 
-import { gitExec, gitDiff, gitStatus, gitLog } from "../adapters/git-adapter.ts";
+import { gitDiff, gitExec, gitLog, gitStatus } from "../adapters/git-adapter.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;
   spawnSyncCalls = [];
 });
 
-// ---------------------------------------------------------------------------
 // gitExec — basic call verification
-// ---------------------------------------------------------------------------
 
 describe("gitExec — spawnSync call shape", () => {
   it("calls spawnSync with 'git' as the command", () => {
@@ -87,9 +81,7 @@ describe("gitExec — spawnSync call shape", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitExec — SECURITY: shell MUST NOT be true
-// ---------------------------------------------------------------------------
 
 describe("gitExec — security: no shell:true", () => {
   it("does NOT pass shell:true in options", () => {
@@ -106,113 +98,116 @@ describe("gitExec — security: no shell:true", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitExec — ProcessResult on success
-// ---------------------------------------------------------------------------
 
 describe("gitExec — ProcessResult on success (exit 0)", () => {
   it("returns ok:true when exit status is 0", () => {
-    spawnSyncImpl = () => ({ stdout: "main\n", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "main\n" });
     const result = gitExec(["branch"], "/project");
     expect(result.ok).toBe(true);
   });
 
   it("returns stdout from spawnSync result", () => {
-    spawnSyncImpl = () => ({ stdout: "hello\n", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "hello\n" });
     const result = gitExec(["status"], "/project");
     expect(result.stdout).toBe("hello\n");
   });
 
   it("returns stderr from spawnSync result", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "warning\n", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "warning\n", stdout: "" });
     const result = gitExec(["status"], "/project");
     expect(result.stderr).toBe("warning\n");
   });
 
   it("returns exitCode: 0 on success", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "" });
     const result = gitExec(["status"], "/project");
     expect(result.exitCode).toBe(0);
   });
 
   it("returns timedOut:false on success", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: 0, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 0, stderr: "", stdout: "" });
     const result = gitExec(["status"], "/project");
     expect(result.timedOut).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitExec — ProcessResult on failure
-// ---------------------------------------------------------------------------
 
 describe("gitExec — ProcessResult on non-zero exit", () => {
   it("returns ok:false when exit status is non-zero", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "fatal: not a git repo", status: 128, signal: null });
+    spawnSyncImpl = () => ({
+      signal: null,
+      status: 128,
+      stderr: "fatal: not a git repo",
+      stdout: "",
+    });
     const result = gitExec(["status"], "/notarepo");
     expect(result.ok).toBe(false);
   });
 
   it("returns the correct non-zero exitCode", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "error", status: 128, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 128, stderr: "error", stdout: "" });
     const result = gitExec(["status"], "/notarepo");
     expect(result.exitCode).toBe(128);
   });
 
   it("returns ok:false when spawnSync sets an error property", () => {
     spawnSyncImpl = () => ({
-      stdout: "",
-      stderr: "",
-      status: 0,
-      signal: null,
       error: new Error("spawn error"),
+      signal: null,
+      status: 0,
+      stderr: "",
+      stdout: "",
     });
     const result = gitExec(["status"], "/project");
     expect(result.ok).toBe(false);
   });
 
   it("uses exitCode 1 fallback when status is null", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: null, signal: null, error: new Error("ETIMEDOUT") });
+    spawnSyncImpl = () => ({
+      error: new Error("ETIMEDOUT"),
+      signal: null,
+      status: null,
+      stderr: "",
+      stdout: "",
+    });
     const result = gitExec(["status"], "/project");
     expect(result.exitCode).toBe(1);
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitExec — timeout detection
-// ---------------------------------------------------------------------------
 
 describe("gitExec — timeout detection", () => {
   it("sets timedOut:true when signal is SIGTERM", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: null, signal: "SIGTERM" });
+    spawnSyncImpl = () => ({ signal: "SIGTERM", status: null, stderr: "", stdout: "" });
     const result = gitExec(["status"], "/project");
     expect(result.timedOut).toBe(true);
   });
 
   it("sets timedOut:true when error message contains ETIMEDOUT", () => {
     const err = new Error("ETIMEDOUT");
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: null, signal: null, error: err });
+    spawnSyncImpl = () => ({ error: err, signal: null, status: null, stderr: "", stdout: "" });
     const result = gitExec(["status"], "/project");
     expect(result.timedOut).toBe(true);
   });
 
   it("sets timedOut:true when error message contains 'timed out'", () => {
     const err = new Error("process timed out");
-    spawnSyncImpl = () => ({ stdout: "", stderr: "", status: null, signal: null, error: err });
+    spawnSyncImpl = () => ({ error: err, signal: null, status: null, stderr: "", stdout: "" });
     const result = gitExec(["status"], "/project");
     expect(result.timedOut).toBe(true);
   });
 
   it("sets timedOut:false when there is no timeout signal or error", () => {
-    spawnSyncImpl = () => ({ stdout: "", stderr: "error", status: 1, signal: null });
+    spawnSyncImpl = () => ({ signal: null, status: 1, stderr: "error", stdout: "" });
     const result = gitExec(["status"], "/project");
     expect(result.timedOut).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitDiff — convenience wrapper
-// ---------------------------------------------------------------------------
 
 describe("gitDiff — convenience wrapper", () => {
   it("prepends 'diff' to the provided args", () => {
@@ -231,9 +226,7 @@ describe("gitDiff — convenience wrapper", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitStatus — convenience wrapper
-// ---------------------------------------------------------------------------
 
 describe("gitStatus — convenience wrapper", () => {
   it("passes ['status', '--porcelain'] as args", () => {
@@ -257,9 +250,7 @@ describe("gitStatus — convenience wrapper", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // gitLog — convenience wrapper
-// ---------------------------------------------------------------------------
 
 describe("gitLog — convenience wrapper", () => {
   it("passes correct args for git log with file paths", () => {

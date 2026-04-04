@@ -20,9 +20,7 @@ import {
   type TypedParam,
 } from "./flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // parseFlowContent
-// ---------------------------------------------------------------------------
 
 /**
  * Split a flow/fragment `.md` file into YAML frontmatter and spawn instructions.
@@ -69,16 +67,18 @@ export function parseFlowContent(content: string): {
   return { frontmatter, spawnInstructions };
 }
 
-// ---------------------------------------------------------------------------
 // loadFragment
-// ---------------------------------------------------------------------------
 
 /**
  * Resolve a fragment file path using two-tier lookup:
  * 1. Check `${projectDir}/.canon/flows/fragments/${name}.md` first (if projectDir provided)
  * 2. Fall back to `${pluginDir}/flows/fragments/${name}.md`
  */
-async function resolveFragmentFile(pluginDir: string, name: string, projectDir?: string): Promise<string> {
+async function resolveFragmentFile(
+  pluginDir: string,
+  name: string,
+  projectDir?: string,
+): Promise<string> {
   if (projectDir) {
     const projectPath = `${projectDir}/.canon/flows/fragments/${name}.md`;
     try {
@@ -109,9 +109,7 @@ export async function loadFragment(
   return { definition, spawnInstructions };
 }
 
-// ---------------------------------------------------------------------------
 // resolveFragments
-// ---------------------------------------------------------------------------
 
 /**
  * Deep string substitution: recursively walk an object and replace every
@@ -196,26 +194,28 @@ export function resolveFragments(
     const effectiveParams = buildEffectiveParams(definition, include);
 
     if (definition.type === "consultation") {
-      resolveConsultationFragment(
-        definition,
-        include,
-        effectiveParams,
-        spawnInstructions,
+      resolveConsultationFragment(definition, include, {
         consultations,
+        effectiveParams,
         mergedSpawnInstructions,
-      );
+        spawnInstructions,
+      });
       continue;
     }
 
     resolveRegularFragment(definition, include, effectiveParams, mergedStates);
-    mergeSpawnInstructions(definition, include, effectiveParams, spawnInstructions, mergedSpawnInstructions);
+    mergeSpawnInstructions(definition, include, {
+      effectiveParams,
+      mergedSpawnInstructions,
+      spawnInstructions,
+    });
   }
 
   return {
-    states: mergedStates,
     consultations,
-    spawnInstructions: mergedSpawnInstructions,
     firstFragmentEntry,
+    spawnInstructions: mergedSpawnInstructions,
+    states: mergedStates,
   };
 }
 
@@ -227,39 +227,53 @@ function isTypedParam(v: unknown): v is TypedParam {
   return v !== null && typeof v === "object" && "type" in v;
 }
 
+/** Check if a param is required (no default) and not provided. */
+function isParamMissing(
+  paramName: string,
+  paramDef: unknown,
+  withParams: Record<string, unknown>,
+): boolean {
+  if (paramName in withParams) return false;
+  if (isTypedParam(paramDef)) return paramDef.default === undefined;
+  return paramDef === null || paramDef === undefined;
+}
+
+/** Extract the default value for a single param definition. */
+function getParamDefault(paramDef: unknown): (string | number | boolean) | undefined {
+  if (isTypedParam(paramDef)) {
+    return paramDef.default as string | number | boolean | undefined;
+  }
+  // Old format: non-null scalar is a default value (includes false)
+  if (paramDef !== null && paramDef !== undefined) {
+    return paramDef as string | number | boolean;
+  }
+  return undefined;
+}
+
 /** Validate required params and build the effective params map (defaults + overrides). */
 function buildEffectiveParams(
   definition: FragmentDefinition,
   include: FragmentInclude,
 ): Record<string, string | number | boolean> {
   const withParams = include.with ?? {};
+
+  // Validate required params
   if (definition.params) {
     for (const [paramName, paramDef] of Object.entries(definition.params)) {
-      if (isTypedParam(paramDef)) {
-        // New typed format: required if no default and not provided in with
-        if (paramDef.default === undefined && !(paramName in withParams)) {
-          throw new Error(`Fragment "${include.fragment}" requires param "${paramName}" but it was not provided`);
-        }
-      } else {
-        // Old format: null means required
-        if ((paramDef === null || paramDef === undefined) && !(paramName in withParams)) {
-          throw new Error(`Fragment "${include.fragment}" requires param "${paramName}" but it was not provided`);
-        }
+      if (isParamMissing(paramName, paramDef, withParams)) {
+        throw new Error(
+          `Fragment "${include.fragment}" requires param "${paramName}" but it was not provided`,
+        );
       }
     }
   }
 
-  // Build effective params: typed param defaults, then old-format scalar defaults, then with overrides
+  // Build effective params: defaults then with overrides
   const defaults: Record<string, string | number | boolean> = {};
   for (const [paramName, paramDef] of Object.entries(definition.params ?? {})) {
-    if (isTypedParam(paramDef)) {
-      // Use typed default if defined; skip if no default (caller must supply via with)
-      if (paramDef.default !== undefined) {
-        defaults[paramName] = paramDef.default as string | number | boolean;
-      }
-    } else if (paramDef !== null && paramDef !== undefined) {
-      // Old format: non-null scalar is a default value (includes false)
-      defaults[paramName] = paramDef as string | number | boolean;
+    const defaultVal = getParamDefault(paramDef);
+    if (defaultVal !== undefined) {
+      defaults[paramName] = defaultVal;
     }
   }
 
@@ -269,24 +283,29 @@ function buildEffectiveParams(
   } as Record<string, string | number | boolean>;
 }
 
+type ResolveConsultationOpts = {
+  effectiveParams: Record<string, string | number | boolean>;
+  spawnInstructions: Record<string, string>;
+  consultations: Record<string, ConsultationFragment>;
+  mergedSpawnInstructions: Record<string, string>;
+};
+
 /** Resolve a consultation-type fragment into the consultations and spawn instructions maps. */
 function resolveConsultationFragment(
   definition: FragmentDefinition,
   include: FragmentInclude,
-  effectiveParams: Record<string, string | number | boolean>,
-  spawnInstructions: Record<string, string>,
-  consultations: Record<string, ConsultationFragment>,
-  mergedSpawnInstructions: Record<string, string>,
+  opts: ResolveConsultationOpts,
 ): void {
+  const { effectiveParams, spawnInstructions, consultations, mergedSpawnInstructions } = opts;
   const consultation: ConsultationFragment = {
-    fragment: definition.fragment,
-    description: definition.description,
     agent: definition.agent!,
+    artifact: definition.artifact,
+    description: definition.description,
+    fragment: definition.fragment,
+    min_waves: definition.min_waves,
     role: definition.role!,
     section: definition.section,
-    artifact: definition.artifact,
     timeout: definition.timeout,
-    min_waves: definition.min_waves,
     ...(definition.skip_when !== undefined ? { skip_when: definition.skip_when } : {}),
   };
 
@@ -295,7 +314,41 @@ function resolveConsultationFragment(
   const consultName = include.as ?? definition.fragment;
   consultations[consultName] = substituted;
 
-  mergeSpawnInstructions(definition, include, effectiveParams, spawnInstructions, mergedSpawnInstructions);
+  mergeSpawnInstructions(definition, include, {
+    effectiveParams,
+    mergedSpawnInstructions,
+    spawnInstructions,
+  });
+}
+
+/** Apply overrides to fragment states. */
+function applyStateOverrides(
+  states: Record<string, unknown>,
+  overrides: Record<string, unknown>,
+): void {
+  for (const [stateId, overrideFields] of Object.entries(overrides)) {
+    if (states[stateId]) {
+      states[stateId] = {
+        ...(states[stateId] as object),
+        ...(overrideFields as object),
+      } as StateDefinition;
+    }
+  }
+}
+
+/** Rename states when `as:` is used (single-state fragments only). */
+function applyAsRename(
+  states: Record<string, unknown>,
+  alias: string,
+  fragmentName: string,
+): Record<string, unknown> {
+  const stateEntries = Object.entries(states);
+  if (stateEntries.length !== 1) {
+    throw new Error(
+      `Fragment "${fragmentName}" has ${stateEntries.length} states but "as:" only works with single-state fragments`,
+    );
+  }
+  return { [alias]: stateEntries[0][1] };
 }
 
 /** Resolve a regular (non-consultation) fragment's states into the merged states map. */
@@ -308,25 +361,12 @@ function resolveRegularFragment(
   if (!definition.states) return;
 
   const hasParams = Object.keys(effectiveParams).length > 0;
-  let states = hasParams ? substituteParams(definition.states, effectiveParams) : { ...definition.states };
+  let states = hasParams
+    ? substituteParams(definition.states, effectiveParams)
+    : { ...definition.states };
 
-  if (include.overrides) {
-    for (const [stateId, overrideFields] of Object.entries(include.overrides)) {
-      if (states[stateId]) {
-        states[stateId] = { ...states[stateId], ...overrideFields } as StateDefinition;
-      }
-    }
-  }
-
-  if (include.as) {
-    const stateEntries = Object.entries(states);
-    if (stateEntries.length !== 1) {
-      throw new Error(
-        `Fragment "${include.fragment}" has ${stateEntries.length} states but "as:" only works with single-state fragments`,
-      );
-    }
-    states = { [include.as]: stateEntries[0][1] };
-  }
+  if (include.overrides) applyStateOverrides(states, include.overrides);
+  if (include.as) states = applyAsRename(states, include.as, include.fragment) as typeof states;
 
   for (const [stateId, stateDef] of Object.entries(states)) {
     if (mergedStates[stateId]) {
@@ -336,14 +376,19 @@ function resolveRegularFragment(
   }
 }
 
+type MergeSpawnOpts = {
+  effectiveParams: Record<string, string | number | boolean>;
+  spawnInstructions: Record<string, string>;
+  mergedSpawnInstructions: Record<string, string>;
+};
+
 /** Merge spawn instructions from a fragment, applying param substitution and renaming. */
 function mergeSpawnInstructions(
   definition: FragmentDefinition,
   include: FragmentInclude,
-  effectiveParams: Record<string, string | number | boolean>,
-  spawnInstructions: Record<string, string>,
-  mergedSpawnInstructions: Record<string, string>,
+  opts: MergeSpawnOpts,
 ): void {
+  const { effectiveParams, spawnInstructions, mergedSpawnInstructions } = opts;
   const hasParams = Object.keys(effectiveParams).length > 0;
   const fragSpawn = hasParams
     ? substituteSpawnInstructions(spawnInstructions, effectiveParams)
@@ -355,9 +400,7 @@ function mergeSpawnInstructions(
   }
 }
 
-// ---------------------------------------------------------------------------
 // VIRTUAL_SINKS / RUNTIME_VARIABLES constants
-// ---------------------------------------------------------------------------
 
 /**
  * Virtual transition targets that are handled by the orchestrator at runtime
@@ -418,9 +461,7 @@ export const RUNTIME_VARIABLES = new Set([
   "enrichment",
 ]);
 
-// ---------------------------------------------------------------------------
 // validateSpawnCoverage
-// ---------------------------------------------------------------------------
 
 /**
  * Check that every non-terminal state has a matching key in flow.spawn_instructions.
@@ -439,9 +480,7 @@ export function validateSpawnCoverage(flow: ResolvedFlow): string[] {
   return errors;
 }
 
-// ---------------------------------------------------------------------------
 // analyzeReachability
-// ---------------------------------------------------------------------------
 
 /**
  * BFS from the entry state to find all reachable states.
@@ -450,8 +489,8 @@ export function validateSpawnCoverage(flow: ResolvedFlow): string[] {
  * Returns an array of warning messages for unreachable states (empty if all reachable).
  * These are warnings only — they do NOT block flow loading per ADR-004.
  */
-export function analyzeReachability(flow: ResolvedFlow): string[] {
-  const warnings: string[] = [];
+/** BFS from entry to collect all reachable state IDs. */
+function collectReachableStates(flow: ResolvedFlow): Set<string> {
   const visited = new Set<string>();
   const queue = [flow.entry];
 
@@ -460,27 +499,28 @@ export function analyzeReachability(flow: ResolvedFlow): string[] {
     if (visited.has(current)) continue;
     visited.add(current);
     const state = flow.states[current];
-    if (state?.transitions) {
-      for (const target of Object.values(state.transitions)) {
-        if (!VIRTUAL_SINKS.has(target) && !visited.has(target)) {
-          queue.push(target);
-        }
+    if (!state?.transitions) continue;
+    for (const target of Object.values(state.transitions)) {
+      if (!VIRTUAL_SINKS.has(target) && !visited.has(target)) {
+        queue.push(target);
       }
     }
   }
+  return visited;
+}
 
+export function analyzeReachability(flow: ResolvedFlow): string[] {
+  const visited = collectReachableStates(flow);
+  const warnings: string[] = [];
   for (const stateId of Object.keys(flow.states)) {
     if (!visited.has(stateId)) {
       warnings.push(`Warning: state "${stateId}" is unreachable from entry "${flow.entry}"`);
     }
   }
-
   return warnings;
 }
 
-// ---------------------------------------------------------------------------
 // checkUnresolvedRefs
-// ---------------------------------------------------------------------------
 
 /**
  * After fragment param substitution, check for remaining `${...}` patterns
@@ -492,40 +532,47 @@ export function analyzeReachability(flow: ResolvedFlow): string[] {
  *
  * Returns an array of error messages (empty if valid).
  */
-export function checkUnresolvedRefs(flow: ResolvedFlow): string[] {
+/** Check spawn instructions for unknown ${...} references. */
+function checkSpawnInstructionRefs(spawnInstructions: Record<string, string>): string[] {
   const errors: string[] = [];
   const refPattern = /\$\{([^}]+)\}/g;
-
-  // Check spawn instructions for unknown ${...} references
-  for (const [stateId, text] of Object.entries(flow.spawn_instructions)) {
+  for (const [stateId, text] of Object.entries(spawnInstructions)) {
     refPattern.lastIndex = 0;
-    let match;
-    while ((match = refPattern.exec(text)) !== null) {
+    let match = refPattern.exec(text);
+    while (match !== null) {
       if (!RUNTIME_VARIABLES.has(match[1])) {
         errors.push(`Spawn instruction "${stateId}" has unresolved reference: \${${match[1]}}`);
       }
+      match = refPattern.exec(text);
     }
   }
-
-  // Check state transition targets for leftover ${...}
-  for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    if (stateDef.transitions) {
-      for (const [cond, target] of Object.entries(stateDef.transitions)) {
-        if (/\$\{/.test(target)) {
-          errors.push(
-            `State "${stateId}" transition "${cond}" has unresolved reference in target: "${target}"`,
-          );
-        }
-      }
-    }
-  }
-
   return errors;
 }
 
-// ---------------------------------------------------------------------------
+/** Check state transition targets for leftover ${...} patterns. */
+function checkTransitionTargetRefs(states: Record<string, StateDefinition>): string[] {
+  const errors: string[] = [];
+  for (const [stateId, stateDef] of Object.entries(states)) {
+    if (!stateDef.transitions) continue;
+    for (const [cond, target] of Object.entries(stateDef.transitions)) {
+      if (/\$\{/.test(target)) {
+        errors.push(
+          `State "${stateId}" transition "${cond}" has unresolved reference in target: "${target}"`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+export function checkUnresolvedRefs(flow: ResolvedFlow): string[] {
+  return [
+    ...checkSpawnInstructionRefs(flow.spawn_instructions),
+    ...checkTransitionTargetRefs(flow.states),
+  ];
+}
+
 // validateStateIdParams
-// ---------------------------------------------------------------------------
 
 /**
  * Validate that fragment params declared as `type: "state_id"` have values
@@ -534,6 +581,26 @@ export function checkUnresolvedRefs(flow: ResolvedFlow): string[] {
  *
  * Returns an array of error messages (empty if valid).
  */
+/** Validate a single include's state_id params against resolved state IDs. */
+function validateIncludeStateIdParams(
+  include: FragmentInclude,
+  params: Record<string, unknown>,
+  resolvedStateIds: Set<string>,
+): string[] {
+  const errors: string[] = [];
+  const withParams = include.with ?? {};
+  for (const [paramName, paramDef] of Object.entries(params)) {
+    if (!isTypedParam(paramDef) || paramDef.type !== "state_id") continue;
+    const value = paramName in withParams ? withParams[paramName] : paramDef.default;
+    if (typeof value === "string" && value !== "hitl" && !resolvedStateIds.has(value)) {
+      errors.push(
+        `Fragment "${include.fragment}" param "${paramName}" is state_id but "${value}" is not a valid state`,
+      );
+    }
+  }
+  return errors;
+}
+
 export function validateStateIdParams(
   fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }>,
   includes: FragmentInclude[],
@@ -543,24 +610,12 @@ export function validateStateIdParams(
   for (const include of includes) {
     const frag = fragments.find((f) => f.definition.fragment === include.fragment);
     if (!frag?.definition.params) continue;
-    const withParams = include.with ?? {};
-    for (const [paramName, paramDef] of Object.entries(frag.definition.params)) {
-      if (isTypedParam(paramDef) && paramDef.type === "state_id") {
-        const value = paramName in withParams ? withParams[paramName] : paramDef.default;
-        if (typeof value === "string" && value !== "hitl" && !resolvedStateIds.has(value)) {
-          errors.push(
-            `Fragment "${include.fragment}" param "${paramName}" is state_id but "${value}" is not a valid state`,
-          );
-        }
-      }
-    }
+    errors.push(...validateIncludeStateIdParams(include, frag.definition.params, resolvedStateIds));
   }
   return errors;
 }
 
-// ---------------------------------------------------------------------------
 // validateFlow
-// ---------------------------------------------------------------------------
 
 /**
  * Validate a resolved flow definition. Returns an array of error messages
@@ -572,65 +627,70 @@ export function validateStateIdParams(
  *   3. Reachability analysis — WARN only, does not block (ADR-004)
  *   4. Unresolved reference check (ADR-004)
  */
+/** Validate that all transition targets reference existing states or virtual sinks. */
+function validateTransitionTargets(
+  stateId: string,
+  transitions: Record<string, string>,
+  stateIds: Set<string>,
+): string[] {
+  const errors: string[] = [];
+  for (const [condition, target] of Object.entries(transitions)) {
+    if (!VIRTUAL_SINKS.has(target) && !stateIds.has(target)) {
+      errors.push(
+        `State "${stateId}" transition "${condition}" targets non-existent state "${target}"`,
+      );
+    }
+  }
+  return errors;
+}
+
+/** Validate structural properties of individual states. */
+function validateStateStructure(
+  stateId: string,
+  stateDef: StateDefinition,
+  stateIds: Set<string>,
+): string[] {
+  const errors: string[] = [];
+  if (stateDef.transitions) {
+    errors.push(...validateTransitionTargets(stateId, stateDef.transitions, stateIds));
+  }
+  if (stateDef.max_iterations !== undefined && !stateDef.stuck_when) {
+    errors.push(`State "${stateId}" has max_iterations but no stuck_when`);
+  }
+  if (stateDef.type === "parallel-per" && !stateDef.iterate_on) {
+    errors.push(`State "${stateId}" is parallel-per but has no iterate_on`);
+  }
+  if (stateDef.type === "terminal" && stateDef.transitions) {
+    errors.push(`State "${stateId}" is terminal but has transitions`);
+  }
+  return errors;
+}
+
 export function validateFlow(flow: ResolvedFlow): string[] {
   const errors: string[] = [];
   const stateIds = new Set(Object.keys(flow.states));
 
-  // Entry state must exist
   if (!stateIds.has(flow.entry)) {
     errors.push(`Entry state "${flow.entry}" does not exist in states`);
   }
 
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    // All transition targets must exist (or be a virtual sink)
-    if (stateDef.transitions) {
-      for (const [condition, target] of Object.entries(stateDef.transitions)) {
-        if (!VIRTUAL_SINKS.has(target) && !stateIds.has(target)) {
-          errors.push(`State "${stateId}" transition "${condition}" targets non-existent state "${target}"`);
-        }
-      }
-    }
-
-    // States with max_iterations should have stuck_when
-    if (stateDef.max_iterations !== undefined && !stateDef.stuck_when) {
-      errors.push(`State "${stateId}" has max_iterations but no stuck_when`);
-    }
-
-    // parallel-per states should have iterate_on
-    if (stateDef.type === "parallel-per" && !stateDef.iterate_on) {
-      errors.push(`State "${stateId}" is parallel-per but has no iterate_on`);
-    }
-
-    // terminal states should not have transitions
-    if (stateDef.type === "terminal" && stateDef.transitions) {
-      errors.push(`State "${stateId}" is terminal but has transitions`);
-    }
+    errors.push(...validateStateStructure(stateId, stateDef, stateIds));
   }
 
-  // ADR-004 pass 2: spawn instruction coverage (hard errors)
   errors.push(...validateSpawnCoverage(flow));
 
-  // ADR-004 pass 3: reachability analysis (warnings only — do not block)
   const reachabilityWarnings = analyzeReachability(flow);
-  if (reachabilityWarnings.length > 0) {
-    // Log to console — reachability issues are visible but non-blocking
-    for (const warning of reachabilityWarnings) {
-      console.warn(`[flow-parser] ${warning}`);
-    }
-    // Include in output so callers can see them (but loadAndResolveFlow
-    // separates warnings from errors by the "Warning:" prefix)
-    errors.push(...reachabilityWarnings);
+  for (const warning of reachabilityWarnings) {
+    console.warn(`[flow-parser] ${warning}`);
   }
-
-  // ADR-004 pass 4: unresolved reference check (hard errors)
+  errors.push(...reachabilityWarnings);
   errors.push(...checkUnresolvedRefs(flow));
 
   return errors;
 }
 
-// ---------------------------------------------------------------------------
 // buildStateGraph
-// ---------------------------------------------------------------------------
 
 /**
  * Build an adjacency list from flow states: state → [target states].
@@ -655,9 +715,7 @@ export function buildStateGraph(flow: ResolvedFlow): Record<string, string[]> {
   return graph;
 }
 
-// ---------------------------------------------------------------------------
 // loadAndResolveFlow
-// ---------------------------------------------------------------------------
 
 /**
  * Resolve a flow file using two-tier lookup:
@@ -665,7 +723,43 @@ export function buildStateGraph(flow: ResolvedFlow): Record<string, string[]> {
  * 2. Fall back to `${pluginDir}/flows/${flowName}.md`
  * Throws a descriptive error listing available flows if neither exists.
  */
-async function resolveFlowFile(pluginDir: string, flowName: string, projectDir?: string): Promise<string> {
+/** Filter and extract flow names from directory entries. */
+function extractFlowNames(entries: string[]): string[] {
+  return entries
+    .filter(
+      (e) =>
+        e.endsWith(".md") &&
+        !e.startsWith(".") &&
+        e !== "README.md" &&
+        e !== "SCHEMA.md" &&
+        e !== "GATES.md",
+    )
+    .map((e) => e.replace(/\.md$/, ""))
+    .sort();
+}
+
+/** List all available flow names from plugin and project directories. */
+async function listAvailableFlows(pluginDir: string, projectDir?: string): Promise<string[]> {
+  let available: string[] = [];
+  try {
+    available = extractFlowNames(await readdir(`${pluginDir}/flows`));
+  } catch {
+    /* flows dir missing */
+  }
+  if (!projectDir) return available;
+  try {
+    const projectFlows = extractFlowNames(await readdir(`${projectDir}/.canon/flows`));
+    return [...new Set([...available, ...projectFlows])].sort();
+  } catch {
+    return available;
+  }
+}
+
+async function resolveFlowFile(
+  pluginDir: string,
+  flowName: string,
+  projectDir?: string,
+): Promise<string> {
   if (projectDir) {
     const projectPath = `${projectDir}/.canon/flows/${flowName}.md`;
     try {
@@ -678,44 +772,12 @@ async function resolveFlowFile(pluginDir: string, flowName: string, projectDir?:
   try {
     return await readFile(pluginPath, "utf-8");
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      const flowsDir = `${pluginDir}/flows`;
-      let available: string[] = [];
-      try {
-        const entries = await readdir(flowsDir);
-        available = entries
-          .filter(
-            (e) =>
-              e.endsWith(".md") && !e.startsWith(".") && e !== "README.md" && e !== "SCHEMA.md" && e !== "GATES.md",
-          )
-          .map((e) => e.replace(/\.md$/, ""))
-          .sort();
-      } catch {
-        /* flows dir missing — leave empty */
-      }
-      // Also include project-level flows in the available list if projectDir given
-      if (projectDir) {
-        const projectFlowsDir = `${projectDir}/.canon/flows`;
-        try {
-          const projectEntries = await readdir(projectFlowsDir);
-          const projectFlows = projectEntries
-            .filter(
-              (e) =>
-                e.endsWith(".md") && !e.startsWith(".") && e !== "README.md" && e !== "SCHEMA.md" && e !== "GATES.md",
-            )
-            .map((e) => e.replace(/\.md$/, ""))
-            .sort();
-          available = [...new Set([...available, ...projectFlows])].sort();
-        } catch {
-          /* project flows dir missing — leave empty */
-        }
-      }
-      const list = available.length > 0 ? `: ${available.join(", ")}` : "";
-      throw new Error(
-        `Flow "${flowName}" not found (checked ${projectDir ? `${projectDir}/.canon/flows/ and ` : ""}${pluginPath}). Available flows${list}`,
-      );
-    }
-    throw err;
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    const available = await listAvailableFlows(pluginDir, projectDir);
+    const list = available.length > 0 ? `: ${available.join(", ")}` : "";
+    throw new Error(
+      `Flow "${flowName}" not found (checked ${projectDir ? `${projectDir}/.canon/flows/ and ` : ""}${pluginPath}). Available flows${list}`,
+    );
   }
 }
 
@@ -730,6 +792,72 @@ async function resolveFlowFile(pluginDir: string, flowName: string, projectDir?:
  * Returns the resolved flow directly (no errors field — validation either
  * passes or throws a descriptive error).
  */
+/** Re-validate all resolved states through the strict schema. */
+function validateResolvedStates(resolvedStates: Record<string, unknown>): {
+  validatedStates: Record<string, StateDefinition>;
+  errors: string[];
+} {
+  const validatedStates: Record<string, StateDefinition> = {};
+  const errors: string[] = [];
+  for (const [stateId, stateDef] of Object.entries(resolvedStates)) {
+    const result = StateDefinitionSchema.safeParse(stateDef);
+    if (result.success) {
+      validatedStates[stateId] = result.data;
+    } else {
+      errors.push(
+        `State "${stateId}" failed validation after param substitution: ${JSON.stringify(result.error.issues)}`,
+      );
+    }
+  }
+  return { errors, validatedStates };
+}
+
+/** Resolve fragment includes and merge with inline states/spawn instructions. */
+type ResolveIncludesOpts = {
+  inlineStates: Record<string, StateDefinition>;
+  spawnInstructions: Record<string, string>;
+  pluginDir: string;
+  projectDir?: string;
+};
+
+async function resolveIncludes(
+  flowDef: FlowDefinition,
+  opts: ResolveIncludesOpts,
+): Promise<{
+  resolvedStates: Record<string, unknown>;
+  resolvedConsultations: Record<string, ConsultationFragment>;
+  resolvedSpawnInstructions: Record<string, string>;
+  fragmentEntry: string | undefined;
+  loadedFragments: Array<{
+    definition: FragmentDefinition;
+    spawnInstructions: Record<string, string>;
+  }>;
+}> {
+  const { inlineStates, spawnInstructions, pluginDir, projectDir } = opts;
+  if (!flowDef.includes || flowDef.includes.length === 0) {
+    return {
+      fragmentEntry: undefined,
+      loadedFragments: [],
+      resolvedConsultations: {},
+      resolvedSpawnInstructions: { ...spawnInstructions },
+      resolvedStates: { ...inlineStates },
+    };
+  }
+
+  const fragmentNames = [...new Set(flowDef.includes.map((i) => i.fragment))];
+  const loadedFragments = await Promise.all(
+    fragmentNames.map((name) => loadFragment(pluginDir, name, projectDir)),
+  );
+  const resolved = resolveFragments(flowDef, loadedFragments, flowDef.includes);
+  return {
+    fragmentEntry: resolved.firstFragmentEntry,
+    loadedFragments,
+    resolvedConsultations: resolved.consultations,
+    resolvedSpawnInstructions: { ...resolved.spawnInstructions, ...spawnInstructions },
+    resolvedStates: { ...resolved.states, ...inlineStates },
+  };
+}
+
 export async function loadAndResolveFlow(
   pluginDir: string,
   flowName: string,
@@ -742,8 +870,6 @@ export async function loadAndResolveFlow(
   }
   const raw = await resolveFlowFile(pluginDir, flowName, projectDir);
   const { frontmatter, spawnInstructions } = parseFlowContent(raw);
-
-  // Validate frontmatter against FlowDefinitionSchema
   const flowDef = FlowDefinitionSchema.parse(frontmatter);
 
   const hasInlineStates = flowDef.states && Object.keys(flowDef.states).length > 0;
@@ -753,49 +879,22 @@ export async function loadAndResolveFlow(
   }
 
   const inlineStates = flowDef.states ?? {};
-  let resolvedStates = { ...inlineStates };
-  let resolvedConsultations: Record<string, ConsultationFragment> = {};
-  let resolvedSpawnInstructions = { ...spawnInstructions };
-  let fragmentEntry: string | undefined;
-  let loadedFragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [];
+  const {
+    resolvedStates,
+    resolvedConsultations,
+    resolvedSpawnInstructions,
+    fragmentEntry,
+    loadedFragments,
+  } = await resolveIncludes(flowDef, { inlineStates, pluginDir, projectDir, spawnInstructions });
 
-  // If includes exist, load all fragments and resolve
-  if (flowDef.includes && flowDef.includes.length > 0) {
-    // Load all unique fragments — project dir first, then plugin dir
-    const fragmentNames = [...new Set(flowDef.includes.map((i) => i.fragment))];
-    loadedFragments = await Promise.all(fragmentNames.map((name) => loadFragment(pluginDir, name, projectDir)));
+  const { validatedStates, errors: schemaErrors } = validateResolvedStates(resolvedStates);
 
-    const resolved = resolveFragments(flowDef, loadedFragments, flowDef.includes);
-
-    // Merge fragment states with flow states (flow states take precedence)
-    resolvedStates = { ...resolved.states, ...inlineStates };
-    resolvedConsultations = resolved.consultations;
-    resolvedSpawnInstructions = { ...resolved.spawnInstructions, ...spawnInstructions };
-    fragmentEntry = resolved.firstFragmentEntry;
-  }
-
-  // Re-validate all states through the strict schema after param substitution
-  const validatedStates: Record<string, StateDefinition> = {};
-  const schemaErrors: string[] = [];
-  for (const [stateId, stateDef] of Object.entries(resolvedStates)) {
-    const result = StateDefinitionSchema.safeParse(stateDef);
-    if (result.success) {
-      validatedStates[stateId] = result.data;
-    } else {
-      schemaErrors.push(
-        `State "${stateId}" failed validation after param substitution: ${JSON.stringify(result.error.issues)}`,
-      );
-    }
-  }
-
-  // Validate state_id params against resolved state map
   const resolvedStateIds = new Set(Object.keys(resolvedStates));
   const stateIdParamErrors =
     loadedFragments.length > 0 && flowDef.includes
       ? validateStateIdParams(loadedFragments, flowDef.includes, resolvedStateIds)
       : [];
 
-  // Determine entry: explicit flow entry, first inline state, or first fragment's entry
   const entry = flowDef.entry ?? Object.keys(inlineStates)[0] ?? fragmentEntry;
   if (!entry) {
     throw new Error(
@@ -806,14 +905,13 @@ export async function loadAndResolveFlow(
   const resolvedFlow: ResolvedFlow = {
     ...flowDef,
     entry,
-    states: validatedStates,
     spawn_instructions: resolvedSpawnInstructions,
-    ...(Object.keys(resolvedConsultations).length > 0 ? { consultations: resolvedConsultations } : {}),
+    states: validatedStates,
+    ...(Object.keys(resolvedConsultations).length > 0
+      ? { consultations: resolvedConsultations }
+      : {}),
   };
 
-  // Hard-blocking validation (ADR-004): separate hard errors from reachability warnings.
-  // Reachability warnings start with "Warning:" and are non-blocking (already logged to
-  // console.warn inside validateFlow). All other messages are hard errors that block loading.
   const allMessages = [...schemaErrors, ...stateIdParamErrors, ...validateFlow(resolvedFlow)];
   const hardErrors = allMessages.filter((msg) => !msg.startsWith("Warning:"));
 

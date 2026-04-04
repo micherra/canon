@@ -6,45 +6,63 @@ export function formatDriftReport(report: DriftReport): string {
   lines.push("## Canon Drift Report");
   lines.push("");
 
-  // Overview
+  formatOverviewSection(lines, report);
+  formatMostViolatedSection(lines, report.most_violated);
+  formatHotspotsSection(lines, report.violation_directories);
+  formatNeverTriggeredSection(lines, report.never_triggered);
+  formatRecommendationsSection(lines, report);
+
+  return lines.join("\n");
+}
+
+function formatOverviewSection(lines: string[], report: DriftReport): void {
   lines.push(`### Overview (${report.total_reviews} reviews)`);
   lines.push(
     `Avg score: Rules ${report.avg_score.rules}% | Opinions ${report.avg_score.opinions}% | Conventions ${report.avg_score.conventions}%`,
   );
   lines.push(`Trend: ${formatTrend(report.trend)}`);
   lines.push("");
+}
 
-  // Most violated
-  if (report.most_violated.length > 0) {
-    lines.push("### Most violated principles");
-    for (const stat of report.most_violated) {
-      lines.push(
-        `${stat.principle_id} — ${stat.total_violations} violations (${stat.unintentional_violations} unintentional), ${stat.compliance_rate}% compliance`,
-      );
-    }
-    lines.push("");
+function formatMostViolatedSection(
+  lines: string[],
+  mostViolated: DriftReport["most_violated"],
+): void {
+  if (mostViolated.length === 0) return;
+  lines.push("### Most violated principles");
+  for (const stat of mostViolated) {
+    lines.push(
+      `${stat.principle_id} — ${stat.total_violations} violations (${stat.unintentional_violations} unintentional), ${stat.compliance_rate}% compliance`,
+    );
   }
+  lines.push("");
+}
 
-  // Hotspots
-  if (report.violation_directories.length > 0) {
-    lines.push("### Hotspot directories");
-    for (const dir of report.violation_directories) {
-      lines.push(`${dir.directory} — ${dir.total_violations} violations across ${dir.review_count} reviews`);
-    }
-    lines.push("");
+function formatHotspotsSection(
+  lines: string[],
+  directories: DriftReport["violation_directories"],
+): void {
+  if (directories.length === 0) return;
+  lines.push("### Hotspot directories");
+  for (const dir of directories) {
+    lines.push(
+      `${dir.directory} — ${dir.total_violations} violations across ${dir.review_count} reviews`,
+    );
   }
+  lines.push("");
+}
 
-  // Never triggered
-  if (report.never_triggered.length > 0) {
-    lines.push("### Never-triggered principles");
-    lines.push("These principles have never appeared in any review:");
-    for (const id of report.never_triggered) {
-      lines.push(`- ${id}`);
-    }
-    lines.push("");
+function formatNeverTriggeredSection(lines: string[], neverTriggered: string[]): void {
+  if (neverTriggered.length === 0) return;
+  lines.push("### Never-triggered principles");
+  lines.push("These principles have never appeared in any review:");
+  for (const id of neverTriggered) {
+    lines.push(`- ${id}`);
   }
+  lines.push("");
+}
 
-  // Recommendations
+function formatRecommendationsSection(lines: string[], report: DriftReport): void {
   lines.push("### Recommendations");
   const recommendations = generateRecommendations(report);
   if (recommendations.length === 0) {
@@ -54,8 +72,6 @@ export function formatDriftReport(report: DriftReport): string {
       lines.push(`- ${rec}`);
     }
   }
-
-  return lines.join("\n");
 }
 
 function formatTrend(trend: DriftReport["trend"]): string {

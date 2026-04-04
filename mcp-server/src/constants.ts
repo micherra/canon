@@ -2,11 +2,11 @@
 
 /** Layer centrality weights for impact scoring. Higher = more central to architecture. */
 export const LAYER_CENTRALITY: Record<string, number> = {
-  shared: 3,
-  domain: 2,
-  data: 1.5,
   api: 1,
+  data: 1.5,
+  domain: 2,
   infra: 1,
+  shared: 3,
   ui: 0.5,
   unknown: 0,
 };
@@ -40,13 +40,9 @@ export const RESOLVE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"];
 export const CANON_DIR = ".canon";
 export const CANON_FILES = {
   CONFIG: "config.json",
+  DRIFT_DB: "drift.db",
   KNOWLEDGE_DB: "knowledge-graph.db",
   ORCHESTRATION_DB: "orchestration.db",
-  DRIFT_DB: "drift.db",
-  // GRAPH_DATA and REVERSE_DEPS are still written by query.ts/view-materializer.ts
-  // pending full ADR-005 migration. Keep constants so existing readers compile.
-  GRAPH_DATA: "graph-data.json",
-  REVERSE_DEPS: "reverse-deps.json",
 } as const;
 
 /** Maximum lines of file content returned by get_file_context. */

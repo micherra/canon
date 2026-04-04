@@ -8,25 +8,19 @@
 import { describe, expect, it } from "vitest";
 import { reportInputSchema } from "../schema.ts";
 
-// ---------------------------------------------------------------------------
 // Shared test data
-// ---------------------------------------------------------------------------
 
 const baseReviewInput = {
-  type: "review" as const,
   files: ["src/index.ts", "src/utils/config.ts"],
   honored: ["functions-do-one-thing", "deep-modules"],
   score: {
-    rules: { passed: 3, total: 3 },
-    opinions: { passed: 2, total: 2 },
     conventions: { passed: 1, total: 1 },
+    opinions: { passed: 2, total: 2 },
+    rules: { passed: 3, total: 3 },
   },
+  type: "review" as const,
   verdict: "CLEAN" as const,
 };
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("reportInputSchema — review violations with message field", () => {
   it("accepts a violation WITH message field", () => {
@@ -34,11 +28,11 @@ describe("reportInputSchema — review violations with message field", () => {
       ...baseReviewInput,
       violations: [
         {
-          principle_id: "functions-do-one-thing",
-          severity: "strong-opinion",
           file_path: "src/index.ts",
           impact_score: 42,
           message: "Function does multiple things: parses and stores",
+          principle_id: "functions-do-one-thing",
+          severity: "strong-opinion",
         },
       ],
     };
@@ -56,10 +50,10 @@ describe("reportInputSchema — review violations with message field", () => {
       ...baseReviewInput,
       violations: [
         {
-          principle_id: "validate-at-trust-boundaries",
-          severity: "rule",
           file_path: "src/tools/store-pr-review.ts",
           impact_score: 10,
+          principle_id: "validate-at-trust-boundaries",
+          severity: "rule",
           // message intentionally omitted
         },
       ],
@@ -78,9 +72,9 @@ describe("reportInputSchema — review violations with message field", () => {
       ...baseReviewInput,
       violations: [
         {
+          message: "Has message",
           principle_id: "functions-do-one-thing",
           severity: "strong-opinion",
-          message: "Has message",
         },
         {
           principle_id: "validate-at-trust-boundaries",
@@ -119,9 +113,9 @@ describe("reportInputSchema — review violations with message field", () => {
       ...baseReviewInput,
       violations: [
         {
+          message: 42, // should be string
           principle_id: "functions-do-one-thing",
           severity: "strong-opinion",
-          message: 42, // should be string
         },
       ],
     };

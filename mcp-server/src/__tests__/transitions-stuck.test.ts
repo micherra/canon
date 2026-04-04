@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { HistoryEntry } from "../orchestration/flow-schema.ts";
 import { buildHistoryEntry, isStuck } from "../orchestration/transitions.ts";
 
-// ---------------------------------------------------------------------------
 // buildHistoryEntry — no_gate_progress
-// ---------------------------------------------------------------------------
 
 describe("buildHistoryEntry — no_gate_progress", () => {
   it("returns correct shape with provided gateOutputHash and gatePassed", () => {
@@ -34,9 +32,7 @@ describe("buildHistoryEntry — no_gate_progress", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // isStuck — no_gate_progress
-// ---------------------------------------------------------------------------
 
 describe("isStuck — no_gate_progress", () => {
   it("returns false when fewer than 2 entries exist (zero entries)", () => {

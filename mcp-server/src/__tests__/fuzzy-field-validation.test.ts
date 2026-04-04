@@ -39,7 +39,7 @@ describe("checkUnknownFields", () => {
   it("returns empty array for valid input", () => {
     const errors = checkUnknownFields(
       "report_result",
-      { workspace: "/tmp", state_id: "review", status_keyword: "clean" },
+      { state_id: "review", status_keyword: "clean", workspace: "/tmp" },
       REPORT_RESULT_KEYS,
     );
     expect(errors).toEqual([]);
@@ -48,7 +48,7 @@ describe("checkUnknownFields", () => {
   it("reports unknown field with suggestion", () => {
     const errors = checkUnknownFields(
       "report_result",
-      { workspace: "/tmp", state_id: "review", status: "clean" },
+      { state_id: "review", status: "clean", workspace: "/tmp" },
       REPORT_RESULT_KEYS,
     );
     expect(errors).toHaveLength(1);
@@ -60,7 +60,7 @@ describe("checkUnknownFields", () => {
   it("reports unknown field without suggestion when nothing is close", () => {
     const errors = checkUnknownFields(
       "report_result",
-      { workspace: "/tmp", completely_unrelated: "foo" },
+      { completely_unrelated: "foo", workspace: "/tmp" },
       REPORT_RESULT_KEYS,
     );
     expect(errors).toHaveLength(1);
@@ -69,9 +69,13 @@ describe("checkUnknownFields", () => {
   });
 
   it("reports multiple unknown fields", () => {
-    const errors = checkUnknownFields("report_result", { status: "clean", stateId: "review" }, REPORT_RESULT_KEYS);
+    const errors = checkUnknownFields(
+      "report_result",
+      { stateId: "review", status: "clean" },
+      REPORT_RESULT_KEYS,
+    );
     expect(errors).toHaveLength(2);
-    expect(errors[0]).toContain('"status"');
-    expect(errors[1]).toContain('"stateId"');
+    expect(errors[0]).toContain('"stateId"');
+    expect(errors[1]).toContain('"status"');
   });
 });

@@ -13,25 +13,23 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  SingleStateSchema,
-  WaveStateSchema,
-  WavePolicySchema,
-  ParallelStateSchema,
-  ParallelPerStateSchema,
-  TerminalStateSchema,
-  StateDefinitionSchema,
   FragmentStateDefinitionSchema,
+  ParallelPerStateSchema,
+  ParallelStateSchema,
+  SingleStateSchema,
+  StateDefinitionSchema,
+  TerminalStateSchema,
+  WavePolicySchema,
+  WaveStateSchema,
 } from "../orchestration/flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // SingleStateSchema
-// ---------------------------------------------------------------------------
 
 describe("SingleStateSchema", () => {
   it("accepts minimal valid single state", () => {
     const result = SingleStateSchema.parse({
-      type: "single",
       agent: "canon:canon-implementor",
+      type: "single",
     });
     expect(result.type).toBe("single");
     expect(result.agent).toBe("canon:canon-implementor");
@@ -39,19 +37,19 @@ describe("SingleStateSchema", () => {
 
   it("accepts single state with all optional fields", () => {
     const result = SingleStateSchema.parse({
-      type: "single",
       agent: "canon:canon-implementor",
-      role: "backend implementor",
-      transitions: { done: "test", blocked: "hitl" },
-      max_iterations: 3,
-      stuck_when: "same_violations",
+      cluster_by: "directory",
+      compete: "auto",
       gate: "npm test",
       gates: ["npm test", "npx tsc --noEmit"],
       large_diff_threshold: 500,
-      cluster_by: "directory",
-      compete: "auto",
+      max_iterations: 3,
+      role: "backend implementor",
+      stuck_when: "same_violations",
       template: "implementor.md",
       timeout: "30m",
+      transitions: { blocked: "hitl", done: "test" },
+      type: "single",
     });
     expect(result.max_iterations).toBe(3);
     expect(result.cluster_by).toBe("directory");
@@ -60,9 +58,9 @@ describe("SingleStateSchema", () => {
 
   it("coerces max_iterations string to number", () => {
     const result = SingleStateSchema.parse({
-      type: "single",
       agent: "canon:canon-implementor",
       max_iterations: "5",
+      type: "single",
     });
     expect(result.max_iterations).toBe(5);
   });
@@ -70,8 +68,8 @@ describe("SingleStateSchema", () => {
   it("rejects wrong type literal", () => {
     expect(() =>
       SingleStateSchema.parse({
-        type: "wave",
         agent: "canon:canon-implementor",
+        type: "wave",
       }),
     ).toThrow();
   });
@@ -85,18 +83,16 @@ describe("SingleStateSchema", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // WavePolicySchema
-// ---------------------------------------------------------------------------
 
 describe("WavePolicySchema", () => {
   it("accepts full wave_policy object", () => {
     const result = WavePolicySchema.parse({
+      coordination: "some-channel",
+      gate: "npm test",
       isolation: "worktree",
       merge_strategy: "sequential",
       on_conflict: "hitl",
-      gate: "npm test",
-      coordination: "some-channel",
     });
     expect(result?.isolation).toBe("worktree");
     expect(result?.merge_strategy).toBe("sequential");
@@ -137,21 +133,17 @@ describe("WavePolicySchema", () => {
   });
 
   it("rejects invalid isolation value", () => {
-    expect(() =>
-      WavePolicySchema.parse({ isolation: "container" }),
-    ).toThrow();
+    expect(() => WavePolicySchema.parse({ isolation: "container" })).toThrow();
   });
 });
 
-// ---------------------------------------------------------------------------
 // WaveStateSchema
-// ---------------------------------------------------------------------------
 
 describe("WaveStateSchema", () => {
   it("accepts minimal valid wave state (without wave_policy)", () => {
     const result = WaveStateSchema.parse({
-      type: "wave",
       agent: "canon:canon-implementor",
+      type: "wave",
     });
     expect(result.type).toBe("wave");
     expect(result.agent).toBe("canon:canon-implementor");
@@ -160,8 +152,8 @@ describe("WaveStateSchema", () => {
 
   it("accepts wave state with full wave_policy", () => {
     const result = WaveStateSchema.parse({
-      type: "wave",
       agent: "canon:canon-implementor",
+      type: "wave",
       wave_policy: {
         isolation: "branch",
         merge_strategy: "squash",
@@ -175,8 +167,8 @@ describe("WaveStateSchema", () => {
 
   it("accepts wave state with empty wave_policy (defaults applied)", () => {
     const result = WaveStateSchema.parse({
-      type: "wave",
       agent: "canon:canon-implementor",
+      type: "wave",
       wave_policy: {},
     });
     expect(result.wave_policy?.isolation).toBe("worktree");
@@ -187,35 +179,33 @@ describe("WaveStateSchema", () => {
   it("rejects wrong type literal", () => {
     expect(() =>
       WaveStateSchema.parse({
-        type: "single",
         agent: "canon:canon-implementor",
+        type: "single",
       }),
     ).toThrow();
   });
 
   it("accepts wave state with transitions, gates, consultations, postconditions", () => {
     const result = WaveStateSchema.parse({
-      type: "wave",
       agent: "canon:canon-implementor",
-      transitions: { done: "review" },
-      gate: "npm test",
       consultations: { before: ["canon-guide"] },
-      postconditions: [{ type: "file_exists", target: "dist/index.js" }],
+      gate: "npm test",
+      postconditions: [{ target: "dist/index.js", type: "file_exists" }],
+      transitions: { done: "review" },
+      type: "wave",
     });
     expect(result.transitions).toEqual({ done: "review" });
     expect(result.gate).toBe("npm test");
   });
 });
 
-// ---------------------------------------------------------------------------
 // ParallelStateSchema
-// ---------------------------------------------------------------------------
 
 describe("ParallelStateSchema", () => {
   it("accepts minimal valid parallel state", () => {
     const result = ParallelStateSchema.parse({
-      type: "parallel",
       agents: ["canon:canon-implementor", "canon:canon-tester"],
+      type: "parallel",
     });
     expect(result.type).toBe("parallel");
     expect(result.agents).toHaveLength(2);
@@ -223,8 +213,8 @@ describe("ParallelStateSchema", () => {
 
   it("accepts parallel state with roles array", () => {
     const result = ParallelStateSchema.parse({
-      type: "parallel",
       roles: [{ name: "backend", optional: false }, "frontend"],
+      type: "parallel",
     });
     expect(result.roles).toHaveLength(2);
   });
@@ -241,8 +231,8 @@ describe("ParallelStateSchema", () => {
   it("rejects wrong type literal", () => {
     expect(() =>
       ParallelStateSchema.parse({
-        type: "single",
         agents: ["canon:canon-implementor"],
+        type: "single",
       }),
     ).toThrow();
   });
@@ -252,24 +242,22 @@ describe("ParallelStateSchema", () => {
     // Zod strips unknown fields in strict mode; in passthrough mode they'd be kept.
     // By default Zod strips, so we verify `agent` is NOT on the type by checking parse success
     const result = ParallelStateSchema.parse({
-      type: "parallel",
       agents: ["a"],
+      type: "parallel",
     });
     // agent field should not be present in output (Zod strips extras)
-    expect((result as Record<string, unknown>)["agent"]).toBeUndefined();
+    expect((result as Record<string, unknown>).agent).toBeUndefined();
   });
 });
 
-// ---------------------------------------------------------------------------
 // ParallelPerStateSchema
-// ---------------------------------------------------------------------------
 
 describe("ParallelPerStateSchema", () => {
   it("accepts minimal valid parallel-per state", () => {
     const result = ParallelPerStateSchema.parse({
-      type: "parallel-per",
       agent: "canon:canon-implementor",
       iterate_on: "${tasks}",
+      type: "parallel-per",
     });
     expect(result.type).toBe("parallel-per");
     expect(result.iterate_on).toBe("${tasks}");
@@ -277,10 +265,10 @@ describe("ParallelPerStateSchema", () => {
 
   it("coerces max_iterations string to number", () => {
     const result = ParallelPerStateSchema.parse({
-      type: "parallel-per",
       agent: "canon:canon-implementor",
       iterate_on: "${tasks}",
       max_iterations: "4",
+      type: "parallel-per",
     });
     expect(result.max_iterations).toBe(4);
   });
@@ -288,9 +276,9 @@ describe("ParallelPerStateSchema", () => {
   it("rejects wrong type literal", () => {
     expect(() =>
       ParallelPerStateSchema.parse({
-        type: "single",
         agent: "canon:canon-implementor",
         iterate_on: "${tasks}",
+        type: "single",
       }),
     ).toThrow();
   });
@@ -299,16 +287,14 @@ describe("ParallelPerStateSchema", () => {
     // iterate_on is semantically required but kept optional in the schema for backward compat;
     // the flow validator (validateFlow) checks for missing iterate_on at load time.
     const result = ParallelPerStateSchema.parse({
-      type: "parallel-per",
       agent: "canon:canon-implementor",
+      type: "parallel-per",
     });
     expect(result.type).toBe("parallel-per");
   });
 });
 
-// ---------------------------------------------------------------------------
 // TerminalStateSchema
-// ---------------------------------------------------------------------------
 
 describe("TerminalStateSchema", () => {
   it("accepts minimal valid terminal state", () => {
@@ -320,10 +306,10 @@ describe("TerminalStateSchema", () => {
 
   it("accepts terminal state with base fields (template, timeout, effects)", () => {
     const result = TerminalStateSchema.parse({
-      type: "terminal",
+      effects: [{ artifact: "review.md", type: "persist_review" }],
       template: "done.md",
       timeout: "5m",
-      effects: [{ type: "persist_review", artifact: "review.md" }],
+      type: "terminal",
     });
     expect(result.template).toBe("done.md");
     expect(result.effects).toHaveLength(1);
@@ -332,8 +318,8 @@ describe("TerminalStateSchema", () => {
   it("accepts terminal state with transitions (semantic validation catches misuse)", () => {
     // Transitions are kept optional on TerminalStateSchema; validateFlow catches semantic errors
     const result = TerminalStateSchema.parse({
-      type: "terminal",
       transitions: { done: "somewhere" },
+      type: "terminal",
     });
     // Zod strips unknown fields — `transitions` is NOT on TerminalStateSchema, so it's stripped
     // If it IS included in the schema, check it exists; if not, it would be undefined
@@ -351,15 +337,13 @@ describe("TerminalStateSchema", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // StateDefinitionSchema — discriminated union routing
-// ---------------------------------------------------------------------------
 
 describe("StateDefinitionSchema (discriminated union)", () => {
   it("routes 'single' type to SingleStateSchema", () => {
     const result = StateDefinitionSchema.parse({
-      type: "single",
       agent: "canon:canon-implementor",
+      type: "single",
     });
     expect(result.type).toBe("single");
     // TypeScript narrowing: after discriminant check, agent is accessible
@@ -370,25 +354,25 @@ describe("StateDefinitionSchema (discriminated union)", () => {
 
   it("routes 'wave' type to WaveStateSchema", () => {
     const result = StateDefinitionSchema.parse({
-      type: "wave",
       agent: "canon:canon-implementor",
+      type: "wave",
     });
     expect(result.type).toBe("wave");
   });
 
   it("routes 'parallel' type to ParallelStateSchema", () => {
     const result = StateDefinitionSchema.parse({
-      type: "parallel",
       agents: ["canon:canon-implementor"],
+      type: "parallel",
     });
     expect(result.type).toBe("parallel");
   });
 
   it("routes 'parallel-per' type to ParallelPerStateSchema", () => {
     const result = StateDefinitionSchema.parse({
-      type: "parallel-per",
       agent: "canon:canon-implementor",
       iterate_on: "${tasks}",
+      type: "parallel-per",
     });
     expect(result.type).toBe("parallel-per");
   });
@@ -403,8 +387,8 @@ describe("StateDefinitionSchema (discriminated union)", () => {
   it("rejects unknown type literal", () => {
     expect(() =>
       StateDefinitionSchema.parse({
-        type: "unknown-type",
         agent: "canon:canon-implementor",
+        type: "unknown-type",
       }),
     ).toThrow();
   });
@@ -412,8 +396,8 @@ describe("StateDefinitionSchema (discriminated union)", () => {
   it("SingleStateSchema rejects 'wave' type literal (wrong-type rejection)", () => {
     expect(() =>
       SingleStateSchema.parse({
-        type: "wave",
         agent: "canon:canon-implementor",
+        type: "wave",
       }),
     ).toThrow();
   });
@@ -421,8 +405,8 @@ describe("StateDefinitionSchema (discriminated union)", () => {
   it("WaveStateSchema rejects 'single' type literal (wrong-type rejection)", () => {
     expect(() =>
       WaveStateSchema.parse({
-        type: "single",
         agent: "canon:canon-implementor",
+        type: "single",
       }),
     ).toThrow();
   });
@@ -438,8 +422,8 @@ describe("StateDefinitionSchema (discriminated union)", () => {
   it("ParallelPerStateSchema rejects 'terminal' type literal", () => {
     expect(() =>
       ParallelPerStateSchema.parse({
-        type: "terminal",
         iterate_on: "${tasks}",
+        type: "terminal",
       }),
     ).toThrow();
   });
@@ -447,60 +431,58 @@ describe("StateDefinitionSchema (discriminated union)", () => {
   it("TerminalStateSchema rejects 'single' type literal", () => {
     expect(() =>
       TerminalStateSchema.parse({
-        type: "single",
         agent: "a",
+        type: "single",
       }),
     ).toThrow();
   });
 });
 
-// ---------------------------------------------------------------------------
 // FragmentStateDefinitionSchema — relaxed numeric fields
-// ---------------------------------------------------------------------------
 
 describe("FragmentStateDefinitionSchema", () => {
   it("accepts single fragment state with string max_iterations placeholder", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      type: "single",
       agent: "canon:canon-implementor",
       max_iterations: "${max_iter}",
+      type: "single",
     });
     expect(result.type).toBe("single");
-    expect((result as Record<string, unknown>)["max_iterations"]).toBe("${max_iter}");
+    expect((result as Record<string, unknown>).max_iterations).toBe("${max_iter}");
   });
 
   it("accepts single fragment state with numeric max_iterations", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      type: "single",
       agent: "canon:canon-implementor",
       max_iterations: 3,
+      type: "single",
     });
-    expect((result as Record<string, unknown>)["max_iterations"]).toBe(3);
+    expect((result as Record<string, unknown>).max_iterations).toBe(3);
   });
 
   it("accepts wave fragment state", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      type: "wave",
       agent: "canon:canon-implementor",
+      type: "wave",
     });
     expect(result.type).toBe("wave");
   });
 
   it("accepts parallel fragment state", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      type: "parallel",
       agents: ["canon:canon-implementor"],
+      type: "parallel",
     });
     expect(result.type).toBe("parallel");
   });
 
   it("accepts parallel-per fragment state with string iterate_on", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      type: "parallel-per",
       agent: "canon:canon-implementor",
       iterate_on: "${tasks}",
+      type: "parallel-per",
     });
-    expect((result as Record<string, unknown>)["iterate_on"]).toBe("${tasks}");
+    expect((result as Record<string, unknown>).iterate_on).toBe("${tasks}");
   });
 
   it("accepts terminal fragment state", () => {
@@ -512,26 +494,24 @@ describe("FragmentStateDefinitionSchema", () => {
 
   it("accepts string large_diff_threshold placeholder", () => {
     const result = FragmentStateDefinitionSchema.parse({
-      type: "single",
       agent: "canon:canon-implementor",
       large_diff_threshold: "${threshold}",
+      type: "single",
     });
-    expect((result as Record<string, unknown>)["large_diff_threshold"]).toBe("${threshold}");
+    expect((result as Record<string, unknown>).large_diff_threshold).toBe("${threshold}");
   });
 
   it("rejects unknown type literal", () => {
     expect(() =>
       FragmentStateDefinitionSchema.parse({
-        type: "bogus",
         agent: "canon:canon-implementor",
+        type: "bogus",
       }),
     ).toThrow();
   });
 });
 
-// ---------------------------------------------------------------------------
 // ADR-004 acceptance: discriminated union type safety (dc-02)
-// ---------------------------------------------------------------------------
 
 describe("ADR-004 acceptance: discriminated union state schemas (dc-02)", () => {
   it("rejects a wave state with iterate_on (belongs to parallel-per)", () => {
@@ -540,19 +520,19 @@ describe("ADR-004 acceptance: discriminated union state schemas (dc-02)", () => 
     // strips iterate_on (Zod default) or rejects it if strict.
     // The test verifies that iterate_on is NOT propagated into a wave state.
     const result = StateDefinitionSchema.parse({
-      type: "wave",
       agent: "test",
       iterate_on: "items",
+      type: "wave",
     });
     // Zod strips unknown fields — iterate_on must not appear on the parsed result
     expect(result.type).toBe("wave");
-    expect((result as Record<string, unknown>)["iterate_on"]).toBeUndefined();
+    expect((result as Record<string, unknown>).iterate_on).toBeUndefined();
   });
 
   it("accepts wave state with wave_policy (dc-02 positive case)", () => {
     const result = StateDefinitionSchema.parse({
-      type: "wave",
       agent: "test",
+      type: "wave",
       wave_policy: { isolation: "branch", merge_strategy: "squash" },
     });
     expect(result.type).toBe("wave");
@@ -564,8 +544,8 @@ describe("ADR-004 acceptance: discriminated union state schemas (dc-02)", () => 
 
   it("wave state without wave_policy gets undefined wave_policy (dc-07: optional with defaults applied on access)", () => {
     const result = StateDefinitionSchema.parse({
-      type: "wave",
       agent: "test",
+      type: "wave",
     });
     expect(result.type).toBe("wave");
     // wave_policy is optional — absent when not provided
@@ -576,8 +556,8 @@ describe("ADR-004 acceptance: discriminated union state schemas (dc-02)", () => 
 
   it("wave state with empty wave_policy object gets WavePolicySchema defaults (dc-07)", () => {
     const result = StateDefinitionSchema.parse({
-      type: "wave",
       agent: "test",
+      type: "wave",
       wave_policy: {},
     });
     expect(result.type).toBe("wave");
@@ -590,9 +570,9 @@ describe("ADR-004 acceptance: discriminated union state schemas (dc-02)", () => 
 
   it("parallel-per state accepts iterate_on (correct field placement)", () => {
     const result = StateDefinitionSchema.parse({
-      type: "parallel-per",
       agent: "test",
       iterate_on: "items",
+      type: "parallel-per",
     });
     expect(result.type).toBe("parallel-per");
     if (result.type === "parallel-per") {

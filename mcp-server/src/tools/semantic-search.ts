@@ -5,23 +5,23 @@ import { join } from "node:path";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
-import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import type { EntityKind, SemanticSearchResult } from "../graph/kg-types.ts";
-import { toolError, toolOk, type ToolResult } from "../utils/tool-result.ts";
+import { KgVectorQuery } from "../graph/kg-vector-query.ts";
+import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 
-export interface SemanticSearchInput {
+export type SemanticSearchInput = {
   query: string;
   kind_filter?: string[];
   scope?: string;
   limit?: number;
   threshold?: number;
-}
+};
 
-export interface SemanticSearchOutput {
+export type SemanticSearchOutput = {
   query: string;
   results: SemanticSearchResult[];
   count: number;
-}
+};
 
 export async function semanticSearch(
   input: SemanticSearchInput,
@@ -50,13 +50,13 @@ export async function semanticSearch(
     const vectorQuery = new KgVectorQuery(db, embeddingService);
 
     const results = await vectorQuery.semanticSearch(query, {
-      limit,
       kind_filter: kind_filter as EntityKind[] | undefined,
+      limit,
       scope: scope as "entities" | "summaries" | "both" | undefined,
       threshold,
     });
 
-    return toolOk({ query, results, count: results.length });
+    return toolOk({ count: results.length, query, results });
   } catch (err) {
     const msg = (err as Error).message;
     // If the model isn't loaded yet (first use, download in progress)

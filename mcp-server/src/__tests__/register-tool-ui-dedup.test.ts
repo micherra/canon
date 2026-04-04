@@ -5,10 +5,11 @@
  * so we replicate the dedup logic and verify it matches the pattern used
  * in production — then do a smoke-start of the server to confirm no crash.
  */
-import { describe, it, expect, vi } from "vitest";
+
 import { execFileSync } from "node:child_process";
-import { join, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { describe, expect, it, vi } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverEntry = join(__dirname, "..", "index.ts");
@@ -38,10 +39,10 @@ describe("registerToolWithUi resource deduplication", () => {
     // Smoke test: start the server and immediately send EOF via stdin.
     // If registerAppResource throws "already registered", this will fail.
     const result = execFileSync("npx", ["tsx", serverEntry], {
-      timeout: 10_000,
-      input: "", // immediate EOF causes the server to exit cleanly
       encoding: "utf-8",
+      input: "", // immediate EOF causes the server to exit cleanly
       stdio: ["pipe", "pipe", "pipe"],
+      timeout: 10_000,
     });
     // No throw means success — the server initialized without the duplicate error.
     expect(result).toBeDefined();

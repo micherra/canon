@@ -4,7 +4,11 @@ import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 // Simple per-event-loop-tick cache — avoids reading config.json 3x when
 // loadLayerMappings, deriveSourceDirsFromLayers, and loadConfigNumber are called in sequence.
-let configCache: { projectDir: string; result: Record<string, unknown> | null; tick: number } | null = null;
+let configCache: {
+  projectDir: string;
+  result: Record<string, unknown> | null;
+  tick: number;
+} | null = null;
 let currentTick = 0;
 const bumpTick = () => {
   queueMicrotask(() => {
@@ -42,11 +46,11 @@ async function loadCanonConfig(projectDir: string): Promise<Record<string, unkno
 /** Default layer mappings — directory patterns to layer names. */
 export const DEFAULT_LAYER_MAPPINGS: Record<string, string[]> = {
   api: ["api", "routes", "controllers"],
-  ui: ["app", "components", "pages", "views"],
-  domain: ["services", "domain", "models"],
   data: ["db", "data", "repositories", "prisma"],
+  domain: ["services", "domain", "models"],
   infra: ["infra", "deploy", "terraform", "docker"],
   shared: ["utils", "lib", "shared", "types"],
+  ui: ["app", "components", "pages", "views"],
 };
 
 export type LayerMappings = Record<string, string[]>;
@@ -143,6 +147,15 @@ export function buildLayerInferrer(mappings: LayerMappings): (filePath: string) 
  * Plain segment patterns (no '/' before '*') are skipped.
  * Returns null if no rooted patterns are found or if no layers are configured.
  */
+function extractDirFromPattern(pattern: string): string | null {
+  const starIdx = pattern.indexOf("*");
+  if (starIdx === -1) return null; // no wildcard — plain segment, skip
+  const slashBeforeStar = pattern.lastIndexOf("/", starIdx - 1);
+  if (slashBeforeStar === -1) return null; // no '/' before '*' — not a rooted path, skip
+  const dir = pattern.slice(0, starIdx).replace(/\/$/, "");
+  return dir || null;
+}
+
 export async function deriveSourceDirsFromLayers(projectDir: string): Promise<string[] | null> {
   const config = await loadCanonConfig(projectDir);
   if (!config?.layers || typeof config.layers !== "object" || Array.isArray(config.layers)) {
@@ -152,11 +165,7 @@ export async function deriveSourceDirsFromLayers(projectDir: string): Promise<st
   for (const patterns of Object.values(config.layers as Record<string, string[]>)) {
     if (!Array.isArray(patterns)) continue;
     for (const pattern of patterns) {
-      const starIdx = pattern.indexOf("*");
-      if (starIdx === -1) continue; // no wildcard — plain segment, skip
-      const slashBeforeStar = pattern.lastIndexOf("/", starIdx - 1);
-      if (slashBeforeStar === -1) continue; // no '/' before '*' — not a rooted path, skip
-      const dir = pattern.slice(0, starIdx).replace(/\/$/, "");
+      const dir = extractDirFromPattern(pattern);
       if (dir) dirs.add(dir);
     }
   }
@@ -175,45 +184,53 @@ export async function loadLayerMappingsStrict(projectDir: string): Promise<Layer
   throw new Error("No layer mappings configured in .canon/config.json");
 }
 
-export interface GraphCompositionConfig {
+export type GraphCompositionConfig = {
   enabled: boolean;
   markers: string[];
   file_patterns: string[];
   min_confidence: number;
   max_refs_per_file: number;
-}
+};
 
 const DEFAULT_MARKERS = ["uses", "includes", "extends", "imports", "references", "source"];
 
 const DEFAULT_COMPOSITION_CONFIG: GraphCompositionConfig = {
   enabled: false,
-  markers: DEFAULT_MARKERS,
   file_patterns: [],
-  min_confidence: 0.5,
+  markers: DEFAULT_MARKERS,
   max_refs_per_file: 50,
+  min_confidence: 0.5,
 };
 
 /** Load graph composition config from .canon/config.json. */
-export async function loadGraphCompositionConfig(projectDir: string): Promise<GraphCompositionConfig> {
+export async function loadGraphCompositionConfig(
+  projectDir: string,
+): Promise<GraphCompositionConfig> {
   const config = await loadCanonConfig(projectDir);
   const graph = config?.graph as Record<string, unknown> | undefined;
   if (!graph?.composition) return DEFAULT_COMPOSITION_CONFIG;
   const c = graph.composition as Record<string, unknown>;
   return {
     enabled: (c.enabled as boolean) ?? false,
-    markers: Array.isArray(c.markers) ? c.markers : DEFAULT_MARKERS,
     file_patterns: Array.isArray(c.file_patterns) ? c.file_patterns : [],
-    min_confidence: typeof c.min_confidence === "number" ? c.min_confidence : 0.5,
+    markers: Array.isArray(c.markers) ? c.markers : DEFAULT_MARKERS,
     max_refs_per_file: typeof c.max_refs_per_file === "number" ? c.max_refs_per_file : 50,
+    min_confidence: typeof c.min_confidence === "number" ? c.min_confidence : 0.5,
   };
 }
 
 /** Read a numeric config value at a dotted path (e.g. "review.max_principles_per_review"). */
-export async function loadConfigNumber(projectDir: string, key: string, defaultValue: number): Promise<number> {
+export async function loadConfigNumber(
+  projectDir: string,
+  key: string,
+  defaultValue: number,
+): Promise<number> {
   const config = await loadCanonConfig(projectDir);
   if (!config) return defaultValue;
 
-  const value = Number(key.split(".").reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], config));
+  const value = Number(
+    key.split(".").reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], config),
+  );
 
   return Number.isFinite(value) && value >= 1 ? Math.floor(value) : defaultValue;
 }

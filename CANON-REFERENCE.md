@@ -20,7 +20,7 @@ canon/
 ├── skills/canon/         # Canon skill definition (entry point for Claude Code)
 │   └── references/       # Skill reference fragments loaded on demand
 ├── templates/            # Artifact templates agents must follow
-├── mcp-server/ui/        # Svelte/Sigma.js dashboard UI (builds to single HTML for MCP App)
+├── mcp-server/src/ui/    # Svelte/Sigma.js dashboard UI (builds to single HTML for MCP App)
 ├── commands/             # CLI command definitions
 └── .canon/               # Runtime data (workspaces, principles, config, drift JSONL)
     └── workspaces/       # Per-branch/task build state (board.json, session.json, progress.md, plans/, etc.)
@@ -83,10 +83,9 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 |------|---------|
 | `load_flow` | Load and resolve a flow definition (fragments, spawn instructions, state graph) |
 | `init_workspace` | Create or resume a workspace (`board.json`, `session.json`, `progress.md`); seeds `progress.md` with task header on creation |
+| `drive_flow` | Advance the state machine one step: resolves spawn prompt, checks convergence, enters state; returns `SpawnRequest` or `HitlBreakpoint` |
 | `update_board` | Mutate board state: enter/skip/block/unblock states, complete flow, set wave progress |
-| `get_spawn_prompt` | Resolve spawn prompt for a state (variable substitution, wave context); reads `progress.md` from disk and injects as `${progress}` when flow declares `progress:` field |
 | `report_result` | Record agent result, evaluate transitions, check stuck detection; returns `next_state`; accepts optional `transcript_path` (best-effort write to execution state) |
-| `check_convergence` | Check iteration limits before re-entering a looping state |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
 | `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
 | `inject_wave_event` | Inject user events into running wave execution |

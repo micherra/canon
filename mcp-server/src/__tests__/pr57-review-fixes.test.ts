@@ -10,23 +10,21 @@
  * Fix 7: verify-fix-loop.md — boolean param works now that buildEffectiveParams supports it
  */
 
-import type Database from "better-sqlite3";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
-import { KgVectorQuery } from "../graph/kg-vector-query.ts";
+import type Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
+import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { resolveFragments } from "../orchestration/flow-parser.ts";
 import type { FragmentDefinition } from "../orchestration/flow-schema.ts";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
 import { MockEmbeddingService, randomEmbedding } from "./embedding-test-helpers.ts";
 
-// ---------------------------------------------------------------------------
 // Fix 1: write-plan-index.ts — path traversal validation on slug
-// ---------------------------------------------------------------------------
 
 describe("writePlanIndex — slug path traversal validation", () => {
   let tmpDir: string;
@@ -36,14 +34,14 @@ describe("writePlanIndex — slug path traversal validation", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("returns INVALID_INPUT when slug contains path traversal (../..)", async () => {
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "../../etc",
       tasks: [{ task_id: "task-01", wave: 1 }],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -55,9 +53,9 @@ describe("writePlanIndex — slug path traversal validation", () => {
 
   it("returns INVALID_INPUT when slug contains forward slash", async () => {
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "foo/bar",
       tasks: [{ task_id: "task-01", wave: 1 }],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -68,9 +66,9 @@ describe("writePlanIndex — slug path traversal validation", () => {
 
   it("returns INVALID_INPUT when slug contains dot-dot component", async () => {
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "..dangerous",
       tasks: [{ task_id: "task-01", wave: 1 }],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(false);
@@ -81,9 +79,9 @@ describe("writePlanIndex — slug path traversal validation", () => {
 
   it("accepts a normal slug with hyphens and alphanumeric chars", async () => {
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "my-epic-plan",
       tasks: [{ task_id: "task-01", wave: 1 }],
+      workspace: tmpDir,
     });
 
     expect(result.ok).toBe(true);
@@ -91,9 +89,9 @@ describe("writePlanIndex — slug path traversal validation", () => {
 
   it("rejects an empty slug", async () => {
     const result = await writePlanIndex({
-      workspace: tmpDir,
       slug: "",
       tasks: [{ task_id: "task-01", wave: 1 }],
+      workspace: tmpDir,
     });
 
     // Empty slug is rejected — SLUG_PATTERN requires at least 1 character
@@ -101,28 +99,26 @@ describe("writePlanIndex — slug path traversal validation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 2 & 7: flow-parser.ts — boolean typed params in buildEffectiveParams
-// ---------------------------------------------------------------------------
 
 describe("resolveFragments — boolean typed param support", () => {
   const baseFlow = {
-    name: "test-flow",
     description: "test",
+    fragments: [],
     initial_state: "start",
+    name: "test-flow",
+    principles: [],
     states: {
       start: { type: "terminal" as const },
     },
-    principles: [],
-    fragments: [],
   };
 
   it("uses boolean false as default when param not in with", () => {
     const fragment: FragmentDefinition = {
       fragment: "bool-frag",
-      params: { write_tests: { type: "boolean", default: false } },
+      params: { write_tests: { default: false, type: "boolean" } },
       states: {
-        s: { type: "single" as const, agent: "a", template: "${write_tests}" },
+        s: { agent: "a", template: "${write_tests}", type: "single" as const },
       },
     };
 
@@ -133,15 +129,15 @@ describe("resolveFragments — boolean typed param support", () => {
     );
 
     // false → "false" via String(false) in substituteParams
-    expect(result.states["s"].template).toBe("false");
+    expect(result.states.s.template).toBe("false");
   });
 
   it("uses boolean true as default", () => {
     const fragment: FragmentDefinition = {
       fragment: "bool-frag",
-      params: { write_tests: { type: "boolean", default: true } },
+      params: { write_tests: { default: true, type: "boolean" } },
       states: {
-        s: { type: "single" as const, agent: "a", template: "${write_tests}" },
+        s: { agent: "a", template: "${write_tests}", type: "single" as const },
       },
     };
 
@@ -151,15 +147,15 @@ describe("resolveFragments — boolean typed param support", () => {
       [{ fragment: "bool-frag" }],
     );
 
-    expect(result.states["s"].template).toBe("true");
+    expect(result.states.s.template).toBe("true");
   });
 
   it("allows boolean param to be overridden via with", () => {
     const fragment: FragmentDefinition = {
       fragment: "bool-frag",
-      params: { write_tests: { type: "boolean", default: false } },
+      params: { write_tests: { default: false, type: "boolean" } },
       states: {
-        s: { type: "single" as const, agent: "a", template: "${write_tests}" },
+        s: { agent: "a", template: "${write_tests}", type: "single" as const },
       },
     };
 
@@ -169,7 +165,7 @@ describe("resolveFragments — boolean typed param support", () => {
       [{ fragment: "bool-frag", with: { write_tests: true } }],
     );
 
-    expect(result.states["s"].template).toBe("true");
+    expect(result.states.s.template).toBe("true");
   });
 
   it("does NOT treat old-format false as required (backward compat fix)", () => {
@@ -180,7 +176,7 @@ describe("resolveFragments — boolean typed param support", () => {
       // Old-format: scalar false as a default
       params: { flag: false as unknown as null },
       states: {
-        s: { type: "single" as const, agent: "a", template: "${flag}" },
+        s: { agent: "a", template: "${flag}", type: "single" as const },
       },
     };
 
@@ -195,12 +191,10 @@ describe("resolveFragments — boolean typed param support", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 3: kg-vector-store.ts — unused `rows` removal does not affect behavior
 //
 // The `rows` variable was an intermediate query result that was never used;
 // only `allCandidates` was used. Verify getStaleEntityVectors still works.
-// ---------------------------------------------------------------------------
 
 describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
   let db: Database.Database;
@@ -220,24 +214,24 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
   test("returns entity with no meta row as stale", () => {
     // Seed a function entity (kind != 'file')
     const fileRow = store.upsertFile({
-      path: "src/A.ts",
-      mtime_ms: Date.now(),
       content_hash: "abc",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/A.ts",
     });
     store.insertEntity({
+      file_id: fileRow.file_id!,
+      is_default_export: false,
+      is_exported: false,
+      kind: "function",
+      line_end: 5,
+      line_start: 1,
+      metadata: null,
       name: "myFn",
       qualified_name: "src/A.ts::myFn",
-      kind: "function",
-      line_start: 1,
-      line_end: 5,
-      is_exported: false,
-      is_default_export: false,
       signature: null,
-      metadata: null,
-      file_id: fileRow.file_id!,
     });
 
     const stale = vectorStore.getStaleEntityVectors();
@@ -248,25 +242,25 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
   test("excludes kind='file' entities", () => {
     // Seed a file entity — should be excluded
     const fileRow = store.upsertFile({
-      path: "src/B.ts",
-      mtime_ms: Date.now(),
       content_hash: "xyz",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/B.ts",
     });
     // Insert kind='file' entity
     store.insertEntity({
+      file_id: fileRow.file_id!,
+      is_default_export: false,
+      is_exported: false,
+      kind: "file",
+      line_end: 0,
+      line_start: 0,
+      metadata: null,
       name: "B.ts",
       qualified_name: "src/B.ts",
-      kind: "file",
-      line_start: 0,
-      line_end: 0,
-      is_exported: false,
-      is_default_export: false,
       signature: null,
-      metadata: null,
-      file_id: fileRow.file_id!,
     });
 
     const stale = vectorStore.getStaleEntityVectors();
@@ -274,12 +268,9 @@ describe("KgVectorStore.getStaleEntityVectors — unused rows removal", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 4 & 5: kg-vector-query.ts — parameterized threshold (no SQL injection)
 //
 // Verify that threshold filtering works correctly with bound params.
-// ---------------------------------------------------------------------------
-
 
 describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   let db: Database.Database;
@@ -304,32 +295,36 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   ): { entityId: number; fileId: number } {
     const path = overrides.qualified_name?.split("::")[0] ?? "src/E.ts";
     const fileRow = store.upsertFile({
-      path,
-      mtime_ms: Date.now(),
       content_hash: `hash-${seed}`,
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path,
     });
     const entityRow = store.insertEntity({
+      file_id: fileRow.file_id!,
+      is_default_export: false,
+      is_exported: false,
+      kind: (overrides.kind as "function") ?? "function",
+      line_end: 10,
+      line_start: 1,
+      metadata: null,
       name: overrides.name ?? "fn",
       qualified_name: overrides.qualified_name ?? `${path}::fn`,
-      kind: (overrides.kind as "function") ?? "function",
-      line_start: 1,
-      line_end: 10,
-      is_exported: false,
-      is_default_export: false,
       signature: null,
-      metadata: null,
-      file_id: fileRow.file_id!,
     });
     const vec = randomEmbedding(seed);
-    vectorStore.upsertEntityVector(entityRow.entity_id!, vec, KgVectorStore.textHash(`vec-${seed}`));
+    vectorStore.upsertEntityVector(
+      entityRow.entity_id!,
+      vec,
+      KgVectorStore.textHash(`vec-${seed}`),
+    );
     return { entityId: entityRow.entity_id!, fileId: fileRow.file_id! };
   }
 
   test("entity threshold 0 returns no results (all distances > 0)", async () => {
-    seedEntityWithVector({ qualified_name: "src/A.ts::fn", name: "fn" }, 0);
+    seedEntityWithVector({ name: "fn", qualified_name: "src/A.ts::fn" }, 0);
 
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "entities", threshold: 0 });
@@ -339,8 +334,8 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   });
 
   test("entity threshold 2.0 (max possible L2 distance) returns all results", async () => {
-    seedEntityWithVector({ qualified_name: "src/A.ts::fn1", name: "fn1" }, 10);
-    seedEntityWithVector({ qualified_name: "src/B.ts::fn2", name: "fn2" }, 20);
+    seedEntityWithVector({ name: "fn1", qualified_name: "src/A.ts::fn1" }, 10);
+    seedEntityWithVector({ name: "fn2", qualified_name: "src/B.ts::fn2" }, 20);
 
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "entities", threshold: 2.0 });
@@ -352,24 +347,28 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
 
   test("summary threshold 2.0 returns all summary results", async () => {
     const fileRow = store.upsertFile({
-      path: "src/C.ts",
-      mtime_ms: Date.now(),
       content_hash: "c-hash",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/C.ts",
     });
     const summaryRow = store.upsertSummary({
-      file_id: fileRow.file_id!,
+      content_hash: "c-hash",
       entity_id: null,
+      file_id: fileRow.file_id!,
+      model: null,
       scope: "file",
       summary: "A helpful file",
-      model: null,
-      content_hash: "c-hash",
       updated_at: new Date().toISOString(),
     });
     const vec = randomEmbedding(30);
-    vectorStore.upsertSummaryVector(summaryRow.summary_id!, vec, KgVectorStore.textHash("A helpful file"));
+    vectorStore.upsertSummaryVector(
+      summaryRow.summary_id!,
+      vec,
+      KgVectorStore.textHash("A helpful file"),
+    );
 
     const query = new KgVectorQuery(db, mockService as any);
     const results = await query.semanticSearch("query", { scope: "summaries", threshold: 2.0 });
@@ -378,12 +377,10 @@ describe("KgVectorQuery — threshold uses bound param (Fixes 4 & 5)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Fix 6: store-summaries.ts — upsertSummary return value used directly
 //
 // We test the internal helper indirectly: if KgStore.upsertSummary returns the
 // row with summary_id, the embedding pipeline receives the correct ID.
-// ---------------------------------------------------------------------------
 
 describe("KgStore.upsertSummary returns summary_id (Fix 6 contract)", () => {
   let db: Database.Database;
@@ -400,21 +397,21 @@ describe("KgStore.upsertSummary returns summary_id (Fix 6 contract)", () => {
 
   test("upsertSummary returns a SummaryRow with summary_id", () => {
     const fileRow = store.upsertFile({
-      path: "src/D.ts",
-      mtime_ms: Date.now(),
       content_hash: "dhash",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/D.ts",
     });
 
     const result = store.upsertSummary({
-      file_id: fileRow.file_id!,
+      content_hash: "dhash",
       entity_id: null,
+      file_id: fileRow.file_id!,
+      model: null,
       scope: "file",
       summary: "Summary text",
-      model: null,
-      content_hash: "dhash",
       updated_at: new Date().toISOString(),
     });
 
@@ -425,21 +422,21 @@ describe("KgStore.upsertSummary returns summary_id (Fix 6 contract)", () => {
 
   test("upsertSummary return value matches getSummaryByFile (same row)", () => {
     const fileRow = store.upsertFile({
-      path: "src/E.ts",
-      mtime_ms: Date.now(),
       content_hash: "ehash",
       language: "typescript",
-      layer: "domain",
       last_indexed_at: Date.now(),
+      layer: "domain",
+      mtime_ms: Date.now(),
+      path: "src/E.ts",
     });
 
     const upsertResult = store.upsertSummary({
-      file_id: fileRow.file_id!,
+      content_hash: "ehash",
       entity_id: null,
+      file_id: fileRow.file_id!,
+      model: null,
       scope: "file",
       summary: "Another summary",
-      model: null,
-      content_hash: "ehash",
       updated_at: new Date().toISOString(),
     });
 

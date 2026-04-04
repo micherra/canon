@@ -9,94 +9,90 @@
 import type Database from "better-sqlite3";
 import type { EdgeRow, EntityRow, FileEdgeRow, FileRow, SummaryRow } from "./kg-types.ts";
 
-// ---------------------------------------------------------------------------
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
-// ---------------------------------------------------------------------------
 
 function toEntityRow(row: Record<string, unknown>): EntityRow {
   const base = row as unknown as EntityRow;
   return {
     ...base,
-    is_exported: Boolean(row["is_exported"]),
-    is_default_export: Boolean(row["is_default_export"]),
+    is_default_export: Boolean(row.is_default_export),
+    is_exported: Boolean(row.is_exported),
   };
 }
 
-// ---------------------------------------------------------------------------
 // KgStore
-// ---------------------------------------------------------------------------
 
 export class KgStore {
   private readonly db: Database.Database;
 
   // ---- File statements ----
-  private readonly stmtUpsertFile: Database.Statement;
-  private readonly stmtGetFile: Database.Statement;
-  private readonly stmtGetFileById: Database.Statement;
-  private readonly stmtDeleteFile: Database.Statement;
+  private stmtUpsertFile!: Database.Statement;
+  private stmtGetFile!: Database.Statement;
+  private stmtGetFileById!: Database.Statement;
+  private stmtDeleteFile!: Database.Statement;
 
   // ---- Entity statements ----
-  private readonly stmtInsertEntity: Database.Statement;
-  private readonly stmtGetEntitiesByFile: Database.Statement;
-  private readonly stmtGetEntityByQualifiedName: Database.Statement;
-  private readonly stmtFindExportedByName: Database.Statement;
-  private readonly stmtDeleteEntitiesByFile: Database.Statement;
+  private stmtInsertEntity!: Database.Statement;
+  private stmtGetEntitiesByFile!: Database.Statement;
+  private stmtGetEntityByQualifiedName!: Database.Statement;
+  private stmtFindExportedByName!: Database.Statement;
+  private stmtDeleteEntitiesByFile!: Database.Statement;
 
   // ---- Edge statements ----
-  private readonly stmtInsertEdge: Database.Statement;
-  private readonly stmtGetEdgesFrom: Database.Statement;
-  private readonly stmtGetEdgesTo: Database.Statement;
-  private readonly stmtDeleteEdgesByEntity: Database.Statement;
+  private stmtInsertEdge!: Database.Statement;
+  private stmtGetEdgesFrom!: Database.Statement;
+  private stmtGetEdgesTo!: Database.Statement;
+  private stmtDeleteEdgesByEntity!: Database.Statement;
 
   // ---- File edge statements ----
-  private readonly stmtInsertFileEdge: Database.Statement;
-  private readonly stmtGetFileEdgesFrom: Database.Statement;
-  private readonly stmtGetFileEdgesTo: Database.Statement;
-  private readonly stmtDeleteFileEdgesByFile: Database.Statement;
+  private stmtInsertFileEdge!: Database.Statement;
+  private stmtGetFileEdgesFrom!: Database.Statement;
+  private stmtGetFileEdgesTo!: Database.Statement;
+  private stmtDeleteFileEdgesByFile!: Database.Statement;
 
   // ---- Summary statements ----
-  private readonly stmtUpsertSummary: Database.Statement;
-  private readonly stmtDeleteExistingNullEntitySummary: Database.Statement;
-  private readonly stmtInsertSummaryReturning: Database.Statement;
-  private readonly stmtGetSummaryByFile: Database.Statement;
-  private readonly stmtDeleteSummariesByFile: Database.Statement;
-  private readonly stmtGetStaleSummaries: Database.Statement;
+  private stmtUpsertSummary!: Database.Statement;
+  private stmtDeleteExistingNullEntitySummary!: Database.Statement;
+  private stmtInsertSummaryReturning!: Database.Statement;
+  private stmtGetSummaryByFile!: Database.Statement;
+  private stmtDeleteSummariesByFile!: Database.Statement;
+  private stmtGetStaleSummaries!: Database.Statement;
 
   // ---- Stats statements ----
-  private readonly stmtCountFiles: Database.Statement;
-  private readonly stmtCountEntities: Database.Statement;
-  private readonly stmtCountEdges: Database.Statement;
-  private readonly stmtCountFileEdges: Database.Statement;
+  private stmtCountFiles!: Database.Statement;
+  private stmtCountEntities!: Database.Statement;
+  private stmtCountEdges!: Database.Statement;
+  private stmtCountFileEdges!: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
+    this.prepareFileStatements(db);
+    this.prepareEntityStatements(db);
+    this.prepareEdgeStatements(db);
+    this.prepareFileEdgeStatements(db);
+    this.prepareSummaryStatements(db);
+    this.stmtCountFiles = db.prepare(`SELECT COUNT(*) AS n FROM files`);
+    this.stmtCountEntities = db.prepare(`SELECT COUNT(*) AS n FROM entities`);
+    this.stmtCountEdges = db.prepare(`SELECT COUNT(*) AS n FROM edges`);
+    this.stmtCountFileEdges = db.prepare(`SELECT COUNT(*) AS n FROM file_edges`);
+  }
 
-    // Files
+  private prepareFileStatements(db: Database.Database): void {
     this.stmtUpsertFile = db.prepare(`
       INSERT INTO files (path, mtime_ms, content_hash, language, layer, last_indexed_at)
       VALUES (@path, @mtime_ms, @content_hash, @language, @layer, @last_indexed_at)
       ON CONFLICT(path) DO UPDATE SET
-        mtime_ms        = excluded.mtime_ms,
-        content_hash    = excluded.content_hash,
-        language        = excluded.language,
-        layer           = excluded.layer,
+        mtime_ms = excluded.mtime_ms, content_hash = excluded.content_hash,
+        language = excluded.language, layer = excluded.layer,
         last_indexed_at = excluded.last_indexed_at
       RETURNING *
     `);
+    this.stmtGetFile = db.prepare(`SELECT * FROM files WHERE path = ?`);
+    this.stmtGetFileById = db.prepare(`SELECT * FROM files WHERE file_id = ?`);
+    this.stmtDeleteFile = db.prepare(`DELETE FROM files WHERE path = ?`);
+  }
 
-    this.stmtGetFile = db.prepare(`
-      SELECT * FROM files WHERE path = ?
-    `);
-
-    this.stmtGetFileById = db.prepare(`
-      SELECT * FROM files WHERE file_id = ?
-    `);
-
-    this.stmtDeleteFile = db.prepare(`
-      DELETE FROM files WHERE path = ?
-    `);
-
-    // Entities
+  private prepareEntityStatements(db: Database.Database): void {
     this.stmtInsertEntity = db.prepare(`
       INSERT OR IGNORE INTO entities
         (file_id, name, qualified_name, kind, line_start, line_end,
@@ -106,121 +102,74 @@ export class KgStore {
          @is_exported, @is_default_export, @signature, @metadata)
       RETURNING *
     `);
+    this.stmtGetEntitiesByFile = db.prepare(`SELECT * FROM entities WHERE file_id = ?`);
+    this.stmtGetEntityByQualifiedName = db.prepare(
+      `SELECT * FROM entities WHERE file_id = ? AND qualified_name = ?`,
+    );
+    this.stmtFindExportedByName = db.prepare(
+      `SELECT * FROM entities WHERE name = ? AND is_exported = 1`,
+    );
+    this.stmtDeleteEntitiesByFile = db.prepare(`DELETE FROM entities WHERE file_id = ?`);
+  }
 
-    this.stmtGetEntitiesByFile = db.prepare(`
-      SELECT * FROM entities WHERE file_id = ?
-    `);
-
-    this.stmtGetEntityByQualifiedName = db.prepare(`
-      SELECT * FROM entities WHERE file_id = ? AND qualified_name = ?
-    `);
-
-    this.stmtFindExportedByName = db.prepare(`
-      SELECT * FROM entities WHERE name = ? AND is_exported = 1
-    `);
-
-    this.stmtDeleteEntitiesByFile = db.prepare(`
-      DELETE FROM entities WHERE file_id = ?
-    `);
-
-    // Edges
+  private prepareEdgeStatements(db: Database.Database): void {
     this.stmtInsertEdge = db.prepare(`
       INSERT OR IGNORE INTO edges
         (source_entity_id, target_entity_id, edge_type, confidence, metadata)
-      VALUES
-        (@source_entity_id, @target_entity_id, @edge_type, @confidence, @metadata)
+      VALUES (@source_entity_id, @target_entity_id, @edge_type, @confidence, @metadata)
       RETURNING *
     `);
+    this.stmtGetEdgesFrom = db.prepare(`SELECT * FROM edges WHERE source_entity_id = ?`);
+    this.stmtGetEdgesTo = db.prepare(`SELECT * FROM edges WHERE target_entity_id = ?`);
+    this.stmtDeleteEdgesByEntity = db.prepare(
+      `DELETE FROM edges WHERE source_entity_id = ? OR target_entity_id = ?`,
+    );
+  }
 
-    this.stmtGetEdgesFrom = db.prepare(`
-      SELECT * FROM edges WHERE source_entity_id = ?
-    `);
-
-    this.stmtGetEdgesTo = db.prepare(`
-      SELECT * FROM edges WHERE target_entity_id = ?
-    `);
-
-    this.stmtDeleteEdgesByEntity = db.prepare(`
-      DELETE FROM edges
-      WHERE source_entity_id = ? OR target_entity_id = ?
-    `);
-
-    // File edges
+  private prepareFileEdgeStatements(db: Database.Database): void {
     this.stmtInsertFileEdge = db.prepare(`
       INSERT OR IGNORE INTO file_edges
         (source_file_id, target_file_id, edge_type, confidence, evidence, relation)
-      VALUES
-        (@source_file_id, @target_file_id, @edge_type, @confidence, @evidence, @relation)
+      VALUES (@source_file_id, @target_file_id, @edge_type, @confidence, @evidence, @relation)
       RETURNING *
     `);
+    this.stmtGetFileEdgesFrom = db.prepare(`SELECT * FROM file_edges WHERE source_file_id = ?`);
+    this.stmtGetFileEdgesTo = db.prepare(`SELECT * FROM file_edges WHERE target_file_id = ?`);
+    this.stmtDeleteFileEdgesByFile = db.prepare(
+      `DELETE FROM file_edges WHERE source_file_id = ? OR target_file_id = ?`,
+    );
+  }
 
-    this.stmtGetFileEdgesFrom = db.prepare(`
-      SELECT * FROM file_edges WHERE source_file_id = ?
-    `);
-
-    this.stmtGetFileEdgesTo = db.prepare(`
-      SELECT * FROM file_edges WHERE target_file_id = ?
-    `);
-
-    this.stmtDeleteFileEdgesByFile = db.prepare(`
-      DELETE FROM file_edges
-      WHERE source_file_id = ? OR target_file_id = ?
-    `);
-
-    // Summaries
-    // Note: ON CONFLICT cannot target NULL columns in SQLite (NULLs are always distinct
-    // in UNIQUE constraints). For entity_id IS NULL rows we do a manual DELETE + INSERT.
-    // For non-NULL entity_id the UNIQUE constraint fires normally.
+  private prepareSummaryStatements(db: Database.Database): void {
     this.stmtUpsertSummary = db.prepare(`
       INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
       VALUES (@file_id, @entity_id, @scope, @summary, @model, @content_hash, @updated_at)
       ON CONFLICT(file_id, entity_id, scope) DO UPDATE SET
-        summary      = excluded.summary,
-        model        = excluded.model,
-        content_hash = excluded.content_hash,
-        updated_at   = excluded.updated_at
+        summary = excluded.summary, model = excluded.model,
+        content_hash = excluded.content_hash, updated_at = excluded.updated_at
       RETURNING *
     `);
-
-    // For NULL entity_id rows: explicitly delete existing then re-insert (RETURNING *)
-    this.stmtDeleteExistingNullEntitySummary = db.prepare(`
-      DELETE FROM summaries WHERE file_id = @file_id AND entity_id IS NULL AND scope = @scope
-    `);
-
+    this.stmtDeleteExistingNullEntitySummary = db.prepare(
+      `DELETE FROM summaries WHERE file_id = @file_id AND entity_id IS NULL AND scope = @scope`,
+    );
     this.stmtInsertSummaryReturning = db.prepare(`
       INSERT INTO summaries (file_id, entity_id, scope, summary, model, content_hash, updated_at)
       VALUES (@file_id, @entity_id, @scope, @summary, @model, @content_hash, @updated_at)
       RETURNING *
     `);
-
-    this.stmtGetSummaryByFile = db.prepare(`
-      SELECT * FROM summaries
-      WHERE file_id = ? AND entity_id IS NULL AND scope = 'file'
-    `);
-
-    this.stmtDeleteSummariesByFile = db.prepare(`
-      DELETE FROM summaries WHERE file_id = ?
-    `);
-
+    this.stmtGetSummaryByFile = db.prepare(
+      `SELECT * FROM summaries WHERE file_id = ? AND entity_id IS NULL AND scope = 'file'`,
+    );
+    this.stmtDeleteSummariesByFile = db.prepare(`DELETE FROM summaries WHERE file_id = ?`);
     this.stmtGetStaleSummaries = db.prepare(`
       SELECT s.*, f.path, f.content_hash AS file_content_hash
-      FROM summaries s
-      JOIN files f ON f.file_id = s.file_id
-      WHERE s.content_hash IS NOT NULL
-        AND s.content_hash != f.content_hash
+      FROM summaries s JOIN files f ON f.file_id = s.file_id
+      WHERE s.content_hash IS NOT NULL AND s.content_hash != f.content_hash
       LIMIT ?
     `);
-
-    // Stats
-    this.stmtCountFiles = db.prepare(`SELECT COUNT(*) AS n FROM files`);
-    this.stmtCountEntities = db.prepare(`SELECT COUNT(*) AS n FROM entities`);
-    this.stmtCountEdges = db.prepare(`SELECT COUNT(*) AS n FROM edges`);
-    this.stmtCountFileEdges = db.prepare(`SELECT COUNT(*) AS n FROM file_edges`);
   }
 
-  // --------------------------------------------------------------------------
   // Files
-  // --------------------------------------------------------------------------
 
   upsertFile(file: Omit<FileRow, "file_id">): FileRow {
     const row = this.stmtUpsertFile.get(file) as FileRow;
@@ -239,15 +188,13 @@ export class KgStore {
     this.stmtDeleteFile.run(path);
   }
 
-  // --------------------------------------------------------------------------
   // Entities
-  // --------------------------------------------------------------------------
 
   insertEntity(entity: Omit<EntityRow, "entity_id">): EntityRow {
     const params = {
       ...entity,
-      is_exported: entity.is_exported ? 1 : 0,
       is_default_export: entity.is_default_export ? 1 : 0,
+      is_exported: entity.is_exported ? 1 : 0,
     };
 
     const row = this.stmtInsertEntity.get(params) as Record<string, unknown> | undefined;
@@ -271,7 +218,9 @@ export class KgStore {
   }
 
   getEntityByQualifiedName(fileId: number, qualifiedName: string): EntityRow | undefined {
-    const row = this.stmtGetEntityByQualifiedName.get(fileId, qualifiedName) as Record<string, unknown> | undefined;
+    const row = this.stmtGetEntityByQualifiedName.get(fileId, qualifiedName) as
+      | Record<string, unknown>
+      | undefined;
     return row ? toEntityRow(row) : undefined;
   }
 
@@ -284,9 +233,7 @@ export class KgStore {
     this.stmtDeleteEntitiesByFile.run(fileId);
   }
 
-  // --------------------------------------------------------------------------
   // Edges (entity-level)
-  // --------------------------------------------------------------------------
 
   insertEdge(edge: Omit<EdgeRow, "edge_id">): EdgeRow {
     const row = this.stmtInsertEdge.get(edge) as EdgeRow;
@@ -305,9 +252,7 @@ export class KgStore {
     this.stmtDeleteEdgesByEntity.run(entityId, entityId);
   }
 
-  // --------------------------------------------------------------------------
   // File edges
-  // --------------------------------------------------------------------------
 
   insertFileEdge(edge: Omit<FileEdgeRow, "file_edge_id">): FileEdgeRow {
     const row = this.stmtInsertFileEdge.get(edge) as FileEdgeRow;
@@ -326,9 +271,7 @@ export class KgStore {
     this.stmtDeleteFileEdgesByFile.run(fileId, fileId);
   }
 
-  // --------------------------------------------------------------------------
   // Summaries
-  // --------------------------------------------------------------------------
 
   upsertSummary(params: Omit<SummaryRow, "summary_id">): SummaryRow {
     // SQLite UNIQUE constraints treat NULLs as distinct, so ON CONFLICT never fires
@@ -358,12 +301,12 @@ export class KgStore {
   }
 
   getStaleSummaries(limit = 100): Array<SummaryRow & { path: string; file_content_hash: string }> {
-    return this.stmtGetStaleSummaries.all(limit) as Array<SummaryRow & { path: string; file_content_hash: string }>;
+    return this.stmtGetStaleSummaries.all(limit) as Array<
+      SummaryRow & { path: string; file_content_hash: string }
+    >;
   }
 
-  // --------------------------------------------------------------------------
   // Bulk operations
-  // --------------------------------------------------------------------------
 
   /**
    * Delete a file and all its dependents (entities, edges, file_edges).
@@ -381,21 +324,17 @@ export class KgStore {
     return this.db.transaction(fn)();
   }
 
-  // --------------------------------------------------------------------------
   // Stats
-  // --------------------------------------------------------------------------
 
   getStats(): { files: number; entities: number; edges: number; fileEdges: number } {
     const files = (this.stmtCountFiles.get() as { n: number }).n;
     const entities = (this.stmtCountEntities.get() as { n: number }).n;
     const edges = (this.stmtCountEdges.get() as { n: number }).n;
     const fileEdges = (this.stmtCountFileEdges.get() as { n: number }).n;
-    return { files, entities, edges, fileEdges };
+    return { edges, entities, fileEdges, files };
   }
 
-  // --------------------------------------------------------------------------
   // Lifecycle
-  // --------------------------------------------------------------------------
 
   close(): void {
     this.db.close();

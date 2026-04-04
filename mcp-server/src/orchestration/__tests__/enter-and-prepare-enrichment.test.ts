@@ -8,23 +8,21 @@
  * 4. enrichment variable is merged after reviewScopeVars (so it doesn't clobber review_scope)
  */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ExecutionStore, getExecutionStore } from "../execution-store.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { type ExecutionStore, getExecutionStore } from "../execution-store.ts";
 import type { Board, ResolvedFlow } from "../flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../wave-variables.ts", () => ({
-  escapeDollarBrace: vi.fn((s: string) => s),
-  substituteVariables: vi.fn((s: string) => s),
   buildTemplateInjection: vi.fn(() => ""),
-  parseTaskIdsForWave: vi.fn(() => []),
+  escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
+  parseTaskIdsForWave: vi.fn(() => []),
+  substituteVariables: vi.fn((s: string) => s),
 }));
 
 vi.mock("../event-bus-instance.ts", () => ({
@@ -44,8 +42,12 @@ vi.mock("../consultation-executor.ts", () => ({
 }));
 
 vi.mock("../../adapters/git-adapter.ts", () => ({
-  gitExec: vi.fn().mockReturnValue({ ok: false, stdout: "", stderr: "", exitCode: 1, timedOut: false }),
-  gitLog: vi.fn().mockReturnValue({ ok: false, stdout: "", stderr: "", exitCode: 1, timedOut: false }),
+  gitExec: vi
+    .fn()
+    .mockReturnValue({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: false }),
+  gitLog: vi
+    .fn()
+    .mockReturnValue({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: false }),
 }));
 
 // Mock context-enrichment module
@@ -56,13 +58,9 @@ vi.mock("../context-enrichment.ts", () => ({
   }),
 }));
 
-import { assembleEnrichment } from "../context-enrichment.ts";
 import { enterAndPrepareState } from "../../tools/enter-and-prepare-state.ts";
 import { assertOk } from "../../utils/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { assembleEnrichment } from "../context-enrichment.ts";
 
 let tmpDirs: string[] = [];
 
@@ -77,27 +75,27 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
   const now = new Date().toISOString();
 
   store.initExecution({
-    flow: overrides.flow ?? "test-flow",
-    task: overrides.task ?? "test task",
-    entry: overrides.entry ?? "implement",
-    current_state: overrides.current_state ?? "implement",
     base_commit: overrides.base_commit ?? "abc1234",
-    started: overrides.started ?? now,
-    last_updated: overrides.last_updated ?? now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: overrides.current_state ?? "implement",
+    entry: overrides.entry ?? "implement",
+    flow: overrides.flow ?? "test-flow",
     flow_name: "test-flow",
+    last_updated: overrides.last_updated ?? now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: overrides.started ?? now,
+    task: overrides.task ?? "test task",
+    tier: "medium",
   });
 
   const states = (overrides.states as Board["states"]) ?? {
-    implement: { status: "pending", entries: 0 },
-    done: { status: "pending", entries: 0 },
+    done: { entries: 0, status: "pending" },
+    implement: { entries: 0, status: "pending" },
   };
   for (const [stateId, state] of Object.entries(states)) {
-    store.upsertState(stateId, { status: state.status, entries: state.entries ?? 0 });
+    store.upsertState(stateId, { entries: state.entries ?? 0, status: state.status });
   }
 
   return store;
@@ -105,14 +103,14 @@ function seedStore(workspace: string, overrides: Partial<Board> = {}): Execution
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: { type: "single", agent: "canon-implementor" },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: { implement: "Implement ${task}. ${enrichment}" },
+    states: {
+      done: { type: "terminal" },
+      implement: { agent: "canon-implementor", type: "single" },
+    },
     ...overrides,
   };
 }
@@ -122,15 +120,11 @@ afterEach(() => {
   if (cache instanceof Map) cache.clear();
 
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("enterAndPrepareState — enrichment integration", () => {
   describe("enrichment content included in spawn prompt", () => {
@@ -150,10 +144,10 @@ describe("enterAndPrepareState — enrichment integration", () => {
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "build the widget", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "build the widget" },
+        workspace,
       });
       assertOk(result);
 
@@ -173,11 +167,11 @@ describe("enterAndPrepareState — enrichment integration", () => {
 
       const flow = makeFlow();
       await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
         project_dir: "/some/project",
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
 
       expect(assembleEnrichment).toHaveBeenCalledOnce();
@@ -203,10 +197,10 @@ describe("enterAndPrepareState — enrichment integration", () => {
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "build the widget", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "build the widget" },
+        workspace,
       });
 
       // Should still succeed — not throw or return toolError
@@ -222,10 +216,10 @@ describe("enterAndPrepareState — enrichment integration", () => {
       vi.mocked(assembleEnrichment).mockRejectedValue(new Error("timeout"));
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow: makeFlow(),
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
 
       assertOk(result);
@@ -249,10 +243,10 @@ describe("enterAndPrepareState — enrichment integration", () => {
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "build the widget", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "build the widget" },
+        workspace,
       });
 
       assertOk(result);
@@ -267,11 +261,11 @@ describe("enterAndPrepareState — enrichment integration", () => {
       const workspace = makeTmpDir();
       // Seed with entries > 1 to trigger review_scope
       seedStore(workspace, {
-        states: {
-          implement: { status: "in_progress", entries: 2 },
-          done: { status: "pending", entries: 0 },
-        },
         base_commit: "abc1234",
+        states: {
+          done: { entries: 0, status: "pending" },
+          implement: { entries: 2, status: "in_progress" },
+        },
       });
 
       vi.mocked(assembleEnrichment).mockResolvedValue({
@@ -286,10 +280,10 @@ describe("enterAndPrepareState — enrichment integration", () => {
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "build widget", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "build widget" },
+        workspace,
       });
 
       assertOk(result);
@@ -309,10 +303,10 @@ describe("enterAndPrepareState — enrichment integration", () => {
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow: makeFlow(),
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
 
       assertOk(result);
@@ -338,10 +332,10 @@ describe("enterAndPrepareState — enrichment integration", () => {
       });
 
       const result = await enterAndPrepareState({
-        workspace,
-        state_id: "implement",
         flow,
-        variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+        state_id: "implement",
+        variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+        workspace,
       });
 
       assertOk(result);

@@ -3,7 +3,7 @@
  * Imported by both analytics.ts and drift-db.ts to avoid circular dependencies.
  */
 
-export interface FlowRunEntry {
+export type FlowRunEntry = {
   run_id: string;
   flow: string;
   tier: string;
@@ -21,11 +21,11 @@ export interface FlowRunEntry {
   total_violations?: number;
   total_test_results?: { passed: number; failed: number; skipped: number };
   total_files_changed?: number;
-}
+};
 
-export interface FlowAnalytics {
+export type FlowAnalytics = {
   total_runs: number;
   avg_duration_ms: number;
   avg_gate_pass_rate?: number;
   avg_postcondition_pass_rate?: number;
-}
+};

@@ -44,7 +44,7 @@ export function applyReviewThresholdToCondition(
 ): string {
   if (reviewThreshold === "warning" && condition === "warning") {
     // Upgrade: treat warning as blocking
-    return transitions["blocking"] !== undefined ? "blocking" : condition;
+    return transitions.blocking !== undefined ? "blocking" : condition;
   }
   return condition;
 }
@@ -72,8 +72,8 @@ export function buildHistoryEntry(
   switch (stuckWhen) {
     case "same_violations":
       return {
-        principle_ids: data.principleIds ?? [],
         file_paths: data.filePaths ?? [],
+        principle_ids: data.principleIds ?? [],
       };
     case "same_file_test":
       return {
@@ -85,8 +85,8 @@ export function buildHistoryEntry(
       };
     case "no_progress":
       return {
-        commit_sha: data.commitSha ?? "",
         artifact_count: data.artifactCount ?? 0,
+        commit_sha: data.commitSha ?? "",
       };
     case "no_gate_progress":
       return {
@@ -124,7 +124,9 @@ export function isStuck(history: HistoryEntry[], stuckWhen: StuckWhen): boolean 
       const p = prev as FileTestHistoryEntry;
       const c = curr as FileTestHistoryEntry;
       if (p.pairs.length !== c.pairs.length) return false;
-      return c.pairs.every((cp) => p.pairs.some((pp) => pp.file === cp.file && pp.test === cp.test));
+      return c.pairs.every((cp) =>
+        p.pairs.some((pp) => pp.file === cp.file && pp.test === cp.test),
+      );
     }
     case "same_status": {
       const p = prev as StatusHistoryEntry;
@@ -153,11 +155,11 @@ function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
 }
 
 /** A single result from a parallel-per agent execution. */
-export interface ParallelPerResult {
+export type ParallelPerResult = {
   status: string;
   item?: string;
   artifacts?: string[];
-}
+};
 
 /**
  * Returns true if the RoleEntry has optional: true, false otherwise.
@@ -168,8 +170,8 @@ export function isRoleOptional(entry: string | { name: string; optional?: boolea
 
 const REVIEW_SEVERITY_ORDER: Record<string, number> = {
   blocking: 3,
-  warning: 2,
   clean: 1,
+  warning: 2,
 };
 
 /**
@@ -177,8 +179,11 @@ const REVIEW_SEVERITY_ORDER: Record<string, number> = {
  * The most severe verdict across all cluster results becomes the aggregated condition.
  * Always returns an empty cannotFixItems list (not applicable for review verdicts).
  */
-export function aggregateReviewResults(results: ParallelPerResult[]): { condition: string; cannotFixItems: string[] } {
-  if (results.length === 0) return { condition: "clean", cannotFixItems: [] };
+export function aggregateReviewResults(results: ParallelPerResult[]): {
+  condition: string;
+  cannotFixItems: string[];
+} {
+  if (results.length === 0) return { cannotFixItems: [], condition: "clean" };
 
   let maxSeverity = 0;
   let maxCondition = "clean";
@@ -192,7 +197,7 @@ export function aggregateReviewResults(results: ParallelPerResult[]): { conditio
     }
   }
 
-  return { condition: maxCondition, cannotFixItems: [] };
+  return { cannotFixItems: [], condition: maxCondition };
 }
 
 /**
@@ -215,7 +220,7 @@ export function aggregateParallelPerResults(
   // Only required results can block the state.
   const hasBlocked = requiredResults.some((r) => r.status === "blocked");
   if (hasBlocked) {
-    return { condition: "blocked", cannotFixItems: [] };
+    return { cannotFixItems: [], condition: "blocked" };
   }
 
   const doneResults = requiredResults.filter((r) => r.status === "done");
@@ -223,18 +228,20 @@ export function aggregateParallelPerResults(
 
   if (requiredResults.length > 0 && cannotFixResults.length === requiredResults.length) {
     return {
+      cannotFixItems: cannotFixResults
+        .map((r) => r.item)
+        .filter((i): i is string => i !== undefined),
       condition: "cannot_fix",
-      cannotFixItems: cannotFixResults.map((r) => r.item).filter((i): i is string => i !== undefined),
     };
   }
 
   if (requiredResults.length === 0 || doneResults.length === requiredResults.length) {
-    return { condition: "done", cannotFixItems: [] };
+    return { cannotFixItems: [], condition: "done" };
   }
 
   // Mixed: some required done, some required cannot_fix
   return {
-    condition: "done",
     cannotFixItems: cannotFixResults.map((r) => r.item).filter((i): i is string => i !== undefined),
+    condition: "done",
   };
 }

@@ -3,26 +3,26 @@
  * Creates a new workspace directory structure or resumes an existing one.
  */
 
-import {
-  sanitizeBranch,
-  generateSlug,
-  checkSlugCollision,
-  initWorkspace as createWorkspace,
-} from "../orchestration/workspace.ts";
-import { initBoard } from "../orchestration/board.ts";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import type { Board, Session } from "../orchestration/flow-schema.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { existsSync } from "fs";
-import { mkdir, readFile } from "fs/promises";
-import { join } from "path";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { gitStatus, gitWorktreeAdd } from "../adapters/git-adapter.ts";
 import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
+import { initBoard } from "../orchestration/board.ts";
+import { getExecutionStore } from "../orchestration/execution-store.ts";
+import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
+import type { Board, Session } from "../orchestration/flow-schema.ts";
+import {
+  checkSlugCollision,
+  initWorkspace as createWorkspace,
+  generateSlug,
+  sanitizeBranch,
+} from "../orchestration/workspace.ts";
 
-interface InitWorkspaceInput {
+type InitWorkspaceInput = {
   flow_name: string;
   task: string;
   branch: string;
@@ -31,9 +31,9 @@ interface InitWorkspaceInput {
   original_input?: string;
   skip_flags?: string[];
   preflight?: boolean;
-}
+};
 
-interface InitWorkspaceResult {
+type InitWorkspaceResult = {
   workspace: string;
   candidate_workspace?: string;
   slug: string;
@@ -45,7 +45,7 @@ interface InitWorkspaceResult {
   worktree_path?: string;
   worktree_branch?: string;
   cache_prefix_hash?: string;
-}
+};
 
 /**
  * List active workspaces for a branch. Scans all task subdirectories under
@@ -57,14 +57,19 @@ export async function listBranchWorkspaces(
 ): Promise<Array<{ workspace: string; session: Session; board: Board; resume_state: string }>> {
   const sanitized = sanitizeBranch(branch);
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
-  const results: Array<{ workspace: string; session: Session; board: Board; resume_state: string }> = [];
+  const results: Array<{
+    workspace: string;
+    session: Session;
+    board: Board;
+    resume_state: string;
+  }> = [];
 
   let entries: string[];
   try {
-    const { readdir } = await import("fs/promises");
+    const { readdir } = await import("node:fs/promises");
     entries = await readdir(branchDir);
-  } catch (err: any) {
-    if (err.code === "ENOENT") return results;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return results;
     throw err;
   }
 
@@ -77,7 +82,7 @@ export async function listBranchWorkspaces(
       if (session.status !== "active") continue;
       const board = store.getBoard();
       if (!board) continue;
-      results.push({ workspace: ws, session, board, resume_state: board.current_state });
+      results.push({ board, resume_state: board.current_state, session, workspace: ws });
     } catch {
       // Not a valid workspace subdirectory — skip
     }
@@ -127,313 +132,384 @@ async function runPreflightChecks(
   return issues;
 }
 
+/** Check if an error is an expected "no existing DB" error. */
+function isExpectedNoDbError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    code === "SQLITE_CANTOPEN" ||
+    code === "ENOENT" ||
+    message.includes("SQLITE_CANTOPEN") ||
+    message.includes("no such file") ||
+    message.includes("directory does not exist") ||
+    message.includes("Cannot open database")
+  );
+}
+
+/** Check if an error is a UNIQUE constraint error from concurrent insertion. */
+function isSqliteConstraintError(err: unknown): boolean {
+  return (
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT" ||
+    (err instanceof Error && err.message.includes("UNIQUE constraint"))
+  );
+}
+
+/** Try to resume an existing workspace. Returns result if resume succeeds, null otherwise. */
+function tryResumeWorkspace(
+  candidateWorkspace: string,
+  projectDir: string,
+): InitWorkspaceResult | null {
+  try {
+    const store = getExecutionStore(candidateWorkspace);
+    const session = store.getSession();
+    const board = store.getBoard();
+    if (session && session.status === "active" && board) {
+      const worktreePath = join(projectDir, ".canon", "worktrees", session.slug);
+      const worktreeExists = existsSync(worktreePath);
+      return {
+        board,
+        created: false,
+        resume_state: board.current_state,
+        session,
+        slug: session.slug,
+        workspace: candidateWorkspace,
+        worktree_branch: worktreeExists ? `canon-build/${session.slug}` : undefined,
+        worktree_path: worktreeExists ? worktreePath : undefined,
+      };
+    }
+  } catch (err) {
+    if (!isExpectedNoDbError(err)) throw err;
+  }
+  return null;
+}
+
+/** Persist initial state and iteration records to the execution store. */
+function persistInitialStates(
+  store: ReturnType<typeof getExecutionStore>,
+  flow: Awaited<ReturnType<typeof loadAndResolveFlow>>,
+): void {
+  for (const [stateId] of Object.entries(flow.states)) {
+    store.upsertState(stateId, { entries: 0, status: "pending" });
+    const stateDef = flow.states[stateId];
+    const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
+    if (maxIter !== undefined) {
+      store.upsertIteration(stateId, { cannot_fix: [], count: 0, history: [], max: maxIter });
+    } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
+      store.upsertIteration(stateId, { cannot_fix: [], count: 0, history: [], max: 3 });
+    }
+  }
+}
+
+/** Find the top N hub files by in-degree. */
+function findTopHubs(
+  allDegrees: Map<number, { in_degree: number; out_degree: number }>,
+  fileIdToPath: Map<number, string>,
+  n: number,
+): Array<{ path: string; in_degree: number }> {
+  const entries: Array<{ path: string; in_degree: number }> = [];
+  for (const [fileId, degrees] of allDegrees) {
+    const path = fileIdToPath.get(fileId);
+    if (path !== undefined && degrees.in_degree > 0)
+      entries.push({ in_degree: degrees.in_degree, path });
+  }
+  entries.sort((a, b) => b.in_degree - a.in_degree);
+  return entries.slice(0, n);
+}
+
+/** Generate the project structure section from the KG database. */
+function generateProjectStructure(projectDir: string): string | null {
+  const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
+  if (!existsSync(kgDbPath)) return null;
+
+  const db = initDatabase(kgDbPath);
+  try {
+    const kgQuery = new KgQuery(db);
+    const allFiles = kgQuery.getAllFilesWithStats();
+
+    const layerCounts = new Map<string, number>();
+    const fileIdToPath = new Map<number, string>();
+    for (const file of allFiles) {
+      if (file.file_id !== undefined) fileIdToPath.set(file.file_id, file.path);
+      const layer = file.layer || "unknown";
+      layerCounts.set(layer, (layerCounts.get(layer) ?? 0) + 1);
+    }
+
+    const layerBreakdown = [...layerCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([layer, count]) => `${layer} (${count} file${count === 1 ? "" : "s"})`)
+      .join(", ");
+
+    const top5 = findTopHubs(kgQuery.getAllFileDegrees(), fileIdToPath, 5);
+
+    const hubLine =
+      top5.length > 0
+        ? `Hub files (high in-degree): ${top5.map((h) => `${h.path} (${h.in_degree})`).join(", ")}`
+        : "Hub files (high in-degree): none";
+
+    return [
+      "## Project Structure",
+      "",
+      `Layers: ${layerBreakdown || "none"}`,
+      hubLine,
+      `Total files in graph: ${allFiles.length}`,
+    ].join("\n");
+  } finally {
+    db.close();
+  }
+}
+
+/** Options for building the cache prefix. */
+type BuildCachePrefixOptions = {
+  slug: string;
+  flow: Awaited<ReturnType<typeof loadAndResolveFlow>>;
+  projectDir: string;
+  pluginDir: string;
+};
+
+/** Build the shared prompt cache prefix. */
+async function buildCachePrefix(
+  input: InitWorkspaceInput,
+  options: BuildCachePrefixOptions,
+): Promise<string> {
+  const { slug, flow, projectDir, pluginDir } = options;
+  const prefixParts: string[] = [];
+  if (flow.description) prefixParts.push(`## Flow: ${flow.name}\n\n${flow.description}`);
+
+  const claudeMdPath = join(pluginDir, "CLAUDE.md");
+  if (existsSync(claudeMdPath)) {
+    try {
+      prefixParts.push(await readFile(claudeMdPath, "utf-8"));
+    } catch {
+      /* graceful */
+    }
+  }
+
+  prefixParts.push(
+    `## Workspace\n\n- Task: ${input.task}\n- Branch: ${input.branch}\n- Slug: ${slug}\n- Base commit: ${input.base_commit}`,
+  );
+
+  try {
+    const structure = generateProjectStructure(projectDir);
+    if (structure) prefixParts.push(structure);
+  } catch {
+    /* graceful */
+  }
+
+  try {
+    const conventionsPath = join(projectDir, CANON_DIR, "CONVENTIONS.md");
+    if (existsSync(conventionsPath)) {
+      prefixParts.push(`## Conventions\n\n${await readFile(conventionsPath, "utf-8")}`);
+    }
+  } catch {
+    /* graceful */
+  }
+
+  return prefixParts.join("\n\n---\n\n");
+}
+
+/** Options for creating and persisting a worktree. */
+type CreateWorktreeOptions = {
+  slug: string;
+  baseCommit: string;
+  projectDir: string;
+};
+
+/** Create worktree and persist info. Returns path and branch if successful. */
+function createAndPersistWorktree(
+  store: ReturnType<typeof getExecutionStore>,
+  session: Session,
+  options: CreateWorktreeOptions,
+): { worktree_path?: string; worktree_branch?: string } {
+  const { slug, baseCommit, projectDir } = options;
+  const worktreePath = join(projectDir, ".canon", "worktrees", slug);
+  const worktreeBranch = `canon-build/${slug}`;
+  const wtResult = gitWorktreeAdd(worktreePath, projectDir, {
+    baseCommit,
+    branchName: worktreeBranch,
+  });
+  if (!wtResult.ok) return {};
+
+  session.worktree_path = worktreePath;
+  session.worktree_branch = worktreeBranch;
+  try {
+    store.updateExecution({ worktree_branch: worktreeBranch, worktree_path: worktreePath });
+  } catch (err) {
+    console.warn("[init-workspace] Failed to persist worktree info to execution row:", err);
+  }
+  return { worktree_branch: worktreeBranch, worktree_path: worktreePath };
+}
+
+/** Initialize execution store, handling race conditions with concurrent initializers. */
+function initExecutionOrRace(
+  store: ReturnType<typeof getExecutionStore>,
+  board: Board,
+  session: Session,
+  workspace: string,
+): InitWorkspaceResult | null {
+  try {
+    store.initExecution({
+      base_commit: board.base_commit,
+      branch: session.branch,
+      created: session.created,
+      current_state: board.current_state,
+      entry: board.entry,
+      flow: board.flow,
+      flow_name: session.flow,
+      last_updated: board.last_updated,
+      original_task: session.original_task,
+      sanitized: session.sanitized,
+      slug: session.slug,
+      started: board.started,
+      status: session.status,
+      task: board.task,
+      tier: session.tier,
+    });
+    return null;
+  } catch (err) {
+    if (!isSqliteConstraintError(err)) throw err;
+    const winnerSession = store.getSession();
+    if (winnerSession && winnerSession.status === "active") {
+      const winnerBoard = store.getBoard()!;
+      return {
+        board: winnerBoard,
+        created: false,
+        resume_state: winnerBoard.current_state,
+        session: winnerSession,
+        slug: winnerSession.slug,
+        workspace,
+      };
+    }
+    throw err;
+  }
+}
+
+/** Run preflight checks if requested. Returns early result or null to proceed. */
+async function runPreflightIfNeeded(
+  input: InitWorkspaceInput,
+  projectDir: string,
+  sanitized: string,
+  baseSlug: string,
+): Promise<InitWorkspaceResult | null> {
+  if (!input.preflight) return null;
+  const candidateWs = join(projectDir, ".canon", "workspaces", sanitized, baseSlug);
+  const issues = await runPreflightChecks(projectDir, input.branch, candidateWs);
+  if (issues.length === 0) return null;
+  return {
+    board: {} as Board,
+    candidate_workspace: candidateWs,
+    created: false,
+    preflight_issues: issues,
+    session: {} as Session,
+    slug: baseSlug,
+    workspace: "",
+  };
+}
+
+/** Options for finalizing a new workspace. */
+type FinalizeWorkspaceOptions = {
+  workspace: string;
+  slug: string;
+  board: Board;
+  session: Session;
+  flow: Awaited<ReturnType<typeof loadAndResolveFlow>>;
+  projectDir: string;
+  pluginDir: string;
+};
+
+/** Persist execution, set up cache prefix, worktree, and return final result. */
+async function finalizeNewWorkspace(
+  store: ReturnType<typeof getExecutionStore>,
+  input: InitWorkspaceInput,
+  options: FinalizeWorkspaceOptions,
+): Promise<InitWorkspaceResult> {
+  const { workspace, slug, board, session, flow, projectDir, pluginDir } = options;
+  const raceResult = initExecutionOrRace(store, board, session, workspace);
+  if (raceResult) return raceResult;
+
+  persistInitialStates(store, flow);
+
+  const cachePrefix = await buildCachePrefix(input, { flow, pluginDir, projectDir, slug });
+  store.setCachePrefix(cachePrefix);
+  const prefixHash = createHash("sha256").update(cachePrefix).digest("hex").slice(0, 12);
+  store.appendProgress(`## Progress: ${input.task}`);
+
+  const worktreeInfo = createAndPersistWorktree(store, session, {
+    baseCommit: input.base_commit,
+    projectDir,
+    slug,
+  });
+
+  return {
+    board,
+    created: true,
+    session,
+    slug,
+    workspace,
+    ...worktreeInfo,
+    cache_prefix_hash: prefixHash,
+  };
+}
+
 export async function initWorkspaceFlow(
   input: InitWorkspaceInput,
   projectDir: string,
   pluginDir: string,
 ): Promise<InitWorkspaceResult> {
   const sanitized = sanitizeBranch(input.branch);
-
-  // Generate slug early — workspace path is scoped by branch + slug
   const baseSlug = generateSlug(input.task);
 
-  // Pre-flight checks (advisory — run before any mutations)
-  if (input.preflight) {
-    const branchDirPf = join(projectDir, ".canon", "workspaces", sanitized);
-    const candidateWs = join(branchDirPf, baseSlug);
-    const issues = await runPreflightChecks(projectDir, input.branch, candidateWs);
-    if (issues.length > 0) {
-      // Return early with issues — no workspace created.
-      // Use candidate_workspace (not workspace) so callers can't accidentally
-      // pass a non-existent path to enter_and_prepare_state.
-      return {
-        workspace: "",
-        candidate_workspace: candidateWs,
-        slug: baseSlug,
-        board: {} as Board,
-        session: {} as Session,
-        created: false,
-        preflight_issues: issues,
-      };
-    }
-  }
+  const preflightResult = await runPreflightIfNeeded(input, projectDir, sanitized, baseSlug);
+  if (preflightResult) return preflightResult;
 
-  // Check for existing workspace with matching slug (resume case)
   const branchDir = join(projectDir, ".canon", "workspaces", sanitized);
-  const candidateSlug = baseSlug;
-  const candidateWorkspace = join(branchDir, candidateSlug);
+  const candidateWorkspace = join(branchDir, baseSlug);
 
-  try {
-    const store = getExecutionStore(candidateWorkspace);
-    const session = store.getSession();
-    const board = store.getBoard();
+  const resumeResult = tryResumeWorkspace(candidateWorkspace, projectDir);
+  if (resumeResult) return resumeResult;
 
-    // Only resume if the session is active
-    if (session && session.status === "active" && board) {
-      const worktreePath = join(projectDir, ".canon", "worktrees", session.slug);
-      const worktreeExists = existsSync(worktreePath);
-      return {
-        workspace: candidateWorkspace,
-        slug: session.slug,
-        board,
-        session,
-        created: false,
-        resume_state: board.current_state,
-        worktree_path: worktreeExists ? worktreePath : undefined,
-        worktree_branch: worktreeExists ? `canon-build/${session.slug}` : undefined,
-      };
-    }
-  } catch (err) {
-    // Only swallow expected "no existing DB" errors (file not found / can't open).
-    // Rethrow unexpected errors such as permission denied or disk errors.
-    const code = (err as NodeJS.ErrnoException).code;
-    const message = (err instanceof Error) ? err.message : String(err);
-    const isExpectedNoDb =
-      code === "SQLITE_CANTOPEN" ||
-      code === "ENOENT" ||
-      message.includes("SQLITE_CANTOPEN") ||
-      message.includes("no such file") ||
-      message.includes("directory does not exist") ||
-      message.includes("Cannot open database");
-    if (!isExpectedNoDb) throw err;
-    // else: no existing workspace for this slug — proceed with creation
-  }
-
-  // Workspace path: .canon/workspaces/{branch}/{slug}/
   const slug = await checkSlugCollision(branchDir, baseSlug);
   const workspace = join(branchDir, slug);
-
-  // Create workspace directory structure
   await createWorkspace(projectDir, join(sanitized, slug));
 
-  // Re-check for existing execution inside (another process may have created it)
   const store = getExecutionStore(workspace);
   const existingSession = store.getSession();
   if (existingSession && existingSession.status === "active") {
     const existingBoard = store.getBoard()!;
-    return { workspace, slug: existingSession.slug, board: existingBoard, session: existingSession, created: false, resume_state: existingBoard.current_state };
+    return {
+      board: existingBoard,
+      created: false,
+      resume_state: existingBoard.current_state,
+      session: existingSession,
+      slug: existingSession.slug,
+      workspace,
+    };
   }
 
-  // Load and resolve flow
   const flow = await loadAndResolveFlow(pluginDir, input.flow_name);
-
-  // Create plans/${slug}/ directory
   await mkdir(join(workspace, "plans", slug), { recursive: true });
-
-  // Init board from resolved flow
   const board = initBoard(flow, input.task, input.base_commit);
 
-  // Create session object
   const now = new Date().toISOString();
   const session: Session = {
     branch: input.branch,
-    sanitized,
     created: now,
-    task: input.task,
-    original_task: input.original_input,
-    tier: input.tier,
     flow: input.flow_name,
+    original_task: input.original_input,
+    sanitized,
     slug,
     status: "active",
+    task: input.task,
+    tier: input.tier,
   };
 
-  // Persist execution to SQLite.
-  // Two concurrent callers can both pass the re-check above (both see no session)
-  // and race to insert the singleton execution row. The loser gets a UNIQUE
-  // constraint error. We catch that here and fall back to reading the row the
-  // winner already inserted, returning a clean resume instead of propagating
-  // the constraint error.
-  try {
-    store.initExecution({
-      flow: board.flow,
-      task: board.task,
-      entry: board.entry,
-      current_state: board.current_state,
-      base_commit: board.base_commit,
-      started: board.started,
-      last_updated: board.last_updated,
-      branch: session.branch,
-      sanitized: session.sanitized,
-      created: session.created,
-      original_task: session.original_task,
-      tier: session.tier,
-      flow_name: session.flow,
-      slug: session.slug,
-      status: session.status,
-    });
-  } catch (err) {
-    // Another concurrent caller already inserted the execution row.
-    // Treat this as a resume: read what the winner wrote and return it.
-    const isConstraintError =
-      (err as { code?: string }).code === 'SQLITE_CONSTRAINT_PRIMARYKEY' ||
-      (err as { code?: string }).code === 'SQLITE_CONSTRAINT' ||
-      (err instanceof Error && err.message.includes('UNIQUE constraint'));
-    if (!isConstraintError) throw err;
-
-    const winnerSession = store.getSession();
-    if (winnerSession && winnerSession.status === 'active') {
-      const winnerBoard = store.getBoard()!;
-      return {
-        workspace,
-        slug: winnerSession.slug,
-        board: winnerBoard,
-        session: winnerSession,
-        created: false,
-        resume_state: winnerBoard.current_state,
-      };
-    }
-    // Constraint error but still no session readable — re-throw.
-    throw err;
-  }
-
-  // Persist initial state records
-  for (const [stateId] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
-    const stateDef = flow.states[stateId];
-    // max_revisions (ADR-017) takes precedence over max_iterations, matching initBoard logic
-    const maxIter = stateDef.max_revisions ?? stateDef.max_iterations;
-    if (maxIter !== undefined) {
-      store.upsertIteration(stateId, { count: 0, max: maxIter, history: [], cannot_fix: [] });
-    } else if (stateDef.approval_gate === true && stateDef.type !== "terminal") {
-      // Default revision budget for explicitly gated states without explicit limit
-      store.upsertIteration(stateId, { count: 0, max: 3, history: [], cannot_fix: [] });
-    }
-  }
-
-  // Compute shared prompt cache prefix (ADR-006a)
-  // Content must be stable across all agent spawns in the workspace.
-  // Progress is explicitly excluded — it is append-only and changes per state.
-  const prefixParts: string[] = [];
-
-  // 1. Flow description (from resolved flow metadata)
-  if (flow.description) {
-    prefixParts.push(`## Flow: ${flow.name}\n\n${flow.description}`);
-  }
-
-  // 2. Project conventions (CLAUDE.md from plugin dir if available)
-  const claudeMdPath = join(pluginDir, "CLAUDE.md");
-  if (existsSync(claudeMdPath)) {
-    try {
-      const claudeMd = await readFile(claudeMdPath, "utf-8");
-      prefixParts.push(claudeMd);
-    } catch { /* graceful degradation — CLAUDE.md unreadable */ }
-  }
-
-  // 3. Workspace metadata (stable identifiers only)
-  prefixParts.push(
-    `## Workspace\n\n- Task: ${input.task}\n- Branch: ${input.branch}\n- Slug: ${slug}\n- Base commit: ${input.base_commit}`,
-  );
-
-  // 4. Project structure from KG (graceful degradation — skip if KG absent or fails)
-  try {
-    const kgDbPath = join(projectDir, CANON_DIR, CANON_FILES.KNOWLEDGE_DB);
-    if (existsSync(kgDbPath)) {
-      const db = initDatabase(kgDbPath);
-      try {
-        const kgQuery = new KgQuery(db);
-
-        // Get all files with layer info
-        const allFiles = kgQuery.getAllFilesWithStats();
-        const totalFiles = allFiles.length;
-
-        // Layer breakdown: count files per layer
-        const layerCounts = new Map<string, number>();
-        const fileIdToPath = new Map<number, string>();
-        for (const file of allFiles) {
-          if (file.file_id !== undefined) {
-            fileIdToPath.set(file.file_id, file.path);
-          }
-          const layer = file.layer || "unknown";
-          layerCounts.set(layer, (layerCounts.get(layer) ?? 0) + 1);
-        }
-
-        // Layer breakdown string: "api (12 files), domain (8 files), ..."
-        const layerBreakdown = [...layerCounts.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .map(([layer, count]) => `${layer} (${count} file${count === 1 ? "" : "s"})`)
-          .join(", ");
-
-        // Top 5 hub files by in_degree
-        const allDegrees = kgQuery.getAllFileDegrees();
-        const hubEntries: Array<{ path: string; in_degree: number }> = [];
-        for (const [fileId, degrees] of allDegrees) {
-          const path = fileIdToPath.get(fileId);
-          if (path !== undefined && degrees.in_degree > 0) {
-            hubEntries.push({ path, in_degree: degrees.in_degree });
-          }
-        }
-        hubEntries.sort((a, b) => b.in_degree - a.in_degree);
-        const top5 = hubEntries.slice(0, 5);
-
-        const hubLine = top5.length > 0
-          ? `Hub files (high in-degree): ${top5.map((h) => `${h.path} (${h.in_degree})`).join(", ")}`
-          : "Hub files (high in-degree): none";
-
-        const projectStructure = [
-          "## Project Structure",
-          "",
-          `Layers: ${layerBreakdown || "none"}`,
-          hubLine,
-          `Total files in graph: ${totalFiles}`,
-        ].join("\n");
-
-        prefixParts.push(projectStructure);
-      } finally {
-        db.close();
-      }
-    }
-  } catch {
-    // Graceful degradation — KG unavailable or query failed; skip project_structure
-  }
-
-  // 5. Project conventions from .canon/CONVENTIONS.md (graceful degradation — skip if absent)
-  try {
-    const conventionsPath = join(projectDir, CANON_DIR, "CONVENTIONS.md");
-    if (existsSync(conventionsPath)) {
-      const content = await readFile(conventionsPath, "utf-8");
-      prefixParts.push(`## Conventions\n\n${content}`);
-    }
-  } catch {
-    // Graceful degradation — CONVENTIONS.md unreadable; skip conventions
-  }
-
-  const cachePrefix = prefixParts.join("\n\n---\n\n");
-  store.setCachePrefix(cachePrefix);
-
-  const prefixHash = createHash("sha256").update(cachePrefix).digest("hex").slice(0, 12);
-
-  // Seed progress
-  store.appendProgress(`## Progress: ${input.task}`);
-
-  // Create worktree for isolated builds (graceful fallback on failure)
-  let actualWorktreePath: string | undefined;
-  let actualWorktreeBranch: string | undefined;
-  const worktreePath = join(projectDir, ".canon", "worktrees", slug);
-  const worktreeBranch = `canon-build/${slug}`;
-  const wtResult = gitWorktreeAdd(worktreePath, worktreeBranch, input.base_commit, projectDir);
-  if (wtResult.ok) {
-    actualWorktreePath = worktreePath;
-    actualWorktreeBranch = worktreeBranch;
-    session.worktree_path = worktreePath;
-    session.worktree_branch = worktreeBranch;
-    // Persist worktree info to the execution row so enterAndPrepareState can inject
-    // ${branch}, ${worktree_branch}, and ${worktree_path} into spawn prompt variables.
-    // Best-effort: a transient SQLite error must not fail initWorkspaceFlow after the
-    // worktree has already been created successfully.
-    try {
-      store.updateExecution({
-        worktree_path: worktreePath,
-        worktree_branch: worktreeBranch,
-      });
-    } catch (err) {
-      console.warn("[init-workspace] Failed to persist worktree info to execution row:", err);
-    }
-  }
-
-  return {
-    workspace, slug, board, session, created: true,
-    worktree_path: actualWorktreePath,
-    worktree_branch: actualWorktreeBranch,
-    cache_prefix_hash: prefixHash,
-  };
+  return finalizeNewWorkspace(store, input, {
+    board,
+    flow,
+    pluginDir,
+    projectDir,
+    session,
+    slug,
+    workspace,
+  });
 }

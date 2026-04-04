@@ -9,13 +9,10 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SemanticSearchResult } from "../graph/kg-types.ts";
 import { semanticSearch } from "../tools/semantic-search.ts";
 import { randomEmbedding } from "./embedding-test-helpers.ts";
 
-// ---------------------------------------------------------------------------
 // Mock EmbeddingService
-// ---------------------------------------------------------------------------
 
 const mockEmbedOne = vi.fn<(text: string) => Promise<Float32Array>>();
 const mockDispose = vi.fn();
@@ -39,9 +36,7 @@ vi.mock("../graph/kg-embedding.ts", () => {
   return { EmbeddingService };
 });
 
-// ---------------------------------------------------------------------------
 // Test DB seeding helpers
-// ---------------------------------------------------------------------------
 
 async function seedTestDb(dbPath: string): Promise<void> {
   // We need to seed the DB with entities, vectors, and summaries for integration tests.
@@ -56,12 +51,12 @@ async function seedTestDb(dbPath: string): Promise<void> {
 
   // Insert a file
   const file = store.upsertFile({
-    path: "src/middleware/error-handler.ts",
-    mtime_ms: Date.now(),
     content_hash: "abc",
     language: "typescript",
-    layer: "api",
     last_indexed_at: Date.now(),
+    layer: "api",
+    mtime_ms: Date.now(),
+    path: "src/middleware/error-handler.ts",
   });
 
   const fileId = file.file_id!;
@@ -69,41 +64,41 @@ async function seedTestDb(dbPath: string): Promise<void> {
   // Insert an entity of kind "function"
   const entityRow = store.insertEntity({
     file_id: fileId,
+    is_default_export: false,
+    is_exported: true,
+    kind: "function",
+    line_end: 10,
+    line_start: 1,
+    metadata: null,
     name: "errorHandler",
     qualified_name: "src/middleware/error-handler.ts::errorHandler",
-    kind: "function",
-    line_start: 1,
-    line_end: 10,
     signature: "function errorHandler(err: Error, req: Request): Response",
-    is_exported: true,
-    is_default_export: false,
-    metadata: null,
   });
   const entityId = entityRow.entity_id!;
 
   // Insert another entity of kind "class"
   const file2 = store.upsertFile({
-    path: "src/services/auth.ts",
-    mtime_ms: Date.now(),
     content_hash: "def",
     language: "typescript",
-    layer: "domain",
     last_indexed_at: Date.now(),
+    layer: "domain",
+    mtime_ms: Date.now(),
+    path: "src/services/auth.ts",
   });
 
   const fileId2 = file2.file_id!;
 
   const entityRow2 = store.insertEntity({
     file_id: fileId2,
+    is_default_export: false,
+    is_exported: true,
+    kind: "class",
+    line_end: 50,
+    line_start: 1,
+    metadata: null,
     name: "AuthService",
     qualified_name: "src/services/auth.ts::AuthService",
-    kind: "class",
-    line_start: 1,
-    line_end: 50,
     signature: "class AuthService",
-    is_exported: true,
-    is_default_export: false,
-    metadata: null,
   });
   const entityId2 = entityRow2.entity_id!;
 
@@ -116,12 +111,12 @@ async function seedTestDb(dbPath: string): Promise<void> {
 
   // Insert a file-level summary and its vector
   store.upsertSummary({
-    file_id: fileId,
+    content_hash: "abc",
     entity_id: null,
+    file_id: fileId,
+    model: null,
     scope: "file",
     summary: "Error handling middleware for Express",
-    model: null,
-    content_hash: "abc",
     updated_at: new Date().toISOString(),
   });
 
@@ -138,10 +133,6 @@ async function seedTestDb(dbPath: string): Promise<void> {
   db.close();
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("semanticSearch", () => {
   let tmpDir: string;
 
@@ -152,12 +143,10 @@ describe("semanticSearch", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
-  // -------------------------------------------------------------------------
   // Error cases
-  // -------------------------------------------------------------------------
 
   it("returns KG_NOT_INDEXED when database does not exist", async () => {
     mockEmbedOne.mockResolvedValue(randomEmbedding(0));
@@ -189,9 +178,7 @@ describe("semanticSearch", () => {
     }
   });
 
-  // -------------------------------------------------------------------------
   // Happy path — valid query against a pre-populated DB
-  // -------------------------------------------------------------------------
 
   it("returns results for a valid query", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
@@ -239,9 +226,7 @@ describe("semanticSearch", () => {
     }
   });
 
-  // -------------------------------------------------------------------------
   // kind_filter restricts results
-  // -------------------------------------------------------------------------
 
   it("kind_filter restricts results to specified entity kinds", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
@@ -250,7 +235,7 @@ describe("semanticSearch", () => {
     mockEmbedOne.mockResolvedValue(randomEmbedding(0));
 
     const result = await semanticSearch(
-      { query: "auth service", kind_filter: ["function"], scope: "entities" },
+      { kind_filter: ["function"], query: "auth service", scope: "entities" },
       tmpDir,
     );
 
@@ -272,7 +257,7 @@ describe("semanticSearch", () => {
     mockEmbedOne.mockResolvedValue(randomEmbedding(0));
 
     const result = await semanticSearch(
-      { query: "service", kind_filter: ["class"], scope: "entities" },
+      { kind_filter: ["class"], query: "service", scope: "entities" },
       tmpDir,
     );
 
@@ -286,9 +271,7 @@ describe("semanticSearch", () => {
     }
   });
 
-  // -------------------------------------------------------------------------
   // scope parameter
-  // -------------------------------------------------------------------------
 
   it("scope='entities' returns only entity-sourced results", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
@@ -340,9 +323,7 @@ describe("semanticSearch", () => {
     }
   });
 
-  // -------------------------------------------------------------------------
   // Results are sorted by distance (ascending)
-  // -------------------------------------------------------------------------
 
   it("results are sorted by distance ascending", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
@@ -350,7 +331,7 @@ describe("semanticSearch", () => {
 
     mockEmbedOne.mockResolvedValue(randomEmbedding(0));
 
-    const result = await semanticSearch({ query: "handler", limit: 10 }, tmpDir);
+    const result = await semanticSearch({ limit: 10, query: "handler" }, tmpDir);
 
     expect(result.ok).toBe(true);
     if (result.ok && result.results.length > 1) {
@@ -360,9 +341,7 @@ describe("semanticSearch", () => {
     }
   });
 
-  // -------------------------------------------------------------------------
   // limit parameter
-  // -------------------------------------------------------------------------
 
   it("limit parameter restricts result count", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
@@ -370,7 +349,7 @@ describe("semanticSearch", () => {
 
     mockEmbedOne.mockResolvedValue(randomEmbedding(0));
 
-    const result = await semanticSearch({ query: "code", limit: 1 }, tmpDir);
+    const result = await semanticSearch({ limit: 1, query: "code" }, tmpDir);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -378,9 +357,7 @@ describe("semanticSearch", () => {
     }
   });
 
-  // -------------------------------------------------------------------------
   // dispose is called
-  // -------------------------------------------------------------------------
 
   it("disposes the EmbeddingService after search", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
@@ -400,14 +377,14 @@ describe("semanticSearch", () => {
     // Make embedOne throw an unexpected error
     mockEmbedOne.mockRejectedValue(new Error("unexpected model failure"));
 
-    await expect(semanticSearch({ query: "handler" }, tmpDir)).rejects.toThrow("unexpected model failure");
+    await expect(semanticSearch({ query: "handler" }, tmpDir)).rejects.toThrow(
+      "unexpected model failure",
+    );
 
     expect(mockDispose).toHaveBeenCalledOnce();
   });
 
-  // -------------------------------------------------------------------------
   // Network/download error → recoverable UNEXPECTED
-  // -------------------------------------------------------------------------
 
   it("returns recoverable UNEXPECTED error when model download fails", async () => {
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");

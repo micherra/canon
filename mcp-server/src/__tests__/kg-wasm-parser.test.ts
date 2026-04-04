@@ -6,9 +6,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { getParser, initParsers, isInitialized } from "../graph/kg-wasm-parser.ts";
 
-// ---------------------------------------------------------------------------
 // Initialization state tests (before init)
-// ---------------------------------------------------------------------------
 
 describe("kg-wasm-parser — before init", () => {
   it("isInitialized() returns false before initParsers() is called", () => {
@@ -30,9 +28,7 @@ describe("kg-wasm-parser — before init", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Initialization tests
-// ---------------------------------------------------------------------------
 
 describe("kg-wasm-parser — initParsers()", () => {
   beforeAll(async () => {
@@ -54,9 +50,7 @@ describe("kg-wasm-parser — initParsers()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // getParser() tests — after init
-// ---------------------------------------------------------------------------
 
 describe("kg-wasm-parser — getParser() after init", () => {
   beforeAll(async () => {
@@ -104,9 +98,7 @@ describe("kg-wasm-parser — getParser() after init", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Parsing tests — each parser can parse trivial source without throwing
-// ---------------------------------------------------------------------------
 
 describe("kg-wasm-parser — parsing trivial source strings", () => {
   beforeAll(async () => {

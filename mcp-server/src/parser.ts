@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
 import matter from "gray-matter";
 
-export interface PrincipleScope {
+export type PrincipleScope = {
   layers: string[];
   file_patterns: string[];
-}
+};
 
-export interface Principle {
+export type Principle = {
   id: string;
   title: string;
   severity: "rule" | "strong-opinion" | "convention";
@@ -15,7 +15,7 @@ export interface Principle {
   archived: boolean;
   body: string;
   filePath: string;
-}
+};
 
 export function parseFrontmatter(content: string): {
   frontmatter: Record<string, unknown>;
@@ -23,8 +23,8 @@ export function parseFrontmatter(content: string): {
 } {
   const parsed = matter(content);
   return {
-    frontmatter: parsed.data as Record<string, unknown>,
     body: parsed.content.trim(),
+    frontmatter: parsed.data as Record<string, unknown>,
   };
 }
 
@@ -34,17 +34,17 @@ export function parsePrinciple(content: string, filePath: string): Principle {
   const scope = (frontmatter.scope as Record<string, unknown>) || {};
 
   return {
-    id: (frontmatter.id as string) || "",
-    title: (frontmatter.title as string) || "",
-    severity: (frontmatter.severity as Principle["severity"]) || "convention",
-    scope: {
-      layers: (scope.layers as string[]) || [],
-      file_patterns: (scope.file_patterns as string[]) || [],
-    },
-    tags: (frontmatter.tags as string[]) || [],
     archived: frontmatter.archived === "true" || frontmatter.archived === true,
     body,
     filePath,
+    id: (frontmatter.id as string) || "",
+    scope: {
+      file_patterns: (scope.file_patterns as string[]) || [],
+      layers: (scope.layers as string[]) || [],
+    },
+    severity: (frontmatter.severity as Principle["severity"]) || "convention",
+    tags: (frontmatter.tags as string[]) || [],
+    title: (frontmatter.title as string) || "",
   };
 }
 

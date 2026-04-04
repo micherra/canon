@@ -8,15 +8,13 @@
  * 4. getSpawnPrompt leaves ${progress} as literal when flow has no progress field
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mock for loadAndResolveFlow used by initWorkspaceFlow
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/flow-parser.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../orchestration/flow-parser.ts")>();
@@ -26,15 +24,11 @@ vi.mock("../orchestration/flow-parser.ts", async (importOriginal) => {
   };
 });
 
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import { initWorkspaceFlow } from "../tools/init-workspace.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 
@@ -46,14 +40,14 @@ function makeTmpDir(): string {
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow for progress wiring",
     entry: "implement",
-    states: {
-      implement: { type: "single", agent: "canon-implementor" },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: { implement: "Implement ${task}. Progress so far:\n${progress}" },
+    states: {
+      done: { type: "terminal" },
+      implement: { agent: "canon-implementor", type: "single" },
+    },
     ...overrides,
   };
 }
@@ -61,15 +55,13 @@ function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
 afterEach(() => {
   clearStoreCache();
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // 1. initWorkspaceFlow seeds progress.md on new workspace creation
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — progress.md seeding", () => {
   it("creates progress.md with task header on new workspace creation", async () => {
@@ -82,10 +74,10 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
 
     const result = await initWorkspaceFlow(
       {
+        base_commit: "abc123",
+        branch: "feat/test",
         flow_name: "test-flow",
         task: "Wire progress.md end-to-end",
-        branch: "feat/test",
-        base_commit: "abc123",
         tier: "small",
       },
       projectDir,
@@ -109,10 +101,10 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
 
     const result = await initWorkspaceFlow(
       {
+        base_commit: "deadbeef",
+        branch: "main",
         flow_name: "test-flow",
         task: "My task",
-        branch: "main",
-        base_commit: "deadbeef",
         tier: "medium",
       },
       projectDir,
@@ -122,7 +114,7 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     // Progress is stored in SQLite store — only the header line should be present
     const store = getExecutionStore(result.workspace);
     const progressContent = store.getProgress(100);
-    const lines = progressContent.split("\n").filter(l => l.trim() !== "");
+    const lines = progressContent.split("\n").filter((l) => l.trim() !== "");
     expect(lines).toHaveLength(1);
     // getProgress() prepends "- " to each stored line
     expect(lines[0]).toContain("## Progress: My task");
@@ -137,10 +129,10 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     vi.mocked(loadAndResolveFlow).mockResolvedValue(flow);
     const first = await initWorkspaceFlow(
       {
+        base_commit: "aaa",
+        branch: "feat/resume",
         flow_name: "test-flow",
         task: "Resumed task",
-        branch: "feat/resume",
-        base_commit: "aaa",
         tier: "small",
       },
       projectDir,
@@ -155,10 +147,10 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
     // Second call — same branch + task → resume
     const second = await initWorkspaceFlow(
       {
+        base_commit: "aaa",
+        branch: "feat/resume",
         flow_name: "test-flow",
         task: "Resumed task",
-        branch: "feat/resume",
-        base_commit: "aaa",
         tier: "small",
       },
       projectDir,
@@ -172,9 +164,7 @@ describe("initWorkspaceFlow — progress.md seeding", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. getSpawnPrompt resolves ${progress} when flow.progress exists and file is on disk
-// ---------------------------------------------------------------------------
 
 describe("getSpawnPrompt — progress variable resolution", () => {
   it("injects progress.md contents as ${progress} when flow.progress path resolves to an existing file", async () => {
@@ -185,10 +175,19 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     const now = new Date().toISOString();
     const store = getExecutionStore(workspace);
     store.initExecution({
-      flow: "test-flow", task: "my task", entry: "implement", current_state: "implement",
-      base_commit: "abc123", started: now, last_updated: now,
-      branch: "main", sanitized: "main", created: now, tier: "small",
-      flow_name: "test-flow", slug: "test-slug",
+      base_commit: "abc123",
+      branch: "main",
+      created: now,
+      current_state: "implement",
+      entry: "implement",
+      flow: "test-flow",
+      flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "main",
+      slug: "test-slug",
+      started: now,
+      task: "my task",
+      tier: "small",
     });
     store.appendProgress("## Progress: My task");
     store.appendProgress("- [research] done: found the solution");
@@ -199,10 +198,10 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "my task", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "my task" },
+      workspace,
     });
 
     expect(result.prompts).toHaveLength(1);
@@ -216,10 +215,19 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     const now = new Date().toISOString();
     const store = getExecutionStore(workspace);
     store.initExecution({
-      flow: "test-flow", task: "test", entry: "implement", current_state: "implement",
-      base_commit: "abc123", started: now, last_updated: now,
-      branch: "main", sanitized: "main", created: now, tier: "small",
-      flow_name: "test-flow", slug: "test-slug",
+      base_commit: "abc123",
+      branch: "main",
+      created: now,
+      current_state: "implement",
+      entry: "implement",
+      flow: "test-flow",
+      flow_name: "test-flow",
+      last_updated: now,
+      sanitized: "main",
+      slug: "test-slug",
+      started: now,
+      task: "test",
+      tier: "small",
     });
     store.appendProgress("## Progress: Path substitution test");
 
@@ -230,18 +238,16 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
 
     expect(result.prompts[0].prompt).toContain("Path substitution test");
   });
 
-  // -------------------------------------------------------------------------
   // 3. getSpawnPrompt resolves ${progress} to empty string when file missing
-  // -------------------------------------------------------------------------
 
   it("resolves ${progress} to empty string when progress.md does not exist", async () => {
     const workspace = makeTmpDir();
@@ -253,10 +259,10 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
 
     // ${progress} substituted with empty string, not literal "${progress}"
@@ -265,9 +271,7 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     expect(result.prompts[0].prompt).not.toContain("${progress}");
   });
 
-  // -------------------------------------------------------------------------
   // 4. ${progress} is left as literal when flow has no progress field
-  // -------------------------------------------------------------------------
 
   it("leaves ${progress} as literal text when flow has no progress field", async () => {
     const workspace = makeTmpDir();
@@ -281,10 +285,10 @@ describe("getSpawnPrompt — progress variable resolution", () => {
     });
 
     const result = await getSpawnPrompt({
-      workspace,
-      state_id: "implement",
       flow,
-      variables: { task: "test", CANON_PLUGIN_ROOT: "" },
+      state_id: "implement",
+      variables: { CANON_PLUGIN_ROOT: "", task: "test" },
+      workspace,
     });
 
     // Without flow.progress, ${progress} is never resolved — stays literal

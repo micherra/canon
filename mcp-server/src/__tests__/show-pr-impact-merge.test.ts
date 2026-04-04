@@ -28,9 +28,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Module-level mocks — must be declared before any imports of the mocked modules
-// ---------------------------------------------------------------------------
 
 vi.mock("fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("fs")>();
@@ -57,27 +55,23 @@ import { DriftStore } from "../drift/store.ts";
 import { getPrReviewData } from "../tools/pr-review-data.ts";
 import { showPrImpact } from "../tools/show-pr-impact.ts";
 
-// ---------------------------------------------------------------------------
-// Shared fixtures
-// ---------------------------------------------------------------------------
-
 const SAMPLE_PREP = {
+  blast_radius: [],
+  diff_command: "git diff main..HEAD --name-status",
   files: [],
   impact_files: [],
+  incremental: false,
   layers: [],
+  narrative: "No changed files.",
+  net_new_files: 0,
   total_files: 0,
   total_violations: 0,
-  net_new_files: 0,
-  incremental: false,
-  diff_command: "git diff main..HEAD --name-status",
-  narrative: "No changed files.",
-  blast_radius: [],
 };
 
 const SAMPLE_SCORE = {
-  rules: { passed: 1, total: 1 },
-  opinions: { passed: 0, total: 1 },
   conventions: { passed: 1, total: 1 },
+  opinions: { passed: 0, total: 1 },
+  rules: { passed: 1, total: 1 },
 };
 
 function makeReview(
@@ -91,21 +85,19 @@ function makeReview(
   }> = {},
 ) {
   return {
+    branch: overrides.branch,
+    files: overrides.files ?? ["src/a.ts"],
+    honored: [],
+    pr_number: overrides.pr_number,
     review_id: overrides.review_id ?? `rev_${Math.random().toString(36).slice(2)}`,
+    score: SAMPLE_SCORE,
     timestamp: new Date().toISOString(),
     verdict: overrides.verdict ?? ("CLEAN" as const),
-    branch: overrides.branch,
-    pr_number: overrides.pr_number,
-    files: overrides.files ?? ["src/a.ts"],
     violations: overrides.violations ?? [],
-    honored: [],
-    score: SAMPLE_SCORE,
   };
 }
 
-// ---------------------------------------------------------------------------
 // Setup / teardown helpers
-// ---------------------------------------------------------------------------
 
 let tmpDir: string;
 
@@ -118,13 +110,11 @@ async function setupTmpDir() {
 }
 
 async function teardownTmpDir() {
-  await rm(tmpDir, { recursive: true, force: true });
+  await rm(tmpDir, { force: true, recursive: true });
   vi.restoreAllMocks();
 }
 
-// ---------------------------------------------------------------------------
 // 1–2. prReviews filter: principle-only vs PR-context reviews
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — prReviews filter (no explicit filter given)", () => {
   beforeEach(setupTmpDir);
@@ -134,14 +124,14 @@ describe("showPrImpact — prReviews filter (no explicit filter given)", () => {
     const store = new DriftStore(tmpDir);
     // This review has neither pr_number nor branch — it's a principle-only review
     await store.appendReview({
-      review_id: "rev_principle_only",
-      timestamp: new Date().toISOString(),
-      verdict: "WARNING",
       // no branch, no pr_number
       files: ["src/domain/service.ts"],
-      violations: [{ principle_id: "thin-handlers", severity: "rule" }],
       honored: [],
+      review_id: "rev_principle_only",
       score: SAMPLE_SCORE,
+      timestamp: new Date().toISOString(),
+      verdict: "WARNING",
+      violations: [{ principle_id: "thin-handlers", severity: "rule" }],
     });
 
     const result = await showPrImpact(tmpDir);
@@ -178,16 +168,18 @@ describe("showPrImpact — prReviews filter (no explicit filter given)", () => {
     const store = new DriftStore(tmpDir);
     // First: principle-only (should be excluded)
     await store.appendReview({
+      files: ["src/bad.ts"],
+      honored: [],
       review_id: "rev_principle",
+      score: SAMPLE_SCORE,
       timestamp: new Date().toISOString(),
       verdict: "BLOCKING",
-      files: ["src/bad.ts"],
       violations: [{ principle_id: "p1", severity: "rule" }],
-      honored: [],
-      score: SAMPLE_SCORE,
     });
     // Second: PR review (should be used)
-    await store.appendReview(makeReview({ pr_number: 55, verdict: "CLEAN", files: ["src/clean.ts"] }));
+    await store.appendReview(
+      makeReview({ files: ["src/clean.ts"], pr_number: 55, verdict: "CLEAN" }),
+    );
 
     const result = await showPrImpact(tmpDir);
 
@@ -198,9 +190,7 @@ describe("showPrImpact — prReviews filter (no explicit filter given)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3–5. Filter paths: branch, pr_number, and explicit filter bypass
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — branch and pr_number filter paths", () => {
   beforeEach(setupTmpDir);
@@ -208,8 +198,12 @@ describe("showPrImpact — branch and pr_number filter paths", () => {
 
   it("branch filter selects only reviews matching that branch", async () => {
     const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({ branch: "feat/login", verdict: "WARNING", files: ["src/login.ts"] }));
-    await store.appendReview(makeReview({ branch: "feat/signup", verdict: "CLEAN", files: ["src/signup.ts"] }));
+    await store.appendReview(
+      makeReview({ branch: "feat/login", files: ["src/login.ts"], verdict: "WARNING" }),
+    );
+    await store.appendReview(
+      makeReview({ branch: "feat/signup", files: ["src/signup.ts"], verdict: "CLEAN" }),
+    );
 
     // Ask for feat/login only
     const result = await showPrImpact(tmpDir, { branch: "feat/login" });
@@ -222,8 +216,10 @@ describe("showPrImpact — branch and pr_number filter paths", () => {
 
   it("pr_number filter selects only reviews for that PR", async () => {
     const store = new DriftStore(tmpDir);
-    await store.appendReview(makeReview({ pr_number: 1, verdict: "BLOCKING", files: ["src/old.ts"] }));
-    await store.appendReview(makeReview({ pr_number: 2, verdict: "CLEAN", files: ["src/new.ts"] }));
+    await store.appendReview(
+      makeReview({ files: ["src/old.ts"], pr_number: 1, verdict: "BLOCKING" }),
+    );
+    await store.appendReview(makeReview({ files: ["src/new.ts"], pr_number: 2, verdict: "CLEAN" }));
 
     const result = await showPrImpact(tmpDir, { pr_number: 1 });
 
@@ -237,15 +233,15 @@ describe("showPrImpact — branch and pr_number filter paths", () => {
     const store = new DriftStore(tmpDir);
     // A principle-only review for a specific branch
     await store.appendReview({
-      review_id: "rev_branch_principle",
-      timestamp: new Date().toISOString(),
-      verdict: "WARNING",
       branch: "feat/specific",
       // no pr_number — would be excluded without explicit filter
       files: ["src/specific.ts"],
-      violations: [{ principle_id: "p1", severity: "strong-opinion" }],
       honored: [],
+      review_id: "rev_branch_principle",
       score: SAMPLE_SCORE,
+      timestamp: new Date().toISOString(),
+      verdict: "WARNING",
+      violations: [{ principle_id: "p1", severity: "strong-opinion" }],
     });
 
     // With explicit branch filter, hasFilter=true → this review IS included
@@ -270,25 +266,23 @@ describe("showPrImpact — branch and pr_number filter paths", () => {
 
   it("diff_base and incremental are forwarded to getPrReviewData when combined with pr_number", async () => {
     await showPrImpact(tmpDir, {
-      pr_number: 7,
       diff_base: "origin/main",
       incremental: true,
+      pr_number: 7,
     });
 
     expect(getPrReviewData).toHaveBeenCalledWith(
       expect.objectContaining({
-        pr_number: 7,
         diff_base: "origin/main",
         incremental: true,
+        pr_number: 7,
       }),
       tmpDir,
     );
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6–7. index.ts registration: get_pr_review_data removed, URI updated
-// ---------------------------------------------------------------------------
 
 describe("index.ts tool registrations", () => {
   it("get_pr_review_data is not registered as an MCP tool in index.ts", async () => {
@@ -313,9 +307,7 @@ describe("index.ts tool registrations", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 8. has_review field: server output shape vs UI store type contract
-// ---------------------------------------------------------------------------
 
 describe("UnifiedPrOutput — has_review field contract", () => {
   beforeEach(setupTmpDir);
@@ -341,9 +333,7 @@ describe("UnifiedPrOutput — has_review field contract", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 9. Path traversal rejection — files with ".." stripped from review
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — path traversal protection", () => {
   beforeEach(setupTmpDir);
@@ -352,21 +342,21 @@ describe("showPrImpact — path traversal protection", () => {
   it("strips files containing '..' from review.files before processing", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview({
-      review_id: "rev_traversal",
-      timestamp: new Date().toISOString(),
-      verdict: "WARNING",
-      pr_number: 1,
       files: [
         "src/safe.ts", // safe — should stay
         "../../../etc/passwd", // traversal — should be stripped
         "src/../etc/passwd", // traversal — should be stripped
       ],
-      violations: [
-        { principle_id: "p1", severity: "rule", file_path: "src/safe.ts" },
-        { principle_id: "p2", severity: "rule", file_path: "../../../etc/passwd" },
-      ],
       honored: [],
+      pr_number: 1,
+      review_id: "rev_traversal",
       score: SAMPLE_SCORE,
+      timestamp: new Date().toISOString(),
+      verdict: "WARNING",
+      violations: [
+        { file_path: "src/safe.ts", principle_id: "p1", severity: "rule" },
+        { file_path: "../../../etc/passwd", principle_id: "p2", severity: "rule" },
+      ],
     });
 
     const result = await showPrImpact(tmpDir);
@@ -387,17 +377,17 @@ describe("showPrImpact — path traversal protection", () => {
   it("strips absolute-path files from review.files", async () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview({
-      review_id: "rev_abs",
-      timestamp: new Date().toISOString(),
-      verdict: "WARNING",
-      pr_number: 1,
       files: [
         "src/safe.ts",
         "/etc/passwd", // absolute — should be stripped
       ],
-      violations: [],
       honored: [],
+      pr_number: 1,
+      review_id: "rev_abs",
       score: SAMPLE_SCORE,
+      timestamp: new Date().toISOString(),
+      verdict: "WARNING",
+      violations: [],
     });
 
     const result = await showPrImpact(tmpDir);
@@ -407,10 +397,8 @@ describe("showPrImpact — path traversal protection", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 10. Violations without file_path are NOT assigned to hotspots
 //     (they land in __unassigned__ in buildHotspots but the hotspot is per review.files entry)
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — violations without file_path", () => {
   beforeEach(setupTmpDir);
@@ -420,8 +408,8 @@ describe("showPrImpact — violations without file_path", () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(
       makeReview({
-        pr_number: 1,
         files: ["src/a.ts"],
+        pr_number: 1,
         violations: [
           // file_path is absent — violationsByFile will key it under __unassigned__
           { principle_id: "p1", severity: "rule" as const },
@@ -444,9 +432,9 @@ describe("showPrImpact — violations without file_path", () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(
       makeReview({
-        pr_number: 1,
         files: ["src/a.ts"],
-        violations: [{ principle_id: "p1", severity: "rule" as const, file_path: "src/a.ts" }],
+        pr_number: 1,
+        violations: [{ file_path: "src/a.ts", principle_id: "p1", severity: "rule" as const }],
       }),
     );
 
@@ -461,9 +449,7 @@ describe("showPrImpact — violations without file_path", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 11. Empty review.files → zero hotspots
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — empty review.files produces zero hotspots", () => {
   beforeEach(setupTmpDir);
@@ -473,8 +459,8 @@ describe("showPrImpact — empty review.files produces zero hotspots", () => {
     const store = new DriftStore(tmpDir);
     await store.appendReview(
       makeReview({
-        pr_number: 1,
         files: [],
+        pr_number: 1,
         violations: [{ principle_id: "p1", severity: "rule" as const }],
       }),
     );
@@ -487,9 +473,7 @@ describe("showPrImpact — empty review.files produces zero hotspots", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 12. Cross-subsystem: prep + review both present in same call
-// ---------------------------------------------------------------------------
 
 describe("showPrImpact — cross-subsystem: prep + review coexist", () => {
   beforeEach(setupTmpDir);
@@ -500,23 +484,29 @@ describe("showPrImpact — cross-subsystem: prep + review coexist", () => {
       ...SAMPLE_PREP,
       files: [
         {
-          path: "src/a.ts",
           layer: "tools",
+          path: "src/a.ts",
           status: "modified",
         },
       ],
-      total_files: 1,
       narrative: "1 file changed in PR #7.",
+      total_files: 1,
     };
     vi.mocked(getPrReviewData).mockResolvedValue(customPrep as never);
 
     const store = new DriftStore(tmpDir);
     await store.appendReview(
       makeReview({
+        files: ["src/a.ts"],
         pr_number: 7,
         verdict: "WARNING",
-        files: ["src/a.ts"],
-        violations: [{ principle_id: "thin-handlers", severity: "strong-opinion" as const, file_path: "src/a.ts" }],
+        violations: [
+          {
+            file_path: "src/a.ts",
+            principle_id: "thin-handlers",
+            severity: "strong-opinion" as const,
+          },
+        ],
       }),
     );
 
@@ -561,9 +551,7 @@ describe("showPrImpact — cross-subsystem: prep + review coexist", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 13. UI store type mirror — key field names match server output
-// ---------------------------------------------------------------------------
 
 describe("UI store type contract — field names match server UnifiedPrOutput", () => {
   beforeEach(setupTmpDir);
@@ -573,10 +561,10 @@ describe("UI store type contract — field names match server UnifiedPrOutput", 
     const store = new DriftStore(tmpDir);
     await store.appendReview(
       makeReview({
+        files: ["src/a.ts"],
         pr_number: 1,
         verdict: "WARNING",
-        files: ["src/a.ts"],
-        violations: [{ principle_id: "p1", severity: "rule" as const, file_path: "src/a.ts" }],
+        violations: [{ file_path: "src/a.ts", principle_id: "p1", severity: "rule" as const }],
       }),
     );
 

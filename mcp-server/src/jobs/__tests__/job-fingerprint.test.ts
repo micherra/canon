@@ -1,8 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 vi.mock("../../adapters/git-adapter-async.ts", () => ({
   gitExecAsync: vi.fn(),
@@ -12,13 +10,11 @@ vi.mock("node:fs/promises", () => ({
   readFile: vi.fn(),
 }));
 
-// ---------------------------------------------------------------------------
 // Import after mocks
-// ---------------------------------------------------------------------------
 
-import { computeJobFingerprint } from "../job-fingerprint.ts";
-import { gitExecAsync } from "../../adapters/git-adapter-async.ts";
 import { readFile } from "node:fs/promises";
+import { gitExecAsync } from "../../adapters/git-adapter-async.ts";
+import { computeJobFingerprint } from "../job-fingerprint.ts";
 
 const mockGitExecAsync = vi.mocked(gitExecAsync);
 const mockReadFile = vi.mocked(readFile);
@@ -27,19 +23,17 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // computeJobFingerprint — happy path
-// ---------------------------------------------------------------------------
 
 describe("computeJobFingerprint — happy path", () => {
   it("returns a 64-char hex string in a git repo", async () => {
     mockGitExecAsync.mockResolvedValueOnce({
-      ok: true,
-      stdout: "abc123def456abc123def456abc123def456abc123\n",
-      stderr: "",
-      exitCode: 0,
-      timedOut: false,
       duration_ms: 5,
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "abc123def456abc123def456abc123def456abc123\n",
+      timedOut: false,
     });
     mockReadFile.mockResolvedValueOnce('{"layers": {}}' as unknown as never);
 
@@ -51,12 +45,12 @@ describe("computeJobFingerprint — happy path", () => {
 
   it("passes rev-parse HEAD to gitExecAsync", async () => {
     mockGitExecAsync.mockResolvedValueOnce({
-      ok: true,
-      stdout: "deadbeef\n",
-      stderr: "",
-      exitCode: 0,
-      timedOut: false,
       duration_ms: 3,
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "deadbeef\n",
+      timedOut: false,
     });
     mockReadFile.mockResolvedValueOnce("{}" as unknown as never);
 
@@ -65,19 +59,17 @@ describe("computeJobFingerprint — happy path", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // computeJobFingerprint — determinism
-// ---------------------------------------------------------------------------
 
 describe("computeJobFingerprint — determinism", () => {
   it("same inputs produce same fingerprint", async () => {
     const mockResult = {
-      ok: true as const,
-      stdout: "abcdef1234567890abcdef1234567890abcdef12\n",
-      stderr: "",
-      exitCode: 0,
-      timedOut: false,
       duration_ms: 4,
+      exitCode: 0,
+      ok: true as const,
+      stderr: "",
+      stdout: "abcdef1234567890abcdef1234567890abcdef12\n",
+      timedOut: false,
     };
 
     mockGitExecAsync.mockResolvedValue(mockResult);
@@ -90,12 +82,12 @@ describe("computeJobFingerprint — determinism", () => {
 
   it("different sourceDirs produce different fingerprints", async () => {
     const mockResult = {
-      ok: true as const,
-      stdout: "abcdef1234567890abcdef1234567890abcdef12\n",
-      stderr: "",
-      exitCode: 0,
-      timedOut: false,
       duration_ms: 4,
+      exitCode: 0,
+      ok: true as const,
+      stderr: "",
+      stdout: "abcdef1234567890abcdef1234567890abcdef12\n",
+      timedOut: false,
     };
 
     mockGitExecAsync.mockResolvedValue(mockResult);
@@ -108,12 +100,12 @@ describe("computeJobFingerprint — determinism", () => {
 
   it("sourceDirs order does not matter (sorted)", async () => {
     const mockResult = {
-      ok: true as const,
-      stdout: "abcdef1234567890abcdef1234567890abcdef12\n",
-      stderr: "",
-      exitCode: 0,
-      timedOut: false,
       duration_ms: 4,
+      exitCode: 0,
+      ok: true as const,
+      stderr: "",
+      stdout: "abcdef1234567890abcdef1234567890abcdef12\n",
+      timedOut: false,
     };
 
     mockGitExecAsync.mockResolvedValue(mockResult);
@@ -127,20 +119,20 @@ describe("computeJobFingerprint — determinism", () => {
   it("different git HEAD produces different fingerprint", async () => {
     mockGitExecAsync
       .mockResolvedValueOnce({
-        ok: true,
-        stdout: "aaaaaa\n",
-        stderr: "",
-        exitCode: 0,
-        timedOut: false,
         duration_ms: 3,
+        exitCode: 0,
+        ok: true,
+        stderr: "",
+        stdout: "aaaaaa\n",
+        timedOut: false,
       })
       .mockResolvedValueOnce({
-        ok: true,
-        stdout: "bbbbbb\n",
-        stderr: "",
-        exitCode: 0,
-        timedOut: false,
         duration_ms: 3,
+        exitCode: 0,
+        ok: true,
+        stderr: "",
+        stdout: "bbbbbb\n",
+        timedOut: false,
       });
     mockReadFile.mockResolvedValue("{}" as unknown as never);
 
@@ -150,19 +142,17 @@ describe("computeJobFingerprint — determinism", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // computeJobFingerprint — null when not in a git repo
-// ---------------------------------------------------------------------------
 
 describe("computeJobFingerprint — null when not in a git repo", () => {
   it("returns null when gitExecAsync returns ok: false", async () => {
     mockGitExecAsync.mockResolvedValueOnce({
-      ok: false,
-      stdout: "",
-      stderr: "fatal: not a git repository",
-      exitCode: 128,
-      timedOut: false,
       duration_ms: 2,
+      exitCode: 128,
+      ok: false,
+      stderr: "fatal: not a git repository",
+      stdout: "",
+      timedOut: false,
     });
 
     const result = await computeJobFingerprint({ projectDir: "/not-a-git-repo" });
@@ -170,23 +160,19 @@ describe("computeJobFingerprint — null when not in a git repo", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // computeJobFingerprint — missing config.json
-// ---------------------------------------------------------------------------
 
 describe("computeJobFingerprint — missing config.json", () => {
   it("returns a fingerprint even when config.json does not exist", async () => {
     mockGitExecAsync.mockResolvedValueOnce({
-      ok: true,
-      stdout: "deadbeef\n",
-      stderr: "",
-      exitCode: 0,
-      timedOut: false,
       duration_ms: 3,
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "deadbeef\n",
+      timedOut: false,
     });
-    mockReadFile.mockRejectedValueOnce(
-      Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
-    );
+    mockReadFile.mockRejectedValueOnce(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
 
     const result = await computeJobFingerprint({ projectDir: "/project" });
     expect(result).not.toBeNull();

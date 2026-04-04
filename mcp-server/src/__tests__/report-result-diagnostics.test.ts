@@ -9,20 +9,15 @@
  * All workspace setup uses ExecutionStore directly (no legacy readBoard/writeBoard).
  */
 
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import { afterEach, describe, expect, it } from "vitest";
+import { flowEventBus } from "../orchestration/event-bus-instance.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
+import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -35,14 +30,14 @@ function makeTmpWorkspace(): string {
 /** Minimal flow with a single state that transitions done → terminal */
 function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {
-    name: "diag-flow",
     description: "Diagnostics test flow",
     entry: "impl",
+    name: "diag-flow",
     spawn_instructions: {},
     states: {
       impl: {
-        type: "single",
         transitions: { done: "ship" },
+        type: "single",
       },
       ship: { type: "terminal" },
     },
@@ -53,18 +48,18 @@ function makeFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
 /** Flow where the impl state uses same_status stuck detection */
 function makeFlowWithStuck(): ResolvedFlow {
   return {
-    name: "diag-stuck-flow",
     description: "Stuck detection test flow",
     entry: "impl",
+    name: "diag-stuck-flow",
     spawn_instructions: {},
     states: {
       impl: {
-        type: "single",
         stuck_when: "same_status",
         transitions: {
-          done: "ship",
           blocked: "impl", // loop back to trigger stuck
+          done: "ship",
         },
+        type: "single",
       },
       ship: { type: "terminal" },
     },
@@ -77,23 +72,23 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
   const now = new Date().toISOString();
 
   store.initExecution({
-    flow: flow.name,
-    task: "test task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc123",
-    started: now,
-    last_updated: now,
     branch: "feat/test",
-    sanitized: "feat-test",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "feat-test",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
 
   for (const stateId of Object.keys(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
   }
 }
 
@@ -101,22 +96,20 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
 function setupWorkspaceWithIterations(workspace: string, flow: ResolvedFlow): void {
   setupWorkspace(workspace, flow);
   const store = getExecutionStore(workspace);
-  store.upsertState("impl", { status: "in_progress", entries: 1 });
-  store.upsertIteration("impl", { count: 0, max: 5, history: [], cannot_fix: [] });
+  store.upsertState("impl", { entries: 1, status: "in_progress" });
+  store.upsertIteration("impl", { cannot_fix: [], count: 0, history: [], max: 5 });
 }
 
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
   flowEventBus.removeAllListeners();
 });
 
-// ---------------------------------------------------------------------------
 // 1. ADR-003a metrics stored in board state
-// ---------------------------------------------------------------------------
 
 describe("report_result: ADR-003a metrics", () => {
   it("stores ADR-003a agent performance fields in board state metrics", async () => {
@@ -124,31 +117,31 @@ describe("report_result: ADR-003a metrics", () => {
     setupWorkspace(workspace, makeFlow());
 
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
 
     const result = await reportResult({
-      workspace,
-      state_id: "impl",
-      status_keyword: "done",
       flow: makeFlow(),
       metrics: {
-        duration_ms: 5000,
-        spawns: 1,
-        model: "claude-sonnet",
-        tool_calls: 42,
-        orientation_calls: 3,
-        input_tokens: 10000,
-        output_tokens: 2000,
         cache_read_tokens: 8000,
         cache_write_tokens: 500,
+        duration_ms: 5000,
+        input_tokens: 10000,
+        model: "claude-sonnet",
+        orientation_calls: 3,
+        output_tokens: 2000,
+        spawns: 1,
+        tool_calls: 42,
         turns: 7,
       },
+      state_id: "impl",
+      status_keyword: "done",
+      workspace,
     });
 
     assertOk(result);
 
     const board = store.getBoard();
-    const metrics = board?.states["impl"]?.metrics;
+    const metrics = board?.states.impl?.metrics;
     expect(metrics).toBeDefined();
     expect(metrics?.tool_calls).toBe(42);
     expect(metrics?.orientation_calls).toBe(3);
@@ -168,13 +161,13 @@ describe("report_result: ADR-003a metrics", () => {
     setupWorkspace(workspace, makeFlow());
 
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
 
     const result = await reportResult({
-      workspace,
+      flow: makeFlow(),
       state_id: "impl",
       status_keyword: "done",
-      flow: makeFlow(),
+      workspace,
       // No metrics provided at all
     });
 
@@ -182,7 +175,7 @@ describe("report_result: ADR-003a metrics", () => {
 
     const board = store.getBoard();
     // metrics should be absent since no metrics fields were provided
-    expect(board?.states["impl"]?.metrics).toBeUndefined();
+    expect(board?.states.impl?.metrics).toBeUndefined();
   });
 
   it("stores only ADR-003a fields when no legacy metrics fields provided", async () => {
@@ -190,34 +183,32 @@ describe("report_result: ADR-003a metrics", () => {
     setupWorkspace(workspace, makeFlow());
 
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
 
     const result = await reportResult({
-      workspace,
-      state_id: "impl",
-      status_keyword: "done",
       flow: makeFlow(),
       metrics: {
         duration_ms: 0,
-        spawns: 0,
         model: "claude-sonnet",
+        spawns: 0,
         tool_calls: 10,
         turns: 2,
       },
+      state_id: "impl",
+      status_keyword: "done",
+      workspace,
     });
 
     assertOk(result);
 
     const board = store.getBoard();
-    const metrics = board?.states["impl"]?.metrics;
+    const metrics = board?.states.impl?.metrics;
     expect(metrics?.tool_calls).toBe(10);
     expect(metrics?.turns).toBe(2);
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. stuck_detected event emission
-// ---------------------------------------------------------------------------
 
 describe("report_result: stuck_detected event", () => {
   it("emits stuck_detected event when stuck detection triggers", async () => {
@@ -227,10 +218,10 @@ describe("report_result: stuck_detected event", () => {
 
     // First call — seeds history with status "blocked"
     const r1 = await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "blocked",
-      flow,
+      workspace,
     });
     assertOk(r1);
 
@@ -240,10 +231,10 @@ describe("report_result: stuck_detected event", () => {
 
     // Second call with same status — should trigger stuck detection
     const r2 = await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "blocked",
-      flow,
+      workspace,
     });
     assertOk(r2);
 
@@ -258,21 +249,23 @@ describe("report_result: stuck_detected event", () => {
 
     // Seed first iteration
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "blocked",
-      flow,
+      workspace,
     });
 
     let capturedEvent: unknown;
-    flowEventBus.on("stuck_detected", (e) => { capturedEvent = e; });
+    flowEventBus.on("stuck_detected", (e) => {
+      capturedEvent = e;
+    });
 
     // Second call triggers stuck
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "blocked",
-      flow,
+      workspace,
     });
 
     expect(capturedEvent).toBeDefined();
@@ -295,17 +288,17 @@ describe("report_result: stuck_detected event", () => {
     const store = getExecutionStore(workspace);
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "blocked",
-      flow,
+      workspace,
     });
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "blocked",
-      flow,
+      workspace,
     });
 
     const events = store.getEventsByType("stuck_detected");
@@ -324,20 +317,22 @@ describe("report_result: stuck_detected event", () => {
     expect(correlationId).not.toBeNull();
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "blocked",
-      flow,
+      workspace,
     });
 
     let capturedEvent: unknown;
-    flowEventBus.on("stuck_detected", (e) => { capturedEvent = e; });
+    flowEventBus.on("stuck_detected", (e) => {
+      capturedEvent = e;
+    });
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "blocked",
-      flow,
+      workspace,
     });
 
     const evt = capturedEvent as Record<string, unknown>;
@@ -352,16 +347,16 @@ describe("report_result: stuck_detected event", () => {
     const flow = makeFlow();
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
 
     const stuckEvents: unknown[] = [];
     flowEventBus.on("stuck_detected", (e) => stuckEvents.push(e));
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "done",
-      flow,
+      workspace,
     });
 
     assertOk(result);
@@ -370,9 +365,7 @@ describe("report_result: stuck_detected event", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. correlation_id in state_completed and transition_evaluated events
-// ---------------------------------------------------------------------------
 
 describe("report_result: correlation_id in events", () => {
   it("state_completed event includes correlation_id when execution has one", async () => {
@@ -380,19 +373,21 @@ describe("report_result: correlation_id in events", () => {
     const flow = makeFlow();
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
     const correlationId = store.getCorrelationId();
     expect(correlationId).not.toBeNull();
 
     let capturedEvent: unknown;
-    flowEventBus.on("state_completed", (e) => { capturedEvent = e; });
+    flowEventBus.on("state_completed", (e) => {
+      capturedEvent = e;
+    });
 
     const result = await reportResult({
-      workspace,
+      flow,
+      metrics: { duration_ms: 1000, model: "claude-sonnet", spawns: 1 },
       state_id: "impl",
       status_keyword: "done",
-      flow,
-      metrics: { duration_ms: 1000, spawns: 1, model: "claude-sonnet" },
+      workspace,
     });
 
     assertOk(result);
@@ -405,18 +400,20 @@ describe("report_result: correlation_id in events", () => {
     const flow = makeFlow();
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
     const correlationId = store.getCorrelationId();
     expect(correlationId).not.toBeNull();
 
     let capturedEvent: unknown;
-    flowEventBus.on("transition_evaluated", (e) => { capturedEvent = e; });
+    flowEventBus.on("transition_evaluated", (e) => {
+      capturedEvent = e;
+    });
 
     const result = await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "done",
-      flow,
+      workspace,
     });
 
     assertOk(result);
@@ -429,15 +426,15 @@ describe("report_result: correlation_id in events", () => {
     const flow = makeFlow();
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
     const correlationId = store.getCorrelationId();
     expect(correlationId).not.toBeNull();
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "done",
-      flow,
+      workspace,
     });
 
     const events = store.getEventsByType("state_completed");
@@ -450,15 +447,15 @@ describe("report_result: correlation_id in events", () => {
     const flow = makeFlow();
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
     const correlationId = store.getCorrelationId();
     expect(correlationId).not.toBeNull();
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "done",
-      flow,
+      workspace,
     });
 
     const events = store.getEventsByType("transition_evaluated");
@@ -471,21 +468,25 @@ describe("report_result: correlation_id in events", () => {
     const flow = makeFlow();
     setupWorkspace(workspace, flow);
     const store = getExecutionStore(workspace);
-    store.upsertState("impl", { status: "in_progress", entries: 1 });
+    store.upsertState("impl", { entries: 1, status: "in_progress" });
     const correlationId = store.getCorrelationId();
     // initExecution always assigns a UUID
     expect(correlationId).toMatch(/^[0-9a-f-]{36}$/);
 
     let stateEvent: unknown;
     let transEvent: unknown;
-    flowEventBus.on("state_completed", (e) => { stateEvent = e; });
-    flowEventBus.on("transition_evaluated", (e) => { transEvent = e; });
+    flowEventBus.on("state_completed", (e) => {
+      stateEvent = e;
+    });
+    flowEventBus.on("transition_evaluated", (e) => {
+      transEvent = e;
+    });
 
     await reportResult({
-      workspace,
+      flow,
       state_id: "impl",
       status_keyword: "done",
-      flow,
+      workspace,
     });
 
     const se = stateEvent as Record<string, unknown>;

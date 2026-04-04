@@ -8,15 +8,11 @@
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 
-// ---------------------------------------------------------------------------
 // Schema version — increment when DDL changes require a migration
-// ---------------------------------------------------------------------------
 
 export const SCHEMA_VERSION = "3";
 
-// ---------------------------------------------------------------------------
 // DDL statements (v1+v2 base schema)
-// ---------------------------------------------------------------------------
 
 const DDL_STATEMENTS = [
   // Meta table for schema versioning
@@ -80,7 +76,7 @@ const DDL_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_entity_id)`,
   `CREATE INDEX IF NOT EXISTS idx_edges_type   ON edges(edge_type)`,
 
-  // File-level edges (backward compat with graph-data.json)
+  // File-level edges
   `CREATE TABLE IF NOT EXISTS file_edges (
     file_edge_id   INTEGER PRIMARY KEY AUTOINCREMENT,
     source_file_id INTEGER NOT NULL REFERENCES files(file_id) ON DELETE CASCADE,
@@ -163,14 +159,12 @@ const DDL_STATEMENTS = [
   )`,
 ];
 
-// ---------------------------------------------------------------------------
 // Migration definitions
-// ---------------------------------------------------------------------------
 
-interface Migration {
+type Migration = {
   version: string;
   up: (db: Database.Database) => void;
-}
+};
 
 /**
  * Ordered list of schema migrations.
@@ -179,7 +173,6 @@ interface Migration {
  */
 const MIGRATIONS: Migration[] = [
   {
-    version: "3",
     up: (db) => {
       // sqlite-vec extension must be loaded before vec0 DDL executes.
       // Load is idempotent — safe to call multiple times.
@@ -211,6 +204,7 @@ const MIGRATIONS: Migration[] = [
 
       db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
     },
+    version: "3",
   },
 ];
 
@@ -222,9 +216,9 @@ const MIGRATIONS: Migration[] = [
  * Exported for direct testing of upgrade scenarios.
  */
 export function runMigrations(db: Database.Database): void {
-  const currentRow = db
-    .prepare("SELECT value FROM meta WHERE key = 'schema_version'")
-    .get() as { value: string } | undefined;
+  const currentRow = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+    | { value: string }
+    | undefined;
   let version = currentRow?.value ?? "1";
 
   for (const migration of MIGRATIONS) {
@@ -236,9 +230,7 @@ export function runMigrations(db: Database.Database): void {
   }
 }
 
-// ---------------------------------------------------------------------------
 // initDatabase
-// ---------------------------------------------------------------------------
 
 /**
  * Open (or create) a better-sqlite3 database at `dbPath`, configure PRAGMAs,

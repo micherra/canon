@@ -2,11 +2,11 @@ import { DriftStore } from "../drift/store.ts";
 import type { ReportInput, ReviewEntry } from "../schema.ts";
 import { generateId } from "../utils/id.ts";
 
-export interface ReportOutput {
+export type ReportOutput = {
   recorded: boolean;
   id: string;
   note: string;
-}
+};
 
 export async function report(input: ReportInput, projectDir: string): Promise<ReportOutput> {
   const store = new DriftStore(projectDir);
@@ -30,21 +30,21 @@ async function recordReview(
   const id = generateId("rev");
 
   const entry: ReviewEntry = {
+    files: review.files,
+    honored: cleanHonored,
     review_id: id,
+    score: review.score,
     timestamp: new Date().toISOString(),
     verdict: review.verdict ?? deriveVerdict(review.violations),
-    files: review.files,
     violations: review.violations,
-    honored: cleanHonored,
-    score: review.score,
   };
 
   await store.appendReview(entry);
 
   return {
-    recorded: true,
     id,
     note: "Review logged. Results will appear in drift reports and inform learning suggestions.",
+    recorded: true,
   };
 }
 

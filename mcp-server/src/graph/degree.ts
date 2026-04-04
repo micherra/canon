@@ -1,9 +1,9 @@
 /** Shared degree-map builder — eliminates duplication across insights, priority, and query. */
 
-export interface DegreeMaps {
+export type DegreeMaps = {
   inDegree: Map<string, number>;
   outDegree: Map<string, number>;
-}
+};
 
 /** Build in-degree and out-degree maps from nodes and edges. */
 export function buildDegreeMaps(

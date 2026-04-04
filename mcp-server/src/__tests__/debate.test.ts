@@ -62,9 +62,9 @@ describe("debate", () => {
   describe("heuristicConvergence", () => {
     function makeMessage(content: string): Message {
       return {
+        content,
         from: "team",
         timestamp: new Date().toISOString(),
-        content,
       };
     }
 
@@ -131,7 +131,11 @@ describe("debate", () => {
     });
 
     it("detects convergence when messages are very short", () => {
-      const messages: Message[] = [makeMessage("Agreed."), makeMessage("Same."), makeMessage("OK.")];
+      const messages: Message[] = [
+        makeMessage("Agreed."),
+        makeMessage("Same."),
+        makeMessage("OK."),
+      ];
 
       const result = heuristicConvergence(messages);
       expect(result.converged).toBe(true);
@@ -152,7 +156,7 @@ describe("debate", () => {
     });
 
     afterEach(async () => {
-      await rm(workspace, { recursive: true, force: true });
+      await rm(workspace, { force: true, recursive: true });
     });
 
     it("returns message for empty channel", async () => {
@@ -173,8 +177,18 @@ describe("debate", () => {
 
     it("infers round number from channel name (item #15)", async () => {
       // Messages posted to debate-round-3 channel — round number from channel, not msg.from
-      await writeMessage(workspace, "debate-round-3", "some-agent-no-round", "Final response from Team A.");
-      await writeMessage(workspace, "debate-round-3", "another-agent", "Final response from Team B.");
+      await writeMessage(
+        workspace,
+        "debate-round-3",
+        "some-agent-no-round",
+        "Final response from Team A.",
+      );
+      await writeMessage(
+        workspace,
+        "debate-round-3",
+        "another-agent",
+        "Final response from Team B.",
+      );
 
       const summary = await buildDebateSummary(workspace, "debate-round-3");
       // Should show Round 3 (from channel), not Round 0 (from msg.from fallback)
@@ -195,13 +209,13 @@ describe("debate", () => {
     let workspace: string;
 
     const config: DebateConfig = {
-      teams: 2,
       composition: ["canon-researcher"],
-      min_rounds: 2,
-      max_rounds: 4,
+      continue_to_build: true,
       convergence_check_after: 3,
       hitl_checkpoint: true,
-      continue_to_build: true,
+      max_rounds: 4,
+      min_rounds: 2,
+      teams: 2,
     };
 
     beforeEach(async () => {
@@ -209,7 +223,7 @@ describe("debate", () => {
     });
 
     afterEach(async () => {
-      await rm(workspace, { recursive: true, force: true });
+      await rm(workspace, { force: true, recursive: true });
     });
 
     it("returns next_round=1 and not completed when no rounds exist", async () => {
@@ -221,8 +235,18 @@ describe("debate", () => {
     });
 
     it("increments next_round as rounds are populated", async () => {
-      await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "Position A.");
-      await writeMessage(workspace, "debate-round-1", "round-1-team-b-canon-researcher", "Position B.");
+      await writeMessage(
+        workspace,
+        "debate-round-1",
+        "round-1-team-a-canon-researcher",
+        "Position A.",
+      );
+      await writeMessage(
+        workspace,
+        "debate-round-1",
+        "round-1-team-b-canon-researcher",
+        "Position B.",
+      );
 
       const progress = await inspectDebateProgress(workspace, config);
       expect(progress.last_completed_round).toBe(1);
@@ -231,9 +255,11 @@ describe("debate", () => {
     });
 
     it("marks completed when max_rounds are reached", async () => {
-      for (let r = 1; r <= 4; r++) {
-        await writeMessage(workspace, `debate-round-${r}`, `round-${r}-team-a`, `Round ${r} message.`);
-      }
+      await Promise.all(
+        Array.from({ length: 4 }, (_, i) => i + 1).map((r) =>
+          writeMessage(workspace, `debate-round-${r}`, `round-${r}-team-a`, `Round ${r} message.`),
+        ),
+      );
 
       const progress = await inspectDebateProgress(workspace, config);
       expect(progress.completed).toBe(true);
@@ -241,7 +267,12 @@ describe("debate", () => {
     });
 
     it("includes transcript when rounds have messages", async () => {
-      await writeMessage(workspace, "debate-round-1", "round-1-team-a-canon-researcher", "We prefer event sourcing.");
+      await writeMessage(
+        workspace,
+        "debate-round-1",
+        "round-1-team-a-canon-researcher",
+        "We prefer event sourcing.",
+      );
 
       const progress = await inspectDebateProgress(workspace, config);
       expect(progress.transcript).toBeDefined();
@@ -252,15 +283,25 @@ describe("debate", () => {
     it("detects convergence when messages contain agreement signals after min rounds", async () => {
       const earlyConvergeConfig: DebateConfig = {
         ...config,
-        min_rounds: 2,
         convergence_check_after: 2,
+        min_rounds: 2,
       };
 
       // Post 2 rounds
       await writeMessage(workspace, "debate-round-1", "round-1-team-a", "Initial position.");
       await writeMessage(workspace, "debate-round-1", "round-1-team-b", "Counter position.");
-      await writeMessage(workspace, "debate-round-2", "round-2-team-a", "We agree and are aligned now.");
-      await writeMessage(workspace, "debate-round-2", "round-2-team-b", "Consensus reached. We agree.");
+      await writeMessage(
+        workspace,
+        "debate-round-2",
+        "round-2-team-a",
+        "We agree and are aligned now.",
+      );
+      await writeMessage(
+        workspace,
+        "debate-round-2",
+        "round-2-team-b",
+        "Consensus reached. We agree.",
+      );
 
       const progress = await inspectDebateProgress(workspace, earlyConvergeConfig);
       expect(progress.completed).toBe(true);
@@ -270,56 +311,67 @@ describe("debate", () => {
 
   describe("buildDebatePrompt", () => {
     it("includes the base prompt", () => {
-      const result = buildDebatePrompt(
-        "Design the auth system.",
-        "/workspace",
-        1,
-        5,
-        "Team A",
-        ["Team B", "Team C"],
-        "canon-researcher",
-      );
+      const result = buildDebatePrompt("Design the auth system.", {
+        agent: "canon-researcher",
+        maxRounds: 5,
+        otherTeamLabels: ["Team B", "Team C"],
+        roundNumber: 1,
+        teamLabel: "Team A",
+        workspace: "/workspace",
+      });
       expect(result).toContain("Design the auth system.");
     });
 
     it("includes round framing for the given round", () => {
-      const result = buildDebatePrompt(
-        "Design the auth system.",
-        "/workspace",
-        1,
-        5,
-        "Team A",
-        ["Team B"],
-        "canon-researcher",
-      );
+      const result = buildDebatePrompt("Design the auth system.", {
+        agent: "canon-researcher",
+        maxRounds: 5,
+        otherTeamLabels: ["Team B"],
+        roundNumber: 1,
+        teamLabel: "Team A",
+        workspace: "/workspace",
+      });
       expect(result).toContain("State Your Position");
       expect(result).toContain("Team A");
     });
 
     it("includes post_message coordination instructions with correct channel", () => {
-      const result = buildDebatePrompt("Brief.", "/workspace/test", 2, 5, "Team B", ["Team A"], "canon-architect");
+      const result = buildDebatePrompt("Brief.", {
+        agent: "canon-architect",
+        maxRounds: 5,
+        otherTeamLabels: ["Team A"],
+        roundNumber: 2,
+        teamLabel: "Team B",
+        workspace: "/workspace/test",
+      });
       expect(result).toContain('channel="debate-round-2"');
       expect(result).toContain('workspace="/workspace/test"');
     });
 
     it("includes prior transcript when provided", () => {
       const transcript = "### Round 1\n\nTeam A: Use event sourcing.";
-      const result = buildDebatePrompt(
-        "Brief.",
-        "/workspace",
-        2,
-        5,
-        "Team B",
-        ["Team A"],
-        "canon-architect",
+      const result = buildDebatePrompt("Brief.", {
+        agent: "canon-architect",
+        maxRounds: 5,
+        otherTeamLabels: ["Team A"],
+        roundNumber: 2,
+        teamLabel: "Team B",
         transcript,
-      );
+        workspace: "/workspace",
+      });
       expect(result).toContain("Prior Debate Transcript");
       expect(result).toContain("Use event sourcing.");
     });
 
     it("omits transcript section when not provided", () => {
-      const result = buildDebatePrompt("Brief.", "/workspace", 1, 5, "Team A", ["Team B"], "canon-researcher");
+      const result = buildDebatePrompt("Brief.", {
+        agent: "canon-researcher",
+        maxRounds: 5,
+        otherTeamLabels: ["Team B"],
+        roundNumber: 1,
+        teamLabel: "Team A",
+        workspace: "/workspace",
+      });
       expect(result).not.toContain("Prior Debate Transcript");
     });
   });

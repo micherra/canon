@@ -15,9 +15,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { aggregateParallelPerResults, isRoleOptional } from "../orchestration/transitions.ts";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports for reportResult integration tests
-// ---------------------------------------------------------------------------
 
 vi.mock("../orchestration/event-bus-instance.ts", () => ({
   flowEventBus: {
@@ -31,14 +29,10 @@ vi.mock("../orchestration/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { reportResult } from "../tools/report-result.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "optional-roles-test-"));
@@ -48,58 +42,56 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: flow.name,
-    task: "test task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc1234",
-    started: now,
-    last_updated: now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "main",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
   for (const stateId of Object.keys(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
   }
 }
 
 function makeFlowWithOptionalRoles(): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "test",
     entry: "review",
+    name: "test-flow",
+    spawn_instructions: {
+      review: "Review from role ${role}",
+    },
     states: {
+      hitl: { type: "terminal" },
       review: {
-        type: "parallel",
         agents: ["canon:canon-reviewer"],
         roles: ["required-reviewer", { name: "optional-reviewer", optional: true }],
         transitions: {
-          done: "ship",
           blocked: "hitl",
+          done: "ship",
         },
+        type: "parallel",
       },
       ship: { type: "terminal" },
-      hitl: { type: "terminal" },
-    },
-    spawn_instructions: {
-      review: "Review from role ${role}",
     },
   };
 }
 
-// ---------------------------------------------------------------------------
 // Unit tests: aggregateParallelPerResults with optionalRoles
-// ---------------------------------------------------------------------------
 
 describe("aggregateParallelPerResults — optional roles", () => {
   it("does not block when only optional roles are blocked", () => {
     const results = [
-      { status: "done", item: "required-reviewer" },
-      { status: "blocked", item: "optional-reviewer" },
+      { item: "required-reviewer", status: "done" },
+      { item: "optional-reviewer", status: "blocked" },
     ];
     const optionalRoles = new Set(["optional-reviewer"]);
     const result = aggregateParallelPerResults(results, optionalRoles);
@@ -109,8 +101,8 @@ describe("aggregateParallelPerResults — optional roles", () => {
 
   it("blocks when a required role is blocked (optional role also blocked)", () => {
     const results = [
-      { status: "blocked", item: "required-reviewer" },
-      { status: "blocked", item: "optional-reviewer" },
+      { item: "required-reviewer", status: "blocked" },
+      { item: "optional-reviewer", status: "blocked" },
     ];
     const optionalRoles = new Set(["optional-reviewer"]);
     const result = aggregateParallelPerResults(results, optionalRoles);
@@ -119,8 +111,8 @@ describe("aggregateParallelPerResults — optional roles", () => {
 
   it("blocks when a required role is blocked (optional role is done)", () => {
     const results = [
-      { status: "blocked", item: "required-reviewer" },
-      { status: "done", item: "optional-reviewer" },
+      { item: "required-reviewer", status: "blocked" },
+      { item: "optional-reviewer", status: "done" },
     ];
     const optionalRoles = new Set(["optional-reviewer"]);
     const result = aggregateParallelPerResults(results, optionalRoles);
@@ -129,8 +121,8 @@ describe("aggregateParallelPerResults — optional roles", () => {
 
   it("excludes optional roles from cannot_fix items", () => {
     const results = [
-      { status: "done", item: "required-reviewer" },
-      { status: "cannot_fix", item: "optional-reviewer" },
+      { item: "required-reviewer", status: "done" },
+      { item: "optional-reviewer", status: "cannot_fix" },
     ];
     const optionalRoles = new Set(["optional-reviewer"]);
     const result = aggregateParallelPerResults(results, optionalRoles);
@@ -141,8 +133,8 @@ describe("aggregateParallelPerResults — optional roles", () => {
 
   it("counts required cannot_fix items even when optional role is blocked", () => {
     const results = [
-      { status: "cannot_fix", item: "required-reviewer" },
-      { status: "blocked", item: "optional-reviewer" },
+      { item: "required-reviewer", status: "cannot_fix" },
+      { item: "optional-reviewer", status: "blocked" },
     ];
     const optionalRoles = new Set(["optional-reviewer"]);
     const result = aggregateParallelPerResults(results, optionalRoles);
@@ -154,30 +146,28 @@ describe("aggregateParallelPerResults — optional roles", () => {
   it("preserves existing behavior when no optional roles provided", () => {
     // Same as existing test: blocked result blocks everything
     const results = [
-      { status: "done", item: "a" },
-      { status: "blocked", item: "b" },
+      { item: "a", status: "done" },
+      { item: "b", status: "blocked" },
     ];
     expect(aggregateParallelPerResults(results)).toEqual({
-      condition: "blocked",
       cannotFixItems: [],
+      condition: "blocked",
     });
   });
 
   it("preserves existing behavior when optional roles set is empty", () => {
     const results = [
-      { status: "done", item: "a" },
-      { status: "blocked", item: "b" },
+      { item: "a", status: "done" },
+      { item: "b", status: "blocked" },
     ];
     expect(aggregateParallelPerResults(results, new Set())).toEqual({
-      condition: "blocked",
       cannotFixItems: [],
+      condition: "blocked",
     });
   });
 });
 
-// ---------------------------------------------------------------------------
 // Unit tests: isRoleOptional helper
-// ---------------------------------------------------------------------------
 
 describe("isRoleOptional", () => {
   it("returns false for string role entries", () => {
@@ -197,9 +187,7 @@ describe("isRoleOptional", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Integration tests: reportResult threads optional roles through aggregation
-// ---------------------------------------------------------------------------
 
 describe("reportResult — optional roles in parallel state", () => {
   let workspace: string;
@@ -210,7 +198,7 @@ describe("reportResult — optional roles in parallel state", () => {
   });
 
   afterEach(() => {
-    rmSync(workspace, { recursive: true, force: true });
+    rmSync(workspace, { force: true, recursive: true });
   });
 
   it("does not block when only optional roles report blocked status", async () => {
@@ -218,14 +206,14 @@ describe("reportResult — optional roles in parallel state", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "done",
       flow,
       parallel_results: [
         { item: "required-reviewer", status: "done" },
         { item: "optional-reviewer", status: "blocked" },
       ],
+      state_id: "review",
+      status_keyword: "done",
+      workspace,
     });
     assertOk(result);
 
@@ -239,14 +227,14 @@ describe("reportResult — optional roles in parallel state", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "done",
       flow,
       parallel_results: [
         { item: "required-reviewer", status: "blocked" },
         { item: "optional-reviewer", status: "done" },
       ],
+      state_id: "review",
+      status_keyword: "done",
+      workspace,
     });
     assertOk(result);
 
@@ -259,14 +247,14 @@ describe("reportResult — optional roles in parallel state", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "done",
       flow,
       parallel_results: [
         { item: "required-reviewer", status: "done" },
         { item: "optional-reviewer", status: "needs_context" },
       ],
+      state_id: "review",
+      status_keyword: "done",
+      workspace,
     });
     assertOk(result);
 

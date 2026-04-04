@@ -18,24 +18,18 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Language, Parser } from "web-tree-sitter";
 
-// ---------------------------------------------------------------------------
 // Supported languages
-// ---------------------------------------------------------------------------
 
 const SUPPORTED_LANGUAGES = ["typescript", "tsx", "python", "bash", "java"] as const;
 
 type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
-// ---------------------------------------------------------------------------
 // Module-level state
-// ---------------------------------------------------------------------------
 
 let initialized = false;
 const parsers = new Map<string, Parser>();
 
-// ---------------------------------------------------------------------------
 // Path resolution
-// ---------------------------------------------------------------------------
 
 /**
  * Resolve the absolute path to a grammar WASM file.
@@ -49,10 +43,6 @@ function grammarPath(language: SupportedLanguage): string {
   const grammarsDir = join(dirname(thisFile), "..", "..", "grammars");
   return join(grammarsDir, `tree-sitter-${language}.wasm`);
 }
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Initialize the WASM runtime and load all grammar files.
@@ -72,7 +62,13 @@ export async function initParsers(): Promise<void> {
       // scriptName is 'web-tree-sitter.wasm' — resolve it from node_modules
       if (scriptName.endsWith(".wasm")) {
         const thisFile = fileURLToPath(import.meta.url);
-        const nodeModulesDir = join(dirname(thisFile), "..", "..", "node_modules", "web-tree-sitter");
+        const nodeModulesDir = join(
+          dirname(thisFile),
+          "..",
+          "..",
+          "node_modules",
+          "web-tree-sitter",
+        );
         return join(nodeModulesDir, scriptName);
       }
       return scriptName;
@@ -85,10 +81,13 @@ export async function initParsers(): Promise<void> {
     const wasmPath = grammarPath(lang);
     let language: Language;
     try {
+      // biome-ignore lint/performance/noAwaitInLoops: fail-fast sequential load — each grammar must succeed before the next is attempted
       language = await Language.load(wasmPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`kg-wasm-parser: failed to load grammar for '${lang}' from '${wasmPath}': ${message}`);
+      throw new Error(
+        `kg-wasm-parser: failed to load grammar for '${lang}' from '${wasmPath}': ${message}`,
+      );
     }
 
     const parser = new Parser();
@@ -112,7 +111,9 @@ export function getParser(language: string): Parser {
   const parser = parsers.get(language);
   if (!parser) {
     const supported = SUPPORTED_LANGUAGES.join(", ");
-    throw new Error(`kg-wasm-parser: unknown language '${language}'. Supported languages: ${supported}`);
+    throw new Error(
+      `kg-wasm-parser: unknown language '${language}'. Supported languages: ${supported}`,
+    );
   }
   return parser;
 }

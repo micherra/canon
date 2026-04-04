@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BoardStateEntry, ResolvedFlow } from "../orchestration/flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 // runShell mock — mutable implementation swapped per test
-type RunShellResult = { ok: boolean; stdout: string; stderr: string; exitCode: number; timedOut: boolean };
+type RunShellResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  timedOut: boolean;
+};
 let runShellImpl: ((cmd: string, cwd: string, timeout?: number) => RunShellResult) | null = null;
 let lastRunShellArgs: { cmd: string; cwd: string; timeout?: number } | null = null;
 
@@ -14,7 +18,7 @@ vi.mock("../adapters/process-adapter.ts", () => ({
   runShell: (cmd: string, cwd: string, timeout?: number) => {
     lastRunShellArgs = { cmd, cwd, timeout };
     if (runShellImpl) return runShellImpl(cmd, cwd, timeout);
-    return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+    return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
   },
 }));
 
@@ -28,23 +32,22 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-// ---------------------------------------------------------------------------
 // Import after mocks are registered
-// ---------------------------------------------------------------------------
 
-import { normalizeGates, resolveGateCommand, runGate, runGates } from "../orchestration/gate-runner.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+import {
+  normalizeGates,
+  resolveGateCommand,
+  runGate,
+  runGates,
+} from "../orchestration/gate-runner.ts";
 
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "test",
     entry: "start",
-    states: {},
+    name: "test-flow",
     spawn_instructions: {},
+    states: {},
     ...(gates ? { gates } : {}),
   };
 }
@@ -58,10 +61,12 @@ function makeStateDef(
   };
 }
 
-function makeBoardState(discovered_gates?: Array<{ command: string; source: string }>): BoardStateEntry {
+function makeBoardState(
+  discovered_gates?: Array<{ command: string; source: string }>,
+): BoardStateEntry {
   return {
-    status: "in_progress",
     entries: 0,
+    status: "in_progress",
     ...(discovered_gates !== undefined ? { discovered_gates } : {}),
   };
 }
@@ -72,9 +77,7 @@ beforeEach(() => {
   lastRunShellArgs = null;
 });
 
-// ---------------------------------------------------------------------------
 // resolveGateCommand
-// ---------------------------------------------------------------------------
 
 describe("resolveGateCommand — flow.gates map lookup", () => {
   it("returns command from flow.gates map when gate name is found", () => {
@@ -133,13 +136,17 @@ describe("resolveGateCommand — test-suite auto-detection from package.json", (
   });
 });
 
-// ---------------------------------------------------------------------------
 // runGate — fail-closed behavior
-// ---------------------------------------------------------------------------
 
 describe("runGate — gate exits 0 (passed)", () => {
   it("returns passed: true when command exits with code 0", () => {
-    runShellImpl = () => ({ ok: true, stdout: "all tests passed", stderr: "", exitCode: 0, timedOut: false });
+    runShellImpl = () => ({
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+      stdout: "all tests passed",
+      timedOut: false,
+    });
     const flow = makeFlow({ "test-suite": "npm test" });
     const result = runGate("test-suite", flow, "/project");
 
@@ -153,7 +160,13 @@ describe("runGate — gate exits 0 (passed)", () => {
 
 describe("runGate — gate exits non-zero (failed)", () => {
   it("returns passed: false when command exits with non-zero code", () => {
-    runShellImpl = () => ({ ok: false, stdout: "", stderr: "2 tests failed", exitCode: 1, timedOut: false });
+    runShellImpl = () => ({
+      exitCode: 1,
+      ok: false,
+      stderr: "2 tests failed",
+      stdout: "",
+      timedOut: false,
+    });
     const flow = makeFlow({ "test-suite": "npm test" });
     const result = runGate("test-suite", flow, "/project");
 
@@ -209,7 +222,7 @@ describe("runGate — command injection protection", () => {
     let executedCommand: string | null = null;
     runShellImpl = (cmd) => {
       executedCommand = cmd;
-      return { ok: true, stdout: "ok", stderr: "", exitCode: 0, timedOut: false };
+      return { exitCode: 0, ok: true, stderr: "", stdout: "ok", timedOut: false };
     };
     const flow = makeFlow({ "safe-gate": "npm run lint" });
     runGate("safe-gate", flow, "/project");
@@ -222,7 +235,7 @@ describe("runGate — command injection protection", () => {
 
 describe("runGate — runShell timeout and cwd configuration", () => {
   it("passes 300_000 timeout to runShell", () => {
-    runShellImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
+    runShellImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
     const flow = makeFlow({ "test-suite": "npm test" });
     runGate("test-suite", flow, "/project");
 
@@ -231,8 +244,8 @@ describe("runGate — runShell timeout and cwd configuration", () => {
   });
 
   it("passes cwd to runShell", () => {
-    runShellImpl = () => ({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false });
-    const flow = makeFlow({ "check": "tsc" });
+    runShellImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false });
+    const flow = makeFlow({ check: "tsc" });
     runGate("check", flow, "/my/project");
 
     expect(lastRunShellArgs!.cwd).toBe("/my/project");
@@ -243,18 +256,16 @@ describe("runGate — runShell timeout and cwd configuration", () => {
     let adapterCalled = false;
     runShellImpl = () => {
       adapterCalled = true;
-      return { ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false };
+      return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
     };
-    const flow = makeFlow({ "lint": "eslint ." });
+    const flow = makeFlow({ lint: "eslint ." });
     runGate("lint", flow, "/project");
 
     expect(adapterCalled).toBe(true);
   });
 });
 
-// ---------------------------------------------------------------------------
 // normalizeGates — 3-tier resolution
-// ---------------------------------------------------------------------------
 
 describe("normalizeGates — no gates declared", () => {
   it("returns { commands: [], source: 'none' } when no gate, gates, or discovered_gates", () => {
@@ -288,8 +299,8 @@ describe("normalizeGates — tier 1: explicit gates array", () => {
 
     expect(result.source).toBe("gates");
     expect(result.commands).toHaveLength(2);
-    expect(result.commands[0]).toEqual({ name: "npm test", command: "npm test" });
-    expect(result.commands[1]).toEqual({ name: "npx tsc --noEmit", command: "npx tsc --noEmit" });
+    expect(result.commands[0]).toEqual({ command: "npm test", name: "npm test" });
+    expect(result.commands[1]).toEqual({ command: "npx tsc --noEmit", name: "npx tsc --noEmit" });
   });
 
   it("returns single gates array entry as direct command", () => {
@@ -298,7 +309,7 @@ describe("normalizeGates — tier 1: explicit gates array", () => {
     const result = normalizeGates(stateDef, flow, "/project");
 
     expect(result.source).toBe("gates");
-    expect(result.commands).toEqual([{ name: "echo hello", command: "echo hello" }]);
+    expect(result.commands).toEqual([{ command: "echo hello", name: "echo hello" }]);
   });
 
   it("prefers explicit gates array over discovered_gates (tier 1 wins)", () => {
@@ -315,7 +326,7 @@ describe("normalizeGates — tier 1: explicit gates array", () => {
   it("prefers explicit gates array over legacy gate field (tier 1 wins even if gate is also set)", () => {
     const flow = makeFlow({ lint: "npm run lint" });
     // Both gates array and gate field present — gates array wins (tier 1)
-    const stateDef = { type: "single" as const, gates: ["npm test"], gate: "lint" };
+    const stateDef = { gate: "lint", gates: ["npm test"], type: "single" as const };
     const result = normalizeGates(stateDef, flow, "/project");
 
     expect(result.source).toBe("gates");
@@ -331,7 +342,7 @@ describe("normalizeGates — tier 2: legacy gate field", () => {
 
     expect(result.source).toBe("gate");
     expect(result.commands).toHaveLength(1);
-    expect(result.commands[0]).toEqual({ name: "lint", command: "npm run lint" });
+    expect(result.commands[0]).toEqual({ command: "npm run lint", name: "lint" });
   });
 
   it("returns empty command string for unresolvable legacy gate (fails closed downstream)", () => {
@@ -341,7 +352,7 @@ describe("normalizeGates — tier 2: legacy gate field", () => {
 
     expect(result.source).toBe("gate");
     expect(result.commands).toHaveLength(1);
-    expect(result.commands[0]).toEqual({ name: "unknown-gate", command: "" });
+    expect(result.commands[0]).toEqual({ command: "", name: "unknown-gate" });
   });
 
   it("prefers legacy gate over discovered_gates (tier 2 wins)", () => {
@@ -411,9 +422,7 @@ describe("normalizeGates — tier 3: discovered gates are stored as metadata but
   });
 });
 
-// ---------------------------------------------------------------------------
 // runGates — multi-gate execution
-// ---------------------------------------------------------------------------
 
 describe("runGates — empty when no gates declared", () => {
   it("returns empty array when stateDef has no gate, gates, or discovered_gates", () => {
@@ -439,7 +448,7 @@ describe("runGates — multi-gate execution from explicit gates array", () => {
     let callCount = 0;
     runShellImpl = (_cmd) => {
       callCount++;
-      return { ok: true, stdout: `output-${callCount}`, stderr: "", exitCode: 0, timedOut: false };
+      return { exitCode: 0, ok: true, stderr: "", stdout: `output-${callCount}`, timedOut: false };
     };
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["echo hello", "echo world"] });
@@ -452,7 +461,7 @@ describe("runGates — multi-gate execution from explicit gates array", () => {
   });
 
   it("executes direct shell commands from gates array — echo exits 0", () => {
-    runShellImpl = () => ({ ok: true, stdout: "hello", stderr: "", exitCode: 0, timedOut: false });
+    runShellImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "hello", timedOut: false });
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["echo hello"] });
     const results = runGates(stateDef, flow, "/project");
@@ -464,7 +473,7 @@ describe("runGates — multi-gate execution from explicit gates array", () => {
   });
 
   it("executes direct shell commands from gates array — false exits 1", () => {
-    runShellImpl = () => ({ ok: false, stdout: "", stderr: "", exitCode: 1, timedOut: false });
+    runShellImpl = () => ({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: false });
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["false"] });
     const results = runGates(stateDef, flow, "/project");
@@ -478,7 +487,13 @@ describe("runGates — multi-gate execution from explicit gates array", () => {
     let callCount = 0;
     runShellImpl = () => {
       callCount++;
-      return { ok: callCount === 1, stdout: "", stderr: "", exitCode: callCount === 1 ? 0 : 1, timedOut: false };
+      return {
+        exitCode: callCount === 1 ? 0 : 1,
+        ok: callCount === 1,
+        stderr: "",
+        stdout: "",
+        timedOut: false,
+      };
     };
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["echo ok", "false"] });
@@ -536,7 +551,7 @@ describe("runGates — discovered gates are NOT executed (stored as metadata onl
   });
 
   it("still executes explicit gates even when discovered gates are also present", () => {
-    runShellImpl = () => ({ ok: true, stdout: "ok", stderr: "", exitCode: 0, timedOut: false });
+    runShellImpl = () => ({ exitCode: 0, ok: true, stderr: "", stdout: "ok", timedOut: false });
     const flow = makeFlow();
     const stateDef = makeStateDef({ gates: ["npm test"] });
     const boardState = makeBoardState([{ command: "pytest", source: "tester" }]);

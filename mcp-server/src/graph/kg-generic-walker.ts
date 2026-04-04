@@ -17,10 +17,6 @@ import type { Node, Tree } from "web-tree-sitter";
 import type { LanguageConfig, SyntaxNode, WalkerContext } from "./kg-language-configs.ts";
 import type { AdapterResult, EdgeType, EntityKind, IntraFileEdge } from "./kg-types.ts";
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /**
  * Walk a parsed syntax tree and extract entities, intra-file edges, and
  * import specifiers according to the given LanguageConfig.
@@ -30,18 +26,22 @@ import type { AdapterResult, EdgeType, EntityKind, IntraFileEdge } from "./kg-ty
  * @param config   - Language configuration with node-kind maps and optional hooks
  * @returns        AdapterResult with entities, intraFileEdges, and importSpecifiers
  */
-export function walkTree(tree: Tree | null, filePath: string, config: LanguageConfig): AdapterResult {
+export function walkTree(
+  tree: Tree | null,
+  filePath: string,
+  config: LanguageConfig,
+): AdapterResult {
   // Guard against null tree (web-tree-sitter parse() can return null on failure)
   if (!tree) {
-    return { entities: [], intraFileEdges: [], importSpecifiers: [] };
+    return { entities: [], importSpecifiers: [], intraFileEdges: [] };
   }
 
   const ctx: WalkerContext = {
-    filePath,
-    entities: [],
-    intraEdges: [],
-    importSpecifiers: [],
     classStack: [],
+    entities: [],
+    filePath,
+    importSpecifiers: [],
+    intraEdges: [],
   };
 
   const root = tree.rootNode;
@@ -51,10 +51,10 @@ export function walkTree(tree: Tree | null, filePath: string, config: LanguageCo
 
   // Build file → entity "contains" edges
   const containsEdges: IntraFileEdge[] = ctx.entities.map((e) => ({
+    confidence: 1.0,
+    edge_type: "contains" as const,
     source_qualified: filePath,
     target_qualified: e.qualified_name,
-    edge_type: "contains" as const,
-    confidence: 1.0,
   }));
 
   // Cast from the looser WalkerContext string types to the strict AdapterResult types.
@@ -65,6 +65,7 @@ export function walkTree(tree: Tree | null, filePath: string, config: LanguageCo
       ...e,
       kind: e.kind as EntityKind,
     })),
+    importSpecifiers: ctx.importSpecifiers,
     intraFileEdges: [
       ...containsEdges,
       ...ctx.intraEdges.map((edge) => ({
@@ -72,14 +73,12 @@ export function walkTree(tree: Tree | null, filePath: string, config: LanguageCo
         edge_type: edge.edge_type as EdgeType,
       })),
     ],
-    importSpecifiers: ctx.importSpecifiers,
   };
 }
 
-// ---------------------------------------------------------------------------
 // Core recursive visitor
-// ---------------------------------------------------------------------------
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: tree-sitter node visitor must dispatch on many node types in one place
 function visitNode(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
   const { nodeKinds, hooks } = config;
   const kind = node.type;
@@ -149,9 +148,7 @@ function visitNode(node: Node, ctx: WalkerContext, config: LanguageConfig): void
   }
 }
 
-// ---------------------------------------------------------------------------
 // Entity extraction helpers
-// ---------------------------------------------------------------------------
 
 function extractFunctionEntity(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
   const { hooks } = config;
@@ -173,23 +170,52 @@ function extractFunctionEntity(node: Node, ctx: WalkerContext, config: LanguageC
   const qn = `${ctx.filePath}::${name}`;
 
   ctx.entities.push({
+    is_default_export: isDefault,
+    is_exported: exported,
+    kind: "function",
+    line_end: node.endPosition.row + 1,
+    line_start: node.startPosition.row + 1,
+    metadata: JSON.stringify({ async: isAsync, generator: isGenerator }),
     name,
     qualified_name: qn,
-    kind: "function",
-    line_start: node.startPosition.row + 1,
-    line_end: node.endPosition.row + 1,
-    is_exported: exported,
-    is_default_export: isDefault,
     signature: node.childForFieldName("parameters")?.text ?? null,
-    metadata: JSON.stringify({ async: isAsync, generator: isGenerator }),
   });
 
   // Extract calls from function body
   extractCalls(node, qn, ctx, config);
 }
 
+/** Visit all named children of a body node, or the body itself if it's not a class body type. */
+function visitBodyNode(bodyNode: Node, ctx: WalkerContext, config: LanguageConfig): void {
+  if (config.nodeKinds.classBody.includes(bodyNode.type)) {
+    for (const child of bodyNode.namedChildren) {
+      visitNode(child, ctx, config);
+    }
+  } else {
+    visitNode(bodyNode, ctx, config);
+  }
+}
+
+/** Walk a class body node, visiting its children. */
+function walkClassBody(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
+  const bodyNode = node.childForFieldName("body");
+  if (bodyNode) {
+    visitBodyNode(bodyNode, ctx, config);
+    return;
+  }
+
+  for (const child of node.children) {
+    if (config.nodeKinds.classBody.includes(child.type)) {
+      for (const bodyChild of child.namedChildren) {
+        visitNode(bodyChild, ctx, config);
+      }
+      break;
+    }
+  }
+}
+
 function extractClassEntity(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
-  const { nodeKinds, hooks } = config;
+  const { hooks } = config;
   const name = hooks?.getEntityName
     ? hooks.getEntityName(node as unknown as SyntaxNode)
     : (node.childForFieldName("name")?.text ?? null);
@@ -200,48 +226,24 @@ function extractClassEntity(node: Node, ctx: WalkerContext, config: LanguageConf
     ? hooks.isExported(node as unknown as SyntaxNode)
     : defaultIsExported(node, config);
 
-  const isAbstract = node.type.includes("abstract");
   const qn = `${ctx.filePath}::${name}`;
 
   ctx.entities.push({
+    is_default_export: defaultIsDefaultExport(node),
+    is_exported: exported,
+    kind: "class",
+    line_end: node.endPosition.row + 1,
+    line_start: node.startPosition.row + 1,
+    metadata: JSON.stringify({ abstract: node.type.includes("abstract") }),
     name,
     qualified_name: qn,
-    kind: "class",
-    line_start: node.startPosition.row + 1,
-    line_end: node.endPosition.row + 1,
-    is_exported: exported,
-    is_default_export: defaultIsDefaultExport(node),
     signature: null,
-    metadata: JSON.stringify({ abstract: isAbstract }),
   });
 
-  // Extract extends/implements edges from class children and heritage nodes
   extractHeritageEdges(node, qn, ctx);
 
-  // Walk class body for methods
   ctx.classStack.push(name);
-
-  // Find the body: prefer 'body' field, then look for classBody-typed children
-  const bodyNode = node.childForFieldName("body");
-  if (bodyNode) {
-    if (nodeKinds.classBody.includes(bodyNode.type)) {
-      for (const child of bodyNode.namedChildren) {
-        visitNode(child, ctx, config);
-      }
-    } else {
-      visitNode(bodyNode, ctx, config);
-    }
-  } else {
-    for (const child of node.children) {
-      if (nodeKinds.classBody.includes(child.type)) {
-        for (const bodyChild of child.namedChildren) {
-          visitNode(bodyChild, ctx, config);
-        }
-        break;
-      }
-    }
-  }
-
+  walkClassBody(node, ctx, config);
   ctx.classStack.pop();
 }
 
@@ -256,10 +258,10 @@ function pushExtendsEdge(ctx: WalkerContext, classQn: string, clauseNode: Node):
   const superName = (clauseNode.childForFieldName("value") ?? clauseNode.namedChildren[0])?.text;
   if (!superName) return;
   ctx.intraEdges.push({
+    confidence: 0.9,
+    edge_type: "extends",
     source_qualified: classQn,
     target_qualified: `${ctx.filePath}::${superName}`,
-    edge_type: "extends",
-    confidence: 0.9,
   });
 }
 
@@ -268,10 +270,10 @@ function pushImplementsEdges(ctx: WalkerContext, classQn: string, clauseNode: No
   for (const impl of clauseNode.namedChildren) {
     if (!impl.text) continue;
     ctx.intraEdges.push({
+      confidence: 0.9,
+      edge_type: "implements",
       source_qualified: classQn,
       target_qualified: `${ctx.filePath}::${impl.text}`,
-      edge_type: "implements",
-      confidence: 0.9,
     });
   }
 }
@@ -296,10 +298,10 @@ function extractPythonSuperclasses(node: Node, classQn: string, ctx: WalkerConte
   for (const baseNode of superclassesNode.namedChildren) {
     if (baseNode.type === "identifier" || baseNode.type === "attribute") {
       ctx.intraEdges.push({
+        confidence: 0.9,
+        edge_type: "extends",
         source_qualified: classQn,
         target_qualified: `${ctx.filePath}::${baseNode.text}`,
-        edge_type: "extends",
-        confidence: 0.9,
       });
     }
   }
@@ -316,7 +318,9 @@ function extractHeritageEdges(node: Node, classQn: string, ctx: WalkerContext): 
 function hasStaticmethodDecorator(node: Node): boolean {
   const parent = node.parent;
   if (parent?.type !== "decorated_definition") return false;
-  return parent.namedChildren.some((dec) => dec.type === "decorator" && dec.text.includes("staticmethod"));
+  return parent.namedChildren.some(
+    (dec) => dec.type === "decorator" && dec.text.includes("staticmethod"),
+  );
 }
 
 /** Check Java-style modifiers node for visibility. */
@@ -361,23 +365,21 @@ function extractMethodEntity(node: Node, ctx: WalkerContext, config: LanguageCon
   const qn = `${ctx.filePath}::${enclosingClass}.${methodName}`;
 
   ctx.entities.push({
+    is_default_export: false,
+    is_exported: exported,
+    kind: "method",
+    line_end: node.endPosition.row + 1,
+    line_start: node.startPosition.row + 1,
+    metadata: JSON.stringify({ async: isAsync, static: isStatic, visibility }),
     name: methodName,
     qualified_name: qn,
-    kind: "method",
-    line_start: node.startPosition.row + 1,
-    line_end: node.endPosition.row + 1,
-    is_exported: exported,
-    is_default_export: false,
     signature: node.childForFieldName("parameters")?.text ?? null,
-    metadata: JSON.stringify({ static: isStatic, async: isAsync, visibility }),
   });
 
   extractCalls(node, qn, ctx, config);
 }
 
-// ---------------------------------------------------------------------------
 // Variable declaration extraction
-// ---------------------------------------------------------------------------
 
 function extractVariableDecl(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
   const { hooks } = config;
@@ -396,39 +398,40 @@ function extractVariableDecl(node: Node, ctx: WalkerContext, config: LanguageCon
     const varName = nameNode.text;
     const qn = `${ctx.filePath}::${varName}`;
 
-    if (valueNode && (valueNode.type === "arrow_function" || valueNode.type === "function_expression")) {
+    if (
+      valueNode &&
+      (valueNode.type === "arrow_function" || valueNode.type === "function_expression")
+    ) {
       const isAsync = valueNode.children.some((c) => c.type === "async");
       ctx.entities.push({
+        is_default_export: defaultIsDefaultExport(node),
+        is_exported: exported,
+        kind: "function",
+        line_end: node.endPosition.row + 1,
+        line_start: node.startPosition.row + 1,
+        metadata: JSON.stringify({ async: isAsync, generator: false }),
         name: varName,
         qualified_name: qn,
-        kind: "function",
-        line_start: node.startPosition.row + 1,
-        line_end: node.endPosition.row + 1,
-        is_exported: exported,
-        is_default_export: defaultIsDefaultExport(node),
         signature: valueNode.childForFieldName("parameters")?.text ?? null,
-        metadata: JSON.stringify({ async: isAsync, generator: false }),
       });
       extractCalls(valueNode, qn, ctx, config);
     } else if (exported) {
       ctx.entities.push({
+        is_default_export: defaultIsDefaultExport(node),
+        is_exported: true,
+        kind: "variable",
+        line_end: node.endPosition.row + 1,
+        line_start: node.startPosition.row + 1,
+        metadata: JSON.stringify({ const: isConst }),
         name: varName,
         qualified_name: qn,
-        kind: "variable",
-        line_start: node.startPosition.row + 1,
-        line_end: node.endPosition.row + 1,
-        is_exported: true,
-        is_default_export: defaultIsDefaultExport(node),
         signature: null,
-        metadata: JSON.stringify({ const: isConst }),
       });
     }
   }
 }
 
-// ---------------------------------------------------------------------------
 // Export statement extraction
-// ---------------------------------------------------------------------------
 
 function extractExportStatement(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
   // Re-exports: export { foo } from './bar' or export * from './bar'
@@ -436,14 +439,16 @@ function extractExportStatement(node: Node, ctx: WalkerContext, config: Language
   if (sourceNode) {
     const specifier = sourceNode.text.replace(/^['"]|['"]$/g, "");
     const names: string[] = [];
-    const exportClause = node.children.find((c) => c.type === "export_clause" || c.type === "namespace_export");
+    const exportClause = node.children.find(
+      (c) => c.type === "export_clause" || c.type === "namespace_export",
+    );
     if (exportClause) {
       for (const spec of exportClause.namedChildren) {
         const localName = spec.childForFieldName("name") ?? spec.namedChildren[0];
         if (localName) names.push(localName.text);
       }
     }
-    ctx.importSpecifiers.push({ specifier, names });
+    ctx.importSpecifiers.push({ names, specifier });
   }
 
   // Continue walking children to pick up exported declarations
@@ -452,11 +457,14 @@ function extractExportStatement(node: Node, ctx: WalkerContext, config: Language
   }
 }
 
-// ---------------------------------------------------------------------------
 // Call extraction
-// ---------------------------------------------------------------------------
 
-function extractCalls(node: Node, callerQn: string, ctx: WalkerContext, config: LanguageConfig): void {
+function extractCalls(
+  node: Node,
+  callerQn: string,
+  ctx: WalkerContext,
+  config: LanguageConfig,
+): void {
   const { nodeKinds, hooks } = config;
 
   if (nodeKinds.callExpression.includes(node.type)) {
@@ -470,10 +478,10 @@ function extractCalls(node: Node, callerQn: string, ctx: WalkerContext, config: 
 
     if (calleeName) {
       ctx.intraEdges.push({
+        confidence: 0.8,
+        edge_type: "calls",
         source_qualified: callerQn,
         target_qualified: `${ctx.filePath}::${calleeName}`,
-        edge_type: "calls",
-        confidence: 0.8,
       });
     }
   }
@@ -489,52 +497,48 @@ function extractCalls(node: Node, callerQn: string, ctx: WalkerContext, config: 
  * Python call (function field), Java method_invocation (name field),
  * and Bash command (name field / first command_name child).
  */
-function extractCalleeName(node: Node): string | null {
-  // TypeScript/JS: call_expression has 'function' field
-  const fnField = node.childForFieldName("function");
-  if (fnField) {
-    if (fnField.type === "identifier") return fnField.text;
-    if (fnField.type === "member_expression" || fnField.type === "optional_chain") {
-      const object = fnField.childForFieldName("object");
-      const property = fnField.childForFieldName("property");
-      if (object && property) return `${object.text}.${property.text}`;
-      return fnField.text.slice(0, 120);
-    }
-    // Python: attribute access (obj.method)
-    if (fnField.type === "attribute") {
-      const attr = fnField.childForFieldName("attribute");
-      return attr ? attr.text : fnField.text;
-    }
-    if (fnField.type === "identifier") return fnField.text;
-    return null;
+/** Extract callee name from a 'function' field node (TS/JS/Python). */
+function calleeFromFunctionField(fnField: Node): string | null {
+  if (fnField.type === "identifier") return fnField.text;
+  if (fnField.type === "member_expression" || fnField.type === "optional_chain") {
+    const object = fnField.childForFieldName("object");
+    const property = fnField.childForFieldName("property");
+    if (object && property) return `${object.text}.${property.text}`;
+    return fnField.text.slice(0, 120);
   }
+  if (fnField.type === "attribute") {
+    const attr = fnField.childForFieldName("attribute");
+    return attr ? attr.text : fnField.text;
+  }
+  return null;
+}
+
+function extractCalleeName(node: Node): string | null {
+  const fnField = node.childForFieldName("function");
+  if (fnField) return calleeFromFunctionField(fnField);
 
   // Java: method_invocation has 'name' field
   const nameField = node.childForFieldName("name");
   if (nameField) return nameField.text;
 
-  // Bash: command has command_name as first child or 'name' field
+  // Bash: command has command_name as first child
   const firstChild = node.children[0];
   if (firstChild?.type === "command_name") return firstChild.text;
 
   return null;
 }
 
-// ---------------------------------------------------------------------------
 // Default import extraction (fallback when no hook provided)
-// ---------------------------------------------------------------------------
 
 function extractDefaultImport(node: Node, ctx: WalkerContext): void {
   const sourceNode = node.childForFieldName("source");
   if (sourceNode) {
     const specifier = sourceNode.text.replace(/^['"]|['"]$/g, "");
-    ctx.importSpecifiers.push({ specifier, names: [] });
+    ctx.importSpecifiers.push({ names: [], specifier });
   }
 }
 
-// ---------------------------------------------------------------------------
 // Export / isExported helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Default export detection.

@@ -9,19 +9,19 @@ import { toPosix } from "../utils/paths.ts";
 
 export type MdNodeKind = string; // e.g. "flow", "agent", "principle" — derived from directory
 
-export interface MdNameMaps {
+export type MdNameMaps = {
   /** frontmatter `id:` or `name:` → file path */
   byId: Map<string, string>;
   /** filename stem (without .md) → file path */
   byStem: Map<string, string>;
-}
+};
 
-export interface MdKindRule {
+export type MdKindRule = {
   /** Directory prefix to match (e.g. "agents/") */
   prefix: string;
   /** Kind label assigned to matching files */
   kind: string;
-}
+};
 
 // ── Defaults ──
 
@@ -33,19 +33,22 @@ function isExcludedDoc(filePath: string): boolean {
 
 /** Default kind rules — can be overridden via config in the future. */
 const DEFAULT_KIND_RULES: MdKindRule[] = [
-  { prefix: "flows/fragments/", kind: "fragment" },
-  { prefix: "flows/", kind: "flow" },
-  { prefix: "agents/", kind: "agent" },
-  { prefix: "templates/", kind: "template" },
-  { prefix: "principles/", kind: "principle" },
-  { prefix: ".canon/principles/", kind: "principle" },
-  { prefix: "skills/", kind: "skill" },
-  { prefix: "commands/", kind: "command" },
+  { kind: "fragment", prefix: "flows/fragments/" },
+  { kind: "flow", prefix: "flows/" },
+  { kind: "agent", prefix: "agents/" },
+  { kind: "template", prefix: "templates/" },
+  { kind: "principle", prefix: "principles/" },
+  { kind: "principle", prefix: ".canon/principles/" },
+  { kind: "skill", prefix: "skills/" },
+  { kind: "command", prefix: "commands/" },
 ];
 
 // ── Node classification ──
 
-export function classifyMdNode(filePath: string, kindRules: MdKindRule[] = DEFAULT_KIND_RULES): string | undefined {
+export function classifyMdNode(
+  filePath: string,
+  kindRules: MdKindRule[] = DEFAULT_KIND_RULES,
+): string | undefined {
   if (!filePath.endsWith(".md")) return undefined;
   if (isExcludedDoc(filePath)) return undefined;
   const posix = toPosix(filePath);
@@ -102,25 +105,89 @@ function resolveName(name: string, maps: MdNameMaps): string | undefined {
 
 // ── Edge construction ──
 
-function compositionEdge(
-  source: string,
-  target: string,
-  relation: string,
-  confidence: number,
-  evidence: string,
-): GraphEdge {
+type CompositionEdgeOpts = {
+  source: string;
+  target: string;
+  relation: string;
+  confidence: number;
+  evidence: string;
+};
+
+function compositionEdge(opts: CompositionEdgeOpts): GraphEdge {
   return {
-    source,
-    target,
-    type: "composition",
-    relation,
-    confidence,
-    evidence: evidence.slice(0, 140),
+    confidence: opts.confidence,
+    evidence: opts.evidence.slice(0, 140),
     origin: "inferred-llm",
+    relation: opts.relation,
+    source: opts.source,
+    target: opts.target,
+    type: "composition",
   };
 }
 
 // ── Generic extractors ──
+
+type FmEdgeCtx = { edges: GraphEdge[]; filePath: string; maps: MdNameMaps; seen: Set<string> };
+type FmEdgeSpec = { confidence: number; evidence: string; field: string; target: string };
+
+/** Add a deduped edge for a resolved field:value pair. */
+function pushFmEdge(ctx: FmEdgeCtx, spec: FmEdgeSpec): void {
+  const key = `${spec.field}:${spec.target}`;
+  if (spec.target === ctx.filePath || ctx.seen.has(key)) return;
+  ctx.seen.add(key);
+  ctx.edges.push(
+    compositionEdge({
+      confidence: spec.confidence,
+      evidence: spec.evidence,
+      relation: `fm:${spec.field}`,
+      source: ctx.filePath,
+      target: spec.target,
+    }),
+  );
+}
+
+/** Extract single-value frontmatter edges: `key: value` */
+function extractSingleValueEdges(ctx: FmEdgeCtx, frontmatterText: string): void {
+  const singleRe = /^[ \t]*(\w[\w-]*):\s*["']?([a-z][\w-]*)["']?\s*$/gm;
+  let m = singleRe.exec(frontmatterText);
+  while (m !== null) {
+    const [, field, value] = m;
+    const target = resolveName(value, ctx.maps);
+    if (target) pushFmEdge(ctx, { confidence: 0.9, evidence: `${field}: ${value}`, field, target });
+    m = singleRe.exec(frontmatterText);
+  }
+}
+
+/** Extract inline-array frontmatter edges: `key: [val1, val2]` */
+function extractListValueEdges(ctx: FmEdgeCtx, frontmatterText: string): void {
+  const listRe = /^[ \t]*(\w[\w-]*):\s*\[([^\]]+)\]/gm;
+  let m = listRe.exec(frontmatterText);
+  while (m !== null) {
+    const [, field, rawList] = m;
+    const items = rawList
+      .split(",")
+      .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+      .filter(Boolean);
+    for (const item of items) {
+      const target = resolveName(item, ctx.maps);
+      if (target)
+        pushFmEdge(ctx, { confidence: 0.85, evidence: `${field}: [${item}]`, field, target });
+    }
+    m = listRe.exec(frontmatterText);
+  }
+}
+
+/** Extract nested-structure frontmatter edges: `- key: value` */
+function extractNestedValueEdges(ctx: FmEdgeCtx, frontmatterText: string): void {
+  const nestedRe = /^[ \t]*-?\s*(\w[\w-]*):\s*["']?([a-z][\w-]*)["']?\s*$/gm;
+  let m = nestedRe.exec(frontmatterText);
+  while (m !== null) {
+    const [, field, value] = m;
+    const target = resolveName(value, ctx.maps);
+    if (target) pushFmEdge(ctx, { confidence: 0.9, evidence: `${field}: ${value}`, field, target });
+    m = nestedRe.exec(frontmatterText);
+  }
+}
 
 /**
  * Extract edges from frontmatter values.
@@ -134,50 +201,11 @@ function extractFrontmatterEdges(
   maps: MdNameMaps,
   _fileSet: Set<string>,
 ): GraphEdge[] {
-  const edges: GraphEdge[] = [];
-  const seen = new Set<string>();
-
-  // Match `key: value` (single values)
-  const singleRe = /^[ \t]*(\w[\w-]*):\s*["']?([a-z][\w-]*)["']?\s*$/gm;
-  let m: RegExpExecArray | null;
-  while ((m = singleRe.exec(frontmatterText)) !== null) {
-    const [, field, value] = m;
-    const target = resolveName(value, maps);
-    if (target && target !== filePath && !seen.has(`${field}:${target}`)) {
-      seen.add(`${field}:${target}`);
-      edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.9, `${field}: ${value}`));
-    }
-  }
-
-  // Match `key: [val1, val2, ...]` (inline arrays)
-  const listRe = /^[ \t]*(\w[\w-]*):\s*\[([^\]]+)\]/gm;
-  while ((m = listRe.exec(frontmatterText)) !== null) {
-    const [, field, rawList] = m;
-    const items = rawList
-      .split(",")
-      .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-      .filter(Boolean);
-    for (const item of items) {
-      const target = resolveName(item, maps);
-      if (target && target !== filePath && !seen.has(`${field}:${target}`)) {
-        seen.add(`${field}:${target}`);
-        edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.85, `${field}: [${item}]`));
-      }
-    }
-  }
-
-  // Match `- key: value` patterns inside nested structures (e.g., `- fragment: name`)
-  const nestedRe = /^[ \t]*-?\s*(\w[\w-]*):\s*["']?([a-z][\w-]*)["']?\s*$/gm;
-  while ((m = nestedRe.exec(frontmatterText)) !== null) {
-    const [, field, value] = m;
-    const target = resolveName(value, maps);
-    if (target && target !== filePath && !seen.has(`${field}:${target}`)) {
-      seen.add(`${field}:${target}`);
-      edges.push(compositionEdge(filePath, target, `fm:${field}`, 0.9, `${field}: ${value}`));
-    }
-  }
-
-  return edges;
+  const ctx: FmEdgeCtx = { edges: [], filePath, maps, seen: new Set<string>() };
+  extractSingleValueEdges(ctx, frontmatterText);
+  extractListValueEdges(ctx, frontmatterText);
+  extractNestedValueEdges(ctx, frontmatterText);
+  return ctx.edges;
 }
 
 /**
@@ -189,15 +217,25 @@ function extractBacktickEdges(filePath: string, body: string, maps: MdNameMaps):
   const seen = new Set<string>();
 
   const backtickRe = /`([a-z][\w-]*)`/g;
-  let m: RegExpExecArray | null;
-  while ((m = backtickRe.exec(body)) !== null) {
+  let m = backtickRe.exec(body);
+  while (m !== null) {
     const id = m[1];
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const target = resolveName(id, maps);
-    if (target && target !== filePath) {
-      edges.push(compositionEdge(filePath, target, "ref:id", 0.8, `\`${id}\``));
+    if (!seen.has(id)) {
+      seen.add(id);
+      const target = resolveName(id, maps);
+      if (target && target !== filePath) {
+        edges.push(
+          compositionEdge({
+            confidence: 0.8,
+            evidence: `\`${id}\``,
+            relation: "ref:id",
+            source: filePath,
+            target,
+          }),
+        );
+      }
     }
+    m = backtickRe.exec(body);
   }
 
   return edges;
@@ -216,16 +254,26 @@ function extractPathEdges(filePath: string, content: string, fileSet: Set<string
 
   // Match paths ending in .md (with optional ${VAR}/ prefix)
   const pathRe = /(?:\$\{[\w]+\}\/)?([\w][\w./-]*\.md)\b/g;
-  let m: RegExpExecArray | null;
-  while ((m = pathRe.exec(content)) !== null) {
+  let m = pathRe.exec(content);
+  while (m !== null) {
     const refPath = m[1];
-    if (seen.has(refPath)) continue;
-    seen.add(refPath);
+    if (!seen.has(refPath)) {
+      seen.add(refPath);
 
-    const posix = toPosix(refPath);
-    if (fileSet.has(posix) && posix !== filePath) {
-      edges.push(compositionEdge(filePath, posix, "ref:path", 0.7, refPath));
+      const posix = toPosix(refPath);
+      if (fileSet.has(posix) && posix !== filePath) {
+        edges.push(
+          compositionEdge({
+            confidence: 0.7,
+            evidence: refPath,
+            relation: "ref:path",
+            source: filePath,
+            target: posix,
+          }),
+        );
+      }
     }
+    m = pathRe.exec(content);
   }
 
   return edges;
@@ -233,47 +281,66 @@ function extractPathEdges(filePath: string, content: string, fileSet: Set<string
 
 // ── Main inference function ──
 
-export async function inferMdRelations(
-  filePaths: string[],
+/** Extract all edges from a single .md file's content. */
+function extractEdgesFromFile(
+  fp: string,
+  content: string,
   fileSet: Set<string>,
   nameMaps: MdNameMaps,
-  projectDir: string,
-): Promise<GraphEdge[]> {
-  const allEdges: GraphEdge[] = [];
-
-  for (const fp of filePaths) {
-    if (!fp.endsWith(".md") || isExcludedDoc(fp)) continue;
-    if (!classifyMdNode(fp)) continue;
-
-    let content: string;
-    try {
-      content = await readFile(join(projectDir, fp), "utf-8");
-    } catch (err: unknown) {
-      if (isNotFound(err)) continue;
-      throw err;
-    }
-
-    const { body } = parseFrontmatter(content);
-    const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    const frontmatterText = fmMatch ? fmMatch[1] : "";
-
-    // Three generic passes — same for all .md file types
-    if (frontmatterText) {
-      allEdges.push(...extractFrontmatterEdges(fp, frontmatterText, nameMaps, fileSet));
-    }
-    allEdges.push(...extractBacktickEdges(fp, body, nameMaps));
-    allEdges.push(...extractPathEdges(fp, content, fileSet));
+): GraphEdge[] {
+  const { body } = parseFrontmatter(content);
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+  const frontmatterText = fmMatch ? fmMatch[1] : "";
+  const edges: GraphEdge[] = [];
+  if (frontmatterText) {
+    edges.push(...extractFrontmatterEdges(fp, frontmatterText, nameMaps, fileSet));
   }
+  edges.push(...extractBacktickEdges(fp, body, nameMaps));
+  edges.push(...extractPathEdges(fp, content, fileSet));
+  return edges;
+}
 
-  // Deduplicate: keep highest confidence per source|target|relation
+/** Deduplicate edges: keep highest confidence per source|target|relation. */
+function deduplicateEdges(edges: GraphEdge[]): GraphEdge[] {
   const byKey = new Map<string, GraphEdge>();
-  for (const edge of allEdges) {
+  for (const edge of edges) {
     const key = `${edge.source}|${edge.target}|${edge.relation}`;
     const existing = byKey.get(key);
     if (!existing || (edge.confidence || 0) > (existing.confidence || 0)) {
       byKey.set(key, edge);
     }
   }
-
   return Array.from(byKey.values());
+}
+
+export async function inferMdRelations(
+  filePaths: string[],
+  fileSet: Set<string>,
+  nameMaps: MdNameMaps,
+  projectDir: string,
+): Promise<GraphEdge[]> {
+  const activePaths = filePaths.filter(
+    (fp) => fp.endsWith(".md") && !isExcludedDoc(fp) && classifyMdNode(fp),
+  );
+
+  const fileContents = await Promise.all(
+    activePaths.map(async (fp) => {
+      try {
+        const content = await readFile(join(projectDir, fp), "utf-8");
+        return { content, fp };
+      } catch (err: unknown) {
+        if (isNotFound(err)) return null;
+        throw err;
+      }
+    }),
+  );
+
+  const allEdges: GraphEdge[] = [];
+  for (const entry of fileContents) {
+    if (entry) {
+      allEdges.push(...extractEdgesFromFile(entry.fp, entry.content, fileSet, nameMaps));
+    }
+  }
+
+  return deduplicateEdges(allEdges);
 }

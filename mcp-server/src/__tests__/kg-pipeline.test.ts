@@ -19,9 +19,7 @@ import { KgStore } from "../graph/kg-store.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { randomEmbedding } from "./embedding-test-helpers.ts";
 
-// ---------------------------------------------------------------------------
 // Mock EmbeddingService — fast random vectors, no model download
-// ---------------------------------------------------------------------------
 
 let _mockSeed = 0;
 
@@ -42,10 +40,6 @@ vi.mock("../graph/kg-embedding.ts", () => ({
   },
 }));
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeTempProject(): string {
   return mkdtempSync(path.join(tmpdir(), "kg-pipeline-test-"));
 }
@@ -56,10 +50,6 @@ function writeFile(projectDir: string, relPath: string, content: string): void {
   writeFileSync(absPath, content, "utf8");
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("runPipeline", () => {
   let projectDir: string;
 
@@ -68,7 +58,7 @@ describe("runPipeline", () => {
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   test("returns PipelineResult with correct shape", async () => {
@@ -78,11 +68,11 @@ describe("runPipeline", () => {
     const result = await runPipeline(projectDir, { dbPath, incremental: false });
 
     expect(result).toMatchObject({
+      durationMs: expect.any(Number),
+      edgesTotal: expect.any(Number),
+      entitiesTotal: expect.any(Number),
       filesScanned: expect.any(Number),
       filesUpdated: expect.any(Number),
-      entitiesTotal: expect.any(Number),
-      edgesTotal: expect.any(Number),
-      durationMs: expect.any(Number),
     });
     expect(result.filesScanned).toBeGreaterThan(0);
     expect(result.filesUpdated).toBeGreaterThan(0);
@@ -209,9 +199,7 @@ describe("runPipeline", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Embed phase tests
-// ---------------------------------------------------------------------------
 
 describe("runPipeline embed phase", () => {
   let projectDir: string;
@@ -222,7 +210,7 @@ describe("runPipeline embed phase", () => {
   });
 
   afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   test("creates entity vectors for indexed entities after pipeline run", async () => {
@@ -266,7 +254,7 @@ describe("runPipeline embed phase", () => {
     const dbPath = path.join(projectDir, "test.db");
 
     // First run — embeds everything
-    const result1 = await runPipeline(projectDir, { dbPath, incremental: true });
+    const _result1 = await runPipeline(projectDir, { dbPath, incremental: true });
 
     const db1 = new Database(dbPath);
     const vectorStore1 = new KgVectorStore(db1);
@@ -290,11 +278,11 @@ describe("runPipeline embed phase", () => {
 
     // Pipeline should complete successfully regardless
     expect(result).toMatchObject({
+      durationMs: expect.any(Number),
+      edgesTotal: expect.any(Number),
+      entitiesTotal: expect.any(Number),
       filesScanned: expect.any(Number),
       filesUpdated: expect.any(Number),
-      entitiesTotal: expect.any(Number),
-      edgesTotal: expect.any(Number),
-      durationMs: expect.any(Number),
     });
   });
 });
@@ -310,7 +298,7 @@ describe("reindexFile", () => {
 
   afterEach(() => {
     db.close();
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(projectDir, { force: true, recursive: true });
   });
 
   test("indexes a new file and returns changed=true", async () => {

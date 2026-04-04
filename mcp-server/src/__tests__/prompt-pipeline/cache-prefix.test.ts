@@ -7,45 +7,44 @@
  * Tests use in-memory SQLite or temp dirs for isolation.
  */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  columnExists,
   initExecutionDb,
   SCHEMA_VERSION,
-  columnExists,
-  runMigrations,
 } from "../../orchestration/execution-schema.ts";
-import { ExecutionStore, getExecutionStore, clearStoreCache } from "../../orchestration/execution-store.ts";
+import {
+  clearStoreCache,
+  ExecutionStore,
+  getExecutionStore,
+} from "../../orchestration/execution-store.ts";
 
-// ---------------------------------------------------------------------------
 // Mock loadAndResolveFlow + git adapter so initWorkspaceFlow is testable
-// ---------------------------------------------------------------------------
 
 vi.mock("../../orchestration/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
-    name: "fast-path",
     description: "A fast single-agent pipeline for small tasks.",
     entry: "build",
+    name: "fast-path",
+    spawn_instructions: {},
     states: {
-      build: { type: "single", transitions: { done: "done" } },
+      build: { transitions: { done: "done" }, type: "single" },
       done: { type: "terminal" },
     },
-    spawn_instructions: {},
   }),
 }));
 
 vi.mock("../../adapters/git-adapter.ts", () => ({
-  gitStatus: vi.fn().mockReturnValue({ ok: true, stdout: "", stderr: "", exitCode: 0, timedOut: false }),
+  gitStatus: vi
+    .fn()
+    .mockReturnValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),
   gitWorktreeAdd: vi.fn().mockReturnValue({ ok: false }),
 }));
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -118,14 +117,12 @@ function createV3Db(dbPath: string): Database.Database {
 afterEach(() => {
   clearStoreCache();
   for (const dir of tmpDirs) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
 
-// ---------------------------------------------------------------------------
 // 1. Schema migration v4 adds cache_prefix column
-// ---------------------------------------------------------------------------
 
 describe("schema migration v4 — cache_prefix column", () => {
   it("SCHEMA_VERSION is '8' (v4 adds cache_prefix, v5 adds transcript_path, v6 adds agent session columns, v7 adds worktree columns, v8 adds jobs tables)", () => {
@@ -140,7 +137,9 @@ describe("schema migration v4 — cache_prefix column", () => {
 
   it("fresh DB meta has schema_version '8'", () => {
     const db = initExecutionDb(":memory:");
-    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
     expect(row?.value).toBe("8");
     db.close();
   });
@@ -161,7 +160,9 @@ describe("schema migration v4 — cache_prefix column", () => {
     v3db.close();
 
     const db = initExecutionDb(dbPath);
-    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string }
+      | undefined;
     expect(row?.value).toBe("8");
     db.close();
   });
@@ -171,18 +172,21 @@ describe("schema migration v4 — cache_prefix column", () => {
     const v3db = createV3Db(dbPath);
 
     const now = new Date().toISOString();
-    v3db.prepare(
-      `INSERT INTO execution
+    v3db
+      .prepare(
+        `INSERT INTO execution
         (id, flow, task, entry, current_state, base_commit, started, last_updated,
          branch, sanitized, created, tier, flow_name, slug)
        VALUES (1, 'fast-path', 'test task', 'build', 'build', 'deadbeef',
-               ?, ?, 'main', 'main', ?, 'small', 'fast-path', 'test-task')`
-    ).run(now, now, now);
+               ?, ?, 'main', 'main', ?, 'small', 'fast-path', 'test-task')`,
+      )
+      .run(now, now, now);
     v3db.close();
 
     const db = initExecutionDb(dbPath);
     const row = db.prepare("SELECT flow, task, cache_prefix FROM execution WHERE id = 1").get() as
-      { flow: string; task: string; cache_prefix: string } | undefined;
+      | { flow: string; task: string; cache_prefix: string }
+      | undefined;
 
     expect(row).toBeDefined();
     expect(row!.flow).toBe("fast-path");
@@ -204,9 +208,7 @@ describe("schema migration v4 — cache_prefix column", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. ExecutionStore — getCachePrefix / setCachePrefix
-// ---------------------------------------------------------------------------
 
 describe("ExecutionStore getCachePrefix / setCachePrefix", () => {
   function makeStoreWithRow(): ExecutionStore {
@@ -215,19 +217,19 @@ describe("ExecutionStore getCachePrefix / setCachePrefix", () => {
 
     const now = new Date().toISOString();
     store.initExecution({
-      flow: "fast-path",
-      task: "test task",
-      entry: "build",
-      current_state: "build",
       base_commit: "abc123",
-      started: now,
-      last_updated: now,
       branch: "main",
-      sanitized: "main",
       created: now,
-      tier: "small",
+      current_state: "build",
+      entry: "build",
+      flow: "fast-path",
       flow_name: "fast-path",
+      last_updated: now,
+      sanitized: "main",
       slug: "test-slug",
+      started: now,
+      task: "test task",
+      tier: "small",
     });
 
     return store;
@@ -240,7 +242,8 @@ describe("ExecutionStore getCachePrefix / setCachePrefix", () => {
 
   it("setCachePrefix stores and getCachePrefix retrieves the prefix text", () => {
     const store = makeStoreWithRow();
-    const prefix = "## Flow: fast-path\n\nA fast path for small tasks.\n\n---\n\n## Workspace\n\n- Task: test task";
+    const prefix =
+      "## Flow: fast-path\n\nA fast path for small tasks.\n\n---\n\n## Workspace\n\n- Task: test task";
     store.setCachePrefix(prefix);
     expect(store.getCachePrefix()).toBe(prefix);
   });
@@ -260,19 +263,17 @@ describe("ExecutionStore getCachePrefix / setCachePrefix", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. initWorkspaceFlow computes and stores cache prefix
-// ---------------------------------------------------------------------------
 
 describe("initWorkspaceFlow — cache prefix computation", () => {
   async function initWs(projectDir: string) {
     const { initWorkspaceFlow } = await import("../../tools/init-workspace.ts");
     return initWorkspaceFlow(
       {
+        base_commit: "abc123",
+        branch: "main",
         flow_name: "fast-path",
         task: "fix the bug",
-        branch: "main",
-        base_commit: "abc123",
         tier: "small" as const,
       },
       projectDir,
@@ -352,6 +353,6 @@ describe("initWorkspaceFlow — cache prefix computation", () => {
     const prefix = store.getCachePrefix();
 
     expect(prefix.length).toBeGreaterThan(20);
-    expect(prefix).toContain("---");  // separator between parts
+    expect(prefix).toContain("---"); // separator between parts
   });
 });

@@ -4,16 +4,14 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
-import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
+import { KgVectorStore } from "../graph/kg-vector-store.ts";
 import { inferLanguageFromExtension, storeSummaries } from "../tools/store-summaries.ts";
 import { randomEmbedding } from "./embedding-test-helpers.ts";
 
-// ---------------------------------------------------------------------------
 // Mock EmbeddingService — fast random vectors, no model download
 // This is applied to all tests in this file so that storeSummaries never
 // tries to download a real embedding model during the DB write path.
-// ---------------------------------------------------------------------------
 
 let _mockSeed = 0;
 
@@ -44,7 +42,7 @@ describe("storeSummaries", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("creates DB and writes summary to DB when KG DB does not exist", async () => {
@@ -73,7 +71,10 @@ describe("storeSummaries", () => {
 
   it("does not throw when KG DB does not exist", async () => {
     await expect(
-      storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] }, tmpDir),
+      storeSummaries(
+        { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
+        tmpDir,
+      ),
     ).resolves.not.toThrow();
   });
 
@@ -83,12 +84,12 @@ describe("storeSummaries", () => {
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
     const fileRow: Omit<FileRow, "file_id"> = {
-      path: "src/api/handler.ts",
-      mtime_ms: Date.now(),
       content_hash: "abc123",
       language: "typescript",
-      layer: "api",
       last_indexed_at: Date.now(),
+      layer: "api",
+      mtime_ms: Date.now(),
+      path: "src/api/handler.ts",
     };
     store.upsertFile(fileRow);
     db.close();
@@ -142,7 +143,10 @@ describe("storeSummaries", () => {
 
     // Now that DB is the sole write path, a corrupt DB causes rejection
     await expect(
-      storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] }, tmpDir),
+      storeSummaries(
+        { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
+        tmpDir,
+      ),
     ).rejects.toThrow();
   });
 
@@ -195,9 +199,7 @@ describe("storeSummaries", () => {
     db.close();
   });
 
-  // -------------------------------------------------------------------------
   // Embedding trigger tests
-  // -------------------------------------------------------------------------
 
   describe("embedding trigger (best-effort)", () => {
     it("writes a summary_vectors row after storeSummaries when file is in KG", async () => {
@@ -206,12 +208,12 @@ describe("storeSummaries", () => {
       const store = new KgStore(db);
 
       store.upsertFile({
-        path: "src/api/handler.ts",
-        mtime_ms: Date.now(),
         content_hash: "abc123",
         language: "typescript",
-        layer: "api",
         last_indexed_at: Date.now(),
+        layer: "api",
+        mtime_ms: Date.now(),
+        path: "src/api/handler.ts",
       });
       db.close();
 
@@ -231,7 +233,9 @@ describe("storeSummaries", () => {
       // Check summary_vector_meta has a row for this summary
       const metaRow = db2
         .prepare("SELECT * FROM summary_vector_meta WHERE summary_id = ?")
-        .get(summaryRow!.summary_id!) as { summary_id: number; text_hash: string; model_id: string } | undefined;
+        .get(summaryRow!.summary_id!) as
+        | { summary_id: number; text_hash: string; model_id: string }
+        | undefined;
 
       expect(metaRow).toBeDefined();
       expect(metaRow?.text_hash).toBe(KgVectorStore.textHash("Handles HTTP requests"));
@@ -249,18 +253,21 @@ describe("storeSummaries", () => {
       const db = initDatabase(dbPath);
       const store = new KgStore(db);
       store.upsertFile({
-        path: "src/api/handler.ts",
-        mtime_ms: Date.now(),
         content_hash: "abc123",
         language: "typescript",
-        layer: "api",
         last_indexed_at: Date.now(),
+        layer: "api",
+        mtime_ms: Date.now(),
+        path: "src/api/handler.ts",
       });
       db.close();
 
       // Should NOT throw even though embedding fails
       await expect(
-        storeSummaries({ summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] }, tmpDir),
+        storeSummaries(
+          { summaries: [{ file_path: "src/api/handler.ts", summary: "Handles HTTP requests" }] },
+          tmpDir,
+        ),
       ).resolves.not.toThrow();
 
       // Summary should still be in DB

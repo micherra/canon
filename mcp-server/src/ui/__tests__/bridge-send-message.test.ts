@@ -41,8 +41,8 @@ class MockApp {
 vi.mock("@modelcontextprotocol/ext-apps", () => ({
   App: MockApp,
   applyDocumentTheme: vi.fn(),
-  applyHostStyleVariables: vi.fn(),
   applyHostFonts: vi.fn(),
+  applyHostStyleVariables: vi.fn(),
 }));
 
 // Import bridge after mocking
@@ -67,8 +67,8 @@ describe("bridge.sendMessage()", () => {
 
     expect(mockSendMessage).toHaveBeenCalledOnce();
     expect(mockSendMessage).toHaveBeenCalledWith({
+      content: [{ text: "Show me the blast radius", type: "text" }],
       role: "user",
-      content: [{ type: "text", text: "Show me the blast radius" }],
     });
   });
 
@@ -79,8 +79,8 @@ describe("bridge.sendMessage()", () => {
     await bridge.sendMessage(text);
 
     expect(mockSendMessage).toHaveBeenCalledWith({
+      content: [{ text, type: "text" }],
       role: "user",
-      content: [{ type: "text", text }],
     });
   });
 

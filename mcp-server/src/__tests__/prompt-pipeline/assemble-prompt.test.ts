@@ -15,18 +15,16 @@
  * - Stage 3 integration: state with inject_messages produces prompt with message content
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
 // Hoist mocks before module imports
-// ---------------------------------------------------------------------------
 
 const mockStore = {
-  getBoard: vi.fn(),
-  getProgress: vi.fn().mockReturnValue(""),
   appendProgress: vi.fn(),
-  getExecution: vi.fn(),
+  getBoard: vi.fn(),
   getCachePrefix: vi.fn().mockReturnValue(""),
+  getExecution: vi.fn(),
+  getProgress: vi.fn().mockReturnValue(""),
 };
 
 vi.mock("../../orchestration/execution-store.ts", () => ({
@@ -39,20 +37,20 @@ vi.mock("../../orchestration/skip-when.ts", () => ({
 
 vi.mock("../../orchestration/inject-context.ts", () => ({
   resolveContextInjections: vi.fn().mockResolvedValue({
+    hitl: undefined,
     variables: {},
     warnings: [],
-    hitl: undefined,
   }),
 }));
 
 vi.mock("../../orchestration/wave-briefing.ts", () => ({
-  readWaveGuidance: vi.fn().mockResolvedValue(""),
   assembleWaveBriefing: vi.fn().mockReturnValue(""),
+  readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("../../orchestration/messages.ts", () => ({
-  readChannelAsContext: vi.fn().mockResolvedValue(""),
   buildMessageInstructions: vi.fn().mockReturnValue("msg-instr"),
+  readChannelAsContext: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("../../orchestration/diff-cluster.ts", () => ({
@@ -60,65 +58,60 @@ vi.mock("../../orchestration/diff-cluster.ts", () => ({
 }));
 
 vi.mock("../../orchestration/debate.ts", () => ({
-  inspectDebateProgress: vi.fn().mockResolvedValue({ completed: true, summary: "" }),
   buildDebatePrompt: vi.fn().mockReturnValue(""),
   debateTeamLabel: vi.fn(),
+  inspectDebateProgress: vi.fn().mockResolvedValue({ completed: true, summary: "" }),
 }));
 
 vi.mock("../../orchestration/compete.ts", () => ({
   expandCompetitorPrompts: vi.fn().mockReturnValue([]),
 }));
 
-import { getExecutionStore } from "../../orchestration/execution-store.ts";
-import { evaluateSkipWhen } from "../../orchestration/skip-when.ts";
+import type { Board, ResolvedFlow } from "../../orchestration/flow-schema.ts";
 import { readChannelAsContext } from "../../orchestration/messages.ts";
+import { evaluateSkipWhen } from "../../orchestration/skip-when.ts";
 import { assembleWaveBriefing } from "../../orchestration/wave-briefing.ts";
 import { assemblePrompt } from "../../tools/prompt-pipeline/assemble-prompt.ts";
-import type { Board, ResolvedFlow } from "../../orchestration/flow-schema.ts";
 import type { SpawnPromptInput } from "../../tools/prompt-pipeline/types.ts";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {
-    flow: "test-flow",
-    task: "test task",
-    entry: "implement",
-    current_state: "implement",
     base_commit: "abc1234",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations: {},
     blocked: null,
     concerns: [],
+    current_state: "implement",
+    entry: "implement",
+    flow: "test-flow",
+    iterations: {},
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
     ...overrides,
   } as Board;
 }
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "Test flow",
     entry: "implement",
-    states: {
-      implement: { type: "single", agent: "canon-implementor" },
-      done: { type: "terminal" },
-    },
+    name: "test-flow",
     spawn_instructions: { implement: "Implement the task." },
+    states: {
+      done: { type: "terminal" },
+      implement: { agent: "canon-implementor", type: "single" },
+    },
     ...overrides,
   };
 }
 
 function makeInput(overrides: Partial<SpawnPromptInput> = {}): SpawnPromptInput {
   return {
-    workspace: "/tmp/test-workspace",
-    state_id: "implement",
     flow: makeFlow(),
+    state_id: "implement",
     variables: { CANON_PLUGIN_ROOT: "" },
+    workspace: "/tmp/test-workspace",
     ...overrides,
   };
 }
@@ -134,15 +127,13 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 // Early returns
-// ---------------------------------------------------------------------------
 
 describe("assemblePrompt — terminal state", () => {
   it("returns empty prompts and state_type terminal for terminal states", async () => {
     const input = makeInput({
-      state_id: "done",
       flow: makeFlow(),
+      state_id: "done",
     });
     const result = await assemblePrompt(input);
 
@@ -166,11 +157,11 @@ describe("assemblePrompt — missing state", () => {
 describe("assemblePrompt — missing rawInstruction", () => {
   it("returns skip_reason when no spawn instruction for state", async () => {
     const flow = makeFlow({
-      states: {
-        implement: { type: "single", agent: "canon-implementor" },
-        done: { type: "terminal" },
-      },
       spawn_instructions: {}, // no instruction for implement
+      states: {
+        done: { type: "terminal" },
+        implement: { agent: "canon-implementor", type: "single" },
+      },
     });
     const input = makeInput({ flow });
     const result = await assemblePrompt(input);
@@ -183,14 +174,14 @@ describe("assemblePrompt — missing rawInstruction", () => {
 describe("assemblePrompt — skip_when", () => {
   it("returns skip_reason when skip_when condition is met", async () => {
     vi.mocked(evaluateSkipWhen).mockResolvedValueOnce({
-      skip: true,
       reason: "already done",
+      skip: true,
     });
 
     const flow = makeFlow({
       states: {
-        implement: { type: "single", agent: "canon-implementor", skip_when: "auto_approved" },
         done: { type: "terminal" },
+        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
       },
     });
     const input = makeInput({ flow });
@@ -205,8 +196,8 @@ describe("assemblePrompt — skip_when", () => {
 
     const flow = makeFlow({
       states: {
-        implement: { type: "single", agent: "canon-implementor", skip_when: "auto_approved" },
         done: { type: "terminal" },
+        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
       },
     });
     const input = makeInput({ flow });
@@ -217,9 +208,7 @@ describe("assemblePrompt — skip_when", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Pipeline produces prompts
-// ---------------------------------------------------------------------------
 
 describe("assemblePrompt — simple single state", () => {
   it("produces one prompt for a single-agent state", async () => {
@@ -252,16 +241,16 @@ describe("assemblePrompt — simple single state", () => {
 describe("assemblePrompt — wave state with items", () => {
   it("produces one prompt per item for wave state", async () => {
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput({
-      state_id: "build",
       flow,
       items: ["task-1", "task-2", "task-3"],
+      state_id: "build",
       wave: 1,
     });
     const result = await assemblePrompt(input);
@@ -276,16 +265,16 @@ describe("assemblePrompt — wave state with items", () => {
 
   it("sets isolation=worktree on wave prompt entries", async () => {
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput({
-      state_id: "build",
       flow,
       items: ["task-1"],
+      state_id: "build",
       wave: 1,
     });
     const result = await assemblePrompt(input);
@@ -294,20 +283,18 @@ describe("assemblePrompt — wave state with items", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // _board optimization
-// ---------------------------------------------------------------------------
 
 describe("assemblePrompt — _board optimization", () => {
   it("uses pre-read _board without calling getExecutionStore for board", async () => {
     const board = makeBoard({ current_state: "implement" });
     const flow = makeFlow({
       states: {
-        implement: { type: "single", agent: "canon-implementor", skip_when: "auto_approved" },
         done: { type: "terminal" },
+        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
       },
     });
-    const input = makeInput({ flow, _board: board });
+    const input = makeInput({ _board: board, flow });
 
     vi.mocked(evaluateSkipWhen).mockResolvedValueOnce({ skip: false });
 
@@ -323,8 +310,8 @@ describe("assemblePrompt — _board optimization", () => {
 
     const flow = makeFlow({
       states: {
-        implement: { type: "single", agent: "canon-implementor", skip_when: "auto_approved" },
         done: { type: "terminal" },
+        implement: { agent: "canon-implementor", skip_when: "auto_approved", type: "single" },
       },
     });
     const input = makeInput({ flow }); // no _board
@@ -337,9 +324,7 @@ describe("assemblePrompt — _board optimization", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Escaping ownership transfer
-// ---------------------------------------------------------------------------
 
 describe("assemblePrompt — consultation output escaping", () => {
   it("escapes raw ${var} in consultation summary exactly once", async () => {
@@ -352,20 +337,20 @@ describe("assemblePrompt — consultation output escaping", () => {
     });
 
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput({
-      state_id: "build",
-      flow,
-      items: ["task-1"],
-      wave: 1,
       consultation_outputs: {
         research: { summary: "Use ${pattern} here" },
       },
+      flow,
+      items: ["task-1"],
+      state_id: "build",
+      wave: 1,
     });
 
     const result = await assemblePrompt(input);
@@ -385,21 +370,21 @@ describe("assemblePrompt — consultation output escaping", () => {
     });
 
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput({
-      state_id: "build",
-      flow,
-      items: ["task-1"],
-      wave: 1,
       consultation_outputs: {
         // Pre-escaped by caller — this is WRONG under the new contract
         research: { summary: "Use \\${pattern} here" },
       },
+      flow,
+      items: ["task-1"],
+      state_id: "build",
+      wave: 1,
     });
 
     const result = await assemblePrompt(input);
@@ -410,9 +395,7 @@ describe("assemblePrompt — consultation output escaping", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Validate stage integration
-// ---------------------------------------------------------------------------
 
 describe("assemblePrompt — validate stage (unresolved variables)", () => {
   it("produces ERROR warning for unresolved variables in final prompt", async () => {
@@ -440,20 +423,22 @@ describe("assemblePrompt — validate stage (unresolved variables)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Stage 3 integration: inject_messages
-// ---------------------------------------------------------------------------
 
 describe("assemblePrompt — Stage 3 inject_messages", () => {
   it("injects message content when state has inject_messages: true and channel has content", async () => {
     vi.mocked(readChannelAsContext).mockResolvedValueOnce("Message from peer: done.");
 
     const flow = makeFlow({
-      states: {
-        implement: { type: "single", agent: "canon-implementor", inject_messages: true } as ResolvedFlow["states"][string],
-        done: { type: "terminal" },
-      },
       spawn_instructions: { implement: "Do the work. Context: ${messages}" },
+      states: {
+        done: { type: "terminal" },
+        implement: {
+          agent: "canon-implementor",
+          inject_messages: true,
+          type: "single",
+        } as ResolvedFlow["states"][string],
+      },
     });
     const input = makeInput({ flow });
 
@@ -478,23 +463,21 @@ describe("assemblePrompt — Stage 3 inject_messages", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // No consultation_outputs — no error
-// ---------------------------------------------------------------------------
 
 describe("assemblePrompt — absent consultation_outputs", () => {
   it("does not throw when consultation_outputs is absent", async () => {
     const flow = makeFlow({
+      spawn_instructions: { build: "Build ${item}." },
       states: {
-        build: { type: "wave", agent: "canon-implementor" },
+        build: { agent: "canon-implementor", type: "wave" },
         done: { type: "terminal" },
       },
-      spawn_instructions: { build: "Build ${item}." },
     });
     const input = makeInput({
-      state_id: "build",
       flow,
       items: ["task-1"],
+      state_id: "build",
       wave: 1,
       // no consultation_outputs
     });

@@ -11,29 +11,25 @@
  *   4. Same directory prefix       → confidence 0.7 (boosted to 0.8 with common substring)
  */
 
-import { toolError, toolOk } from "../utils/tool-result.ts";
 import type { ToolResult } from "../utils/tool-result.ts";
+import { toolError, toolOk } from "../utils/tool-result.ts";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface FailureEntry {
+export type FailureEntry = {
   file: string;
   test_name?: string;
   error_message: string;
   error_type?: string;
-}
+};
 
-export interface FailureCategory {
+export type FailureCategory = {
   category: string;
   description: string;
   confidence: number;
   files: string[];
   entries: FailureEntry[];
-}
+};
 
-export interface CategorizeFailuresInput {
+export type CategorizeFailuresInput = {
   workspace: string;
   failures: FailureEntry[];
   refined_categories?: Array<{
@@ -41,24 +37,16 @@ export interface CategorizeFailuresInput {
     description: string;
     files: string[];
   }>;
-}
+};
 
-export interface CategorizeFailuresResult {
+export type CategorizeFailuresResult = {
   categories: FailureCategory[];
   uncategorized: FailureEntry[];
   needs_refinement: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
+};
 
 const CONFIDENCE_THRESHOLD = 0.8;
 const SUBSTRING_BOOST_LENGTH = 20;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function dirOf(filePath: string): string {
   const lastSlash = filePath.lastIndexOf("/");
@@ -76,32 +64,25 @@ function dirOf(filePath: string): string {
  * at MAX_MSG_LEN characters and the search exits early once the first
  * longest match is found.
  */
+/** Check if a candidate substring is present in all messages. */
+function isSubstringInAll(candidate: string, messages: string[]): boolean {
+  return messages.every((m) => m.includes(candidate));
+}
+
 function longestCommonSubstring(messages: string[]): string | null {
   if (messages.length === 0) return null;
-  // Cap message length to bound cubic worst-case complexity
   const MAX_MSG_LEN = 200;
   const capped = messages.map((m) => m.slice(0, MAX_MSG_LEN));
-  // Safe: we checked messages.length > 0 above
   const first: string = capped[0] as string;
-  let best: string | null = null;
 
-  // Enumerate substrings of the first message (longest first)
   for (let len = first.length; len > SUBSTRING_BOOST_LENGTH; len--) {
     for (let start = 0; start <= first.length - len; start++) {
       const candidate = first.slice(start, start + len);
-      if (capped.every((m) => m.includes(candidate))) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (best === null || candidate.length > (best as string).length) {
-          best = candidate;
-        }
-        // Break inner loop once we find first match at this length
-        break;
-      }
+      if (isSubstringInAll(candidate, capped)) return candidate;
     }
-    if (best !== null) break;
   }
 
-  return best;
+  return null;
 }
 
 function makeCategoryLabel(
@@ -135,134 +116,147 @@ function makeCategoryLabel(
   }
 }
 
-// ---------------------------------------------------------------------------
 // Core implementation
-// ---------------------------------------------------------------------------
+
+/** Group failure indices by a key function, skipping already-assigned indices. */
+function groupByKey(
+  failures: FailureEntry[],
+  assigned: Set<number>,
+  keyFn: (entry: FailureEntry) => string | null,
+): Map<string, number[]> {
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < failures.length; i++) {
+    if (assigned.has(i)) continue;
+    const key = keyFn(failures[i]);
+    if (key === null) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(i);
+  }
+  return groups;
+}
+
+/** Options for assigning groups to categories. */
+type AssignGroupsOptions = {
+  signal: "exact_error" | "error_type" | "same_file" | "directory";
+  confidence: number;
+  categories: FailureCategory[];
+};
+
+/** Assign groups with 2+ entries to categories, marking indices as assigned. */
+function assignGroups(
+  failures: FailureEntry[],
+  groups: Map<string, number[]>,
+  assigned: Set<number>,
+  options: AssignGroupsOptions,
+): void {
+  const { signal, confidence, categories } = options;
+  for (const [_key, indices] of groups) {
+    if (indices.length < 2) continue;
+    const entries = indices.map((i) => failures[i]);
+    const { category, description } = makeCategoryLabel(signal, entries[0]);
+    const files = [...new Set(entries.map((e) => e.file))];
+    categories.push({ category, confidence, description, entries, files });
+    for (const i of indices) assigned.add(i);
+  }
+}
+
+/** Assign directory groups with common substring boost. */
+function assignDirectoryGroups(
+  failures: FailureEntry[],
+  groups: Map<string, number[]>,
+  assigned: Set<number>,
+  categories: FailureCategory[],
+): void {
+  for (const [_dir, indices] of groups) {
+    if (indices.length < 2) continue;
+    const entries = indices.map((i) => failures[i]);
+    const messages = entries.map((e) => e.error_message);
+    const commonSub = longestCommonSubstring(messages);
+    const confidence = commonSub !== null ? 0.8 : 0.7;
+    const { category, description } = makeCategoryLabel("directory", entries[0]);
+    const files = [...new Set(entries.map((e) => e.file))];
+    categories.push({ category, confidence, description, entries, files });
+    for (const i of indices) assigned.add(i);
+  }
+}
+
+/** Assign singleton categories for failures with partial signal (error_type present). */
+function assignSingletons(
+  failures: FailureEntry[],
+  assigned: Set<number>,
+  categories: FailureCategory[],
+): void {
+  for (let i = 0; i < failures.length; i++) {
+    if (assigned.has(i)) continue;
+    const entry = failures[i];
+    if (!entry.error_type) continue;
+    const { category, description } = makeCategoryLabel("error_type", entry);
+    categories.push({
+      category,
+      confidence: 0.6,
+      description,
+      entries: [entry],
+      files: [entry.file],
+    });
+    assigned.add(i);
+  }
+}
 
 export async function categorizeFailures(
   input: CategorizeFailuresInput,
 ): Promise<ToolResult<CategorizeFailuresResult>> {
   const { failures, refined_categories } = input;
 
-  // Validate: failures must be non-empty
   if (failures.length === 0) {
     return toolError("INVALID_INPUT", "failures array must not be empty", false);
   }
 
-  // Step 4: LLM refinement pass-through — when refined_categories is provided, skip pattern matching
   if (refined_categories !== undefined) {
     return applyRefinedCategories(failures, refined_categories);
   }
 
-  // Track which failure entries have been assigned to a group already
   const assigned = new Set<number>();
   const categories: FailureCategory[] = [];
 
   // Step 1: Exact error match (confidence 0.95)
-  const exactErrorGroups = new Map<string, number[]>();
-  for (let i = 0; i < failures.length; i++) {
-    const key = failures[i].error_message;
-    if (!exactErrorGroups.has(key)) exactErrorGroups.set(key, []);
-    exactErrorGroups.get(key)!.push(i);
-  }
-  for (const [_msg, indices] of exactErrorGroups) {
-    if (indices.length >= 2) {
-      // Only group when 2+ failures share the exact error message
-      const entries = indices.map((i) => failures[i]);
-      const { category, description } = makeCategoryLabel("exact_error", entries[0]);
-      const files = [...new Set(entries.map((e) => e.file))];
-      categories.push({ category, description, confidence: 0.95, files, entries });
-      for (const i of indices) assigned.add(i);
-    }
-  }
+  const exactGroups = groupByKey(failures, assigned, (e) => e.error_message);
+  assignGroups(failures, exactGroups, assigned, {
+    categories,
+    confidence: 0.95,
+    signal: "exact_error",
+  });
 
-  // Step 2: Error type grouping (confidence 0.9) — only unassigned failures
-  const errorTypeGroups = new Map<string, number[]>();
-  for (let i = 0; i < failures.length; i++) {
-    if (assigned.has(i)) continue;
-    const t = failures[i].error_type;
-    if (!t) continue;
-    if (!errorTypeGroups.has(t)) errorTypeGroups.set(t, []);
-    errorTypeGroups.get(t)!.push(i);
-  }
-  for (const [_type, indices] of errorTypeGroups) {
-    if (indices.length >= 2) {
-      const entries = indices.map((i) => failures[i]);
-      const { category, description } = makeCategoryLabel("error_type", entries[0]);
-      const files = [...new Set(entries.map((e) => e.file))];
-      categories.push({ category, description, confidence: 0.9, files, entries });
-      for (const i of indices) assigned.add(i);
-    }
-    // Single failure with error_type but no group — leave for next signal
-  }
+  // Step 2: Error type grouping (confidence 0.9)
+  const typeGroups = groupByKey(failures, assigned, (e) => e.error_type ?? null);
+  assignGroups(failures, typeGroups, assigned, {
+    categories,
+    confidence: 0.9,
+    signal: "error_type",
+  });
 
-  // Step 3: Same file grouping (confidence 0.85) — only unassigned failures
-  const fileGroups = new Map<string, number[]>();
-  for (let i = 0; i < failures.length; i++) {
-    if (assigned.has(i)) continue;
-    const f = failures[i].file;
-    if (!fileGroups.has(f)) fileGroups.set(f, []);
-    fileGroups.get(f)!.push(i);
-  }
-  for (const [_file, indices] of fileGroups) {
-    if (indices.length >= 2) {
-      const entries = indices.map((i) => failures[i]);
-      const { category, description } = makeCategoryLabel("same_file", entries[0]);
-      const files = [...new Set(entries.map((e) => e.file))];
-      categories.push({ category, description, confidence: 0.85, files, entries });
-      for (const i of indices) assigned.add(i);
-    }
-  }
+  // Step 3: Same file grouping (confidence 0.85)
+  const fileGroups = groupByKey(failures, assigned, (e) => e.file);
+  assignGroups(failures, fileGroups, assigned, {
+    categories,
+    confidence: 0.85,
+    signal: "same_file",
+  });
 
-  // Step 4: Directory prefix grouping (confidence 0.7) — only unassigned failures
-  const dirGroups = new Map<string, number[]>();
-  for (let i = 0; i < failures.length; i++) {
-    if (assigned.has(i)) continue;
-    const d = dirOf(failures[i].file);
-    if (!dirGroups.has(d)) dirGroups.set(d, []);
-    dirGroups.get(d)!.push(i);
-  }
-  for (const [_dir, indices] of dirGroups) {
-    if (indices.length >= 2) {
-      const entries = indices.map((i) => failures[i]);
-      const messages = entries.map((e) => e.error_message);
-      const commonSub = longestCommonSubstring(messages);
-      const confidence = commonSub !== null ? 0.8 : 0.7;
-      const { category, description } = makeCategoryLabel("directory", entries[0]);
-      const files = [...new Set(entries.map((e) => e.file))];
-      categories.push({ category, description, confidence, files, entries });
-      for (const i of indices) assigned.add(i);
-    }
-  }
+  // Step 4: Directory prefix grouping (confidence 0.7/0.8)
+  const dirGroups = groupByKey(failures, assigned, (e) => dirOf(e.file));
+  assignDirectoryGroups(failures, dirGroups, assigned, categories);
 
-  // Step 5: Singleton groups for failures with partial signal (has error_type but no peer).
-  // Failures with no signal at all are left unassigned and collected as truly uncategorized.
-  for (let i = 0; i < failures.length; i++) {
-    if (assigned.has(i)) continue;
-    const entry = failures[i];
-    // Only create a singleton category when there is some partial signal (error_type present).
-    // Without any signal, the failure is truly uncategorized and should surface for LLM refinement.
-    if (entry.error_type) {
-      const { category, description } = makeCategoryLabel("error_type", entry);
-      categories.push({ category, description, confidence: 0.6, files: [entry.file], entries: [entry] });
-      assigned.add(i);
-    }
-  }
+  // Step 5: Singletons
+  assignSingletons(failures, assigned, categories);
 
-  // Collect uncategorized — failures not assigned to any group (no error_type, no peer signal)
   const uncategorized: FailureEntry[] = failures.filter((_, i) => !assigned.has(i));
+  const needs_refinement =
+    categories.some((c) => c.confidence < CONFIDENCE_THRESHOLD) || uncategorized.length > 1;
 
-  // Evaluate needs_refinement
-  const hasLowConfidenceGroup = categories.some((c) => c.confidence < CONFIDENCE_THRESHOLD);
-  const hasMultipleUncategorized = uncategorized.length > 1;
-  const needs_refinement = hasLowConfidenceGroup || hasMultipleUncategorized;
-
-  return toolOk({ categories, uncategorized, needs_refinement });
+  return toolOk({ categories, needs_refinement, uncategorized });
 }
 
-// ---------------------------------------------------------------------------
 // LLM refinement pass-through
-// ---------------------------------------------------------------------------
 
 function applyRefinedCategories(
   failures: FailureEntry[],
@@ -307,10 +301,10 @@ function applyRefinedCategories(
     const entries = failures.filter((f) => rc.files.includes(f.file));
     return {
       category: rc.category,
-      description: rc.description,
       confidence: 1.0,
-      files: rc.files,
+      description: rc.description,
       entries,
+      files: rc.files,
     };
   });
 
@@ -318,5 +312,5 @@ function applyRefinedCategories(
   const refinedFileSet = new Set(refinedCategories.flatMap((rc) => rc.files));
   const uncategorized = failures.filter((f) => !refinedFileSet.has(f.file));
 
-  return toolOk({ categories, uncategorized, needs_refinement: false });
+  return toolOk({ categories, needs_refinement: false, uncategorized });
 }

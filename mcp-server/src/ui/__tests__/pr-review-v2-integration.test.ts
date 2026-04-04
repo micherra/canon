@@ -21,13 +21,13 @@ import { describe, expect, it, vi } from "vitest";
 
 // ── Types (mirrored from PrReviewPrep for test fixtures) ────────────────────
 
-interface Violation {
+type Violation = {
   principle_id: string;
   severity: "rule" | "strong-opinion" | "convention";
   message?: string;
-}
+};
 
-interface PrFileInfo {
+type PrFileInfo = {
   path: string;
   layer: string;
   status: "added" | "modified" | "deleted" | "renamed";
@@ -42,7 +42,7 @@ interface PrFileInfo {
     layer_centrality: number;
   };
   violations?: Violation[];
-}
+};
 
 // ── Pure computation helpers (extracted from PrReviewPrep logic) ─────────────
 
@@ -89,18 +89,24 @@ function depRowPrompt(filePath: string): string {
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function makeFile(path: string, status: PrFileInfo["status"], overrides: Partial<PrFileInfo> = {}): PrFileInfo {
+function makeFile(
+  path: string,
+  status: PrFileInfo["status"],
+  overrides: Partial<PrFileInfo> = {},
+): PrFileInfo {
   return {
-    path,
-    layer: "tools",
-    status,
     bucket: "low-risk",
+    layer: "tools",
+    path,
     reason: "No issues found",
+    status,
     ...overrides,
   };
 }
 
-const SINGLE_FILE_NO_VIOLATIONS: PrFileInfo[] = [makeFile("src/tools/pr-review-data.ts", "modified")];
+const SINGLE_FILE_NO_VIOLATIONS: PrFileInfo[] = [
+  makeFile("src/tools/pr-review-data.ts", "modified"),
+];
 
 const MIXED_STATUS_FILES: PrFileInfo[] = [
   makeFile("src/tools/added-a.ts", "added"),
@@ -113,12 +119,22 @@ const MIXED_STATUS_FILES: PrFileInfo[] = [
 const FILES_WITH_VIOLATIONS: PrFileInfo[] = [
   makeFile("src/tools/alpha.ts", "modified", {
     violations: [
-      { principle_id: "thin-handlers", severity: "strong-opinion", message: "Too much logic in handler" },
+      {
+        message: "Too much logic in handler",
+        principle_id: "thin-handlers",
+        severity: "strong-opinion",
+      },
       { principle_id: "errors-are-values", severity: "rule" },
     ],
   }),
   makeFile("src/tools/beta.ts", "modified", {
-    violations: [{ principle_id: "no-hidden-side-effects", severity: "convention", message: "Implicit mutation" }],
+    violations: [
+      {
+        message: "Implicit mutation",
+        principle_id: "no-hidden-side-effects",
+        severity: "convention",
+      },
+    ],
   }),
   makeFile("src/tools/gamma.ts", "added"),
 ];
@@ -187,7 +203,11 @@ describe("netNewFiles computation", () => {
   });
 
   it("returns positive number when only added files", () => {
-    const files = [makeFile("src/a.ts", "added"), makeFile("src/b.ts", "added"), makeFile("src/c.ts", "added")];
+    const files = [
+      makeFile("src/a.ts", "added"),
+      makeFile("src/b.ts", "added"),
+      makeFile("src/c.ts", "added"),
+    ];
     expect(computeNetNewFiles(files)).toBe(3);
   });
 
@@ -207,7 +227,11 @@ describe("netNewFiles computation", () => {
   });
 
   it("ignores modified and renamed files", () => {
-    const files = [makeFile("src/a.ts", "added"), makeFile("src/b.ts", "modified"), makeFile("src/c.ts", "renamed")];
+    const files = [
+      makeFile("src/a.ts", "added"),
+      makeFile("src/b.ts", "modified"),
+      makeFile("src/c.ts", "renamed"),
+    ];
     expect(computeNetNewFiles(files)).toBe(1);
   });
 });
@@ -311,12 +335,16 @@ describe("ImpactRow prompt template", () => {
 describe("ViolationCard prompt template", () => {
   it("produces correct prompt with principle and file", () => {
     const result = violationCardPrompt("thin-handlers", "src/api/routes.ts");
-    expect(result).toBe("Explain the thin-handlers violation in src/api/routes.ts and how to fix it");
+    expect(result).toBe(
+      "Explain the thin-handlers violation in src/api/routes.ts and how to fix it",
+    );
   });
 
   it("produces correct prompt for rule severity violation", () => {
     const result = violationCardPrompt("errors-are-values", "src/tools/pr-review-data.ts");
-    expect(result).toBe("Explain the errors-are-values violation in src/tools/pr-review-data.ts and how to fix it");
+    expect(result).toBe(
+      "Explain the errors-are-values violation in src/tools/pr-review-data.ts and how to fix it",
+    );
   });
 
   it("uses exact principle_id in the prompt (no transformation)", () => {
@@ -402,22 +430,34 @@ describe("Acceptance criteria: all sections render for valid responses", () => {
     const HIGH_IMPACT_THRESHOLD = 15;
     const files: PrFileInfo[] = [
       makeFile("src/a.ts", "modified", {
-        priority_score: 20,
         priority_factors: {
           in_degree: 10,
-          violation_count: 0,
           is_changed: true,
           layer: "tools",
           layer_centrality: 0.5,
+          violation_count: 0,
         },
+        priority_score: 20,
       }),
       makeFile("src/b.ts", "modified", {
+        priority_factors: {
+          in_degree: 5,
+          is_changed: true,
+          layer: "tools",
+          layer_centrality: 0.3,
+          violation_count: 0,
+        },
         priority_score: 14,
-        priority_factors: { in_degree: 5, violation_count: 0, is_changed: true, layer: "tools", layer_centrality: 0.3 },
       }),
       makeFile("src/c.ts", "modified", {
+        priority_factors: {
+          in_degree: 7,
+          is_changed: true,
+          layer: "tools",
+          layer_centrality: 0.4,
+          violation_count: 0,
+        },
         priority_score: 15,
-        priority_factors: { in_degree: 7, violation_count: 0, is_changed: true, layer: "tools", layer_centrality: 0.4 },
       }),
       makeFile("src/d.ts", "modified", { priority_score: 5 }),
     ];
@@ -427,22 +467,22 @@ describe("Acceptance criteria: all sections render for valid responses", () => {
 
   it("Section 3 Tab B: violations sorted by severity then in_degree", () => {
     const SEVERITY_ORDER: Record<string, number> = {
+      convention: 2,
       rule: 0,
       "strong-opinion": 1,
-      convention: 2,
     };
 
-    interface FlatViol {
+    type FlatViol = {
       principleId: string;
       severity: string;
       inDegree: number;
-    }
+    };
 
     const violations: FlatViol[] = [
-      { principleId: "v1", severity: "convention", inDegree: 10 },
-      { principleId: "v2", severity: "rule", inDegree: 3 },
-      { principleId: "v3", severity: "strong-opinion", inDegree: 7 },
-      { principleId: "v4", severity: "rule", inDegree: 8 },
+      { inDegree: 10, principleId: "v1", severity: "convention" },
+      { inDegree: 3, principleId: "v2", severity: "rule" },
+      { inDegree: 7, principleId: "v3", severity: "strong-opinion" },
+      { inDegree: 8, principleId: "v4", severity: "rule" },
     ];
 
     const sorted = [...violations].sort((a, b) => {

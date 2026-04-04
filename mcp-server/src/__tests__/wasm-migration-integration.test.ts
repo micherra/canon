@@ -18,19 +18,15 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { getAdapter, getLanguage } from "../graph/kg-adapter-registry.ts";
 import { initParsers, isInitialized } from "../graph/kg-wasm-parser.ts";
 
-// ---------------------------------------------------------------------------
 // One-time WASM initialization for all suites in this file
-// ---------------------------------------------------------------------------
 
 beforeAll(async () => {
   await initParsers();
 });
 
-// ===========================================================================
 // 1. getAdapter and getLanguage coverage for .java
 //    Known Gap declared in wasm-04: "Java adapter parse behavior is not exercised
 //    by the integration tests (no .java fixture files exist in the test suite)"
-// ===========================================================================
 
 describe("Adapter Registry — Java extension coverage", () => {
   test("getAdapter returns a LanguageAdapter for .java", () => {
@@ -52,10 +48,8 @@ describe("Adapter Registry — Java extension coverage", () => {
   });
 });
 
-// ===========================================================================
 // 2. End-to-end Java parsing through adapter registry
 //    Cross-task boundary: kg-adapter-registry → kg-wasm-parser → kg-generic-walker
-// ===========================================================================
 
 describe('End-to-end Java parsing via getAdapter(".java").parse()', () => {
   test("parses a Java class and extracts class entity", () => {
@@ -149,11 +143,9 @@ public class Service {
   });
 });
 
-// ===========================================================================
 // 3. End-to-end Python parsing through adapter registry
 //    Fills gap: section 10 only tests empty file for Python; no entity extraction
 //    tested through registry
-// ===========================================================================
 
 describe('End-to-end Python parsing via getAdapter(".py").parse()', () => {
   test("parses a Python function and extracts function entity", () => {
@@ -207,11 +199,9 @@ describe('End-to-end Python parsing via getAdapter(".py").parse()', () => {
   });
 });
 
-// ===========================================================================
 // 4. End-to-end TypeScript parsing through adapter registry
 //    Verifies the adapter registry → WASM parser → walker cross-task boundary
 //    for TypeScript (primary migration target)
-// ===========================================================================
 
 describe('End-to-end TypeScript parsing via getAdapter(".ts").parse()', () => {
   test("parses exported TypeScript function and extracts entity", () => {
@@ -282,11 +272,9 @@ export class AuthService {
   });
 });
 
-// ===========================================================================
 // 5. Concurrent initParsers() calls
 //    Known Gap declared in wasm-01: "No test for calling initParsers() from two
 //    concurrent async contexts simultaneously"
-// ===========================================================================
 
 describe("initParsers() concurrent call safety", () => {
   test("concurrent initParsers() calls both resolve without error", async () => {
@@ -308,11 +296,9 @@ describe("initParsers() concurrent call safety", () => {
   });
 });
 
-// ===========================================================================
 // 6. AdapterResult shape contract — cross-task interface validation
 //    Verifies that the AdapterResult produced by wasm-04 (registry/makeAdapter)
 //    satisfies the shape expected by consumers (kg-pipeline, kg-store).
-// ===========================================================================
 
 describe("AdapterResult shape contract across task boundaries", () => {
   test("AdapterResult has required top-level fields for TypeScript", () => {

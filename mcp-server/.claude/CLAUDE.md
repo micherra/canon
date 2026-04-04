@@ -153,7 +153,7 @@ src/
 - `generateNarrative(files, layers)` — pure function; returns human-readable summary string
 - `buildFileViolationMap(reviews: ReviewEntry[]): Map<string, PrViolation[]>` — pure function; maps per-file violation lists from drift store reviews; no I/O
 
-**UI clustering** (`ui/lib/clustering.ts`):
+**UI clustering** (`src/ui/lib/clustering.ts`):
 - `ClusterInput` type — `{ path: string; status: "added"|"modified"|"deleted"|"renamed"; layer?: string }`
 - `Cluster` type — `{ id: string; title: string; description: string; type: "new-feature"|"removal"|"prefix-group"|"layer-group"|"other"; files: ClusterInput[] }`
 - `clusterFiles(files: ClusterInput[]): Cluster[]` — pure function; groups files into <= 30-file clusters via 6-step algorithm (new-feature, removal, prefix, layer, merge-small, split-large); no cluster exceeds 30 files
@@ -161,10 +161,10 @@ src/
 - `synthesizeDescription(cluster: Cluster): string` — pure; returns human-readable cluster description
 - `clusterIcon(type: Cluster["type"]): string` — returns emoji icon for cluster type
 
-**UI bridge** (`ui/stores/bridge.ts`):
+**UI bridge** (`src/ui/stores/bridge.ts`):
 - `bridge.sendMessage(text: string): Promise<void>` — sends a user-role message via `app.sendMessage()`; throws if bridge not initialized; added 2026-03-25
 
-**UI components** (`ui/components/`):
+**UI components** (`src/ui/components/`):
 - `NarrativeSummary.svelte` — props: `narrative`, `totalFiles`, `layerCount`, `netNewFiles`, `violationCount`; pure display, no interactivity
 - `ImpactRow.svelte` — props: `file` (PrFileInfo), `maxScore`, `onPrompt`; click fires `"Show me {filePath} and explain what changed"`
 - `ViolationCard.svelte` — props: `file` (path), `violation` (PrViolation), `onPrompt`; severity pill colors from `SEVERITY_COLORS` in `constants.ts`; click fires `"Explain the {principleId} violation in {filePath} and how to fix it"`
@@ -172,7 +172,7 @@ src/
 - `ChangeStoryGrid.svelte` — props: `files` (ClusterInput[]), `onPrompt`; computes `clusterFiles()` via `$derived`; renders 2-col card grid
 - `ImpactTabs.svelte` — props: `files` (PrFileInfo[]), `blastRadius` (BlastRadiusEntry[]), `onPrompt`; three tabs: High Impact (`priority_score >= 15`), Violations (sorted rule > strong-opinion > convention), Critical Deps (files not in diff appearing in blast radius)
 
-**PrReview.svelte** (`ui/PrReview.svelte`) — added 2026-03-25; replaces deleted `PrReviewPrep.svelte` and `PrImpact.svelte`:
+**PrReview.svelte** (`src/ui/PrReview.svelte`) — added 2026-03-25; replaces deleted `PrReviewPrep.svelte` and `PrImpact.svelte`:
 - Unified progressive container; no props — all data from `bridge.waitForToolResult()` (via `useDataLoader`)
 - Prep-only mode (`has_review === false`): run-review banner + header bar + `NarrativeSummary`, `ChangeStoryGrid`, staleness warning (when stale), `ImpactTabs`
 - Review mode (`has_review === true`): `VerdictBanner`, `StatsRow`, then a 2-column grid dashboard — Row 1: `FixBeforeMerge` (left), `ViolationsByPrinciple` + `ComplianceScore` stacked (right); Row 2: `BlastRadiusChart` (left), `LayerChart` + `SubsystemsPanel` stacked (right)
@@ -249,7 +249,7 @@ src/
 - `TestResultsSchema` / `TestResults` — `{ passed: number; failed: number; skipped: number }`
 - `StateDefinitionSchema` now accepts `gates?: string[]` and `postconditions?: PostconditionAssertion[]`
 - `EffectTypeSchema` now includes `"check_postconditions"` — triggers contract checker on the state's postconditions
-- `StateMetricsSchema` fields (`duration_ms`, `spawns`, `model`) are now `.optional()`; 7 optional contract-checker fields: `gate_results`, `postcondition_results`, `violation_count`, `violation_severities`, `test_results`, `files_changed`, `revision_count`; 7 optional agent-performance fields added 2026-04-01 (ADR-003a): `tool_calls`, `orientation_calls`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `turns` — all accepted by `report_result` and `report_and_enter_next_state`; `tool_calls`, `orientation_calls`, `turns` also writable via `record_agent_metrics` tool
+- `StateMetricsSchema` fields (`duration_ms`, `spawns`, `model`) are now `.optional()`; 7 optional contract-checker fields: `gate_results`, `postcondition_results`, `violation_count`, `violation_severities`, `test_results`, `files_changed`, `revision_count`; 7 optional agent-performance fields added 2026-04-01 (ADR-003a): `tool_calls`, `orientation_calls`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `turns` — all accepted by `report_result`; `tool_calls`, `orientation_calls`, `turns` also writable via `record_agent_metrics` tool
 - `BoardStateEntrySchema` new optional fields: `gate_results`, `postcondition_results`, `discovered_gates`, `discovered_postconditions`
 - `StateDefinitionSchema` is now a `z.discriminatedUnion("type", [...])` — updated 2026-04-01 (ADR-004); five per-type schemas exported: `SingleStateSchema`, `WaveStateSchema`, `ParallelStateSchema`, `ParallelPerStateSchema`, `TerminalStateSchema`; corresponding TS types also exported: `SingleState`, `WaveState`, `WavePolicy`, `ParallelState`, `ParallelPerState`, `TerminalState`
 - `WavePolicySchema` / `WavePolicy` — optional config on `WaveStateSchema`; fields: `isolation` (`"worktree"|"branch"|"none"`, default `"worktree"`), `merge_strategy` (`"sequential"|"rebase"|"squash"`, default `"sequential"`), `on_conflict` (`"hitl"|"replan"|"retry-single"`, default `"hitl"`), `gate?`, `coordination?`; defaults applied at parse time; absent `wave_policy` on a wave state uses these defaults
@@ -281,11 +281,9 @@ src/
 | `init_workspace` | Create or resume a workspace; seeds `progress.md` (header `## Progress: {task}`) on new workspace creation; optional `preflight: true` checks git status and stale sessions before creating; when preflight finds issues, returns `workspace: ""` (empty string) and puts the candidate path in `candidate_workspace` — callers must check `preflight_issues` before using `workspace` |
 | `load_flow` | Load and resolve a flow definition; throws (hard-blocking) on validation errors since ADR-004; reachability issues emit non-blocking warnings |
 | `write_plan_index` | Write a structured `INDEX.md` for wave execution to `{workspace}/plans/{slug}/INDEX.md`; validates task IDs (`/^[a-zA-Z0-9_-]+$/`), wave ≥ 1, no duplicates; returns `{ path, task_count, wave_count }` — added 2026-04-01 |
-| `enter_and_prepare_state` | **Combined hot-path tool**: check_convergence + update_board(enter_state) + get_spawn_prompt in one call; returns `{ can_enter, skip_reason, prompts }`; replaces the three-step sequence for the main state loop; briefing injection scans all three breakpoints: `before`, `between`, and `after` |
+| `drive_flow` | Drive the flow state machine for a single state; returns a `SpawnRequest` or `HitlBreakpoint` for the orchestrator to process; replaces the `enter_and_prepare_state` + `get_spawn_prompt` + `check_convergence` three-step sequence |
 | `update_board` | Mutate board state (still used for skip_state, block, unblock, complete_flow, set_wave_progress); at `complete_flow` aggregates gate/postcondition/violation/test metrics from board states into `FlowRunEntry` |
-| `get_spawn_prompt` | Resolve spawn prompt; reads progress from `ExecutionStore.getProgress()` (SQLite) and injects as `${progress}` when `flow.progress` is set; degrades gracefully to empty string if absent; appends metrics instruction footer to every prompt entry (added 2026-04-01 ADR-003a) — footer contains concrete `workspace` and `state_id` values so agents receive a runnable `record_agent_metrics` invocation example. Internally uses a 9-stage prompt assembly pipeline (ADR-006). `consultation_outputs` no longer require pre-escaping — the pipeline handles escaping at read boundaries (stage 6). |
 | `report_result` | Record agent result and evaluate transitions; optional `progress_line` appends to progress.md server-side; accepts quality signal and discovery fields (see Contracts above) |
-| `check_convergence` | Check iteration limits |
 | `post_message` | Post a message to a workspace channel (unified messaging) |
 | `get_messages` | Read messages from a workspace channel; supports `include_events` for wave events |
 | `inject_wave_event` | Inject user events into running wave execution |

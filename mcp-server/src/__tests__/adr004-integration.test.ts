@@ -18,50 +18,50 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import Database from "better-sqlite3";
+import { initExecutionDb, runMigrations } from "../orchestration/execution-schema.ts";
+import { ExecutionStore } from "../orchestration/execution-store.ts";
 import {
+  checkUnresolvedRefs,
   loadAndResolveFlow,
+  RUNTIME_VARIABLES,
+  VIRTUAL_SINKS,
   validateFlow,
   validateSpawnCoverage,
-  checkUnresolvedRefs,
   validateStateIdParams,
-  VIRTUAL_SINKS,
-  RUNTIME_VARIABLES,
 } from "../orchestration/flow-parser.ts";
-import {
-  StateDefinitionSchema,
-  FragmentStateDefinitionSchema,
+import type {
+  FragmentDefinition,
+  FragmentInclude,
+  ResolvedFlow,
 } from "../orchestration/flow-schema.ts";
-import { initExecutionDb, runMigrations, SCHEMA_VERSION } from "../orchestration/execution-schema.ts";
-import { ExecutionStore } from "../orchestration/execution-store.ts";
-import type { ResolvedFlow, FragmentDefinition, FragmentInclude } from "../orchestration/flow-schema.ts";
+import {
+  FragmentStateDefinitionSchema,
+  StateDefinitionSchema,
+} from "../orchestration/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ → project root
 
-// ---------------------------------------------------------------------------
 // Helper
-// ---------------------------------------------------------------------------
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "test",
     entry: "start",
+    name: "test-flow",
     spawn_instructions: { start: "Do the thing" },
     states: {
-      start: { type: "single", agent: "agent-a", transitions: { done: "end" } },
       end: { type: "terminal" },
+      start: { agent: "agent-a", transitions: { done: "end" }, type: "single" },
     },
     ...overrides,
   };
 }
 
-// ---------------------------------------------------------------------------
 // 1. Hard-blocking error message — combined spawn coverage + unresolved refs
-// ---------------------------------------------------------------------------
 
 describe("loadAndResolveFlow — hard-blocking error message content", () => {
   it("throws with the flow name in the error message", async () => {
@@ -78,12 +78,12 @@ describe("loadAndResolveFlow — hard-blocking error message content", () => {
     const flowWithBothErrors: ResolvedFlow = makeFlow({
       spawn_instructions: {}, // missing 'start' → spawn coverage error
       states: {
+        end: { type: "terminal" },
         start: {
-          type: "single",
           agent: "a",
           transitions: { done: "end" },
+          type: "single",
         },
-        end: { type: "terminal" },
       },
     });
 
@@ -98,12 +98,12 @@ describe("loadAndResolveFlow — hard-blocking error message content", () => {
     const flow: ResolvedFlow = makeFlow({
       spawn_instructions: {}, // missing 'start' → spawn error
       states: {
+        end: { type: "terminal" },
         start: {
-          type: "single",
           agent: "a",
           transitions: { done: "${missing_param}" }, // → ref error
+          type: "single",
         },
-        end: { type: "terminal" },
       },
     });
 
@@ -122,9 +122,9 @@ describe("loadAndResolveFlow — hard-blocking error message content", () => {
     const flow: ResolvedFlow = makeFlow({
       spawn_instructions: { start: "Do it" },
       states: {
-        start: { type: "single", agent: "a", transitions: { done: "end" } },
         end: { type: "terminal" },
         orphan: { type: "terminal" }, // unreachable, no spawn needed, warning only
+        start: { agent: "a", transitions: { done: "end" }, type: "single" },
       },
     });
 
@@ -138,9 +138,7 @@ describe("loadAndResolveFlow — hard-blocking error message content", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 2. VIRTUAL_SINKS and RUNTIME_VARIABLES are the correct exported sets
-// ---------------------------------------------------------------------------
 
 describe("VIRTUAL_SINKS export", () => {
   it("contains 'hitl' and 'no_items' as the two virtual sinks", () => {
@@ -160,8 +158,16 @@ describe("RUNTIME_VARIABLES export", () => {
 
   it("contains all item.* sub-variants used in parallel-per spawn instructions", () => {
     // These are the item.* variables from the RUNTIME_VARIABLES set
-    const itemVars = ["item.principle_id", "item.severity", "item.file_path", "item.detail",
-      "item.test_file", "item.test_name", "item.error_message", "item.source_file"];
+    const itemVars = [
+      "item.principle_id",
+      "item.severity",
+      "item.file_path",
+      "item.detail",
+      "item.test_file",
+      "item.test_name",
+      "item.error_message",
+      "item.source_file",
+    ];
     for (const v of itemVars) {
       expect(RUNTIME_VARIABLES.has(v), `Expected RUNTIME_VARIABLES to contain "${v}"`).toBe(true);
     }
@@ -183,9 +189,7 @@ describe("RUNTIME_VARIABLES export", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 3. checkUnresolvedRefs: item.* sub-variants are all accepted
-// ---------------------------------------------------------------------------
 
 describe("checkUnresolvedRefs — item.* variable exhaustive coverage", () => {
   it("accepts item.test_file in spawn instruction", () => {
@@ -240,25 +244,26 @@ describe("checkUnresolvedRefs — item.* variable exhaustive coverage", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 4. validateStateIdParams — edge cases around defaults and hitl virtual sink
-// ---------------------------------------------------------------------------
 
 describe("validateStateIdParams — edge cases", () => {
   it("accepts default: hitl as virtual sink (security-scan on_critical pattern)", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "security-scan",
           params: {
-            on_critical: { type: "state_id", default: "hitl" },
             after_done: { type: "state_id" },
+            on_critical: { default: "hitl", type: "state_id" },
           },
           states: {
             "security-scan": {
-              type: "single",
               agent: "canon:canon-security",
-              transitions: { done: "${after_done}", critical: "${on_critical}" },
+              transitions: { critical: "${on_critical}", done: "${after_done}" },
+              type: "single",
             },
           },
         },
@@ -276,13 +281,16 @@ describe("validateStateIdParams — edge cases", () => {
   });
 
   it("returns error when default state_id is not hitl and not in resolvedStateIds", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "my-frag",
-          params: { after_done: { type: "state_id", default: "nonexistent" } },
+          params: { after_done: { default: "nonexistent", type: "state_id" } },
           states: {
-            "my-state": { type: "single", agent: "a", transitions: { done: "${after_done}" } },
+            "my-state": { agent: "a", transitions: { done: "${after_done}" }, type: "single" },
           },
         },
         spawnInstructions: {},
@@ -296,12 +304,15 @@ describe("validateStateIdParams — edge cases", () => {
   });
 
   it("skips fragments that have no params", () => {
-    const fragments: Array<{ definition: FragmentDefinition; spawnInstructions: Record<string, string> }> = [
+    const fragments: Array<{
+      definition: FragmentDefinition;
+      spawnInstructions: Record<string, string>;
+    }> = [
       {
         definition: {
           fragment: "no-params-frag",
           // no params key
-          states: { s: { type: "single", agent: "a" } },
+          states: { s: { agent: "a", type: "single" } },
         },
         spawnInstructions: {},
       },
@@ -313,15 +324,11 @@ describe("validateStateIdParams — edge cases", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 5. Discriminated union — malformed / hybrid state edge cases
-// ---------------------------------------------------------------------------
 
 describe("StateDefinitionSchema — malformed state edge cases", () => {
   it("rejects an object with no type field", () => {
-    expect(() =>
-      StateDefinitionSchema.parse({ agent: "some-agent" }),
-    ).toThrow();
+    expect(() => StateDefinitionSchema.parse({ agent: "some-agent" })).toThrow();
   });
 
   it("rejects null input", () => {
@@ -334,11 +341,11 @@ describe("StateDefinitionSchema — malformed state edge cases", () => {
 
   it("strips unknown fields from a single state (Zod default strip)", () => {
     const result = StateDefinitionSchema.parse({
-      type: "single",
       agent: "my-agent",
+      type: "single",
       unknown_field: "should be stripped",
     });
-    expect((result as Record<string, unknown>)["unknown_field"]).toBeUndefined();
+    expect((result as Record<string, unknown>).unknown_field).toBeUndefined();
   });
 
   it("rejects numeric type (type must be a string literal)", () => {
@@ -359,22 +366,19 @@ describe("FragmentStateDefinitionSchema — malformed state edge cases", () => {
   it("accepts a string max_iterations placeholder in a wave fragment state", () => {
     // wave fragment states may carry string placeholders
     const result = FragmentStateDefinitionSchema.parse({
-      type: "wave",
       agent: "test",
       max_iterations: "${max_iter}",
+      type: "wave",
     });
     expect(result.type).toBe("wave");
-    expect((result as Record<string, unknown>)["max_iterations"]).toBe("${max_iter}");
+    expect((result as Record<string, unknown>).max_iterations).toBe("${max_iter}");
   });
 
   it("rejects unknown type in fragment schema same as regular schema", () => {
-    expect(() =>
-      FragmentStateDefinitionSchema.parse({ type: "job", agent: "a" }),
-    ).toThrow();
+    expect(() => FragmentStateDefinitionSchema.parse({ agent: "a", type: "job" })).toThrow();
   });
 });
 
-// ---------------------------------------------------------------------------
 // 6. Migration runner — existing execution data is preserved
 //
 // A v1 database has all the standard tables (execution, execution_states, etc.)
@@ -382,7 +386,6 @@ describe("FragmentStateDefinitionSchema — malformed state edge cases", () => {
 // We simulate this by starting with initExecutionDb (which creates a v2 DB),
 // then dropping iteration_results and resetting the version to '1', so we can
 // test the migration path in isolation without duplicating all the DDL.
-// ---------------------------------------------------------------------------
 
 describe("runMigrations — data preservation during upgrade", () => {
   /**
@@ -404,7 +407,9 @@ describe("runMigrations — data preservation during upgrade", () => {
     const db = makeV1DbFromFull();
 
     // Seed an execution_states row to verify it survives the migration
-    db.exec(`INSERT INTO execution_states (state_id, status, entries) VALUES ('implement', 'active', 1)`);
+    db.exec(
+      `INSERT INTO execution_states (state_id, status, entries) VALUES ('implement', 'active', 1)`,
+    );
 
     runMigrations(db);
 
@@ -418,9 +423,9 @@ describe("runMigrations — data preservation during upgrade", () => {
     const db = makeV1DbFromFull();
     runMigrations(db);
 
-    const info = db
-      .prepare(`PRAGMA table_info(iteration_results)`)
-      .all() as Array<{ name: string }>;
+    const info = db.prepare(`PRAGMA table_info(iteration_results)`).all() as Array<{
+      name: string;
+    }>;
     const columns = info.map((c) => c.name);
     expect(columns).toContain("state_id");
     expect(columns).toContain("iteration");
@@ -459,9 +464,9 @@ describe("runMigrations — data preservation during upgrade", () => {
     const db = makeV1DbFromFull();
     runMigrations(db);
 
-    const row = db
-      .prepare(`SELECT value FROM meta WHERE key = 'schema_version'`)
-      .get() as { value: string } | undefined;
+    const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
+      | { value: string }
+      | undefined;
     expect(row?.value).toBe("8");
   });
 
@@ -472,9 +477,7 @@ describe("runMigrations — data preservation during upgrade", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 7. isStuck — edge cases not covered in the implementor tests
-// ---------------------------------------------------------------------------
 
 describe("ExecutionStore.isStuck — additional edge cases", () => {
   function makeStore(): ExecutionStore {
@@ -486,16 +489,16 @@ describe("ExecutionStore.isStuck — additional edge cases", () => {
     const store = makeStore();
     // Three iterations: 1 and 2 differ, but 2 and 3 are identical
     store.recordIterationResult("review", 1, "blocking", {
-      principle_ids: ["thin-handlers"],
       file_paths: ["a.ts"],
+      principle_ids: ["thin-handlers"],
     });
     store.recordIterationResult("review", 2, "blocking", {
-      principle_ids: ["errors-are-values"],
       file_paths: ["b.ts"],
+      principle_ids: ["errors-are-values"],
     });
     store.recordIterationResult("review", 3, "blocking", {
-      principle_ids: ["errors-are-values"],
       file_paths: ["b.ts"],
+      principle_ids: ["errors-are-values"],
     });
     // Last two (2,3) match → stuck
     expect(store.isStuck("review", "same_violations")).toBe(true);
@@ -504,12 +507,12 @@ describe("ExecutionStore.isStuck — additional edge cases", () => {
   it("no_progress: returns false when artifact_count changes even if commit_sha same", () => {
     const store = makeStore();
     store.recordIterationResult("implement", 1, "needs_fix", {
-      commit_sha: "abc",
       artifact_count: 2,
+      commit_sha: "abc",
     });
     store.recordIterationResult("implement", 2, "needs_fix", {
-      commit_sha: "abc",
       artifact_count: 3, // different artifact count
+      commit_sha: "abc",
     });
     expect(store.isStuck("implement", "no_progress")).toBe(false);
   });
@@ -536,9 +539,7 @@ describe("ExecutionStore.isStuck — additional edge cases", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 8. Boolean typed param substitution (verify-fix-loop write_tests pattern)
-// ---------------------------------------------------------------------------
 
 describe("resolveFragments — boolean typed param (write_tests pattern)", () => {
   it("substitutes boolean typed param value as string in spawn instructions", async () => {
@@ -547,7 +548,7 @@ describe("resolveFragments — boolean typed param (write_tests pattern)", () =>
     const flow = await loadAndResolveFlow(pluginDir, "feature");
     expect(flow).toBeDefined();
     // The feature flow includes verify-fix-loop; check that no ${write_tests} refs remain
-    const allSpawnText = Object.values(flow.spawn_instructions).join("\n");
+    const _allSpawnText = Object.values(flow.spawn_instructions).join("\n");
     // write_tests should be substituted (either "false" literal or absent as a runtime var)
     // RUNTIME_VARIABLES includes write_tests, so it may appear there — but should not appear
     // as an unresolved fragment param reference
@@ -556,9 +557,7 @@ describe("resolveFragments — boolean typed param (write_tests pattern)", () =>
   });
 });
 
-// ---------------------------------------------------------------------------
 // 9. Cross-task integration: typed params → state_id validation → real flow load
-// ---------------------------------------------------------------------------
 
 describe("Cross-task: typed param state_id validation with real production flows", () => {
   it("feature flow: all fragment state_id params resolve to real states", async () => {
@@ -592,22 +591,20 @@ describe("Cross-task: typed param state_id validation with real production flows
   });
 });
 
-// ---------------------------------------------------------------------------
 // 10. validateSpawnCoverage: parallel state type coverage
-// ---------------------------------------------------------------------------
 
 describe("validateSpawnCoverage — parallel state type", () => {
   it("reports missing spawn instruction for a parallel state", () => {
     const flow: ResolvedFlow = makeFlow({
       spawn_instructions: { start: "Do stuff" }, // missing 'workers'
       states: {
-        start: { type: "single", agent: "a", transitions: { done: "workers" } },
+        end: { type: "terminal" },
+        start: { agent: "a", transitions: { done: "workers" }, type: "single" },
         workers: {
-          type: "parallel",
           agents: ["agent-a", "agent-b"],
           transitions: { done: "end" },
+          type: "parallel",
         },
-        end: { type: "terminal" },
       },
     });
     const errors = validateSpawnCoverage(flow);
@@ -620,13 +617,13 @@ describe("validateSpawnCoverage — parallel state type", () => {
     const flow: ResolvedFlow = makeFlow({
       spawn_instructions: { start: "Do stuff" }, // missing 'wave-impl'
       states: {
-        start: { type: "single", agent: "a", transitions: { done: "wave-impl" } },
+        end: { type: "terminal" },
+        start: { agent: "a", transitions: { done: "wave-impl" }, type: "single" },
         "wave-impl": {
-          type: "wave",
           agent: "implementor",
           transitions: { done: "end" },
+          type: "wave",
         },
-        end: { type: "terminal" },
       },
     });
     const errors = validateSpawnCoverage(flow);
@@ -636,14 +633,11 @@ describe("validateSpawnCoverage — parallel state type", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // 11. write_plan_index empty slug edge case
-// ---------------------------------------------------------------------------
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
@@ -652,14 +646,14 @@ describe("writePlanIndex — additional edge cases", () => {
     const tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
     try {
       const result = await writePlanIndex({
-        workspace: tmpDir,
         slug: "",
         tasks: [{ task_id: "t-01", wave: 1 }],
+        workspace: tmpDir,
       });
       // Empty slug is rejected — SLUG_PATTERN requires at least 1 character
       expect(result.ok).toBe(false);
     } finally {
-      await rm(tmpDir, { recursive: true, force: true });
+      await rm(tmpDir, { force: true, recursive: true });
     }
   });
 
@@ -667,15 +661,15 @@ describe("writePlanIndex — additional edge cases", () => {
     const tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
     try {
       const result = await writePlanIndex({
-        workspace: tmpDir,
         slug: "test",
         tasks: [
           {
+            files: ["src/a.ts", "src/b.ts", "src/c.ts"],
             task_id: "t-01",
             wave: 1,
-            files: ["src/a.ts", "src/b.ts", "src/c.ts"],
           },
         ],
+        workspace: tmpDir,
       });
       assertOk(result);
       const content = await readFile(result.path, "utf-8");
@@ -688,7 +682,7 @@ describe("writePlanIndex — additional edge cases", () => {
       const wave1Ids = parseTaskIdsForWave(content, 1);
       expect(wave1Ids).toEqual(["t-01"]);
     } finally {
-      await rm(tmpDir, { recursive: true, force: true });
+      await rm(tmpDir, { force: true, recursive: true });
     }
   });
 
@@ -696,16 +690,16 @@ describe("writePlanIndex — additional edge cases", () => {
     const tmpDir = await mkdtemp(join(tmpdir(), "write-plan-index-test-"));
     try {
       const result = await writePlanIndex({
-        workspace: tmpDir,
         slug: "test",
         tasks: [{ task_id: "", wave: 1 }],
+        workspace: tmpDir,
       });
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error_code).toBe("INVALID_INPUT");
       }
     } finally {
-      await rm(tmpDir, { recursive: true, force: true });
+      await rm(tmpDir, { force: true, recursive: true });
     }
   });
 });

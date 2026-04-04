@@ -1,44 +1,40 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeReview, VERDICT_MAP, type WriteReviewInput } from "../tools/write-review.ts";
+import { afterEach, describe, expect, it } from "vitest";
 import { parseReviewArtifact } from "../orchestration/effects.ts";
+import { VERDICT_MAP, type WriteReviewInput, writeReview } from "../tools/write-review.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDir: string;
 
 afterEach(async () => {
   if (tmpDir) {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   }
 });
 
-// ---------------------------------------------------------------------------
 // Fixtures
-// ---------------------------------------------------------------------------
 
 const BASE_INPUT: WriteReviewInput = {
-  workspace: "", // overwritten per-test
+  files: ["src/foo.ts", "src/bar.ts"],
+  honored: ["errors-are-values", "thin-handlers"],
+  score: {
+    conventions: { passed: 2, total: 2 },
+    opinions: { passed: 3, total: 4 },
+    rules: { passed: 5, total: 5 },
+  },
   slug: "my-epic",
   verdict: "approved",
   violations: [],
-  honored: ["errors-are-values", "thin-handlers"],
-  score: {
-    rules: { passed: 5, total: 5 },
-    opinions: { passed: 3, total: 4 },
-    conventions: { passed: 2, total: 2 },
-  },
-  files: ["src/foo.ts", "src/bar.ts"],
+  workspace: "", // overwritten per-test
 };
 
 function makeInput(overrides: Partial<WriteReviewInput> = {}): WriteReviewInput {
   return { ...BASE_INPUT, workspace: tmpDir, ...overrides };
 }
 
-// ---------------------------------------------------------------------------
 // Happy path — files created in reviews/ directory
-// ---------------------------------------------------------------------------
 
 describe("writeReview — file output", () => {
   it("writes REVIEW.md and REVIEW.meta.json to reviews/ directory", async () => {
@@ -70,9 +66,7 @@ describe("writeReview — file output", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Verdict mapping
-// ---------------------------------------------------------------------------
 
 describe("writeReview — verdict mapping", () => {
   it("maps approved -> CLEAN", async () => {
@@ -119,9 +113,7 @@ describe("writeReview — verdict mapping", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Markdown content
-// ---------------------------------------------------------------------------
 
 describe("writeReview — markdown content", () => {
   it("includes YAML frontmatter with mapped verdict", async () => {
@@ -142,7 +134,7 @@ describe("writeReview — markdown content", () => {
 
     assertOk(result);
     const md = await readFile(result.path, "utf-8");
-    expect(md).toMatch(/## Canon Review\s*[—\-]\s*Verdict:\s*CLEAN/i);
+    expect(md).toMatch(/## Canon Review\s*[—-]\s*Verdict:\s*CLEAN/i);
   });
 
   it("includes violations table section", async () => {
@@ -153,10 +145,10 @@ describe("writeReview — markdown content", () => {
         verdict: "blocked",
         violations: [
           {
+            description: "throws instead of returning",
+            file_path: "src/foo.ts",
             principle_id: "errors-are-values",
             severity: "rule",
-            file_path: "src/foo.ts",
-            description: "throws instead of returning",
           },
         ],
       }),
@@ -190,9 +182,9 @@ describe("writeReview — markdown content", () => {
     const result = await writeReview(
       makeInput({
         score: {
-          rules: { passed: 4, total: 5 },
-          opinions: { passed: 2, total: 3 },
           conventions: { passed: 1, total: 1 },
+          opinions: { passed: 2, total: 3 },
+          rules: { passed: 4, total: 5 },
         },
       }),
     );
@@ -206,9 +198,7 @@ describe("writeReview — markdown content", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Meta JSON
-// ---------------------------------------------------------------------------
 
 describe("writeReview — meta JSON", () => {
   it("meta has _type: review and _version: 1", async () => {
@@ -237,14 +227,14 @@ describe("writeReview — meta JSON", () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-review-test-"));
 
     const violations = [
-      { principle_id: "thin-handlers", severity: "strong-opinion", file_path: "src/index.ts" },
+      { file_path: "src/index.ts", principle_id: "thin-handlers", severity: "strong-opinion" },
     ];
     const result = await writeReview(
       makeInput({
+        files: ["src/index.ts"],
+        honored: ["errors-are-values"],
         verdict: "changes_required",
         violations,
-        honored: ["errors-are-values"],
-        files: ["src/index.ts"],
       }),
     );
 
@@ -259,9 +249,7 @@ describe("writeReview — meta JSON", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Return value
-// ---------------------------------------------------------------------------
 
 describe("writeReview — return value", () => {
   it("returns violation_count matching violations array length", async () => {
@@ -289,10 +277,6 @@ describe("writeReview — return value", () => {
     expect(result.violation_count).toBe(0);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Validation errors
-// ---------------------------------------------------------------------------
 
 describe("writeReview — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
@@ -330,9 +314,7 @@ describe("writeReview — validation errors", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Backward compat: parseReviewArtifact can parse generated markdown
-// ---------------------------------------------------------------------------
 
 describe("writeReview — backward compat with parseReviewArtifact", () => {
   it("generated REVIEW.md is parseable by parseReviewArtifact (approved -> CLEAN)", async () => {
@@ -355,9 +337,9 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
         verdict: "blocked",
         violations: [
           {
+            file_path: "src/bad.ts",
             principle_id: "errors-are-values",
             severity: "rule",
-            file_path: "src/bad.ts",
           },
         ],
       }),
@@ -393,9 +375,9 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
     const result = await writeReview(
       makeInput({
         score: {
-          rules: { passed: 3, total: 4 },
-          opinions: { passed: 2, total: 3 },
           conventions: { passed: 1, total: 2 },
+          opinions: { passed: 2, total: 3 },
+          rules: { passed: 3, total: 4 },
         },
       }),
     );
@@ -434,15 +416,17 @@ describe("writeReview — backward compat with parseReviewArtifact", () => {
     ];
     const expectedMapped = ["CLEAN", "WARNING", "WARNING", "BLOCKING"] as const;
 
-    for (let i = 0; i < verdicts.length; i++) {
-      const subDir = await mkdtemp(join(tmpdir(), "write-review-test-v-"));
-      const result = await writeReview({ ...makeInput(), workspace: subDir, verdict: verdicts[i] });
-      assertOk(result);
-      const md = await readFile(result.path, "utf-8");
-      const parsed = parseReviewArtifact(md);
-      expect(parsed).not.toBeNull();
-      expect(parsed!.verdict).toBe(expectedMapped[i]);
-      await rm(subDir, { recursive: true, force: true });
-    }
+    await Promise.all(
+      verdicts.map(async (verdict, i) => {
+        const subDir = await mkdtemp(join(tmpdir(), "write-review-test-v-"));
+        const result = await writeReview({ ...makeInput(), verdict, workspace: subDir });
+        assertOk(result);
+        const md = await readFile(result.path, "utf-8");
+        const parsed = parseReviewArtifact(md);
+        expect(parsed).not.toBeNull();
+        expect(parsed!.verdict).toBe(expectedMapped[i]);
+        await rm(subDir, { force: true, recursive: true });
+      }),
+    );
   });
 });

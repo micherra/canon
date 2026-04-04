@@ -1,34 +1,32 @@
-import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { canEnterState, filterCannotFix } from "../orchestration/convergence.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { checkConvergence } from "../tools/check-convergence.ts";
-import { getExecutionStore, clearStoreCache } from "../orchestration/execution-store.ts";
+import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { checkConvergence } from "../tools/check-convergence.ts";
+import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../utils/tool-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {
-    flow: "test",
-    task: "test task",
-    entry: "start",
-    current_state: "start",
     base_commit: "abc123",
-    started: new Date().toISOString(),
-    last_updated: new Date().toISOString(),
-    states: {},
-    iterations,
     blocked: null,
     concerns: [],
+    current_state: "start",
+    entry: "start",
+    flow: "test",
+    iterations,
+    last_updated: new Date().toISOString(),
     skipped: [],
+    started: new Date().toISOString(),
+    states: {},
+    task: "test task",
   } as Board;
 }
 
-// ---------------------------------------------------------------------------
 // Workspace helpers for round-trip tests
-// ---------------------------------------------------------------------------
 
 let tmpDirs: string[] = [];
 
@@ -41,7 +39,7 @@ function makeTmpWorkspace(): string {
 afterEach(() => {
   clearStoreCache();
   for (const d of tmpDirs) {
-    rmSync(d, { recursive: true, force: true });
+    rmSync(d, { force: true, recursive: true });
   }
   tmpDirs = [];
 });
@@ -49,21 +47,21 @@ afterEach(() => {
 /** Flow with a review state that has max_iterations and cannot_fix transition */
 function makeFlowWithCannotFix(): ResolvedFlow {
   return {
-    name: "test-flow",
     description: "A test flow",
     entry: "review",
+    name: "test-flow",
     spawn_instructions: {},
     states: {
+      hitl: { type: "terminal" },
       review: {
-        type: "single",
         max_iterations: 3,
         transitions: {
-          done: "ship",
           cannot_fix: "hitl",
+          done: "ship",
         },
+        type: "single",
       },
       ship: { type: "terminal" },
-      hitl: { type: "terminal" },
     },
   };
 }
@@ -76,24 +74,29 @@ function seedWorkspace(workspace: string, flow: ResolvedFlow): void {
   const store = getExecutionStore(workspace);
   const now = new Date().toISOString();
   store.initExecution({
-    flow: flow.name,
-    task: "test task",
-    entry: flow.entry,
-    current_state: flow.entry,
     base_commit: "abc123",
-    started: now,
-    last_updated: now,
     branch: "main",
-    sanitized: "main",
     created: now,
-    tier: "medium",
+    current_state: flow.entry,
+    entry: flow.entry,
+    flow: flow.name,
     flow_name: flow.name,
+    last_updated: now,
+    sanitized: "main",
     slug: "test-slug",
+    started: now,
+    task: "test task",
+    tier: "medium",
   });
   for (const [stateId, stateDef] of Object.entries(flow.states)) {
-    store.upsertState(stateId, { status: "pending", entries: 0 });
+    store.upsertState(stateId, { entries: 0, status: "pending" });
     if (stateDef.max_iterations !== undefined) {
-      store.upsertIteration(stateId, { count: 0, max: stateDef.max_iterations, history: [], cannot_fix: [] });
+      store.upsertIteration(stateId, {
+        cannot_fix: [],
+        count: 0,
+        history: [],
+        max: stateDef.max_iterations,
+      });
     }
   }
 }
@@ -107,7 +110,7 @@ describe("canEnterState", () => {
 
   it("returns allowed when count < max", () => {
     const board = makeBoard({
-      review: { count: 1, max: 3, history: [] },
+      review: { count: 1, history: [], max: 3 },
     });
     const result = canEnterState(board, "review");
     expect(result).toEqual({ allowed: true });
@@ -115,7 +118,7 @@ describe("canEnterState", () => {
 
   it("returns not allowed when count === max", () => {
     const board = makeBoard({
-      review: { count: 3, max: 3, history: [] },
+      review: { count: 3, history: [], max: 3 },
     });
     const result = canEnterState(board, "review");
     expect(result).toEqual({
@@ -126,7 +129,7 @@ describe("canEnterState", () => {
 
   it("returns not allowed when count > max", () => {
     const board = makeBoard({
-      review: { count: 5, max: 3, history: [] },
+      review: { count: 5, history: [], max: 3 },
     });
     const result = canEnterState(board, "review");
     expect(result).toEqual({
@@ -139,8 +142,8 @@ describe("canEnterState", () => {
 describe("filterCannotFix", () => {
   it("returns all items when cannotFixList is empty", () => {
     const items = [
-      { principle_id: "p1", file_path: "a.ts" },
-      { principle_id: "p2", file_path: "b.ts" },
+      { file_path: "a.ts", principle_id: "p1" },
+      { file_path: "b.ts", principle_id: "p2" },
     ];
     const result = filterCannotFix(items, []);
     expect(result).toEqual(items);
@@ -148,42 +151,40 @@ describe("filterCannotFix", () => {
 
   it("removes items that match entries in cannotFixList", () => {
     const items = [
-      { principle_id: "p1", file_path: "a.ts" },
-      { principle_id: "p2", file_path: "b.ts" },
+      { file_path: "a.ts", principle_id: "p1" },
+      { file_path: "b.ts", principle_id: "p2" },
     ];
-    const cannotFix = [{ principle_id: "p1", file_path: "a.ts" }];
+    const cannotFix = [{ file_path: "a.ts", principle_id: "p1" }];
     const result = filterCannotFix(items, cannotFix);
-    expect(result).toEqual([{ principle_id: "p2", file_path: "b.ts" }]);
+    expect(result).toEqual([{ file_path: "b.ts", principle_id: "p2" }]);
   });
 
   it("keeps items that do not match any entry in cannotFixList", () => {
     const items = [
-      { principle_id: "p1", file_path: "a.ts" },
-      { principle_id: "p2", file_path: "b.ts" },
+      { file_path: "a.ts", principle_id: "p1" },
+      { file_path: "b.ts", principle_id: "p2" },
     ];
-    const cannotFix = [{ principle_id: "p3", file_path: "c.ts" }];
+    const cannotFix = [{ file_path: "c.ts", principle_id: "p3" }];
     const result = filterCannotFix(items, cannotFix);
     expect(result).toEqual(items);
   });
 
   it("only removes exact matches from typed items", () => {
     const items = [
-      { principle_id: "p1", file_path: "a.ts" },
-      { principle_id: "p2", file_path: "b.ts" },
-      { principle_id: "p1", file_path: "c.ts" },
+      { file_path: "a.ts", principle_id: "p1" },
+      { file_path: "b.ts", principle_id: "p2" },
+      { file_path: "c.ts", principle_id: "p1" },
     ];
-    const cannotFix = [{ principle_id: "p1", file_path: "a.ts" }];
+    const cannotFix = [{ file_path: "a.ts", principle_id: "p1" }];
     const result = filterCannotFix(items, cannotFix);
     expect(result).toEqual([
-      { principle_id: "p2", file_path: "b.ts" },
-      { principle_id: "p1", file_path: "c.ts" },
+      { file_path: "b.ts", principle_id: "p2" },
+      { file_path: "c.ts", principle_id: "p1" },
     ]);
   });
 });
 
-// ---------------------------------------------------------------------------
 // report-result cannot_fix accumulation
-// ---------------------------------------------------------------------------
 
 describe("reportResult — cannot_fix accumulation", () => {
   it("accumulates CannotFixItem entries when condition is cannot_fix with principle_ids and file_paths", async () => {
@@ -192,19 +193,19 @@ describe("reportResult — cannot_fix accumulation", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["src/tools/report-result.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
-      file_paths: ["src/tools/report-result.ts"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations["review"];
+    const iteration = result.board.iterations.review;
     expect(iteration).toBeDefined();
     expect(iteration.cannot_fix).toEqual([
-      { principle_id: "no-hidden-side-effects", file_path: "src/tools/report-result.ts" },
+      { file_path: "src/tools/report-result.ts", principle_id: "no-hidden-side-effects" },
     ]);
   });
 
@@ -214,24 +215,24 @@ describe("reportResult — cannot_fix accumulation", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["a.ts", "b.ts"],
       flow,
       principle_ids: ["p1", "p2"],
-      file_paths: ["a.ts", "b.ts"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations["review"];
+    const iteration = result.board.iterations.review;
     expect(iteration.cannot_fix).toHaveLength(4);
     expect(iteration.cannot_fix).toEqual(
       expect.arrayContaining([
-        { principle_id: "p1", file_path: "a.ts" },
-        { principle_id: "p1", file_path: "b.ts" },
-        { principle_id: "p2", file_path: "a.ts" },
-        { principle_id: "p2", file_path: "b.ts" },
-      ])
+        { file_path: "a.ts", principle_id: "p1" },
+        { file_path: "b.ts", principle_id: "p1" },
+        { file_path: "a.ts", principle_id: "p2" },
+        { file_path: "b.ts", principle_id: "p2" },
+      ]),
     );
   });
 
@@ -242,64 +243,62 @@ describe("reportResult — cannot_fix accumulation", () => {
 
     // First report
     await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      file_paths: ["a.ts"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
 
     // Second report with same item
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      file_paths: ["a.ts"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations["review"];
+    const iteration = result.board.iterations.review;
     expect(iteration.cannot_fix).toHaveLength(1);
-    expect(iteration.cannot_fix).toEqual([
-      { principle_id: "p1", file_path: "a.ts" },
-    ]);
+    expect(iteration.cannot_fix).toEqual([{ file_path: "a.ts", principle_id: "p1" }]);
   });
 
   it("skips accumulation when no iteration record exists for the state", async () => {
     const workspace = makeTmpWorkspace();
     // Flow with no max_iterations on the state being reported
     const flow: ResolvedFlow = {
-      name: "test-flow",
       description: "A test flow",
       entry: "build",
+      name: "test-flow",
       spawn_instructions: {},
       states: {
         build: {
-          type: "single",
           transitions: { cannot_fix: "hitl", done: "ship" },
+          type: "single",
           // no max_iterations — no iteration record created
         },
-        ship: { type: "terminal" },
         hitl: { type: "terminal" },
+        ship: { type: "terminal" },
       },
     };
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "build",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      file_paths: ["a.ts"],
+      state_id: "build",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
     assertOk(result);
 
     // No iteration record — nothing to accumulate
-    expect(result.board.iterations["build"]).toBeUndefined();
+    expect(result.board.iterations.build).toBeUndefined();
   });
 
   it("skips accumulation when principle_ids is missing", async () => {
@@ -308,16 +307,16 @@ describe("reportResult — cannot_fix accumulation", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
-      flow,
       // no principle_ids
       file_paths: ["a.ts"],
+      flow,
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations["review"];
+    const iteration = result.board.iterations.review;
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
   });
 
@@ -327,16 +326,16 @@ describe("reportResult — cannot_fix accumulation", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
       flow,
       principle_ids: ["p1"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
       // no file_paths
     });
     assertOk(result);
 
-    const iteration = result.board.iterations["review"];
+    const iteration = result.board.iterations.review;
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
   });
 
@@ -346,23 +345,21 @@ describe("reportResult — cannot_fix accumulation", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "DONE",
+      file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      file_paths: ["a.ts"],
+      state_id: "review",
+      status_keyword: "DONE",
+      workspace,
     });
     assertOk(result);
 
-    const iteration = result.board.iterations["review"];
+    const iteration = result.board.iterations.review;
     expect(iteration.cannot_fix ?? []).toHaveLength(0);
   });
 });
 
-// ---------------------------------------------------------------------------
 // Round-trip: accumulate in report-result, read back via check-convergence
-// ---------------------------------------------------------------------------
 
 describe("cannot_fix round-trip: report-result → check-convergence", () => {
   it("check-convergence returns accumulated cannot_fix_items after report-result", async () => {
@@ -371,20 +368,20 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     seedWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["src/tools/check-convergence.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
-      file_paths: ["src/tools/check-convergence.ts"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
 
-    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    const convergenceResult = await checkConvergence({ state_id: "review", workspace });
     assertOk(convergenceResult);
     const convergence = convergenceResult;
 
     expect(convergence.cannot_fix_items).toEqual([
-      { principle_id: "no-hidden-side-effects", file_path: "src/tools/check-convergence.ts" },
+      { file_path: "src/tools/check-convergence.ts", principle_id: "no-hidden-side-effects" },
     ]);
   });
 
@@ -395,34 +392,34 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
 
     // First agent report
     await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1"],
-      file_paths: ["a.ts"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
 
     // Second agent report with different items
     await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["b.ts"],
       flow,
       principle_ids: ["p2"],
-      file_paths: ["b.ts"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
 
-    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    const convergenceResult = await checkConvergence({ state_id: "review", workspace });
     assertOk(convergenceResult);
     const convergence = convergenceResult;
 
     expect(convergence.cannot_fix_items).toHaveLength(2);
     expect(convergence.cannot_fix_items).toEqual(
       expect.arrayContaining([
-        { principle_id: "p1", file_path: "a.ts" },
-        { principle_id: "p2", file_path: "b.ts" },
-      ])
+        { file_path: "a.ts", principle_id: "p1" },
+        { file_path: "b.ts", principle_id: "p2" },
+      ]),
     );
   });
 
@@ -432,29 +429,27 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     seedWorkspace(workspace, flow);
 
     await reportResult({
-      workspace,
-      state_id: "review",
-      status_keyword: "CANNOT_FIX",
+      file_paths: ["a.ts"],
       flow,
       principle_ids: ["p1", "p2"],
-      file_paths: ["a.ts"],
+      state_id: "review",
+      status_keyword: "CANNOT_FIX",
+      workspace,
     });
 
-    const convergenceResult = await checkConvergence({ workspace, state_id: "review" });
+    const convergenceResult = await checkConvergence({ state_id: "review", workspace });
     assertOk(convergenceResult);
     const convergence = convergenceResult;
 
     // Orchestrator uses filterCannotFix to exclude items from next iteration
     const allItems = [
-      { principle_id: "p1", file_path: "a.ts" },
-      { principle_id: "p2", file_path: "a.ts" },
-      { principle_id: "p3", file_path: "a.ts" }, // new item not yet cannot_fixed
+      { file_path: "a.ts", principle_id: "p1" },
+      { file_path: "a.ts", principle_id: "p2" },
+      { file_path: "a.ts", principle_id: "p3" }, // new item not yet cannot_fixed
     ];
 
     const remaining = filterCannotFix(allItems, convergence.cannot_fix_items);
 
-    expect(remaining).toEqual([
-      { principle_id: "p3", file_path: "a.ts" },
-    ]);
+    expect(remaining).toEqual([{ file_path: "a.ts", principle_id: "p3" }]);
   });
 });
