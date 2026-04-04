@@ -67,10 +67,8 @@ The orchestrator drives a flow with this loop:
 2. **`init_workspace(task, flow_name)`** — Create `${WORKSPACE}/board.json` (state tracker) and `session.json` (task metadata). On resume, reads the existing board to restore position.
 
 3. **Per state:**
-   - `check_convergence(state_id)` — Verify iteration count is within `max_iterations`. If over the limit, escalate to HITL.
-   - `update_board(enter_state, state_id)` — Record the state as `in_progress`, increment `entries`.
-   - `get_spawn_prompt(state_id)` — Resolve the spawn instruction template: substitute variables (`${task}`, `${WORKSPACE}`, etc.), inject context from prior states, apply wave variables if applicable.
-   - Spawn the specialist agent defined by the state.
+   - `drive_flow(workspace, resolved_flow)` — Advance one step: checks convergence, enters state, resolves spawn prompt. Returns a `SpawnRequest` (spawn the agent) or `HitlBreakpoint` (present to user).
+   - Spawn the specialist agent defined by the `SpawnRequest`.
    - `report_result(state_id, result)` — Record the agent's output, evaluate the transition map, check stuck detection. Returns `next_state`.
    - Repeat for `next_state`.
 
