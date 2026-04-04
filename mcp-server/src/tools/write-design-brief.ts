@@ -39,7 +39,6 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
   lines.push(`## Design Brief: ${input.task_id}`);
   lines.push("");
 
-  // File targets table
   lines.push("### File Targets");
   lines.push("");
   lines.push("| Path | Action | Description |");
@@ -52,7 +51,6 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
   }
   lines.push("");
 
-  // Constraints list
   lines.push("### Constraints");
   lines.push("");
   for (const c of input.constraints) {
@@ -60,7 +58,6 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
   }
   lines.push("");
 
-  // Test expectations table
   lines.push("### Test Expectations");
   lines.push("");
   lines.push("| Description | File |");
@@ -71,7 +68,6 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
   }
   lines.push("");
 
-  // Optional: decisions referenced
   if (input.decisions_referenced && input.decisions_referenced.length > 0) {
     lines.push("### Decisions Referenced");
     lines.push("");
@@ -81,7 +77,6 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
     lines.push("");
   }
 
-  // Optional: dependencies
   if (input.dependencies && input.dependencies.length > 0) {
     lines.push("### Dependencies");
     lines.push("");
@@ -97,7 +92,6 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
 export async function writeDesignBrief(
   input: WriteDesignBriefInput,
 ): Promise<ToolResult<WriteDesignBriefResult>> {
-  // Validate slug
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
       "INVALID_INPUT",
@@ -105,7 +99,6 @@ export async function writeDesignBrief(
     );
   }
 
-  // Validate task_id
   if (!SLUG_PATTERN.test(input.task_id)) {
     return toolError(
       "INVALID_INPUT",
@@ -113,7 +106,6 @@ export async function writeDesignBrief(
     );
   }
 
-  // Validate path traversal safety on the handoffs directory
   const handoffsDir = resolve(join(input.workspace, "handoffs"));
   const workspaceRoot = resolve(input.workspace);
   const rel = relative(workspaceRoot, handoffsDir);
@@ -126,7 +118,6 @@ export async function writeDesignBrief(
 
   const content = generateMarkdown(input);
 
-  // Build meta JSON
   const meta: Record<string, unknown> = {
     _type: "design_brief",
     _version: 1,
@@ -143,7 +134,6 @@ export async function writeDesignBrief(
     meta.dependencies = input.dependencies;
   }
 
-  // Write files
   await mkdir(handoffsDir, { recursive: true });
   const briefPath = join(handoffsDir, "DESIGN-BRIEF.md");
   const metaPath = join(handoffsDir, "DESIGN-BRIEF.meta.json");
