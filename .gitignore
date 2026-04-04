@@ -8,9 +8,6 @@ cursor-extension/media/dashboard.js
 .idea/
 .air/
 .claude/*
-# Plugin-owned .claude/ directories (committed to repo)
-!.claude/rules/
-!.claude/agents/
 .claude/settings.local.json
 .junie/
 .ai/

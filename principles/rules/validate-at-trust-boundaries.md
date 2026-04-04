@@ -20,7 +20,7 @@ Every trust boundary crossing — API endpoints, service-to-service calls, file 
 
 The most dangerous assumption in distributed systems is "this data comes from our own service, so it's safe." Internal services have bugs. Internal services get compromised. Internal data stores get corrupted. Every boundary crossing is an opportunity for invalid data to enter the system.
 
-This complements `agent-assume-hostile-input` (an agent workflow rule in `.claude/rules/` that governs how the AI approaches input handling). This principle is the architectural pattern: where in the system architecture must validation occur?
+This complements `agent-assume-hostile-input` (an agent workflow rule in `rules/` that governs how the AI approaches input handling). This principle is the architectural pattern: where in the system architecture must validation occur?
 
 ## Examples
 

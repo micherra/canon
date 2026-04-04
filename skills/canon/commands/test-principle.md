@@ -19,7 +19,7 @@ Search for the principle file in:
 1. `.canon/principles/**/*.md` (project-local)
 2. `${CLAUDE_PLUGIN_ROOT}/principles/**/*.md` (built-in)
 3. `.canon/rules/*.md` (project-local agent-rules)
-4. `${CLAUDE_PLUGIN_ROOT}/.claude/rules/*.md` (built-in agent-rules)
+4. `${CLAUDE_PLUGIN_ROOT}/rules/*.md` (built-in agent-rules)
 
 Read the full principle file — frontmatter and body.
 

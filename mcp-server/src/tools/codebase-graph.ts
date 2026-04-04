@@ -97,7 +97,7 @@ async function gitRefExists(cwd: string, ref: string): Promise<boolean> {
 
 /** Scan project directories and return sorted file paths. */
 /** Canon directories to scan for .md nodes (agents, flows, templates, principles). */
-const CANON_SCAN_DIRS = [".claude/agents", "flows", "templates", "principles", "skills"];
+const CANON_SCAN_DIRS = ["agents", "flows", "templates", "principles", "skills"];
 
 /** Scan files from configured source directories. */
 async function scanFromSourceDirs(

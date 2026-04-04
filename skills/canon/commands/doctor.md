@@ -80,7 +80,7 @@ For each principle, check:
 
 #### Check 6: Agent-rules validation
 
-Read every `.md` file in `.canon/rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/.claude/rules/*.md`. Validate:
+Read every `.md` file in `.canon/rules/*.md` and `${CLAUDE_PLUGIN_ROOT}/rules/*.md`. Validate:
 - Has YAML frontmatter
 - `id` starts with `agent-`
 - `tags` include `agent-behavior`

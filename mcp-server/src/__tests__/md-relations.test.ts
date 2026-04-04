@@ -9,7 +9,7 @@ describe("classifyMdNode", () => {
   it("classifies by directory prefix", () => {
     expect(classifyMdNode("flows/feature.md")).toBe("flow");
     expect(classifyMdNode("flows/fragments/context-sync.md")).toBe("fragment");
-    expect(classifyMdNode(".claude/agents/canon-architect.md")).toBe("agent");
+    expect(classifyMdNode("agents/canon-architect.md")).toBe("agent");
     expect(classifyMdNode("templates/design-decision.md")).toBe("template");
     expect(classifyMdNode("principles/rules/fail-closed.md")).toBe("principle");
     expect(classifyMdNode("skills/canon/SKILL.md")).toBe("skill");
@@ -19,7 +19,7 @@ describe("classifyMdNode", () => {
   it("excludes doc files", () => {
     expect(classifyMdNode("flows/.claude/CLAUDE.md")).toBeUndefined();
     expect(classifyMdNode("flows/SCHEMA.md")).toBeUndefined();
-    expect(classifyMdNode(".claude/agents/.claude/CLAUDE.md")).toBeUndefined();
+    expect(classifyMdNode("agents/.claude/CLAUDE.md")).toBeUndefined();
   });
 
   it("returns undefined for non-md files", () => {
@@ -212,9 +212,9 @@ describe("inferMdRelations", () => {
   });
 
   it("infers edges from file path references", async () => {
-    await mkdir(join(tmpDir, ".claude", "agents"), { recursive: true });
+    await mkdir(join(tmpDir, "agents"), { recursive: true });
     await writeFile(
-      join(tmpDir, ".claude", "agents", "canon-reviewer.md"),
+      join(tmpDir, "agents", "canon-reviewer.md"),
       "---\nname: canon-reviewer\n---\n\nLoad per `${CLAUDE_PLUGIN_ROOT}/templates/review-checklist.md`. Also see principles/rules/fail-closed.md.",
     );
     await writeFile(
@@ -223,7 +223,7 @@ describe("inferMdRelations", () => {
     );
 
     const filePaths = [
-      ".claude/agents/canon-reviewer.md",
+      "agents/canon-reviewer.md",
       "templates/review-checklist.md",
       "principles/rules/fail-closed.md",
     ];
@@ -232,7 +232,7 @@ describe("inferMdRelations", () => {
     const edges = await inferMdRelations(filePaths, fileSet, maps, tmpDir);
 
     const pathEdges = edges.filter(
-      (e) => e.source === ".claude/agents/canon-reviewer.md" && e.relation === "ref:path",
+      (e) => e.source === "agents/canon-reviewer.md" && e.relation === "ref:path",
     );
     expect(pathEdges).toHaveLength(2);
   });
@@ -296,7 +296,7 @@ describe("codebaseGraph with md-relations", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "canon-graph-md-"));
     await mkdir(join(tmpDir, ".canon"), { recursive: true });
-    await mkdir(join(tmpDir, ".claude", "agents"), { recursive: true });
+    await mkdir(join(tmpDir, "agents"), { recursive: true });
     await mkdir(join(tmpDir, "flows", "fragments"), { recursive: true });
     await mkdir(join(tmpDir, "templates"), { recursive: true });
     await mkdir(join(tmpDir, "principles", "rules"), { recursive: true });
@@ -305,7 +305,7 @@ describe("codebaseGraph with md-relations", () => {
       JSON.stringify({
         layers: {
           docs: ["templates", "principles"],
-          orchestration: ["flows", ".claude/agents"],
+          orchestration: ["flows", "agents"],
         },
       }),
     );
@@ -325,11 +325,11 @@ describe("codebaseGraph with md-relations", () => {
       "---\nname: context-sync\nstates:\n  sync:\n    type: single\n    agent: canon-scribe\n---\n",
     );
     await writeFile(
-      join(tmpDir, ".claude", "agents", "canon-architect.md"),
+      join(tmpDir, "agents", "canon-architect.md"),
       "---\nname: canon-architect\n---\n",
     );
     await writeFile(
-      join(tmpDir, ".claude", "agents", "canon-scribe.md"),
+      join(tmpDir, "agents", "canon-scribe.md"),
       "---\nname: canon-scribe\n---\n",
     );
 
@@ -340,7 +340,7 @@ describe("codebaseGraph with md-relations", () => {
     expect(flowNode).toBeDefined();
     expect(flowNode?.kind).toBe("flow");
 
-    const agentNode = result.nodes.find((n) => n.id === ".claude/agents/canon-architect.md");
+    const agentNode = result.nodes.find((n) => n.id === "agents/canon-architect.md");
     expect(agentNode).toBeDefined();
     expect(agentNode?.kind).toBe("agent");
 

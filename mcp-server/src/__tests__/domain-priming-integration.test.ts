@@ -25,8 +25,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../../..");
 
 const DOMAINS_DIR = join(REPO_ROOT, "domain-primers");
-const ARCHITECT_MD = join(REPO_ROOT, ".claude", "agents", "canon-architect.md");
-const IMPLEMENTOR_MD = join(REPO_ROOT, ".claude", "agents", "canon-implementor.md");
+const ARCHITECT_MD = join(REPO_ROOT, "agents", "canon-architect.md");
+const IMPLEMENTOR_MD = join(REPO_ROOT, "agents", "canon-implementor.md");
 const TASK_PLAN_TEMPLATE = join(REPO_ROOT, "templates", "task-plan.md");
 
 function readFile(path: string): string {
