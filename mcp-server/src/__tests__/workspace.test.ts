@@ -100,7 +100,7 @@ describe("checkSlugCollision", () => {
 describe("initWorkspace", () => {
   it("creates all subdirectories", async () => {
     const ws = await initWorkspace(tmpDir, "my-branch");
-    const expected = ["research", "decisions", "plans", "reviews"];
+    const expected = ["research", "decisions", "plans", "reviews", "transcripts", "handoffs"];
     for (const dir of expected) {
       await expect(access(path.join(ws, dir)).then(() => true)).resolves.toBe(true);
     }

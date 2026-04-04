@@ -479,7 +479,7 @@ describe("initWorkspace — transcripts subdirectory", () => {
     const projectDir = makeTmpDir();
     const ws = await initWorkspace(projectDir, "my-branch");
 
-    const expected = ["research", "decisions", "plans", "reviews", "transcripts"];
+    const expected = ["research", "decisions", "plans", "reviews", "transcripts", "handoffs"];
     for (const dir of expected) {
       await expect(access(join(ws, dir)).then(() => true)).resolves.toBe(true);
     }

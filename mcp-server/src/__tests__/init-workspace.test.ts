@@ -128,11 +128,9 @@ describe("initWorkspaceFlow — SQLite creation", () => {
     const projectDir = makeTmpProjectDir();
     const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
 
-    await Promise.all(
-      ["research", "decisions", "plans", "reviews"].map((dir) =>
-        expect(access(join(result.workspace, dir))).resolves.toBeUndefined(),
-      ),
-    );
+    for (const dir of ["research", "decisions", "plans", "reviews", "transcripts", "handoffs"]) {
+      await expect(access(join(result.workspace, dir))).resolves.toBeUndefined();
+    }
   });
 });
 
