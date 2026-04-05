@@ -1129,9 +1129,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
     });
 
     const stateEntry = store.getState("implement");
-    const waveResults = stateEntry?.wave_results as
-      | Record<string, { branch?: string }>
-      | undefined;
+    const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
     // Should prefer the actual agent branch, not "canon-wave/task-01"
     expect(waveResults?.["task-01"]?.branch).toBe("worktree-agent-a4915c84");
   });
@@ -1168,9 +1166,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
     });
 
     const stateEntry = store.getState("implement");
-    const waveResults = stateEntry?.wave_results as
-      | Record<string, { branch?: string }>
-      | undefined;
+    const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
     // Should fall back to convention branch
     expect(waveResults?.["task-02"]?.branch).toBe("canon-wave/task-02");
   });
@@ -1250,10 +1246,6 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
     });
 
     // mergeWaveResults should fall back to projectDir
-    expect(mergeWaveResults).toHaveBeenCalledWith(
-      expect.any(Array),
-      "/project",
-      "sequential",
-    );
+    expect(mergeWaveResults).toHaveBeenCalledWith(expect.any(Array), "/project", "sequential");
   });
 });
