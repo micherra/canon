@@ -57,3 +57,17 @@ async function transferFunds(
 Use thrown exceptions for genuinely unexpected failures: database connection lost, file system errors, null reference bugs. Also, if the codebase has an established exception-based pattern, consistency may outweigh this principle.
 
 **Related:** `define-errors-out-of-existence` is the companion principle — before modeling an error as a value, ask whether the API can be redesigned so the error condition is impossible. Apply that principle first to eliminate unnecessary errors, then use typed results for the errors that remain.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "Throwing is simpler — the caller can catch it if they care." | Invisible control flow is not simplicity. The caller cannot discover what errors are possible without reading the implementation. A `Promise<Result>` return type is self-documenting. | Return a typed result. The caller is forced to handle it; the failure modes appear in the signature. |
+| "The framework expects throws — Express/Next.js/etc. will catch it." | Framework error boundaries catch unexpected failures (500 errors). Business rule violations (invalid state, insufficient funds) should never reach a generic error boundary — they need specific handling. | Return a typed result for business rule violations. Use framework error boundaries only for unexpected infrastructure failures. |
+| "It's just one throw — the rest of the codebase uses Result types." | One throw in a Result-based codebase breaks the caller's ability to handle errors with `if (!result.ok)`. The caller won't expect a throw and won't wrap it. | Be consistent with the surrounding code. If the module uses Result types, return a Result — even for this one case. |
+| "The error is unrecoverable — why model it as a value?" | Unrecoverability is determined by the caller, not the function. The function returning an error value gives the caller the choice; throwing removes it. | Return an error value. Let the caller decide whether to propagate, log, or surface it to the user. |
+
+## Verification
+
+- [ ] No `throw new Error(...)` in domain-layer functions for expected business rule violations — grep for `throw new Error` in `src/domain/` and `src/services/` and confirm each throw is for a genuinely unexpected failure (not a business rule like "insufficient funds" or "invalid state").
+- [ ] Functions returning `Result`-style types have all branches covered — check that functions with `| { ok: false; ... }` return types do not have code paths that `throw` instead of returning an error object.

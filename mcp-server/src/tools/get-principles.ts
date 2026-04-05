@@ -6,12 +6,14 @@ import type { FileMetrics } from "../graph/kg-types.ts";
 import { CANON_DIR, CANON_FILES, extractSummary } from "../shared/constants.ts";
 import { loadConfigNumber } from "../shared/lib/config.ts";
 import { loadAllPrinciples, matchPrinciples } from "../shared/matcher.ts";
+import { filterBodyBySections } from "../shared/parser.ts";
 
 export type GetPrinciplesInput = {
   file_path?: string;
   layers?: string[];
   task_description?: string;
   summary_only?: boolean;
+  sections?: string[];
 };
 
 type PrinciplesGraphContext = Pick<
@@ -87,7 +89,14 @@ export async function getPrinciples(
   return {
     graph_context,
     principles: top.map((p) => ({
-      body: input.summary_only ? extractSummary(p.body) : p.body,
+      body: input.summary_only
+        ? extractSummary(p.body)
+        : filterBodyBySections(
+            p.body,
+            p.anti_rationalization,
+            p.verification,
+            input.sections ?? [],
+          ),
       id: p.id,
       severity: p.severity,
       title: p.title,

@@ -101,3 +101,18 @@ rules:
 ## Exceptions
 
 Emergency break-glass roles used for incident response may have broader permissions, but must be time-limited (session-based), audit-logged, and require explicit approval to assume. Development and sandbox environments may use broader permissions for experimentation, but production infrastructure must follow least privilege strictly.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "Admin access is easier during development — I'll restrict it before prod." | Dev permissions routinely follow the service to staging and then production. The cost of restricting permissions late is higher (more testing, possible breakage) than doing it right initially. | Define the minimum permission set first. Test with restricted permissions from the start. |
+| "We're already behind authentication — the service is protected." | Auth confirms identity; it doesn't limit what a compromised or misbehaving identity can do. A single compromised credential with `*` access is a full account breach. | Defense in depth: auth tells you who; permissions limit what. Both are required. |
+| "It's just one wildcard — the resource ARN is specific." | `Action: "*"` on a specific resource still grants every current and future action on that resource, including destructive ones you didn't intend (DeleteBucket, PutBucketPolicy, etc.). | Enumerate the specific actions the service needs. Use `s3:GetObject` not `s3:*`. |
+| "The IAM policy is complex to scope properly right now." | Complexity is not an exception to least privilege. A temporary broad permission becomes a permanent security debt. | Scope to the actions you understand now. Expand incrementally as specific needs are confirmed. |
+
+## Verification
+
+- [ ] No wildcard actions in production IAM policies — grep for `"Action": "*"` and `Action = "*"` in Terraform and CloudFormation files under `infra/` or `deploy/`.
+- [ ] No wildcard resources paired with sensitive actions — grep for `"Resource": "*"` and confirm that any matches are paired only with read-only or explicitly scoped actions.
+- [ ] No `cluster-admin` ClusterRoleBindings for application service accounts — grep for `name: cluster-admin` in Kubernetes RBAC files and confirm each binding is for an infrastructure-level service, not an application service account.

@@ -48,4 +48,18 @@ app.post('/orders', async (req, res) => {
 
 - Health check and readiness probe endpoints may inline simple logic.
 - File streaming endpoints where the handler IS the logic.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This handler is small, so putting business logic here is fine." | Size does not determine responsibility boundaries. Even small business logic in handlers creates coupling and duplication. | Keep handlers as transport adapters only; move business logic to a service. |
+| "This endpoint is unique, so abstraction is unnecessary." | "One-off" endpoints become copy targets and future maintenance burdens. | Implement the same handler-service separation pattern consistently. |
+| "Service indirection is overengineering for this route." | The service boundary is what preserves testability and reuse across transports. | Keep orchestration and domain decisions in service code, not request handlers. |
+
+## Verification
+
+- [ ] Handlers only parse/validate transport input, call a service, and map service results to responses.
+- [ ] No direct database/business-rule orchestration appears in handler/controller/route files.
+- [ ] Exceptions (health checks, readiness probes, file streaming) are explicitly bounded and remain transport-focused.
 ```

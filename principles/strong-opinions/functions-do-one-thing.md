@@ -87,3 +87,17 @@ This applies at every level — functions, UI components, modules. A React compo
 ## Exceptions
 
 Pure data transformation pipelines (map/filter/reduce chains) can be longer without being "multi-purpose" — they're doing one thing (transforming data) through multiple steps. Configuration/setup functions that initialize many related settings are doing one thing (configuration) even though they touch many values. Leaf UI components that combine a small amount of local state with rendering (a `<Toggle>` managing its own open/closed state) are fine — the state is intrinsic to the component's single purpose.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "It's all related — validation, transformation, and persistence all handle the same entity." | Relatedness of subject matter is not the same as singleness of purpose. Validate, transform, and persist are three distinct operations that change independently and fail independently. | Extract each concern into its own function. Compose them at the orchestration level. |
+| "Splitting it into more functions would mean more files to navigate." | More small, well-named functions are easier to navigate than fewer large, multi-purpose ones. A function named `validateOrderInput` tells you exactly where to look; a 200-line `processOrder` does not. | Split by responsibility. File count is not a cost — confusion is. |
+| "The function is readable — I can follow it top to bottom." | "Readable once" is not the same as "maintainable over time." Readability degrades as functions grow and logic branches multiply. | Apply the "and/then" test: if describing the function requires "and" or "then," it does more than one thing and should be split. |
+| "It's only 50 lines — that's not too long." | Line count is a proxy, not the definition. A 50-line function with three unrelated responsibilities violates this principle; a 50-line pure transformation pipeline may not. | Evaluate by responsibility count, not line count. |
+
+## Verification
+
+- [ ] No functions exceed 40 lines of logic (excluding blank lines and declarations) — check for functions with high line counts in domain and service files, treating this as a smell requiring inspection.
+- [ ] Function names do not use conjunctions suggesting multiple purposes — grep for function names containing `And`, `AndThen`, `AndSend`, `AndSave`, or similar compound verbs in domain and service layers.

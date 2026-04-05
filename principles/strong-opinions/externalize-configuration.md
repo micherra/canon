@@ -73,3 +73,18 @@ data:
 Truly universal constants — mathematical constants, protocol-defined values, RFC-specified limits, HTTP status codes — are not environment configuration and may be hardcoded. Default values that are genuinely reasonable across all environments (e.g., a default page size of 20) are acceptable as code defaults with environment override capability. The test: "Would this value ever differ between development, staging, and production?"
 
 **Related:** `secrets-never-in-code` addresses the same solution (environment variables, secret stores) but for a security reason — leaked credentials compromise systems. This principle is about deployment flexibility — hardcoded URLs prevent multi-environment deploys. A connection string with a password violates both; a hardcoded timeout value violates only this one.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
+| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
+| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
+| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
+
+## Verification
+
+- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
+- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
+- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.

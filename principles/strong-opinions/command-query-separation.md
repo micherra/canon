@@ -79,3 +79,18 @@ stack.remove();
 Fluent/builder APIs intentionally return `this` to enable chaining (`builder.setName("x").setAge(5).build()`) — the return value is for API ergonomics, not for conveying information. Also, atomic operations like `compareAndSwap`, `getAndIncrement`, or `Map.computeIfAbsent` justifiably combine query and command for correctness in concurrent contexts.
 
 **Related:** `no-hidden-side-effects` is the broader principle — all side effects must be visible in the function's name or signature. CQS is a specific structural rule: don't mix mutation and return values in the same method. A function can satisfy CQS (returns void, clearly a command) but violate no-hidden-side-effects if its name doesn't reveal what it mutates.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
+| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
+| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
+| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
+
+## Verification
+
+- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
+- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
+- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.

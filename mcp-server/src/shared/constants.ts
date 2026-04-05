@@ -61,3 +61,9 @@ export const JOB_TIMEOUT_MS = 300_000;
 export function extractSummary(body: string): string {
   return body.split(/\n\n/)[0]?.trim() || body;
 }
+
+/** Known principle section headings for structured extraction. */
+export const PRINCIPLE_SECTIONS = {
+  ANTI_RATIONALIZATION: "Anti-Rationalization",
+  VERIFICATION: "Verification",
+} as const;

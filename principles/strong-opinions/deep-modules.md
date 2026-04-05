@@ -67,3 +67,18 @@ Three methods, each doing substantial work. The interface is simple; the impleme
 ## Exceptions
 
 Utility modules that intentionally provide a flat collection of independent functions (string helpers, math utilities) are naturally shallow and that's fine — they're not trying to hide complexity, they're providing building blocks. Also, modules at the edges of a system (HTTP handlers, CLI entry points) are often thin by design per the thin-handlers principle.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
+| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
+| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
+| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
+
+## Verification
+
+- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
+- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
+- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.

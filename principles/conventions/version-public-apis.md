@@ -63,3 +63,18 @@ app.use((req, res, next) => {
 Internal APIs between services owned by the same team that deploy atomically (monorepo with shared deployment). Prototype/experimental APIs explicitly marked as unstable (`/beta/...` or `/experimental/...`). GraphQL APIs where the schema evolves additively (fields are added, never removed) — though even GraphQL benefits from a deprecation strategy.
 
 **Related:** `backward-compatible-schema-changes` — versioning is the escape hatch when you can't make a change backward-compatible. Both principles protect existing consumers from breaking changes.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
+| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
+| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
+| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
+
+## Verification
+
+- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
+- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
+- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.

@@ -93,3 +93,18 @@ Each test name reads as a specification. When one fails, you know exactly what b
 ## Exceptions
 
 Property-based tests (e.g., fast-check) naturally verify a property across many inputs in a single test — that's the point. Snapshot tests may capture a large output that implicitly covers multiple behaviors, but the snapshot itself is a single assertion ("the output matches"). These are acceptable. The goal is *one reason to fail*, not *one `expect` statement*.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
+| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
+| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
+| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
+
+## Verification
+
+- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
+- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
+- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.

@@ -75,3 +75,18 @@ secrets:
 Test fixtures using obviously fake values (`"test-api-key"`, `"password123"`, `"sk_test_..."`) are exempt — these are not real secrets. Example configuration files with placeholder values (`"YOUR_API_KEY_HERE"`, `"changeme"`) are acceptable. Public keys (designed to be shared) are not secrets. `.env.example` files with placeholder values are acceptable; `.env` files with real values must be gitignored.
 
 **Related:** `externalize-configuration` addresses the same solution (environment variables, config stores) but for a different reason — deployment flexibility rather than security. A hardcoded `API_URL = "https://api.prod.example.com"` violates externalize-configuration but not this principle (no secret). A hardcoded `DATABASE_URL = "postgres://admin:password@host/db"` violates both.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "It's just a test key — it doesn't have real permissions." | Test keys are still valid credentials. They get committed to public repos, scraped by bots, and used to rack up charges or probe the API. The severity is lower, but the pattern is the same. | Use obviously fake placeholder values (`"sk_test_REPLACE_ME"`) that will never authenticate. |
+| "I'll rotate the key after the demo / after this sprint." | Rotation requires knowing everywhere a secret was used. Once in git history, a secret is permanently exposed — rotation doesn't fix it, it only limits future damage. | Externalize the secret now. There is no safe temporary window for a secret in source code. |
+| "It's in a private repo — only the team has access." | Private repos get forked, cloned, and leaked. Team members leave. Repo visibility settings get misconfigured. Git history persists long after access is revoked. | Environment variables and secret managers cost nothing and eliminate this entire risk class. |
+| "It's a local dev config file — I won't commit it." | Intentions don't matter; git does. Without `.gitignore` enforcement, a `git add .` will commit it. Local config files become secrets incidents regularly. | Add the file to `.gitignore` immediately and use `.env.example` with placeholders as the committed reference. |
+
+## Verification
+
+- [ ] No API key patterns in source files — grep for `sk_live_`, `sk_test_`, `AKIA`, `Bearer `, and common credential prefixes in non-test source files.
+- [ ] No connection strings with embedded credentials — grep for `postgres://`, `mysql://`, `mongodb://` patterns that contain `@` (indicating user:password in the URL).
+- [ ] `.env` files are gitignored — check `.gitignore` includes `*.env` or `.env` and that no `.env` files appear in `git ls-files`.

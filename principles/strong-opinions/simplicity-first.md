@@ -61,3 +61,17 @@ This includes dead abstractions: every interface, base class, and generic type p
 Security-critical paths (auth, payment, data access control) deserve explicit layering even when it feels heavy. Also, if you're building a module that genuinely has multiple implementations today (not hypothetically), an interface is earned. Interfaces required by DI frameworks are acceptable.
 
 **Related:** `patterns-need-justification` applies the same lens to design patterns rather than interfaces.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "We might need this abstraction later." | "Later" is unpredictable. Abstractions added speculatively are often wrong when the real need arrives — and they add maintenance cost until then. | Add the abstraction when the second concrete use case exists. Not before. |
+| "This pattern is standard — everyone knows the factory pattern." | Familiarity doesn't justify complexity. A pattern that requires two extra files to make a single function call has a negative return on investment. | Evaluate the pattern against this codebase's actual needs, not general conventions. |
+| "It's just one more layer of indirection." | Indirection compounds. Each layer doubles the number of files a reader must open to understand a code path. Three "just one more" decisions become an onion with no core. | Name the problem the layer solves. If the name is vague, the layer isn't needed yet. |
+| "The interface makes it easier to test with mocks." | Single-implementation interfaces created solely for mocking indicate the real issue is tight coupling, not missing abstractions. | Break the coupling instead: use dependency injection via function parameters or constructor arguments, not interface hierarchies. |
+
+## Verification
+
+- [ ] No interface has a single implementing class — grep for `implements ` and check that each interface name used after `implements` has more than one implementing class in the codebase.
+- [ ] No generic type parameters that are always instantiated with the same type — check for `<T>` functions or classes where `T` is always `string` or a single domain type at every call site.

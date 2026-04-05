@@ -78,3 +78,18 @@ async function getOrderTotal(orderId: string): Promise<PricingResult> {
 ## Exceptions
 
 Internal function calls within the same trust boundary (same service, same process) do not need boundary validation — that would be excessive defensive programming. TypeScript's type system provides compile-time validation within a trust boundary. Performance-critical hot paths may validate once at the boundary and pass validated types internally.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This data comes from an internal service, so it's safe." | Internal services have bugs, get compromised, and return unexpected shapes. "Internal" is not a trust level — it's a network location. | Validate the response with a schema (`safeParse`) before using any fields. |
+| "TypeScript types are enough — if it compiles, it's valid." | TypeScript types are erased at runtime. `any` casts, JSON parsing, and network responses are all untyped at execution time. | Use a runtime schema validator (Zod, Valibot) at every I/O boundary. |
+| "I'll add validation later once the happy path works." | Validation deferred is validation skipped. Unvalidated code ships to production and stays there. | Write the schema before the handler logic. Validation is the first line of the handler, not a follow-up task. |
+| "The schema is too complex to validate fully right now." | Partial validation is better than none, but partial validation creates false confidence. Complex schemas are exactly where unexpected shapes cause the most damage. | Start with the fields the handler actually uses. A small strict schema beats no schema. |
+
+## Verification
+
+- [ ] Every route handler validates `req.body`, `req.params`, and `req.query` before use — grep for `req.body` and confirm each is preceded by a `.safeParse(` or `.parse(` call.
+- [ ] Service-to-service responses are validated — grep for `response.json()` and confirm results are passed through a schema before field access.
+- [ ] No raw `as SomeType` casts on externally sourced data — grep for `as ` in handler and service files and check each cast site for prior schema validation.

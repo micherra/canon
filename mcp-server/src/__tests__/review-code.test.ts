@@ -129,4 +129,56 @@ describe("reviewCode", () => {
     expect(result.principles_to_evaluate).toHaveLength(2);
     expect(result.summary).not.toContain("omitted");
   });
+
+  describe("sections filter", () => {
+    beforeEach(async () => {
+      // Add a principle with known sections
+      const rulesDir = join(pluginDir, "principles", "rules");
+      await writeFile(
+        join(rulesDir, "r-full.md"),
+        [
+          "---",
+          "id: r-full",
+          "title: Rule Full",
+          "severity: rule",
+          "---",
+          "",
+          "Body summary.",
+          "",
+          "## Anti-Rationalization",
+          "",
+          "Excuse table here.",
+          "",
+          "## Verification",
+          "",
+          "Run: `npm test`",
+        ].join("\n"),
+      );
+    });
+
+    it("sections filter applies to principles_to_evaluate body field", async () => {
+      const result = await reviewCode(
+        { code: "const x = 1;", file_path: "src/foo.ts", sections: ["verification"] },
+        tmpDir,
+        pluginDir,
+      );
+      const p = result.principles_to_evaluate.find((p) => p.principle_id === "r-full");
+      expect(p).toBeDefined();
+      expect(p!.body).toContain("Body summary.");
+      expect(p!.body).toContain("## Verification");
+      expect(p!.body).not.toContain("## Anti-Rationalization");
+    });
+
+    it("no sections parameter returns full body (backward compat)", async () => {
+      const result = await reviewCode(
+        { code: "const x = 1;", file_path: "src/foo.ts" },
+        tmpDir,
+        pluginDir,
+      );
+      const p = result.principles_to_evaluate.find((p) => p.principle_id === "r-full");
+      expect(p).toBeDefined();
+      expect(p!.body).toContain("## Anti-Rationalization");
+      expect(p!.body).toContain("## Verification");
+    });
+  });
 });
