@@ -284,6 +284,132 @@ describe("driveFlow — wave entry", () => {
     );
   });
 
+  it("respawns only unfinished tasks, reuses existing worktree, and injects resume context", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    writeIndexMd(workspace, "epic-slug", [
+      { task_id: "task-01", wave: 1 },
+      { task_id: "task-02", wave: 1 },
+    ]);
+    const waveResults: Record<string, { status: string; tasks: string[] }> = {
+      "task-01": {
+        status: "done",
+        tasks: ["task-01"],
+      },
+      "task-02": {
+        status: "blocked",
+        tasks: ["task-02"],
+      },
+    };
+    Object.assign(waveResults["task-01"], { worktree_path: "/project/.canon/worktrees/task-01" });
+    Object.assign(waveResults["task-02"], { worktree_path: "/project/.canon/worktrees/task-02" });
+
+    store.upsertState("implement", {
+      entries: 1,
+      status: "in_progress",
+      wave: 1,
+      wave_results: waveResults,
+      wave_total: 2,
+    });
+
+    vi.mocked(getProjectDir).mockReturnValue("/project");
+    vi.mocked(createWaveWorktrees).mockResolvedValue([]);
+    vi.mocked(enterAndPrepareState).mockResolvedValue(
+      makeEnterResult({
+        prompts: [
+          {
+            agent: "canon:canon-implementor",
+            item: "task-02",
+            prompt: "Implement task-02",
+            role: "implementor",
+            template_paths: [],
+          },
+        ],
+      }),
+    );
+
+    const flow = makeWaveFlow();
+    const result = await driveFlow({ flow, workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).toBe("spawn");
+    if (result.action !== "spawn") return;
+    expect(result.requests).toHaveLength(1);
+    expect(result.requests[0].task_id).toBe("task-02");
+    expect(result.requests[0].worktree_path).toBe("/project/.canon/worktrees/task-02");
+    expect(result.requests[0].prompt).toContain("## Resume Context");
+    expect(createWaveWorktrees).not.toHaveBeenCalled();
+    expect(enterAndPrepareState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ task_id: "task-02" }],
+        peer_count: 1,
+      }),
+    );
+  });
+
+  it("treats skipped tasks as non-respawnable", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    writeIndexMd(workspace, "epic-slug", [
+      { task_id: "task-01", wave: 1 },
+      { task_id: "task-02", wave: 1 },
+    ]);
+    const waveResults: Record<string, { status: string; tasks: string[] }> = {
+      "task-01": {
+        status: "skipped",
+        tasks: ["task-01"],
+      },
+    };
+    Object.assign(waveResults["task-01"], { worktree_path: "/project/.canon/worktrees/task-01" });
+
+    store.upsertState("implement", {
+      entries: 1,
+      status: "in_progress",
+      wave: 1,
+      wave_results: waveResults,
+      wave_total: 2,
+    });
+
+    vi.mocked(getProjectDir).mockReturnValue("/project");
+    vi.mocked(createWaveWorktrees).mockResolvedValue([
+      {
+        branch: "canon-wave/task-02",
+        task_id: "task-02",
+        worktree_path: "/project/.canon/worktrees/task-02",
+      },
+    ]);
+    vi.mocked(enterAndPrepareState).mockResolvedValue(
+      makeEnterResult({
+        prompts: [
+          {
+            agent: "canon:canon-implementor",
+            item: "task-02",
+            prompt: "Implement task-02",
+            role: "implementor",
+            template_paths: [],
+          },
+        ],
+      }),
+    );
+
+    const flow = makeWaveFlow();
+    const result = await driveFlow({ flow, workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).toBe("spawn");
+    if (result.action !== "spawn") return;
+    expect(result.requests).toHaveLength(1);
+    expect(result.requests[0].task_id).toBe("task-02");
+    expect(result.requests[0].prompt).not.toContain("## Resume Context");
+    expect(createWaveWorktrees).toHaveBeenCalledWith(
+      [{ task_id: "task-02" }],
+      "/project",
+      "/project",
+    );
+  });
+
   it("stores wave metadata (wave=1, wave_total) in execution state", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
