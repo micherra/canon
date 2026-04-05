@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
-import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
+import { gitExecAsync } from "../adapters/git-adapter-async.ts";
+import { CANON_DIR, CANON_FILES } from "../../shared/constants.ts";
 
 export type FingerprintInput = {
   projectDir: string;
