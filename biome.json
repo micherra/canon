@@ -16,7 +16,7 @@
   "files": {
     "ignoreUnknown": true,
     "includes": [
-      "src/**/*.{ts,tsx,js,jsx,mts,cts,cjs,mjs,json,jsonc}",
+      "mcp-server/src/**/*.{ts,tsx,js,jsx,mts,cts,cjs,mjs,json,jsonc}",
 
       "!**/*.generated.*",
       "!**/*.min.*",
@@ -130,7 +130,7 @@
 
   "overrides": [
     {
-      "includes": ["src/**/*.test.{ts,tsx,js,jsx}", "src/**/*.spec.{ts,tsx,js,jsx}"],
+      "includes": ["mcp-server/src/**/*.test.{ts,tsx,js,jsx}", "mcp-server/src/**/*.spec.{ts,tsx,js,jsx}"],
       "linter": {
         "rules": {
           "complexity": {
@@ -159,7 +159,7 @@
       }
     },
     {
-      "includes": ["src/ui/**/*.{ts,tsx,js,jsx}"],
+      "includes": ["mcp-server/src/ui/**/*.{ts,tsx,js,jsx}"],
       "linter": {
         "rules": {
           "correctness": {
@@ -174,7 +174,6 @@
     "clientKind": "git",
     "defaultBranch": "main",
     "enabled": true,
-    "root": "..",
     "useIgnoreFile": true
   }
 }
