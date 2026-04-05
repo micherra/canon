@@ -94,3 +94,18 @@ function ItemSelector({ onAdd }: { onAdd: (item: Item) => void }) {
 Two-way binding for form inputs (`v-model` in Vue, controlled inputs in React) is the pragmatic choice when the parent explicitly opts in — the binding is declared at the call site, not hidden inside the child. Global state managers (Redux, Zustand, Pinia) that use a dispatch/action model maintain unidirectional flow even though components can trigger state changes from anywhere — the change goes through a central, predictable reducer, not by mutating a prop.
 
 **Related:** `minimize-client-side-state` reduces the amount of state flowing through the tree, making unidirectional flow simpler to maintain.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
+| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
+| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
+| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
+
+## Verification
+
+- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
+- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
+- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.

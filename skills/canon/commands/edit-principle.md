@@ -5,7 +5,12 @@ allowed-tools: [Read, Write, Edit, Bash, Glob, Agent]
 model: sonnet
 ---
 
-Edit an existing Canon principle or agent-rule using the canon-writer agent in **edit** mode.
+Thin router for Canon principle/agent-rule editing.
+
+Authority model:
+- `agents/canon-writer.md` owns editing behavior and decision logic
+- `skills/canon/references/principle-format.md` is the source of truth for file structure
+- This command should not duplicate authoring or validation policy
 
 ## Instructions
 
@@ -17,21 +22,19 @@ Launch the canon-writer agent:
 
 If no arguments, ask the user which principle they want to edit. Suggest asking Canon to list principles to browse available entries.
 
-### Step 2: Let the agent work
+### Step 2: Delegate completely
 
-The canon-writer will:
-1. Load and display the current entry
-2. Ask what the user wants to change (or apply flags directly)
-3. Handle severity changes including file moves
-4. Check for conflicts with other entries
-5. Save the updated file
-6. Validate the result
+Do not restate editing rules here. Let canon-writer:
+- load the entry
+- resolve requested edits
+- normalize structure to the format spec
+- validate and save
 
 ### Step 3: Confirm changes
 
 After the agent completes, confirm to the user:
 - Which fields were changed (before → after)
 - Where the file was saved
-- Any conflicts that were flagged
+- Whether structure was normalized to the format spec
 - Suggest asking Canon to list principles to verify
 - If severity changed: "Enforcement level updated — this takes effect on the next review."

@@ -51,6 +51,10 @@ The markdown body after frontmatter follows this fixed structure:
 
 4. **Exceptions** (`## Exceptions`, optional) — When it's acceptable to deviate. Be specific.
 
+5. **Anti-Rationalization** (`## Anti-Rationalization`) — A short table that names common excuses for violating this principle, why each excuse is incorrect, and the correct action.
+
+6. **Verification** (`## Verification`) — A concrete checklist for reviewing compliance in code/config/tests and confirming any allowed exceptions are bounded and explicit.
+
 ## Severity Definitions
 
 | Level | Meaning | Hook behavior | Review behavior |

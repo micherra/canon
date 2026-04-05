@@ -80,3 +80,18 @@ Module B can deploy a completely new internal implementation. As long as it hono
 Early-stage products with one team don't need micro frontends — a well-structured monolith with clear module boundaries is simpler and sufficient. Shared design-system libraries that version semantically and publish as packages are an acceptable build-time dependency, since they change infrequently and are consumed as a stable interface, not coupled internals. The overhead of independent deployment infrastructure (separate CI pipelines, module federation, runtime loading) must be justified by team scale — typically three or more teams working on the same product.
 
 **Related:** `resilient-frontend-composition` explains why independently deployed modules need error boundaries — deployment independence makes runtime failures between modules routine, not exceptional.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "This principle is too strict for this case." | Principles prevent common failure modes specifically in edge cases and delivery pressure, where shortcuts look most attractive. | Apply the principle unless a concrete, bounded exception is documented under `## Exceptions`. |
+| "We'll clean it up after this ships." | Deferred quality work usually becomes permanent debt and normalizes repeated violations. | Implement the compliant approach now, or record an explicit follow-up with owner and due date. |
+| "Code review can catch this later." | Manual review is inconsistent under time pressure and cannot replace explicit constraints. | Encode compliance in code structure, tests, or linting so violations fail fast and repeatably. |
+| "This is just a small change, so the rule doesn't matter." | Small changes accumulate into systemic drift when principles are waived incrementally. | Hold small changes to the same bar and verify the invariant still holds after each change. |
+
+## Verification
+
+- [ ] Updated files satisfy this principle's core constraint in behavior and structure.
+- [ ] Any deviation is explicitly documented under `## Exceptions` with rationale and bounds.
+- [ ] Tests, lints, or checks were added/updated where needed so regressions are detectable.
