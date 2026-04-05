@@ -25,7 +25,6 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { CANON_DIR, CANON_FILES } from "../../shared/constants.ts";
 import { computeFileInsightMaps, KgQuery } from "../../graph/kg-query.ts";
 import { initDatabase } from "../../graph/kg-schema.ts";
 import { KgStore } from "../../graph/kg-store.ts";
@@ -33,6 +32,7 @@ import { getItemCountCap } from "../../orchestration/context-budget.ts";
 import { getExecutionStore } from "../../orchestration/execution-store.ts";
 import { assembleWaveBriefing, readWaveGuidance } from "../../orchestration/wave-briefing.ts";
 import { escapeDollarBrace } from "../../orchestration/wave-variables.ts";
+import { CANON_DIR, CANON_FILES } from "../../shared/constants.ts";
 import type { PromptContext, TaskItem } from "./types.ts";
 
 // KG staleness threshold: 1 hour (matches show_pr_impact UI banner)

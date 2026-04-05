@@ -18,13 +18,13 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Database } from "better-sqlite3";
-import { forkJob, type JobMessage, killJob, sendWorkerInput } from "../adapters/job-adapter.ts";
-import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "../../shared/constants.ts";
 import { runPipeline } from "../../graph/kg-pipeline.ts";
 import { initExecutionDb } from "../../orchestration/execution-schema.ts";
-import type { CodebaseGraphInput } from "../../tools/codebase-graph.ts";
+import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "../../shared/constants.ts";
 import { isSyncMode } from "../../shared/lib/env.ts";
 import { type ToolResult, toolError, toolOk } from "../../shared/lib/tool-result.ts";
+import type { CodebaseGraphInput } from "../../tools/codebase-graph.ts";
+import { forkJob, type JobMessage, killJob, sendWorkerInput } from "../adapters/job-adapter.ts";
 import { computeJobFingerprint } from "./job-fingerprint.ts";
 import { type JobStatus, JobStore } from "./job-store.ts";
 

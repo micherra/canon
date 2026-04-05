@@ -47,12 +47,12 @@ import { syncBoardToStore } from "../orchestration/board-sync.ts";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
 import { categorizeFailures } from "../tools/categorize-failures.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import type { ToolResult } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

@@ -36,8 +36,8 @@ vi.mock("../orchestration/effects.ts", () => ({
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
-import { reportResult } from "../tools/report-result.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
+import { reportResult } from "../tools/report-result.ts";
 
 function makeTmpWorkspace(): string {
   const dir = mkdtempSync(join(tmpdir(), "qg-report-result-"));

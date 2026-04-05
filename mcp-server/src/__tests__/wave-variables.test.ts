@@ -10,13 +10,13 @@ vi.mock("../platform/adapters/git-adapter.ts", () => ({
   gitExec: vi.fn(),
 }));
 
-import { gitExec } from "../platform/adapters/git-adapter.ts";
 import {
   escapeDollarBrace,
   extractFilePaths,
   parseTaskIdsForWave,
   resolveWaveVariables,
 } from "../orchestration/wave-variables.ts";
+import { gitExec } from "../platform/adapters/git-adapter.ts";
 
 const mockGitExec = vi.mocked(gitExec);
 

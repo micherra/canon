@@ -44,11 +44,11 @@ vi.mock("../../../graph/kg-pipeline.ts", () => ({
   }),
 }));
 
-import { forkJob, killJob, sendWorkerInput } from "../../adapters/job-adapter.ts";
 import { runPipeline } from "../../../graph/kg-pipeline.ts";
+import { isSyncMode } from "../../../shared/lib/env.ts";
+import { forkJob, killJob, sendWorkerInput } from "../../adapters/job-adapter.ts";
 // Import mocked modules AFTER vi.mock declarations
 import { computeJobFingerprint } from "../job-fingerprint.ts";
-import { isSyncMode } from "../../../shared/lib/env.ts";
 import { _resetJobManagerSingleton, getOrCreateJobManager, JobManager } from "../job-manager.ts";
 
 function makeDb() {

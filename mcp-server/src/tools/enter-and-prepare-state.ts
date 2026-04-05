@@ -11,7 +11,6 @@
  * 6. Return combined result.
  */
 
-import { gitExec } from "../platform/adapters/git-adapter.ts";
 import { enterState } from "../orchestration/board.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { assembleEnrichment } from "../orchestration/context-enrichment.ts";
@@ -26,6 +25,7 @@ import type {
   ResolvedFlow,
 } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { gitExec } from "../platform/adapters/git-adapter.ts";
 import type { ToolResult } from "../shared/lib/tool-result.ts";
 import { toolError } from "../shared/lib/tool-result.ts";
 import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";

@@ -84,14 +84,14 @@ vi.mock("../tools/codebase-graph.ts", async (importOriginal) => {
 
 // Imports after mocks
 
-import { forkJob, killJob } from "../platform/adapters/job-adapter.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
+import { initExecutionDb } from "../orchestration/execution-schema.ts";
+import { forkJob, killJob } from "../platform/adapters/job-adapter.ts";
 import { computeJobFingerprint } from "../platform/jobs/job-fingerprint.ts";
 import { _resetJobManagerSingleton, JobManager } from "../platform/jobs/job-manager.ts";
 import { JobStore } from "../platform/jobs/job-store.ts";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { codebaseGraphPoll } from "../tools/codebase-graph-poll.ts";
 import { isSyncMode } from "../shared/lib/env.ts";
+import { codebaseGraphPoll } from "../tools/codebase-graph-poll.ts";
 
 // Note: codebaseGraphMaterialize requires codebase-graph mock — tested in separate describe
 

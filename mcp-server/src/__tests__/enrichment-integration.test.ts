@@ -23,9 +23,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { DriftDb } from "../platform/storage/drift/drift-db.ts";
 import { initDriftDb } from "../platform/storage/drift/drift-schema.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import type { ReviewEntry } from "../shared/schema.ts";
 
 // Module mocks for context-enrichment tests
@@ -48,10 +48,10 @@ vi.mock("../orchestration/scope-resolver.ts", () => ({
 
 // Imports (after mocks)
 
-import { gitLog } from "../platform/adapters/git-adapter.ts";
-import { DriftStore } from "../platform/storage/drift/store.ts";
 import { assembleEnrichment, type EnrichmentInput } from "../orchestration/context-enrichment.ts";
 import { resolveTaskScope } from "../orchestration/scope-resolver.ts";
+import { gitLog } from "../platform/adapters/git-adapter.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 
 // Helpers shared across sections
 
@@ -207,7 +207,10 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
 
   it("scope resolver returning two files produces git entries for both files", async () => {
     // Verify assembleEnrichment calls gitLog once per file from resolved scope.
-    const scopedFiles = ["src/platform/adapters/git-adapter.ts", "src/platform/storage/drift/store.ts"];
+    const scopedFiles = [
+      "src/platform/adapters/git-adapter.ts",
+      "src/platform/storage/drift/store.ts",
+    ];
     vi.mocked(resolveTaskScope).mockReturnValue(scopedFiles);
 
     const result = await assembleEnrichment(

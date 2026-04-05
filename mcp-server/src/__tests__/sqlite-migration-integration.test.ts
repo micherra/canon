@@ -17,18 +17,18 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DriftStore } from "../platform/storage/drift/store.ts";
 import {
   assertWorkspacePath,
   clearStoreCache,
   getExecutionStore,
 } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import type { ReviewEntry } from "../shared/schema.ts";
 import { getMessages } from "../tools/get-messages.ts";
 import { postMessage } from "../tools/post-message.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

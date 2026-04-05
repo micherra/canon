@@ -23,12 +23,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { getFileContext } from "../tools/get-file-context.ts";
 import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 import {

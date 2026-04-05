@@ -1,6 +1,6 @@
 import { DriftStore } from "../platform/storage/drift/store.ts";
-import type { ReportInput, ReviewEntry } from "../shared/schema.ts";
 import { generateId } from "../shared/lib/id.ts";
+import type { ReportInput, ReviewEntry } from "../shared/schema.ts";
 
 export type ReportOutput = {
   recorded: boolean;

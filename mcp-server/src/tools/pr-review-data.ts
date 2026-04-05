@@ -1,16 +1,16 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
-import { runShell } from "../platform/adapters/process-adapter.ts";
-import { CANON_DIR, CANON_FILES, LAYER_CENTRALITY } from "../shared/constants.ts";
-import { DriftStore } from "../platform/storage/drift/store.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import type { FilePriorityScore } from "../graph/priority.ts";
-import type { ReviewEntry } from "../shared/schema.ts";
+import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
+import { runShell } from "../platform/adapters/process-adapter.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
+import { CANON_DIR, CANON_FILES, LAYER_CENTRALITY } from "../shared/constants.ts";
 import { buildLayerInferrer, loadLayerMappings } from "../shared/lib/config.ts";
 import { sanitizeGitRef } from "../shared/lib/git-ref.ts";
+import type { ReviewEntry } from "../shared/schema.ts";
 
 export type PrReviewDataInput = {
   pr_number?: number;

@@ -165,7 +165,11 @@ describe("resolveImport — TS ESM .js extension convention", () => {
 
   it("resolves .js import to .ts file", () => {
     // import { DriftStore } from "../platform/storage/drift/store.ts"
-    const result = resolveImport("../platform/storage/drift/store.js", "src/tools/my-tool.ts", allFiles);
+    const result = resolveImport(
+      "../platform/storage/drift/store.js",
+      "src/tools/my-tool.ts",
+      allFiles,
+    );
     expect(result).toBe("src/platform/storage/drift/store.ts");
   });
 

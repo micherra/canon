@@ -35,11 +35,11 @@ import type { FlowEventMap } from "../orchestration/events.ts";
 import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { checkConvergence } from "../tools/check-convergence.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
-import { assertOk } from "../shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

@@ -1,6 +1,6 @@
 import { DriftStore } from "../platform/storage/drift/store.ts";
-import type { ReviewViolation } from "../shared/schema.ts";
 import { generateId } from "../shared/lib/id.ts";
+import type { ReviewViolation } from "../shared/schema.ts";
 
 export type StorePrReviewInput = {
   pr_number?: number;
