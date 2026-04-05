@@ -41,7 +41,7 @@ vi.mock("../consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("../../adapters/git-adapter.ts", () => ({
+vi.mock("../../platform/adapters/git-adapter.ts", () => ({
   gitExec: vi
     .fn()
     .mockReturnValue({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: false }),

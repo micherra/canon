@@ -23,7 +23,7 @@ vi.mock("../jobs/job-fingerprint.ts", () => ({
   computeJobFingerprint: vi.fn().mockResolvedValue("test-fingerprint-xyz"),
 }));
 
-vi.mock("../adapters/job-adapter.ts", () => ({
+vi.mock("../platform/adapters/job-adapter.ts", () => ({
   forkJob: vi.fn(),
   killJob: vi.fn(),
   sendWorkerInput: vi.fn(),
@@ -84,7 +84,7 @@ vi.mock("../tools/codebase-graph.ts", async (importOriginal) => {
 
 // Imports after mocks
 
-import { forkJob, killJob } from "../adapters/job-adapter.ts";
+import { forkJob, killJob } from "../platform/adapters/job-adapter.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
 import { computeJobFingerprint } from "../jobs/job-fingerprint.ts";
 import { _resetJobManagerSingleton, JobManager } from "../jobs/job-manager.ts";

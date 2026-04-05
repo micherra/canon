@@ -11,7 +11,7 @@
  * 6. Return combined result.
  */
 
-import { gitExec } from "../adapters/git-adapter.ts";
+import { gitExec } from "../platform/adapters/git-adapter.ts";
 import { enterState } from "../orchestration/board.ts";
 import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
 import { assembleEnrichment } from "../orchestration/context-enrichment.ts";

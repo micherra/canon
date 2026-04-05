@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { gitExecAsync } from "../adapters/git-adapter-async.ts";
-import { runShell } from "../adapters/process-adapter.ts";
+import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
+import { runShell } from "../platform/adapters/process-adapter.ts";
 import { CANON_DIR, CANON_FILES, LAYER_CENTRALITY } from "../shared/constants.ts";
 import { DriftStore } from "../drift/store.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";

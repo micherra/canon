@@ -12,7 +12,7 @@ type GitExecResult = {
 let gitExecImpl: ((args: string[], cwd: string) => GitExecResult) | null = null;
 let lastGitExecArgs: { args: string[]; cwd: string } | null = null;
 
-vi.mock("../adapters/git-adapter.ts", () => ({
+vi.mock("../platform/adapters/git-adapter.ts", () => ({
   gitExec: (args: string[], cwd: string) => {
     lastGitExecArgs = { args, cwd };
     if (gitExecImpl) return gitExecImpl(args, cwd);

@@ -877,7 +877,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
     db.close();
 
     // Mock git adapter to return an empty diff
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
         exitCode: 0,
         ok: true,
@@ -897,7 +897,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
   });
 
   it("kg_freshness_ms is undefined when KG DB does not exist", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
         exitCode: 0,
         ok: true,

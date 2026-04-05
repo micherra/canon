@@ -39,7 +39,7 @@ vi.mock("../../orchestration/flow-parser.ts", () => ({
   }),
 }));
 
-vi.mock("../../adapters/git-adapter.ts", () => ({
+vi.mock("../../platform/adapters/git-adapter.ts", () => ({
   gitStatus: vi
     .fn()
     .mockReturnValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),

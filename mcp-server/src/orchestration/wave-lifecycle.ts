@@ -9,7 +9,7 @@
  */
 
 import { join } from "node:path";
-import { gitExecAsync } from "../adapters/git-adapter-async.ts";
+import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
 
 export type WaveTask = {
   task_id: string;

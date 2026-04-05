@@ -53,7 +53,7 @@ describe("graph-worker — module imports and type contracts", () => {
 
   it("job-adapter types are compatible with graph-worker usage", async () => {
     // Verify the IPC message type shapes used by graph-worker compile correctly
-    const { forkJob, sendWorkerInput, killJob } = await import("../../adapters/job-adapter.ts");
+    const { forkJob, sendWorkerInput, killJob } = await import("../../platform/adapters/job-adapter.ts");
     expect(typeof forkJob).toBe("function");
     expect(typeof sendWorkerInput).toBe("function");
     expect(typeof killJob).toBe("function");
