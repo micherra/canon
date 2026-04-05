@@ -16,7 +16,7 @@ import { describe, expect, it, vi } from "vitest";
 // forks real child processes via the full JobManager → job-adapter → graph-worker
 // pipeline against a temporary project directory.
 
-vi.mock("../../graph/kg-pipeline.ts", () => ({
+vi.mock("../../../graph/kg-pipeline.ts", () => ({
   runPipeline: vi.fn().mockResolvedValue({
     durationMs: 1,
     edgesTotal: 0,
@@ -30,7 +30,7 @@ vi.mock("../../graph/kg-pipeline.ts", () => ({
 
 describe("graph-worker — module imports and type contracts", () => {
   it("runPipeline has the expected signature (projectDir + options)", async () => {
-    const { runPipeline } = await import("../../graph/kg-pipeline.ts");
+    const { runPipeline } = await import("../../../graph/kg-pipeline.ts");
     expect(typeof runPipeline).toBe("function");
 
     // Invoke it to verify the mock shape
@@ -53,7 +53,7 @@ describe("graph-worker — module imports and type contracts", () => {
 
   it("job-adapter types are compatible with graph-worker usage", async () => {
     // Verify the IPC message type shapes used by graph-worker compile correctly
-    const { forkJob, sendWorkerInput, killJob } = await import("../../platform/adapters/job-adapter.ts");
+    const { forkJob, sendWorkerInput, killJob } = await import("../../adapters/job-adapter.ts");
     expect(typeof forkJob).toBe("function");
     expect(typeof sendWorkerInput).toBe("function");
     expect(typeof killJob).toBe("function");
@@ -64,7 +64,7 @@ describe("graph-worker — module imports and type contracts", () => {
 
 describe("graph-worker — message handling logic", () => {
   it("sends complete message after runPipeline succeeds", async () => {
-    const { runPipeline } = await import("../../graph/kg-pipeline.ts");
+    const { runPipeline } = await import("../../../graph/kg-pipeline.ts");
     vi.mocked(runPipeline).mockResolvedValueOnce({
       durationMs: 50,
       edgesTotal: 10,
@@ -105,7 +105,7 @@ describe("graph-worker — message handling logic", () => {
   });
 
   it("sends error message when runPipeline throws", async () => {
-    const { runPipeline } = await import("../../graph/kg-pipeline.ts");
+    const { runPipeline } = await import("../../../graph/kg-pipeline.ts");
     vi.mocked(runPipeline).mockRejectedValueOnce(new Error("pipeline failed"));
 
     const sentMessages: unknown[] = [];
@@ -132,7 +132,7 @@ describe("graph-worker — message handling logic", () => {
   });
 
   it("ignores messages with type !== 'start' (no runPipeline call)", async () => {
-    const { runPipeline } = await import("../../graph/kg-pipeline.ts");
+    const { runPipeline } = await import("../../../graph/kg-pipeline.ts");
     vi.mocked(runPipeline).mockClear();
 
     // Simulate worker logic: only process 'start' messages
@@ -145,7 +145,7 @@ describe("graph-worker — message handling logic", () => {
   });
 
   it("sends progress messages via onProgress callback", async () => {
-    const { runPipeline } = await import("../../graph/kg-pipeline.ts");
+    const { runPipeline } = await import("../../../graph/kg-pipeline.ts");
     vi.mocked(runPipeline).mockImplementationOnce(async (_, options) => {
       options?.onProgress?.("scan", 0, 0);
       options?.onProgress?.("scan", 10, 10);

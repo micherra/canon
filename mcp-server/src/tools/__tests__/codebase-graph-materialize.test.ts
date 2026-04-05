@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CodebaseGraphOutput } from "../codebase-graph.ts";
 
 // Mock the job-manager module before importing the tool
-vi.mock("../../jobs/job-manager.ts", () => {
+vi.mock("../../platform/jobs/job-manager.ts", () => {
   const mockManager = {
     cancel: vi.fn(),
     cleanup: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock("../codebase-graph.ts", async (importOriginal) => {
   };
 });
 
-import * as jobManagerModule from "../../jobs/job-manager.ts";
+import * as jobManagerModule from "../../platform/jobs/job-manager.ts";
 import * as codebaseGraphModule from "../codebase-graph.ts";
 import { codebaseGraphMaterialize } from "../codebase-graph-materialize.ts";
 

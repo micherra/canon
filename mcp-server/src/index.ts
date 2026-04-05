@@ -13,7 +13,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
-import { getJobManager } from "./jobs/job-manager.ts";
+import { getJobManager } from "./platform/jobs/job-manager.ts";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
 import { reportInputSchema } from "./shared/schema.ts";
 import type { FailureEntry } from "./tools/categorize-failures.ts";

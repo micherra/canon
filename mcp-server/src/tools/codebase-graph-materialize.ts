@@ -13,7 +13,7 @@
  * - deep-modules: delegates graph reading to readGraphFromDb()
  */
 
-import { getJobManager } from "../jobs/job-manager.ts";
+import { getJobManager } from "../platform/jobs/job-manager.ts";
 import type { ToolResult } from "../shared/lib/tool-result.ts";
 import { toolError, toolOk } from "../shared/lib/tool-result.ts";
 import type { CodebaseGraphInput } from "./codebase-graph.ts";

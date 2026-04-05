@@ -8,8 +8,8 @@
  * Entry point only — no direct exports. Import job-adapter.ts for IPC types.
  */
 
-import type { JobMessage, WorkerInput } from "../platform/adapters/job-adapter.ts";
-import { runPipeline } from "../graph/kg-pipeline.ts";
+import type { JobMessage, WorkerInput } from "../adapters/job-adapter.ts";
+import { runPipeline } from "../../graph/kg-pipeline.ts";
 
 function send(msg: JobMessage): void {
   if (process.send) {

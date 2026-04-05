@@ -12,29 +12,29 @@ import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initExecutionDb } from "../../orchestration/execution-schema.ts";
+import { initExecutionDb } from "../../../orchestration/execution-schema.ts";
 
 // Mocks — must be declared before importing the module under test.
 
 // Mock job-fingerprint to avoid real git calls
-vi.mock("../../jobs/job-fingerprint.ts", () => ({
+vi.mock("../job-fingerprint.ts", () => ({
   computeJobFingerprint: vi.fn().mockResolvedValue("mock-fingerprint-abc123"),
 }));
 
 // Mock job-adapter to avoid real child process forking
-vi.mock("../../platform/adapters/job-adapter.ts", () => ({
+vi.mock("../../adapters/job-adapter.ts", () => ({
   forkJob: vi.fn(),
   killJob: vi.fn(),
   sendWorkerInput: vi.fn(),
 }));
 
 // Mock env helper so we can control sync mode in tests
-vi.mock("../../shared/lib/env.ts", () => ({
+vi.mock("../../../shared/lib/env.ts", () => ({
   isSyncMode: vi.fn().mockReturnValue(false),
 }));
 
 // Mock runPipeline for sync mode tests
-vi.mock("../../graph/kg-pipeline.ts", () => ({
+vi.mock("../../../graph/kg-pipeline.ts", () => ({
   runPipeline: vi.fn().mockResolvedValue({
     durationMs: 1000,
     edgesTotal: 300,
@@ -44,11 +44,11 @@ vi.mock("../../graph/kg-pipeline.ts", () => ({
   }),
 }));
 
-import { forkJob, killJob, sendWorkerInput } from "../../platform/adapters/job-adapter.ts";
-import { runPipeline } from "../../graph/kg-pipeline.ts";
+import { forkJob, killJob, sendWorkerInput } from "../../adapters/job-adapter.ts";
+import { runPipeline } from "../../../graph/kg-pipeline.ts";
 // Import mocked modules AFTER vi.mock declarations
-import { computeJobFingerprint } from "../../jobs/job-fingerprint.ts";
-import { isSyncMode } from "../../shared/lib/env.ts";
+import { computeJobFingerprint } from "../job-fingerprint.ts";
+import { isSyncMode } from "../../../shared/lib/env.ts";
 import { _resetJobManagerSingleton, getOrCreateJobManager, JobManager } from "../job-manager.ts";
 
 function makeDb() {

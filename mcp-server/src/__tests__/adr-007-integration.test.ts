@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Shared mocks for job subsystem (reused across describe blocks)
 
-vi.mock("../jobs/job-fingerprint.ts", () => ({
+vi.mock("../platform/jobs/job-fingerprint.ts", () => ({
   computeJobFingerprint: vi.fn().mockResolvedValue("test-fingerprint-xyz"),
 }));
 
@@ -86,9 +86,9 @@ vi.mock("../tools/codebase-graph.ts", async (importOriginal) => {
 
 import { forkJob, killJob } from "../platform/adapters/job-adapter.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
-import { computeJobFingerprint } from "../jobs/job-fingerprint.ts";
-import { _resetJobManagerSingleton, JobManager } from "../jobs/job-manager.ts";
-import { JobStore } from "../jobs/job-store.ts";
+import { computeJobFingerprint } from "../platform/jobs/job-fingerprint.ts";
+import { _resetJobManagerSingleton, JobManager } from "../platform/jobs/job-manager.ts";
+import { JobStore } from "../platform/jobs/job-store.ts";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import { codebaseGraphPoll } from "../tools/codebase-graph-poll.ts";
 import { isSyncMode } from "../shared/lib/env.ts";

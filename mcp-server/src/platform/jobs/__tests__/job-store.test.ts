@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import type Database from "better-sqlite3";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { initExecutionDb } from "../../orchestration/execution-schema.ts";
+import { initExecutionDb } from "../../../orchestration/execution-schema.ts";
 import { type JobCacheRow, type JobRow, JobStore } from "../job-store.ts";
 
 function makeDb(): Database.Database {
