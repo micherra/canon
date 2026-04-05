@@ -4,8 +4,6 @@
 import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
-import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../constants.ts";
-import { DriftStore } from "../drift/store.ts";
 import { extractExports } from "../graph/export-parser.ts";
 import { extractImports, resolveImport } from "../graph/import-parser.ts";
 import {
@@ -17,14 +15,16 @@ import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { EntityKind, FileMetrics } from "../graph/kg-types.ts";
 import { scanSourceFiles } from "../graph/scanner.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
+import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../shared/constants.ts";
 import {
   buildLayerInferrer,
   deriveSourceDirsFromLayers,
   loadLayerMappings,
-} from "../utils/config.ts";
-import { isNotFound } from "../utils/errors.ts";
-import { loadPathAliases, toPosix } from "../utils/paths.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+} from "../shared/lib/config.ts";
+import { isNotFound } from "../shared/lib/errors.ts";
+import { loadPathAliases, toPosix } from "../shared/lib/paths.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 export type FileContextInput = {
   file_path: string;

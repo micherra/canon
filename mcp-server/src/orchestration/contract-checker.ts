@@ -9,8 +9,8 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { gitExec } from "../adapters/git-adapter.ts";
-import { runShell } from "../adapters/process-adapter.ts";
+import { gitExec } from "../platform/adapters/git-adapter.ts";
+import { runShell } from "../platform/adapters/process-adapter.ts";
 import type { PostconditionAssertion, PostconditionResult } from "./flow-schema.ts";
 
 const BASH_DENYLIST = ["rm", "sudo", "curl", "wget", "chmod", "chown", "mkfs", "dd"];

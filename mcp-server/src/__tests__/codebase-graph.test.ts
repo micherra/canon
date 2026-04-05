@@ -292,7 +292,7 @@ describe("codebaseGraph — git adapter integration", () => {
 
   it("gitCurrentBranch returns null when gitExecAsync returns ok:false — no changed files from git", async () => {
     // Mock gitExecAsync to always return ok:false (simulates no git repo)
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
         exitCode: 128,
         ok: false,
@@ -321,7 +321,7 @@ describe("codebaseGraph — git adapter integration", () => {
       stdout: "feat/my-branch",
       timedOut: false,
     });
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
 
     const { codebaseGraph: cg } = await import("../tools/codebase-graph.ts");
     await cg({ source_dirs: ["src"] }, tmpDir, "/nonexistent");

@@ -47,9 +47,9 @@ vi.mock("node:perf_hooks", () => ({
 
 // Import after mocks
 
-import { gitExec } from "../adapters/git-adapter.ts";
-import { gitExecAsync } from "../adapters/git-adapter-async.ts";
-import { runShell } from "../adapters/process-adapter.ts";
+import { gitExec } from "../platform/adapters/git-adapter.ts";
+import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
+import { runShell } from "../platform/adapters/process-adapter.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;

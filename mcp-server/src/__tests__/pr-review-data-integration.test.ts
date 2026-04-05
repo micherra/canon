@@ -19,7 +19,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 
 function makeMockExecFile(stdout: string, err: Error | null = null) {
   return (
@@ -247,7 +247,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
     });
     db.close();
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
@@ -259,7 +259,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
   });
 
   it("kg_freshness_ms is undefined when no KG DB exists", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
@@ -303,7 +303,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
     });
     db.close();
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts\nM\tsrc/b.ts"),
     }));
 
@@ -318,7 +318,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
   });
 
   it("files have no priority data when KG DB is missing", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
@@ -329,7 +329,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
   });
 
   it("gracefully handles KG DB absence (no crash)", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
@@ -357,7 +357,7 @@ describe("getPrReviewData — error field co-occurrence with empty files", () =>
   });
 
   it("error is absent from output on success (no error key in result)", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/foo.ts"),
     }));
 
@@ -369,7 +369,7 @@ describe("getPrReviewData — error field co-occurrence with empty files", () =>
   });
 
   it("when git fails, total_files is 0 and layers is empty alongside error", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncFail("git: command not found"),
     }));
 
@@ -441,7 +441,7 @@ describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () =>
       violations: [],
     });
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
@@ -486,7 +486,7 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
       "M\tsrc/__tests__/pr.test.ts",
     ].join("\n");
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(diffOutput),
     }));
 
@@ -523,7 +523,7 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
 
     const diffOutput = ["M\tsrc/tools/a.ts", "A\tsrc/tools/b.ts", "D\tsrc/tools/c.ts"].join("\n");
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(diffOutput),
     }));
 

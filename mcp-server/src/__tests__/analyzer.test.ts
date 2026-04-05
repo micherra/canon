@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { analyzeDrift } from "../drift/analyzer.ts";
-import type { ReviewEntry } from "../schema.ts";
+import { analyzeDrift } from "../platform/storage/drift/analyzer.ts";
+import type { ReviewEntry } from "../shared/schema.ts";
 
 function makeReview(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {

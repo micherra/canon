@@ -28,7 +28,7 @@ vi.mock("node:child_process", () => ({
 
 // Import after mocks
 
-import { gitExecAsync } from "../adapters/git-adapter-async.ts";
+import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
 
 beforeEach(() => {
   execFileImpl = null;

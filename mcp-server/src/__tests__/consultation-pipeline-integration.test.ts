@@ -51,9 +51,9 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
 import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

@@ -2,12 +2,12 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import type { EntityKind, SemanticSearchResult } from "../graph/kg-types.ts";
 import { KgVectorQuery } from "../graph/kg-vector-query.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
+import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 export type SemanticSearchInput = {
   query: string;

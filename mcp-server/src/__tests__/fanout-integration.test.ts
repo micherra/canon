@@ -74,9 +74,9 @@ import { clusterDiff } from "../orchestration/diff-cluster.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { assembleWaveBriefing, readWaveGuidance } from "../orchestration/wave-briefing.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

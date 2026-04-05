@@ -23,12 +23,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { getFileContext } from "../tools/get-file-context.ts";
 import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 import {
@@ -877,7 +877,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
     db.close();
 
     // Mock git adapter to return an empty diff
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
         exitCode: 0,
         ok: true,
@@ -897,7 +897,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
   });
 
   it("kg_freshness_ms is undefined when KG DB does not exist", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
         exitCode: 0,
         ok: true,

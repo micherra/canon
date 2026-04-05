@@ -17,9 +17,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow, TranscriptEntry } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { getTranscript } from "../tools/get-transcript.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

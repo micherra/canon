@@ -8,12 +8,12 @@
 
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { EMBEDDING_MODEL_ID } from "../constants.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { EntityRow } from "../graph/kg-types.ts";
 import { KgVectorQuery } from "../graph/kg-vector-query.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
+import { EMBEDDING_MODEL_ID } from "../shared/constants.ts";
 import { MockEmbeddingService, randomEmbedding } from "./embedding-test-helpers.ts";
 
 function makeDb(): Database.Database {

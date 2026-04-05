@@ -13,9 +13,11 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ZodRawShapeCompat } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import { z } from "zod";
-import { getJobManager } from "./jobs/job-manager.ts";
 import { ResolvedFlowSchema } from "./orchestration/flow-schema.ts";
-import { reportInputSchema } from "./schema.ts";
+import { getJobManager } from "./platform/jobs/job-manager.ts";
+import { installFuzzyValidation } from "./shared/lib/fuzzy-field-validation.ts";
+import { wrapHandler } from "./shared/lib/wrap-handler.ts";
+import { reportInputSchema } from "./shared/schema.ts";
 import type { FailureEntry } from "./tools/categorize-failures.ts";
 import { categorizeFailures } from "./tools/categorize-failures.ts";
 import { codebaseGraph, compactGraph } from "./tools/codebase-graph.ts";
@@ -52,8 +54,6 @@ import { writePlanIndex } from "./tools/write-plan-index.ts";
 import { writeResearchSynthesis } from "./tools/write-research-synthesis.ts";
 import { writeReview } from "./tools/write-review.ts";
 import { writeTestReport } from "./tools/write-test-report.ts";
-import { installFuzzyValidation } from "./utils/fuzzy-field-validation.ts";
-import { wrapHandler } from "./utils/wrap-handler.ts";
 
 // Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
 // Falls back to cwd which is typically set by Claude Code to the user's project root.

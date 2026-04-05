@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
-import type { ProcessResult } from "../utils/tool-result.ts";
+import type { ProcessResult } from "../../shared/lib/tool-result.ts";
 
 const DEFAULT_TIMEOUT = 30_000;
 

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type PathAlias, parseTsconfigPaths } from "../graph/import-parser.ts";
+import { type PathAlias, parseTsconfigPaths } from "../../graph/import-parser.ts";
 
 /** Normalize a path to forward slashes so it matches git output on all platforms. */
 export function toPosix(p: string): string {

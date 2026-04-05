@@ -6,7 +6,7 @@ import {
   buildLayerInferrer,
   deriveSourceDirsFromLayers,
   loadConfigNumber,
-} from "../utils/config.ts";
+} from "../shared/lib/config.ts";
 
 let tmpDir: string;
 

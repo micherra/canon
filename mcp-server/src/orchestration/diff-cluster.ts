@@ -5,8 +5,8 @@
  */
 
 import { dirname } from "node:path";
-import { gitExec } from "../adapters/git-adapter.ts";
-import { inferLayer } from "../matcher.ts";
+import { gitExec } from "../platform/adapters/git-adapter.ts";
+import { inferLayer } from "../shared/matcher.ts";
 
 export type FileCluster = {
   key: string;

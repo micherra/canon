@@ -19,17 +19,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Shared mocks for job subsystem (reused across describe blocks)
 
-vi.mock("../jobs/job-fingerprint.ts", () => ({
+vi.mock("../platform/jobs/job-fingerprint.ts", () => ({
   computeJobFingerprint: vi.fn().mockResolvedValue("test-fingerprint-xyz"),
 }));
 
-vi.mock("../adapters/job-adapter.ts", () => ({
+vi.mock("../platform/adapters/job-adapter.ts", () => ({
   forkJob: vi.fn(),
   killJob: vi.fn(),
   sendWorkerInput: vi.fn(),
 }));
 
-vi.mock("../utils/env.ts", () => ({
+vi.mock("../shared/lib/env.ts", () => ({
   isCI: vi.fn().mockReturnValue(false),
   isSyncMode: vi.fn().mockReturnValue(false),
 }));
@@ -44,8 +44,8 @@ vi.mock("../graph/kg-pipeline.ts", () => ({
   }),
 }));
 
-vi.mock("../utils/config.ts", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../utils/config.ts")>();
+vi.mock("../shared/lib/config.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../shared/lib/config.ts")>();
   return {
     ...actual,
     deriveSourceDirsFromLayers: vi.fn().mockResolvedValue(["src"]),
@@ -84,14 +84,14 @@ vi.mock("../tools/codebase-graph.ts", async (importOriginal) => {
 
 // Imports after mocks
 
-import { forkJob, killJob } from "../adapters/job-adapter.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
-import { computeJobFingerprint } from "../jobs/job-fingerprint.ts";
-import { _resetJobManagerSingleton, JobManager } from "../jobs/job-manager.ts";
-import { JobStore } from "../jobs/job-store.ts";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
+import { forkJob, killJob } from "../platform/adapters/job-adapter.ts";
+import { computeJobFingerprint } from "../platform/jobs/job-fingerprint.ts";
+import { _resetJobManagerSingleton, JobManager } from "../platform/jobs/job-manager.ts";
+import { JobStore } from "../platform/jobs/job-store.ts";
+import { isSyncMode } from "../shared/lib/env.ts";
 import { codebaseGraphPoll } from "../tools/codebase-graph-poll.ts";
-import { isSyncMode } from "../utils/env.ts";
 
 // Note: codebaseGraphMaterialize requires codebase-graph mock — tested in separate describe
 
@@ -400,9 +400,9 @@ describe('isSyncMode() with CANON_SYNC_JOBS="" (Known Gap: Task-01)', () => {
 
   it('isSyncMode() with CANON_SYNC_JOBS="" falls through to isCI() check', async () => {
     // Use vi.importActual to get the real isSyncMode implementation,
-    // bypassing the vi.mock('../utils/env.ts') hoisted at file level.
+    // bypassing the vi.mock('../shared/lib/env.ts') hoisted at file level.
     const { isSyncMode: realIsSyncMode } =
-      await vi.importActual<typeof import("../utils/env.ts")>("../utils/env.ts");
+      await vi.importActual<typeof import("../shared/lib/env.ts")>("../shared/lib/env.ts");
 
     const savedEnv = process.env.CANON_SYNC_JOBS;
     const savedCI = process.env.CI;

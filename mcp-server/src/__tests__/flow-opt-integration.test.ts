@@ -70,9 +70,9 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { loadFlow } from "../tools/load-flow.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

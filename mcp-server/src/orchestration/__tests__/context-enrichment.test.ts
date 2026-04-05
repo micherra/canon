@@ -22,11 +22,11 @@ import type { Board, ResolvedFlow } from "../flow-schema.ts";
 
 // Module mocks — must be hoisted to top of file
 
-vi.mock("../../adapters/git-adapter.ts", () => ({
+vi.mock("../../platform/adapters/git-adapter.ts", () => ({
   gitLog: vi.fn(),
 }));
 
-vi.mock("../../drift/store.ts", () => ({
+vi.mock("../../platform/storage/drift/store.ts", () => ({
   DriftStore: vi.fn(function () {
     return {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
@@ -40,8 +40,8 @@ vi.mock("../scope-resolver.ts", () => ({
 
 // Imports (after mocks)
 
-import { gitLog } from "../../adapters/git-adapter.ts";
-import { DriftStore } from "../../drift/store.ts";
+import { gitLog } from "../../platform/adapters/git-adapter.ts";
+import { DriftStore } from "../../platform/storage/drift/store.ts";
 import { assembleEnrichment, type EnrichmentInput } from "../context-enrichment.ts";
 import { resolveTaskScope } from "../scope-resolver.ts";
 

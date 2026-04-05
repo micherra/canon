@@ -62,9 +62,9 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { gitDiff, gitExec, gitStatus } from "../adapters/git-adapter.ts";
-import { gitExecAsync } from "../adapters/git-adapter-async.ts";
-import { runShell } from "../adapters/process-adapter.ts";
+import { gitDiff, gitExec, gitStatus } from "../platform/adapters/git-adapter.ts";
+import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
+import { runShell } from "../platform/adapters/process-adapter.ts";
 import {
   assertOk,
   isToolError,
@@ -72,8 +72,8 @@ import {
   type ToolResult,
   toolError,
   toolOk,
-} from "../utils/tool-result.ts";
-import { wrapHandler } from "../utils/wrap-handler.ts";
+} from "../shared/lib/tool-result.ts";
+import { wrapHandler } from "../shared/lib/wrap-handler.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;
@@ -229,7 +229,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     const gitExecCalls: { args: string[]; cwd: string }[] = [];
     const runShellCalls: { cmd: string; cwd: string }[] = [];
 
-    vi.doMock("../adapters/git-adapter.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter.ts", () => ({
       gitDiff: vi.fn(),
       gitExec: (args: string[], cwd: string) => {
         gitExecCalls.push({ args, cwd });
@@ -239,7 +239,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
       gitStatus: vi.fn(),
     }));
 
-    vi.doMock("../adapters/process-adapter.ts", () => ({
+    vi.doMock("../platform/adapters/process-adapter.ts", () => ({
       runShell: (cmd: string, cwd: string) => {
         runShellCalls.push({ cmd, cwd });
         return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
@@ -265,15 +265,15 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     // runShell was NOT called for file_changed
     expect(runShellCalls).toHaveLength(0);
 
-    vi.doUnmock("../adapters/git-adapter.ts");
-    vi.doUnmock("../adapters/process-adapter.ts");
+    vi.doUnmock("../platform/adapters/git-adapter.ts");
+    vi.doUnmock("../platform/adapters/process-adapter.ts");
   });
 
   it("bash_check assertion calls runShell (shell: true) — not gitExec", async () => {
     const gitExecCalls: string[][] = [];
     const runShellCalls: string[] = [];
 
-    vi.doMock("../adapters/git-adapter.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter.ts", () => ({
       gitDiff: vi.fn(),
       gitExec: (args: string[]) => {
         gitExecCalls.push(args);
@@ -282,7 +282,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
       gitStatus: vi.fn(),
     }));
 
-    vi.doMock("../adapters/process-adapter.ts", () => ({
+    vi.doMock("../platform/adapters/process-adapter.ts", () => ({
       runShell: (cmd: string) => {
         runShellCalls.push(cmd);
         return { exitCode: 0, ok: true, stderr: "", stdout: "test passed", timedOut: false };
@@ -305,8 +305,8 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     // gitExec was NOT called for bash_check
     expect(gitExecCalls).toHaveLength(0);
 
-    vi.doUnmock("../adapters/git-adapter.ts");
-    vi.doUnmock("../adapters/process-adapter.ts");
+    vi.doUnmock("../platform/adapters/git-adapter.ts");
+    vi.doUnmock("../platform/adapters/process-adapter.ts");
   });
 });
 

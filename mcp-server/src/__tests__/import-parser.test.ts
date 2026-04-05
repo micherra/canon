@@ -157,16 +157,20 @@ describe("resolveImport — TS ESM .js extension convention", () => {
   // actual source files are `.ts`. `tryResolve` must strip the fake JS
   // extension and probe TS equivalents.
   const allFiles = new Set([
-    "src/drift/store.ts",
+    "src/platform/storage/drift/store.ts",
     "src/utils/helper.tsx",
     "src/module/index.ts",
     "src/esm/pure.mts",
   ]);
 
   it("resolves .js import to .ts file", () => {
-    // import { DriftStore } from "../drift/store.ts"
-    const result = resolveImport("../drift/store.js", "src/tools/my-tool.ts", allFiles);
-    expect(result).toBe("src/drift/store.ts");
+    // import { DriftStore } from "../platform/storage/drift/store.ts"
+    const result = resolveImport(
+      "../platform/storage/drift/store.js",
+      "src/tools/my-tool.ts",
+      allFiles,
+    );
+    expect(result).toBe("src/platform/storage/drift/store.ts");
   });
 
   it("resolves .js import to .tsx file", () => {

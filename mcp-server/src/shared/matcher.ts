@@ -1,8 +1,8 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { CANON_DIR } from "./constants.ts";
+import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./lib/config.ts";
 import { loadPrincipleFile, type Principle } from "./parser.ts";
-import { buildLayerInferrer, DEFAULT_LAYER_MAPPINGS } from "./utils/config.ts";
 
 const SEVERITY_SUBDIRS = ["rules", "strong-opinions", "conventions"];
 

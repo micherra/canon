@@ -21,12 +21,12 @@
 
 import { existsSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
-import { DriftStore } from "../drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
-import type { ReviewEntry, ReviewViolation } from "../schema.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
+import type { ReviewEntry, ReviewViolation } from "../shared/schema.ts";
 import type { PrReviewDataOutput } from "./pr-review-data.ts";
 import { getPrReviewData } from "./pr-review-data.ts";
 

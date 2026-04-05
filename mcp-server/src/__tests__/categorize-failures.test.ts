@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { isToolError } from "../shared/lib/tool-result.ts";
 import type { CategorizeFailuresInput } from "../tools/categorize-failures.ts";
 import { categorizeFailures } from "../tools/categorize-failures.ts";
-import { isToolError } from "../utils/tool-result.ts";
 
 function makeInput(overrides: Partial<CategorizeFailuresInput> = {}): CategorizeFailuresInput {
   return {

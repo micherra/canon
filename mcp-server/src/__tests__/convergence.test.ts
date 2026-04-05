@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { canEnterState, filterCannotFix } from "../orchestration/convergence.ts";
 import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { checkConvergence } from "../tools/check-convergence.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {

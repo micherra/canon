@@ -638,8 +638,8 @@ describe("validateSpawnCoverage — parallel state type", () => {
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 describe("writePlanIndex — additional edge cases", () => {
   it("rejects an empty slug", async () => {

@@ -33,10 +33,10 @@ vi.mock("../orchestration/effects.ts", () => ({
 
 // Imports after mocks
 
-import { CANON_DIR } from "../constants.ts";
-import { appendFlowRun, computeAnalytics } from "../drift/analytics.ts";
 import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import { BoardSchema } from "../orchestration/flow-schema.ts";
+import { appendFlowRun, computeAnalytics } from "../platform/storage/drift/analytics.ts";
+import { CANON_DIR } from "../shared/constants.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
 

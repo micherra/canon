@@ -31,8 +31,8 @@ vi.mock("../orchestration/effects.ts", () => ({
 
 import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "optional-roles-test-"));

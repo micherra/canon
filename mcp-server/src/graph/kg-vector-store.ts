@@ -14,7 +14,7 @@
 
 import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
-import { EMBEDDING_DIM, EMBEDDING_MODEL_ID } from "../constants.ts";
+import { EMBEDDING_DIM, EMBEDDING_MODEL_ID } from "../shared/constants.ts";
 
 // KgVectorStore
 

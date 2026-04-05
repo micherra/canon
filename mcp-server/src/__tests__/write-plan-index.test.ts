@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseTaskIdsForWave } from "../orchestration/wave-variables.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { writePlanIndex } from "../tools/write-plan-index.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDir: string;
 

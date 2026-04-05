@@ -1,4 +1,4 @@
-import { JS_EXTENSIONS, PY_EXTENSIONS } from "../constants.ts";
+import { JS_EXTENSIONS, PY_EXTENSIONS } from "../shared/constants.ts";
 
 /** Registry of export extractors by file extension. Add new languages here. */
 const exportExtractors = new Map<string, (content: string) => string[]>();

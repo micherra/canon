@@ -52,12 +52,12 @@ import {
   getProjectDir,
   mergeWaveResults,
 } from "../orchestration/wave-lifecycle.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

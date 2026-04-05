@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DriftStore } from "../drift/store.ts";
-import type { ReviewEntry } from "../schema.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
+import type { ReviewEntry } from "../shared/schema.ts";
 import { buildFileViolationMap } from "../tools/pr-review-data.ts";
 
 describe("buildFileViolationMap — unit", () => {

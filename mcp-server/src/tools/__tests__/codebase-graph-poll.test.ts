@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the job-manager module before importing the tool
-vi.mock("../../jobs/job-manager.ts", () => {
+vi.mock("../../platform/jobs/job-manager.ts", () => {
   const mockManager = {
     cancel: vi.fn(),
     cleanup: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock("../../jobs/job-manager.ts", () => {
   };
 });
 
-import * as jobManagerModule from "../../jobs/job-manager.ts";
+import * as jobManagerModule from "../../platform/jobs/job-manager.ts";
 import { codebaseGraphPoll } from "../codebase-graph-poll.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

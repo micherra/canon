@@ -41,7 +41,7 @@ vi.mock("../consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("../../adapters/git-adapter.ts", () => ({
+vi.mock("../../platform/adapters/git-adapter.ts", () => ({
   gitExec: vi
     .fn()
     .mockReturnValue({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: false }),
@@ -58,8 +58,8 @@ vi.mock("../context-enrichment.ts", () => ({
   }),
 }));
 
+import { assertOk } from "../../shared/lib/tool-result.ts";
 import { enterAndPrepareState } from "../../tools/enter-and-prepare-state.ts";
-import { assertOk } from "../../utils/tool-result.ts";
 import { assembleEnrichment } from "../context-enrichment.ts";
 
 let tmpDirs: string[] = [];

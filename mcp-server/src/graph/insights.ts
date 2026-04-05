@@ -2,7 +2,7 @@
 
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { buildDegreeMaps } from "./degree.ts";
 import { detectDeadCode } from "./kg-dead-code.ts";
 import { initDatabase } from "./kg-schema.ts";

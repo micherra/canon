@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { getItemCountCap } from "./context-budget.ts";
 import { getExecutionStore } from "./execution-store.ts";
 import type { Board, ContextInjection } from "./flow-schema.ts";

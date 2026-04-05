@@ -2,11 +2,11 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
-import { CANON_DIR, CANON_FILES } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
+import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 
 export type SummaryEntry = {
   summary: string;

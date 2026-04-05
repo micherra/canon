@@ -21,7 +21,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isToolError } from "../utils/tool-result.ts";
+import { isToolError } from "../shared/lib/tool-result.ts";
 
 // Mock I/O boundaries
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
@@ -47,12 +47,12 @@ import { syncBoardToStore } from "../orchestration/board-sync.ts";
 import { initExecutionDb } from "../orchestration/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
 import { categorizeFailures } from "../tools/categorize-failures.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { reportResult } from "../tools/report-result.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

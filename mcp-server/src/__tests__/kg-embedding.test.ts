@@ -10,8 +10,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { EMBEDDING_BATCH_SIZE, EMBEDDING_DIM } from "../constants.ts";
 import { EmbeddingService } from "../graph/kg-embedding.ts";
+import { EMBEDDING_BATCH_SIZE, EMBEDDING_DIM } from "../shared/constants.ts";
 
 /** Create a real EmbeddingService instance for lifecycle tests (no model download). */
 function makeService(): EmbeddingService {

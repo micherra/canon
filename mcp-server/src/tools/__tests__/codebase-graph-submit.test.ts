@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the job-manager module before importing the tool
-vi.mock("../../jobs/job-manager.ts", () => {
+vi.mock("../../platform/jobs/job-manager.ts", () => {
   const mockManager = {
     cancel: vi.fn(),
     cleanup: vi.fn(),
@@ -24,7 +24,7 @@ vi.mock("../../jobs/job-manager.ts", () => {
 });
 
 // Mock deriveSourceDirsFromLayers to avoid fs reads
-vi.mock("../../utils/config.ts", () => ({
+vi.mock("../../shared/lib/config.ts", () => ({
   deriveSourceDirsFromLayers: vi.fn().mockResolvedValue(["src"]),
 }));
 
@@ -36,7 +36,7 @@ vi.mock("../../graph/kg-schema.ts", () => ({
   }),
 }));
 
-import * as jobManagerModule from "../../jobs/job-manager.ts";
+import * as jobManagerModule from "../../platform/jobs/job-manager.ts";
 import { codebaseGraphSubmit } from "../codebase-graph-submit.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

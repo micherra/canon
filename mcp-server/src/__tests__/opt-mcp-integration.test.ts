@@ -43,9 +43,9 @@ import { getExecutionStore } from "../orchestration/execution-store.ts";
 import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
 import { resolveContextInjections } from "../orchestration/inject-context.ts";
 import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { assertOk } from "../shared/lib/tool-result.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 import { getSpawnPrompt, truncateProgress } from "../tools/get-spawn-prompt.ts";
-import { assertOk } from "../utils/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

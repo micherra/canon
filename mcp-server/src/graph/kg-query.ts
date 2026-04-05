@@ -7,7 +7,7 @@
  */
 
 import type Database from "better-sqlite3";
-import { LAYER_CENTRALITY } from "../constants.ts";
+import { LAYER_CENTRALITY } from "../shared/constants.ts";
 import type {
   BlastRadiusResult,
   CallerResult,

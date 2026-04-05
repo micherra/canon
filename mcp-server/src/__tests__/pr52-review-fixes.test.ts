@@ -39,7 +39,7 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { gitExecAsync } from "../adapters/git-adapter-async.ts";
+import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
 
 type SpawnSyncResult = {
   stdout: string;
@@ -51,7 +51,7 @@ type SpawnSyncResult = {
 
 let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
 
-import { runShell } from "../adapters/process-adapter.ts";
+import { runShell } from "../platform/adapters/process-adapter.ts";
 
 beforeEach(() => {
   execFileImpl = null;
@@ -186,7 +186,7 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
     // Mock gitExecAsync: first call (rev-parse --abbrev-ref HEAD) returns "feat/test",
     // subsequent calls (rev-parse --verify for origin/main) return ok:true,
     // and the final diff call returns ok:true empty.
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi
         .fn()
         .mockResolvedValueOnce({
@@ -212,7 +212,7 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
   });
 
   it("returns graph nodes when diff_base is invalid (graceful fallback, no changed files marked)", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi
         .fn()
         .mockResolvedValueOnce({
@@ -258,7 +258,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
 
   it("shell-escapes args when passed to runShell for non-git command", async () => {
     let capturedCommand: string | undefined;
-    vi.doMock("../adapters/process-adapter.ts", () => ({
+    vi.doMock("../platform/adapters/process-adapter.ts", () => ({
       runShell: (cmd: string, _cwd: string) => {
         capturedCommand = cmd;
         return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
@@ -277,13 +277,13 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
 
   it("args with special shell chars are properly quoted in the shell command", async () => {
     let capturedCommand: string | undefined;
-    vi.doMock("../adapters/process-adapter.ts", () => ({
+    vi.doMock("../platform/adapters/process-adapter.ts", () => ({
       runShell: (cmd: string, _cwd: string) => {
         capturedCommand = cmd;
         return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
       },
     }));
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: vi.fn().mockResolvedValue({
         exitCode: 0,
         ok: true,
@@ -311,7 +311,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
 
 // Fix 4: wrap-handler — docstring accuracy (verified via import + behavior test)
 
-import { wrapHandler } from "../utils/wrap-handler.ts";
+import { wrapHandler } from "../shared/lib/wrap-handler.ts";
 
 describe("Fix 4: wrapHandler — ok:false ToolResult passes through jsonResponse (not converted to MCP error)", () => {
   it("returns ok:false result as JSON (not converted to SDK error format)", async () => {

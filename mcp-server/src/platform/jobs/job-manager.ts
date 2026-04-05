@@ -18,13 +18,13 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Database } from "better-sqlite3";
+import { runPipeline } from "../../graph/kg-pipeline.ts";
+import { initExecutionDb } from "../../orchestration/execution-schema.ts";
+import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "../../shared/constants.ts";
+import { isSyncMode } from "../../shared/lib/env.ts";
+import { type ToolResult, toolError, toolOk } from "../../shared/lib/tool-result.ts";
+import type { CodebaseGraphInput } from "../../tools/codebase-graph.ts";
 import { forkJob, type JobMessage, killJob, sendWorkerInput } from "../adapters/job-adapter.ts";
-import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "../constants.ts";
-import { runPipeline } from "../graph/kg-pipeline.ts";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import type { CodebaseGraphInput } from "../tools/codebase-graph.ts";
-import { isSyncMode } from "../utils/env.ts";
-import { type ToolResult, toolError, toolOk } from "../utils/tool-result.ts";
 import { computeJobFingerprint } from "./job-fingerprint.ts";
 import { type JobStatus, JobStore } from "./job-store.ts";
 
@@ -53,7 +53,9 @@ export type PollResult = {
 
 // Worker path and working directory.
 //
-// graph-worker.ts lives at src/workers/graph-worker.ts.
+// graph-worker.ts lives at src/platform/workers/graph-worker.ts.
+// jobs/ and workers/ are sibling directories under platform/, so the relative
+// path from platform/jobs/ to platform/workers/ is ../workers/.
 // We resolve relative to this file so it works when bundled/run from dist/.
 //
 // WORKER_CWD is the mcp-server/ root — the directory that contains
@@ -61,9 +63,10 @@ export type PollResult = {
 // `--import tsx` (and any other packages the worker imports) can be resolved
 // regardless of what directory the parent process is running from.
 
-const WORKER_PATH = fileURLToPath(new URL("../workers/graph-worker.ts", import.meta.url));
-// job-manager.ts is at src/jobs/, so ../../ resolves to mcp-server/
-const WORKER_CWD = fileURLToPath(new URL("../../", import.meta.url));
+const GRAPH_WORKER_URL = new URL("../workers/graph-worker.ts", import.meta.url);
+const WORKER_PATH = fileURLToPath(GRAPH_WORKER_URL);
+// job-manager.ts is at src/platform/jobs/, so ../../../ resolves to mcp-server/
+const WORKER_CWD = fileURLToPath(new URL("../../../", import.meta.url));
 
 // JobManager
 

@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type Database from "better-sqlite3";
-import { CANON_FILES } from "../constants.ts";
+import { CANON_FILES } from "../shared/constants.ts";
 import { validateEventPayload } from "./events.ts";
 import { initExecutionDb } from "./execution-schema.ts";
 import type {

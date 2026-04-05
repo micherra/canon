@@ -1,8 +1,5 @@
 import { readFile } from "node:fs/promises";
 import path, { isAbsolute, join } from "node:path";
-import { gitExecAsync } from "../adapters/git-adapter-async.ts";
-import { CANON_DIR, CANON_FILES, extractSummary } from "../constants.ts";
-import { DriftStore } from "../drift/store.ts";
 import { extractImports, type PathAlias, resolveImport } from "../graph/import-parser.ts";
 import { type CodebaseInsights, generateInsights } from "../graph/insights.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
@@ -10,17 +7,20 @@ import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { buildNameMaps, classifyMdNode, inferMdRelations } from "../graph/md-relations.ts";
 import { scanSourceFiles } from "../graph/scanner.ts";
-import { loadAllPrinciples } from "../matcher.ts";
+import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
+import { CANON_DIR, CANON_FILES, extractSummary } from "../shared/constants.ts";
 import {
   buildLayerInferrer,
   deriveSourceDirsFromLayers,
   loadGraphCompositionConfig,
   loadLayerMappings,
   loadLayerMappingsStrict,
-} from "../utils/config.ts";
-import { isNotFound } from "../utils/errors.ts";
-import { sanitizeGitRef } from "../utils/git-ref.ts";
-import { loadPathAliases, toPosix } from "../utils/paths.ts";
+} from "../shared/lib/config.ts";
+import { isNotFound } from "../shared/lib/errors.ts";
+import { sanitizeGitRef } from "../shared/lib/git-ref.ts";
+import { loadPathAliases, toPosix } from "../shared/lib/paths.ts";
+import { loadAllPrinciples } from "../shared/matcher.ts";
 
 const FALLBACK_LAYER_COLOR = "#BDC3C7";
 

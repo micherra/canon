@@ -70,7 +70,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
   });
 
   it("every returned file has a bucket field (never undefined)", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nM\tsrc/graph/b.ts"),
     }));
 
@@ -83,7 +83,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
   });
 
   it("every impact_file has a non-empty reason string", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nA\tsrc/graph/b.ts"),
     }));
 
@@ -99,7 +99,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
   it("file with stored violations appears in impact_files due to violations filter", async () => {
     // Files with stored DriftStore violations appear in impact_files even when bucket=low-risk
     // (because the impact_files filter includes files where violations.length > 0)
-    const { DriftStore } = await import("../drift/store.js");
+    const { DriftStore } = await import("../platform/storage/drift/store.js");
     const store = new DriftStore(tmpDir);
     await store.appendReview({
       files: ["src/tools/bad.ts"],
@@ -119,7 +119,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
       ],
     });
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/bad.ts"),
     }));
 
@@ -135,7 +135,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
 
   it("file without graph data is excluded from impact_files (no graph → low-risk)", async () => {
     // No KG DB: priority_factors will be undefined → classifyFile → low-risk
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/orphan/file.ts"),
     }));
 
@@ -165,7 +165,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
   });
 
   it("narrative is a non-empty string in every response", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
@@ -182,7 +182,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
       JSON.stringify({ layers: { tools: ["src/tools"] } }),
     );
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nA\tsrc/tools/b.ts"),
     }));
 
@@ -195,7 +195,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
   });
 
   it("narrative for empty diff is a short non-empty string (not an error)", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
@@ -210,7 +210,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
 
   it("narrative mentions violations when files have stored violations in DriftStore", async () => {
     // Store a DriftStore review with violations so buildFileViolationMap populates them
-    const { DriftStore } = await import("../drift/store.js");
+    const { DriftStore } = await import("../platform/storage/drift/store.js");
     const store = new DriftStore(tmpDir);
     await store.appendReview({
       files: ["src/tools/bad.ts"],
@@ -229,7 +229,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
       ],
     });
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/bad.ts\nM\tsrc/tools/ok.ts"),
     }));
 
@@ -257,7 +257,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
   });
 
   it("blast_radius is an empty array when no KG DB is present", async () => {
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
@@ -270,7 +270,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
 
   it("blast_radius is empty when changed files have in_degree below threshold (< 3)", async () => {
     // A file with in_degree=2 — below the threshold of 3 — no KG DB present
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
@@ -317,7 +317,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     }
     db.close();
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/hub.ts"),
     }));
 
@@ -370,7 +370,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     }
     db.close();
 
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/hub.ts"),
     }));
 
@@ -428,7 +428,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
     db.close();
 
     const diffOutput = hubs.map((h) => `M\t${h.name}`).join("\n");
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(diffOutput),
     }));
 
@@ -447,7 +447,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
   it("blast_radius only seeds from changed files (is_changed must be true)", async () => {
     // hub.ts has high in_degree but is NOT in the diff — should not appear in blast_radius
     // actual-change.ts is in the diff but has no importers → empty blast radius
-    vi.doMock("../adapters/git-adapter-async.ts", () => ({
+    vi.doMock("../platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/actual-change.ts"),
     }));
 

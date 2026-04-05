@@ -13,9 +13,9 @@
  * - deep-modules: delegates graph reading to readGraphFromDb()
  */
 
-import { getJobManager } from "../jobs/job-manager.ts";
-import type { ToolResult } from "../utils/tool-result.ts";
-import { toolError, toolOk } from "../utils/tool-result.ts";
+import { getJobManager } from "../platform/jobs/job-manager.ts";
+import type { ToolResult } from "../shared/lib/tool-result.ts";
+import { toolError, toolOk } from "../shared/lib/tool-result.ts";
 import type { CodebaseGraphInput } from "./codebase-graph.ts";
 import { type CompactGraphOutput, compactGraph, readGraphFromDb } from "./codebase-graph.ts";
 

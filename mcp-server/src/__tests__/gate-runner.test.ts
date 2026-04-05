@@ -14,7 +14,7 @@ type RunShellResult = {
 let runShellImpl: ((cmd: string, cwd: string, timeout?: number) => RunShellResult) | null = null;
 let lastRunShellArgs: { cmd: string; cwd: string; timeout?: number } | null = null;
 
-vi.mock("../adapters/process-adapter.ts", () => ({
+vi.mock("../platform/adapters/process-adapter.ts", () => ({
   runShell: (cmd: string, cwd: string, timeout?: number) => {
     lastRunShellArgs = { cmd, cwd, timeout };
     if (runShellImpl) return runShellImpl(cmd, cwd, timeout);

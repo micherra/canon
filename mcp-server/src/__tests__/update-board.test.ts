@@ -19,7 +19,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 
 // Mock analytics so appendFlowRun doesn't need drift.db during most tests
-vi.mock("../drift/analytics.ts", () => ({
+vi.mock("../platform/storage/drift/analytics.ts", () => ({
   appendFlowRun: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -35,9 +35,9 @@ vi.mock("../orchestration/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
-import { appendFlowRun } from "../drift/analytics.ts";
+import { appendFlowRun } from "../platform/storage/drift/analytics.ts";
+import { wrapHandler } from "../shared/lib/wrap-handler.ts";
 import { updateBoard } from "../tools/update-board.ts";
-import { wrapHandler } from "../utils/wrap-handler.ts";
 
 let tmpDirs: string[] = [];
 
