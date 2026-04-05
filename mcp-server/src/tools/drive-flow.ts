@@ -165,6 +165,8 @@ type HandleWaveResultOpts = {
   status: string;
   artifacts: unknown;
   store: ReturnType<typeof getExecutionStore>;
+  /** Actual branch used by the agent's worktree (e.g. "worktree-agent-*"). */
+  worktree_branch?: string;
 };
 
 /** Handle the result of a wave-type state, routing to wave task handler or validating task_id. */
@@ -173,7 +175,7 @@ function handleWaveResult(
   flow: DriveFlowInput["flow"],
   opts: HandleWaveResultOpts,
 ): Promise<ToolResult<DriveFlowAction>> | ToolResult<DriveFlowAction> | null {
-  const { state_id, task_id, status, artifacts, store } = opts;
+  const { state_id, task_id, status, artifacts, store, worktree_branch } = opts;
   const stateDef = flow.states[state_id];
   if (stateDef?.type !== "wave") return null;
   if (task_id) {
@@ -184,6 +186,7 @@ function handleWaveResult(
       task_artifacts: artifacts as string[] | undefined,
       task_id,
       task_status: status,
+      worktree_branch,
       workspace,
     });
   }
@@ -300,7 +303,7 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
 
   // Branch A: result provided
   if (data.result) {
-    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id } =
+    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id, worktree_branch } =
       data.result;
 
     if (agent_session_id) store.updateAgentSession(state_id, agent_session_id);
@@ -311,6 +314,7 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
       status,
       store,
       task_id,
+      worktree_branch,
     });
     if (waveAction) return waveAction;
 
@@ -360,6 +364,8 @@ type WaveTaskResultInput = {
   task_status: string;
   task_artifacts?: string[];
   store: ReturnType<typeof getExecutionStore>;
+  /** Actual branch used by the agent's worktree (e.g. "worktree-agent-*"). */
+  worktree_branch?: string;
 };
 
 /** Persist a wave task result into the store atomically. */
@@ -369,7 +375,7 @@ function persistWaveTaskResult(
   conventionWorktreePath: string,
   conventionBranch: string,
 ): void {
-  const { state_id, task_id, task_status, task_artifacts } = input;
+  const { state_id, task_id, task_status, task_artifacts, worktree_branch } = input;
   store.transaction(() => {
     const existing = store.getState(state_id);
     const waveResults: Record<
@@ -382,7 +388,9 @@ function persistWaveTaskResult(
       >) ?? {};
     const existingEntry = waveResults[task_id];
     waveResults[task_id] = {
-      branch: existingEntry?.branch ?? conventionBranch,
+      // Prefer the actual agent branch (e.g. "worktree-agent-*") over the
+      // convention branch ("canon-wave/{task_id}") which may not carry commits.
+      branch: worktree_branch ?? existingEntry?.branch ?? conventionBranch,
       status: task_status,
       tasks: [task_id],
       worktree_path: existingEntry?.worktree_path ?? conventionWorktreePath,
@@ -641,12 +649,19 @@ async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveF
   const onConflict = wavePolicy?.on_conflict ?? "hitl";
   const projectDir = getProjectDir(workspace);
 
+  // Use the build-branch worktree as the merge target when available.
+  // init_workspace creates a worktree at store.getExecution().worktree_path
+  // on branch canon-build/{slug}. Wave task branches must be merged into
+  // that worktree, not into the main repo (projectDir) which is on main.
+  const execution = store.getExecution();
+  const mergeCwd = execution?.worktree_path ?? projectDir;
+
   const stateEntry = store.getState(state_id);
   const waveResults: Record<string, WaveResult> =
     (stateEntry?.wave_results as Record<string, WaveResult>) ?? {};
   const worktreeResults = buildWorktreeResults(waveResults, projectDir);
 
-  const mergeResult = await mergeWaveResults(worktreeResults, projectDir, mergeStrategy);
+  const mergeResult = await mergeWaveResults(worktreeResults, mergeCwd, mergeStrategy);
   if (!mergeResult.ok) {
     return handleMergeFailure(
       mergeResult as { ok: false; conflict_task: string; conflict_detail: string },
@@ -663,7 +678,7 @@ async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveF
     );
   }
 
-  const gateResults = runGates(stateDef, flow, projectDir, stateEntry ?? undefined);
+  const gateResults = runGates(stateDef, flow, mergeCwd, stateEntry ?? undefined);
   const statusKeyword = gateResults.some((g) => !g.passed) ? "gate_failed" : "done";
 
   const eventResult = handlePendingWaveEvents(store, currentWave);

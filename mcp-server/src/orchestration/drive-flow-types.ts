@@ -91,6 +91,8 @@ export type DriveFlowInput = {
     agent_session_id?: string;
     /** Optional task ID for wave implementors. */
     task_id?: string;
+    /** Optional branch name for the agent's worktree (e.g. "worktree-agent-*"). */
+    worktree_branch?: string;
   };
 };
 
@@ -113,6 +115,8 @@ export const DriveFlowResultSchema = z.object({
   status: z.string(),
   /** Optional task ID for wave implementors — typed here so callers don't need a type assertion. */
   task_id: z.string().optional(),
+  /** Optional actual branch name used by the agent's worktree (e.g. "worktree-agent-*"). */
+  worktree_branch: z.string().optional(),
 });
 
 export const DriveFlowInputSchema = z.object({
