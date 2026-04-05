@@ -16,11 +16,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../orchestration/skip-when.ts", () => ({
+vi.mock("../domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../orchestration/event-bus-instance.ts", () => ({
+vi.mock("../domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -28,11 +28,11 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../orchestration/consultation-executor.ts", () => ({
+vi.mock("../features/orchestration/engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn(),
 }));
 
-vi.mock("../orchestration/wave-variables.ts", () => ({
+vi.mock("../domains/workspaces/wave-variables.ts", () => ({
   buildTemplateInjection: vi.fn(() => ""),
   escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
@@ -46,10 +46,10 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { spawnSync } from "node:child_process";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { enterAndPrepareState } from "../features/orchestration/tools/enter-and-prepare-state.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 
 let tmpDirs: string[] = [];
 
@@ -209,7 +209,8 @@ describe("scoped re-review (review_scope injection)", () => {
         signal: null,
         status: 0,
         stderr: "",
-        stdout: "src/tools/enter-and-prepare-state.ts\nflows/fragments/review-fix-loop.md\n",
+        stdout:
+          "src/features/orchestration/tools/enter-and-prepare-state.ts\nflows/fragments/review-fix-loop.md\n",
       });
 
       const flow = makeFlow();
@@ -231,7 +232,7 @@ describe("scoped re-review (review_scope injection)", () => {
       // The prompt should contain the review_scope content
       const prompt = result.prompts[0]?.prompt ?? "";
       expect(prompt).toContain("Scoped re-review");
-      expect(prompt).toContain("src/tools/enter-and-prepare-state.ts");
+      expect(prompt).toContain("src/features/orchestration/tools/enter-and-prepare-state.ts");
       expect(prompt).toContain("flows/fragments/review-fix-loop.md");
     });
 

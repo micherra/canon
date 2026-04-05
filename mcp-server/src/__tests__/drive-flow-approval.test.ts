@@ -18,10 +18,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // shouldApprovalGate and shouldApprovalGateWaveBoundary (pure functions)
 
-import { initBoard } from "../orchestration/board.ts";
-import type { DriveFlowInput } from "../orchestration/drive-flow-types.ts";
-import type { Board, ResolvedFlow, StateDefinition } from "../orchestration/flow-schema.ts";
-import { shouldApprovalGate, shouldApprovalGateWaveBoundary } from "../tools/drive-flow.ts";
+import { initBoard } from "../domains/board/board.ts";
+import type { Board, ResolvedFlow, StateDefinition } from "../domains/flows/flow-schema.ts";
+import type { DriveFlowInput } from "../features/orchestration/services/drive-flow-types.ts";
+import {
+  shouldApprovalGate,
+  shouldApprovalGateWaveBoundary,
+} from "../features/orchestration/tools/drive-flow.ts";
 
 function makeBoard(metadataOverrides?: Record<string, string | number | boolean>): Board {
   return {
@@ -370,19 +373,19 @@ describe("initBoard with approval gate fields", () => {
 
 // driveFlow — Branch A approval gate intercept
 
-vi.mock("../tools/enter-and-prepare-state.ts", () => ({
+vi.mock("../features/orchestration/tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
-vi.mock("../tools/report-result.ts", () => ({
+vi.mock("../features/orchestration/tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
 
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { clearStoreCache, ExecutionStore } from "../orchestration/execution-store.ts";
-import { driveFlow } from "../tools/drive-flow.ts";
-import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { reportResult } from "../tools/report-result.ts";
+import { initExecutionDb } from "../domains/workspaces/execution-schema.ts";
+import { clearStoreCache, ExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { driveFlow } from "../features/orchestration/tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "../features/orchestration/tools/enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "../features/orchestration/tools/enter-and-prepare-state.ts";
+import { reportResult } from "../features/orchestration/tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 
@@ -903,7 +906,7 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
 
 // Fix 4: STATUS_ALIASES — "approve" maps to "approved"
 
-import { STATUS_ALIASES } from "../orchestration/flow-schema.ts";
+import { STATUS_ALIASES } from "../domains/flows/flow-schema.ts";
 
 describe("STATUS_ALIASES — approve alias", () => {
   it("'approve' maps to 'approved'", () => {

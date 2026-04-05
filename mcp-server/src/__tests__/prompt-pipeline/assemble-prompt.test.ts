@@ -27,15 +27,15 @@ const mockStore = {
   getProgress: vi.fn().mockReturnValue(""),
 };
 
-vi.mock("../../orchestration/execution-store.ts", () => ({
+vi.mock("../../domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
 
-vi.mock("../../orchestration/skip-when.ts", () => ({
+vi.mock("../../domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn().mockResolvedValue({ skip: false }),
 }));
 
-vi.mock("../../orchestration/inject-context.ts", () => ({
+vi.mock("../../features/orchestration/services/inject-context.ts", () => ({
   resolveContextInjections: vi.fn().mockResolvedValue({
     hitl: undefined,
     variables: {},
@@ -43,36 +43,36 @@ vi.mock("../../orchestration/inject-context.ts", () => ({
   }),
 }));
 
-vi.mock("../../orchestration/wave-briefing.ts", () => ({
+vi.mock("../../features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn().mockReturnValue(""),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../../orchestration/messages.ts", () => ({
+vi.mock("../../domains/messages/messages.ts", () => ({
   buildMessageInstructions: vi.fn().mockReturnValue("msg-instr"),
   readChannelAsContext: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../../orchestration/diff-cluster.ts", () => ({
+vi.mock("../../features/orchestration/services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("../../orchestration/debate.ts", () => ({
+vi.mock("../../features/orchestration/engine/debate.ts", () => ({
   buildDebatePrompt: vi.fn().mockReturnValue(""),
   debateTeamLabel: vi.fn(),
   inspectDebateProgress: vi.fn().mockResolvedValue({ completed: true, summary: "" }),
 }));
 
-vi.mock("../../orchestration/compete.ts", () => ({
+vi.mock("../../features/orchestration/engine/compete.ts", () => ({
   expandCompetitorPrompts: vi.fn().mockReturnValue([]),
 }));
 
-import type { Board, ResolvedFlow } from "../../orchestration/flow-schema.ts";
-import { readChannelAsContext } from "../../orchestration/messages.ts";
-import { evaluateSkipWhen } from "../../orchestration/skip-when.ts";
-import { assembleWaveBriefing } from "../../orchestration/wave-briefing.ts";
-import { assemblePrompt } from "../../tools/prompt-pipeline/assemble-prompt.ts";
-import type { SpawnPromptInput } from "../../tools/prompt-pipeline/types.ts";
+import type { Board, ResolvedFlow } from "../../domains/flows/flow-schema.ts";
+import { evaluateSkipWhen } from "../../domains/flows/skip-when.ts";
+import { readChannelAsContext } from "../../domains/messages/messages.ts";
+import { assembleWaveBriefing } from "../../features/orchestration/services/wave-briefing.ts";
+import type { SpawnPromptInput } from "../../features/prompt-pipeline/model/types.ts";
+import { assemblePrompt } from "../../features/prompt-pipeline/tools/assemble-prompt.ts";
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {

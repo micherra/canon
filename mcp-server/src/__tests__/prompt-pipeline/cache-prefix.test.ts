@@ -17,16 +17,16 @@ import {
   columnExists,
   initExecutionDb,
   SCHEMA_VERSION,
-} from "../../orchestration/execution-schema.ts";
+} from "../../domains/workspaces/execution-schema.ts";
 import {
   clearStoreCache,
   ExecutionStore,
   getExecutionStore,
-} from "../../orchestration/execution-store.ts";
+} from "../../domains/workspaces/execution-store.ts";
 
 // Mock loadAndResolveFlow + git adapter so initWorkspaceFlow is testable
 
-vi.mock("../../orchestration/flow-parser.ts", () => ({
+vi.mock("../../domains/flows/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
     description: "A fast single-agent pipeline for small tasks.",
     entry: "build",
@@ -267,7 +267,9 @@ describe("ExecutionStore getCachePrefix / setCachePrefix", () => {
 
 describe("initWorkspaceFlow — cache prefix computation", () => {
   async function initWs(projectDir: string) {
-    const { initWorkspaceFlow } = await import("../../tools/init-workspace.ts");
+    const { initWorkspaceFlow } = await import(
+      "../../features/orchestration/tools/init-workspace.ts"
+    );
     return initWorkspaceFlow(
       {
         base_commit: "abc123",

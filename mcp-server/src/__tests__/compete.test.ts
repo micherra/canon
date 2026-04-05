@@ -7,17 +7,17 @@ import {
   type CompeteConfig,
   type CompetitorOutput,
   expandCompetitorPrompts,
-} from "../orchestration/compete.ts";
-import type { SpawnPromptEntry } from "../tools/get-spawn-prompt.ts";
+} from "../features/orchestration/engine/compete.ts";
+import type { SpawnPromptEntry } from "../features/orchestration/tools/get-spawn-prompt.ts";
 
 // Mocks for getSpawnPrompt compete path tests
 
-vi.mock("../orchestration/wave-briefing.ts", () => ({
+vi.mock("../features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../orchestration/diff-cluster.ts", () => ({
+vi.mock("../features/orchestration/services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
@@ -138,9 +138,9 @@ describe("compete", () => {
 
 // resolveCompeteConfig("auto") and compete path through get-spawn-prompt
 
-import { clusterDiff } from "../orchestration/diff-cluster.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import type { ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { clusterDiff } from "../features/orchestration/services/diff-cluster.ts";
+import { getSpawnPrompt } from "../features/orchestration/tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 

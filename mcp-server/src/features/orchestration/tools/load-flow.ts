@@ -1,0 +1,28 @@
+import { buildStateGraph, loadAndResolveFlow } from "../../../domains/flows/flow-parser.ts";
+import type { ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
+import { type ToolResult, toolError, toolOk } from "../../../shared/lib/tool-result.ts";
+
+export type LoadFlowInput = {
+  flow_name: string;
+};
+
+export type LoadFlowResult = {
+  flow: ResolvedFlow;
+  state_graph: Record<string, string[]>;
+};
+
+export async function loadFlow(
+  input: LoadFlowInput,
+  pluginDir: string,
+  projectDir?: string,
+): Promise<ToolResult<LoadFlowResult>> {
+  try {
+    const flow = await loadAndResolveFlow(pluginDir, input.flow_name, projectDir);
+    const state_graph = buildStateGraph(flow);
+    return toolOk({ flow, state_graph });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const code = message.includes("not found") ? "FLOW_NOT_FOUND" : "FLOW_PARSE_ERROR";
+    return toolError(code, message);
+  }
+}

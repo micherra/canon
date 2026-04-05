@@ -21,6 +21,9 @@ import { tmpdir } from "node:os";
 import path, { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { storeSummaries } from "../features/diagnostics/tools/store-summaries.ts";
+import { getFileContext } from "../features/file-context/tools/get-file-context.ts";
+import { graphQuery } from "../features/knowledge-graph/tools/graph-query.ts";
 import { getAdapter, getLanguage } from "../graph/kg-adapter-registry.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";
@@ -30,9 +33,6 @@ import { KgStore } from "../graph/kg-store.ts";
 import type { EntityRow, FileRow } from "../graph/kg-types.ts";
 import { initParsers } from "../graph/kg-wasm-parser.ts";
 import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
-import { getFileContext } from "../tools/get-file-context.ts";
-import { graphQuery } from "../tools/graph-query.ts";
-import { storeSummaries } from "../tools/store-summaries.ts";
 
 function makeTempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "kg-integration-test-"));

@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { storePrReview } from "../features/pr-review/tools/store-pr-review.ts";
 import { DriftStore } from "../platform/storage/drift/store.ts";
-import { storePrReview } from "../tools/store-pr-review.ts";
 
 describe("storePrReview", () => {
   let tmpDir: string;

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { getItemCountCap } from "../orchestration/context-budget.ts";
+import { getItemCountCap } from "../features/orchestration/services/context-budget.ts";
 
 describe("getItemCountCap", () => {
   it("returns 5 for small tier", () => {

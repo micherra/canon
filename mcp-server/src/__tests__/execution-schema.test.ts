@@ -14,7 +14,7 @@ import {
   initExecutionDb,
   runMigrations,
   SCHEMA_VERSION,
-} from "../orchestration/execution-schema.ts";
+} from "../domains/workspaces/execution-schema.ts";
 
 function getTableNames(db: ReturnType<typeof initExecutionDb>): string[] {
   const rows = db

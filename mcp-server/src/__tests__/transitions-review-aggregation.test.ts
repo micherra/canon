@@ -9,8 +9,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { ParallelPerResult } from "../orchestration/transitions.ts";
-import { aggregateReviewResults } from "../orchestration/transitions.ts";
+import type { ParallelPerResult } from "../features/orchestration/engine/transitions.ts";
+import { aggregateReviewResults } from "../features/orchestration/engine/transitions.ts";
 
 describe("aggregateReviewResults", () => {
   it("returns clean for empty results", () => {

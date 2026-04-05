@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { executeEffects } from "../orchestration/effects.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { StateDefinition } from "../orchestration/flow-schema.ts";
+import type { StateDefinition } from "../domains/flows/flow-schema.ts";
+import { getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { executeEffects } from "../features/orchestration/engine/effects.ts";
 import { DriftStore } from "../platform/storage/drift/store.ts";
 
 const SAMPLE_REVIEW = `---

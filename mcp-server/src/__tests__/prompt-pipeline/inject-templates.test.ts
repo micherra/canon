@@ -6,9 +6,9 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
-import { injectTemplates } from "../../tools/prompt-pipeline/inject-templates.ts";
-import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
+import type { Board, ResolvedFlow, StateDefinition } from "../../domains/flows/flow-schema.ts";
+import type { PromptContext } from "../../features/prompt-pipeline/model/types.ts";
+import { injectTemplates } from "../../features/prompt-pipeline/services/inject-templates.ts";
 
 function makeBoard(): Board {
   return {

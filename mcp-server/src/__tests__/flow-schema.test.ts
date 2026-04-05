@@ -21,7 +21,7 @@ import {
   TerminalStateSchema,
   WavePolicySchema,
   WaveStateSchema,
-} from "../orchestration/flow-schema.ts";
+} from "../domains/flows/flow-schema.ts";
 
 // SingleStateSchema
 

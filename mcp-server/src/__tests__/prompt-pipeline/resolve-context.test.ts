@@ -6,17 +6,17 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
-import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
+import type { Board, ResolvedFlow, StateDefinition } from "../../domains/flows/flow-schema.ts";
+import type { PromptContext } from "../../features/prompt-pipeline/model/types.ts";
 
 // Hoist vi.mock calls to top — must come before any imports that use the mocks
 
-vi.mock("../../orchestration/inject-context.ts", () => ({
+vi.mock("../../features/orchestration/services/inject-context.ts", () => ({
   resolveContextInjections: vi.fn(),
 }));
 
-import { resolveContextInjections } from "../../orchestration/inject-context.ts";
-import { resolveContext } from "../../tools/prompt-pipeline/resolve-context.ts";
+import { resolveContextInjections } from "../../features/orchestration/services/inject-context.ts";
+import { resolveContext } from "../../features/prompt-pipeline/services/resolve-context.ts";
 
 function makeBoard(): Board {
   return {

@@ -50,7 +50,7 @@ describe("reportInputSchema — review violations with message field", () => {
       ...baseReviewInput,
       violations: [
         {
-          file_path: "src/tools/store-pr-review.ts",
+          file_path: "src/features/pr-review/tools/store-pr-review.ts",
           impact_score: 10,
           principle_id: "validate-at-trust-boundaries",
           severity: "rule",

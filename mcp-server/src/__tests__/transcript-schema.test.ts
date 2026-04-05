@@ -12,16 +12,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
-
+import { TranscriptEntrySchema } from "../domains/flows/flow-schema.ts";
 import {
   columnExists,
   initExecutionDb,
   runMigrations,
   SCHEMA_VERSION,
-} from "../orchestration/execution-schema.ts";
-import { ExecutionStore } from "../orchestration/execution-store.ts";
-import { TranscriptEntrySchema } from "../orchestration/flow-schema.ts";
-import { initWorkspace } from "../orchestration/workspace.ts";
+} from "../domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { initWorkspace } from "../domains/workspaces/workspace.ts";
 
 let tmpDirs: string[] = [];
 

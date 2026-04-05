@@ -43,16 +43,16 @@ vi.mock("node:fs", () => ({
 
 // Imports after mocks
 
-import { initBoard, recordConsultationResult, recordGateResult } from "../orchestration/board.ts";
+import { initBoard, recordConsultationResult, recordGateResult } from "../domains/board/board.ts";
+import type { Board, ConsultationResult, ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { resolveGateCommand, runGate } from "../domains/flows/gate-runner.ts";
+import { escapeDollarBrace } from "../domains/workspaces/wave-variables.ts";
 import {
   type ConsultationInput,
   executeConsultations,
   resolveConsultationPrompt,
-} from "../orchestration/consultation-executor.ts";
-import type { Board, ConsultationResult, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { resolveGateCommand, runGate } from "../orchestration/gate-runner.ts";
-import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
-import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
+} from "../features/orchestration/engine/consultation-executor.ts";
+import { assembleWaveBriefing } from "../features/orchestration/services/wave-briefing.ts";
 
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {

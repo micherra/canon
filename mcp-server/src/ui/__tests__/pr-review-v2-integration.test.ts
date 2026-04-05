@@ -105,7 +105,7 @@ function makeFile(
 }
 
 const SINGLE_FILE_NO_VIOLATIONS: PrFileInfo[] = [
-  makeFile("src/tools/pr-review-data.ts", "modified"),
+  makeFile("src/features/pr-review/tools/pr-review-data.ts", "modified"),
 ];
 
 const MIXED_STATUS_FILES: PrFileInfo[] = [
@@ -317,8 +317,10 @@ describe("handlePrompt routing", () => {
 
 describe("ImpactRow prompt template", () => {
   it("produces correct prompt for a simple file path", () => {
-    const result = impactRowPrompt("src/tools/pr-review-data.ts");
-    expect(result).toBe("Show me src/tools/pr-review-data.ts and explain what changed");
+    const result = impactRowPrompt("src/features/pr-review/tools/pr-review-data.ts");
+    expect(result).toBe(
+      "Show me src/features/pr-review/tools/pr-review-data.ts and explain what changed",
+    );
   });
 
   it("produces correct prompt for a nested file path", () => {
@@ -341,9 +343,12 @@ describe("ViolationCard prompt template", () => {
   });
 
   it("produces correct prompt for rule severity violation", () => {
-    const result = violationCardPrompt("errors-are-values", "src/tools/pr-review-data.ts");
+    const result = violationCardPrompt(
+      "errors-are-values",
+      "src/features/pr-review/tools/pr-review-data.ts",
+    );
     expect(result).toBe(
-      "Explain the errors-are-values violation in src/tools/pr-review-data.ts and how to fix it",
+      "Explain the errors-are-values violation in src/features/pr-review/tools/pr-review-data.ts and how to fix it",
     );
   });
 

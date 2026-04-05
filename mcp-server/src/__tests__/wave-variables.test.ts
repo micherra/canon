@@ -15,7 +15,7 @@ import {
   extractFilePaths,
   parseTaskIdsForWave,
   resolveWaveVariables,
-} from "../orchestration/wave-variables.ts";
+} from "../domains/workspaces/wave-variables.ts";
 import { gitExec } from "../platform/adapters/git-adapter.ts";
 
 const mockGitExec = vi.mocked(gitExec);
@@ -123,16 +123,18 @@ describe("parseTaskIdsForWave", () => {
 
 describe("extractFilePaths", () => {
   it("extracts backtick-quoted paths", () => {
-    const content = "Modified `src/orchestration/wave-variables.ts` and `mcp-server/src/index.ts`";
+    const content =
+      "Modified `src/domains/workspaces/wave-variables.ts` and `mcp-server/src/index.ts`";
     const paths = extractFilePaths(content);
-    expect(paths).toContain("src/orchestration/wave-variables.ts");
+    expect(paths).toContain("src/domains/workspaces/wave-variables.ts");
     expect(paths).toContain("mcp-server/src/index.ts");
   });
 
   it("extracts paths from markdown table rows", () => {
-    const content = "| `mcp-server/src/tools/load-flow.ts` | created | Load flows |";
+    const content =
+      "| `mcp-server/src/features/orchestration/tools/load-flow.ts` | created | Load flows |";
     const paths = extractFilePaths(content);
-    expect(paths).toContain("mcp-server/src/tools/load-flow.ts");
+    expect(paths).toContain("mcp-server/src/features/orchestration/tools/load-flow.ts");
   });
 
   it("returns empty array when no paths found", () => {
@@ -251,7 +253,7 @@ describe("resolveWaveVariables", () => {
     ]);
     const summary = [
       "## Files",
-      "| `mcp-server/src/orchestration/wave-variables.ts` | created | Core logic |",
+      "| `mcp-server/src/domains/workspaces/wave-variables.ts` | created | Core logic |",
       "| `mcp-server/src/__tests__/wave-variables.test.ts` | created | Tests |",
     ].join("\n");
     await writeFile(join(plansDir, "iwc-01-SUMMARY.md"), summary);
@@ -259,7 +261,7 @@ describe("resolveWaveVariables", () => {
 
     const vars = await resolveWaveVariables(tmpDir, { slug, totalWaves: 2, wave: 2 });
 
-    expect(vars.wave_files).toContain("mcp-server/src/orchestration/wave-variables.ts");
+    expect(vars.wave_files).toContain("mcp-server/src/domains/workspaces/wave-variables.ts");
     expect(vars.wave_files).toContain("mcp-server/src/__tests__/wave-variables.test.ts");
   });
 

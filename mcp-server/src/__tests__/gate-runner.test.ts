@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BoardStateEntry, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { BoardStateEntry, ResolvedFlow } from "../domains/flows/flow-schema.ts";
 
 // Hoist mocks before module imports
 
@@ -39,7 +39,7 @@ import {
   resolveGateCommand,
   runGate,
   runGates,
-} from "../orchestration/gate-runner.ts";
+} from "../domains/flows/gate-runner.ts";
 
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {

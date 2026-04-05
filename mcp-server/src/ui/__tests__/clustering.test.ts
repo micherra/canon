@@ -34,8 +34,8 @@ const REAL_WORLD_FIXTURE: ClusterInput[] = [
   makeFile("mcp-server/src/graph/view-materializer.ts", "modified", "graph"),
   makeFile("mcp-server/src/graph/md-relations.ts", "added", "graph"),
   // Tools — mix of modified and deleted
-  makeFile("mcp-server/src/tools/graph-query.ts", "modified", "tools"),
-  makeFile("mcp-server/src/tools/pr-review-data.ts", "modified", "tools"),
+  makeFile("mcp-server/src/features/knowledge-graph/tools/graph-query.ts", "modified", "tools"),
+  makeFile("mcp-server/src/features/pr-review/tools/pr-review-data.ts", "modified", "tools"),
   makeFile("mcp-server/src/tools/get-branch.ts", "deleted", "tools"),
   makeFile("mcp-server/src/tools/get-compliance-trend.ts", "deleted", "tools"),
   makeFile("mcp-server/src/tools/get-file-content.ts", "deleted", "tools"),
@@ -186,8 +186,8 @@ describe("clusterFiles() — shared prefix grouping", () => {
 
   it("groups pr-* files into a prefix cluster", () => {
     const files = [
-      makeFile("src/tools/pr-review-data.ts", "modified", "tools"),
-      makeFile("src/tools/pr-review-prep.ts", "modified", "tools"),
+      makeFile("src/features/pr-review/tools/pr-review-data.ts", "modified", "tools"),
+      makeFile("src/features/pr-review/tools/pr-review-prep.ts", "modified", "tools"),
     ];
     const result = clusterFiles(files);
     const prefixCluster = result.find((c) => c.type === "prefix-group");

@@ -20,8 +20,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { initExecutionDb, runMigrations } from "../orchestration/execution-schema.ts";
-import { ExecutionStore } from "../orchestration/execution-store.ts";
 import {
   checkUnresolvedRefs,
   loadAndResolveFlow,
@@ -30,16 +28,18 @@ import {
   validateFlow,
   validateSpawnCoverage,
   validateStateIdParams,
-} from "../orchestration/flow-parser.ts";
+} from "../domains/flows/flow-parser.ts";
 import type {
   FragmentDefinition,
   FragmentInclude,
   ResolvedFlow,
-} from "../orchestration/flow-schema.ts";
+} from "../domains/flows/flow-schema.ts";
 import {
   FragmentStateDefinitionSchema,
   StateDefinitionSchema,
-} from "../orchestration/flow-schema.ts";
+} from "../domains/flows/flow-schema.ts";
+import { initExecutionDb, runMigrations } from "../domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "../domains/workspaces/execution-store.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -638,8 +638,8 @@ describe("validateSpawnCoverage — parallel state type", () => {
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writePlanIndex } from "../features/orchestration/tools/write-plan-index.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { writePlanIndex } from "../tools/write-plan-index.ts";
 
 describe("writePlanIndex — additional edge cases", () => {
   it("rejects an empty slug", async () => {
@@ -678,7 +678,7 @@ describe("writePlanIndex — additional edge cases", () => {
       expect(content).toContain("src/b.ts");
       expect(content).toContain("src/c.ts");
       // parseTaskIdsForWave should still work on this content
-      const { parseTaskIdsForWave } = await import("../orchestration/wave-variables.ts");
+      const { parseTaskIdsForWave } = await import("../domains/workspaces/wave-variables.ts");
       const wave1Ids = parseTaskIdsForWave(content, 1);
       expect(wave1Ids).toEqual(["t-01"]);
     } finally {

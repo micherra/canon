@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock loadAndResolveFlow to avoid needing real flow files
-vi.mock("../orchestration/flow-parser.ts", () => ({
+vi.mock("../domains/flows/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
     description: "test",
     entry: "build",
@@ -30,8 +30,11 @@ vi.mock("../orchestration/flow-parser.ts", () => ({
   }),
 }));
 
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { initWorkspaceFlow, listBranchWorkspaces } from "../tools/init-workspace.ts";
+import { getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import {
+  initWorkspaceFlow,
+  listBranchWorkspaces,
+} from "../features/orchestration/tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 

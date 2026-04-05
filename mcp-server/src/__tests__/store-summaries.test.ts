@@ -2,11 +2,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  inferLanguageFromExtension,
+  storeSummaries,
+} from "../features/diagnostics/tools/store-summaries.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import { KgStore } from "../graph/kg-store.ts";
 import type { FileRow } from "../graph/kg-types.ts";
 import { KgVectorStore } from "../graph/kg-vector-store.ts";
-import { inferLanguageFromExtension, storeSummaries } from "../tools/store-summaries.ts";
 import { randomEmbedding } from "./embedding-test-helpers.ts";
 
 // Mock EmbeddingService — fast random vectors, no model download

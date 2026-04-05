@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { writeImplementationSummary } from "../features/orchestration/tools/write-implementation-summary.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
 
 let tmpDir: string;
 
@@ -21,7 +21,10 @@ describe("writeImplementationSummary — valid input", () => {
 
     const result = await writeImplementationSummary({
       files_changed: [
-        { action: "added", path: "src/tools/write-implementation-summary.ts" },
+        {
+          action: "added",
+          path: "src/features/orchestration/tools/write-implementation-summary.ts",
+        },
         { action: "added", path: "src/__tests__/write-implementation-summary.test.ts" },
       ],
       slug: "my-epic",

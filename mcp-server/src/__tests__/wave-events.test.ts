@@ -7,9 +7,9 @@
 
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore } from "../orchestration/execution-store.ts";
-import { resolveEventAgents } from "../orchestration/wave-events.ts";
+import { initExecutionDb } from "../domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { resolveEventAgents } from "../domains/workspaces/wave-events.ts";
 
 let db: Database.Database;
 let store: ExecutionStore;

@@ -16,11 +16,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import type { Board } from "../orchestration/flow-schema.ts";
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { normalizeStatus } from "../orchestration/transitions.ts";
-import { loadFlow } from "../tools/load-flow.ts";
+import { loadAndResolveFlow } from "../domains/flows/flow-parser.ts";
+import type { Board } from "../domains/flows/flow-schema.ts";
+import { evaluateSkipWhen } from "../domains/flows/skip-when.ts";
+import { normalizeStatus } from "../features/orchestration/engine/transitions.ts";
+import { loadFlow } from "../features/orchestration/tools/load-flow.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -103,13 +103,13 @@ describe("normalizeStatus — epic_complete", () => {
 
 describe("StuckWhenSchema — no_gate_progress", () => {
   it("accepts no_gate_progress as a valid value", async () => {
-    const { StuckWhenSchema } = await import("../orchestration/flow-schema.ts");
+    const { StuckWhenSchema } = await import("../domains/flows/flow-schema.ts");
     expect(() => StuckWhenSchema.parse("no_gate_progress")).not.toThrow();
     expect(StuckWhenSchema.parse("no_gate_progress")).toBe("no_gate_progress");
   });
 
   it("still accepts pre-existing stuck_when values", async () => {
-    const { StuckWhenSchema } = await import("../orchestration/flow-schema.ts");
+    const { StuckWhenSchema } = await import("../domains/flows/flow-schema.ts");
     expect(() => StuckWhenSchema.parse("same_violations")).not.toThrow();
     expect(() => StuckWhenSchema.parse("same_file_test")).not.toThrow();
     expect(() => StuckWhenSchema.parse("same_status")).not.toThrow();
@@ -117,7 +117,7 @@ describe("StuckWhenSchema — no_gate_progress", () => {
   });
 
   it("rejects unknown stuck_when values", async () => {
-    const { StuckWhenSchema } = await import("../orchestration/flow-schema.ts");
+    const { StuckWhenSchema } = await import("../domains/flows/flow-schema.ts");
     expect(() => StuckWhenSchema.parse("unknown_stuck_value")).toThrow();
   });
 });
@@ -126,7 +126,7 @@ describe("StuckWhenSchema — no_gate_progress", () => {
 
 describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
   it("parses a valid gate progress history entry with hash and passed: true", async () => {
-    const { GateProgressHistoryEntrySchema } = await import("../orchestration/flow-schema.ts");
+    const { GateProgressHistoryEntrySchema } = await import("../domains/flows/flow-schema.ts");
     const result = GateProgressHistoryEntrySchema.parse({
       gate_output_hash: "abc123",
       passed: true,
@@ -136,7 +136,7 @@ describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
   });
 
   it("parses a valid gate progress history entry with passed: false", async () => {
-    const { GateProgressHistoryEntrySchema } = await import("../orchestration/flow-schema.ts");
+    const { GateProgressHistoryEntrySchema } = await import("../domains/flows/flow-schema.ts");
     const result = GateProgressHistoryEntrySchema.parse({
       gate_output_hash: "deadbeef",
       passed: false,
@@ -146,12 +146,12 @@ describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
   });
 
   it("rejects entry missing gate_output_hash", async () => {
-    const { GateProgressHistoryEntrySchema } = await import("../orchestration/flow-schema.ts");
+    const { GateProgressHistoryEntrySchema } = await import("../domains/flows/flow-schema.ts");
     expect(() => GateProgressHistoryEntrySchema.parse({ passed: true })).toThrow();
   });
 
   it("rejects entry missing passed field", async () => {
-    const { GateProgressHistoryEntrySchema } = await import("../orchestration/flow-schema.ts");
+    const { GateProgressHistoryEntrySchema } = await import("../domains/flows/flow-schema.ts");
     expect(() => GateProgressHistoryEntrySchema.parse({ gate_output_hash: "abc" })).toThrow();
   });
 });
@@ -160,7 +160,7 @@ describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
 
 describe("ConsultationFragmentSchema — skip_when field", () => {
   it("accepts a consultation fragment with skip_when: no_open_questions", async () => {
-    const { ConsultationFragmentSchema } = await import("../orchestration/flow-schema.ts");
+    const { ConsultationFragmentSchema } = await import("../domains/flows/flow-schema.ts");
     const result = ConsultationFragmentSchema.parse({
       agent: "canon-researcher",
       fragment: "targeted-research",
@@ -171,7 +171,7 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
   });
 
   it("accepts a consultation fragment without skip_when (backward compat)", async () => {
-    const { ConsultationFragmentSchema } = await import("../orchestration/flow-schema.ts");
+    const { ConsultationFragmentSchema } = await import("../domains/flows/flow-schema.ts");
     const result = ConsultationFragmentSchema.parse({
       agent: "canon-reviewer",
       fragment: "plan-review",
@@ -182,7 +182,7 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
 
   it("accepts a consultation fragment with another valid SkipWhenSchema value (no_fix_requested)", async () => {
     // ConsultationFragmentSchema uses SkipWhenSchema.optional() — only known enum values are valid
-    const { ConsultationFragmentSchema } = await import("../orchestration/flow-schema.ts");
+    const { ConsultationFragmentSchema } = await import("../domains/flows/flow-schema.ts");
     const result = ConsultationFragmentSchema.parse({
       agent: "some-agent",
       fragment: "some-fragment",
@@ -197,7 +197,7 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
 
 describe("FragmentDefinitionSchema — skip_when field", () => {
   it("accepts a consultation fragment definition with skip_when", async () => {
-    const { FragmentDefinitionSchema } = await import("../orchestration/flow-schema.ts");
+    const { FragmentDefinitionSchema } = await import("../domains/flows/flow-schema.ts");
     const result = FragmentDefinitionSchema.parse({
       agent: "canon-researcher",
       fragment: "targeted-research",
@@ -210,7 +210,7 @@ describe("FragmentDefinitionSchema — skip_when field", () => {
   });
 
   it("accepts a fragment definition without skip_when (backward compat)", async () => {
-    const { FragmentDefinitionSchema } = await import("../orchestration/flow-schema.ts");
+    const { FragmentDefinitionSchema } = await import("../domains/flows/flow-schema.ts");
     const result = FragmentDefinitionSchema.parse({
       agent: "canon-reviewer",
       fragment: "plan-review",
@@ -397,7 +397,9 @@ describe("no_open_questions runtime path via evaluateSkipWhen", () => {
 
 describe("no_gate_progress isStuck integration with full history", () => {
   it("isStuck is true when gate produces same hash and keeps failing across three waves (only last two matter)", async () => {
-    const { isStuck, buildHistoryEntry } = await import("../orchestration/transitions.ts");
+    const { isStuck, buildHistoryEntry } = await import(
+      "../features/orchestration/engine/transitions.ts"
+    );
 
     // Wave 1: hash=h1, failed
     const e1 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
@@ -411,7 +413,9 @@ describe("no_gate_progress isStuck integration with full history", () => {
   });
 
   it("isStuck is false when gate hash changes on wave 3 (progress made)", async () => {
-    const { isStuck, buildHistoryEntry } = await import("../orchestration/transitions.ts");
+    const { isStuck, buildHistoryEntry } = await import(
+      "../features/orchestration/engine/transitions.ts"
+    );
 
     const e1 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
     const e2 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
@@ -421,7 +425,9 @@ describe("no_gate_progress isStuck integration with full history", () => {
   });
 
   it("isStuck is false when gate passes on wave 3 (gate now passes — not stuck even if hash same)", async () => {
-    const { isStuck, buildHistoryEntry } = await import("../orchestration/transitions.ts");
+    const { isStuck, buildHistoryEntry } = await import(
+      "../features/orchestration/engine/transitions.ts"
+    );
 
     const e1 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
     const e2 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
@@ -435,7 +441,7 @@ describe("no_gate_progress isStuck integration with full history", () => {
 
 describe("BoardSchema backward compatibility with new fields", () => {
   it("BoardSchema.parse succeeds on a minimal board without new fields", async () => {
-    const { BoardSchema } = await import("../orchestration/flow-schema.ts");
+    const { BoardSchema } = await import("../domains/flows/flow-schema.ts");
 
     const minimalBoard = {
       base_commit: "abc1234",
@@ -456,7 +462,7 @@ describe("BoardSchema backward compatibility with new fields", () => {
   });
 
   it("BoardSchema.parse succeeds on a board with has_open_questions in metadata", async () => {
-    const { BoardSchema } = await import("../orchestration/flow-schema.ts");
+    const { BoardSchema } = await import("../domains/flows/flow-schema.ts");
 
     const board = {
       base_commit: "abc1234",
@@ -482,12 +488,12 @@ describe("BoardSchema backward compatibility with new fields", () => {
 
 describe("STATUS_KEYWORDS and STATUS_ALIASES — epic_complete registration", () => {
   it("STATUS_KEYWORDS array contains epic_complete", async () => {
-    const { STATUS_KEYWORDS } = await import("../orchestration/flow-schema.ts");
+    const { STATUS_KEYWORDS } = await import("../domains/flows/flow-schema.ts");
     expect(STATUS_KEYWORDS).toContain("epic_complete");
   });
 
   it("STATUS_ALIASES maps epic_complete to epic_complete (identity alias)", async () => {
-    const { STATUS_ALIASES } = await import("../orchestration/flow-schema.ts");
+    const { STATUS_ALIASES } = await import("../domains/flows/flow-schema.ts");
     expect(STATUS_ALIASES.epic_complete).toBe("epic_complete");
   });
 });

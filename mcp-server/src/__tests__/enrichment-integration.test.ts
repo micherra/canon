@@ -23,7 +23,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
 import { DriftDb } from "../platform/storage/drift/drift-db.ts";
 import { initDriftDb } from "../platform/storage/drift/drift-schema.ts";
 import type { ReviewEntry } from "../shared/schema.ts";
@@ -42,14 +42,17 @@ vi.mock("../platform/storage/drift/store.ts", () => ({
   }),
 }));
 
-vi.mock("../orchestration/scope-resolver.ts", () => ({
+vi.mock("../features/orchestration/services/scope-resolver.ts", () => ({
   resolveTaskScope: vi.fn(),
 }));
 
 // Imports (after mocks)
 
-import { assembleEnrichment, type EnrichmentInput } from "../orchestration/context-enrichment.ts";
-import { resolveTaskScope } from "../orchestration/scope-resolver.ts";
+import {
+  assembleEnrichment,
+  type EnrichmentInput,
+} from "../features/orchestration/services/context-enrichment.ts";
+import { resolveTaskScope } from "../features/orchestration/services/scope-resolver.ts";
 import { gitLog } from "../platform/adapters/git-adapter.ts";
 import { DriftStore } from "../platform/storage/drift/store.ts";
 
@@ -177,7 +180,7 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
     // Scope resolver returns file paths (as it would from board artifacts).
     // This verifies the pipeline: scope → git section → output.
     vi.mocked(resolveTaskScope).mockReturnValue([
-      "src/orchestration/context-enrichment.ts",
+      "src/features/orchestration/services/context-enrichment.ts",
       "src/platform/adapters/git-adapter.ts",
     ]);
 
@@ -192,7 +195,7 @@ describe("enrichment integration — scope resolver → assembler pipeline", () 
 
     expect(result.content).toContain("## Context Enrichment");
     expect(result.content).toContain("Recent Changes");
-    expect(result.content).toContain("src/orchestration/context-enrichment.ts");
+    expect(result.content).toContain("src/features/orchestration/services/context-enrichment.ts");
     expect(result.warnings).not.toContain("enrichment: no task scope found");
   });
 

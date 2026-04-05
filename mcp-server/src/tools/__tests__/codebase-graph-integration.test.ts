@@ -21,7 +21,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { initExecutionDb } from "../../orchestration/execution-schema.ts";
+import { initExecutionDb } from "../../domains/workspaces/execution-schema.ts";
 import { JobManager } from "../../platform/jobs/job-manager.ts";
 import { JobStore } from "../../platform/jobs/job-store.ts";
 import { CANON_DIR, CANON_FILES } from "../../shared/constants.ts";

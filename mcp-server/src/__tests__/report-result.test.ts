@@ -12,13 +12,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import type { FlowEventMap } from "../orchestration/events.ts";
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
-import type { ResolvedFlow as FlowType } from "../orchestration/flow-schema.ts";
-import { writeMessage } from "../orchestration/messages.ts";
+import type { ResolvedFlow as FlowType } from "../domains/flows/flow-schema.ts";
+import { flowEventBus } from "../domains/messages/event-bus-instance.ts";
+import type { FlowEventMap } from "../domains/messages/events.ts";
+import { writeMessage } from "../domains/messages/messages.ts";
+import { clearStoreCache, getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { reportResult } from "../features/orchestration/tools/report-result.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { reportResult } from "../tools/report-result.ts";
 
 function makeMinimalFlow(overrides?: Partial<FlowType>): FlowType {
   return {

@@ -10,9 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { initExecutionDb, SCHEMA_VERSION } from "../orchestration/execution-schema.ts";
-import { ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
-import { BoardSchema } from "../orchestration/flow-schema.ts";
+import { BoardSchema } from "../domains/flows/flow-schema.ts";
+import { initExecutionDb, SCHEMA_VERSION } from "../domains/workspaces/execution-schema.ts";
+import { ExecutionStore, getExecutionStore } from "../domains/workspaces/execution-store.ts";
 
 function makeDb(): Database.Database {
   return initExecutionDb(":memory:");

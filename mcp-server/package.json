@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "description": "MCP server for Canon engineering principles",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "src/app/index.ts",
   "scripts": {
     "build": "tsc",
     "lint": "cd .. && biome check mcp-server/src/",
     "lint:fix": "cd .. && biome check --write mcp-server/src/",
     "lint:types": "tsc -p tsconfig.lint.json",
-    "start": "tsx src/index.ts",
+    "start": "tsx src/app/index.ts",
     "test": "vitest run"
   },
   "dependencies": {

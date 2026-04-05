@@ -9,7 +9,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { semanticSearch } from "../tools/semantic-search.ts";
+import { semanticSearch } from "../features/knowledge-graph/tools/semantic-search.ts";
 import { randomEmbedding } from "./embedding-test-helpers.ts";
 
 // Mock EmbeddingService

@@ -6,8 +6,8 @@ import {
   recordConsultationResult,
   recordGateResult,
   setBlocked,
-} from "../orchestration/board.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+} from "../domains/board/board.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
 
 function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {

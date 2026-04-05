@@ -36,8 +36,8 @@ vi.mock("../../graph/kg-schema.ts", () => ({
   }),
 }));
 
+import { codebaseGraphSubmit } from "../../features/knowledge-graph/tools/codebase-graph-submit.ts";
 import * as jobManagerModule from "../../platform/jobs/job-manager.ts";
-import { codebaseGraphSubmit } from "../codebase-graph-submit.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockManager = (jobManagerModule as any)._mockManager;
