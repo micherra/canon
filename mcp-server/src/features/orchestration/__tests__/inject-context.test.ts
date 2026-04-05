@@ -3,12 +3,9 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Board, ContextInjection } from "@domains/flows/flow-schema.ts";
-import {
-  extractSection,
-  resolveContextInjections,
-} from "@features/orchestration/services/inject-context.ts";
 import type { LayerViolation } from "@graph/kg-types.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { extractSection, resolveContextInjections } from "../services/inject-context.ts";
 
 // Mocks for file_context tests
 // Use vi.hoisted so mock factory functions can reference these variables

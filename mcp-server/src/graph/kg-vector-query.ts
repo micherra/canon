@@ -9,9 +9,9 @@
  * tool handler). Callers that need graceful degradation should catch errors.
  */
 
-import type { EmbeddingService } from "@graph/kg-embedding.ts";
-import type { EntityKind, SemanticSearchResult } from "@graph/kg-types.ts";
 import type Database from "better-sqlite3";
+import type { EmbeddingService } from "./kg-embedding.ts";
+import type { EntityKind, SemanticSearchResult } from "./kg-types.ts";
 
 export class KgVectorQuery {
   constructor(

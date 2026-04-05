@@ -114,11 +114,8 @@ describe("ParallelStateSchema approval gate fields", () => {
 // 3 & 4: shouldApprovalGate edge cases
 
 import type { Board, StateDefinition } from "@domains/flows/flow-schema.ts";
-import type { DriveFlowInput } from "@features/orchestration/services/drive-flow-types.ts";
-import {
-  shouldApprovalGate,
-  shouldApprovalGateWaveBoundary,
-} from "@features/orchestration/tools/drive-flow.ts";
+import type { DriveFlowInput } from "../services/drive-flow-types.ts";
+import { shouldApprovalGate, shouldApprovalGateWaveBoundary } from "../tools/drive-flow.ts";
 
 function makeBoard(metadataOverrides?: Record<string, string | number | boolean>): Board {
   return {
@@ -298,19 +295,19 @@ describe("initBoard with approval gate fields — wave state", () => {
 
 // 6 & 7 & 8: driveFlow integration — reject path, Branch B no gate, re-entry
 
-vi.mock("@features/orchestration/tools/enter-and-prepare-state.ts", () => ({
+vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
-vi.mock("@features/orchestration/tools/report-result.ts", () => ({
+vi.mock("../tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
 
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { driveFlow } from "@features/orchestration/tools/drive-flow.ts";
-import type { EnterAndPrepareStateResult } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import { driveFlow } from "../tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { reportResult } from "../tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 

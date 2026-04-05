@@ -22,10 +22,10 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
-import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
+import { resolveTaskScope } from "./scope-resolver.ts";
 
 export type EnrichmentInput = {
   workspace: string;

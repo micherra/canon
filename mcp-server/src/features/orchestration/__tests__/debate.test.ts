@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Message, writeMessage } from "@domains/messages/messages.ts";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildDebatePrompt,
   buildDebateSummary,
@@ -10,8 +11,7 @@ import {
   inspectDebateProgress,
   roundFraming,
   roundType,
-} from "@features/orchestration/engine/debate.ts";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+} from "../engine/debate.ts";
 
 describe("debate", () => {
   describe("roundType", () => {

@@ -11,7 +11,7 @@
  */
 
 import { RUNTIME_VARIABLES } from "@domains/flows/flow-parser.ts";
-import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
+import type { PromptContext } from "../model/types.ts";
 
 /**
  * Extended allowlist of variables that are valid at pipeline time.

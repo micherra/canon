@@ -1,5 +1,5 @@
-import type { BoardStateEntry, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { BoardStateEntry, ResolvedFlow } from "../flow-schema.ts";
 
 // Hoist mocks before module imports
 
@@ -34,12 +34,7 @@ vi.mock("node:fs", () => ({
 
 // Import after mocks are registered
 
-import {
-  normalizeGates,
-  resolveGateCommand,
-  runGate,
-  runGates,
-} from "@domains/flows/gate-runner.ts";
+import { normalizeGates, resolveGateCommand, runGate, runGates } from "../gate-runner.ts";
 
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {

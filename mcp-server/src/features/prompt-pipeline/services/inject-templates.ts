@@ -9,7 +9,7 @@
  */
 
 import { buildTemplateInjection } from "@domains/messages/variables.ts";
-import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
+import type { PromptContext } from "../model/types.ts";
 
 /**
  * Stage 5: Inject template usage instructions into basePrompt.

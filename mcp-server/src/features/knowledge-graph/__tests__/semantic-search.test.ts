@@ -8,9 +8,9 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
 import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { semanticSearch } from "../tools/semantic-search.ts";
 
 // Mock EmbeddingService
 

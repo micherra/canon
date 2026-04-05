@@ -36,11 +36,7 @@ import {
   inspectDebateProgress,
 } from "@features/orchestration/engine/debate.ts";
 import { clusterDiff, type FileCluster } from "@features/orchestration/services/diff-cluster.ts";
-import type {
-  PromptContext,
-  SpawnPromptEntry,
-  TaskItem,
-} from "@features/prompt-pipeline/model/types.ts";
+import type { PromptContext, SpawnPromptEntry, TaskItem } from "../model/types.ts";
 
 // Helpers (extracted from get-spawn-prompt.ts)
 

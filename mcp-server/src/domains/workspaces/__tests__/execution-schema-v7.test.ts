@@ -8,14 +8,14 @@
  * 4. SCHEMA_VERSION is '8'
  */
 
+import Database from "better-sqlite3";
+import { describe, expect, test } from "vitest";
 import {
   columnExists,
   initExecutionDb,
   runMigrations,
   SCHEMA_VERSION,
-} from "@domains/workspaces/execution-schema.ts";
-import Database from "better-sqlite3";
-import { describe, expect, test } from "vitest";
+} from "../execution-schema.ts";
 
 describe("SCHEMA_VERSION", () => {
   test("is 8", () => {

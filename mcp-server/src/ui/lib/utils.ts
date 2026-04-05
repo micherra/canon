@@ -1,4 +1,4 @@
-import { SEVERITY_COLORS } from "@ui/lib/constants.ts";
+import { SEVERITY_COLORS } from "./constants.ts";
 
 export function splitFilePath(path: string): { dir: string; name: string } {
   const idx = path.lastIndexOf("/");

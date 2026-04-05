@@ -10,7 +10,7 @@
 
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
-import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
+import type { PromptContext } from "../model/types.ts";
 
 /**
  * Stage 2: Resolve the ${progress} variable.

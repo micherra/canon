@@ -1,6 +1,6 @@
-import type { Board } from "@domains/flows/flow-schema.ts";
-import { evaluateSkipWhen, matchGlob } from "@domains/flows/skip-when.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Board } from "../flow-schema.ts";
+import { evaluateSkipWhen, matchGlob } from "../skip-when.ts";
 
 // Hoist the mock factory so it runs before module import.
 // gitExecImpl is a mutable reference we swap per test.
@@ -166,25 +166,25 @@ describe("evaluateSkipWhen — auto_approved", () => {
 
 describe("SkipWhenSchema", () => {
   it("accepts auto_approved as a valid value", async () => {
-    const { SkipWhenSchema } = await import("@domains/flows/flow-schema.ts");
+    const { SkipWhenSchema } = await import("../flow-schema.ts");
     expect(() => SkipWhenSchema.parse("auto_approved")).not.toThrow();
     expect(SkipWhenSchema.parse("auto_approved")).toBe("auto_approved");
   });
 
   it("still accepts existing valid values", async () => {
-    const { SkipWhenSchema } = await import("@domains/flows/flow-schema.ts");
+    const { SkipWhenSchema } = await import("../flow-schema.ts");
     expect(() => SkipWhenSchema.parse("no_contract_changes")).not.toThrow();
     expect(() => SkipWhenSchema.parse("no_fix_requested")).not.toThrow();
   });
 
   it("accepts no_open_questions as a valid value", async () => {
-    const { SkipWhenSchema } = await import("@domains/flows/flow-schema.ts");
+    const { SkipWhenSchema } = await import("../flow-schema.ts");
     expect(() => SkipWhenSchema.parse("no_open_questions")).not.toThrow();
     expect(SkipWhenSchema.parse("no_open_questions")).toBe("no_open_questions");
   });
 
   it("rejects unknown values", async () => {
-    const { SkipWhenSchema } = await import("@domains/flows/flow-schema.ts");
+    const { SkipWhenSchema } = await import("../flow-schema.ts");
     expect(() => SkipWhenSchema.parse("unknown_value")).toThrow();
   });
 });

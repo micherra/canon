@@ -35,11 +35,11 @@ import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { checkConvergence } from "@features/diagnostics/tools/check-convergence.ts";
-import { filterCannotFix } from "@features/orchestration/engine/convergence.ts";
-import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
-import { updateBoard } from "@features/orchestration/tools/update-board.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { filterCannotFix } from "../engine/convergence.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
 
 let tmpDirs: string[] = [];
 

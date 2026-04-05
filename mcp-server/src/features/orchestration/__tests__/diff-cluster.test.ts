@@ -20,11 +20,7 @@ vi.mock("@platform/adapters/git-adapter.ts", () => ({
   },
 }));
 
-import {
-  clusterByDirectory,
-  clusterByLayer,
-  getChangedFiles,
-} from "@features/orchestration/services/diff-cluster.ts";
+import { clusterByDirectory, clusterByLayer, getChangedFiles } from "../services/diff-cluster.ts";
 
 beforeEach(() => {
   gitExecImpl = null;

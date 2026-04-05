@@ -22,13 +22,13 @@ import {
   clearStoreCache,
   getExecutionStore,
 } from "@domains/workspaces/execution-store.ts";
-import { getMessages } from "@features/orchestration/tools/get-messages.ts";
-import { postMessage } from "@features/orchestration/tools/post-message.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { getMessages } from "../tools/get-messages.ts";
+import { postMessage } from "../tools/post-message.ts";
+import { reportResult } from "../tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 
@@ -435,10 +435,8 @@ describe("wave events lifecycle through SQLite store", () => {
     });
     store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
 
-    const { resolveWaveEvent } = await import(
-      "@features/orchestration/tools/resolve-wave-event.ts"
-    );
-    const { injectWaveEvent } = await import("@features/orchestration/tools/inject-wave-event.ts");
+    const { resolveWaveEvent } = await import("../tools/resolve-wave-event.ts");
+    const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
 
     const injected = await injectWaveEvent({
       payload: { description: "Test change" },

@@ -61,7 +61,7 @@ vi.mock("@graph/kg-schema.ts", () => ({
 
 // Mock codebase-graph.ts so the materialize null-manager test can import it
 // without pulling in the full kg-pipeline / tree-sitter / sqlite chain.
-vi.mock("@features/knowledge-graph/tools/codebase-graph.ts", async (importOriginal) => {
+vi.mock("../tools/codebase-graph.ts", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@features/knowledge-graph/tools/codebase-graph.ts")>();
   return {
@@ -86,13 +86,13 @@ vi.mock("@features/knowledge-graph/tools/codebase-graph.ts", async (importOrigin
 // Imports after mocks
 
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
-import { codebaseGraphPoll } from "@features/knowledge-graph/tools/codebase-graph-poll.ts";
 import { runPipeline } from "@graph/kg-pipeline.ts";
 import { forkJob, killJob } from "@platform/adapters/job-adapter.ts";
 import { computeJobFingerprint } from "@platform/jobs/job-fingerprint.ts";
 import { _resetJobManagerSingleton, JobManager } from "@platform/jobs/job-manager.ts";
 import { JobStore } from "@platform/jobs/job-store.ts";
 import { isSyncMode } from "@shared/lib/env.ts";
+import { codebaseGraphPoll } from "../tools/codebase-graph-poll.ts";
 
 // Note: codebaseGraphMaterialize requires codebase-graph mock — tested in separate describe
 
@@ -447,9 +447,7 @@ describe("codebaseGraphMaterialize when manager not initialized (Known Gap: Task
   it("returns INVALID_INPUT when job manager not initialized", async () => {
     // Dynamically import to capture the codebaseGraphMaterialize with the
     // shared vi.mock for job-manager in scope.
-    const { codebaseGraphMaterialize } = await import(
-      "@features/knowledge-graph/tools/codebase-graph-materialize.ts"
-    );
+    const { codebaseGraphMaterialize } = await import("../tools/codebase-graph-materialize.ts");
 
     // After reset, getJobManager() returns null
     const result = await codebaseGraphMaterialize(

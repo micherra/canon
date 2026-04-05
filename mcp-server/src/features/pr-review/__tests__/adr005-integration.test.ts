@@ -23,12 +23,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
-import { classifyFile, generateNarrative } from "@features/pr-review/tools/pr-review-data.ts";
-import {
-  buildBlastRadiusByFile,
-  detectSubsystems,
-  type PrImpactOutput,
-} from "@features/pr-review/tools/show-pr-impact.ts";
 import { computeUnifiedBlastRadius } from "@graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
@@ -37,6 +31,12 @@ import type { FileRow } from "@graph/kg-types.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
+import {
+  buildBlastRadiusByFile,
+  detectSubsystems,
+  type PrImpactOutput,
+} from "../tools/show-pr-impact.ts";
 
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {
@@ -887,7 +887,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
       }),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // kg_freshness_ms must be present and represent ~10 minutes
@@ -907,7 +907,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
       }),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.kg_freshness_ms).toBeUndefined();

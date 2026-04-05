@@ -38,7 +38,7 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
 
 // wave-briefing: mock readWaveGuidance to return empty (no wave guidance file)
 // but leave assembleWaveBriefing REAL so we test the actual briefing output.
-vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOriginal) => {
+vi.mock("../services/wave-briefing.ts", async (importOriginal) => {
   const real =
     await importOriginal<typeof import("@features/orchestration/services/wave-briefing.ts")>();
   return {
@@ -50,11 +50,11 @@ vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOrigin
 import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
-import { resolveConsultationPrompt } from "@features/orchestration/engine/consultation-executor.ts";
-import { assembleWaveBriefing } from "@features/orchestration/services/wave-briefing.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
+import { assembleWaveBriefing } from "../services/wave-briefing.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 

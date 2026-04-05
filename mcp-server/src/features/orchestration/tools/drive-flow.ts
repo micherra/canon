@@ -32,19 +32,19 @@ import {
   mergeWaveResults,
 } from "@domains/workspaces/wave-lifecycle.ts";
 import { parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
+import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolError } from "@shared/lib/tool-result.ts";
 import type {
   DriveFlowAction,
   DriveFlowInput,
   SpawnRequest,
-} from "@features/orchestration/services/drive-flow-types.ts";
-import { DriveFlowInputSchema } from "@features/orchestration/services/drive-flow-types.ts";
-import type { ConsultationPromptEntry } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import type { SpawnPromptEntry } from "@features/orchestration/tools/get-spawn-prompt.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
-import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
-import type { ToolResult } from "@shared/lib/tool-result.ts";
-import { toolError } from "@shared/lib/tool-result.ts";
+} from "../services/drive-flow-types.ts";
+import { DriveFlowInputSchema } from "../services/drive-flow-types.ts";
+import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
+import type { SpawnPromptEntry } from "./get-spawn-prompt.ts";
+import { reportResult } from "./report-result.ts";
+import { resolveAfterConsultations } from "./resolve-after-consultations.ts";
 
 // Re-export types for external consumers
 export type { DriveFlowAction, DriveFlowInput, SpawnRequest };

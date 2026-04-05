@@ -1,5 +1,5 @@
-import { buildTemplateInjection, substituteVariables } from "@domains/messages/variables.ts";
 import { describe, expect, it } from "vitest";
+import { buildTemplateInjection, substituteVariables } from "../variables.ts";
 
 describe("substituteVariables", () => {
   it("replaces a simple variable", () => {

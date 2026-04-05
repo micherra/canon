@@ -6,8 +6,8 @@
  * performance. The API is fully synchronous (better-sqlite3 is sync).
  */
 
-import type { EdgeRow, EntityRow, FileEdgeRow, FileRow, SummaryRow } from "@graph/kg-types.ts";
 import type Database from "better-sqlite3";
+import type { EdgeRow, EntityRow, FileEdgeRow, FileRow, SummaryRow } from "./kg-types.ts";
 
 // Helper — SQLite returns 0/1 for booleans; coerce to boolean
 

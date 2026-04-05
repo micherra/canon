@@ -34,8 +34,8 @@ vi.mock("@graph/kg-query.ts", () => ({
   }),
 }));
 
-import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
 import { KgQuery } from "@graph/kg-query.ts";
+import { graphQuery } from "../tools/graph-query.ts";
 
 let tmpDir: string;
 

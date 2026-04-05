@@ -55,11 +55,11 @@ import {
   assembleWaveBriefing,
   readWaveGuidance,
 } from "@features/orchestration/services/wave-briefing.ts";
-import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
-import { injectWaveBriefing } from "@features/prompt-pipeline/services/inject-wave-briefing.ts";
 import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
+import type { PromptContext } from "../model/types.ts";
+import { injectWaveBriefing } from "../services/inject-wave-briefing.ts";
 
 function makeCtx(
   overrides: Partial<PromptContext> & {

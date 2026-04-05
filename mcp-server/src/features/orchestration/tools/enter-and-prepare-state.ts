@@ -21,15 +21,15 @@ import type {
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { resolveConsultationPrompt } from "@features/orchestration/engine/consultation-executor.ts";
-import { canEnterState } from "@features/orchestration/engine/convergence.ts";
-import { assembleEnrichment } from "@features/orchestration/services/context-enrichment.ts";
-import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";
-import type { SpawnPromptEntry, TaskItem } from "@features/orchestration/tools/get-spawn-prompt.ts";
-import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
+import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
+import { canEnterState } from "../engine/convergence.ts";
+import { assembleEnrichment } from "../services/context-enrichment.ts";
+import type { FileCluster } from "../services/diff-cluster.ts";
+import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
+import { getSpawnPrompt } from "./get-spawn-prompt.ts";
 
 export type ConsultationPromptEntry = {
   name: string;

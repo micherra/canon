@@ -42,19 +42,16 @@ vi.mock("@platform/storage/drift/store.ts", () => ({
   }),
 }));
 
-vi.mock("@features/orchestration/services/scope-resolver.ts", () => ({
+vi.mock("../services/scope-resolver.ts", () => ({
   resolveTaskScope: vi.fn(),
 }));
 
 // Imports (after mocks)
 
-import {
-  assembleEnrichment,
-  type EnrichmentInput,
-} from "@features/orchestration/services/context-enrichment.ts";
-import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
+import { assembleEnrichment, type EnrichmentInput } from "../services/context-enrichment.ts";
+import { resolveTaskScope } from "../services/scope-resolver.ts";
 
 // Helpers shared across sections
 

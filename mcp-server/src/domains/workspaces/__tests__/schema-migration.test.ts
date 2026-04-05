@@ -14,13 +14,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  columnExists,
-  initExecutionDb,
-  SCHEMA_VERSION,
-} from "@domains/workspaces/execution-schema.ts";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
+import { columnExists, initExecutionDb, SCHEMA_VERSION } from "../execution-schema.ts";
 
 let tmpFiles: string[] = [];
 

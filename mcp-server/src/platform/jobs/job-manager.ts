@@ -26,12 +26,12 @@ import {
   killJob,
   sendWorkerInput,
 } from "@platform/adapters/job-adapter.ts";
-import { computeJobFingerprint } from "@platform/jobs/job-fingerprint.ts";
-import { type JobStatus, JobStore } from "@platform/jobs/job-store.ts";
 import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "@shared/constants.ts";
 import { isSyncMode } from "@shared/lib/env.ts";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { Database } from "better-sqlite3";
+import { computeJobFingerprint } from "./job-fingerprint.ts";
+import { type JobStatus, JobStore } from "./job-store.ts";
 
 // Public result types
 

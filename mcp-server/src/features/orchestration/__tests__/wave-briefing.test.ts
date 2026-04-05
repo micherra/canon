@@ -1,8 +1,5 @@
-import {
-  assembleWaveBriefing,
-  type WaveBriefingInput,
-} from "@features/orchestration/services/wave-briefing.ts";
 import { describe, expect, it } from "vitest";
+import { assembleWaveBriefing, type WaveBriefingInput } from "../services/wave-briefing.ts";
 
 describe("assembleWaveBriefing", () => {
   it("assembles briefing with all sections populated", () => {

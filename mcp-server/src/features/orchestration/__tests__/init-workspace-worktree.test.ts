@@ -30,7 +30,7 @@ vi.mock("@domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
-import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
+import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 

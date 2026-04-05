@@ -1,10 +1,10 @@
 import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { describe, expect, it } from "vitest";
 import {
   type ConsultationInput,
   executeConsultations,
   resolveConsultationPrompt,
-} from "@features/orchestration/engine/consultation-executor.ts";
-import { describe, expect, it } from "vitest";
+} from "../engine/consultation-executor.ts";
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {

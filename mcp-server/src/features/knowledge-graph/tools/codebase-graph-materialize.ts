@@ -13,15 +13,11 @@
  * - deep-modules: delegates graph reading to readGraphFromDb()
  */
 
-import type { CodebaseGraphInput } from "@features/knowledge-graph/tools/codebase-graph.ts";
-import {
-  type CompactGraphOutput,
-  compactGraph,
-  readGraphFromDb,
-} from "@features/knowledge-graph/tools/codebase-graph.ts";
 import { getJobManager } from "@platform/jobs/job-manager.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import type { CodebaseGraphInput } from "./codebase-graph.ts";
+import { type CompactGraphOutput, compactGraph, readGraphFromDb } from "./codebase-graph.ts";
 
 export type GraphMaterializeInput = {
   job_id: string;

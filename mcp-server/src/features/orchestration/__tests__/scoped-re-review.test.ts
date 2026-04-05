@@ -28,7 +28,7 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("@features/orchestration/engine/consultation-executor.ts", () => ({
+vi.mock("../engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn(),
 }));
 
@@ -48,8 +48,8 @@ vi.mock("node:child_process", () => ({
 import { spawnSync } from "node:child_process";
 import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 
 let tmpDirs: string[] = [];
 

@@ -6,6 +6,7 @@
  */
 
 import { readdir, readFile } from "node:fs/promises";
+import { parse as parseYaml } from "yaml";
 import {
   type ConsultationFragment,
   type FlowDefinition,
@@ -17,8 +18,7 @@ import {
   type StateDefinition,
   StateDefinitionSchema,
   type TypedParam,
-} from "@domains/flows/flow-schema.ts";
-import { parse as parseYaml } from "yaml";
+} from "./flow-schema.ts";
 
 // parseFlowContent
 

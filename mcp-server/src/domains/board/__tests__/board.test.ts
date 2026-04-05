@@ -1,3 +1,5 @@
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { describe, expect, it } from "vitest";
 import {
   completeState,
   enterState,
@@ -5,9 +7,7 @@ import {
   recordConsultationResult,
   recordGateResult,
   setBlocked,
-} from "@domains/board/board.ts";
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
-import { describe, expect, it } from "vitest";
+} from "../board.ts";
 
 function makeMinimalFlow(overrides?: Partial<ResolvedFlow>): ResolvedFlow {
   return {

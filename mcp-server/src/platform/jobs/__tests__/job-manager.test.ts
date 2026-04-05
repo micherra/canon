@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Mocks — must be declared before importing the module under test.
 
 // Mock job-fingerprint to avoid real git calls
-vi.mock("@platform/jobs/job-fingerprint.ts", () => ({
+vi.mock("../job-fingerprint.ts", () => ({
   computeJobFingerprint: vi.fn().mockResolvedValue("mock-fingerprint-abc123"),
 }));
 
@@ -46,14 +46,10 @@ vi.mock("@graph/kg-pipeline.ts", () => ({
 
 import { runPipeline } from "@graph/kg-pipeline.ts";
 import { forkJob, killJob, sendWorkerInput } from "@platform/adapters/job-adapter.ts";
-// Import mocked modules AFTER vi.mock declarations
-import { computeJobFingerprint } from "@platform/jobs/job-fingerprint.ts";
-import {
-  _resetJobManagerSingleton,
-  getOrCreateJobManager,
-  JobManager,
-} from "@platform/jobs/job-manager.ts";
 import { isSyncMode } from "@shared/lib/env.ts";
+// Import mocked modules AFTER vi.mock declarations
+import { computeJobFingerprint } from "../job-fingerprint.ts";
+import { _resetJobManagerSingleton, getOrCreateJobManager, JobManager } from "../job-manager.ts";
 
 function makeDb() {
   const tmpDir = mkdtempSync(path.join(os.tmpdir(), "job-manager-test-"));

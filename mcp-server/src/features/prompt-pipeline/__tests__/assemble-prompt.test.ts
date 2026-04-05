@@ -71,8 +71,8 @@ import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { readChannelAsContext } from "@domains/messages/messages.ts";
 import { assembleWaveBriefing } from "@features/orchestration/services/wave-briefing.ts";
-import type { SpawnPromptInput } from "@features/prompt-pipeline/model/types.ts";
-import { assemblePrompt } from "@features/prompt-pipeline/tools/assemble-prompt.ts";
+import type { SpawnPromptInput } from "../model/types.ts";
+import { assemblePrompt } from "../tools/assemble-prompt.ts";
 
 function makeBoard(overrides: Record<string, unknown> = {}): Board {
   return {

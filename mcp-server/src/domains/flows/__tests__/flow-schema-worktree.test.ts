@@ -9,8 +9,8 @@
  * - WaveResultSchema.parse() without worktree_entries — backward compat (optional field)
  */
 
-import { WaveResultSchema, WorktreeEntrySchema } from "@domains/flows/flow-schema.ts";
 import { describe, expect, it } from "vitest";
+import { WaveResultSchema, WorktreeEntrySchema } from "../flow-schema.ts";
 
 describe("WorktreeEntrySchema", () => {
   it("parses a valid worktree entry with all fields", () => {

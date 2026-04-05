@@ -10,8 +10,8 @@
  *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
  */
 
-import { VERDICT_COLORS } from "@ui/lib/constants.ts";
-import { pluralize } from "@ui/lib/utils.ts";
+import { VERDICT_COLORS } from "../lib/constants.ts";
+import { pluralize } from "../lib/utils.ts";
 
 interface VerdictBannerProps {
   verdict: "BLOCKING" | "WARNING" | "CLEAN";

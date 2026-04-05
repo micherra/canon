@@ -11,7 +11,7 @@
 
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import { resolveContextInjections } from "@features/orchestration/services/inject-context.ts";
-import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
+import type { PromptContext } from "../model/types.ts";
 
 /**
  * Stage 1: Resolve inject_context injections.

@@ -9,12 +9,8 @@
  * - Upgrade from v6 DB to v8
  */
 
-import {
-  initExecutionDb,
-  runMigrations,
-  SCHEMA_VERSION,
-} from "@domains/workspaces/execution-schema.ts";
 import { describe, expect, test } from "vitest";
+import { initExecutionDb, runMigrations, SCHEMA_VERSION } from "../execution-schema.ts";
 
 function getTableNames(db: ReturnType<typeof initExecutionDb>): string[] {
   const rows = db

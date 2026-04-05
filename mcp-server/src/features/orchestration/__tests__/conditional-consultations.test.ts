@@ -28,7 +28,7 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOriginal) => {
+vi.mock("../services/wave-briefing.ts", async (importOriginal) => {
   const real =
     await importOriginal<typeof import("@features/orchestration/services/wave-briefing.ts")>();
   return {
@@ -40,8 +40,8 @@ vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOrigin
 import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { ConsultationFragmentSchema } from "@domains/flows/flow-schema.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 
 let tmpDirs: string[] = [];
 

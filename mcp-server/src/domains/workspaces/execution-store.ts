@@ -20,9 +20,9 @@ import type {
   WaveEvent,
 } from "@domains/flows/flow-schema.ts";
 import { validateEventPayload } from "@domains/messages/events.ts";
-import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { CANON_FILES } from "@shared/constants.ts";
 import type Database from "better-sqlite3";
+import { initExecutionDb } from "./execution-schema.ts";
 
 // Row types (internal — not exported; callers receive typed objects)
 

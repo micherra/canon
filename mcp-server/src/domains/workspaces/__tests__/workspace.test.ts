@@ -1,13 +1,8 @@
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import {
-  checkSlugCollision,
-  generateSlug,
-  initWorkspace,
-  sanitizeBranch,
-} from "@domains/workspaces/workspace.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { checkSlugCollision, generateSlug, initWorkspace, sanitizeBranch } from "../workspace.ts";
 
 let tmpDir: string;
 

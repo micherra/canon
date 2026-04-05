@@ -27,7 +27,7 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("@features/orchestration/engine/effects.ts", () => ({
+vi.mock("../engine/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -35,10 +35,10 @@ vi.mock("@features/orchestration/engine/effects.ts", () => ({
 
 import { BoardSchema } from "@domains/flows/flow-schema.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
-import { updateBoard } from "@features/orchestration/tools/update-board.ts";
 import { appendFlowRun, computeAnalytics } from "@platform/storage/drift/analytics.ts";
 import { CANON_DIR } from "@shared/constants.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "qg-integ-"));

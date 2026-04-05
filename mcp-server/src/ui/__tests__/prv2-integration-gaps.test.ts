@@ -45,8 +45,8 @@ import {
   clusterFiles,
   clusterIcon,
   synthesizeDescription,
-} from "@ui/lib/clustering.ts";
-import { SEVERITY_COLORS } from "@ui/lib/constants.ts";
+} from "../lib/clustering.ts";
+import { SEVERITY_COLORS } from "../lib/constants.ts";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -547,7 +547,7 @@ describe("SEVERITY_COLORS contract (cross-task: constants → ViolationCard)", (
     const path = join(uiDir, "components/ViolationCard.svelte");
     const content = readFileSync(path, "utf-8");
     expect(content).toContain("getSeverityColor");
-    expect(content).toContain("@ui/lib/utils.ts");
+    expect(content).toContain("../lib/utils.ts");
   });
 
   it("ViolationCard.svelte passes severity to getSeverityColor for the severity pill color", () => {
@@ -1128,7 +1128,7 @@ describe("bridge.sendMessage() — uninitialized guard (prv2-03 declared gap)", 
     }));
 
     // Import bridge AFTER vi.resetModules() but BEFORE calling init() — app stays null
-    const { bridge: freshBridge } = await import("@ui/stores/bridge.js");
+    const { bridge: freshBridge } = await import("../stores/bridge.js");
 
     // sendMessage without init should throw the guard error
     await expect(freshBridge.sendMessage("hello")).rejects.toThrow("Bridge not initialized");

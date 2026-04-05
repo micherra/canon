@@ -12,7 +12,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
 import { runPipeline } from "@graph/kg-pipeline.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
@@ -21,6 +20,7 @@ import { KgVectorStore } from "@graph/kg-vector-store.ts";
 import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { semanticSearch } from "../tools/semantic-search.ts";
 
 // Mock EmbeddingService (shared across all describe blocks in this file)
 

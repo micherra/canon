@@ -1,14 +1,10 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseReviewArtifact } from "@features/orchestration/engine/effects.ts";
-import {
-  VERDICT_MAP,
-  type WriteReviewInput,
-  writeReview,
-} from "@features/orchestration/tools/write-review.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { parseReviewArtifact } from "../engine/effects.ts";
+import { VERDICT_MAP, type WriteReviewInput, writeReview } from "../tools/write-review.ts";
 
 let tmpDir: string;
 

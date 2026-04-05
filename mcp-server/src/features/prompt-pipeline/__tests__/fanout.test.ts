@@ -42,8 +42,8 @@ import { expandCompetitorPrompts } from "@features/orchestration/engine/compete.
 import { buildDebatePrompt, inspectDebateProgress } from "@features/orchestration/engine/debate.ts";
 import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";
 import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
-import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
-import { fanout } from "@features/prompt-pipeline/tools/fanout.ts";
+import type { PromptContext } from "../model/types.ts";
+import { fanout } from "../tools/fanout.ts";
 
 function makeCtx(
   overrides: Partial<PromptContext> & {

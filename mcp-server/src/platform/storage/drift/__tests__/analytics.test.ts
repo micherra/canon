@@ -13,13 +13,9 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  appendFlowRun,
-  computeAnalytics,
-  type FlowRunEntry,
-} from "@platform/storage/drift/analytics.ts";
 import { CANON_DIR } from "@shared/constants.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { appendFlowRun, computeAnalytics, type FlowRunEntry } from "../analytics.ts";
 
 function makeTmpDir(): string {
   return mkdtempSync(join(tmpdir(), "canon-analytics-test-"));

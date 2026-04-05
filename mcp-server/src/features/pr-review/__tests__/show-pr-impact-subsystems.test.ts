@@ -20,12 +20,9 @@
  *     4. Limits to top 15 entries
  */
 
-import type { BlastRadiusFileEntry, Subsystem } from "@features/pr-review/tools/show-pr-impact.ts";
-import {
-  buildBlastRadiusByFile,
-  detectSubsystems,
-} from "@features/pr-review/tools/show-pr-impact.ts";
 import { describe, expect, it } from "vitest";
+import type { BlastRadiusFileEntry, Subsystem } from "../tools/show-pr-impact.ts";
+import { buildBlastRadiusByFile, detectSubsystems } from "../tools/show-pr-impact.ts";
 
 // detectSubsystems
 

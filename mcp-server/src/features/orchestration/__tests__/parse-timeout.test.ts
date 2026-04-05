@@ -1,5 +1,5 @@
-import { parseTimeout } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import { describe, expect, it } from "vitest";
+import { parseTimeout } from "../tools/get-spawn-prompt.ts";
 
 describe("parseTimeout", () => {
   it("parses minutes", () => {

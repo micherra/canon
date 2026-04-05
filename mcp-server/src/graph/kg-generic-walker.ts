@@ -13,9 +13,9 @@
  * hides ~300 lines of complex AST walking logic.
  */
 
-import type { LanguageConfig, SyntaxNode, WalkerContext } from "@graph/kg-language-configs.ts";
-import type { AdapterResult, EdgeType, EntityKind, IntraFileEdge } from "@graph/kg-types.ts";
 import type { Node, Tree } from "web-tree-sitter";
+import type { LanguageConfig, SyntaxNode, WalkerContext } from "./kg-language-configs.ts";
+import type { AdapterResult, EdgeType, EntityKind, IntraFileEdge } from "./kg-types.ts";
 
 /**
  * Walk a parsed syntax tree and extract entities, intra-file edges, and

@@ -3,8 +3,8 @@
  * Uses mocked JobManager and DB reads.
  */
 
-import type { CodebaseGraphOutput } from "@features/knowledge-graph/tools/codebase-graph.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CodebaseGraphOutput } from "../tools/codebase-graph.ts";
 
 // Mock the job-manager module before importing the tool
 vi.mock("@platform/jobs/job-manager.ts", () => {
@@ -23,7 +23,7 @@ vi.mock("@platform/jobs/job-manager.ts", () => {
 
 // Mock readGraphFromDb (and compactGraph) so materialize doesn't hit real DB.
 // Comment #10: materialize now calls readGraphFromDb instead of codebaseGraph.
-vi.mock("@features/knowledge-graph/tools/codebase-graph.ts", async (importOriginal) => {
+vi.mock("../tools/codebase-graph.ts", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@features/knowledge-graph/tools/codebase-graph.ts")>();
   return {
@@ -36,9 +36,9 @@ vi.mock("@features/knowledge-graph/tools/codebase-graph.ts", async (importOrigin
   };
 });
 
-import * as codebaseGraphModule from "@features/knowledge-graph/tools/codebase-graph.ts";
-import { codebaseGraphMaterialize } from "@features/knowledge-graph/tools/codebase-graph-materialize.ts";
 import * as jobManagerModule from "@platform/jobs/job-manager.ts";
+import * as codebaseGraphModule from "../tools/codebase-graph.ts";
+import { codebaseGraphMaterialize } from "../tools/codebase-graph-materialize.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockManager = (jobManagerModule as any)._mockManager;

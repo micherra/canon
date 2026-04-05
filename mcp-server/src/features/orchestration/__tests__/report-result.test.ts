@@ -16,9 +16,9 @@ import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";
 import { writeMessage } from "@domains/messages/messages.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { reportResult } from "../tools/report-result.ts";
 
 function makeMinimalFlow(overrides?: Partial<FlowType>): FlowType {
   return {

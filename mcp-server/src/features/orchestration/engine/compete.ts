@@ -8,7 +8,7 @@
  * 3. Build a synthesizer prompt that merges the best ideas
  */
 
-import type { SpawnPromptEntry } from "@features/orchestration/tools/get-spawn-prompt.ts";
+import type { SpawnPromptEntry } from "../tools/get-spawn-prompt.ts";
 
 export type CompeteConfig = {
   count: number;

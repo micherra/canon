@@ -1,3 +1,3 @@
-import { FlowEventBus } from "@domains/messages/events.ts";
+import { FlowEventBus } from "./events.ts";
 
 export const flowEventBus = new FlowEventBus();

@@ -96,7 +96,7 @@ import {
   readWaveGuidance,
 } from "@features/orchestration/services/wave-briefing.ts";
 import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
-import type { SpawnPromptInput } from "@features/prompt-pipeline/model/types.ts";
+import type { SpawnPromptInput } from "../model/types.ts";
 
 let tmpDirs: string[] = [];
 

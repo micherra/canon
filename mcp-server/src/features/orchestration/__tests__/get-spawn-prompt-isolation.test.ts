@@ -27,13 +27,13 @@ vi.mock("@domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
 
-vi.mock("@features/orchestration/services/wave-briefing.ts", () => ({
+vi.mock("../services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn().mockReturnValue(""),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
 import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
-import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 

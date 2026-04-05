@@ -1,4 +1,4 @@
-import { toolError } from "@shared/lib/tool-result.ts";
+import { toolError } from "./tool-result.ts";
 
 /** Standard JSON response wrapper for MCP tool results. */
 function jsonResponse(result: unknown) {

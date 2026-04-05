@@ -5,12 +5,12 @@
  * Each describe block gets a fresh DB via beforeEach.
  */
 
-import type { FlowRunEntry } from "@platform/storage/drift/analytics.ts";
-import { DriftDb, getDriftDb } from "@platform/storage/drift/drift-db.ts";
-import { DRIFT_SCHEMA_VERSION, initDriftDb } from "@platform/storage/drift/drift-schema.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import type { FlowRunEntry } from "../analytics.ts";
+import { DriftDb, getDriftDb } from "../drift-db.ts";
+import { DRIFT_SCHEMA_VERSION, initDriftDb } from "../drift-schema.ts";
 
 function makeReviewEntry(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {

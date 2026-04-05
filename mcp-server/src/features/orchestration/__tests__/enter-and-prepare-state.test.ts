@@ -30,7 +30,7 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("@features/orchestration/engine/consultation-executor.ts", () => ({
+vi.mock("../engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn(),
 }));
 
@@ -45,10 +45,10 @@ vi.mock("@domains/workspaces/wave-variables.ts", () => ({
 import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
-import { resolveConsultationPrompt } from "@features/orchestration/engine/consultation-executor.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
+import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 
 let tmpDirs: string[] = [];
 

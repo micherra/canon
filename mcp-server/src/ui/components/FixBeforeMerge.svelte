@@ -12,7 +12,7 @@
  *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
  */
 
-import { getSeverityColor } from "@ui/lib/utils.ts";
+import { getSeverityColor } from "../lib/utils.ts";
 
 interface Violation {
   file_path?: string;

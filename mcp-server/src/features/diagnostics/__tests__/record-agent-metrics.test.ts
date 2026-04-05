@@ -14,9 +14,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { recordAgentMetrics } from "@features/diagnostics/tools/record-agent-metrics.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { recordAgentMetrics } from "../tools/record-agent-metrics.ts";
 
 let tmpDirs: string[] = [];
 

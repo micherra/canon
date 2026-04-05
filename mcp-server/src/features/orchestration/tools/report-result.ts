@@ -25,8 +25,10 @@ import type {
 import { STATUS_ALIASES, STATUS_KEYWORDS } from "@domains/flows/flow-schema.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { inspectDebateProgress } from "@features/orchestration/engine/debate.ts";
-import { executeEffects } from "@features/orchestration/engine/effects.ts";
+import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolError } from "@shared/lib/tool-result.ts";
+import { inspectDebateProgress } from "../engine/debate.ts";
+import { executeEffects } from "../engine/effects.ts";
 import {
   aggregateParallelPerResults,
   aggregateReviewResults,
@@ -36,9 +38,7 @@ import {
   isRoleOptional,
   isStuck,
   normalizeStatus,
-} from "@features/orchestration/engine/transitions.ts";
-import type { ToolResult } from "@shared/lib/tool-result.ts";
-import { toolError } from "@shared/lib/tool-result.ts";
+} from "../engine/transitions.ts";
 
 // Artifact validation (ADR-010)
 

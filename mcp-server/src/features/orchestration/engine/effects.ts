@@ -8,14 +8,11 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type { Effect, StateDefinition } from "@domains/flows/flow-schema.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import {
-  evaluatePostconditions,
-  resolvePostconditions,
-} from "@features/orchestration/services/contract-checker.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { generateId } from "@shared/lib/id.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 import { z } from "zod";
+import { evaluatePostconditions, resolvePostconditions } from "../services/contract-checker.ts";
 
 /** Zod schema for validating REVIEW.meta.json structure before using it. */
 const ReviewMetaSchema = z.object({

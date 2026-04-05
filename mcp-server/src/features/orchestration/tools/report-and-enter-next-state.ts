@@ -22,12 +22,12 @@ import type {
   TestResults,
   ViolationSeverities,
 } from "@domains/flows/flow-schema.ts";
-import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";
-import type { ConsultationPromptEntry } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import type { SpawnPromptEntry, TaskItem } from "@features/orchestration/tools/get-spawn-prompt.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
+import type { FileCluster } from "../services/diff-cluster.ts";
+import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
+import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
+import { reportResult } from "./report-result.ts";
 
 export type ReportAndEnterNextStateInput = {
   // All fields from ReportResultInput

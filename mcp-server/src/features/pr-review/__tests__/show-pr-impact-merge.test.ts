@@ -46,14 +46,14 @@ vi.mock("@graph/kg-blast-radius.ts", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
-vi.mock("@features/pr-review/tools/pr-review-data.ts", () => ({
+vi.mock("../tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 
 import { existsSync } from "node:fs";
-import { getPrReviewData } from "@features/pr-review/tools/pr-review-data.ts";
-import { showPrImpact } from "@features/pr-review/tools/show-pr-impact.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
+import { getPrReviewData } from "../tools/pr-review-data.ts";
+import { showPrImpact } from "../tools/show-pr-impact.ts";
 
 const SAMPLE_PREP = {
   blast_radius: [],

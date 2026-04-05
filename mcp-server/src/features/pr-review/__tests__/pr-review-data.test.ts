@@ -75,7 +75,7 @@ describe("getPrReviewData — diff command construction", () => {
     vi.doMock("@platform/adapters/process-adapter.ts", () => ({
       runShell: mockRunShellOk(""),
     }));
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({ pr_number: 42 }, tmpDir);
     expect(result.diff_command).toContain("gh pr diff 42");
     expect(result.diff_command).toContain("--name-only");
@@ -85,7 +85,7 @@ describe("getPrReviewData — diff command construction", () => {
     vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({ branch: "feature/auth", diff_base: "main" }, tmpDir);
     expect(result.diff_command).toContain("git diff main..feature/auth");
     expect(result.diff_command).toContain("--name-status");
@@ -95,7 +95,7 @@ describe("getPrReviewData — diff command construction", () => {
     vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
     expect(result.diff_command).toContain("git diff main..HEAD");
     expect(result.diff_command).toContain("--name-status");
@@ -128,7 +128,7 @@ describe("getPrReviewData — name-status parsing", () => {
       gitExecAsync: mockGitExecAsyncOk(nameStatusOutput),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({ branch: "feat/x", diff_base: "main" }, tmpDir);
 
     expect(result.total_files).toBe(4);
@@ -146,7 +146,7 @@ describe("getPrReviewData — name-status parsing", () => {
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
     expect(result.files).toHaveLength(2);
     expect(result.total_files).toBe(2);
@@ -158,7 +158,7 @@ describe("getPrReviewData — name-status parsing", () => {
       runShell: mockRunShellOk(nameOnlyOutput),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({ pr_number: 5 }, tmpDir);
     expect(result.files).toHaveLength(2);
     for (const f of result.files) {
@@ -171,7 +171,7 @@ describe("getPrReviewData — name-status parsing", () => {
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
     expect(result.files).toHaveLength(0);
     expect(result.total_files).toBe(0);
@@ -212,7 +212,7 @@ describe("getPrReviewData — layer inference", () => {
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     const toolsFile = result.files.find(
@@ -242,7 +242,7 @@ describe("getPrReviewData — layer inference", () => {
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     const toolsLayer = result.layers.find((l) => l.name === "tools");
@@ -257,7 +257,7 @@ describe("getPrReviewData — layer inference", () => {
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
     expect(result.files[0]?.layer).toBe("unknown");
   });
@@ -321,7 +321,7 @@ describe("getPrReviewData — priority score merging", () => {
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // Both files are in the result
@@ -343,7 +343,7 @@ describe("getPrReviewData — priority score merging", () => {
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
     expect(result.files).toHaveLength(1);
     expect(result.impact_files).toHaveLength(0);
@@ -369,7 +369,7 @@ describe("getPrReviewData — error handling", () => {
       gitExecAsync: mockGitExecAsyncFail("fatal: not a git repository"),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
     expect(result.files).toHaveLength(0);
     expect(result.total_files).toBe(0);
@@ -381,7 +381,7 @@ describe("getPrReviewData — error handling", () => {
       gitExecAsync: mockGitExecAsyncFail("command not found: git"),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     await expect(fn({}, tmpDir)).resolves.not.toThrow();
   });
 
@@ -390,7 +390,7 @@ describe("getPrReviewData — error handling", () => {
       runShell: mockRunShellFail("gh: command not found"),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({ pr_number: 42 }, tmpDir);
     expect(result.files).toHaveLength(0);
     expect(result.error).toBeDefined();
@@ -435,7 +435,7 @@ describe("getPrReviewData — incremental mode", () => {
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({ incremental: true, pr_number: 42 }, tmpDir);
 
     expect(result.incremental).toBe(true);
@@ -461,19 +461,19 @@ describe("getPrReviewData — git ref sanitization", () => {
   });
 
   it("throws on invalid git ref characters", async () => {
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     await expect(fn({ branch: "feat/x; rm -rf /", diff_base: "main" }, tmpDir)).rejects.toThrow(
       "Invalid git ref",
     );
   });
 
   it("throws on ref starting with dash", async () => {
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     await expect(fn({ diff_base: "-Xms256m" }, tmpDir)).rejects.toThrow("Invalid git ref");
   });
 
   it("throws on ref containing ..", async () => {
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     await expect(fn({ diff_base: "main..evil" }, tmpDir)).rejects.toThrow("Invalid git ref");
   });
 });
@@ -594,7 +594,7 @@ describe("getPrReviewData — blast radius from KG", () => {
     vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/api/handler.ts"),
     }));
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
     expect(result.blast_radius).toEqual([]);
   });
@@ -655,7 +655,7 @@ describe("getPrReviewData — blast radius from KG", () => {
     vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/api/handler.ts"),
     }));
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // handler.ts has in_degree=3 and is_changed=true — should appear in blast_radius
@@ -683,7 +683,7 @@ describe("getPrReviewData — adapter routing", () => {
     const gitExecAsync = mockGitExecAsyncOk("M\tsrc/file.ts");
     vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     await fn({}, tmpDir);
 
     expect(gitExecAsync).toHaveBeenCalled();
@@ -697,7 +697,7 @@ describe("getPrReviewData — adapter routing", () => {
     const runShell = mockRunShellOk("");
     vi.doMock("@platform/adapters/process-adapter.ts", () => ({ runShell }));
 
-    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
     await fn({ pr_number: 1 }, tmpDir);
 
     expect(runShell).toHaveBeenCalled();

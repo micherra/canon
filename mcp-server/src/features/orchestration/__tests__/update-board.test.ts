@@ -35,9 +35,9 @@ vi.mock("@domains/messages/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
-import { updateBoard } from "@features/orchestration/tools/update-board.ts";
 import { appendFlowRun } from "@platform/storage/drift/analytics.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
+import { updateBoard } from "../tools/update-board.ts";
 
 let tmpDirs: string[] = [];
 

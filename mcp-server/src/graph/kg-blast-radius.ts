@@ -6,10 +6,10 @@
  * then performs a recursive CTE traversal to find all transitively affected entities.
  */
 
-import { KgQuery } from "@graph/kg-query.ts";
-import { KgStore } from "@graph/kg-store.ts";
-import type { BlastRadiusResult } from "@graph/kg-types.ts";
 import type Database from "better-sqlite3";
+import { KgQuery } from "./kg-query.ts";
+import { KgStore } from "./kg-store.ts";
+import type { BlastRadiusResult } from "./kg-types.ts";
 
 // Exported Interfaces
 

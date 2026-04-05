@@ -36,8 +36,8 @@ import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { resolveWaveVariables } from "@domains/workspaces/wave-variables.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
-import { updateBoard } from "@features/orchestration/tools/update-board.ts";
+import { reportResult } from "../tools/report-result.ts";
+import { updateBoard } from "../tools/update-board.ts";
 
 const mockSpawnSync = vi.mocked(spawnSync);
 

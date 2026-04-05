@@ -17,16 +17,16 @@ import type {
   PromptStage,
   SpawnPromptInput,
   SpawnPromptResult,
-} from "@features/prompt-pipeline/model/types.ts";
-import { injectCoordination } from "@features/prompt-pipeline/services/inject-coordination.ts";
-import { injectTemplates } from "@features/prompt-pipeline/services/inject-templates.ts";
-import { injectWaveBriefing } from "@features/prompt-pipeline/services/inject-wave-briefing.ts";
-import { resolveContext } from "@features/prompt-pipeline/services/resolve-context.ts";
-import { resolveMessages } from "@features/prompt-pipeline/services/resolve-messages.ts";
-import { resolveProgress } from "@features/prompt-pipeline/services/resolve-progress.ts";
-import { substituteVariablesStage } from "@features/prompt-pipeline/services/substitute-variables.ts";
-import { fanout } from "@features/prompt-pipeline/tools/fanout.ts";
-import { validatePrompts } from "@features/prompt-pipeline/tools/validate.ts";
+} from "../model/types.ts";
+import { injectCoordination } from "../services/inject-coordination.ts";
+import { injectTemplates } from "../services/inject-templates.ts";
+import { injectWaveBriefing } from "../services/inject-wave-briefing.ts";
+import { resolveContext } from "../services/resolve-context.ts";
+import { resolveMessages } from "../services/resolve-messages.ts";
+import { resolveProgress } from "../services/resolve-progress.ts";
+import { substituteVariablesStage } from "../services/substitute-variables.ts";
+import { fanout } from "./fanout.ts";
+import { validatePrompts } from "./validate.ts";
 
 /**
  * The prompt assembly pipeline: 9 stages applied in sequence.

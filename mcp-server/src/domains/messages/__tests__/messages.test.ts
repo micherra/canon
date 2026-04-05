@@ -8,13 +8,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildMessageInstructions, readChannelAsContext } from "@domains/messages/messages.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { getMessages } from "@features/orchestration/tools/get-messages.ts";
 import { postMessage } from "@features/orchestration/tools/post-message.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildMessageInstructions, readChannelAsContext } from "../messages.ts";
 
 // Store-level message operations (unit)
 

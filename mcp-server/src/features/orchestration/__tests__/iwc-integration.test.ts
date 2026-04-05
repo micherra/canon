@@ -51,8 +51,8 @@ import {
   type ConsultationInput,
   executeConsultations,
   resolveConsultationPrompt,
-} from "@features/orchestration/engine/consultation-executor.ts";
-import { assembleWaveBriefing } from "@features/orchestration/services/wave-briefing.ts";
+} from "../engine/consultation-executor.ts";
+import { assembleWaveBriefing } from "../services/wave-briefing.ts";
 
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {

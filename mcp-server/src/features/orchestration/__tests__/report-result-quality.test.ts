@@ -29,15 +29,15 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("@features/orchestration/engine/effects.ts", () => ({
+vi.mock("../engine/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { BoardSchema } from "@domains/flows/flow-schema.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { reportResult } from "@features/orchestration/tools/report-result.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { reportResult } from "../tools/report-result.ts";
 
 function makeTmpWorkspace(): string {
   const dir = mkdtempSync(join(tmpdir(), "qg-report-result-"));

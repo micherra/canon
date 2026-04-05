@@ -4,8 +4,8 @@
  * Tests for pure utility functions in ui/lib/utils.ts.
  */
 
-import { getSeverityColor, pluralize, splitFilePath } from "@ui/lib/utils.ts";
 import { describe, expect, it } from "vitest";
+import { getSeverityColor, pluralize, splitFilePath } from "../lib/utils.ts";
 
 // ---------------------------------------------------------------------------
 // splitFilePath

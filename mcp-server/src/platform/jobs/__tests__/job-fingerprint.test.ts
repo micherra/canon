@@ -14,7 +14,7 @@ vi.mock("node:fs/promises", () => ({
 
 import { readFile } from "node:fs/promises";
 import { gitExecAsync } from "@platform/adapters/git-adapter-async.ts";
-import { computeJobFingerprint } from "@platform/jobs/job-fingerprint.ts";
+import { computeJobFingerprint } from "../job-fingerprint.ts";
 
 const mockGitExecAsync = vi.mocked(gitExecAsync);
 const mockReadFile = vi.mocked(readFile);

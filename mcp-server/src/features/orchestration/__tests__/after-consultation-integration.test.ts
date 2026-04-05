@@ -41,7 +41,7 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
 }));
 
 // Leave assembleWaveBriefing real — we test actual briefing output.
-vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOriginal) => {
+vi.mock("../services/wave-briefing.ts", async (importOriginal) => {
   const real =
     await importOriginal<typeof import("@features/orchestration/services/wave-briefing.ts")>();
   return {
@@ -52,9 +52,9 @@ vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOrigin
 
 import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
 
 let tmpDirs: string[] = [];
 

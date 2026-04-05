@@ -1,4 +1,4 @@
-import FileContext from "@ui/FileContext.svelte";
 import { mount } from "svelte";
+import FileContext from "./FileContext.svelte";
 
 mount(FileContext, { target: document.getElementById("app")! });

@@ -1,5 +1,5 @@
-import { createMetricsAccumulator } from "@domains/messages/events.ts";
 import { describe, expect, it } from "vitest";
+import { createMetricsAccumulator } from "../events.ts";
 
 describe("createMetricsAccumulator", () => {
   it("tracks spawns on agent_spawned events", () => {

@@ -27,8 +27,8 @@ vi.mock("@domains/flows/flow-parser.ts", async (importOriginal) => {
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
-import { initWorkspaceFlow } from "@features/orchestration/tools/init-workspace.ts";
+import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import { initWorkspaceFlow } from "../tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 

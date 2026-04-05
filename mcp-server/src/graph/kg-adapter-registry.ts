@@ -7,12 +7,12 @@
  * their own hand-rolled adapters (no tree-sitter dependency).
  */
 
-import { markdownAdapter } from "@graph/kg-adapter-markdown.ts";
-import { yamlAdapter } from "@graph/kg-adapter-yaml.ts";
-import { walkTree } from "@graph/kg-generic-walker.ts";
-import { LANGUAGE_CONFIGS, type LanguageConfig } from "@graph/kg-language-configs.ts";
-import type { AdapterResult, LanguageAdapter } from "@graph/kg-types.ts";
-import { getParser } from "@graph/kg-wasm-parser.ts";
+import { markdownAdapter } from "./kg-adapter-markdown.ts";
+import { yamlAdapter } from "./kg-adapter-yaml.ts";
+import { walkTree } from "./kg-generic-walker.ts";
+import { LANGUAGE_CONFIGS, type LanguageConfig } from "./kg-language-configs.ts";
+import type { AdapterResult, LanguageAdapter } from "./kg-types.ts";
+import { getParser } from "./kg-wasm-parser.ts";
 
 // Factory — build a LanguageAdapter from a LanguageConfig
 

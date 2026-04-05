@@ -1,5 +1,5 @@
-import { checkUnknownFields, suggestField } from "@shared/lib/fuzzy-field-validation.ts";
 import { describe, expect, it } from "vitest";
+import { checkUnknownFields, suggestField } from "../fuzzy-field-validation.ts";
 
 const REPORT_RESULT_KEYS = [
   "workspace",

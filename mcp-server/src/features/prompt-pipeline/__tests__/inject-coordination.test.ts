@@ -22,8 +22,8 @@ vi.mock("@domains/messages/messages.ts", () => ({
 
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
-import type { PromptContext, SpawnPromptEntry } from "@features/prompt-pipeline/model/types.ts";
-import { injectCoordination } from "@features/prompt-pipeline/services/inject-coordination.ts";
+import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
+import { injectCoordination } from "../services/inject-coordination.ts";
 
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {

@@ -1,9 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { codebaseGraph } from "@features/knowledge-graph/tools/codebase-graph.ts";
 import { buildNameMaps, classifyMdNode, inferMdRelations } from "@graph/md-relations.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { codebaseGraph } from "../tools/codebase-graph.ts";
 
 describe("classifyMdNode", () => {
   it("classifies by directory prefix", () => {

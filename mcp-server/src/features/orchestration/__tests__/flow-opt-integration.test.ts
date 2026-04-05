@@ -39,7 +39,7 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOriginal) => {
+vi.mock("../services/wave-briefing.ts", async (importOriginal) => {
   const real =
     await importOriginal<typeof import("@features/orchestration/services/wave-briefing.ts")>();
   return {
@@ -48,7 +48,7 @@ vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOrigin
   };
 });
 
-vi.mock("@features/orchestration/engine/consultation-executor.ts", () => ({
+vi.mock("../engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn((name: string, flow: unknown) => {
     // Return a minimal resolved consultation for testing
     const flowTyped = flow as { consultations?: Record<string, { agent: string; role: string }> };
@@ -71,9 +71,9 @@ import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
-import { loadFlow } from "@features/orchestration/tools/load-flow.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
+import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import { loadFlow } from "../tools/load-flow.ts";
 
 let tmpDirs: string[] = [];
 

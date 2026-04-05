@@ -9,10 +9,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BoardSchema } from "@domains/flows/flow-schema.ts";
-import { initExecutionDb, SCHEMA_VERSION } from "@domains/workspaces/execution-schema.ts";
-import { ExecutionStore, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { initExecutionDb, SCHEMA_VERSION } from "../execution-schema.ts";
+import { ExecutionStore, getExecutionStore } from "../execution-store.ts";
 
 function makeDb(): Database.Database {
   return initExecutionDb(":memory:");

@@ -14,7 +14,7 @@
  *   - props-are-the-component-contract: no bridge access, no global state
  */
 
-import { getSeverityColor } from "@ui/lib/utils.ts";
+import { getSeverityColor } from "../lib/utils.ts";
 
 interface ViolationCardProps {
   filePath: string;

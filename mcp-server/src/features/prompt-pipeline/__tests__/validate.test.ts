@@ -6,9 +6,9 @@
  */
 
 import type { Board, ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
-import type { PromptContext, SpawnPromptEntry } from "@features/prompt-pipeline/model/types.ts";
-import { validatePrompts } from "@features/prompt-pipeline/tools/validate.ts";
 import { describe, expect, it } from "vitest";
+import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
+import { validatePrompts } from "../tools/validate.ts";
 
 function makeBoard(): Board {
   return {

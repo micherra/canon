@@ -6,8 +6,8 @@
  */
 
 import type { Board, ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
-import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PromptContext } from "../model/types.ts";
 
 // Hoist vi.mock — must come before module imports
 
@@ -16,7 +16,7 @@ vi.mock("@domains/workspaces/execution-store.ts", () => ({
 }));
 
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { substituteVariablesStage } from "@features/prompt-pipeline/services/substitute-variables.ts";
+import { substituteVariablesStage } from "../services/substitute-variables.ts";
 
 function makeBoard(): Board {
   return {

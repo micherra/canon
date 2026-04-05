@@ -32,7 +32,7 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("@features/orchestration/engine/consultation-executor.ts", () => ({
+vi.mock("../engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn(),
 }));
 
@@ -44,7 +44,7 @@ vi.mock("@domains/workspaces/wave-variables.ts", () => ({
   substituteVariables: vi.fn((s: string) => s),
 }));
 
-import { reportAndEnterNextState } from "@features/orchestration/tools/report-and-enter-next-state.ts";
+import { reportAndEnterNextState } from "../tools/report-and-enter-next-state.ts";
 
 let tmpDirs: string[] = [];
 

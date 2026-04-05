@@ -20,7 +20,7 @@
 
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
-import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
+import type { PromptContext } from "../model/types.ts";
 
 /**
  * Build the metrics footer to append to every prompt entry.

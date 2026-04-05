@@ -1,7 +1,7 @@
 <script lang="ts">
 import { onDestroy } from "svelte";
-import { buildSigmaGraph, type FilterOptions, type SigmaGraphApi } from "@ui/lib/sigmaGraph.ts";
-import type { GraphEdge, GraphNode } from "@ui/lib/types.ts";
+import { buildSigmaGraph, type FilterOptions, type SigmaGraphApi } from "../lib/sigmaGraph.ts";
+import type { GraphEdge, GraphNode } from "../lib/types.ts";
 
 // ── Props interface ───────────────────────────────────────────────────────
 

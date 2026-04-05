@@ -1,12 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { report } from "@features/orchestration/tools/report.ts";
 // Clear the DriftDb module cache between tests
 import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { report } from "../tools/report.ts";
 
 // --- Schema validation ---
 

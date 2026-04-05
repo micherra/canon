@@ -32,11 +32,11 @@ import {
   assembleWaveBriefing,
   readWaveGuidance,
 } from "@features/orchestration/services/wave-briefing.ts";
-import type { PromptContext, TaskItem } from "@features/prompt-pipeline/model/types.ts";
 import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import type { PromptContext, TaskItem } from "../model/types.ts";
 
 // KG staleness threshold: 1 hour (matches show_pr_impact UI banner)
 const KG_STALENESS_THRESHOLD_MS = 3_600_000;

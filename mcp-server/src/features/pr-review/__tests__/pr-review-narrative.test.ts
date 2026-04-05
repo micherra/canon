@@ -1,6 +1,6 @@
-import type { PrFileInfo } from "@features/pr-review/tools/pr-review-data.ts";
-import { generateNarrative } from "@features/pr-review/tools/pr-review-data.ts";
 import { describe, expect, it } from "vitest";
+import type { PrFileInfo } from "../tools/pr-review-data.ts";
+import { generateNarrative } from "../tools/pr-review-data.ts";
 
 // Helper to build a PrFileInfo with priority factors
 function makeFile(path: string, layer: string, overrides: Partial<PrFileInfo> = {}): PrFileInfo {

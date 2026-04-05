@@ -7,8 +7,8 @@
  * - hooks/*.yaml -> hook entities
  */
 
-import type { AdapterResult, LanguageAdapter } from "@graph/kg-types.ts";
 import { parse as parseYaml } from "yaml";
+import type { AdapterResult, LanguageAdapter } from "./kg-types.ts";
 
 /** Extract state names from a data object's `states` field. */
 function extractStateNames(data: Record<string, unknown>): string[] {

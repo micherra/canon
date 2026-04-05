@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("context-budget: shared cap values match expected tier bounds", () => {
   it("getItemCountCap values match the documented caps (5/15/30)", async () => {
-    const { getItemCountCap } = await import("@features/orchestration/services/context-budget.ts");
+    const { getItemCountCap } = await import("../services/context-budget.ts");
     // These values are the contract both inject-context and inject-wave-briefing depend on
     expect(getItemCountCap("small")).toBe(5);
     expect(getItemCountCap("medium")).toBe(15);
@@ -35,7 +35,7 @@ describe("context-budget: shared cap values match expected tier bounds", () => {
   });
 
   it("unknown tier returns the medium cap (15) — same fallback for both consumers", async () => {
-    const { getItemCountCap } = await import("@features/orchestration/services/context-budget.ts");
+    const { getItemCountCap } = await import("../services/context-budget.ts");
     // Both inject-context and inject-wave-briefing fall back to "medium" when session is null
     expect(getItemCountCap("unknown" as "small" | "medium" | "large")).toBe(15);
   });
@@ -231,9 +231,7 @@ describe("file_context injection — session null fallback", () => {
     const twentyFiles = Array.from({ length: 20 }, (_, i) => `src/file${i}.ts`);
     const board = makeBoardWithFiles(twentyFiles);
 
-    const { resolveContextInjections } = await import(
-      "@features/orchestration/services/inject-context.ts"
-    );
+    const { resolveContextInjections } = await import("../services/inject-context.ts");
     const result = await resolveContextInjections(
       [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,
@@ -272,9 +270,7 @@ describe("file_context injection — not-indexed file formatting", () => {
   it("formats file as '(not indexed)' when KG has no entry for the file", async () => {
     const board = makeBoardWithFiles(["src/new-file.ts"]);
 
-    const { resolveContextInjections } = await import(
-      "@features/orchestration/services/inject-context.ts"
-    );
+    const { resolveContextInjections } = await import("../services/inject-context.ts");
     const result = await resolveContextInjections(
       [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,
@@ -315,9 +311,7 @@ describe("file_context injection — initDatabase failure graceful degradation",
 
     const board = makeBoardWithFiles(["src/api/handler.ts"]);
 
-    const { resolveContextInjections } = await import(
-      "@features/orchestration/services/inject-context.ts"
-    );
+    const { resolveContextInjections } = await import("../services/inject-context.ts");
     const result = await resolveContextInjections(
       [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,

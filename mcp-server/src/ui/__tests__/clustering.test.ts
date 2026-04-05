@@ -5,8 +5,8 @@
  * All fixtures are static arrays — no randomness, deterministic results.
  */
 
-import { type ClusterInput, clusterFiles, findCommonPrefix } from "@ui/lib/clustering.ts";
 import { describe, expect, it } from "vitest";
+import { type ClusterInput, clusterFiles, findCommonPrefix } from "../lib/clustering.ts";
 
 // ---------------------------------------------------------------------------
 // Fixtures

@@ -18,9 +18,9 @@ import { fileURLToPath } from "node:url";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import type { Board } from "@domains/flows/flow-schema.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
-import { normalizeStatus } from "@features/orchestration/engine/transitions.ts";
-import { loadFlow } from "@features/orchestration/tools/load-flow.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { normalizeStatus } from "../engine/transitions.ts";
+import { loadFlow } from "../tools/load-flow.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -397,9 +397,7 @@ describe("no_open_questions runtime path via evaluateSkipWhen", () => {
 
 describe("no_gate_progress isStuck integration with full history", () => {
   it("isStuck is true when gate produces same hash and keeps failing across three waves (only last two matter)", async () => {
-    const { isStuck, buildHistoryEntry } = await import(
-      "@features/orchestration/engine/transitions.ts"
-    );
+    const { isStuck, buildHistoryEntry } = await import("../engine/transitions.ts");
 
     // Wave 1: hash=h1, failed
     const e1 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
@@ -413,9 +411,7 @@ describe("no_gate_progress isStuck integration with full history", () => {
   });
 
   it("isStuck is false when gate hash changes on wave 3 (progress made)", async () => {
-    const { isStuck, buildHistoryEntry } = await import(
-      "@features/orchestration/engine/transitions.ts"
-    );
+    const { isStuck, buildHistoryEntry } = await import("../engine/transitions.ts");
 
     const e1 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
     const e2 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
@@ -425,9 +421,7 @@ describe("no_gate_progress isStuck integration with full history", () => {
   });
 
   it("isStuck is false when gate passes on wave 3 (gate now passes — not stuck even if hash same)", async () => {
-    const { isStuck, buildHistoryEntry } = await import(
-      "@features/orchestration/engine/transitions.ts"
-    );
+    const { isStuck, buildHistoryEntry } = await import("../engine/transitions.ts");
 
     const e1 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });
     const e2 = buildHistoryEntry("no_gate_progress", { gateOutputHash: "h1", gatePassed: false });

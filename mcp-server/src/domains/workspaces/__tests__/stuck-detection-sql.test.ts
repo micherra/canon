@@ -5,14 +5,10 @@
  * Each test gets a fresh DB.
  */
 
-import {
-  initExecutionDb,
-  runMigrations,
-  SCHEMA_VERSION,
-} from "@domains/workspaces/execution-schema.ts";
-import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import Database from "better-sqlite3";
 import { describe, expect, test } from "vitest";
+import { initExecutionDb, runMigrations, SCHEMA_VERSION } from "../execution-schema.ts";
+import { ExecutionStore } from "../execution-store.ts";
 
 function makeStore(): ExecutionStore {
   const db = initExecutionDb(":memory:");

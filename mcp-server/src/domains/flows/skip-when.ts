@@ -1,5 +1,5 @@
-import type { Board } from "@domains/flows/flow-schema.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
+import type { Board } from "./flow-schema.ts";
 
 type SkipResult = {
   skip: boolean;

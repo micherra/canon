@@ -11,16 +11,16 @@ import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TranscriptEntrySchema } from "@domains/flows/flow-schema.ts";
+import Database from "better-sqlite3";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   columnExists,
   initExecutionDb,
   runMigrations,
   SCHEMA_VERSION,
-} from "@domains/workspaces/execution-schema.ts";
-import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { initWorkspace } from "@domains/workspaces/workspace.ts";
-import Database from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
+} from "../execution-schema.ts";
+import { ExecutionStore } from "../execution-store.ts";
+import { initWorkspace } from "../workspace.ts";
 
 let tmpDirs: string[] = [];
 

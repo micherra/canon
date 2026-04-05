@@ -6,14 +6,14 @@
  * `await computeAnalytics(...)`.
  */
 
-import type { FlowAnalytics, FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
-import { getDriftDb } from "@platform/storage/drift/drift-db.ts";
+import type { FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
+import { getDriftDb } from "./drift-db.ts";
 
 // Re-export interfaces so callers continue to `import { FlowRunEntry, FlowAnalytics } from "@platform/storage/drift/analytics.ts"`
 export type {
   FlowAnalytics,
   FlowRunEntry,
-} from "@platform/storage/drift/drift-analytics-types.ts";
+} from "./drift-analytics-types.ts";
 
 /**
  * Append a completed flow run entry to drift.db.

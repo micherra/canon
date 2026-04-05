@@ -87,8 +87,8 @@ import type {
   TaskItem,
 } from "@features/orchestration/tools/get-spawn-prompt.ts";
 import { assemblePrompt, getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
-import type { PromptContext, SpawnPromptInput } from "@features/prompt-pipeline/model/types.ts";
-import { fanout } from "@features/prompt-pipeline/tools/fanout.ts";
+import type { PromptContext, SpawnPromptInput } from "../model/types.ts";
+import { fanout } from "../tools/fanout.ts";
 
 let tmpDirs: string[] = [];
 

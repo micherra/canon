@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { StateDefinition } from "@domains/flows/flow-schema.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { executeEffects } from "@features/orchestration/engine/effects.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { executeEffects } from "../engine/effects.ts";
 
 const SAMPLE_REVIEW = `---
 verdict: "WARNING"

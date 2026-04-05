@@ -25,17 +25,14 @@ import type {
 } from "@domains/flows/flow-schema.ts";
 import { RequiredArtifactSchema } from "@domains/flows/flow-schema.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { executeEffects } from "@features/orchestration/engine/effects.ts";
-import {
-  reportResult,
-  validateRequiredArtifacts,
-} from "@features/orchestration/tools/report-result.ts";
-import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
-import { writeReview } from "@features/orchestration/tools/write-review.ts";
-import { writeTestReport } from "@features/orchestration/tools/write-test-report.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
+import { executeEffects } from "../engine/effects.ts";
+import { reportResult, validateRequiredArtifacts } from "../tools/report-result.ts";
+import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
+import { writeReview } from "../tools/write-review.ts";
+import { writeTestReport } from "../tools/write-test-report.ts";
 
 let tmpDirs: string[] = [];
 

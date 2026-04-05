@@ -46,7 +46,7 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
 }));
 
 // Import bridge after mocking
-const { bridge } = await import("@ui/stores/bridge.js");
+const { bridge } = await import("../stores/bridge.js");
 
 // ---------------------------------------------------------------------------
 // Tests
