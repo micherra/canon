@@ -6,11 +6,13 @@ import type { FileMetrics } from "../graph/kg-types.ts";
 import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
 import { loadConfigNumber } from "../shared/lib/config.ts";
 import { loadAllPrinciples, matchPrinciples } from "../shared/matcher.ts";
+import { filterBodyBySections } from "../shared/parser.ts";
 
 export type ReviewCodeInput = {
   code: string;
   file_path: string;
   context?: string;
+  sections?: string[];
 };
 
 export type PrincipleForReview = {
@@ -197,8 +199,9 @@ export async function reviewCode(
   );
 
   const allForReview = [...capped, ...injected];
+  const sections = input.sections ?? [];
   const principlesToEvaluate: PrincipleForReview[] = allForReview.map((p) => ({
-    body: p.body,
+    body: filterBodyBySections(p.body, p.anti_rationalization, p.verification, sections),
     principle_id: p.id,
     principle_title: p.title,
     review_hint: computeReviewHint(p.id, input.code),

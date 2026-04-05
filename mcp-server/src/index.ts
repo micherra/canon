@@ -150,6 +150,12 @@ server.registerTool(
         .array(z.string())
         .optional()
         .describe("Architectural layers (e.g., api, domain, data)"),
+      sections: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Filter principle body to include only these sections (e.g., 'anti_rationalization', 'verification')",
+        ),
       summary_only: z
         .boolean()
         .optional()
@@ -196,6 +202,12 @@ server.registerTool(
       code: z.string().describe("The code to review"),
       context: z.string().optional().describe("Brief description of what the code does"),
       file_path: z.string().describe("Path of the file being reviewed"),
+      sections: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Filter principle body to include only these sections (e.g., 'anti_rationalization', 'verification')",
+        ),
     },
   },
   wrapHandler(async (input) => {

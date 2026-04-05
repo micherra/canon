@@ -124,4 +124,91 @@ describe("getPrinciples", () => {
     const rule = result.principles.find((p) => p.id === "r1");
     expect(rule!.body).toContain("## Rationale");
   });
+
+  describe("sections filter", () => {
+    beforeEach(async () => {
+      // Add a principle with known sections
+      const rulesDir = join(pluginDir, "principles", "rules");
+      await writeFile(
+        join(rulesDir, "r-with-sections.md"),
+        [
+          "---",
+          "id: r-sections",
+          "title: Rule With Sections",
+          "severity: rule",
+          "---",
+          "",
+          "Summary paragraph here.",
+          "",
+          "More body text.",
+          "",
+          "## Anti-Rationalization",
+          "",
+          "| Excuse | Rebuttal |",
+          "| --- | --- |",
+          "| It's fast | Correctness first |",
+          "",
+          "## Verification",
+          "",
+          "Run: `npm test`",
+        ].join("\n"),
+      );
+    });
+
+    it("returns full body (with sections) when sections is omitted", async () => {
+      const result = await getPrinciples({}, tmpDir, pluginDir);
+      const p = result.principles.find((p) => p.id === "r-sections");
+      expect(p).toBeDefined();
+      expect(p!.body).toContain("## Anti-Rationalization");
+      expect(p!.body).toContain("## Verification");
+      expect(p!.body).toContain("Summary paragraph here.");
+    });
+
+    it("returns only summary + requested sections when sections is provided", async () => {
+      const result = await getPrinciples({ sections: ["verification"] }, tmpDir, pluginDir);
+      const p = result.principles.find((p) => p.id === "r-sections");
+      expect(p).toBeDefined();
+      expect(p!.body).toContain("Summary paragraph here.");
+      expect(p!.body).toContain("## Verification");
+      expect(p!.body).not.toContain("## Anti-Rationalization");
+    });
+
+    it("summary_only takes precedence over sections", async () => {
+      const result = await getPrinciples(
+        { summary_only: true, sections: ["verification"] },
+        tmpDir,
+        pluginDir,
+      );
+      const p = result.principles.find((p) => p.id === "r-sections");
+      expect(p).toBeDefined();
+      // summary_only returns only the first paragraph — no sections appended
+      expect(p!.body).toBe("Summary paragraph here.");
+      expect(p!.body).not.toContain("## Verification");
+    });
+
+    it("returns summary + verification section when sections: ['verification']", async () => {
+      const result = await getPrinciples({ sections: ["verification"] }, tmpDir, pluginDir);
+      const p = result.principles.find((p) => p.id === "r-sections");
+      expect(p!.body).toContain("Summary paragraph here.");
+      expect(p!.body).toContain("Run: `npm test`");
+    });
+
+    it("returns summary + anti_rationalization when sections: ['anti_rationalization']", async () => {
+      const result = await getPrinciples({ sections: ["anti_rationalization"] }, tmpDir, pluginDir);
+      const p = result.principles.find((p) => p.id === "r-sections");
+      expect(p!.body).toContain("Summary paragraph here.");
+      expect(p!.body).toContain("## Anti-Rationalization");
+      expect(p!.body).not.toContain("## Verification");
+    });
+
+    it("returns summary only when principle lacks the requested section", async () => {
+      // so1 has no Anti-Rationalization or Verification sections
+      const result = await getPrinciples({ sections: ["verification"] }, tmpDir, pluginDir);
+      const so1 = result.principles.find((p) => p.id === "so1");
+      expect(so1).toBeDefined();
+      // Body should be just the summary (first paragraph), no section headings
+      expect(so1!.body).toBe("Opinion body.");
+      expect(so1!.body).not.toContain("##");
+    });
+  });
 });
