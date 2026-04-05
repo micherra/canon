@@ -186,8 +186,8 @@ function handleWaveResult(
       task_artifacts: artifacts as string[] | undefined,
       task_id,
       task_status: status,
-      worktree_branch,
       workspace,
+      worktree_branch,
     });
   }
   return toolError(
@@ -303,8 +303,16 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
 
   // Branch A: result provided
   if (data.result) {
-    const { state_id, status, artifacts, parallel_results, metrics, agent_session_id, task_id, worktree_branch } =
-      data.result;
+    const {
+      state_id,
+      status,
+      artifacts,
+      parallel_results,
+      metrics,
+      agent_session_id,
+      task_id,
+      worktree_branch,
+    } = data.result;
 
     if (agent_session_id) store.updateAgentSession(state_id, agent_session_id);
 
