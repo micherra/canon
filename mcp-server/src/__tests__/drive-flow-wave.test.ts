@@ -1093,3 +1093,159 @@ describe("driveFlow — epic checkpoint", () => {
     expect(["spawn", "hitl"]).toContain(result.action);
   });
 });
+
+// 9. Bug fixes: worktree_branch tracking and merge cwd
+
+describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
+  it("stores the provided worktree_branch on the wave result instead of the convention branch", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
+
+    store.upsertState("implement", {
+      entries: 1,
+      status: "in_progress",
+      wave: 1,
+      wave_results: {},
+      wave_total: 1,
+    });
+
+    vi.mocked(getProjectDir).mockReturnValue("/project");
+    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
+    vi.mocked(runGates).mockReturnValue([]);
+    vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
+
+    const flow = makeWaveFlow();
+    await driveFlow({
+      flow,
+      result: {
+        state_id: "implement",
+        status: "done",
+        task_id: "task-01",
+        worktree_branch: "worktree-agent-a4915c84",
+      },
+      workspace,
+    });
+
+    const stateEntry = store.getState("implement");
+    const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
+    // Should prefer the actual agent branch, not "canon-wave/task-01"
+    expect(waveResults?.["task-01"]?.branch).toBe("worktree-agent-a4915c84");
+  });
+
+  it("falls back to convention branch when worktree_branch is not provided", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    writeIndexMd(workspace, "epic-slug", [{ task_id: "task-02", wave: 1 }]);
+
+    store.upsertState("implement", {
+      entries: 1,
+      status: "in_progress",
+      wave: 1,
+      wave_results: {},
+      wave_total: 1,
+    });
+
+    vi.mocked(getProjectDir).mockReturnValue("/project");
+    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
+    vi.mocked(runGates).mockReturnValue([]);
+    vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
+
+    const flow = makeWaveFlow();
+    await driveFlow({
+      flow,
+      result: {
+        state_id: "implement",
+        status: "done",
+        task_id: "task-02",
+        // no worktree_branch provided
+      },
+      workspace,
+    });
+
+    const stateEntry = store.getState("implement");
+    const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
+    // Should fall back to convention branch
+    expect(waveResults?.["task-02"]?.branch).toBe("canon-wave/task-02");
+  });
+});
+
+describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () => {
+  it("passes build worktree_path as cwd to mergeWaveResults when execution has worktree_path", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
+
+    // Set execution worktree_path to simulate a build-branch worktree
+    store.updateExecution({ worktree_path: "/project/.canon/worktrees/epic-slug" });
+
+    store.upsertState("implement", {
+      entries: 1,
+      status: "in_progress",
+      wave: 1,
+      wave_results: {},
+      wave_total: 1,
+    });
+
+    vi.mocked(getProjectDir).mockReturnValue("/project");
+    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
+    vi.mocked(runGates).mockReturnValue([]);
+    vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
+
+    const flow = makeWaveFlow();
+    await driveFlow({
+      flow,
+      result: {
+        state_id: "implement",
+        status: "done",
+        task_id: "task-01",
+      },
+      workspace,
+    });
+
+    // mergeWaveResults should be called with the build worktree path, not projectDir
+    expect(mergeWaveResults).toHaveBeenCalledWith(
+      expect.any(Array),
+      "/project/.canon/worktrees/epic-slug",
+      "sequential",
+    );
+  });
+
+  it("falls back to projectDir as merge cwd when execution has no worktree_path", async () => {
+    const workspace = makeTmpWorkspace();
+    const storeInstance = makeStore(workspace);
+    writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
+
+    // No worktree_path set on execution (non-worktree build)
+    storeInstance.upsertState("implement", {
+      entries: 1,
+      status: "in_progress",
+      wave: 1,
+      wave_results: {},
+      wave_total: 1,
+    });
+
+    vi.mocked(getProjectDir).mockReturnValue("/project");
+    vi.mocked(mergeWaveResults).mockResolvedValue({ merged_count: 1, ok: true });
+    vi.mocked(cleanupWorktrees).mockResolvedValue({ errors: [], removed: 1 });
+    vi.mocked(runGates).mockReturnValue([]);
+    vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as any);
+
+    const flow = makeWaveFlow();
+    await driveFlow({
+      flow,
+      result: {
+        state_id: "implement",
+        status: "done",
+        task_id: "task-01",
+      },
+      workspace,
+    });
+
+    // mergeWaveResults should fall back to projectDir
+    expect(mergeWaveResults).toHaveBeenCalledWith(expect.any(Array), "/project", "sequential");
+  });
+});

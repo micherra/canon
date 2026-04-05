@@ -76,6 +76,39 @@ describe("DriveFlowInputSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  test("accepts result with worktree_branch for wave implementors", () => {
+    const result = DriveFlowInputSchema.safeParse({
+      flow: MINIMAL_FLOW,
+      result: {
+        state_id: "start",
+        status: "done",
+        task_id: "task-01",
+        worktree_branch: "worktree-agent-a4915c84",
+      },
+      workspace: "/some/workspace",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.result?.worktree_branch).toBe("worktree-agent-a4915c84");
+    }
+  });
+
+  test("worktree_branch is optional in result", () => {
+    const result = DriveFlowInputSchema.safeParse({
+      flow: MINIMAL_FLOW,
+      result: {
+        state_id: "start",
+        status: "done",
+        task_id: "task-01",
+      },
+      workspace: "/some/workspace",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.result?.worktree_branch).toBeUndefined();
+    }
+  });
+
   test("rejects missing workspace", () => {
     const result = DriveFlowInputSchema.safeParse({
       flow: MINIMAL_FLOW,
