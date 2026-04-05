@@ -21,9 +21,7 @@ export type Principle = {
 };
 
 /** Known section heading values for case-insensitive matching. */
-const KNOWN_SECTIONS = new Map(
-  Object.values(PRINCIPLE_SECTIONS).map((v) => [v.toLowerCase(), v])
-);
+const KNOWN_SECTIONS = new Map(Object.values(PRINCIPLE_SECTIONS).map((v) => [v.toLowerCase(), v]));
 
 /**
  * Splits a principle body by `## ` headings, extracting known sections
@@ -31,7 +29,7 @@ const KNOWN_SECTIONS = new Map(
  * remainder (preamble + unknown sections) as a trimmed string.
  */
 export const extractSections = (
-  body: string
+  body: string,
 ): { sections: Map<string, string>; remainder: string } => {
   const sections = new Map<string, string>();
 
@@ -53,7 +51,7 @@ export const extractSections = (
     remainderParts.push(part);
   }
 
-  return { sections, remainder: remainderParts.join("\n").trim() };
+  return { remainder: remainderParts.join("\n").trim(), sections };
 };
 
 /**
@@ -70,16 +68,16 @@ export const filterBodyBySections = (
   body: string,
   anti_rationalization: string | undefined,
   verification: string | undefined,
-  sections: string[]
+  sections: string[],
 ): string => {
   const sectionMap: Record<string, { heading: string; content: string | undefined }> = {
     anti_rationalization: {
-      heading: PRINCIPLE_SECTIONS.ANTI_RATIONALIZATION,
       content: anti_rationalization,
+      heading: PRINCIPLE_SECTIONS.ANTI_RATIONALIZATION,
     },
     verification: {
-      heading: PRINCIPLE_SECTIONS.VERIFICATION,
       content: verification,
+      heading: PRINCIPLE_SECTIONS.VERIFICATION,
     },
   };
 

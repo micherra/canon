@@ -336,9 +336,7 @@ describe("filterBodyBySections", () => {
   const verification = "Shell commands.";
 
   it("returns summary + requested section only when sections list provided", () => {
-    const result = filterBodyBySections(body, antiRat, verification, [
-      "anti_rationalization",
-    ]);
+    const result = filterBodyBySections(body, antiRat, verification, ["anti_rationalization"]);
     expect(result).toContain(summaryParagraph);
     expect(result).toContain("## Anti-Rationalization");
     expect(result).toContain(antiRat);

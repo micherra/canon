@@ -175,7 +175,7 @@ describe("getPrinciples", () => {
 
     it("summary_only takes precedence over sections", async () => {
       const result = await getPrinciples(
-        { summary_only: true, sections: ["verification"] },
+        { sections: ["verification"], summary_only: true },
         tmpDir,
         pluginDir,
       );
