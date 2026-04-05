@@ -875,6 +875,7 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
   // Get spawn prompts for the next wave state
   const enterOut = await enterAndPrepareState({
     flow,
+    items: nextWaveTaskIds.map((tid) => ({ task_id: tid })),
     peer_count: nextWaveTaskIds.length,
     state_id,
     variables: {},
@@ -1133,6 +1134,7 @@ async function enterWaveState(
 
   const enterOut = await enterAndPrepareState({
     flow,
+    items: waveTaskIds.map((tid) => ({ task_id: tid })),
     peer_count: waveTaskIds.length,
     state_id: stateId,
     variables: {},
