@@ -18,8 +18,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DriftStore } from "@platform/storage/drift/store.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DriftStore } from "../../../platform/storage/drift/store.ts";
 
 function makeMockExecFile(stdout: string, err: Error | null = null) {
   return (
@@ -73,7 +73,7 @@ describe("getPrReviewData — rename similarity score edge cases", () => {
       execFile: makeMockExecFile(output),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({ branch: "feat/rename-test", diff_base: "main" }, tmpDir);
 
     expect(result.total_files).toBe(1);
@@ -87,7 +87,7 @@ describe("getPrReviewData — rename similarity score edge cases", () => {
       execFile: makeMockExecFile(output),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.files[0]?.path).toBe("src/bar.ts");
@@ -101,7 +101,7 @@ describe("getPrReviewData — rename similarity score edge cases", () => {
       execFile: makeMockExecFile(output),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // Only the real file should appear; whitespace lines filtered
@@ -116,7 +116,7 @@ describe("getPrReviewData — rename similarity score edge cases", () => {
       execFile: makeMockExecFile(output),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // The malformed "M\t" line has an empty path — parseDiffOutput skips it (if (!path) continue)
@@ -145,7 +145,7 @@ describe("getPrReviewData — incremental mode without prior review", () => {
       execFile: makeMockExecFile(""),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     // PR 999 has no prior review in the store
     const result = await fn({ incremental: true, pr_number: 999 }, tmpDir);
 
@@ -178,7 +178,7 @@ describe("getPrReviewData — incremental mode without prior review", () => {
       execFile: makeMockExecFile(""),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({ incremental: true, pr_number: 7 }, tmpDir);
 
     expect(result.incremental).toBe(false);
@@ -201,17 +201,17 @@ describe("getPrReviewData — pr_number validation", () => {
   });
 
   it("rejects pr_number of zero", async () => {
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     await expect(fn({ pr_number: 0 }, tmpDir)).rejects.toThrow("pr_number");
   });
 
   it("rejects negative pr_number", async () => {
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     await expect(fn({ pr_number: -5 }, tmpDir)).rejects.toThrow("pr_number");
   });
 
   it("rejects non-integer pr_number (1.5)", async () => {
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     await expect(fn({ pr_number: 1.5 }, tmpDir)).rejects.toThrow("pr_number");
   });
 });
@@ -232,8 +232,8 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
 
   it("populates kg_freshness_ms when KG DB exists with indexed files", async () => {
     // Set up a real SQLite DB with at least one indexed file
-    const { initDatabase } = await import("../../../graph/kg-schema.js");
-    const { KgStore } = await import("../../../graph/kg-store.js");
+    const { initDatabase } = await import("@graph/kg-schema.js");
+    const { KgStore } = await import("@graph/kg-store.js");
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
@@ -251,7 +251,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.kg_freshness_ms).toBeTypeOf("number");
@@ -263,7 +263,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.kg_freshness_ms).toBeUndefined();
@@ -271,8 +271,8 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
 
   it("merges priority data into file entries when KG DB is present", async () => {
     // Set up a real SQLite DB
-    const { initDatabase } = await import("../../../graph/kg-schema.js");
-    const { KgStore } = await import("../../../graph/kg-store.js");
+    const { initDatabase } = await import("@graph/kg-schema.js");
+    const { KgStore } = await import("@graph/kg-store.js");
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
@@ -307,7 +307,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts\nM\tsrc/b.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // Both files should have priority data since they are in the KG
@@ -322,7 +322,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.impact_files).toHaveLength(0);
@@ -333,7 +333,7 @@ describe("getPrReviewData — kg_freshness_ms and priority data passthrough", ()
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // Should gracefully degrade — no crash, no priority data
@@ -361,7 +361,7 @@ describe("getPrReviewData — error field co-occurrence with empty files", () =>
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/foo.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // On success, the error key should not be present at all
@@ -373,7 +373,7 @@ describe("getPrReviewData — error field co-occurrence with empty files", () =>
       gitExecAsync: mockGitExecAsyncFail("git: command not found"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // All three empty + error must be set simultaneously
@@ -417,7 +417,7 @@ describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () =>
       violations: [],
     });
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     await expect(fn({ incremental: true, pr_number: 42 }, tmpDir)).rejects.toThrow(
       "Invalid git ref",
     );
@@ -445,7 +445,7 @@ describe("getPrReviewData — sanitizeGitRef on stored last_reviewed_sha", () =>
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({ incremental: true, pr_number: 42 }, tmpDir);
 
     expect(result.incremental).toBe(true);
@@ -490,7 +490,7 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
       gitExecAsync: mockGitExecAsyncOk(diffOutput),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // total_files and layer groupings
@@ -529,7 +529,7 @@ describe("getPrReviewData — cross-subsystem integration: layer + priority", ()
       gitExecAsync: mockGitExecAsyncOk(diffOutput),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.layers).toHaveLength(1);

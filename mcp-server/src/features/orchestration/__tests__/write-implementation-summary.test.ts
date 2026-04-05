@@ -1,9 +1,9 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeImplementationSummary } from "@features/orchestration/tools/write-implementation-summary.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
 
 let tmpDir: string;
 

@@ -18,9 +18,9 @@
  * operations, all concerning coordination and observability metadata.
  */
 
-import { buildMessageInstructions } from "../../../domains/messages/messages.ts";
-import { substituteVariables } from "../../../domains/messages/variables.ts";
-import type { PromptContext } from "../model/types.ts";
+import { buildMessageInstructions } from "@domains/messages/messages.ts";
+import { substituteVariables } from "@domains/messages/variables.ts";
+import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
 
 /**
  * Build the metrics footer to append to every prompt entry.

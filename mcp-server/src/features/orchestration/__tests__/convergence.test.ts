@@ -1,13 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { checkConvergence } from "@features/diagnostics/tools/check-convergence.ts";
+import { canEnterState, filterCannotFix } from "@features/orchestration/engine/convergence.ts";
+import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Board, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { checkConvergence } from "../../diagnostics/tools/check-convergence.ts";
-import { canEnterState, filterCannotFix } from "../engine/convergence.ts";
-import { reportResult } from "../tools/report-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {

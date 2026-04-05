@@ -23,15 +23,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../../../domains/flows/skip-when.ts", () => ({
+vi.mock("@domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../services/inject-context.ts", () => ({
+vi.mock("@features/orchestration/services/inject-context.ts", () => ({
   resolveContextInjections: vi.fn(),
 }));
 
-vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
+vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -39,13 +39,16 @@ vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-import type { Board, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { evaluateSkipWhen } from "../../../domains/flows/skip-when.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { resolveContextInjections } from "../services/inject-context.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { getSpawnPrompt, truncateProgress } from "../tools/get-spawn-prompt.ts";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { resolveContextInjections } from "@features/orchestration/services/inject-context.ts";
+import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import {
+  getSpawnPrompt,
+  truncateProgress,
+} from "@features/orchestration/tools/get-spawn-prompt.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

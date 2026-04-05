@@ -27,9 +27,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { PrFileInfo } from "@features/pr-review/tools/pr-review-data.ts";
+import { classifyFile, generateNarrative } from "@features/pr-review/tools/pr-review-data.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PrFileInfo } from "../tools/pr-review-data.ts";
-import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
 
 /** Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout. */
 function mockGitExecAsyncOk(stdout: string) {
@@ -74,7 +74,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nM\tsrc/graph/b.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     for (const file of result.impact_files) {
@@ -87,7 +87,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nA\tsrc/graph/b.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     for (const file of result.impact_files) {
@@ -99,7 +99,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
   it("file with stored violations appears in impact_files due to violations filter", async () => {
     // Files with stored DriftStore violations appear in impact_files even when bucket=low-risk
     // (because the impact_files filter includes files where violations.length > 0)
-    const { DriftStore } = await import("../../../platform/storage/drift/store.js");
+    const { DriftStore } = await import("@platform/storage/drift/store.js");
     const store = new DriftStore(tmpDir);
     await store.appendReview({
       files: ["src/tools/bad.ts"],
@@ -123,7 +123,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/bad.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // File appears in impact_files because violations.length > 0 (even without KG priority data)
@@ -139,7 +139,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/orphan/file.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // Low-risk files are in the lightweight files list but not impact_files
@@ -169,7 +169,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(typeof result.narrative).toBe("string");
@@ -186,7 +186,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/a.ts\nA\tsrc/tools/b.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // generateNarrative inserts total file count + top layer name
@@ -199,7 +199,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(typeof result.narrative).toBe("string");
@@ -210,7 +210,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
 
   it("narrative mentions violations when files have stored violations in DriftStore", async () => {
     // Store a DriftStore review with violations so buildFileViolationMap populates them
-    const { DriftStore } = await import("../../../platform/storage/drift/store.js");
+    const { DriftStore } = await import("@platform/storage/drift/store.js");
     const store = new DriftStore(tmpDir);
     await store.appendReview({
       files: ["src/tools/bad.ts"],
@@ -233,7 +233,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/tools/bad.ts\nM\tsrc/tools/ok.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.narrative).toMatch(/violation/i);
@@ -261,7 +261,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(Array.isArray(result.blast_radius)).toBe(true);
@@ -274,7 +274,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/a.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // No KG DB → no priority data → in_degree = 0 < threshold of 3 → empty blast radius
@@ -283,8 +283,8 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
 
   it("blast_radius includes an entry when a changed file has in_degree >= 3", async () => {
     // Set up a real SQLite DB: src/hub.ts is imported by 4 files → in_degree=4
-    const { initDatabase } = await import("../../../graph/kg-schema.js");
-    const { KgStore } = await import("../../../graph/kg-store.js");
+    const { initDatabase } = await import("@graph/kg-schema.js");
+    const { KgStore } = await import("@graph/kg-store.js");
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
@@ -321,7 +321,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/hub.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.blast_radius).toHaveLength(1);
@@ -337,8 +337,8 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
 
   it("blast_radius capped at 10 affected files per seed", async () => {
     // Create a hub with 15 importers — blast radius must cap at 10
-    const { initDatabase } = await import("../../../graph/kg-schema.js");
-    const { KgStore } = await import("../../../graph/kg-store.js");
+    const { initDatabase } = await import("@graph/kg-schema.js");
+    const { KgStore } = await import("@graph/kg-store.js");
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
@@ -374,7 +374,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/hub.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.blast_radius).toHaveLength(1);
@@ -385,8 +385,8 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
 
   it("blast_radius capped at 3 seed files (MAX_SEEDS)", async () => {
     // 5 hubs each with 4+ importers — only top 3 by in_degree become seeds
-    const { initDatabase } = await import("../../../graph/kg-schema.js");
-    const { KgStore } = await import("../../../graph/kg-store.js");
+    const { initDatabase } = await import("@graph/kg-schema.js");
+    const { KgStore } = await import("@graph/kg-store.js");
     const dbPath = join(tmpDir, ".canon", "knowledge-graph.db");
     const db = initDatabase(dbPath);
     const store = new KgStore(db);
@@ -432,7 +432,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
       gitExecAsync: mockGitExecAsyncOk(diffOutput),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // Only top 3 seeds (hub5, hub4, hub3 by descending in_degree)
@@ -451,7 +451,7 @@ describe("getPrReviewData — computeBlastRadius() with real graph edges (known 
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/actual-change.ts"),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // hub.ts is not in the diff → not a blast radius seed

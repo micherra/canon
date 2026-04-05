@@ -6,8 +6,6 @@
  * performance. All operations are purely SELECT — no mutations here.
  */
 
-import type Database from "better-sqlite3";
-import { LAYER_CENTRALITY } from "../shared/constants.ts";
 import type {
   BlastRadiusResult,
   CallerResult,
@@ -18,7 +16,9 @@ import type {
   FileRow,
   LayerViolation,
   SearchResult,
-} from "./kg-types.ts";
+} from "@graph/kg-types.ts";
+import { LAYER_CENTRALITY } from "@shared/constants.ts";
+import type Database from "better-sqlite3";
 
 // Layer rules — clean-architecture defaults (mirrors insights.ts)
 

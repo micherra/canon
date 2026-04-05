@@ -8,11 +8,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
+import type { InitExecutionParams } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { injectWaveEvent } from "@features/orchestration/tools/inject-wave-event.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flowEventBus } from "../../../domains/messages/event-bus-instance.ts";
-import type { InitExecutionParams } from "../../../domains/workspaces/execution-store.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { injectWaveEvent } from "../tools/inject-wave-event.ts";
 
 const BASE_EXECUTION: InitExecutionParams = {
   base_commit: "abc1234",

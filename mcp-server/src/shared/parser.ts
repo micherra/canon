@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { PRINCIPLE_SECTIONS } from "@shared/constants.ts";
 import matter from "gray-matter";
-import { PRINCIPLE_SECTIONS } from "./constants.ts";
 
 export type PrincipleScope = {
   layers: string[];

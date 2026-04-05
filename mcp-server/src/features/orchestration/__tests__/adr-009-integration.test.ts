@@ -20,39 +20,39 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isToolError } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isToolError } from "../../../shared/lib/tool-result.ts";
 
 // Mock I/O boundaries
-vi.mock("../tools/enter-and-prepare-state.ts", () => ({
+vi.mock("@features/orchestration/tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
-vi.mock("../tools/report-result.ts", () => ({
+vi.mock("@features/orchestration/tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
-vi.mock("../../../domains/workspaces/wave-lifecycle.ts", () => ({
+vi.mock("@domains/workspaces/wave-lifecycle.ts", () => ({
   cleanupWorktrees: vi.fn(),
   createWaveWorktrees: vi.fn(),
   getProjectDir: vi.fn(),
   mergeWaveResults: vi.fn(),
 }));
-vi.mock("../../../domains/flows/gate-runner.ts", () => ({
+vi.mock("@domains/flows/gate-runner.ts", () => ({
   runGates: vi.fn(),
 }));
-vi.mock("../tools/resolve-after-consultations.ts", () => ({
+vi.mock("@features/orchestration/tools/resolve-after-consultations.ts", () => ({
   resolveAfterConsultations: vi.fn(),
 }));
 
-import { syncBoardToStore } from "../../../domains/board/board-sync.ts";
-import type { Board, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { initExecutionDb } from "../../../domains/workspaces/execution-schema.ts";
-import { clearStoreCache, ExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import type { ToolResult } from "../../../shared/lib/tool-result.ts";
-import { categorizeFailures } from "../../diagnostics/tools/categorize-failures.ts";
-import { driveFlow } from "../tools/drive-flow.ts";
-import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { reportResult } from "../tools/report-result.ts";
+import { syncBoardToStore } from "@domains/board/board-sync.ts";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
+import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
+import { driveFlow } from "@features/orchestration/tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import type { ToolResult } from "@shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

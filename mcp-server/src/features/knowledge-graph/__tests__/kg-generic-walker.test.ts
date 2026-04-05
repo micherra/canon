@@ -7,11 +7,11 @@
  * Uses web-tree-sitter WASM parsers via initParsers() / getParser().
  */
 
+import { walkTree } from "@graph/kg-generic-walker.ts";
+import { LANGUAGE_CONFIGS } from "@graph/kg-language-configs.ts";
+import type { AdapterResult } from "@graph/kg-types.ts";
+import { getParser, initParsers } from "@graph/kg-wasm-parser.ts";
 import { beforeAll, describe, expect, it } from "vitest";
-import { walkTree } from "../../../graph/kg-generic-walker.ts";
-import { LANGUAGE_CONFIGS } from "../../../graph/kg-language-configs.ts";
-import type { AdapterResult } from "../../../graph/kg-types.ts";
-import { getParser, initParsers } from "../../../graph/kg-wasm-parser.ts";
 
 beforeAll(async () => {
   await initParsers();

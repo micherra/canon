@@ -13,11 +13,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { RequiredArtifact, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import {
+  reportResult,
+  validateRequiredArtifacts,
+} from "@features/orchestration/tools/report-result.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import type { RequiredArtifact, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { reportResult, validateRequiredArtifacts } from "../tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 

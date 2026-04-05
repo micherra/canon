@@ -9,10 +9,10 @@
  * (wrapping synchronous DriftDb calls for backward compatibility).
  */
 
-import type { ReviewEntry } from "../../../shared/schema.ts";
-import { getDriftDb, type WeeklyTrendPoint } from "./drift-db.ts";
+import { getDriftDb, type WeeklyTrendPoint } from "@platform/storage/drift/drift-db.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 
-// Re-export WeeklyTrendPoint so callers can `import { WeeklyTrendPoint } from "./store.ts"` (unchanged interface).
+// Re-export WeeklyTrendPoint so callers can `import { WeeklyTrendPoint } from "@platform/storage/drift/store.ts"` (unchanged interface).
 export type { WeeklyTrendPoint };
 
 export class DriftStore {

@@ -37,16 +37,16 @@ const uiDir = join(__dirname, "..");
 // ── Pure function imports ────────────────────────────────────────────────────
 
 // buildFileViolationMap lives in src/ — import via relative path from ui/__tests__
-import { buildFileViolationMap } from "../../features/pr-review/tools/pr-review-data.ts";
-import type { ReviewEntry } from "../../shared/schema.ts";
+import { buildFileViolationMap } from "@features/pr-review/tools/pr-review-data.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 import {
   type Cluster,
   type ClusterInput,
   clusterFiles,
   clusterIcon,
   synthesizeDescription,
-} from "../lib/clustering.ts";
-import { SEVERITY_COLORS } from "../lib/constants.ts";
+} from "@ui/lib/clustering.ts";
+import { SEVERITY_COLORS } from "@ui/lib/constants.ts";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -1128,7 +1128,7 @@ describe("bridge.sendMessage() — uninitialized guard (prv2-03 declared gap)", 
     }));
 
     // Import bridge AFTER vi.resetModules() but BEFORE calling init() — app stays null
-    const { bridge: freshBridge } = await import("../stores/bridge.js");
+    const { bridge: freshBridge } = await import("@ui/stores/bridge.js");
 
     // sendMessage without init should throw the guard error
     await expect(freshBridge.sendMessage("hello")).rejects.toThrow("Bridge not initialized");

@@ -10,9 +10,9 @@
  * channel has no messages.
  */
 
-import { readChannelAsContext } from "../../../domains/messages/messages.ts";
-import { escapeDollarBrace } from "../../../domains/workspaces/wave-variables.ts";
-import type { PromptContext } from "../model/types.ts";
+import { readChannelAsContext } from "@domains/messages/messages.ts";
+import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
+import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
 
 /**
  * Stage 3: Resolve ${messages} from channel context.

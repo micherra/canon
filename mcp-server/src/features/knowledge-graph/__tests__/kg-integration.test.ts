@@ -19,20 +19,20 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
+import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
+import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
+import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
+import { getAdapter, getLanguage } from "@graph/kg-adapter-registry.ts";
+import { analyzeBlastRadius } from "@graph/kg-blast-radius.ts";
+import { runPipeline } from "@graph/kg-pipeline.ts";
+import { KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import type { EntityRow, FileRow } from "@graph/kg-types.ts";
+import { initParsers } from "@graph/kg-wasm-parser.ts";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import Database from "better-sqlite3";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { getAdapter, getLanguage } from "../../../graph/kg-adapter-registry.ts";
-import { analyzeBlastRadius } from "../../../graph/kg-blast-radius.ts";
-import { runPipeline } from "../../../graph/kg-pipeline.ts";
-import { KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import type { EntityRow, FileRow } from "../../../graph/kg-types.ts";
-import { initParsers } from "../../../graph/kg-wasm-parser.ts";
-import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
-import { storeSummaries } from "../../diagnostics/tools/store-summaries.ts";
-import { getFileContext } from "../../file-context/tools/get-file-context.ts";
-import { graphQuery } from "../tools/graph-query.ts";
 
 function makeTempDir(): string {
   return mkdtempSync(path.join(tmpdir(), "kg-integration-test-"));
@@ -133,7 +133,7 @@ function populateTestGraph(store: KgStore) {
   store.insertFileEdge({
     confidence: 1.0,
     edge_type: "imports",
-    evidence: "import { funcB } from './B'",
+    evidence: "import { funcB } from '@features/knowledge-graph/__tests__/B'",
     relation: null,
     source_file_id: fileA.file_id!,
     target_file_id: fileB.file_id!,
@@ -141,7 +141,7 @@ function populateTestGraph(store: KgStore) {
   store.insertFileEdge({
     confidence: 1.0,
     edge_type: "imports",
-    evidence: "import { funcC } from './C'",
+    evidence: "import { funcC } from '@features/knowledge-graph/__tests__/C'",
     relation: null,
     source_file_id: fileB.file_id!,
     target_file_id: fileC.file_id!,

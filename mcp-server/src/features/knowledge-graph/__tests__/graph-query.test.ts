@@ -14,14 +14,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // We must mock the DB layer so we don't need a real SQLite file
 
-vi.mock("../../../graph/kg-schema.ts", () => ({
+vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn().mockReturnValue({
     close: vi.fn(),
     prepare: vi.fn().mockReturnValue({ all: vi.fn().mockReturnValue([]), get: vi.fn() }),
   }),
 }));
 
-vi.mock("../../../graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: vi.fn(function () {
     return {
       findDeadCode: vi.fn().mockReturnValue([{ entity_id: 1, kind: "function", name: "orphan" }]),
@@ -34,8 +34,8 @@ vi.mock("../../../graph/kg-query.ts", () => ({
   }),
 }));
 
-import { KgQuery } from "../../../graph/kg-query.ts";
-import { graphQuery } from "../tools/graph-query.ts";
+import { graphQuery } from "@features/knowledge-graph/tools/graph-query.ts";
+import { KgQuery } from "@graph/kg-query.ts";
 
 let tmpDir: string;
 

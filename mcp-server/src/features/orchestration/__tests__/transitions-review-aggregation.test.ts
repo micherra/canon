@@ -8,9 +8,9 @@
  * - Unknown statuses treated as severity 0 (below clean)
  */
 
+import type { ParallelPerResult } from "@features/orchestration/engine/transitions.ts";
+import { aggregateReviewResults } from "@features/orchestration/engine/transitions.ts";
 import { describe, expect, it } from "vitest";
-import type { ParallelPerResult } from "../engine/transitions.ts";
-import { aggregateReviewResults } from "../engine/transitions.ts";
 
 describe("aggregateReviewResults", () => {
   it("returns clean for empty results", () => {

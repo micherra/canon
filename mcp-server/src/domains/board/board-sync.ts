@@ -5,8 +5,8 @@
  * duplicating logic. See ADR-009a (composition over inline).
  */
 
-import type { Board } from "../flows/flow-schema.ts";
-import type { getExecutionStore } from "../workspaces/execution-store.ts";
+import type { Board } from "@domains/flows/flow-schema.ts";
+import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 
 /**
  * Sync a Board object back to the ExecutionStore after mutation.

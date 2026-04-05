@@ -11,19 +11,19 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { reindexFile, runPipeline } from "@graph/kg-pipeline.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import { KgVectorStore } from "@graph/kg-vector-store.ts";
+import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { reindexFile, runPipeline } from "../../../graph/kg-pipeline.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import { KgVectorStore } from "../../../graph/kg-vector-store.ts";
-import { randomEmbedding } from "../../../tests/helpers/embedding-test-helpers.ts";
 
 // Mock EmbeddingService — fast random vectors, no model download
 
 let _mockSeed = 0;
 
-vi.mock("../../../graph/kg-embedding.ts", () => ({
+vi.mock("@graph/kg-embedding.ts", () => ({
   EmbeddingService: class MockEmbeddingService {
     async embed(texts: string[]): Promise<Float32Array[]> {
       return texts.map((_, i) => randomEmbedding(_mockSeed + i));

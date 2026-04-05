@@ -1,12 +1,12 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { computeFileInsightMaps, KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import type { FileMetrics } from "../../../graph/kg-types.ts";
-import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
-import { loadConfigNumber } from "../../../shared/lib/config.ts";
-import { loadAllPrinciples, matchPrinciples } from "../../../shared/matcher.ts";
-import { filterBodyBySections } from "../../../shared/parser.ts";
+import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import type { FileMetrics } from "@graph/kg-types.ts";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { loadConfigNumber } from "@shared/lib/config.ts";
+import { loadAllPrinciples, matchPrinciples } from "@shared/matcher.ts";
+import { filterBodyBySections } from "@shared/parser.ts";
 
 export type ReviewCodeInput = {
   code: string;

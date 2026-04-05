@@ -15,15 +15,15 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
 
 // Mock analytics so appendFlowRun doesn't need drift.db during most tests
-vi.mock("../../../platform/storage/drift/analytics.ts", () => ({
+vi.mock("@platform/storage/drift/analytics.ts", () => ({
   appendFlowRun: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
+vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -31,13 +31,13 @@ vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../../../domains/messages/events.ts", () => ({
+vi.mock("@domains/messages/events.ts", () => ({
   createJsonlLogger: vi.fn(() => vi.fn().mockResolvedValue(undefined)),
 }));
 
-import { appendFlowRun } from "../../../platform/storage/drift/analytics.ts";
-import { wrapHandler } from "../../../shared/lib/wrap-handler.ts";
-import { updateBoard } from "../tools/update-board.ts";
+import { updateBoard } from "@features/orchestration/tools/update-board.ts";
+import { appendFlowRun } from "@platform/storage/drift/analytics.ts";
+import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 
 let tmpDirs: string[] = [];
 

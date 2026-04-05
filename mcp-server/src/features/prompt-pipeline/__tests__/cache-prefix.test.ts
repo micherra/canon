@@ -10,23 +10,22 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
 import {
   columnExists,
   initExecutionDb,
   SCHEMA_VERSION,
-} from "../../../domains/workspaces/execution-schema.ts";
+} from "@domains/workspaces/execution-schema.ts";
 import {
   clearStoreCache,
   ExecutionStore,
   getExecutionStore,
-} from "../../../domains/workspaces/execution-store.ts";
+} from "@domains/workspaces/execution-store.ts";
+import Database from "better-sqlite3";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock loadAndResolveFlow + git adapter so initWorkspaceFlow is testable
 
-vi.mock("../../../domains/flows/flow-parser.ts", () => ({
+vi.mock("@domains/flows/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
     description: "A fast single-agent pipeline for small tasks.",
     entry: "build",
@@ -39,7 +38,7 @@ vi.mock("../../../domains/flows/flow-parser.ts", () => ({
   }),
 }));
 
-vi.mock("../../../platform/adapters/git-adapter.ts", () => ({
+vi.mock("@platform/adapters/git-adapter.ts", () => ({
   gitStatus: vi
     .fn()
     .mockReturnValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),
@@ -267,7 +266,7 @@ describe("ExecutionStore getCachePrefix / setCachePrefix", () => {
 
 describe("initWorkspaceFlow — cache prefix computation", () => {
   async function initWs(projectDir: string) {
-    const { initWorkspaceFlow } = await import("../../orchestration/tools/init-workspace.ts");
+    const { initWorkspaceFlow } = await import("@features/orchestration/tools/init-workspace.ts");
     return initWorkspaceFlow(
       {
         base_commit: "abc123",

@@ -11,7 +11,6 @@
  * - Exported types exist (checked via type assertions at compile time)
  */
 
-import { describe, expect, it } from "vitest";
 import {
   FragmentStateDefinitionSchema,
   ParallelPerStateSchema,
@@ -21,7 +20,8 @@ import {
   TerminalStateSchema,
   WavePolicySchema,
   WaveStateSchema,
-} from "../flow-schema.ts";
+} from "@domains/flows/flow-schema.ts";
+import { describe, expect, it } from "vitest";
 
 // SingleStateSchema
 

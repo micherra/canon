@@ -13,19 +13,16 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveFragments } from "@domains/flows/flow-parser.ts";
+import type { FragmentDefinition } from "@domains/flows/flow-schema.ts";
+import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import { KgVectorQuery } from "@graph/kg-vector-query.ts";
+import { KgVectorStore } from "@graph/kg-vector-store.ts";
+import { MockEmbeddingService, randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, test } from "vitest";
-import { resolveFragments } from "../../../domains/flows/flow-parser.ts";
-import type { FragmentDefinition } from "../../../domains/flows/flow-schema.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import { KgVectorQuery } from "../../../graph/kg-vector-query.ts";
-import { KgVectorStore } from "../../../graph/kg-vector-store.ts";
-import {
-  MockEmbeddingService,
-  randomEmbedding,
-} from "../../../tests/helpers/embedding-test-helpers.ts";
-import { writePlanIndex } from "../../orchestration/tools/write-plan-index.ts";
 
 // Fix 1: write-plan-index.ts — path traversal validation on slug
 

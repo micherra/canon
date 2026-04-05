@@ -1,7 +1,7 @@
+import type { CategorizeFailuresInput } from "@features/diagnostics/tools/categorize-failures.ts";
+import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
+import { isToolError } from "@shared/lib/tool-result.ts";
 import { describe, expect, it } from "vitest";
-import { isToolError } from "../../../shared/lib/tool-result.ts";
-import type { CategorizeFailuresInput } from "../tools/categorize-failures.ts";
-import { categorizeFailures } from "../tools/categorize-failures.ts";
 
 function makeInput(overrides: Partial<CategorizeFailuresInput> = {}): CategorizeFailuresInput {
   return {
@@ -177,15 +177,15 @@ describe("categorize_failures — directory prefix grouping", () => {
       makeInput({
         failures: [
           {
-            error_message: `${sharedSubstring} from './string'`,
+            error_message: `${sharedSubstring} from '@features/diagnostics/__tests__/string'`,
             file: "src/utils/string.test.ts",
           },
           {
-            error_message: `${sharedSubstring} from './number'`,
+            error_message: `${sharedSubstring} from '@features/diagnostics/__tests__/number'`,
             file: "src/utils/number.test.ts",
           },
           {
-            error_message: `${sharedSubstring} from './array'`,
+            error_message: `${sharedSubstring} from '@features/diagnostics/__tests__/array'`,
             file: "src/utils/array.test.ts",
           },
         ],

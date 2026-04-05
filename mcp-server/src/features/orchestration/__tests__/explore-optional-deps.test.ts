@@ -9,10 +9,10 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
+import type { RoleEntry } from "@domains/flows/flow-schema.ts";
+import { isRoleOptional } from "@features/orchestration/engine/transitions.ts";
 import { describe, expect, it } from "vitest";
-import { loadAndResolveFlow } from "../../../domains/flows/flow-parser.ts";
-import type { RoleEntry } from "../../../domains/flows/flow-schema.ts";
-import { isRoleOptional } from "../engine/transitions.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

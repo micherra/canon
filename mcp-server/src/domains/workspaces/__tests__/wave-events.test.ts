@@ -5,11 +5,11 @@
  * The resolveEventAgents pure function is tested here too.
  */
 
+import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { resolveEventAgents } from "@domains/workspaces/wave-events.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { initExecutionDb } from "../execution-schema.ts";
-import { ExecutionStore } from "../execution-store.ts";
-import { resolveEventAgents } from "../wave-events.ts";
 
 let db: Database.Database;
 let store: ExecutionStore;

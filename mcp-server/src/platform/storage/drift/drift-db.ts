@@ -11,11 +11,11 @@
 
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { FlowAnalytics, FlowRunEntry } from "@platform/storage/drift/drift-analytics-types.ts";
+import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
+import { CANON_DIR } from "@shared/constants.ts";
+import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
 import type Database from "better-sqlite3";
-import { CANON_DIR } from "../../../shared/constants.ts";
-import type { ReviewEntry, ReviewViolation } from "../../../shared/schema.ts";
-import type { FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
-import { initDriftDb } from "./drift-schema.ts";
 
 // Re-export WeeklyTrendPoint so callers can import from drift-db
 

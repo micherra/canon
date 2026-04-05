@@ -1,23 +1,23 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildSynthesizerPrompt,
   type CompeteConfig,
   type CompetitorOutput,
   expandCompetitorPrompts,
-} from "../engine/compete.ts";
-import type { SpawnPromptEntry } from "../tools/get-spawn-prompt.ts";
+} from "@features/orchestration/engine/compete.ts";
+import type { SpawnPromptEntry } from "@features/orchestration/tools/get-spawn-prompt.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mocks for getSpawnPrompt compete path tests
 
-vi.mock("../services/wave-briefing.ts", () => ({
+vi.mock("@features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../services/diff-cluster.ts", () => ({
+vi.mock("@features/orchestration/services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
@@ -138,9 +138,9 @@ describe("compete", () => {
 
 // resolveCompeteConfig("auto") and compete path through get-spawn-prompt
 
-import type { ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { clusterDiff } from "../services/diff-cluster.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
+import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 

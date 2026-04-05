@@ -5,8 +5,8 @@
  * and violations with message are accepted and typed correctly.
  */
 
+import { reportInputSchema } from "@shared/schema.ts";
 import { describe, expect, it } from "vitest";
-import { reportInputSchema } from "../../../shared/schema.ts";
 
 // Shared test data
 

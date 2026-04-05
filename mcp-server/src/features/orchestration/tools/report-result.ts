@@ -6,8 +6,8 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
-import { completeState, setBlocked } from "../../../domains/board/board.ts";
-import { syncBoardToStore } from "../../../domains/board/board-sync.ts";
+import { completeState, setBlocked } from "@domains/board/board.ts";
+import { syncBoardToStore } from "@domains/board/board-sync.ts";
 import type {
   Board,
   CannotFixItem,
@@ -21,12 +21,12 @@ import type {
   StuckWhen,
   TestResults,
   ViolationSeverities,
-} from "../../../domains/flows/flow-schema.ts";
-import { STATUS_ALIASES, STATUS_KEYWORDS } from "../../../domains/flows/flow-schema.ts";
-import { flowEventBus } from "../../../domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { inspectDebateProgress } from "../../../features/orchestration/engine/debate.ts";
-import { executeEffects } from "../../../features/orchestration/engine/effects.ts";
+} from "@domains/flows/flow-schema.ts";
+import { STATUS_ALIASES, STATUS_KEYWORDS } from "@domains/flows/flow-schema.ts";
+import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { inspectDebateProgress } from "@features/orchestration/engine/debate.ts";
+import { executeEffects } from "@features/orchestration/engine/effects.ts";
 import {
   aggregateParallelPerResults,
   aggregateReviewResults,
@@ -36,9 +36,9 @@ import {
   isRoleOptional,
   isStuck,
   normalizeStatus,
-} from "../../../features/orchestration/engine/transitions.ts";
-import type { ToolResult } from "../../../shared/lib/tool-result.ts";
-import { toolError } from "../../../shared/lib/tool-result.ts";
+} from "@features/orchestration/engine/transitions.ts";
+import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolError } from "@shared/lib/tool-result.ts";
 
 // Artifact validation (ADR-010)
 
@@ -979,7 +979,7 @@ function emitReportEvents(
   const { input, condition, nextState, hitl_required, hitl_reason } = options;
   const correlationId = store.getCorrelationId();
   const onStateCompleted = (
-    event: import("../../../domains/messages/events.js").FlowEventMap["state_completed"],
+    event: import("@domains/messages/events.js").FlowEventMap["state_completed"],
   ) => {
     try {
       store.appendEvent(
@@ -992,7 +992,7 @@ function emitReportEvents(
     }
   };
   const onTransitionEvaluated = (
-    event: import("../../../domains/messages/events.js").FlowEventMap["transition_evaluated"],
+    event: import("@domains/messages/events.js").FlowEventMap["transition_evaluated"],
   ) => {
     try {
       store.appendEvent(

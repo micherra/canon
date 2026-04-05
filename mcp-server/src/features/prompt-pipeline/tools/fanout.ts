@@ -24,19 +24,23 @@
  * into N prompt entries based on state type.
  */
 
-import type { CompeteConfig } from "../../../domains/flows/flow-schema.ts";
-import { substituteVariables } from "../../../domains/messages/variables.ts";
+import type { CompeteConfig } from "@domains/flows/flow-schema.ts";
+import { substituteVariables } from "@domains/messages/variables.ts";
 import {
   type CompeteConfig as ExpandedCompeteConfig,
   expandCompetitorPrompts,
-} from "../../orchestration/engine/compete.ts";
+} from "@features/orchestration/engine/compete.ts";
 import {
   buildDebatePrompt,
   debateTeamLabel,
   inspectDebateProgress,
-} from "../../orchestration/engine/debate.ts";
-import { clusterDiff, type FileCluster } from "../../orchestration/services/diff-cluster.ts";
-import type { PromptContext, SpawnPromptEntry, TaskItem } from "../model/types.ts";
+} from "@features/orchestration/engine/debate.ts";
+import { clusterDiff, type FileCluster } from "@features/orchestration/services/diff-cluster.ts";
+import type {
+  PromptContext,
+  SpawnPromptEntry,
+  TaskItem,
+} from "@features/prompt-pipeline/model/types.ts";
 
 // Helpers (extracted from get-spawn-prompt.ts)
 

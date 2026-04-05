@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("context-budget: shared cap values match expected tier bounds", () => {
   it("getItemCountCap values match the documented caps (5/15/30)", async () => {
-    const { getItemCountCap } = await import("../services/context-budget.ts");
+    const { getItemCountCap } = await import("@features/orchestration/services/context-budget.ts");
     // These values are the contract both inject-context and inject-wave-briefing depend on
     expect(getItemCountCap("small")).toBe(5);
     expect(getItemCountCap("medium")).toBe(15);
@@ -35,7 +35,7 @@ describe("context-budget: shared cap values match expected tier bounds", () => {
   });
 
   it("unknown tier returns the medium cap (15) — same fallback for both consumers", async () => {
-    const { getItemCountCap } = await import("../services/context-budget.ts");
+    const { getItemCountCap } = await import("@features/orchestration/services/context-budget.ts");
     // Both inject-context and inject-wave-briefing fall back to "medium" when session is null
     expect(getItemCountCap("unknown" as "small" | "medium" | "large")).toBe(15);
   });
@@ -47,8 +47,10 @@ describe("context-budget: shared cap values match expected tier bounds", () => {
 
 describe("PIPELINE_ALLOWED_VARIABLES superset relationship", () => {
   it("contains all RUNTIME_VARIABLES entries (superset contract)", async () => {
-    const { RUNTIME_VARIABLES } = await import("../../../domains/flows/flow-parser.ts");
-    const { PIPELINE_ALLOWED_VARIABLES } = await import("../../prompt-pipeline/tools/validate.ts");
+    const { RUNTIME_VARIABLES } = await import("@domains/flows/flow-parser.ts");
+    const { PIPELINE_ALLOWED_VARIABLES } = await import(
+      "@features/prompt-pipeline/tools/validate.ts"
+    );
 
     for (const variable of RUNTIME_VARIABLES) {
       expect(PIPELINE_ALLOWED_VARIABLES.has(variable)).toBe(true);
@@ -56,22 +58,28 @@ describe("PIPELINE_ALLOWED_VARIABLES superset relationship", () => {
   });
 
   it("enrichment is in RUNTIME_VARIABLES (ctx-05 ancillary fix)", async () => {
-    const { RUNTIME_VARIABLES } = await import("../../../domains/flows/flow-parser.ts");
+    const { RUNTIME_VARIABLES } = await import("@domains/flows/flow-parser.ts");
     expect(RUNTIME_VARIABLES.has("enrichment")).toBe(true);
   });
 
   it("enrichment is in PIPELINE_ALLOWED_VARIABLES (visible to stage 9 via spread)", async () => {
-    const { PIPELINE_ALLOWED_VARIABLES } = await import("../../prompt-pipeline/tools/validate.ts");
+    const { PIPELINE_ALLOWED_VARIABLES } = await import(
+      "@features/prompt-pipeline/tools/validate.ts"
+    );
     expect(PIPELINE_ALLOWED_VARIABLES.has("enrichment")).toBe(true);
   });
 
   it("project_structure is NOT in PIPELINE_ALLOWED_VARIABLES (injected via cache prefix, not substitution)", async () => {
-    const { PIPELINE_ALLOWED_VARIABLES } = await import("../../prompt-pipeline/tools/validate.ts");
+    const { PIPELINE_ALLOWED_VARIABLES } = await import(
+      "@features/prompt-pipeline/tools/validate.ts"
+    );
     expect(PIPELINE_ALLOWED_VARIABLES.has("project_structure")).toBe(false);
   });
 
   it("conventions is NOT in PIPELINE_ALLOWED_VARIABLES (injected via cache prefix, not substitution)", async () => {
-    const { PIPELINE_ALLOWED_VARIABLES } = await import("../../prompt-pipeline/tools/validate.ts");
+    const { PIPELINE_ALLOWED_VARIABLES } = await import(
+      "@features/prompt-pipeline/tools/validate.ts"
+    );
     expect(PIPELINE_ALLOWED_VARIABLES.has("conventions")).toBe(false);
   });
 });
@@ -86,27 +94,27 @@ const pluginDir = resolve(process.cwd(), ".."); // mcp-server root (where flows/
 
 describe("flow files load successfully with ${enrichment} in spawn instructions", () => {
   it("epic flow loads without throwing (enrichment in implement spawn)", async () => {
-    const { loadAndResolveFlow } = await import("../../../domains/flows/flow-parser.ts");
+    const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     await expect(loadAndResolveFlow(pluginDir, "epic")).resolves.not.toThrow();
   });
 
   it("feature flow loads without throwing (enrichment in implement spawn)", async () => {
-    const { loadAndResolveFlow } = await import("../../../domains/flows/flow-parser.ts");
+    const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     await expect(loadAndResolveFlow(pluginDir, "feature")).resolves.not.toThrow();
   });
 
   it("refactor flow loads without throwing (enrichment in implement spawn)", async () => {
-    const { loadAndResolveFlow } = await import("../../../domains/flows/flow-parser.ts");
+    const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     await expect(loadAndResolveFlow(pluginDir, "refactor")).resolves.not.toThrow();
   });
 
   it("migrate flow loads without throwing (enrichment in implement spawn)", async () => {
-    const { loadAndResolveFlow } = await import("../../../domains/flows/flow-parser.ts");
+    const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     await expect(loadAndResolveFlow(pluginDir, "migrate")).resolves.not.toThrow();
   });
 
   it("review-only flow loads without throwing (enrichment in review spawn)", async () => {
-    const { loadAndResolveFlow } = await import("../../../domains/flows/flow-parser.ts");
+    const { loadAndResolveFlow } = await import("@domains/flows/flow-parser.ts");
     await expect(loadAndResolveFlow(pluginDir, "review-only")).resolves.not.toThrow();
   });
 });
@@ -138,7 +146,7 @@ const {
   };
 });
 
-vi.mock("../../../domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore2),
 }));
 
@@ -150,11 +158,11 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../graph/kg-schema.ts", () => ({
+vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(() => mockDb2),
 }));
 
-vi.mock("../../../graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query.ts", () => ({
   computeFileInsightMaps: vi.fn().mockReturnValue({
     cycleMemberPaths: new Map<string, string[]>(),
     hubPaths: new Set<string>(),
@@ -166,7 +174,7 @@ vi.mock("../../../graph/kg-query.ts", () => ({
   },
 }));
 
-vi.mock("../../../graph/kg-store.ts", () => ({
+vi.mock("@graph/kg-store.ts", () => ({
   KgStore: class MockKgStore2 {
     getFile = mockGetFile2;
     getSummaryByFile = mockGetSummaryByFile2;
@@ -174,11 +182,9 @@ vi.mock("../../../graph/kg-store.ts", () => ({
 }));
 
 import { existsSync } from "node:fs";
-import { computeFileInsightMaps } from "../../../graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query.ts";
 
-function makeBoardWithFiles(
-  files: string[],
-): import("../../../domains/flows/flow-schema.ts").Board {
+function makeBoardWithFiles(files: string[]): import("@domains/flows/flow-schema.ts").Board {
   return {
     base_commit: "abc123",
     blocked: null,
@@ -225,7 +231,9 @@ describe("file_context injection — session null fallback", () => {
     const twentyFiles = Array.from({ length: 20 }, (_, i) => `src/file${i}.ts`);
     const board = makeBoardWithFiles(twentyFiles);
 
-    const { resolveContextInjections } = await import("../services/inject-context.ts");
+    const { resolveContextInjections } = await import(
+      "@features/orchestration/services/inject-context.ts"
+    );
     const result = await resolveContextInjections(
       [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,
@@ -264,7 +272,9 @@ describe("file_context injection — not-indexed file formatting", () => {
   it("formats file as '(not indexed)' when KG has no entry for the file", async () => {
     const board = makeBoardWithFiles(["src/new-file.ts"]);
 
-    const { resolveContextInjections } = await import("../services/inject-context.ts");
+    const { resolveContextInjections } = await import(
+      "@features/orchestration/services/inject-context.ts"
+    );
     const result = await resolveContextInjections(
       [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,
@@ -298,14 +308,16 @@ describe("file_context injection — initDatabase failure graceful degradation",
   });
 
   it("emits warning and returns no value when initDatabase throws (corrupt DB)", async () => {
-    const { initDatabase } = await import("../../../graph/kg-schema.ts");
+    const { initDatabase } = await import("@graph/kg-schema.ts");
     vi.mocked(initDatabase).mockImplementation(() => {
       throw new Error("database is malformed");
     });
 
     const board = makeBoardWithFiles(["src/api/handler.ts"]);
 
-    const { resolveContextInjections } = await import("../services/inject-context.ts");
+    const { resolveContextInjections } = await import(
+      "@features/orchestration/services/inject-context.ts"
+    );
     const result = await resolveContextInjections(
       [{ as: "FILE_CONTEXT", from: "file_context" }],
       board,

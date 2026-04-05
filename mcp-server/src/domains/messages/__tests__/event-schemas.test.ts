@@ -1,5 +1,5 @@
+import { EventPayloadSchemas, validateEventPayload } from "@domains/messages/events.ts";
 import { describe, expect, it } from "vitest";
-import { EventPayloadSchemas, validateEventPayload } from "../events.ts";
 
 // Type-level check: stuck_detected is in FlowEventType
 // This test verifies the union at runtime by checking the schema map.

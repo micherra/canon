@@ -21,22 +21,22 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { computeUnifiedBlastRadius } from "../../../graph/kg-blast-radius.ts";
-import { computeFileInsightMaps, KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import type { FileRow } from "../../../graph/kg-types.ts";
-import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
-import { storeSummaries } from "../../diagnostics/tools/store-summaries.ts";
-import { getFileContext } from "../../file-context/tools/get-file-context.ts";
-import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
+import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
+import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
+import { classifyFile, generateNarrative } from "@features/pr-review/tools/pr-review-data.ts";
 import {
   buildBlastRadiusByFile,
   detectSubsystems,
   type PrImpactOutput,
-} from "../tools/show-pr-impact.ts";
+} from "@features/pr-review/tools/show-pr-impact.ts";
+import { computeUnifiedBlastRadius } from "@graph/kg-blast-radius.ts";
+import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import type { FileRow } from "@graph/kg-types.ts";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import type Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {
@@ -77,7 +77,7 @@ describe("KgQuery.getFileMetrics with changedFiles option", () => {
     store.insertFileEdge({
       confidence: 1.0,
       edge_type: "imports",
-      evidence: "import A from './A'",
+      evidence: "import A from '@features/pr-review/__tests__/A'",
       relation: null,
       source_file_id: fileB.file_id!,
       target_file_id: fileA.file_id!,
@@ -887,7 +887,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
       }),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // kg_freshness_ms must be present and represent ~10 minutes
@@ -907,7 +907,7 @@ describe("pr-review-data — kg_freshness_ms with real SQLite DB", () => {
       }),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     expect(result.kg_freshness_ms).toBeUndefined();

@@ -13,10 +13,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { recordAgentMetrics } from "@features/diagnostics/tools/record-agent-metrics.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { recordAgentMetrics } from "../tools/record-agent-metrics.ts";
 
 let tmpDirs: string[] = [];
 
@@ -230,9 +230,9 @@ describe("MCP metrics schema widening", () => {
     // We test this indirectly by calling reportResult with the new fields and
     // confirming it succeeds rather than throwing a Zod validation error.
     // The actual behavior test is in the broadened schema acceptance.
-    const { reportResult } = await import("../../orchestration/tools/report-result.ts");
+    const { reportResult } = await import("@features/orchestration/tools/report-result.ts");
     const { getExecutionStore: getStore, clearStoreCache: clearCache } = await import(
-      "../../../domains/workspaces/execution-store.ts"
+      "@domains/workspaces/execution-store.ts"
     );
 
     const ws = makeTmpWorkspace();

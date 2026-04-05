@@ -12,7 +12,7 @@ type GitExecResult = {
 let gitExecImpl: ((args: string[], cwd: string) => GitExecResult) | null = null;
 let lastGitExecArgs: { args: string[]; cwd: string } | null = null;
 
-vi.mock("../../../platform/adapters/git-adapter.ts", () => ({
+vi.mock("@platform/adapters/git-adapter.ts", () => ({
   gitExec: (args: string[], cwd: string) => {
     lastGitExecArgs = { args, cwd };
     if (gitExecImpl) return gitExecImpl(args, cwd);
@@ -20,7 +20,11 @@ vi.mock("../../../platform/adapters/git-adapter.ts", () => ({
   },
 }));
 
-import { clusterByDirectory, clusterByLayer, getChangedFiles } from "../services/diff-cluster.ts";
+import {
+  clusterByDirectory,
+  clusterByLayer,
+  getChangedFiles,
+} from "@features/orchestration/services/diff-cluster.ts";
 
 beforeEach(() => {
   gitExecImpl = null;

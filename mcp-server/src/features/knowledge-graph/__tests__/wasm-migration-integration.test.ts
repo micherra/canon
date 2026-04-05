@@ -14,9 +14,9 @@
  * WASM grammars are loaded once via beforeAll(initParsers).
  */
 
+import { getAdapter, getLanguage } from "@graph/kg-adapter-registry.ts";
+import { initParsers, isInitialized } from "@graph/kg-wasm-parser.ts";
 import { beforeAll, describe, expect, test } from "vitest";
-import { getAdapter, getLanguage } from "../../../graph/kg-adapter-registry.ts";
-import { initParsers, isInitialized } from "../../../graph/kg-wasm-parser.ts";
 
 // One-time WASM initialization for all suites in this file
 

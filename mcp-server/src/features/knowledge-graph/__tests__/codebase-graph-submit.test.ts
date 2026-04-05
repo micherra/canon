@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the job-manager module before importing the tool
-vi.mock("../../../platform/jobs/job-manager.ts", () => {
+vi.mock("@platform/jobs/job-manager.ts", () => {
   const mockManager = {
     cancel: vi.fn(),
     cleanup: vi.fn(),
@@ -24,20 +24,20 @@ vi.mock("../../../platform/jobs/job-manager.ts", () => {
 });
 
 // Mock deriveSourceDirsFromLayers to avoid fs reads
-vi.mock("../../../shared/lib/config.ts", () => ({
+vi.mock("@shared/lib/config.ts", () => ({
   deriveSourceDirsFromLayers: vi.fn().mockResolvedValue(["src"]),
 }));
 
 // Mock initDatabase to avoid sqlite
-vi.mock("../../../graph/kg-schema.ts", () => ({
+vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn().mockReturnValue({
     close: vi.fn(),
     prepare: vi.fn().mockReturnValue({ all: vi.fn().mockReturnValue([]) }),
   }),
 }));
 
-import * as jobManagerModule from "../../../platform/jobs/job-manager.ts";
-import { codebaseGraphSubmit } from "../tools/codebase-graph-submit.ts";
+import { codebaseGraphSubmit } from "@features/knowledge-graph/tools/codebase-graph-submit.ts";
+import * as jobManagerModule from "@platform/jobs/job-manager.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockManager = (jobManagerModule as any)._mockManager;

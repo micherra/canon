@@ -1,10 +1,10 @@
-import { enterState, setBlocked } from "../../../domains/board/board.ts";
-import type { Board } from "../../../domains/flows/flow-schema.ts";
-import { flowEventBus } from "../../../domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { appendFlowRun, type FlowRunEntry } from "../../../platform/storage/drift/analytics.ts";
-import { generateId } from "../../../shared/lib/id.ts";
-import { type ToolResult, toolError, toolOk } from "../../../shared/lib/tool-result.ts";
+import { enterState, setBlocked } from "@domains/board/board.ts";
+import type { Board } from "@domains/flows/flow-schema.ts";
+import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";
+import { generateId } from "@shared/lib/id.ts";
+import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 
 type UpdateBoardInput = {
   workspace: string;
@@ -96,7 +96,7 @@ function emitBoardEvents(
   now: string,
 ): void {
   const onBoardUpdated = (
-    event: import("../../../domains/messages/events.js").FlowEventMap["board_updated"],
+    event: import("@domains/messages/events.js").FlowEventMap["board_updated"],
   ) => {
     try {
       store.appendEvent("board_updated", event as Record<string, unknown>);
@@ -113,7 +113,7 @@ function emitBoardEvents(
     });
     if (input.action === "enter_state" && input.state_id) {
       const onStateEntered = (
-        event: import("../../../domains/messages/events.js").FlowEventMap["state_entered"],
+        event: import("@domains/messages/events.js").FlowEventMap["state_entered"],
       ) => {
         try {
           store.appendEvent("state_entered", event as Record<string, unknown>);

@@ -5,18 +5,18 @@
  * One behavior per test.
  */
 
+import type { Board, ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow, StateDefinition } from "../../../domains/flows/flow-schema.ts";
-import type { PromptContext } from "../model/types.ts";
 
 // Hoist vi.mock — must come before imports that use the mocks
 
-vi.mock("../../../domains/messages/messages.ts", () => ({
+vi.mock("@domains/messages/messages.ts", () => ({
   readChannelAsContext: vi.fn(),
 }));
 
-import { readChannelAsContext } from "../../../domains/messages/messages.ts";
-import { resolveMessages } from "../services/resolve-messages.ts";
+import { readChannelAsContext } from "@domains/messages/messages.ts";
+import { resolveMessages } from "@features/prompt-pipeline/services/resolve-messages.ts";
 
 function makeBoard(): Board {
   return {

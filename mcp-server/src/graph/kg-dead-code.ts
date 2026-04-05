@@ -6,9 +6,9 @@
  * results with confidence scoring, reason strings, and structured groupings.
  */
 
+import { KgQuery } from "@graph/kg-query.ts";
+import { KgStore } from "@graph/kg-store.ts";
 import type Database from "better-sqlite3";
-import { KgQuery } from "./kg-query.ts";
-import { KgStore } from "./kg-store.ts";
 
 export type DeadCodeOptions = {
   /** Include entities in test files (default: false) */

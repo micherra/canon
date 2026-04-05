@@ -1,7 +1,3 @@
-import Graph from "graphology";
-import louvain from "graphology-communities-louvain";
-import forceAtlas2 from "graphology-layout-forceatlas2";
-import Sigma from "sigma";
 import {
   EDGE_ADJACENT_FOCUS,
   EDGE_DEFAULT,
@@ -13,8 +9,12 @@ import {
   NODE_DEFAULT,
   NODE_UNFOCUSED,
   NODE_VIOLATION,
-} from "./constants";
-import type { GraphData, GraphNode } from "./types";
+} from "@shared/lib/constants";
+import type { GraphData, GraphNode } from "@shared/lib/types";
+import Graph from "graphology";
+import louvain from "graphology-communities-louvain";
+import forceAtlas2 from "graphology-layout-forceatlas2";
+import Sigma from "sigma";
 
 // ── Filter options (mirrors GraphApi's FilterOptions) ────────────────────────
 

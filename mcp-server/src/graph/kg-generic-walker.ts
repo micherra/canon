@@ -13,9 +13,9 @@
  * hides ~300 lines of complex AST walking logic.
  */
 
+import type { LanguageConfig, SyntaxNode, WalkerContext } from "@graph/kg-language-configs.ts";
+import type { AdapterResult, EdgeType, EntityKind, IntraFileEdge } from "@graph/kg-types.ts";
 import type { Node, Tree } from "web-tree-sitter";
-import type { LanguageConfig, SyntaxNode, WalkerContext } from "./kg-language-configs.ts";
-import type { AdapterResult, EdgeType, EntityKind, IntraFileEdge } from "./kg-types.ts";
 
 /**
  * Walk a parsed syntax tree and extract entities, intra-file edges, and
@@ -434,7 +434,7 @@ function extractVariableDecl(node: Node, ctx: WalkerContext, config: LanguageCon
 // Export statement extraction
 
 function extractExportStatement(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
-  // Re-exports: export { foo } from './bar' or export * from './bar'
+  // Re-exports: export { foo } from '/bar' or export * from '/bar'
   const sourceNode = node.childForFieldName("source");
   if (sourceNode) {
     const specifier = sourceNode.text.replace(/^['"]|['"]$/g, "");

@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { reviewCode } from "@features/pr-review/tools/review-code.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { reviewCode } from "../tools/review-code.ts";
 
 describe("reviewCode", () => {
   let tmpDir: string;

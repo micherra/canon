@@ -61,8 +61,8 @@ vi.mock("node:child_process", () => ({
 
 // Import after mocks
 
-import type { JobMessage, WorkerInput } from "../job-adapter.ts";
-import { forkJob, killJob, sendWorkerInput } from "../job-adapter.ts";
+import type { JobMessage, WorkerInput } from "@platform/adapters/job-adapter.ts";
+import { forkJob, killJob, sendWorkerInput } from "@platform/adapters/job-adapter.ts";
 
 beforeEach(() => {
   forkImpl = null;

@@ -6,18 +6,15 @@
  * Only kg-embedding.test.ts tests real model output.
  */
 
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import type { EntityRow } from "@graph/kg-types.ts";
+import { KgVectorQuery } from "@graph/kg-vector-query.ts";
+import { KgVectorStore } from "@graph/kg-vector-store.ts";
+import { EMBEDDING_MODEL_ID } from "@shared/constants.ts";
+import { MockEmbeddingService, randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import type { EntityRow } from "../../../graph/kg-types.ts";
-import { KgVectorQuery } from "../../../graph/kg-vector-query.ts";
-import { KgVectorStore } from "../../../graph/kg-vector-store.ts";
-import { EMBEDDING_MODEL_ID } from "../../../shared/constants.ts";
-import {
-  MockEmbeddingService,
-  randomEmbedding,
-} from "../../../tests/helpers/embedding-test-helpers.ts";
 
 function makeDb(): Database.Database {
   return initDatabase(":memory:");

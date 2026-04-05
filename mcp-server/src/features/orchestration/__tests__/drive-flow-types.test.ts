@@ -4,13 +4,13 @@
  * Tests that DriveFlowInput Zod schema accepts valid inputs and rejects invalid ones.
  */
 
-import { describe, expect, test } from "vitest";
 import type {
   DriveFlowAction,
   HitlBreakpoint,
   SpawnRequest,
-} from "../services/drive-flow-types.ts";
-import { DriveFlowInputSchema } from "../services/drive-flow-types.ts";
+} from "@features/orchestration/services/drive-flow-types.ts";
+import { DriveFlowInputSchema } from "@features/orchestration/services/drive-flow-types.ts";
+import { describe, expect, test } from "vitest";
 
 // Minimal ResolvedFlow for testing
 const MINIMAL_FLOW = {

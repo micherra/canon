@@ -29,31 +29,31 @@ vi.mock("fs", async (importOriginal) => {
 });
 
 // Mock initDatabase and analyzeBlastRadius so tests don't need a real SQLite DB
-vi.mock("../../../graph/kg-schema.ts", () => ({
+vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(),
 }));
 
-vi.mock("../../../graph/kg-blast-radius.ts", () => ({
+vi.mock("@graph/kg-blast-radius.ts", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
 // Mock KgQuery so buildSubgraph doesn't need a real SQLite DB
-vi.mock("../../../graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: vi.fn(),
 }));
 
 // Mock getPrReviewData so tests don't need git/diff infrastructure
-vi.mock("../tools/pr-review-data.ts", () => ({
+vi.mock("@features/pr-review/tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 
 import { existsSync } from "node:fs";
-import { analyzeBlastRadius } from "../../../graph/kg-blast-radius.ts";
-import { KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { DriftStore } from "../../../platform/storage/drift/store.ts";
-import { getPrReviewData } from "../tools/pr-review-data.ts";
-import { showPrImpact } from "../tools/show-pr-impact.ts";
+import { getPrReviewData } from "@features/pr-review/tools/pr-review-data.ts";
+import { showPrImpact } from "@features/pr-review/tools/show-pr-impact.ts";
+import { analyzeBlastRadius } from "@graph/kg-blast-radius.ts";
+import { KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { DriftStore } from "@platform/storage/drift/store.ts";
 
 // Shared test fixtures
 

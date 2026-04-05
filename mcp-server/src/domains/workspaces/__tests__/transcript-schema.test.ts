@@ -10,17 +10,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
-import { afterEach, describe, expect, it } from "vitest";
-import { TranscriptEntrySchema } from "../../flows/flow-schema.ts";
+import { TranscriptEntrySchema } from "@domains/flows/flow-schema.ts";
 import {
   columnExists,
   initExecutionDb,
   runMigrations,
   SCHEMA_VERSION,
-} from "../execution-schema.ts";
-import { ExecutionStore } from "../execution-store.ts";
-import { initWorkspace } from "../workspace.ts";
+} from "@domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { initWorkspace } from "@domains/workspaces/workspace.ts";
+import Database from "better-sqlite3";
+import { afterEach, describe, expect, it } from "vitest";
 
 let tmpDirs: string[] = [];
 

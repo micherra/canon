@@ -5,12 +5,12 @@
  * Each describe block gets a fresh DB via beforeEach.
  */
 
+import { detectDeadCode } from "@graph/kg-dead-code.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import type { EntityRow, FileRow } from "@graph/kg-types.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { detectDeadCode } from "../../../graph/kg-dead-code.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import type { EntityRow, FileRow } from "../../../graph/kg-types.ts";
 
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {

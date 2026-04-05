@@ -6,17 +6,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // We mock ../../../platform/adapters/git-adapter.ts before importing the module under test
 // so that wave_diff tests can control gitExec behavior.
-vi.mock("../../../platform/adapters/git-adapter.ts", () => ({
+vi.mock("@platform/adapters/git-adapter.ts", () => ({
   gitExec: vi.fn(),
 }));
 
-import { gitExec } from "../../../platform/adapters/git-adapter.ts";
 import {
   escapeDollarBrace,
   extractFilePaths,
   parseTaskIdsForWave,
   resolveWaveVariables,
-} from "../wave-variables.ts";
+} from "@domains/workspaces/wave-variables.ts";
+import { gitExec } from "@platform/adapters/git-adapter.ts";
 
 const mockGitExec = vi.mocked(gitExec);
 

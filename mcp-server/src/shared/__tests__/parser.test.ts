@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
 import {
   extractSections,
   filterBodyBySections,
   parseFrontmatter,
   parsePrinciple,
-} from "../parser.ts";
+} from "@shared/parser.ts";
+import { describe, expect, it } from "vitest";
 
 describe("parseFrontmatter", () => {
   it("extracts top-level key-value pairs", () => {

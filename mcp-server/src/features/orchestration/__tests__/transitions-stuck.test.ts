@@ -1,6 +1,6 @@
+import type { HistoryEntry } from "@domains/flows/flow-schema.ts";
+import { buildHistoryEntry, isStuck } from "@features/orchestration/engine/transitions.ts";
 import { describe, expect, it } from "vitest";
-import type { HistoryEntry } from "../../../domains/flows/flow-schema.ts";
-import { buildHistoryEntry, isStuck } from "../engine/transitions.ts";
 
 // buildHistoryEntry — no_gate_progress
 

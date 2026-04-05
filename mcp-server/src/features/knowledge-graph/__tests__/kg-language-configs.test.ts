@@ -8,13 +8,13 @@
  * Full extraction validation happens in wasm-03 integration tests.
  */
 
-import { describe, expect, test } from "vitest";
 import {
   getConfigForExtension,
   LANGUAGE_CONFIGS,
   type LanguageConfig,
   type NodeKindMap,
-} from "../../../graph/kg-language-configs.ts";
+} from "@graph/kg-language-configs.ts";
+import { describe, expect, test } from "vitest";
 
 function hasRequiredNodeKindKeys(map: NodeKindMap): boolean {
   const required: (keyof NodeKindMap)[] = [

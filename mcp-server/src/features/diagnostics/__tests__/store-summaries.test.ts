@@ -1,13 +1,16 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  inferLanguageFromExtension,
+  storeSummaries,
+} from "@features/diagnostics/tools/store-summaries.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import type { FileRow } from "@graph/kg-types.ts";
+import { KgVectorStore } from "@graph/kg-vector-store.ts";
+import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import type { FileRow } from "../../../graph/kg-types.ts";
-import { KgVectorStore } from "../../../graph/kg-vector-store.ts";
-import { randomEmbedding } from "../../../tests/helpers/embedding-test-helpers.ts";
-import { inferLanguageFromExtension, storeSummaries } from "../tools/store-summaries.ts";
 
 // Mock EmbeddingService — fast random vectors, no model download
 // This is applied to all tests in this file so that storeSummaries never
@@ -15,7 +18,7 @@ import { inferLanguageFromExtension, storeSummaries } from "../tools/store-summa
 
 let _mockSeed = 0;
 
-vi.mock("../../../graph/kg-embedding.ts", () => ({
+vi.mock("@graph/kg-embedding.ts", () => ({
   EmbeddingService: class MockEmbeddingService {
     async embed(texts: string[]): Promise<Float32Array[]> {
       return texts.map((_, i) => randomEmbedding(_mockSeed + i));
@@ -244,7 +247,7 @@ describe("storeSummaries", () => {
 
     it("summaries are still written to DB even when embedding throws (best-effort)", async () => {
       // Make the mock's embed method throw for this test
-      const { EmbeddingService } = await import("../../../graph/kg-embedding.ts");
+      const { EmbeddingService } = await import("@graph/kg-embedding.ts");
       const embedSpy = vi
         .spyOn(EmbeddingService.prototype, "embed")
         .mockRejectedValue(new Error("simulated embedding failure"));

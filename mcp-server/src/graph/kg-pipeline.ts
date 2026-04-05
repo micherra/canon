@@ -13,18 +13,18 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { resolveImport } from "@graph/import-parser.ts";
+import { getAdapter, getLanguage } from "@graph/kg-adapter-registry.ts";
+import { EmbeddingService } from "@graph/kg-embedding.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import type { AdapterResult, EdgeType, EntityRow } from "@graph/kg-types.ts";
+import { KgVectorStore } from "@graph/kg-vector-store.ts";
+import { initParsers } from "@graph/kg-wasm-parser.ts";
+import { scanSourceFiles } from "@graph/scanner.ts";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { inferLayer } from "@shared/matcher.ts";
 import type { Database } from "better-sqlite3";
-import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
-import { inferLayer } from "../shared/matcher.ts";
-import { resolveImport } from "./import-parser.ts";
-import { getAdapter, getLanguage } from "./kg-adapter-registry.ts";
-import { EmbeddingService } from "./kg-embedding.ts";
-import { initDatabase } from "./kg-schema.ts";
-import { KgStore } from "./kg-store.ts";
-import type { AdapterResult, EdgeType, EntityRow } from "./kg-types.ts";
-import { KgVectorStore } from "./kg-vector-store.ts";
-import { initParsers } from "./kg-wasm-parser.ts";
-import { scanSourceFiles } from "./scanner.ts";
 
 // Public interfaces
 

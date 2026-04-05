@@ -62,9 +62,9 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { gitDiff, gitExec, gitStatus } from "../../../platform/adapters/git-adapter.ts";
-import { gitExecAsync } from "../../../platform/adapters/git-adapter-async.ts";
-import { runShell } from "../../../platform/adapters/process-adapter.ts";
+import { gitDiff, gitExec, gitStatus } from "@platform/adapters/git-adapter.ts";
+import { gitExecAsync } from "@platform/adapters/git-adapter-async.ts";
+import { runShell } from "@platform/adapters/process-adapter.ts";
 import {
   assertOk,
   isToolError,
@@ -72,8 +72,8 @@ import {
   type ToolResult,
   toolError,
   toolOk,
-} from "../../../shared/lib/tool-result.ts";
-import { wrapHandler } from "../../../shared/lib/wrap-handler.ts";
+} from "@shared/lib/tool-result.ts";
+import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;
@@ -247,7 +247,9 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     }));
 
     vi.resetModules();
-    const { evaluatePostconditions } = await import("../services/contract-checker.ts");
+    const { evaluatePostconditions } = await import(
+      "@features/orchestration/services/contract-checker.ts"
+    );
 
     const results = evaluatePostconditions(
       [{ target: "initial.ts", type: "file_changed" }],
@@ -290,7 +292,9 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     }));
 
     vi.resetModules();
-    const { evaluatePostconditions } = await import("../services/contract-checker.ts");
+    const { evaluatePostconditions } = await import(
+      "@features/orchestration/services/contract-checker.ts"
+    );
 
     const results = evaluatePostconditions(
       [{ command: "echo ok", type: "bash_check" }],
@@ -432,7 +436,7 @@ describe("wrapHandler × ToolResult end-to-end JSON serialization", () => {
 
 describe("loadFlow ToolResult — ok:false error paths", () => {
   it("returns FLOW_NOT_FOUND when flow does not exist (not a throw)", async () => {
-    const { loadFlow } = await import("../tools/load-flow.ts");
+    const { loadFlow } = await import("@features/orchestration/tools/load-flow.ts");
     const result = await loadFlow({ flow_name: "flow-that-does-not-exist-xyz" }, "/nonexistent");
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -444,7 +448,7 @@ describe("loadFlow ToolResult — ok:false error paths", () => {
   });
 
   it("loadFlow error result passes through wrapHandler as valid JSON with ok:false", async () => {
-    const { loadFlow } = await import("../tools/load-flow.ts");
+    const { loadFlow } = await import("@features/orchestration/tools/load-flow.ts");
     const handler = wrapHandler(async (input: { flow_name: string }) =>
       loadFlow(input, "/nonexistent"),
     );

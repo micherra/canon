@@ -8,13 +8,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buildMessageInstructions, readChannelAsContext } from "@domains/messages/messages.ts";
+import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
+import { ExecutionStore, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getMessages } from "@features/orchestration/tools/get-messages.ts";
+import { postMessage } from "@features/orchestration/tools/post-message.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getMessages } from "../../../features/orchestration/tools/get-messages.ts";
-import { postMessage } from "../../../features/orchestration/tools/post-message.ts";
-import { initExecutionDb } from "../../workspaces/execution-schema.ts";
-import { ExecutionStore, getExecutionStore } from "../../workspaces/execution-store.ts";
-import { buildMessageInstructions, readChannelAsContext } from "../messages.ts";
 
 // Store-level message operations (unit)
 
@@ -121,7 +121,7 @@ describe("postMessage tool (store-backed)", () => {
   afterEach(async () => {
     await rm(workspace, { force: true, recursive: true });
     // Clear store cache between tests
-    const _storeCache = (await import("../../workspaces/execution-store.ts")) as {
+    const _storeCache = (await import("@domains/workspaces/execution-store.ts")) as {
       default?: unknown;
     };
     // Re-import to clear singleton — use a fresh workspace per test so no conflict

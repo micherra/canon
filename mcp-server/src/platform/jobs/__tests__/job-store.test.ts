@@ -8,10 +8,10 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
+import { type JobCacheRow, type JobRow, JobStore } from "@platform/jobs/job-store.ts";
 import type Database from "better-sqlite3";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { initExecutionDb } from "../../../domains/workspaces/execution-schema.ts";
-import { type JobCacheRow, type JobRow, JobStore } from "../job-store.ts";
 
 function makeDb(): Database.Database {
   // Use a temp file-based DB so initExecutionDb can apply migrations properly.

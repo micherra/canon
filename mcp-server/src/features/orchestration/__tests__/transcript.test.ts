@@ -14,12 +14,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ResolvedFlow, TranscriptEntry } from "@domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { getTranscript } from "@features/orchestration/tools/get-transcript.ts";
+import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ResolvedFlow, TranscriptEntry } from "../../../domains/flows/flow-schema.ts";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { getTranscript } from "../tools/get-transcript.ts";
-import { reportResult } from "../tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 

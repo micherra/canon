@@ -17,16 +17,21 @@ import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
+import type { CodebaseGraphInput } from "@features/knowledge-graph/tools/codebase-graph.ts";
+import { runPipeline } from "@graph/kg-pipeline.ts";
+import {
+  forkJob,
+  type JobMessage,
+  killJob,
+  sendWorkerInput,
+} from "@platform/adapters/job-adapter.ts";
+import { computeJobFingerprint } from "@platform/jobs/job-fingerprint.ts";
+import { type JobStatus, JobStore } from "@platform/jobs/job-store.ts";
+import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "@shared/constants.ts";
+import { isSyncMode } from "@shared/lib/env.ts";
+import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
 import type { Database } from "better-sqlite3";
-import { initExecutionDb } from "../../domains/workspaces/execution-schema.ts";
-import type { CodebaseGraphInput } from "../../features/knowledge-graph/tools/codebase-graph.ts";
-import { runPipeline } from "../../graph/kg-pipeline.ts";
-import { CANON_DIR, CANON_FILES, JOB_TIMEOUT_MS } from "../../shared/constants.ts";
-import { isSyncMode } from "../../shared/lib/env.ts";
-import { type ToolResult, toolError, toolOk } from "../../shared/lib/tool-result.ts";
-import { forkJob, type JobMessage, killJob, sendWorkerInput } from "../adapters/job-adapter.ts";
-import { computeJobFingerprint } from "./job-fingerprint.ts";
-import { type JobStatus, JobStore } from "./job-store.ts";
 
 // Public result types
 

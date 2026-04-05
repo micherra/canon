@@ -2,10 +2,13 @@ import { rmSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Board, ContextInjection } from "@domains/flows/flow-schema.ts";
+import {
+  extractSection,
+  resolveContextInjections,
+} from "@features/orchestration/services/inject-context.ts";
+import type { LayerViolation } from "@graph/kg-types.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Board, ContextInjection } from "../../../domains/flows/flow-schema.ts";
-import type { LayerViolation } from "../../../graph/kg-types.ts";
-import { extractSection, resolveContextInjections } from "../services/inject-context.ts";
 
 // Mocks for file_context tests
 // Use vi.hoisted so mock factory functions can reference these variables
@@ -37,7 +40,7 @@ const {
   };
 });
 
-vi.mock("../../../domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
 
@@ -49,11 +52,11 @@ vi.mock("node:fs", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../graph/kg-schema.ts", () => ({
+vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(() => mockDb),
 }));
 
-vi.mock("../../../graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query.ts", () => ({
   computeFileInsightMaps: vi.fn().mockReturnValue({
     cycleMemberPaths: new Map<string, string[]>(),
     hubPaths: new Set<string>(),
@@ -65,7 +68,7 @@ vi.mock("../../../graph/kg-query.ts", () => ({
   },
 }));
 
-vi.mock("../../../graph/kg-store.ts", () => ({
+vi.mock("@graph/kg-store.ts", () => ({
   KgStore: class MockKgStore {
     getFile = mockGetFile;
     getSummaryByFile = mockGetSummaryByFile;
@@ -73,7 +76,7 @@ vi.mock("../../../graph/kg-store.ts", () => ({
 }));
 
 import { existsSync } from "node:fs";
-import { computeFileInsightMaps } from "../../../graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query.ts";
 
 function makeBoard(stateOverrides: Board["states"] = {}): Board {
   return {

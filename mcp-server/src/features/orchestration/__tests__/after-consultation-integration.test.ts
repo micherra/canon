@@ -28,11 +28,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../../../domains/flows/skip-when.ts", () => ({
+vi.mock("@domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
+vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -41,19 +41,20 @@ vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
 }));
 
 // Leave assembleWaveBriefing real — we test actual briefing output.
-vi.mock("../services/wave-briefing.ts", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../services/wave-briefing.ts")>();
+vi.mock("@features/orchestration/services/wave-briefing.ts", async (importOriginal) => {
+  const real =
+    await importOriginal<typeof import("@features/orchestration/services/wave-briefing.ts")>();
   return {
     ...real,
     readWaveGuidance: vi.fn().mockResolvedValue(""),
   };
 });
 
-import type { Board, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

@@ -11,25 +11,25 @@
  * 6. Return combined result.
  */
 
-import { enterState } from "../../../domains/board/board.ts";
+import { enterState } from "@domains/board/board.ts";
 import type {
   Board,
   CannotFixItem,
   HistoryEntry,
   ResolvedFlow,
-} from "../../../domains/flows/flow-schema.ts";
-import { evaluateSkipWhen } from "../../../domains/flows/skip-when.ts";
-import { flowEventBus } from "../../../domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { resolveConsultationPrompt } from "../../../features/orchestration/engine/consultation-executor.ts";
-import { canEnterState } from "../../../features/orchestration/engine/convergence.ts";
-import { assembleEnrichment } from "../../../features/orchestration/services/context-enrichment.ts";
-import type { FileCluster } from "../../../features/orchestration/services/diff-cluster.ts";
-import { gitExec } from "../../../platform/adapters/git-adapter.ts";
-import type { ToolResult } from "../../../shared/lib/tool-result.ts";
-import { toolError } from "../../../shared/lib/tool-result.ts";
-import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";
-import { getSpawnPrompt } from "./get-spawn-prompt.ts";
+} from "@domains/flows/flow-schema.ts";
+import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
+import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { resolveConsultationPrompt } from "@features/orchestration/engine/consultation-executor.ts";
+import { canEnterState } from "@features/orchestration/engine/convergence.ts";
+import { assembleEnrichment } from "@features/orchestration/services/context-enrichment.ts";
+import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";
+import type { SpawnPromptEntry, TaskItem } from "@features/orchestration/tools/get-spawn-prompt.ts";
+import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
+import { gitExec } from "@platform/adapters/git-adapter.ts";
+import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolError } from "@shared/lib/tool-result.ts";
 
 export type ConsultationPromptEntry = {
   name: string;
@@ -149,7 +149,7 @@ function emitStateEntryEvents(
 ): void {
   const { state_id, stateType, now, iterationCount } = opts;
   const onBoardUpdated = (
-    event: import("../../../domains/messages/events.js").FlowEventMap["board_updated"],
+    event: import("@domains/messages/events.js").FlowEventMap["board_updated"],
   ) => {
     try {
       store.appendEvent("board_updated", event as Record<string, unknown>);
@@ -165,7 +165,7 @@ function emitStateEntryEvents(
       timestamp: now,
     });
     const onStateEntered = (
-      event: import("../../../domains/messages/events.js").FlowEventMap["state_entered"],
+      event: import("@domains/messages/events.js").FlowEventMap["state_entered"],
     ) => {
       try {
         store.appendEvent("state_entered", event as Record<string, unknown>);

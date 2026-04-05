@@ -21,30 +21,30 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { Board, StateDefinition, WaveResult } from "../../../domains/flows/flow-schema.ts";
-import { runGates } from "../../../domains/flows/gate-runner.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import type { WaveWorktreeResult } from "../../../domains/workspaces/wave-lifecycle.ts";
+import type { Board, StateDefinition, WaveResult } from "@domains/flows/flow-schema.ts";
+import { runGates } from "@domains/flows/gate-runner.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { WaveWorktreeResult } from "@domains/workspaces/wave-lifecycle.ts";
 import {
   cleanupWorktrees,
   createWaveWorktrees,
   getProjectDir,
   mergeWaveResults,
-} from "../../../domains/workspaces/wave-lifecycle.ts";
-import { parseTaskIdsForWave } from "../../../domains/workspaces/wave-variables.ts";
+} from "@domains/workspaces/wave-lifecycle.ts";
+import { parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
 import type {
   DriveFlowAction,
   DriveFlowInput,
   SpawnRequest,
-} from "../../../features/orchestration/services/drive-flow-types.ts";
-import { DriveFlowInputSchema } from "../../../features/orchestration/services/drive-flow-types.ts";
-import type { ToolResult } from "../../../shared/lib/tool-result.ts";
-import { toolError } from "../../../shared/lib/tool-result.ts";
-import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
-import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
-import type { SpawnPromptEntry } from "./get-spawn-prompt.ts";
-import { reportResult } from "./report-result.ts";
-import { resolveAfterConsultations } from "./resolve-after-consultations.ts";
+} from "@features/orchestration/services/drive-flow-types.ts";
+import { DriveFlowInputSchema } from "@features/orchestration/services/drive-flow-types.ts";
+import type { ConsultationPromptEntry } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import type { SpawnPromptEntry } from "@features/orchestration/tools/get-spawn-prompt.ts";
+import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
+import type { ToolResult } from "@shared/lib/tool-result.ts";
+import { toolError } from "@shared/lib/tool-result.ts";
 
 // Re-export types for external consumers
 export type { DriveFlowAction, DriveFlowInput, SpawnRequest };

@@ -8,16 +8,16 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { semanticSearch } from "@features/knowledge-graph/tools/semantic-search.ts";
+import { randomEmbedding } from "@tests/helpers/embedding-test-helpers.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { randomEmbedding } from "../../../tests/helpers/embedding-test-helpers.ts";
-import { semanticSearch } from "../tools/semantic-search.ts";
 
 // Mock EmbeddingService
 
 const mockEmbedOne = vi.fn<(text: string) => Promise<Float32Array>>();
 const mockDispose = vi.fn();
 
-vi.mock("../../../graph/kg-embedding.ts", () => {
+vi.mock("@graph/kg-embedding.ts", () => {
   // Must be a proper class so `new EmbeddingService()` works
   class EmbeddingService {
     embedOne(text: string) {
@@ -41,9 +41,9 @@ vi.mock("../../../graph/kg-embedding.ts", () => {
 async function seedTestDb(dbPath: string): Promise<void> {
   // We need to seed the DB with entities, vectors, and summaries for integration tests.
   // Use initDatabase and KgStore/KgVectorStore directly (not through semanticSearch).
-  const { initDatabase } = await import("../../../graph/kg-schema.ts");
-  const { KgStore } = await import("../../../graph/kg-store.ts");
-  const { KgVectorStore } = await import("../../../graph/kg-vector-store.ts");
+  const { initDatabase } = await import("@graph/kg-schema.ts");
+  const { KgStore } = await import("@graph/kg-store.ts");
+  const { KgVectorStore } = await import("@graph/kg-vector-store.ts");
 
   const db = initDatabase(dbPath);
   const store = new KgStore(db);

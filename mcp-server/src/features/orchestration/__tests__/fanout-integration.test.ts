@@ -25,20 +25,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks — must appear before module imports
 
-vi.mock("../services/diff-cluster.ts", () => ({
+vi.mock("@features/orchestration/services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
-vi.mock("../services/wave-briefing.ts", () => ({
+vi.mock("@features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../../../domains/flows/skip-when.ts", () => ({
+vi.mock("@domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn().mockResolvedValue({ skip: false }),
 }));
 
-vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
+vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -47,11 +47,11 @@ vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../engine/consultation-executor.ts", () => ({
+vi.mock("@features/orchestration/engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("../../../domains/workspaces/wave-variables.ts", () => ({
+vi.mock("@domains/workspaces/wave-variables.ts", () => ({
   buildTemplateInjection: vi.fn(() => ""),
   escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
@@ -59,24 +59,27 @@ vi.mock("../../../domains/workspaces/wave-variables.ts", () => ({
   substituteVariables: vi.fn((s: string) => s),
 }));
 
-vi.mock("../engine/effects.ts", () => ({
+vi.mock("@features/orchestration/engine/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../engine/convergence.ts", () => ({
+vi.mock("@features/orchestration/engine/convergence.ts", () => ({
   canEnterState: vi.fn().mockReturnValue({ allowed: true, reason: undefined }),
 }));
 
 // Module imports (after mocks)
 
-import type { Board, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import type { FileCluster } from "../services/diff-cluster.ts";
-import { clusterDiff } from "../services/diff-cluster.ts";
-import { assembleWaveBriefing, readWaveGuidance } from "../services/wave-briefing.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { reportResult } from "../tools/report-result.ts";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";
+import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
+import {
+  assembleWaveBriefing,
+  readWaveGuidance,
+} from "@features/orchestration/services/wave-briefing.ts";
+import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 
@@ -437,7 +440,7 @@ describe("getSpawnPrompt — wave guidance and messaging injection for fanned-ou
     vi.mocked(assembleWaveBriefing).mockReturnValue("## Wave Briefing\nSome briefing.");
 
     // Use getSpawnPrompt directly for this test since enterAndPrepareState mocks clusterDiff
-    const { getSpawnPrompt } = await import("../tools/get-spawn-prompt.ts");
+    const { getSpawnPrompt } = await import("@features/orchestration/tools/get-spawn-prompt.ts");
     const flow = makeReviewFlow();
     const result = await getSpawnPrompt({
       flow,
@@ -462,7 +465,7 @@ describe("getSpawnPrompt — wave guidance and messaging injection for fanned-ou
     seedBoard(workspace, makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
-    const { getSpawnPrompt } = await import("../tools/get-spawn-prompt.ts");
+    const { getSpawnPrompt } = await import("@features/orchestration/tools/get-spawn-prompt.ts");
     const flow = makeReviewFlow();
     const result = await getSpawnPrompt({
       flow,
@@ -491,7 +494,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
     seedBoard(workspace, makeBoard());
     vi.mocked(clusterDiff).mockReturnValue(sampleClusters);
 
-    const { getSpawnPrompt } = await import("../tools/get-spawn-prompt.ts");
+    const { getSpawnPrompt } = await import("@features/orchestration/tools/get-spawn-prompt.ts");
     const flow = makeReviewFlow();
     const spawnResult = await getSpawnPrompt({
       flow,
@@ -514,7 +517,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
     getExecutionStore(workspace).upsertState("review", { entries: 1, status: "in_progress" });
     getExecutionStore(workspace).upsertState("hitl", { entries: 0, status: "pending" });
 
-    const reportResultImport = await import("../tools/report-result.ts");
+    const reportResultImport = await import("@features/orchestration/tools/report-result.ts");
     const result = await reportResultImport.reportResult({
       flow,
       parallel_results: clusterResults,
@@ -543,7 +546,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
       }),
     );
 
-    const reportResultImport = await import("../tools/report-result.ts");
+    const reportResultImport = await import("@features/orchestration/tools/report-result.ts");
     const result = await reportResultImport.reportResult({
       flow,
       parallel_results: [
@@ -575,7 +578,7 @@ describe("fan-out end-to-end: getSpawnPrompt clusters → reportResult review ag
       }),
     );
 
-    const reportResultImport = await import("../tools/report-result.ts");
+    const reportResultImport = await import("@features/orchestration/tools/report-result.ts");
     const result = await reportResultImport.reportResult({
       flow,
       parallel_results: [

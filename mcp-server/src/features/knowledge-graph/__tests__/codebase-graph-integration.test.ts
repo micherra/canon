@@ -19,12 +19,12 @@ import { execSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
+import { JobManager } from "@platform/jobs/job-manager.ts";
+import { JobStore } from "@platform/jobs/job-store.ts";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import Database from "better-sqlite3";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { initExecutionDb } from "../../../domains/workspaces/execution-schema.ts";
-import { JobManager } from "../../../platform/jobs/job-manager.ts";
-import { JobStore } from "../../../platform/jobs/job-store.ts";
-import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
 
 // Slow test timeout — child process lifecycle + WASM init can take several sec
 
@@ -65,7 +65,7 @@ function createTempProject(): string {
   );
   writeFileSync(
     path.join(projectDir, "service.ts"),
-    `import { add } from './utils.ts';\nexport function double(n: number): number { return add(n, n); }\n`,
+    `import { add } from '@features/knowledge-graph/__tests__/utils.ts';\nexport function double(n: number): number { return add(n, n); }\n`,
     "utf-8",
   );
 

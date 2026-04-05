@@ -8,11 +8,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Board, ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
+import { resolveProgress } from "@features/prompt-pipeline/services/resolve-progress.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow, StateDefinition } from "../../../domains/flows/flow-schema.ts";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import type { PromptContext } from "../model/types.ts";
-import { resolveProgress } from "../services/resolve-progress.ts";
 
 let tmpDirs: string[] = [];
 

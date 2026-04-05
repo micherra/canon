@@ -30,24 +30,28 @@ vi.mock("fs", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../graph/kg-schema.ts", () => ({
+vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(),
 }));
 
-vi.mock("../../../graph/kg-blast-radius.ts", () => ({
+vi.mock("@graph/kg-blast-radius.ts", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
-vi.mock("../tools/pr-review-data.ts", () => ({
+vi.mock("@features/pr-review/tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 
 import { existsSync } from "node:fs";
-import { analyzeBlastRadius } from "../../../graph/kg-blast-radius.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { DriftStore } from "../../../platform/storage/drift/store.ts";
-import { getPrReviewData } from "../tools/pr-review-data.ts";
-import { buildBlastRadiusByFile, detectSubsystems, showPrImpact } from "../tools/show-pr-impact.ts";
+import { getPrReviewData } from "@features/pr-review/tools/pr-review-data.ts";
+import {
+  buildBlastRadiusByFile,
+  detectSubsystems,
+  showPrImpact,
+} from "@features/pr-review/tools/show-pr-impact.ts";
+import { analyzeBlastRadius } from "@graph/kg-blast-radius.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { DriftStore } from "@platform/storage/drift/store.ts";
 
 const SAMPLE_SCORE = {
   conventions: { passed: 3, total: 3 },

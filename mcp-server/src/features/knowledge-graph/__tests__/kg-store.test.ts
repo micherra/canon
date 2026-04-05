@@ -5,12 +5,12 @@
  * Each describe block gets a fresh DB via beforeEach.
  */
 
+import { KgQuery } from "@graph/kg-query.ts";
+import { initDatabase, runMigrations, SCHEMA_VERSION } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import type { EntityRow, FileRow } from "@graph/kg-types.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase, runMigrations, SCHEMA_VERSION } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import type { EntityRow, FileRow } from "../../../graph/kg-types.ts";
 
 function makeFileRow(overrides: Partial<Omit<FileRow, "file_id">> = {}): Omit<FileRow, "file_id"> {
   return {
@@ -125,7 +125,7 @@ function populateTestGraph(store: KgStore): {
   store.insertFileEdge({
     confidence: 1.0,
     edge_type: "imports",
-    evidence: "import { funcB } from './B'",
+    evidence: "import { funcB } from '@features/knowledge-graph/__tests__/B'",
     relation: "imports",
     source_file_id: fileA.file_id!,
     target_file_id: fileB.file_id!,
@@ -133,7 +133,7 @@ function populateTestGraph(store: KgStore): {
   store.insertFileEdge({
     confidence: 1.0,
     edge_type: "imports",
-    evidence: "import { funcC } from './C'",
+    evidence: "import { funcC } from '@features/knowledge-graph/__tests__/C'",
     relation: "imports",
     source_file_id: fileB.file_id!,
     target_file_id: fileC.file_id!,
@@ -545,7 +545,7 @@ describe("Knowledge Graph Store", () => {
         const edge = store.insertFileEdge({
           confidence: 1.0,
           edge_type: "imports",
-          evidence: "import { x } from './B'",
+          evidence: "import { x } from '@features/knowledge-graph/__tests__/B'",
           relation: "imports",
           source_file_id: fileA.file_id!,
           target_file_id: fileB.file_id!,
@@ -614,9 +614,7 @@ describe("Knowledge Graph Store", () => {
       });
 
       function makeSummaryParams(
-        overrides: Partial<
-          Omit<import("../../../graph/kg-types.ts").SummaryRow, "summary_id">
-        > = {},
+        overrides: Partial<Omit<import("@graph/kg-types.ts").SummaryRow, "summary_id">> = {},
       ) {
         return {
           content_hash: "hash-v1",

@@ -5,19 +5,19 @@
  * frontmatter parsing and remark for body content analysis.
  */
 
-import matter from "gray-matter";
-import remarkFrontmatter from "remark-frontmatter";
-import remarkGfm from "remark-gfm";
-import remarkParse from "remark-parse";
-import { unified } from "unified";
-import { visit } from "unist-util-visit";
 import type {
   AdapterResult,
   EntityKind,
   ImportSpecifier,
   IntraFileEdge,
   LanguageAdapter,
-} from "./kg-types.ts";
+} from "@graph/kg-types.ts";
+import matter from "gray-matter";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { visit } from "unist-util-visit";
 
 // Entity kind classification
 

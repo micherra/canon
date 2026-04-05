@@ -7,16 +7,16 @@
  * file-level and entity-level blast radius queries.
  */
 
-import type Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type BlastRadiusFile,
   classifyBlastSeverity,
   computeUnifiedBlastRadius,
-} from "../../../graph/kg-blast-radius.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import type { EntityRow, FileRow } from "../../../graph/kg-types.ts";
+} from "@graph/kg-blast-radius.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import type { EntityRow, FileRow } from "@graph/kg-types.ts";
+import type Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // Shared DB helpers
 

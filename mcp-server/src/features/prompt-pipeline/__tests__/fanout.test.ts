@@ -23,27 +23,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../../orchestration/services/diff-cluster.ts", () => ({
+vi.mock("@features/orchestration/services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("../../orchestration/engine/compete.ts", () => ({
+vi.mock("@features/orchestration/engine/compete.ts", () => ({
   expandCompetitorPrompts: vi.fn(),
 }));
 
-vi.mock("../../orchestration/engine/debate.ts", () => ({
+vi.mock("@features/orchestration/engine/debate.ts", () => ({
   buildDebatePrompt: vi.fn().mockReturnValue("debate-prompt"),
   debateTeamLabel: vi.fn((i: number) => `Team ${String.fromCharCode(65 + i)}`),
   inspectDebateProgress: vi.fn(),
 }));
 
-import type { ResolvedFlow, StateDefinition } from "../../../domains/flows/flow-schema.ts";
-import { expandCompetitorPrompts } from "../../orchestration/engine/compete.ts";
-import { buildDebatePrompt, inspectDebateProgress } from "../../orchestration/engine/debate.ts";
-import type { FileCluster } from "../../orchestration/services/diff-cluster.ts";
-import { clusterDiff } from "../../orchestration/services/diff-cluster.ts";
-import type { PromptContext } from "../model/types.ts";
-import { fanout } from "../tools/fanout.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import { expandCompetitorPrompts } from "@features/orchestration/engine/compete.ts";
+import { buildDebatePrompt, inspectDebateProgress } from "@features/orchestration/engine/debate.ts";
+import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";
+import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
+import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
+import { fanout } from "@features/prompt-pipeline/tools/fanout.ts";
 
 function makeCtx(
   overrides: Partial<PromptContext> & {

@@ -16,11 +16,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../../../domains/flows/skip-when.ts", () => ({
+vi.mock("@domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
+vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -28,11 +28,11 @@ vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../engine/consultation-executor.ts", () => ({
+vi.mock("@features/orchestration/engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn(),
 }));
 
-vi.mock("../../../domains/workspaces/wave-variables.ts", () => ({
+vi.mock("@domains/workspaces/wave-variables.ts", () => ({
   buildTemplateInjection: vi.fn(() => ""),
   escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
@@ -46,10 +46,10 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { spawnSync } from "node:child_process";
-import type { Board, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

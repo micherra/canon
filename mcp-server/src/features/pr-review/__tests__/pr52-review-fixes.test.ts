@@ -39,7 +39,7 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { gitExecAsync } from "../../../platform/adapters/git-adapter-async.ts";
+import { gitExecAsync } from "@platform/adapters/git-adapter-async.ts";
 
 type SpawnSyncResult = {
   stdout: string;
@@ -51,7 +51,7 @@ type SpawnSyncResult = {
 
 let spawnSyncImpl: (() => SpawnSyncResult) | null = null;
 
-import { runShell } from "../../../platform/adapters/process-adapter.ts";
+import { runShell } from "@platform/adapters/process-adapter.ts";
 
 beforeEach(() => {
   execFileImpl = null;
@@ -200,7 +200,7 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
         .mockResolvedValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),
     }));
 
-    const { codebaseGraph } = await import("../../knowledge-graph/tools/codebase-graph.ts");
+    const { codebaseGraph } = await import("@features/knowledge-graph/tools/codebase-graph.ts");
     // diff_base with shell-dangerous chars that sanitizeGitRef would reject
     await expect(
       codebaseGraph(
@@ -226,7 +226,7 @@ describe("Fix 2: codebaseGraph — invalid diff_base does not throw", () => {
         .mockResolvedValue({ exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false }),
     }));
 
-    const { codebaseGraph } = await import("../../knowledge-graph/tools/codebase-graph.ts");
+    const { codebaseGraph } = await import("@features/knowledge-graph/tools/codebase-graph.ts");
     const result = await codebaseGraph(
       { diff_base: "$(bad-command)", source_dirs: ["src"] },
       tmpDir,
@@ -265,7 +265,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
       },
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     await fn({ pr_number: 42 }, tmpDir);
 
     // The constructed command must have each arg individually quoted or safe
@@ -293,7 +293,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
       }),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     await fn({ pr_number: 42 }, tmpDir);
 
     // Each arg should be wrapped in single quotes in the shell command string
@@ -311,7 +311,7 @@ describe("Fix 3: runDiffCommand — non-git args are shell-escaped", () => {
 
 // Fix 4: wrap-handler — docstring accuracy (verified via import + behavior test)
 
-import { wrapHandler } from "../../../shared/lib/wrap-handler.ts";
+import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 
 describe("Fix 4: wrapHandler — ok:false ToolResult passes through jsonResponse (not converted to MCP error)", () => {
   it("returns ok:false result as JSON (not converted to SDK error format)", async () => {

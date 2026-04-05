@@ -21,14 +21,14 @@
 
 import { existsSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { analyzeBlastRadius } from "../../../graph/kg-blast-radius.ts";
-import { KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { DriftStore } from "../../../platform/storage/drift/store.ts";
-import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
-import type { ReviewEntry, ReviewViolation } from "../../../shared/schema.ts";
-import type { PrReviewDataOutput } from "./pr-review-data.ts";
-import { getPrReviewData } from "./pr-review-data.ts";
+import type { PrReviewDataOutput } from "@features/pr-review/tools/pr-review-data.ts";
+import { getPrReviewData } from "@features/pr-review/tools/pr-review-data.ts";
+import { analyzeBlastRadius } from "@graph/kg-blast-radius.ts";
+import { KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { DriftStore } from "@platform/storage/drift/store.ts";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import type { ReviewEntry, ReviewViolation } from "@shared/schema.ts";
 
 /** Resolve a project-relative path safely. Returns null on traversal attempts. */
 function safeResolvePath(projectDir: string, filePath: string): string | null {

@@ -17,14 +17,14 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
+import type { InitExecutionParams } from "@domains/workspaces/execution-store.ts";
+import { ExecutionStore, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initExecutionDb } from "../../../domains/workspaces/execution-schema.ts";
-import type { InitExecutionParams } from "../../../domains/workspaces/execution-store.ts";
-import { ExecutionStore, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
 
 // Top-level mock for flow-parser — used by Comment 5 tests
-vi.mock("../../../domains/flows/flow-parser.ts", () => ({
+vi.mock("@domains/flows/flow-parser.ts", () => ({
   loadAndResolveFlow: vi.fn().mockResolvedValue({
     description: "test",
     entry: "build",
@@ -261,7 +261,7 @@ describe("Comment 1 & 2: appendEvent error isolation in event handlers", () => {
 describe("Comment 1 (integration): updateBoard enter_state does not throw on appendEvent failure", () => {
   it("updateBoard succeeds even when appendEvent throws on state_entered", async () => {
     // Import the FlowEventBus class and create a local instance
-    const { FlowEventBus } = await import("../../../domains/messages/events.ts");
+    const { FlowEventBus } = await import("@domains/messages/events.ts");
     const localBus = new FlowEventBus();
 
     // Import updateBoard and patch it to use our localBus — via vi.mock approach
@@ -315,7 +315,7 @@ describe("Comment 1 (integration): updateBoard enter_state does not throw on app
 
 describe("Comment 5: init-workspace catch — narrow error handling", () => {
   it("proceeds with creation on a fresh workspace (no existing DB)", async () => {
-    const { initWorkspaceFlow } = await import("../../orchestration/tools/init-workspace.ts");
+    const { initWorkspaceFlow } = await import("@features/orchestration/tools/init-workspace.ts");
     const projectDir = makeTmpDir();
 
     const result = await initWorkspaceFlow(
@@ -333,7 +333,7 @@ describe("Comment 5: init-workspace catch — narrow error handling", () => {
   });
 
   it("resumes (created:false) on second call for same task and branch", async () => {
-    const { initWorkspaceFlow } = await import("../../orchestration/tools/init-workspace.ts");
+    const { initWorkspaceFlow } = await import("@features/orchestration/tools/init-workspace.ts");
     const projectDir = makeTmpDir();
 
     const first = await initWorkspaceFlow(

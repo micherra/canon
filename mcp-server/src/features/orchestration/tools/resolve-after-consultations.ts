@@ -9,9 +9,9 @@
  * lifecycle phase cleanly separated from enterAndPrepareState (pre-spawn).
  */
 
-import type { ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { resolveConsultationPrompt } from "../../../features/orchestration/engine/consultation-executor.ts";
-import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { resolveConsultationPrompt } from "@features/orchestration/engine/consultation-executor.ts";
+import type { ConsultationPromptEntry } from "@features/orchestration/tools/enter-and-prepare-state.ts";
 
 export type { ConsultationPromptEntry };
 

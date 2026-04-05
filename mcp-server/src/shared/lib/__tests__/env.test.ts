@@ -15,8 +15,8 @@
  * - isCI() returns false when CI is not set
  */
 
+import { isCI, isSyncMode } from "@shared/lib/env.ts";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { isCI, isSyncMode } from "../env.ts";
 
 // Helper — clean environment for each test
 

@@ -8,11 +8,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
+import type { InitExecutionParams } from "@domains/workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { resolveWaveEvent } from "@features/orchestration/tools/resolve-wave-event.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flowEventBus } from "../../../domains/messages/event-bus-instance.ts";
-import type { InitExecutionParams } from "../../../domains/workspaces/execution-store.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
 
 const BASE_EXECUTION: InitExecutionParams = {
   base_commit: "abc1234",
@@ -250,7 +250,7 @@ describe("full lifecycle", () => {
     const store = getExecutionStore(workspace);
     store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
 
-    const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
+    const { injectWaveEvent } = await import("@features/orchestration/tools/inject-wave-event.ts");
     const injected = await injectWaveEvent({
       payload: { description: "Full lifecycle task" },
       type: "add_task",
@@ -281,7 +281,7 @@ describe("full lifecycle", () => {
     const store = getExecutionStore(workspace);
     store.upsertState("implement", { entries: 1, status: "in_progress", wave: 1 });
 
-    const { injectWaveEvent } = await import("../tools/inject-wave-event.ts");
+    const { injectWaveEvent } = await import("@features/orchestration/tools/inject-wave-event.ts");
     const injected = await injectWaveEvent({
       payload: { context: "Reject this" },
       type: "guidance",

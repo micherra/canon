@@ -1,5 +1,5 @@
+import { extractImports, parseTsconfigPaths, resolveImport } from "@graph/import-parser.ts";
 import { describe, expect, it } from "vitest";
-import { extractImports, parseTsconfigPaths, resolveImport } from "../../../graph/import-parser.ts";
 
 describe("extractImports — JS/TS", () => {
   it("extracts ES module imports", () => {
@@ -164,7 +164,7 @@ describe("resolveImport — TS ESM .js extension convention", () => {
   ]);
 
   it("resolves .js import to .ts file", () => {
-    // import { DriftStore } from "../platform/storage/drift/store.ts"
+    // import { DriftStore } from "@features/knowledge-graph/platform/storage/drift/store.ts"
     const result = resolveImport(
       "../platform/storage/drift/store.js",
       "src/tools/my-tool.ts",
@@ -174,19 +174,19 @@ describe("resolveImport — TS ESM .js extension convention", () => {
   });
 
   it("resolves .js import to .tsx file", () => {
-    // import { Helper } from "../utils/helper.ts"
+    // import { Helper } from "@features/knowledge-graph/utils/helper.ts"
     const result = resolveImport("../utils/helper.js", "src/tools/my-tool.ts", allFiles);
     expect(result).toBe("src/utils/helper.tsx");
   });
 
   it("resolves .jsx import to .tsx file", () => {
-    // import { Helper } from "../utils/helper.jsx"
+    // import { Helper } from "@features/knowledge-graph/utils/helper.jsx"
     const result = resolveImport("../utils/helper.jsx", "src/tools/my-tool.ts", allFiles);
     expect(result).toBe("src/utils/helper.tsx");
   });
 
   it("resolves .mjs import to .mts file", () => {
-    // import { pure } from "../esm/pure.mjs"
+    // import { pure } from "@features/knowledge-graph/esm/pure.mjs"
     const result = resolveImport("../esm/pure.mjs", "src/tools/my-tool.ts", allFiles);
     expect(result).toBe("src/esm/pure.mts");
   });

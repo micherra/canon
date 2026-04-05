@@ -22,19 +22,19 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { DriftDb } from "@platform/storage/drift/drift-db.ts";
+import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { DriftDb } from "../../../platform/storage/drift/drift-db.ts";
-import { initDriftDb } from "../../../platform/storage/drift/drift-schema.ts";
-import type { ReviewEntry } from "../../../shared/schema.ts";
 
 // Module mocks for context-enrichment tests
 
-vi.mock("../../../platform/adapters/git-adapter.ts", () => ({
+vi.mock("@platform/adapters/git-adapter.ts", () => ({
   gitLog: vi.fn(),
 }));
 
-vi.mock("../../../platform/storage/drift/store.ts", () => ({
+vi.mock("@platform/storage/drift/store.ts", () => ({
   DriftStore: vi.fn(function () {
     return {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
@@ -42,16 +42,19 @@ vi.mock("../../../platform/storage/drift/store.ts", () => ({
   }),
 }));
 
-vi.mock("../services/scope-resolver.ts", () => ({
+vi.mock("@features/orchestration/services/scope-resolver.ts", () => ({
   resolveTaskScope: vi.fn(),
 }));
 
 // Imports (after mocks)
 
-import { gitLog } from "../../../platform/adapters/git-adapter.ts";
-import { DriftStore } from "../../../platform/storage/drift/store.ts";
-import { assembleEnrichment, type EnrichmentInput } from "../services/context-enrichment.ts";
-import { resolveTaskScope } from "../services/scope-resolver.ts";
+import {
+  assembleEnrichment,
+  type EnrichmentInput,
+} from "@features/orchestration/services/context-enrichment.ts";
+import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
+import { gitLog } from "@platform/adapters/git-adapter.ts";
+import { DriftStore } from "@platform/storage/drift/store.ts";
 
 // Helpers shared across sections
 

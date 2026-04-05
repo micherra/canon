@@ -18,25 +18,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../../orchestration/services/wave-briefing.ts", () => ({
+vi.mock("@features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn(),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../../../graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query.ts", () => ({
   computeFileInsightMaps: vi.fn(),
   KgQuery: vi.fn(),
 }));
 
-vi.mock("../../../graph/kg-store.ts", () => ({
+vi.mock("@graph/kg-store.ts", () => ({
   KgStore: vi.fn(),
 }));
 
-vi.mock("../../../graph/kg-schema.ts", () => ({
+vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(),
 }));
 
-vi.mock("../../../domains/workspaces/execution-store.ts", () => ({
+vi.mock("@domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(),
 }));
 
@@ -49,17 +49,17 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 import { existsSync } from "node:fs";
-import type { ResolvedFlow, StateDefinition } from "../../../domains/flows/flow-schema.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { computeFileInsightMaps, KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
   assembleWaveBriefing,
   readWaveGuidance,
-} from "../../orchestration/services/wave-briefing.ts";
-import type { PromptContext } from "../model/types.ts";
-import { injectWaveBriefing } from "../services/inject-wave-briefing.ts";
+} from "@features/orchestration/services/wave-briefing.ts";
+import type { PromptContext } from "@features/prompt-pipeline/model/types.ts";
+import { injectWaveBriefing } from "@features/prompt-pipeline/services/inject-wave-briefing.ts";
+import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
 
 function makeCtx(
   overrides: Partial<PromptContext> & {

@@ -22,41 +22,41 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock all heavy I/O boundaries
-vi.mock("../tools/enter-and-prepare-state.ts", () => ({
+vi.mock("@features/orchestration/tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
-vi.mock("../tools/report-result.ts", () => ({
+vi.mock("@features/orchestration/tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
-vi.mock("../../../domains/workspaces/wave-lifecycle.ts", () => ({
+vi.mock("@domains/workspaces/wave-lifecycle.ts", () => ({
   cleanupWorktrees: vi.fn(),
   createWaveWorktrees: vi.fn(),
   getProjectDir: vi.fn(),
   mergeWaveResults: vi.fn(),
 }));
-vi.mock("../../../domains/flows/gate-runner.ts", () => ({
+vi.mock("@domains/flows/gate-runner.ts", () => ({
   runGates: vi.fn(),
 }));
-vi.mock("../tools/resolve-after-consultations.ts", () => ({
+vi.mock("@features/orchestration/tools/resolve-after-consultations.ts", () => ({
   resolveAfterConsultations: vi.fn(),
 }));
 
-import type { ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { runGates } from "../../../domains/flows/gate-runner.ts";
-import { initExecutionDb } from "../../../domains/workspaces/execution-schema.ts";
-import { clearStoreCache, ExecutionStore } from "../../../domains/workspaces/execution-store.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { runGates } from "@domains/flows/gate-runner.ts";
+import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
+import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
   cleanupWorktrees,
   createWaveWorktrees,
   getProjectDir,
   mergeWaveResults,
-} from "../../../domains/workspaces/wave-lifecycle.ts";
-import type { ToolResult } from "../../../shared/lib/tool-result.ts";
-import { driveFlow } from "../tools/drive-flow.ts";
-import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
+} from "@domains/workspaces/wave-lifecycle.ts";
+import { driveFlow } from "@features/orchestration/tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import { resolveAfterConsultations } from "@features/orchestration/tools/resolve-after-consultations.ts";
+import type { ToolResult } from "@shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

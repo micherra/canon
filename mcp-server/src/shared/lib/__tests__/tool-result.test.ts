@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
 import {
   type CanonErrorCode,
   isToolError,
   type ToolResult,
   toolError,
   toolOk,
-} from "../tool-result.ts";
+} from "@shared/lib/tool-result.ts";
+import { describe, expect, it } from "vitest";
 
 // toolError()
 

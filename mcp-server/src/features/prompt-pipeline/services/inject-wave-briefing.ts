@@ -25,18 +25,18 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { escapeDollarBrace } from "../../../domains/workspaces/wave-variables.ts";
-import { computeFileInsightMaps, KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { KgStore } from "../../../graph/kg-store.ts";
-import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
-import { getItemCountCap } from "../../orchestration/services/context-budget.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
+import { getItemCountCap } from "@features/orchestration/services/context-budget.ts";
 import {
   assembleWaveBriefing,
   readWaveGuidance,
-} from "../../orchestration/services/wave-briefing.ts";
-import type { PromptContext, TaskItem } from "../model/types.ts";
+} from "@features/orchestration/services/wave-briefing.ts";
+import type { PromptContext, TaskItem } from "@features/prompt-pipeline/model/types.ts";
+import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 
 // KG staleness threshold: 1 hour (matches show_pr_impact UI banner)
 const KG_STALENESS_THRESHOLD_MS = 3_600_000;

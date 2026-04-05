@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
+vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -27,18 +27,18 @@ vi.mock("../../../domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../engine/effects.ts", () => ({
+vi.mock("@features/orchestration/engine/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Imports after mocks
 
-import { BoardSchema } from "../../../domains/flows/flow-schema.ts";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { appendFlowRun, computeAnalytics } from "../../../platform/storage/drift/analytics.ts";
-import { CANON_DIR } from "../../../shared/constants.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { updateBoard } from "../tools/update-board.ts";
+import { BoardSchema } from "@domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import { updateBoard } from "@features/orchestration/tools/update-board.ts";
+import { appendFlowRun, computeAnalytics } from "@platform/storage/drift/analytics.ts";
+import { CANON_DIR } from "@shared/constants.ts";
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "qg-integ-"));
@@ -262,7 +262,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
       states: {},
     };
     const stateDef = { type: "single" as const }; // no explicit gates
-    const { normalizeGates } = await import("../../../domains/flows/gate-runner.ts");
+    const { normalizeGates } = await import("@domains/flows/gate-runner.ts");
     const normalized = normalizeGates(stateDef, flow as any, workspace, implState);
 
     expect(normalized.source).toBe("none");
@@ -313,7 +313,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
       spawn_instructions: {},
       states: {},
     };
-    const { normalizeGates } = await import("../../../domains/flows/gate-runner.ts");
+    const { normalizeGates } = await import("@domains/flows/gate-runner.ts");
     const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states.impl);
 
     expect(normalized.source).toBe("none");
@@ -323,7 +323,7 @@ describe("Integration: report_result discovered_gates → board stores → runGa
 
 describe("Integration: explicit gates override discovered gates (tier 1 wins)", () => {
   it("stateDef.gates[] wins over boardState.discovered_gates in runGates", async () => {
-    const { normalizeGates } = await import("../../../domains/flows/gate-runner.ts");
+    const { normalizeGates } = await import("@domains/flows/gate-runner.ts");
 
     // Board state has discovered gates
     const boardState = {
@@ -755,7 +755,7 @@ describe("Integration: discovered_gates deduplicated when same command reported 
     // normalizeGates returns "none" — discovered gates stored as metadata, not executed
     const stateDef = { type: "single" as const };
     const flow = { description: "f", entry: "impl", name: "f", spawn_instructions: {}, states: {} };
-    const { normalizeGates } = await import("../../../domains/flows/gate-runner.ts");
+    const { normalizeGates } = await import("@domains/flows/gate-runner.ts");
     const normalized = normalizeGates(stateDef, flow as any, workspace, finalBoard.states.impl);
 
     expect(normalized.source).toBe("none");

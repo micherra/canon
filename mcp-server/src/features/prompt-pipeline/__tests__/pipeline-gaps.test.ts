@@ -22,7 +22,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks — mock only external I/O, not pipeline internals
 
-vi.mock("../../orchestration/services/wave-briefing.ts", () => ({
+vi.mock("@features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi
     .fn()
     .mockImplementation(
@@ -41,14 +41,14 @@ vi.mock("../../orchestration/services/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../../../domains/messages/messages.ts", () => ({
+vi.mock("@domains/messages/messages.ts", () => ({
   buildMessageInstructions: vi
     .fn()
     .mockReturnValue("## Wave Coordination\n\nCoordination instructions."),
   readChannelAsContext: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../../orchestration/services/inject-context.ts", () => ({
+vi.mock("@features/orchestration/services/inject-context.ts", () => ({
   resolveContextInjections: vi.fn().mockResolvedValue({
     hitl: undefined,
     variables: {},
@@ -56,39 +56,39 @@ vi.mock("../../orchestration/services/inject-context.ts", () => ({
   }),
 }));
 
-vi.mock("../../orchestration/services/diff-cluster.ts", () => ({
+vi.mock("@features/orchestration/services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("../../orchestration/engine/debate.ts", () => ({
+vi.mock("@features/orchestration/engine/debate.ts", () => ({
   buildDebatePrompt: vi.fn().mockReturnValue("Debate prompt content"),
   debateTeamLabel: vi.fn().mockImplementation((i: number) => `team-${i}`),
   inspectDebateProgress: vi.fn().mockResolvedValue({ completed: true, summary: "" }),
 }));
 
-vi.mock("../../orchestration/engine/compete.ts", () => ({
+vi.mock("@features/orchestration/engine/compete.ts", () => ({
   expandCompetitorPrompts: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock("../../../domains/flows/skip-when.ts", () => ({
+vi.mock("@domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn().mockResolvedValue({ skip: false }),
 }));
 
 // Imports (after mocks)
 
-import type { ResolvedFlow, StateDefinition } from "../../../domains/flows/flow-schema.ts";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { inspectDebateProgress } from "../../orchestration/engine/debate.ts";
-import { clusterDiff } from "../../orchestration/services/diff-cluster.ts";
-import { resolveContextInjections } from "../../orchestration/services/inject-context.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { inspectDebateProgress } from "@features/orchestration/engine/debate.ts";
+import { clusterDiff } from "@features/orchestration/services/diff-cluster.ts";
+import { resolveContextInjections } from "@features/orchestration/services/inject-context.ts";
 import type {
   SpawnPromptEntry,
   SpawnPromptResult,
   TaskItem,
-} from "../../orchestration/tools/get-spawn-prompt.ts";
-import { assemblePrompt, getSpawnPrompt } from "../../orchestration/tools/get-spawn-prompt.ts";
-import type { PromptContext, SpawnPromptInput } from "../model/types.ts";
-import { fanout } from "../tools/fanout.ts";
+} from "@features/orchestration/tools/get-spawn-prompt.ts";
+import { assemblePrompt, getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
+import type { PromptContext, SpawnPromptInput } from "@features/prompt-pipeline/model/types.ts";
+import { fanout } from "@features/prompt-pipeline/tools/fanout.ts";
 
 let tmpDirs: string[] = [];
 

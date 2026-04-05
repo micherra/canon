@@ -11,16 +11,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { type ExecutionStore, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow } from "../../domains/flows/flow-schema.ts";
-import {
-  type ExecutionStore,
-  getExecutionStore,
-} from "../../domains/workspaces/execution-store.ts";
 
 // Hoist mocks before module imports
 
-vi.mock("../../domains/workspaces/wave-variables.ts", () => ({
+vi.mock("@domains/workspaces/wave-variables.ts", () => ({
   buildTemplateInjection: vi.fn(() => ""),
   escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
@@ -28,7 +25,7 @@ vi.mock("../../domains/workspaces/wave-variables.ts", () => ({
   substituteVariables: vi.fn((s: string) => s),
 }));
 
-vi.mock("../../domains/messages/event-bus-instance.ts", () => ({
+vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -36,15 +33,15 @@ vi.mock("../../domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../../domains/flows/skip-when.ts", () => ({
+vi.mock("@domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn().mockResolvedValue({ skip: false }),
 }));
 
-vi.mock("../../features/orchestration/engine/consultation-executor.ts", () => ({
+vi.mock("@features/orchestration/engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("../../platform/adapters/git-adapter.ts", () => ({
+vi.mock("@platform/adapters/git-adapter.ts", () => ({
   gitExec: vi
     .fn()
     .mockReturnValue({ exitCode: 1, ok: false, stderr: "", stdout: "", timedOut: false }),
@@ -54,16 +51,16 @@ vi.mock("../../platform/adapters/git-adapter.ts", () => ({
 }));
 
 // Mock context-enrichment module
-vi.mock("../../features/orchestration/services/context-enrichment.ts", () => ({
+vi.mock("@features/orchestration/services/context-enrichment.ts", () => ({
   assembleEnrichment: vi.fn().mockResolvedValue({
     content: "",
     warnings: [],
   }),
 }));
 
-import { assembleEnrichment } from "../../features/orchestration/services/context-enrichment.ts";
-import { enterAndPrepareState } from "../../features/orchestration/tools/enter-and-prepare-state.ts";
-import { assertOk } from "../../shared/lib/tool-result.ts";
+import { assembleEnrichment } from "@features/orchestration/services/context-enrichment.ts";
+import { enterAndPrepareState } from "@features/orchestration/tools/enter-and-prepare-state.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 

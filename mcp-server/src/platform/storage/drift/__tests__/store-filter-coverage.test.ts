@@ -14,9 +14,9 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DriftStore } from "@platform/storage/drift/store.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ReviewEntry } from "../../../../shared/schema.ts";
-import { DriftStore } from "../store.ts";
 
 function makeReview(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
   return {

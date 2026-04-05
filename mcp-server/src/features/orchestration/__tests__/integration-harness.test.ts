@@ -29,17 +29,17 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import type { ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { BoardSchema } from "../../../domains/flows/flow-schema.ts";
-import { flowEventBus } from "../../../domains/messages/event-bus-instance.ts";
-import type { FlowEventMap } from "../../../domains/messages/events.ts";
-import { clearStoreCache, getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { assertOk } from "../../../shared/lib/tool-result.ts";
-import { checkConvergence } from "../../diagnostics/tools/check-convergence.ts";
-import { filterCannotFix } from "../engine/convergence.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { updateBoard } from "../tools/update-board.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { BoardSchema } from "@domains/flows/flow-schema.ts";
+import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
+import type { FlowEventMap } from "@domains/messages/events.ts";
+import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { checkConvergence } from "@features/diagnostics/tools/check-convergence.ts";
+import { filterCannotFix } from "@features/orchestration/engine/convergence.ts";
+import { getSpawnPrompt } from "@features/orchestration/tools/get-spawn-prompt.ts";
+import { reportResult } from "@features/orchestration/tools/report-result.ts";
+import { updateBoard } from "@features/orchestration/tools/update-board.ts";
+import { assertOk } from "@shared/lib/tool-result.ts";
 
 let tmpDirs: string[] = [];
 
@@ -862,8 +862,8 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
     const workspace = makeTmpWorkspace();
     await mkdir(join(workspace, ".canon"), { recursive: true });
 
-    const { storePrReview } = await import("../../pr-review/tools/store-pr-review.js");
-    const { DriftStore } = await import("../../../platform/storage/drift/store.js");
+    const { storePrReview } = await import("@features/pr-review/tools/store-pr-review.js");
+    const { DriftStore } = await import("@platform/storage/drift/store.js");
 
     // Store two reviews for PR #1 and one for PR #2
     await storePrReview(

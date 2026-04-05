@@ -10,15 +10,15 @@
  */
 
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
 import {
   analyzeReachability,
   checkUnresolvedRefs,
   loadAndResolveFlow,
   validateFlow,
   validateSpawnCoverage,
-} from "../flow-parser.ts";
-import type { ResolvedFlow } from "../flow-schema.ts";
+} from "@domains/flows/flow-parser.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { describe, expect, it } from "vitest";
 
 const pluginDir = resolve(process.cwd(), "..");
 

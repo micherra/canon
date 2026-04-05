@@ -9,17 +9,17 @@
  * - DriveFlowAction "approval" variant (compile-time)
  */
 
-import { describe, expect, it } from "vitest";
-import type {
-  ApprovalBreakpoint,
-  DriveFlowAction,
-} from "../../../features/orchestration/services/drive-flow-types.ts";
 import {
   FragmentStateDefinitionSchema,
   SingleStateSchema,
   STATUS_KEYWORDS,
   WaveStateSchema,
-} from "../flow-schema.ts";
+} from "@domains/flows/flow-schema.ts";
+import type {
+  ApprovalBreakpoint,
+  DriveFlowAction,
+} from "@features/orchestration/services/drive-flow-types.ts";
+import { describe, expect, it } from "vitest";
 
 // BaseStateFields — approval_gate / max_revisions / rejection_target
 

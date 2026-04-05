@@ -4,10 +4,10 @@
  * and surfaces cannot-fix items and history.
  */
 
-import type { CannotFixItem, HistoryEntry } from "../../../domains/flows/flow-schema.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { canEnterState } from "../../../features/orchestration/engine/convergence.ts";
-import { type ToolResult, toolError } from "../../../shared/lib/tool-result.ts";
+import type { CannotFixItem, HistoryEntry } from "@domains/flows/flow-schema.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { canEnterState } from "@features/orchestration/engine/convergence.ts";
+import { type ToolResult, toolError } from "@shared/lib/tool-result.ts";
 
 type CheckConvergenceInput = {
   workspace: string;

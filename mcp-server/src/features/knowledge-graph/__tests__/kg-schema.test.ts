@@ -5,8 +5,8 @@
  * - busy_timeout PRAGMA is set to 5000 after initDatabase()
  */
 
+import { initDatabase } from "@graph/kg-schema.ts";
 import { describe, expect, test } from "vitest";
-import { initDatabase } from "../../../graph/kg-schema.ts";
 
 // busy_timeout PRAGMA
 

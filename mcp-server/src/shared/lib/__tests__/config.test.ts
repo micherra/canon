@@ -1,8 +1,12 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  buildLayerInferrer,
+  deriveSourceDirsFromLayers,
+  loadConfigNumber,
+} from "@shared/lib/config.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildLayerInferrer, deriveSourceDirsFromLayers, loadConfigNumber } from "../config.ts";
 
 let tmpDir: string;
 

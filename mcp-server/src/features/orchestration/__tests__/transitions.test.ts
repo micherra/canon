@@ -1,5 +1,4 @@
-import { describe, expect, it } from "vitest";
-import type { StateDefinition } from "../../../domains/flows/flow-schema.ts";
+import type { StateDefinition } from "@domains/flows/flow-schema.ts";
 import {
   aggregateParallelPerResults,
   applyReviewThresholdToCondition,
@@ -7,7 +6,8 @@ import {
   evaluateTransition,
   isStuck,
   normalizeStatus,
-} from "../engine/transitions.ts";
+} from "@features/orchestration/engine/transitions.ts";
+import { describe, expect, it } from "vitest";
 
 describe("normalizeStatus", () => {
   it.each([

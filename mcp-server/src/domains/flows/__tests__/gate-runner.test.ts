@@ -1,5 +1,5 @@
+import type { BoardStateEntry, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BoardStateEntry, ResolvedFlow } from "../flow-schema.ts";
 
 // Hoist mocks before module imports
 
@@ -14,7 +14,7 @@ type RunShellResult = {
 let runShellImpl: ((cmd: string, cwd: string, timeout?: number) => RunShellResult) | null = null;
 let lastRunShellArgs: { cmd: string; cwd: string; timeout?: number } | null = null;
 
-vi.mock("../../../platform/adapters/process-adapter.ts", () => ({
+vi.mock("@platform/adapters/process-adapter.ts", () => ({
   runShell: (cmd: string, cwd: string, timeout?: number) => {
     lastRunShellArgs = { cmd, cwd, timeout };
     if (runShellImpl) return runShellImpl(cmd, cwd, timeout);
@@ -34,7 +34,12 @@ vi.mock("node:fs", () => ({
 
 // Import after mocks are registered
 
-import { normalizeGates, resolveGateCommand, runGate, runGates } from "../gate-runner.ts";
+import {
+  normalizeGates,
+  resolveGateCommand,
+  runGate,
+  runGates,
+} from "@domains/flows/gate-runner.ts";
 
 function makeFlow(gates?: Record<string, string>): ResolvedFlow {
   return {

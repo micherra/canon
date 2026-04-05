@@ -8,15 +8,15 @@
  * 4. ExecutionStore.updateAgentSession / getAgentSession work correctly
  */
 
-import Database from "better-sqlite3";
-import { describe, expect, test } from "vitest";
 import {
   columnExists,
   initExecutionDb,
   runMigrations,
   SCHEMA_VERSION,
-} from "../execution-schema.ts";
-import { ExecutionStore } from "../execution-store.ts";
+} from "@domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import Database from "better-sqlite3";
+import { describe, expect, test } from "vitest";
 
 const BASE_INIT_PARAMS = {
   base_commit: "abc123",
