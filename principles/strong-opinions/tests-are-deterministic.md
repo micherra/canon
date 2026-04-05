@@ -84,3 +84,17 @@ test("debounce calls handler after delay", () => {
 ## Exceptions
 
 Performance benchmarks and load tests are inherently non-deterministic — they measure timing, not correctness. These should be clearly separated from the deterministic test suite (e.g., in a `benchmarks/` directory) and should use statistical thresholds rather than exact assertions. Randomized property-based tests (e.g., fast-check) are acceptable when they use a fixed seed for reproducibility.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "It only fails occasionally — it's probably a real race condition in the code." | A test that fails occasionally is a flaky test until proven otherwise. Diagnosing it as a real bug requires a deterministic reproduction. | Make the test deterministic first (inject clock, use fake timers). If the failure persists under controlled conditions, then it's a real bug. |
+| "It works on my machine — CI must have a resource issue." | "Works on my machine" is the definition of non-determinism. CI environments are slower and more variable by design; tests must be written to tolerate this. | Use fake timers and injected clocks. Remove all real-time dependencies. |
+| "The timeout is generous — 5 seconds is enough for any machine." | Generous timeouts mask flakiness; they don't eliminate it. A 5-second `setTimeout` is a race condition waiting for a slow CI runner. | Control time explicitly. `vi.useFakeTimers()` and `vi.advanceTimersByTime()` make timing assertions exact on every machine. |
+| "Sorting the results would change the behavior being tested." | If test correctness depends on insertion order, the test is asserting implementation details rather than behavior. Unordered collections are non-deterministic. | Use `expect(results).toEqual(expect.arrayContaining([...]))` or sort before asserting on unordered collections. |
+
+## Verification
+
+- [ ] No `Date.now()` or `new Date()` calls in test files — grep for `Date.now()` and `new Date()` in `**/*.test.*` and `**/*.spec.*` files. Each match should use an injected clock, not the real clock.
+- [ ] No real `setTimeout` or `setInterval` in tests without fake timers — grep for `setTimeout(` in test files and confirm each is either wrapped in `vi.useFakeTimers()` / `jest.useFakeTimers()` or is an explicit integration test in a `benchmarks/` directory.

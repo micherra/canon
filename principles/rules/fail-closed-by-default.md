@@ -83,3 +83,18 @@ function getPublicContent(id: string): Content | null {
 Public, read-only endpoints where denying access has a worse user impact than allowing it (e.g., a public homepage). Graceful degradation paths where the fallback is a reduced-functionality mode, not full access. Health check endpoints that should remain accessible during partial outages. In all cases, the fail-open must be **documented in a code comment** explaining why.
 
 **Related:** `handle-partial-failure` — addresses the mechanics of handling failure (timeouts, retries, circuit breaking); this principle addresses the *policy* (deny vs allow when the check itself fails). `secrets-never-in-code` — both are security principles; a fail-open auth check is as dangerous as a leaked credential.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "The catch block handles the error — I'm logging it." | Logging the error and then returning `true` / allowing access is fail-open regardless of the log. The catch block must deny, not just observe. | Return `false`, throw a service-unavailable error, or return a deny response in every catch block for security checks. |
+| "Returning `null` is fine — the caller will check for it." | Null as a success-neutral value is fail-open if the caller treats null as non-denial. The caller may not check, or may treat null as "no opinion = allow." | Return an explicit denial value. Don't rely on the caller to interpret null correctly. |
+| "If auth is down, we shouldn't block all users." | Availability and security are in tension here, and the principle resolves it: security wins by default. Documented exceptions exist for public content, not for authenticated operations. | Fail closed. Return a 503 with a message explaining auth is unavailable. Users wait; the system stays secure. |
+| "It's just feature flags — not real security." | Feature flags gate features, A/B tests, and sometimes billing-restricted functionality. Fail-open on a feature flag can expose unreleased or paid features to all users. | Default to the safe state: disable the feature when the flag service is unreachable, not enable it. |
+
+## Verification
+
+- [ ] No catch block in auth or permission code returns a truthy / allow value — grep for `catch` in auth-related files and check that no catch body returns `true`, `null`, or an allow-access value without a `// INTENTIONAL FAIL-OPEN` comment.
+- [ ] No catch block silently swallows errors without a deny outcome — grep for empty catch blocks (`catch {` or `catch (e) {` followed immediately by `}`) in security-sensitive modules.
+- [ ] All intentional fail-open paths have a documented justification comment containing `INTENTIONAL FAIL-OPEN` — grep for fail-open patterns in catch blocks and confirm each has this comment.

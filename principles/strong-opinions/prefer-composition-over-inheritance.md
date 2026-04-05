@@ -86,3 +86,17 @@ Each behavior (persistence, auditing, soft-delete) is an independent, testable c
 ## Exceptions
 
 Framework-mandated inheritance (React class components in legacy code, Django views, Java servlets) is acceptable — you can't avoid it. True "is-a" relationships where a subclass genuinely *is* a specialized version of the parent — and uses most of its behavior unchanged — are fine for inheritance. The test: does the subclass override more than ~30% of the parent's methods? If yes, it's not really an "is-a" — it's using inheritance to borrow a few methods, which composition does better.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|---------------|----------------|
+| "Inheritance is cleaner here — the subclass only adds two methods." | Adding two methods to a parent class means the subclass inherits all future changes to the parent. "Clean" today becomes fragile base class debt tomorrow. | Use composition: give the class the two behaviors it needs as injected components, not as a parent's methods. |
+| "It's just one level of inheritance — not a deep hierarchy." | Every hierarchy starts at one level. The problem isn't today's depth; it's that inheritance invites extension at each level. One level becomes three in six months. | Prefer composition from the start. Adding composition later is straightforward; refactoring a deep hierarchy is not. |
+| "The base class is small — it barely adds anything." | A small base class that "barely adds anything" is either useful (in which case, why not just import the functions directly?) or vestigial (in which case, delete it). | Import the shared logic as functions or inject it as a dependency. Inheritance is not the right tool for sharing utility logic. |
+| "Extending the base class is the established pattern in this codebase." | Inherited patterns should be evaluated, not perpetuated. If the existing pattern creates tight coupling and deep hierarchies, adding to it compounds the technical debt. | Note the deviation in a code comment, use composition for new code, and flag the existing pattern for refactoring. |
+
+## Verification
+
+- [ ] No class `extends` another application class (non-framework) with more than one level of depth — grep for `extends` in non-test TypeScript files, excluding known framework base classes (Error, React.Component, etc.), and check for multi-level chains.
+- [ ] No subclass overrides more than 30% of parent methods — for any `extends` relationship found, compare the method count of the parent against the number of `override` or same-named methods in the child.
