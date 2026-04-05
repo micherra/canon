@@ -76,17 +76,14 @@ If it exists:
 
 If `CHANGELOG.md` does not exist, skip this step.
 
-### Step 5: Offer to create PR
+### Step 5: Create PR to main from the session branch
 
-Ask the user: "Create a PR with this description?"
+1. Resolve the session branch from `${worktree_branch}` first, then `${branch}` as fallback.
+2. Push that session branch: `git push -u origin HEAD:${session_branch}`.
+3. Create the PR to `main`: `gh pr create --base main --head ${session_branch} --title "{task description, truncated to 70 chars}" --body "{PR description}"`.
+4. Report the PR URL.
 
-If yes:
-1. Detect the default branch: `git remote show origin | grep 'HEAD branch'` (fallback to `main`); store it as `$DEFAULT_BRANCH`
-2. Push the build branch: `git push -u origin HEAD:${branch}` (uses the session branch variable injected at spawn time; avoids blindly pushing whatever HEAD points to in a worktree)
-3. Create the PR: `gh pr create --base $DEFAULT_BRANCH --head ${branch} --title "{task description, truncated to 70 chars}" --body "{PR description}"`
-4. Report the PR URL
-
-If no, save the PR description to `${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md` and tell the user where to find it.
+If push/PR creation fails, save the PR description to `${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md`, report `DONE_WITH_CONCERNS`, and include the exact git/gh error.
 
 ### Step 6: Log activity
 

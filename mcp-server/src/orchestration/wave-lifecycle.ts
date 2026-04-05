@@ -92,8 +92,10 @@ function sanitizeTaskId(taskId: string): string {
 export async function createWaveWorktrees(
   tasks: WaveTask[],
   projectDir: string,
+  baseCwd?: string,
 ): Promise<WaveWorktreeResult[]> {
   const results: WaveWorktreeResult[] = [];
+  const gitBaseCwd = baseCwd ?? projectDir;
 
   for (const task of tasks) {
     const safeTaskId = sanitizeTaskId(task.task_id);
@@ -103,7 +105,7 @@ export async function createWaveWorktrees(
     // biome-ignore lint/performance/noAwaitInLoops: worktrees must be created sequentially; each creates a new git branch from HEAD which is updated by previous iterations
     const result = await gitExecAsync(
       ["worktree", "add", worktreePath, "-b", branchName, "HEAD"],
-      projectDir,
+      gitBaseCwd,
     );
 
     if (!result.ok) {

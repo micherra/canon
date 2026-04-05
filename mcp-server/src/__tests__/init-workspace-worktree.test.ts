@@ -87,7 +87,7 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
     expect(result.worktree_path).toContain(result.slug);
   });
 
-  it("returns worktree_branch matching canon-build/{slug}", async () => {
+  it("returns worktree_branch matching canon-session/{base}/{slug}-{stamp}", async () => {
     const projectDir = makeTmpProjectDir();
     const baseCommit = initGitRepo(projectDir);
 
@@ -98,7 +98,9 @@ describe("initWorkspaceFlow — worktree creation on new workspace", () => {
     );
 
     expect(result.created).toBe(true);
-    expect(result.worktree_branch).toBe(`canon-build/${result.slug}`);
+    expect(result.worktree_branch).toMatch(
+      new RegExp(`^canon-session/main/${result.slug}-[a-z0-9]+$`),
+    );
   });
 
   it("actually creates the worktree directory on disk", async () => {

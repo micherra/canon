@@ -250,6 +250,38 @@ describe("driveFlow — wave entry", () => {
     const task02Req = result.requests.find((r) => r.task_id === "task-02");
     expect(task01Req?.worktree_path).toBe("/project/.canon/worktrees/task-01");
     expect(task02Req?.worktree_path).toBe("/project/.canon/worktrees/task-02");
+    expect(createWaveWorktrees).toHaveBeenCalledWith(
+      [{ task_id: "task-01" }, { task_id: "task-02" }],
+      "/project",
+      "/project",
+    );
+  });
+
+  it("creates wave worktrees from the session worktree HEAD when available", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    store.updateExecution({ worktree_path: "/project/.canon/worktrees/session-branch" });
+    writeIndexMd(workspace, "epic-slug", [{ task_id: "task-01", wave: 1 }]);
+
+    vi.mocked(getProjectDir).mockReturnValue("/project");
+    vi.mocked(createWaveWorktrees).mockResolvedValue([
+      {
+        branch: "canon-wave/task-01",
+        task_id: "task-01",
+        worktree_path: "/project/.canon/worktrees/task-01",
+      },
+    ]);
+    vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult());
+
+    const flow = makeWaveFlow();
+    const result = await driveFlow({ flow, workspace });
+
+    expect(result.ok).toBe(true);
+    expect(createWaveWorktrees).toHaveBeenCalledWith(
+      [{ task_id: "task-01" }],
+      "/project",
+      "/project/.canon/worktrees/session-branch",
+    );
   });
 
   it("stores wave metadata (wave=1, wave_total) in execution state", async () => {

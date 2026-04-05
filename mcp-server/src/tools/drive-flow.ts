@@ -873,10 +873,12 @@ type StartNextWaveInput = {
  */
 async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<DriveFlowAction>> {
   const { workspace, flow, state_id, nextWave, nextWaveTaskIds, store, projectDir } = input;
+  const execution = store.getExecution();
+  const mergeCwd = execution?.worktree_path ?? projectDir;
 
   // Create worktrees for next wave tasks (subprocess-isolation via wave-lifecycle.ts)
   const waveTaskDefs = nextWaveTaskIds.map((tid) => ({ task_id: tid }));
-  const worktreeResults = (await createWaveWorktrees(waveTaskDefs, projectDir)) ?? [];
+  const worktreeResults = (await createWaveWorktrees(waveTaskDefs, projectDir, mergeCwd)) ?? [];
 
   // Build a worktree lookup map
   const worktreeMap = new Map<string, string>(
@@ -1117,6 +1119,8 @@ async function enterWaveState(
 ): Promise<ToolResult<DriveFlowAction>> {
   const session = store.getSession();
   const projectDir = getProjectDir(workspace);
+  const execution = store.getExecution();
+  const mergeCwd = execution?.worktree_path ?? projectDir;
   const existingState = store.getState(stateId);
   const currentWave = existingState?.wave ?? 1;
 
@@ -1140,6 +1144,7 @@ async function enterWaveState(
       ? await createWaveWorktrees(
           tasksNeedingWorktrees.map((tid) => ({ task_id: tid })),
           projectDir,
+          mergeCwd,
         )
       : [];
 

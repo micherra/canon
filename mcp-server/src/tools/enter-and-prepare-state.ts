@@ -82,7 +82,8 @@ function extractSessionVars(store: ReturnType<typeof getExecutionStore>): Record
   const session = store.getSession();
   const vars: Record<string, string> = {};
   if (!session) return vars;
-  vars.branch = session.branch;
+  // Prefer the session worktree branch so shippers push/PR from the build branch.
+  vars.branch = session.worktree_branch ?? session.branch;
   if (session.worktree_branch) vars.worktree_branch = session.worktree_branch;
   if (session.worktree_path) vars.worktree_path = session.worktree_path;
   return vars;
