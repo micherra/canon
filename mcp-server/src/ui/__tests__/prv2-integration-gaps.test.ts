@@ -36,9 +36,9 @@ const uiDir = join(__dirname, "..");
 
 // ── Pure function imports ────────────────────────────────────────────────────
 
-import type { ReviewEntry } from "../../shared/schema.ts";
 // buildFileViolationMap lives in src/ — import via relative path from ui/__tests__
-import { buildFileViolationMap } from "../../tools/pr-review-data.ts";
+import { buildFileViolationMap } from "../../features/pr-review/tools/pr-review-data.ts";
+import type { ReviewEntry } from "../../shared/schema.ts";
 import {
   type Cluster,
   type ClusterInput,

@@ -16,19 +16,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mock for loadAndResolveFlow used by initWorkspaceFlow
 
-vi.mock("../orchestration/flow-parser.ts", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../orchestration/flow-parser.ts")>();
+vi.mock("../domains/flows/flow-parser.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../domains/flows/flow-parser.ts")>();
   return {
     ...actual,
     loadAndResolveFlow: vi.fn(),
   };
 });
 
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { initWorkspaceFlow } from "../tools/init-workspace.ts";
+import { loadAndResolveFlow } from "../domains/flows/flow-parser.ts";
+import type { ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { getSpawnPrompt } from "../features/orchestration/tools/get-spawn-prompt.ts";
+import { initWorkspaceFlow } from "../features/orchestration/tools/init-workspace.ts";
 
 let tmpDirs: string[] = [];
 

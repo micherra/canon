@@ -19,20 +19,23 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { executeEffects } from "../orchestration/effects.ts";
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type {
   RequiredArtifact,
   ResolvedFlow,
   StateDefinition,
-} from "../orchestration/flow-schema.ts";
-import { RequiredArtifactSchema } from "../orchestration/flow-schema.ts";
+} from "../domains/flows/flow-schema.ts";
+import { RequiredArtifactSchema } from "../domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { executeEffects } from "../features/orchestration/engine/effects.ts";
+import {
+  reportResult,
+  validateRequiredArtifacts,
+} from "../features/orchestration/tools/report-result.ts";
+import { writeImplementationSummary } from "../features/orchestration/tools/write-implementation-summary.ts";
+import { writeReview } from "../features/orchestration/tools/write-review.ts";
+import { writeTestReport } from "../features/orchestration/tools/write-test-report.ts";
 import { DriftStore } from "../platform/storage/drift/store.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { reportResult, validateRequiredArtifacts } from "../tools/report-result.ts";
-import { writeImplementationSummary } from "../tools/write-implementation-summary.ts";
-import { writeReview } from "../tools/write-review.ts";
-import { writeTestReport } from "../tools/write-test-report.ts";
 
 let tmpDirs: string[] = [];
 
@@ -308,7 +311,12 @@ describe("writeImplementationSummary → validateRequiredArtifacts (cross-tool)"
 
     const writeResult = await writeImplementationSummary({
       decisions_applied: ["dec-03"],
-      files_changed: [{ action: "added", path: "src/tools/write-implementation-summary.ts" }],
+      files_changed: [
+        {
+          action: "added",
+          path: "src/features/orchestration/tools/write-implementation-summary.ts",
+        },
+      ],
       slug: "my-epic",
       task_id: "adr010-03",
       workspace,

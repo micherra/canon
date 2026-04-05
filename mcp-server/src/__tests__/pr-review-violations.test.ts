@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildFileViolationMap } from "../features/pr-review/tools/pr-review-data.ts";
 import { DriftStore } from "../platform/storage/drift/store.ts";
 import type { ReviewEntry } from "../shared/schema.ts";
-import { buildFileViolationMap } from "../tools/pr-review-data.ts";
 
 describe("buildFileViolationMap — unit", () => {
   it("returns empty map for empty reviews array", () => {
@@ -245,7 +245,7 @@ describe("getPrReviewData — violations integration", () => {
       ) => cb(null, diffOutput, ""),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     const changedFile = result.impact_files.find((f) => f.path === "src/tools/some-tool.ts");
@@ -268,7 +268,7 @@ describe("getPrReviewData — violations integration", () => {
       ) => cb(null, diffOutput, ""),
     }));
 
-    const { getPrReviewData: fn } = await import("../tools/pr-review-data.js");
+    const { getPrReviewData: fn } = await import("../features/pr-review/tools/pr-review-data.js");
     const result = await fn({}, tmpDir);
 
     // Low-risk file with no violations should be in files (summary) but not impact_files

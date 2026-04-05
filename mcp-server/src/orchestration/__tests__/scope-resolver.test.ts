@@ -11,11 +11,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Board } from "../../orchestration/flow-schema.ts";
+import type { Board } from "../../domains/flows/flow-schema.ts";
 
 // We test resolveTaskScope via a workspace with temp dirs and board objects
 
-import { resolveTaskScope } from "../scope-resolver.ts";
+import { resolveTaskScope } from "../../features/orchestration/services/scope-resolver.ts";
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {
@@ -158,7 +158,7 @@ describe("resolveTaskScope — task plan YAML frontmatter source", () => {
 task_id: "enr-01"
 wave: 1
 files:
-  - mcp-server/src/orchestration/scope-resolver.ts
+  - mcp-server/src/features/orchestration/services/scope-resolver.ts
   - mcp-server/src/adapters/git-adapter.ts
 ---
 
@@ -176,7 +176,7 @@ files:
       workspace: tmpDir,
     });
 
-    expect(result).toContain("mcp-server/src/orchestration/scope-resolver.ts");
+    expect(result).toContain("mcp-server/src/features/orchestration/services/scope-resolver.ts");
     expect(result).toContain("mcp-server/src/adapters/git-adapter.ts");
   });
 
@@ -256,7 +256,7 @@ describe("resolveTaskScope — fallback", () => {
     );
     writeFileSync(
       artifact2,
-      "`mcp-server/src/adapters/git-adapter.ts`\n`mcp-server/src/orchestration/scope-resolver.ts`\n",
+      "`mcp-server/src/adapters/git-adapter.ts`\n`mcp-server/src/features/orchestration/services/scope-resolver.ts`\n",
     );
 
     const board = makeBoard({
@@ -280,6 +280,6 @@ describe("resolveTaskScope — fallback", () => {
     expect(uniquePaths.size).toBe(result.length);
     expect(result).toContain("mcp-server/src/adapters/git-adapter.ts");
     expect(result).toContain("mcp-server/src/drift/store.ts");
-    expect(result).toContain("mcp-server/src/orchestration/scope-resolver.ts");
+    expect(result).toContain("mcp-server/src/features/orchestration/services/scope-resolver.ts");
   });
 });

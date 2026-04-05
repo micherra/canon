@@ -10,13 +10,16 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { ApprovalBreakpoint, DriveFlowAction } from "../orchestration/drive-flow-types.ts";
 import {
   FragmentStateDefinitionSchema,
   SingleStateSchema,
   STATUS_KEYWORDS,
   WaveStateSchema,
-} from "../orchestration/flow-schema.ts";
+} from "../domains/flows/flow-schema.ts";
+import type {
+  ApprovalBreakpoint,
+  DriveFlowAction,
+} from "../features/orchestration/services/drive-flow-types.ts";
 
 // BaseStateFields — approval_gate / max_revisions / rejection_target
 

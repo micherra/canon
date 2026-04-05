@@ -21,7 +21,7 @@ import {
   columnExists,
   initExecutionDb,
   SCHEMA_VERSION,
-} from "../orchestration/execution-schema.ts";
+} from "../domains/workspaces/execution-schema.ts";
 
 let tmpFiles: string[] = [];
 

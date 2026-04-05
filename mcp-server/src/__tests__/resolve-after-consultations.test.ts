@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
+import type { ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { resolveAfterConsultations } from "../features/orchestration/tools/resolve-after-consultations.ts";
 
 function makeFlow(overrides: Partial<ResolvedFlow> = {}): ResolvedFlow {
   return {

@@ -23,17 +23,17 @@ const mockStore = {
   getProgress: vi.fn().mockReturnValue(""),
 };
 
-vi.mock("../orchestration/execution-store.ts", () => ({
+vi.mock("../domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
 
-vi.mock("../orchestration/wave-briefing.ts", () => ({
+vi.mock("../features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn().mockReturnValue(""),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import type { ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { getSpawnPrompt } from "../features/orchestration/tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 

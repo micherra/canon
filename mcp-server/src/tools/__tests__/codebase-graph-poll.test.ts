@@ -20,8 +20,8 @@ vi.mock("../../platform/jobs/job-manager.ts", () => {
   };
 });
 
+import { codebaseGraphPoll } from "../../features/knowledge-graph/tools/codebase-graph-poll.ts";
 import * as jobManagerModule from "../../platform/jobs/job-manager.ts";
-import { codebaseGraphPoll } from "../codebase-graph-poll.ts";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockManager = (jobManagerModule as any)._mockManager;

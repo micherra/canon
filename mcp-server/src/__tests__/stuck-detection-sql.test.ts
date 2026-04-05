@@ -11,8 +11,8 @@ import {
   initExecutionDb,
   runMigrations,
   SCHEMA_VERSION,
-} from "../orchestration/execution-schema.ts";
-import { ExecutionStore } from "../orchestration/execution-store.ts";
+} from "../domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "../domains/workspaces/execution-store.ts";
 
 function makeStore(): ExecutionStore {
   const db = initExecutionDb(":memory:");

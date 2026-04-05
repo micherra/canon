@@ -2,7 +2,7 @@
  * stores/pr-review.ts
  *
  * Type definitions for the unified PR Review View payload.
- * Mirrored from src/tools/show-pr-impact.ts to avoid server/UI boundary coupling.
+ * Mirrored from src/features/pr-review/tools/show-pr-impact.ts to avoid server/UI boundary coupling.
  * Replaces stores/pr-impact.ts (deleted 2026-03-25 — merged into unified show_pr_impact).
  */
 

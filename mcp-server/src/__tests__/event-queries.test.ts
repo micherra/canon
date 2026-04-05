@@ -10,8 +10,8 @@
  */
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore } from "../orchestration/execution-store.ts";
+import { initExecutionDb } from "../domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "../domains/workspaces/execution-store.ts";
 
 function makeStore(): ExecutionStore {
   const db = initExecutionDb(":memory:");

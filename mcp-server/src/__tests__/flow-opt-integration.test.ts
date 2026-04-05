@@ -27,11 +27,11 @@ const pluginDir = resolve(__dirname, "../../.."); // mcp-server/src/__tests__ â†
 
 // Mocks for enterAndPrepareState tests
 
-vi.mock("../orchestration/skip-when.ts", () => ({
+vi.mock("../domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../orchestration/event-bus-instance.ts", () => ({
+vi.mock("../domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -39,15 +39,16 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../orchestration/wave-briefing.ts")>();
+vi.mock("../features/orchestration/services/wave-briefing.ts", async (importOriginal) => {
+  const real =
+    await importOriginal<typeof import("../features/orchestration/services/wave-briefing.ts")>();
   return {
     ...real,
     readWaveGuidance: vi.fn().mockResolvedValue(""),
   };
 });
 
-vi.mock("../orchestration/consultation-executor.ts", () => ({
+vi.mock("../features/orchestration/engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn((name: string, flow: unknown) => {
     // Return a minimal resolved consultation for testing
     const flowTyped = flow as { consultations?: Record<string, { agent: string; role: string }> };
@@ -66,13 +67,13 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { spawnSync } from "node:child_process";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import { loadAndResolveFlow } from "../orchestration/flow-parser.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
+import { loadAndResolveFlow } from "../domains/flows/flow-parser.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { evaluateSkipWhen } from "../domains/flows/skip-when.ts";
+import { getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { enterAndPrepareState } from "../features/orchestration/tools/enter-and-prepare-state.ts";
+import { loadFlow } from "../features/orchestration/tools/load-flow.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { loadFlow } from "../tools/load-flow.ts";
 
 let tmpDirs: string[] = [];
 

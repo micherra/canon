@@ -2,12 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { canEnterState, filterCannotFix } from "../orchestration/convergence.ts";
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { clearStoreCache, getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { checkConvergence } from "../features/diagnostics/tools/check-convergence.ts";
+import { canEnterState, filterCannotFix } from "../features/orchestration/engine/convergence.ts";
+import { reportResult } from "../features/orchestration/tools/report-result.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { checkConvergence } from "../tools/check-convergence.ts";
-import { reportResult } from "../tools/report-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {
   return {
@@ -193,7 +193,7 @@ describe("reportResult — cannot_fix accumulation", () => {
     seedWorkspace(workspace, flow);
 
     const result = await reportResult({
-      file_paths: ["src/tools/report-result.ts"],
+      file_paths: ["src/features/orchestration/tools/report-result.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
       state_id: "review",
@@ -205,7 +205,10 @@ describe("reportResult — cannot_fix accumulation", () => {
     const iteration = result.board.iterations.review;
     expect(iteration).toBeDefined();
     expect(iteration.cannot_fix).toEqual([
-      { file_path: "src/tools/report-result.ts", principle_id: "no-hidden-side-effects" },
+      {
+        file_path: "src/features/orchestration/tools/report-result.ts",
+        principle_id: "no-hidden-side-effects",
+      },
     ]);
   });
 
@@ -368,7 +371,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     seedWorkspace(workspace, flow);
 
     await reportResult({
-      file_paths: ["src/tools/check-convergence.ts"],
+      file_paths: ["src/features/diagnostics/tools/check-convergence.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
       state_id: "review",
@@ -381,7 +384,10 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     const convergence = convergenceResult;
 
     expect(convergence.cannot_fix_items).toEqual([
-      { file_path: "src/tools/check-convergence.ts", principle_id: "no-hidden-side-effects" },
+      {
+        file_path: "src/features/diagnostics/tools/check-convergence.ts",
+        principle_id: "no-hidden-side-effects",
+      },
     ]);
   });
 

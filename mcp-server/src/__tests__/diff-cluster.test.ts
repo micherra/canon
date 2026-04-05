@@ -24,7 +24,7 @@ import {
   clusterByDirectory,
   clusterByLayer,
   getChangedFiles,
-} from "../orchestration/diff-cluster.ts";
+} from "../features/orchestration/services/diff-cluster.ts";
 
 beforeEach(() => {
   gitExecImpl = null;

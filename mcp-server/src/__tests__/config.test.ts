@@ -98,7 +98,9 @@ describe("buildLayerInferrer", () => {
         "dashboard-ui": ["mcp-server/src/ui/**"],
         "mcp-server": ["mcp-server/src/**"],
       });
-      expect(infer("mcp-server/src/tools/codebase-graph.ts")).toBe("mcp-server");
+      expect(infer("mcp-server/src/features/knowledge-graph/tools/codebase-graph.ts")).toBe(
+        "mcp-server",
+      );
       expect(infer("mcp-server/src/ui/PrReview.svelte")).toBe("dashboard-ui");
       expect(infer("src/api/handler.ts")).toBe("api");
       expect(infer("agents/canon-implementor.md")).toBe("agents");

@@ -18,7 +18,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow } from "../flow-schema.ts";
+import type { Board, ResolvedFlow } from "../../domains/flows/flow-schema.ts";
 
 // Module mocks — must be hoisted to top of file
 
@@ -34,16 +34,19 @@ vi.mock("../../platform/storage/drift/store.ts", () => ({
   }),
 }));
 
-vi.mock("../scope-resolver.ts", () => ({
+vi.mock("../../features/orchestration/services/scope-resolver.ts", () => ({
   resolveTaskScope: vi.fn(),
 }));
 
 // Imports (after mocks)
 
+import {
+  assembleEnrichment,
+  type EnrichmentInput,
+} from "../../features/orchestration/services/context-enrichment.ts";
+import { resolveTaskScope } from "../../features/orchestration/services/scope-resolver.ts";
 import { gitLog } from "../../platform/adapters/git-adapter.ts";
 import { DriftStore } from "../../platform/storage/drift/store.ts";
-import { assembleEnrichment, type EnrichmentInput } from "../context-enrichment.ts";
-import { resolveTaskScope } from "../scope-resolver.ts";
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {

@@ -12,7 +12,7 @@ import { mkdtempSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initExecutionDb } from "../../../orchestration/execution-schema.ts";
+import { initExecutionDb } from "../../../domains/workspaces/execution-schema.ts";
 
 // Mocks — must be declared before importing the module under test.
 

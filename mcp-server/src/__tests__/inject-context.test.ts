@@ -3,9 +3,12 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Board, ContextInjection } from "../domains/flows/flow-schema.ts";
+import {
+  extractSection,
+  resolveContextInjections,
+} from "../features/orchestration/services/inject-context.ts";
 import type { LayerViolation } from "../graph/kg-types.ts";
-import type { Board, ContextInjection } from "../orchestration/flow-schema.ts";
-import { extractSection, resolveContextInjections } from "../orchestration/inject-context.ts";
 
 // Mocks for file_context tests
 // Use vi.hoisted so mock factory functions can reference these variables
@@ -37,7 +40,7 @@ const {
   };
 });
 
-vi.mock("../orchestration/execution-store.ts", () => ({
+vi.mock("../domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
 

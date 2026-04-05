@@ -6,10 +6,10 @@
  */
 
 import { beforeEach, describe, expect, test } from "vitest";
-import { syncBoardToStore } from "../orchestration/board-sync.ts";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { ExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board } from "../orchestration/flow-schema.ts";
+import { syncBoardToStore } from "../domains/board/board-sync.ts";
+import type { Board } from "../domains/flows/flow-schema.ts";
+import { initExecutionDb } from "../domains/workspaces/execution-schema.ts";
+import { ExecutionStore } from "../domains/workspaces/execution-store.ts";
 
 function makeStore(): ExecutionStore {
   const db = initExecutionDb(":memory:");

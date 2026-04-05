@@ -9,8 +9,8 @@ import type {
   DriveFlowAction,
   HitlBreakpoint,
   SpawnRequest,
-} from "../orchestration/drive-flow-types.ts";
-import { DriveFlowInputSchema } from "../orchestration/drive-flow-types.ts";
+} from "../features/orchestration/services/drive-flow-types.ts";
+import { DriveFlowInputSchema } from "../features/orchestration/services/drive-flow-types.ts";
 
 // Minimal ResolvedFlow for testing
 const MINIMAL_FLOW = {

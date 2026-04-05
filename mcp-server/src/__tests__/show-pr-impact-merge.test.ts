@@ -46,14 +46,14 @@ vi.mock("../graph/kg-blast-radius.ts", () => ({
   analyzeBlastRadius: vi.fn(),
 }));
 
-vi.mock("../tools/pr-review-data.ts", () => ({
+vi.mock("../features/pr-review/tools/pr-review-data.ts", () => ({
   getPrReviewData: vi.fn(),
 }));
 
 import { existsSync } from "node:fs";
+import { getPrReviewData } from "../features/pr-review/tools/pr-review-data.ts";
+import { showPrImpact } from "../features/pr-review/tools/show-pr-impact.ts";
 import { DriftStore } from "../platform/storage/drift/store.ts";
-import { getPrReviewData } from "../tools/pr-review-data.ts";
-import { showPrImpact } from "../tools/show-pr-impact.ts";
 
 const SAMPLE_PREP = {
   blast_radius: [],
@@ -289,7 +289,7 @@ describe("index.ts tool registrations", () => {
     // Read the index source and check that get_pr_review_data does not appear
     // as a registerTool() or registerAppTool() call.
     const { readFile } = await import("node:fs/promises");
-    const indexSrc = await readFile(new URL("../../src/index.ts", import.meta.url), "utf-8");
+    const indexSrc = await readFile(new URL("../../src/app/index.ts", import.meta.url), "utf-8");
 
     // The tool name must not appear as a registration argument
     expect(indexSrc).not.toMatch(/registerTool\s*\([^)]*['"`]get_pr_review_data['"`]/);
@@ -298,7 +298,7 @@ describe("index.ts tool registrations", () => {
 
   it("show_pr_impact is registered with resource URI ui://canon/pr-review", async () => {
     const { readFile } = await import("node:fs/promises");
-    const indexSrc = await readFile(new URL("../../src/index.ts", import.meta.url), "utf-8");
+    const indexSrc = await readFile(new URL("../../src/app/index.ts", import.meta.url), "utf-8");
 
     // Must contain the new URI
     expect(indexSrc).toContain("ui://canon/pr-review");

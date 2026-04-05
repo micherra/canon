@@ -7,7 +7,7 @@ import {
   generateSlug,
   initWorkspace,
   sanitizeBranch,
-} from "../orchestration/workspace.ts";
+} from "../domains/workspaces/workspace.ts";
 
 let tmpDir: string;
 

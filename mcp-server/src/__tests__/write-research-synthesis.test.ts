@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { writeResearchSynthesis } from "../features/orchestration/tools/write-research-synthesis.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { writeResearchSynthesis } from "../tools/write-research-synthesis.ts";
 
 let tmpDir: string;
 
@@ -19,7 +19,7 @@ const makeInput = (overrides: Partial<Parameters<typeof writeResearchSynthesis>[
     {
       confidence: "high" as const,
       finding: "Board uses SQLite",
-      source: "src/orchestration/board.ts",
+      source: "src/domains/board/board.ts",
     },
     { confidence: "medium" as const, finding: "No retry on failure" },
   ],
@@ -89,7 +89,7 @@ describe("writeResearchSynthesis — happy path", () => {
     expect(content).toContain("high");
     expect(content).toContain("medium");
     // Optional source appears
-    expect(content).toContain("src/orchestration/board.ts");
+    expect(content).toContain("src/domains/board/board.ts");
     // Missing source renders as dash
     expect(content).toContain("—");
   });

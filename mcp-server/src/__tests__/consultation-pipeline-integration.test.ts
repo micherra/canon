@@ -24,11 +24,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../orchestration/skip-when.ts", () => ({
+vi.mock("../domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../orchestration/event-bus-instance.ts", () => ({
+vi.mock("../domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -38,22 +38,23 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
 
 // wave-briefing: mock readWaveGuidance to return empty (no wave guidance file)
 // but leave assembleWaveBriefing REAL so we test the actual briefing output.
-vi.mock("../orchestration/wave-briefing.ts", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../orchestration/wave-briefing.ts")>();
+vi.mock("../features/orchestration/services/wave-briefing.ts", async (importOriginal) => {
+  const real =
+    await importOriginal<typeof import("../features/orchestration/services/wave-briefing.ts")>();
   return {
     ...real,
     readWaveGuidance: vi.fn().mockResolvedValue(""),
   };
 });
 
-import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
-import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { escapeDollarBrace } from "../domains/workspaces/wave-variables.ts";
+import { resolveConsultationPrompt } from "../features/orchestration/engine/consultation-executor.ts";
+import { assembleWaveBriefing } from "../features/orchestration/services/wave-briefing.ts";
+import { enterAndPrepareState } from "../features/orchestration/tools/enter-and-prepare-state.ts";
+import { getSpawnPrompt } from "../features/orchestration/tools/get-spawn-prompt.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 

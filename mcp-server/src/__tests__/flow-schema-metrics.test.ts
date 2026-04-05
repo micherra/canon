@@ -4,8 +4,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { AgentMetrics } from "../orchestration/flow-schema.ts";
-import { AgentMetricsSchema, StateMetricsSchema } from "../orchestration/flow-schema.ts";
+import type { AgentMetrics } from "../domains/flows/flow-schema.ts";
+import { AgentMetricsSchema, StateMetricsSchema } from "../domains/flows/flow-schema.ts";
 
 describe("StateMetricsSchema — backward-compatible optional fields", () => {
   it("parses empty object (all fields optional)", () => {

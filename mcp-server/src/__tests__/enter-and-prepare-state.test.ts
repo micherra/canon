@@ -14,15 +14,15 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type ExecutionStore, getExecutionStore } from "../orchestration/execution-store.ts";
+import { type ExecutionStore, getExecutionStore } from "../domains/workspaces/execution-store.ts";
 
 // Hoist mocks before module imports
 
-vi.mock("../orchestration/skip-when.ts", () => ({
+vi.mock("../domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn(),
 }));
 
-vi.mock("../orchestration/event-bus-instance.ts", () => ({
+vi.mock("../domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -30,11 +30,11 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../orchestration/consultation-executor.ts", () => ({
+vi.mock("../features/orchestration/engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn(),
 }));
 
-vi.mock("../orchestration/wave-variables.ts", () => ({
+vi.mock("../domains/workspaces/wave-variables.ts", () => ({
   buildTemplateInjection: vi.fn(() => ""),
   escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
@@ -42,13 +42,13 @@ vi.mock("../orchestration/wave-variables.ts", () => ({
   substituteVariables: vi.fn((s: string) => s),
 }));
 
-import { resolveConsultationPrompt } from "../orchestration/consultation-executor.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { evaluateSkipWhen } from "../orchestration/skip-when.ts";
-import { escapeDollarBrace } from "../orchestration/wave-variables.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { evaluateSkipWhen } from "../domains/flows/skip-when.ts";
+import { escapeDollarBrace } from "../domains/workspaces/wave-variables.ts";
+import { resolveConsultationPrompt } from "../features/orchestration/engine/consultation-executor.ts";
+import { enterAndPrepareState } from "../features/orchestration/tools/enter-and-prepare-state.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
 import { wrapHandler } from "../shared/lib/wrap-handler.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
 
 let tmpDirs: string[] = [];
 

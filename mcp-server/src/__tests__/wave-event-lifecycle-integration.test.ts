@@ -12,11 +12,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { WaveEvent } from "../orchestration/flow-schema.ts";
-import { getMessages } from "../tools/get-messages.ts";
-import { injectWaveEvent } from "../tools/inject-wave-event.ts";
-import { resolveWaveEvent } from "../tools/resolve-wave-event.ts";
+import type { WaveEvent } from "../domains/flows/flow-schema.ts";
+import { getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { getMessages } from "../features/orchestration/tools/get-messages.ts";
+import { injectWaveEvent } from "../features/orchestration/tools/inject-wave-event.ts";
+import { resolveWaveEvent } from "../features/orchestration/tools/resolve-wave-event.ts";
 
 function seedStore(workspace: string): void {
   const store = getExecutionStore(workspace);

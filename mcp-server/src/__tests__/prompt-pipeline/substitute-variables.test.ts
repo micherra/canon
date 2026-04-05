@@ -6,17 +6,17 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
-import type { PromptContext } from "../../tools/prompt-pipeline/types.ts";
+import type { Board, ResolvedFlow, StateDefinition } from "../../domains/flows/flow-schema.ts";
+import type { PromptContext } from "../../features/prompt-pipeline/model/types.ts";
 
 // Hoist vi.mock — must come before module imports
 
-vi.mock("../../orchestration/execution-store.ts", () => ({
+vi.mock("../../domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(),
 }));
 
-import { getExecutionStore } from "../../orchestration/execution-store.ts";
-import { substituteVariablesStage } from "../../tools/prompt-pipeline/substitute-variables.ts";
+import { getExecutionStore } from "../../domains/workspaces/execution-store.ts";
+import { substituteVariablesStage } from "../../features/prompt-pipeline/services/substitute-variables.ts";
 
 function makeBoard(): Board {
   return {

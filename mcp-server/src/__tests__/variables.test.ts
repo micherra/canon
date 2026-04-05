@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTemplateInjection, substituteVariables } from "../orchestration/variables.ts";
+import { buildTemplateInjection, substituteVariables } from "../domains/messages/variables.ts";
 
 describe("substituteVariables", () => {
   it("replaces a simple variable", () => {

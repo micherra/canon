@@ -21,7 +21,7 @@ import {
   createWaveWorktrees,
   getProjectDir,
   mergeWaveResults,
-} from "../orchestration/wave-lifecycle.ts";
+} from "../domains/workspaces/wave-lifecycle.ts";
 
 let tmpDirs: string[] = [];
 

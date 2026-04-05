@@ -13,11 +13,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { aggregateParallelPerResults, isRoleOptional } from "../orchestration/transitions.ts";
+import {
+  aggregateParallelPerResults,
+  isRoleOptional,
+} from "../features/orchestration/engine/transitions.ts";
 
 // Hoist mocks before module imports for reportResult integration tests
 
-vi.mock("../orchestration/event-bus-instance.ts", () => ({
+vi.mock("../domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -25,14 +28,14 @@ vi.mock("../orchestration/event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../orchestration/effects.ts", () => ({
+vi.mock("../features/orchestration/engine/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+import type { ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { reportResult } from "../features/orchestration/tools/report-result.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { reportResult } from "../tools/report-result.ts";
 
 function makeTmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "optional-roles-test-"));

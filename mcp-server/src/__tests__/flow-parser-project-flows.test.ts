@@ -14,8 +14,8 @@ import {
   loadAndResolveFlow,
   loadFragment,
   resolveFragments,
-} from "../orchestration/flow-parser.ts";
-import type { FragmentDefinition } from "../orchestration/flow-schema.ts";
+} from "../domains/flows/flow-parser.ts";
+import type { FragmentDefinition } from "../domains/flows/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

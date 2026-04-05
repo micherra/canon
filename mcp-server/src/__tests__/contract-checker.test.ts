@@ -3,11 +3,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { PostconditionAssertion } from "../domains/flows/flow-schema.ts";
 import {
   evaluatePostconditions,
   resolvePostconditions,
-} from "../orchestration/contract-checker.ts";
-import type { PostconditionAssertion } from "../orchestration/flow-schema.ts";
+} from "../features/orchestration/services/contract-checker.ts";
 
 describe("resolvePostconditions", () => {
   it("returns explicit assertions when both provided", () => {

@@ -16,14 +16,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../../orchestration/messages.ts", () => ({
+vi.mock("../../domains/messages/messages.ts", () => ({
   buildMessageInstructions: vi.fn().mockReturnValue("## Wave Coordination\n\nInstructions here"),
 }));
 
-import type { ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
-import { buildMessageInstructions } from "../../orchestration/messages.ts";
-import { injectCoordination } from "../../tools/prompt-pipeline/inject-coordination.ts";
-import type { PromptContext, SpawnPromptEntry } from "../../tools/prompt-pipeline/types.ts";
+import type { ResolvedFlow, StateDefinition } from "../../domains/flows/flow-schema.ts";
+import { buildMessageInstructions } from "../../domains/messages/messages.ts";
+import type {
+  PromptContext,
+  SpawnPromptEntry,
+} from "../../features/prompt-pipeline/model/types.ts";
+import { injectCoordination } from "../../features/prompt-pipeline/services/inject-coordination.ts";
 
 function makeEntry(overrides: Partial<SpawnPromptEntry> = {}): SpawnPromptEntry {
   return {

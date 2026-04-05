@@ -24,35 +24,35 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { isToolError } from "../shared/lib/tool-result.ts";
 
 // Mock I/O boundaries
-vi.mock("../tools/enter-and-prepare-state.ts", () => ({
+vi.mock("../features/orchestration/tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
-vi.mock("../tools/report-result.ts", () => ({
+vi.mock("../features/orchestration/tools/report-result.ts", () => ({
   reportResult: vi.fn(),
 }));
-vi.mock("../orchestration/wave-lifecycle.ts", () => ({
+vi.mock("../domains/workspaces/wave-lifecycle.ts", () => ({
   cleanupWorktrees: vi.fn(),
   createWaveWorktrees: vi.fn(),
   getProjectDir: vi.fn(),
   mergeWaveResults: vi.fn(),
 }));
-vi.mock("../orchestration/gate-runner.ts", () => ({
+vi.mock("../domains/flows/gate-runner.ts", () => ({
   runGates: vi.fn(),
 }));
-vi.mock("../tools/resolve-after-consultations.ts", () => ({
+vi.mock("../features/orchestration/tools/resolve-after-consultations.ts", () => ({
   resolveAfterConsultations: vi.fn(),
 }));
 
-import { syncBoardToStore } from "../orchestration/board-sync.ts";
-import { initExecutionDb } from "../orchestration/execution-schema.ts";
-import { clearStoreCache, ExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
+import { syncBoardToStore } from "../domains/board/board-sync.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { initExecutionDb } from "../domains/workspaces/execution-schema.ts";
+import { clearStoreCache, ExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { categorizeFailures } from "../features/diagnostics/tools/categorize-failures.ts";
+import { driveFlow } from "../features/orchestration/tools/drive-flow.ts";
+import type { EnterAndPrepareStateResult } from "../features/orchestration/tools/enter-and-prepare-state.ts";
+import { enterAndPrepareState } from "../features/orchestration/tools/enter-and-prepare-state.ts";
+import { reportResult } from "../features/orchestration/tools/report-result.ts";
 import type { ToolResult } from "../shared/lib/tool-result.ts";
-import { categorizeFailures } from "../tools/categorize-failures.ts";
-import { driveFlow } from "../tools/drive-flow.ts";
-import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
-import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { reportResult } from "../tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 
@@ -616,17 +616,17 @@ describe("categorizeFailures — cross-module contract with driveFlow consumer p
         {
           error_message: "TypeError: Cannot read property 'ok'",
           error_type: "TypeError",
-          file: "src/tools/drive-flow.ts",
+          file: "src/features/orchestration/tools/drive-flow.ts",
         },
         {
           error_message: "TypeError: Cannot read property 'ok'",
           error_type: "TypeError",
-          file: "src/tools/categorize-failures.ts",
+          file: "src/features/diagnostics/tools/categorize-failures.ts",
         },
         {
           error_message: "ReferenceError: store is not defined",
           error_type: "ReferenceError",
-          file: "src/orchestration/board-sync.ts",
+          file: "src/domains/board/board-sync.ts",
         },
       ],
       workspace: "/tmp/test-workspace",
@@ -662,15 +662,15 @@ describe("categorizeFailures — cross-module contract with driveFlow consumer p
     // even when multiple failures share the same file path
     const result = await categorizeFailures({
       failures: [
-        { error_message: "Error A", file: "src/tools/drive-flow.ts" },
-        { error_message: "Error B", file: "src/tools/drive-flow.ts" },
-        { error_message: "Error C", file: "src/tools/categorize-failures.ts" },
+        { error_message: "Error A", file: "src/features/orchestration/tools/drive-flow.ts" },
+        { error_message: "Error B", file: "src/features/orchestration/tools/drive-flow.ts" },
+        { error_message: "Error C", file: "src/features/diagnostics/tools/categorize-failures.ts" },
       ],
       refined_categories: [
         {
           category: "drive-flow issues",
           description: "Failures in the drive-flow tool",
-          files: ["src/tools/drive-flow.ts"],
+          files: ["src/features/orchestration/tools/drive-flow.ts"],
         },
       ],
       workspace: "/tmp/test",
@@ -683,7 +683,9 @@ describe("categorizeFailures — cross-module contract with driveFlow consumer p
     expect(result.categories[0].entries).toHaveLength(2);
     // categorize-failures.ts is uncategorized
     expect(result.uncategorized).toHaveLength(1);
-    expect(result.uncategorized[0].file).toBe("src/tools/categorize-failures.ts");
+    expect(result.uncategorized[0].file).toBe(
+      "src/features/diagnostics/tools/categorize-failures.ts",
+    );
     expect(result.needs_refinement).toBe(false);
   });
 });

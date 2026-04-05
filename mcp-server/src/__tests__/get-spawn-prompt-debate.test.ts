@@ -3,19 +3,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../orchestration/wave-briefing.ts", () => ({
+vi.mock("../features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn().mockReturnValue(undefined),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("../orchestration/diff-cluster.ts", () => ({
+vi.mock("../features/orchestration/services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
-import { clusterDiff } from "../orchestration/diff-cluster.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { writeMessage } from "../orchestration/messages.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import type { ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { writeMessage } from "../domains/messages/messages.ts";
+import { clusterDiff } from "../features/orchestration/services/diff-cluster.ts";
+import { getSpawnPrompt } from "../features/orchestration/tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 

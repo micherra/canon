@@ -15,7 +15,7 @@ import {
   initExecutionDb,
   runMigrations,
   SCHEMA_VERSION,
-} from "../orchestration/execution-schema.ts";
+} from "../domains/workspaces/execution-schema.ts";
 
 describe("SCHEMA_VERSION", () => {
   test("is 8", () => {

@@ -12,12 +12,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type ExecutionStore, getExecutionStore } from "../execution-store.ts";
-import type { Board, ResolvedFlow } from "../flow-schema.ts";
+import type { Board, ResolvedFlow } from "../../domains/flows/flow-schema.ts";
+import {
+  type ExecutionStore,
+  getExecutionStore,
+} from "../../domains/workspaces/execution-store.ts";
 
 // Hoist mocks before module imports
 
-vi.mock("../wave-variables.ts", () => ({
+vi.mock("../../domains/workspaces/wave-variables.ts", () => ({
   buildTemplateInjection: vi.fn(() => ""),
   escapeDollarBrace: vi.fn((s: string) => s),
   extractFilePaths: vi.fn(() => []),
@@ -25,7 +28,7 @@ vi.mock("../wave-variables.ts", () => ({
   substituteVariables: vi.fn((s: string) => s),
 }));
 
-vi.mock("../event-bus-instance.ts", () => ({
+vi.mock("../../domains/messages/event-bus-instance.ts", () => ({
   flowEventBus: {
     emit: vi.fn(),
     once: vi.fn(),
@@ -33,11 +36,11 @@ vi.mock("../event-bus-instance.ts", () => ({
   },
 }));
 
-vi.mock("../skip-when.ts", () => ({
+vi.mock("../../domains/flows/skip-when.ts", () => ({
   evaluateSkipWhen: vi.fn().mockResolvedValue({ skip: false }),
 }));
 
-vi.mock("../consultation-executor.ts", () => ({
+vi.mock("../../features/orchestration/engine/consultation-executor.ts", () => ({
   resolveConsultationPrompt: vi.fn().mockReturnValue(null),
 }));
 
@@ -51,16 +54,16 @@ vi.mock("../../platform/adapters/git-adapter.ts", () => ({
 }));
 
 // Mock context-enrichment module
-vi.mock("../context-enrichment.ts", () => ({
+vi.mock("../../features/orchestration/services/context-enrichment.ts", () => ({
   assembleEnrichment: vi.fn().mockResolvedValue({
     content: "",
     warnings: [],
   }),
 }));
 
+import { assembleEnrichment } from "../../features/orchestration/services/context-enrichment.ts";
+import { enterAndPrepareState } from "../../features/orchestration/tools/enter-and-prepare-state.ts";
 import { assertOk } from "../../shared/lib/tool-result.ts";
-import { enterAndPrepareState } from "../../tools/enter-and-prepare-state.ts";
-import { assembleEnrichment } from "../context-enrichment.ts";
 
 let tmpDirs: string[] = [];
 

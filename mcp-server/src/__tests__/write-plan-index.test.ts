@@ -2,9 +2,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseTaskIdsForWave } from "../orchestration/wave-variables.ts";
+import { parseTaskIdsForWave } from "../domains/workspaces/wave-variables.ts";
+import { writePlanIndex } from "../features/orchestration/tools/write-plan-index.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { writePlanIndex } from "../tools/write-plan-index.ts";
 
 let tmpDir: string;
 

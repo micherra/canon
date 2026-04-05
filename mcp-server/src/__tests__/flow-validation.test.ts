@@ -18,8 +18,8 @@ import {
   loadAndResolveFlow,
   validateFlow,
   validateSpawnCoverage,
-} from "../orchestration/flow-parser.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
+} from "../domains/flows/flow-parser.ts";
+import type { ResolvedFlow } from "../domains/flows/flow-schema.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

@@ -29,17 +29,17 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import { filterCannotFix } from "../orchestration/convergence.ts";
-import { flowEventBus } from "../orchestration/event-bus-instance.ts";
-import type { FlowEventMap } from "../orchestration/events.ts";
-import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
-import type { ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { BoardSchema } from "../orchestration/flow-schema.ts";
+import type { ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { BoardSchema } from "../domains/flows/flow-schema.ts";
+import { flowEventBus } from "../domains/messages/event-bus-instance.ts";
+import type { FlowEventMap } from "../domains/messages/events.ts";
+import { clearStoreCache, getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { checkConvergence } from "../features/diagnostics/tools/check-convergence.ts";
+import { filterCannotFix } from "../features/orchestration/engine/convergence.ts";
+import { getSpawnPrompt } from "../features/orchestration/tools/get-spawn-prompt.ts";
+import { reportResult } from "../features/orchestration/tools/report-result.ts";
+import { updateBoard } from "../features/orchestration/tools/update-board.ts";
 import { assertOk } from "../shared/lib/tool-result.ts";
-import { checkConvergence } from "../tools/check-convergence.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
-import { reportResult } from "../tools/report-result.ts";
-import { updateBoard } from "../tools/update-board.ts";
 
 let tmpDirs: string[] = [];
 
@@ -207,7 +207,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     flowEventBus.on("state_completed", (e) => completedEvents.push(e));
 
     const result = await reportResult({
-      file_paths: ["src/tools/report-result.ts"],
+      file_paths: ["src/features/orchestration/tools/report-result.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
       state_id: "implement",
@@ -219,7 +219,7 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     // Cannot_fix items accumulated
     expect(result.board.iterations.implement?.cannot_fix).toHaveLength(1);
     expect(result.board.iterations.implement?.cannot_fix?.[0]).toEqual({
-      file_path: "src/tools/report-result.ts",
+      file_path: "src/features/orchestration/tools/report-result.ts",
       principle_id: "no-hidden-side-effects",
     });
 
@@ -862,7 +862,7 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
     const workspace = makeTmpWorkspace();
     await mkdir(join(workspace, ".canon"), { recursive: true });
 
-    const { storePrReview } = await import("../tools/store-pr-review.js");
+    const { storePrReview } = await import("../features/pr-review/tools/store-pr-review.js");
     const { DriftStore } = await import("../platform/storage/drift/store.js");
 
     // Store two reviews for PR #1 and one for PR #2

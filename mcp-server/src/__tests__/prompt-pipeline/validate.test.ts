@@ -6,9 +6,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Board, ResolvedFlow, StateDefinition } from "../../orchestration/flow-schema.ts";
-import type { PromptContext, SpawnPromptEntry } from "../../tools/prompt-pipeline/types.ts";
-import { validatePrompts } from "../../tools/prompt-pipeline/validate.ts";
+import type { Board, ResolvedFlow, StateDefinition } from "../../domains/flows/flow-schema.ts";
+import type {
+  PromptContext,
+  SpawnPromptEntry,
+} from "../../features/prompt-pipeline/model/types.ts";
+import { validatePrompts } from "../../features/prompt-pipeline/tools/validate.ts";
 
 function makeBoard(): Board {
   return {
@@ -235,7 +238,7 @@ describe("validatePrompts (Stage 9)", () => {
   it("does not expand \\${x} even when x is a known variable (escape boundary fix)", async () => {
     // substituteVariables now skips \${...} patterns and unescapes them to ${...}.
     // This prevents KG summaries containing ${role} or similar from being expanded.
-    const { substituteVariables } = await import("../../orchestration/variables.ts");
+    const { substituteVariables } = await import("../../domains/messages/variables.ts");
 
     // ${WORKSPACE} is a known variable — but with backslash prefix it must NOT expand
     const result = substituteVariables("Use \\${WORKSPACE} here", {

@@ -22,21 +22,21 @@ const mockStore = {
   getProgress: vi.fn(),
 };
 
-vi.mock("../orchestration/execution-store.ts", () => ({
+vi.mock("../domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
 
 // Hoist mock for wave-briefing before module import
 
-vi.mock("../orchestration/wave-briefing.ts", () => ({
+vi.mock("../features/orchestration/services/wave-briefing.ts", () => ({
   assembleWaveBriefing: vi.fn(),
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-import { getExecutionStore } from "../orchestration/execution-store.ts";
-import type { Board, ResolvedFlow } from "../orchestration/flow-schema.ts";
-import { assembleWaveBriefing } from "../orchestration/wave-briefing.ts";
-import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
+import type { Board, ResolvedFlow } from "../domains/flows/flow-schema.ts";
+import { getExecutionStore } from "../domains/workspaces/execution-store.ts";
+import { assembleWaveBriefing } from "../features/orchestration/services/wave-briefing.ts";
+import { getSpawnPrompt } from "../features/orchestration/tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];
 
