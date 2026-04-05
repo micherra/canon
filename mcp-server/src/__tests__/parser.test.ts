@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseFrontmatter, parsePrinciple } from "../shared/parser.ts";
+import {
+  extractSections,
+  filterBodyBySections,
+  parseFrontmatter,
+  parsePrinciple,
+} from "../shared/parser.ts";
 
 describe("parseFrontmatter", () => {
   it("extracts top-level key-value pairs", () => {
@@ -192,5 +197,160 @@ Body.`;
   it("returns empty id for content without frontmatter", () => {
     const p = parsePrinciple("Just text", "test.md");
     expect(p.id).toBe("");
+  });
+});
+
+describe("extractSections", () => {
+  it("returns empty map and full body when no ## sections exist", () => {
+    const body = "Just a summary paragraph.\n\nAnother paragraph.";
+    const { sections, remainder } = extractSections(body);
+    expect(sections.size).toBe(0);
+    expect(remainder).toBe(body);
+  });
+
+  it("extracts Anti-Rationalization section and leaves unknown sections in remainder", () => {
+    const body =
+      "Summary paragraph.\n\n## Rationale\n\nThe rationale.\n\n## Anti-Rationalization\n\nThe table.";
+    const { sections, remainder } = extractSections(body);
+    expect(sections.has("Anti-Rationalization")).toBe(true);
+    expect(sections.get("Anti-Rationalization")).toContain("The table.");
+    expect(remainder).toContain("Summary paragraph.");
+    expect(remainder).toContain("## Rationale");
+    expect(remainder).not.toContain("## Anti-Rationalization");
+  });
+
+  it("extracts Verification section", () => {
+    const body = "Summary.\n\n## Verification\n\nRun the check.";
+    const { sections, remainder } = extractSections(body);
+    expect(sections.has("Verification")).toBe(true);
+    expect(sections.get("Verification")).toContain("Run the check.");
+    expect(remainder).not.toContain("## Verification");
+  });
+
+  it("extracts both Anti-Rationalization and Verification simultaneously", () => {
+    const body =
+      "Summary.\n\n## Anti-Rationalization\n\nExcuses table.\n\n## Verification\n\nShell commands.";
+    const { sections, remainder } = extractSections(body);
+    expect(sections.has("Anti-Rationalization")).toBe(true);
+    expect(sections.has("Verification")).toBe(true);
+    expect(sections.get("Anti-Rationalization")).toContain("Excuses table.");
+    expect(sections.get("Verification")).toContain("Shell commands.");
+    expect(remainder.trim()).toBe("Summary.");
+  });
+
+  it("is case-insensitive on heading match", () => {
+    const body = "Summary.\n\n## anti-rationalization\n\nContent.";
+    const { sections } = extractSections(body);
+    expect(sections.has("Anti-Rationalization")).toBe(true);
+  });
+
+  it("preserves unknown sections like Rationale and Examples in remainder", () => {
+    const body =
+      "Summary.\n\n## Rationale\n\nWhy.\n\n## Examples\n\nHow.\n\n## Anti-Rationalization\n\nTable.";
+    const { sections, remainder } = extractSections(body);
+    expect(remainder).toContain("## Rationale");
+    expect(remainder).toContain("## Examples");
+    expect(remainder).not.toContain("## Anti-Rationalization");
+    expect(sections.size).toBe(1);
+  });
+});
+
+describe("parsePrinciple with section extraction", () => {
+  it("populates anti_rationalization field when section present", () => {
+    const content = `---
+id: test
+title: Test
+severity: rule
+---
+
+Summary paragraph.
+
+## Anti-Rationalization
+
+The excuse table.`;
+    const p = parsePrinciple(content, "test.md");
+    expect(p.anti_rationalization).toContain("The excuse table.");
+  });
+
+  it("populates verification field when section present", () => {
+    const content = `---
+id: test
+title: Test
+severity: rule
+---
+
+Summary paragraph.
+
+## Verification
+
+\`\`\`bash
+npm test
+\`\`\``;
+    const p = parsePrinciple(content, "test.md");
+    expect(p.verification).toContain("npm test");
+  });
+
+  it("leaves fields undefined when sections absent", () => {
+    const content = `---
+id: test
+title: Test
+severity: rule
+---
+
+Summary paragraph.
+
+## Rationale
+
+Some rationale.`;
+    const p = parsePrinciple(content, "test.md");
+    expect(p.anti_rationalization).toBeUndefined();
+    expect(p.verification).toBeUndefined();
+  });
+
+  it("body field contains remainder without extracted sections", () => {
+    const content = `---
+id: test
+title: Test
+severity: rule
+---
+
+Summary paragraph.
+
+## Rationale
+
+Rationale text.
+
+## Anti-Rationalization
+
+Table content.`;
+    const p = parsePrinciple(content, "test.md");
+    expect(p.body).toContain("## Rationale");
+    expect(p.body).not.toContain("## Anti-Rationalization");
+  });
+});
+
+describe("filterBodyBySections", () => {
+  const summaryParagraph = "Summary paragraph.";
+  const body = `${summaryParagraph}\n\n## Rationale\n\nRationale text.`;
+  const antiRat = "Excuse table.";
+  const verification = "Shell commands.";
+
+  it("returns summary + requested section only when sections list provided", () => {
+    const result = filterBodyBySections(body, antiRat, verification, [
+      "anti_rationalization",
+    ]);
+    expect(result).toContain(summaryParagraph);
+    expect(result).toContain("## Anti-Rationalization");
+    expect(result).toContain(antiRat);
+    expect(result).not.toContain("## Verification");
+    expect(result).not.toContain(verification);
+  });
+
+  it("returns full body when sections list is empty", () => {
+    const result = filterBodyBySections(body, antiRat, verification, []);
+    expect(result).toContain(summaryParagraph);
+    expect(result).toContain("## Rationale");
+    expect(result).toContain("## Anti-Rationalization");
+    expect(result).toContain("## Verification");
   });
 });
