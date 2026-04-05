@@ -91,7 +91,12 @@ export async function getPrinciples(
     principles: top.map((p) => ({
       body: input.summary_only
         ? extractSummary(p.body)
-        : filterBodyBySections(p.body, p.anti_rationalization, p.verification, input.sections ?? []),
+        : filterBodyBySections(
+            p.body,
+            p.anti_rationalization,
+            p.verification,
+            input.sections ?? [],
+          ),
       id: p.id,
       severity: p.severity,
       title: p.title,

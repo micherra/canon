@@ -165,7 +165,8 @@ function tryResumeWorkspace(
     const session = store.getSession();
     const board = store.getBoard();
     if (session && session.status === "active" && board) {
-      const worktreePath = join(projectDir, ".canon", "worktrees", session.slug);
+      const worktreePath =
+        session.worktree_path ?? join(projectDir, ".canon", "worktrees", session.slug);
       const worktreeExists = existsSync(worktreePath);
       return {
         board,
@@ -174,7 +175,9 @@ function tryResumeWorkspace(
         session,
         slug: session.slug,
         workspace: candidateWorkspace,
-        worktree_branch: worktreeExists ? `canon-build/${session.slug}` : undefined,
+        worktree_branch: worktreeExists
+          ? (session.worktree_branch ?? `canon-build/${session.slug}`)
+          : undefined,
         worktree_path: worktreeExists ? worktreePath : undefined,
       };
     }
@@ -315,6 +318,13 @@ type CreateWorktreeOptions = {
   projectDir: string;
 };
 
+/** Build a unique session branch name for the build worktree. */
+function buildSessionBranchName(session: Session): string {
+  const createdMs = Date.parse(session.created);
+  const stamp = Number.isNaN(createdMs) ? Date.now().toString(36) : createdMs.toString(36);
+  return `canon-session/${session.sanitized}/${session.slug}-${stamp}`;
+}
+
 /** Create worktree and persist info. Returns path and branch if successful. */
 function createAndPersistWorktree(
   store: ReturnType<typeof getExecutionStore>,
@@ -323,7 +333,7 @@ function createAndPersistWorktree(
 ): { worktree_path?: string; worktree_branch?: string } {
   const { slug, baseCommit, projectDir } = options;
   const worktreePath = join(projectDir, ".canon", "worktrees", slug);
-  const worktreeBranch = `canon-build/${slug}`;
+  const worktreeBranch = session.worktree_branch ?? buildSessionBranchName(session);
   const wtResult = gitWorktreeAdd(worktreePath, projectDir, {
     baseCommit,
     branchName: worktreeBranch,
