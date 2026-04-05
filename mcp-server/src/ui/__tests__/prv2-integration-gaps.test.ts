@@ -547,7 +547,7 @@ describe("SEVERITY_COLORS contract (cross-task: constants → ViolationCard)", (
     const path = join(uiDir, "components/ViolationCard.svelte");
     const content = readFileSync(path, "utf-8");
     expect(content).toContain("getSeverityColor");
-    expect(content).toContain("../lib/utils");
+    expect(content).toContain("@ui/lib/utils.ts");
   });
 
   it("ViolationCard.svelte passes severity to getSeverityColor for the severity pill color", () => {

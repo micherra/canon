@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { Cluster, ClusterInput } from "../lib/clustering.ts";
-import { clusterFiles } from "../lib/clustering.ts";
+import type { Cluster, ClusterInput } from "@ui/lib/clustering.ts";
+import { clusterFiles } from "@ui/lib/clustering.ts";
 
 // ── Props ────────────────────────────────────────────────────────────────
 

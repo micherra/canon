@@ -10,7 +10,7 @@
  *   - compose-from-small-to-large: standalone leaf; composed by PrReview.svelte
  */
 
-import { splitFilePath } from "../lib/utils";
+import { splitFilePath } from "@ui/lib/utils.ts";
 
 interface StatsRowProps {
   filesChanged: number;

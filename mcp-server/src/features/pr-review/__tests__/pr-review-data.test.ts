@@ -72,7 +72,7 @@ describe("getPrReviewData — diff command construction", () => {
 
   it("constructs gh pr diff command for PR number", async () => {
     // gh command uses runShell (non-git path)
-    vi.doMock("../../../platform/adapters/process-adapter.ts", () => ({
+    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
       runShell: mockRunShellOk(""),
     }));
     const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
@@ -82,7 +82,7 @@ describe("getPrReviewData — diff command construction", () => {
   });
 
   it("constructs git diff --name-status command for branch", async () => {
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
     const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
@@ -92,7 +92,7 @@ describe("getPrReviewData — diff command construction", () => {
   });
 
   it("defaults to main..HEAD without branch or PR", async () => {
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
     const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
@@ -124,7 +124,7 @@ describe("getPrReviewData — name-status parsing", () => {
       "R100\tsrc/old-name.ts\tsrc/new-name.ts",
     ].join("\n");
 
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(nameStatusOutput),
     }));
 
@@ -142,7 +142,7 @@ describe("getPrReviewData — name-status parsing", () => {
 
   it("returns files array with correct total_files count", async () => {
     const output = "M\tsrc/a.ts\nA\tsrc/b.ts\n";
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
@@ -154,7 +154,7 @@ describe("getPrReviewData — name-status parsing", () => {
 
   it("gh pr diff mode infers all files as modified", async () => {
     const nameOnlyOutput = "src/foo.ts\nsrc/bar.ts\n";
-    vi.doMock("../../../platform/adapters/process-adapter.ts", () => ({
+    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
       runShell: mockRunShellOk(nameOnlyOutput),
     }));
 
@@ -167,7 +167,7 @@ describe("getPrReviewData — name-status parsing", () => {
   });
 
   it("handles empty diff output (no changed files)", async () => {
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
@@ -208,7 +208,7 @@ describe("getPrReviewData — layer inference", () => {
 
     const output =
       "M\tsrc/features/pr-review/tools/pr-review-data.ts\nM\tsrc/__tests__/pr-review-data.test.ts\n";
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
@@ -238,7 +238,7 @@ describe("getPrReviewData — layer inference", () => {
 
     const output = ["M\tsrc/tools/a.ts", "A\tsrc/tools/b.ts", "M\tsrc/graph/c.ts"].join("\n");
 
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
@@ -253,7 +253,7 @@ describe("getPrReviewData — layer inference", () => {
 
   it("assigns unknown layer when no mapping matches", async () => {
     const output = "M\tsrc/orphan/file.ts\n";
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
@@ -317,7 +317,7 @@ describe("getPrReviewData — priority score merging", () => {
       "M\tsrc/features/pr-review/tools/pr-review-data.ts",
       "M\tsrc/graph/scanner.ts",
     ].join("\n");
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
@@ -339,7 +339,7 @@ describe("getPrReviewData — priority score merging", () => {
 
   it("files without a priority score entry are excluded from impact_files", async () => {
     const output = "M\tsrc/some/unlisted-file.ts\n";
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(output),
     }));
 
@@ -365,7 +365,7 @@ describe("getPrReviewData — error handling", () => {
   });
 
   it("returns empty files with error field when git diff fails", async () => {
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncFail("fatal: not a git repository"),
     }));
 
@@ -377,7 +377,7 @@ describe("getPrReviewData — error handling", () => {
   });
 
   it("does not throw when git diff fails (graceful degradation)", async () => {
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncFail("command not found: git"),
     }));
 
@@ -386,7 +386,7 @@ describe("getPrReviewData — error handling", () => {
   });
 
   it("returns error field when gh command fails (pr_number mode)", async () => {
-    vi.doMock("../../../platform/adapters/process-adapter.ts", () => ({
+    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
       runShell: mockRunShellFail("gh: command not found"),
     }));
 
@@ -431,7 +431,7 @@ describe("getPrReviewData — incremental mode", () => {
     });
 
     // Incremental mode with last_reviewed_sha switches to git diff (not gh)
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk(""),
     }));
 
@@ -591,7 +591,7 @@ describe("getPrReviewData — blast radius from KG", () => {
 
   it("returns empty blast_radius when KG does not exist", async () => {
     // No KG database — files have no priority_factors.in_degree, no candidates
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/api/handler.ts"),
     }));
     const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
@@ -652,7 +652,7 @@ describe("getPrReviewData — blast radius from KG", () => {
     }
     db.close();
 
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({
       gitExecAsync: mockGitExecAsyncOk("M\tsrc/api/handler.ts"),
     }));
     const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
@@ -681,7 +681,7 @@ describe("getPrReviewData — adapter routing", () => {
 
   it("routes git commands to gitExecAsync (not child_process)", async () => {
     const gitExecAsync = mockGitExecAsyncOk("M\tsrc/file.ts");
-    vi.doMock("../../../platform/adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
+    vi.doMock("@platform/adapters/git-adapter-async.ts", () => ({ gitExecAsync }));
 
     const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     await fn({}, tmpDir);
@@ -695,7 +695,7 @@ describe("getPrReviewData — adapter routing", () => {
 
   it("routes gh commands to runShell (not child_process)", async () => {
     const runShell = mockRunShellOk("");
-    vi.doMock("../../../platform/adapters/process-adapter.ts", () => ({ runShell }));
+    vi.doMock("@platform/adapters/process-adapter.ts", () => ({ runShell }));
 
     const { getPrReviewData: fn } = await import("@features/pr-review/tools/pr-review-data.js");
     await fn({ pr_number: 1 }, tmpDir);

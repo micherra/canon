@@ -229,7 +229,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     const gitExecCalls: { args: string[]; cwd: string }[] = [];
     const runShellCalls: { cmd: string; cwd: string }[] = [];
 
-    vi.doMock("../../../platform/adapters/git-adapter.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter.ts", () => ({
       gitDiff: vi.fn(),
       gitExec: (args: string[], cwd: string) => {
         gitExecCalls.push({ args, cwd });
@@ -239,7 +239,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
       gitStatus: vi.fn(),
     }));
 
-    vi.doMock("../../../platform/adapters/process-adapter.ts", () => ({
+    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
       runShell: (cmd: string, cwd: string) => {
         runShellCalls.push({ cmd, cwd });
         return { exitCode: 0, ok: true, stderr: "", stdout: "", timedOut: false };
@@ -275,7 +275,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
     const gitExecCalls: string[][] = [];
     const runShellCalls: string[] = [];
 
-    vi.doMock("../../../platform/adapters/git-adapter.ts", () => ({
+    vi.doMock("@platform/adapters/git-adapter.ts", () => ({
       gitDiff: vi.fn(),
       gitExec: (args: string[]) => {
         gitExecCalls.push(args);
@@ -284,7 +284,7 @@ describe("Contract-checker adapter routing — gitExec used for file_changed (no
       gitStatus: vi.fn(),
     }));
 
-    vi.doMock("../../../platform/adapters/process-adapter.ts", () => ({
+    vi.doMock("@platform/adapters/process-adapter.ts", () => ({
       runShell: (cmd: string) => {
         runShellCalls.push(cmd);
         return { exitCode: 0, ok: true, stderr: "", stdout: "test passed", timedOut: false };
