@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path, { isAbsolute, join } from "node:path";
 import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
 import { CANON_DIR, CANON_FILES, extractSummary } from "../shared/constants.ts";
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 import { extractImports, type PathAlias, resolveImport } from "../graph/import-parser.ts";
 import { type CodebaseInsights, generateInsights } from "../graph/insights.ts";
 import { runPipeline } from "../graph/kg-pipeline.ts";

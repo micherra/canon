@@ -99,7 +99,7 @@ describe("getPrReviewData — bucket + reason fields wired (Task 01 → 02 integ
   it("file with stored violations appears in impact_files due to violations filter", async () => {
     // Files with stored DriftStore violations appear in impact_files even when bucket=low-risk
     // (because the impact_files filter includes files where violations.length > 0)
-    const { DriftStore } = await import("../drift/store.js");
+    const { DriftStore } = await import("../platform/storage/drift/store.js");
     const store = new DriftStore(tmpDir);
     await store.appendReview({
       files: ["src/tools/bad.ts"],
@@ -210,7 +210,7 @@ describe("getPrReviewData — narrative field wired end-to-end (Task 01 → 02 i
 
   it("narrative mentions violations when files have stored violations in DriftStore", async () => {
     // Store a DriftStore review with violations so buildFileViolationMap populates them
-    const { DriftStore } = await import("../drift/store.js");
+    const { DriftStore } = await import("../platform/storage/drift/store.js");
     const store = new DriftStore(tmpDir);
     await store.appendReview({
       files: ["src/tools/bad.ts"],

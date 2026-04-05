@@ -1,4 +1,4 @@
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 import type { ReviewViolation } from "../shared/schema.ts";
 import { generateId } from "../shared/lib/id.ts";
 

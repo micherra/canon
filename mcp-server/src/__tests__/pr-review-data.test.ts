@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 
 /**
  * Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout.

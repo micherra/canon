@@ -7,7 +7,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 import type { ReviewEntry } from "../shared/schema.ts";
 import { generateId } from "../shared/lib/id.ts";
 import { evaluatePostconditions, resolvePostconditions } from "./contract-checker.ts";

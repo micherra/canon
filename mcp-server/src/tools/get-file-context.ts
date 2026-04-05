@@ -5,7 +5,7 @@ import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { CANON_DIR, CANON_FILES, FILE_PREVIEW_MAX_LINES } from "../shared/constants.ts";
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 import { extractExports } from "../graph/export-parser.ts";
 import { extractImports, resolveImport } from "../graph/import-parser.ts";
 import {

@@ -1,4 +1,4 @@
-import { appendFlowRun, type FlowRunEntry } from "../drift/analytics.ts";
+import { appendFlowRun, type FlowRunEntry } from "../platform/storage/drift/analytics.ts";
 import { enterState, setBlocked } from "../orchestration/board.ts";
 import { flowEventBus } from "../orchestration/event-bus-instance.ts";
 import { getExecutionStore } from "../orchestration/execution-store.ts";

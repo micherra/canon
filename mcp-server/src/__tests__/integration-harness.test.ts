@@ -863,7 +863,7 @@ describe("store_pr_review — get_pr_review_data round-trip", () => {
     await mkdir(join(workspace, ".canon"), { recursive: true });
 
     const { storePrReview } = await import("../tools/store-pr-review.js");
-    const { DriftStore } = await import("../drift/store.js");
+    const { DriftStore } = await import("../platform/storage/drift/store.js");
 
     // Store two reviews for PR #1 and one for PR #2
     await storePrReview(

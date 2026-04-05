@@ -1,5 +1,5 @@
 import { dirname } from "node:path";
-import type { ReviewEntry } from "../shared/schema.ts";
+import type { ReviewEntry } from "../../../shared/schema.ts";
 
 export type PrincipleStats = {
   principle_id: string;

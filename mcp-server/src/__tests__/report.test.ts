@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // Clear the DriftDb module cache between tests
-import { getDriftDb } from "../drift/drift-db.ts";
-import { DriftStore } from "../drift/store.ts";
+import { getDriftDb } from "../platform/storage/drift/drift-db.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 import { reportInputSchema } from "../shared/schema.ts";
 import { report } from "../tools/report.ts";
 

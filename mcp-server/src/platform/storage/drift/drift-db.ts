@@ -12,8 +12,8 @@
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type Database from "better-sqlite3";
-import { CANON_DIR } from "../shared/constants.ts";
-import type { ReviewEntry, ReviewViolation } from "../shared/schema.ts";
+import { CANON_DIR } from "../../../shared/constants.ts";
+import type { ReviewEntry, ReviewViolation } from "../../../shared/schema.ts";
 import type { FlowAnalytics, FlowRunEntry } from "./drift-analytics-types.ts";
 import { initDriftDb } from "./drift-schema.ts";
 

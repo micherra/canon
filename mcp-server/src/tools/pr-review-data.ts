@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { gitExecAsync } from "../platform/adapters/git-adapter-async.ts";
 import { runShell } from "../platform/adapters/process-adapter.ts";
 import { CANON_DIR, CANON_FILES, LAYER_CENTRALITY } from "../shared/constants.ts";
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 import { computeUnifiedBlastRadius } from "../graph/kg-blast-radius.ts";
 import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";

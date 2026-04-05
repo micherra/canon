@@ -19,7 +19,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 import { executeEffects } from "../orchestration/effects.ts";
 import { clearStoreCache, getExecutionStore } from "../orchestration/execution-store.ts";
 import type {

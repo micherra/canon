@@ -51,7 +51,7 @@ vi.mock("../tools/pr-review-data.ts", () => ({
 }));
 
 import { existsSync } from "node:fs";
-import { DriftStore } from "../drift/store.ts";
+import { DriftStore } from "../platform/storage/drift/store.ts";
 import { analyzeBlastRadius } from "../graph/kg-blast-radius.ts";
 import { KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
