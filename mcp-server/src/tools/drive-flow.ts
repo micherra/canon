@@ -1111,6 +1111,70 @@ function buildWorktreeMap(
   return map;
 }
 
+const NON_RESPAWNABLE_WAVE_TASK_STATUSES = ["done", "skipped"] as const;
+type NonRespawnableWaveTaskStatus = (typeof NON_RESPAWNABLE_WAVE_TASK_STATUSES)[number];
+const NON_RESPAWNABLE_WAVE_TASK_STATUS_SET = new Set<string>(NON_RESPAWNABLE_WAVE_TASK_STATUSES);
+
+function isNonRespawnableWaveTaskStatus(status: unknown): status is NonRespawnableWaveTaskStatus {
+  return typeof status === "string" && NON_RESPAWNABLE_WAVE_TASK_STATUS_SET.has(status);
+}
+
+function hasExistingWaveTaskProgress(entry: {
+  status?: string;
+  worktree_path?: string;
+  branch?: string;
+}): boolean {
+  return !!entry.worktree_path || !!entry.branch || typeof entry.status === "string";
+}
+
+function withResumeContextPrompt(prompt: string): string {
+  return `${prompt}\n\n## Resume Context\nExisting progress detected for this unfinished task. Inspect recent commits in this worktree and continue from prior work; do not restart from scratch.\n`;
+}
+
+type ExistingWaveTaskEntry = { status?: string; worktree_path?: string; branch?: string };
+
+function getUnfinishedWaveTaskIds(
+  waveTaskIds: string[],
+  existingWaveResults: Record<string, ExistingWaveTaskEntry>,
+): string[] {
+  return waveTaskIds.filter(
+    (tid) => !isNonRespawnableWaveTaskStatus(existingWaveResults[tid]?.status),
+  );
+}
+
+async function createWorktreesForUnfinishedTasks(
+  unfinishedTaskIds: string[],
+  existingWaveResults: Record<string, ExistingWaveTaskEntry>,
+  projectDir: string,
+  mergeCwd: string,
+): Promise<Array<{ task_id: string; worktree_path: string }>> {
+  const tasksNeedingWorktrees = unfinishedTaskIds.filter(
+    (tid) => !existingWaveResults[tid]?.worktree_path,
+  );
+  return tasksNeedingWorktrees.length > 0
+    ? await createWaveWorktrees(
+        tasksNeedingWorktrees.map((tid) => ({ task_id: tid })),
+        projectDir,
+        mergeCwd,
+      )
+    : [];
+}
+
+function attachWorktreeAndResumeContext(
+  requests: SpawnRequest[],
+  worktreeMap: Map<string, string>,
+  existingWaveResults: Record<string, ExistingWaveTaskEntry>,
+): SpawnRequest[] {
+  return requests.map((req) => {
+    const worktreePath = req.task_id ? worktreeMap.get(req.task_id) : undefined;
+    const withWorktree = worktreePath ? { ...req, worktree_path: worktreePath } : req;
+    if (!withWorktree.task_id) return withWorktree;
+    const existing = existingWaveResults[withWorktree.task_id];
+    if (!existing || !hasExistingWaveTaskProgress(existing)) return withWorktree;
+    return { ...withWorktree, prompt: withResumeContextPrompt(withWorktree.prompt) };
+  });
+}
+
 async function enterWaveState(
   workspace: string,
   flow: DriveFlowInput["flow"],
@@ -1134,20 +1198,20 @@ async function enterWaveState(
 
   const existingWaveResults = (existingState?.wave_results ?? {}) as Record<
     string,
-    { worktree_path?: string; branch?: string }
+    ExistingWaveTaskEntry
   >;
-  const tasksNeedingWorktrees = waveTaskIds.filter(
-    (tid) => !existingWaveResults[tid]?.worktree_path,
-  );
-  const worktreeResults =
-    tasksNeedingWorktrees.length > 0
-      ? await createWaveWorktrees(
-          tasksNeedingWorktrees.map((tid) => ({ task_id: tid })),
-          projectDir,
-          mergeCwd,
-        )
-      : [];
+  const unfinishedTaskIds = getUnfinishedWaveTaskIds(waveTaskIds, existingWaveResults);
 
+  if (unfinishedTaskIds.length === 0) {
+    return { action: "spawn", ok: true as const, requests: [] };
+  }
+
+  const worktreeResults = await createWorktreesForUnfinishedTasks(
+    unfinishedTaskIds,
+    existingWaveResults,
+    projectDir,
+    mergeCwd,
+  );
   const worktreeMap = buildWorktreeMap(worktreeResults, existingWaveResults);
 
   store.transaction(() => {
@@ -1162,8 +1226,8 @@ async function enterWaveState(
 
   const enterOut = await enterAndPrepareState({
     flow,
-    items: waveTaskIds.map((tid) => ({ task_id: tid })),
-    peer_count: waveTaskIds.length,
+    items: unfinishedTaskIds.map((tid) => ({ task_id: tid })),
+    peer_count: unfinishedTaskIds.length,
     state_id: stateId,
     variables: {},
     wave: currentWave,
@@ -1173,13 +1237,13 @@ async function enterWaveState(
   if (!enterOut.can_enter) return buildConvergenceHitl(stateId, enterOut);
 
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
-  const requestsWithWorktrees = requests.map((req) =>
-    req.task_id && worktreeMap.has(req.task_id)
-      ? { ...req, worktree_path: worktreeMap.get(req.task_id) }
-      : req,
+  const requestsWithResume = attachWorktreeAndResumeContext(
+    requests,
+    worktreeMap,
+    existingWaveResults,
   );
 
-  return { action: "spawn", ok: true as const, requests: requestsWithWorktrees };
+  return { action: "spawn", ok: true as const, requests: requestsWithResume };
 }
 
 // SpawnRequest marshalling
