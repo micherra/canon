@@ -1,7 +1,7 @@
 import { analyzeDrift, type DriftReport } from "../drift/analyzer.ts";
 import { formatDriftReport } from "../drift/reporter.ts";
 import { DriftStore } from "../drift/store.ts";
-import { loadAllPrinciples } from "../matcher.ts";
+import { loadAllPrinciples } from "../shared/matcher.ts";
 import type { ReviewEntry } from "../shared/schema.ts";
 
 export type DriftReportInput = {

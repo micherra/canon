@@ -9,7 +9,7 @@ import { computeFileInsightMaps, KgQuery } from "../graph/kg-query.ts";
 import { initDatabase } from "../graph/kg-schema.ts";
 import type { FilePriorityScore } from "../graph/priority.ts";
 import type { ReviewEntry } from "../shared/schema.ts";
-import { buildLayerInferrer, loadLayerMappings } from "../utils/config.ts";
+import { buildLayerInferrer, loadLayerMappings } from "../shared/lib/config.ts";
 import { sanitizeGitRef } from "../shared/lib/git-ref.ts";
 
 export type PrReviewDataInput = {

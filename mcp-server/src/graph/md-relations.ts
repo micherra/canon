@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { parseFrontmatter } from "../shared/parser.ts";
 import type { GraphEdge } from "../tools/codebase-graph.ts";
 import { isNotFound } from "../shared/lib/errors.ts";
-import { toPosix } from "../utils/paths.ts";
+import { toPosix } from "../shared/lib/paths.ts";
 
 // ── Types ──
 

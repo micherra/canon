@@ -21,9 +21,9 @@ import {
   buildLayerInferrer,
   deriveSourceDirsFromLayers,
   loadLayerMappings,
-} from "../utils/config.ts";
+} from "../shared/lib/config.ts";
 import { isNotFound } from "../shared/lib/errors.ts";
-import { loadPathAliases, toPosix } from "../utils/paths.ts";
+import { loadPathAliases, toPosix } from "../shared/lib/paths.ts";
 import { type ToolResult, toolError, toolOk } from "../shared/lib/tool-result.ts";
 
 export type FileContextInput = {

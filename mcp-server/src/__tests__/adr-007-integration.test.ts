@@ -44,8 +44,8 @@ vi.mock("../graph/kg-pipeline.ts", () => ({
   }),
 }));
 
-vi.mock("../utils/config.ts", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../utils/config.ts")>();
+vi.mock("../shared/lib/config.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../shared/lib/config.ts")>();
   return {
     ...actual,
     deriveSourceDirsFromLayers: vi.fn().mockResolvedValue(["src"]),

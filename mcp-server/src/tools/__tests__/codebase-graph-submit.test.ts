@@ -24,7 +24,7 @@ vi.mock("../../jobs/job-manager.ts", () => {
 });
 
 // Mock deriveSourceDirsFromLayers to avoid fs reads
-vi.mock("../../utils/config.ts", () => ({
+vi.mock("../../shared/lib/config.ts", () => ({
   deriveSourceDirsFromLayers: vi.fn().mockResolvedValue(["src"]),
 }));
 

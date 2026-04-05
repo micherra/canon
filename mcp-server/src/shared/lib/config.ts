@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { CANON_DIR, CANON_FILES } from "../shared/constants.ts";
+import { CANON_DIR, CANON_FILES } from "../constants.ts";
 
 // Simple per-event-loop-tick cache — avoids reading config.json 3x when
 // loadLayerMappings, deriveSourceDirsFromLayers, and loadConfigNumber are called in sequence.
