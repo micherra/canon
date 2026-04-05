@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before module imports
 
-vi.mock("../../adapters/git-adapter-async.ts", () => ({
+vi.mock("../../platform/adapters/git-adapter-async.ts", () => ({
   gitExecAsync: vi.fn(),
 }));
 
@@ -13,7 +13,7 @@ vi.mock("node:fs/promises", () => ({
 // Import after mocks
 
 import { readFile } from "node:fs/promises";
-import { gitExecAsync } from "../../adapters/git-adapter-async.ts";
+import { gitExecAsync } from "../../platform/adapters/git-adapter-async.ts";
 import { computeJobFingerprint } from "../job-fingerprint.ts";
 
 const mockGitExecAsync = vi.mocked(gitExecAsync);

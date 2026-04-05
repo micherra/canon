@@ -39,7 +39,7 @@ vi.mock("node:child_process", () => ({
 
 // Import after mocks
 
-import { gitDiff, gitExec, gitLog, gitStatus } from "../adapters/git-adapter.ts";
+import { gitDiff, gitExec, gitLog, gitStatus } from "../platform/adapters/git-adapter.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;

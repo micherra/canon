@@ -11,7 +11,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { gitExec } from "../adapters/git-adapter.ts";
+import { gitExec } from "../platform/adapters/git-adapter.ts";
 
 /**
  * Escapes `${` patterns in agent-sourced text to prevent unintended

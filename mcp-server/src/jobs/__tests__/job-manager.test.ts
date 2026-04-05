@@ -22,7 +22,7 @@ vi.mock("../../jobs/job-fingerprint.ts", () => ({
 }));
 
 // Mock job-adapter to avoid real child process forking
-vi.mock("../../adapters/job-adapter.ts", () => ({
+vi.mock("../../platform/adapters/job-adapter.ts", () => ({
   forkJob: vi.fn(),
   killJob: vi.fn(),
   sendWorkerInput: vi.fn(),
@@ -44,7 +44,7 @@ vi.mock("../../graph/kg-pipeline.ts", () => ({
   }),
 }));
 
-import { forkJob, killJob, sendWorkerInput } from "../../adapters/job-adapter.ts";
+import { forkJob, killJob, sendWorkerInput } from "../../platform/adapters/job-adapter.ts";
 import { runPipeline } from "../../graph/kg-pipeline.ts";
 // Import mocked modules AFTER vi.mock declarations
 import { computeJobFingerprint } from "../../jobs/job-fingerprint.ts";

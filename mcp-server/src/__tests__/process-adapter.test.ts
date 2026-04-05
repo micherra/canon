@@ -28,7 +28,7 @@ vi.mock("node:child_process", () => ({
 
 // Import after mocks
 
-import { runShell } from "../adapters/process-adapter.ts";
+import { runShell } from "../platform/adapters/process-adapter.ts";
 
 beforeEach(() => {
   spawnSyncImpl = null;

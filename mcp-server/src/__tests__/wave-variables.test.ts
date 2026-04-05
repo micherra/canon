@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// We mock ../adapters/git-adapter.ts before importing the module under test
+// We mock ../platform/adapters/git-adapter.ts before importing the module under test
 // so that wave_diff tests can control gitExec behavior.
-vi.mock("../adapters/git-adapter.ts", () => ({
+vi.mock("../platform/adapters/git-adapter.ts", () => ({
   gitExec: vi.fn(),
 }));
 
-import { gitExec } from "../adapters/git-adapter.ts";
+import { gitExec } from "../platform/adapters/git-adapter.ts";
 import {
   escapeDollarBrace,
   extractFilePaths,
