@@ -12,7 +12,7 @@
  *   - single-source-of-truth: delegates path splitting to utils.splitFilePath
  */
 
-import { splitFilePath } from "../lib/utils";
+import { splitFilePath } from "../lib/utils.ts";
 
 interface FilePathProps {
   path: string;

@@ -21,9 +21,9 @@ import type {
   ResolvedFlow,
   TestResults,
   ViolationSeverities,
-} from "../../../domains/flows/flow-schema.ts";
-import type { FileCluster } from "../../../features/orchestration/services/diff-cluster.ts";
-import type { ToolResult } from "../../../shared/lib/tool-result.ts";
+} from "@domains/flows/flow-schema.ts";
+import type { ToolResult } from "@shared/lib/tool-result.ts";
+import type { FileCluster } from "../services/diff-cluster.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
 import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";

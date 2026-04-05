@@ -1,6 +1,6 @@
-import { analyzeDrift } from "../../../platform/storage/drift/analyzer.ts";
-import { DriftStore, type WeeklyTrendPoint } from "../../../platform/storage/drift/store.ts";
-import { loadAllPrinciples } from "../../../shared/matcher.ts";
+import { analyzeDrift } from "@platform/storage/drift/analyzer.ts";
+import { DriftStore, type WeeklyTrendPoint } from "@platform/storage/drift/store.ts";
+import { loadAllPrinciples } from "@shared/matcher.ts";
 
 export type ComplianceInput = {
   principle_id: string;

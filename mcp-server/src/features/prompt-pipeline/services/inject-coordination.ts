@@ -18,8 +18,8 @@
  * operations, all concerning coordination and observability metadata.
  */
 
-import { buildMessageInstructions } from "../../../domains/messages/messages.ts";
-import { substituteVariables } from "../../../domains/messages/variables.ts";
+import { buildMessageInstructions } from "@domains/messages/messages.ts";
+import { substituteVariables } from "@domains/messages/variables.ts";
 import type { PromptContext } from "../model/types.ts";
 
 /**

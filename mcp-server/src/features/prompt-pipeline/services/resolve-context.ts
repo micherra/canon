@@ -9,8 +9,8 @@
  * Sets ctx.skip_reason when a HITL injection is required.
  */
 
-import { escapeDollarBrace } from "../../../domains/workspaces/wave-variables.ts";
-import { resolveContextInjections } from "../../orchestration/services/inject-context.ts";
+import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
+import { resolveContextInjections } from "@features/orchestration/services/inject-context.ts";
 import type { PromptContext } from "../model/types.ts";
 
 /**

@@ -434,7 +434,7 @@ function extractVariableDecl(node: Node, ctx: WalkerContext, config: LanguageCon
 // Export statement extraction
 
 function extractExportStatement(node: Node, ctx: WalkerContext, config: LanguageConfig): void {
-  // Re-exports: export { foo } from './bar' or export * from './bar'
+  // Re-exports: export { foo } from '/bar' or export * from '/bar'
   const sourceNode = node.childForFieldName("source");
   if (sourceNode) {
     const specifier = sourceNode.text.replace(/^['"]|['"]$/g, "");

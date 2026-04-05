@@ -1,0 +1,157 @@
+import { describe, expect, it } from "vitest";
+import { assembleWaveBriefing, type WaveBriefingInput } from "../services/wave-briefing.ts";
+
+describe("assembleWaveBriefing", () => {
+  it("assembles briefing with all sections populated", () => {
+    const input: WaveBriefingInput = {
+      consultationOutputs: {
+        "advisor-1": {
+          section: "Security notes",
+          summary: "Sanitise all user input before passing to the template engine.",
+        },
+      },
+      summaries: [
+        "created src/utils/formatter.ts with formatDate helper",
+        "established a pattern of barrel exports via index.ts",
+        "found a gotcha: unexpected empty-string edge case in parser",
+      ],
+      wave: 2,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    expect(result).toContain("## Wave Briefing (from wave 2)");
+    expect(result).toContain("### New shared code");
+    expect(result).toContain("src/utils/formatter.ts");
+    expect(result).toContain("### Patterns established");
+    expect(result).toContain("barrel exports");
+    expect(result).toContain("### Gotchas");
+    expect(result).toContain("unexpected empty-string");
+    expect(result).toContain("### Security notes");
+    expect(result).toContain("Sanitise all user input");
+  });
+
+  it("omits empty sections when no matching lines are found", () => {
+    const input: WaveBriefingInput = {
+      consultationOutputs: {},
+      summaries: ["Did some work, everything went smoothly."],
+      wave: 1,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    expect(result).toContain("## Wave Briefing (from wave 1)");
+    expect(result).not.toContain("### New shared code");
+    expect(result).not.toContain("### Patterns established");
+    expect(result).not.toContain("### Gotchas");
+  });
+
+  it("includes consultation output under its declared section heading", () => {
+    const input: WaveBriefingInput = {
+      consultationOutputs: {
+        c1: {
+          section: "API decisions",
+          summary: "Use REST not GraphQL for this service.",
+        },
+        c2: {
+          section: "Performance notes",
+          summary: "Cache query results for 60 seconds.",
+        },
+      },
+      summaries: [],
+      wave: 3,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    expect(result).toContain("### API decisions");
+    expect(result).toContain("Use REST not GraphQL");
+    expect(result).toContain("### Performance notes");
+    expect(result).toContain("Cache query results");
+  });
+
+  it("handles empty summaries array — produces minimal briefing with header only", () => {
+    const input: WaveBriefingInput = {
+      consultationOutputs: {},
+      summaries: [],
+      wave: 4,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    expect(result).toContain("## Wave Briefing (from wave 4)");
+    // No body sections
+    expect(result).not.toContain("###");
+  });
+
+  it("handles empty consultationOutputs — produces briefing without consultation sections", () => {
+    const input: WaveBriefingInput = {
+      consultationOutputs: {},
+      summaries: ["added src/helpers/math.ts with add and multiply"],
+      wave: 5,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    expect(result).toContain("### New shared code");
+    expect(result).not.toContain("### API");
+    expect(result).not.toContain("### Performance");
+  });
+
+  it("truncates output exceeding ~2000 characters and appends truncation marker", () => {
+    // Generate a very long summary well over 2000 chars
+    const longLine = "created src/shared/very-long-module.ts with exports and helpers — ".repeat(
+      50,
+    );
+    const input: WaveBriefingInput = {
+      consultationOutputs: {},
+      summaries: [longLine],
+      wave: 6,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    expect(result.length).toBeLessThanOrEqual(2000 + "\n\n[Briefing truncated]".length);
+    expect(result).toContain("[Briefing truncated]");
+  });
+
+  it("preserves pre-escaped \\${...} in input without double-escaping or stripping", () => {
+    // The caller is responsible for escaping. Simulate already-escaped input.
+    const input: WaveBriefingInput = {
+      consultationOutputs: {
+        c1: {
+          section: "Injection safety",
+          summary: "Variable \\${user_input} is safely escaped.",
+        },
+      },
+      summaries: ["created src/template.ts — value is \\${foo} not expanded"],
+      wave: 7,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    // The escaped pattern must survive unchanged
+    expect(result).toContain("\\${foo}");
+    expect(result).toContain("\\${user_input}");
+    // Must NOT double-escape (i.e., \\\\${...} should not appear)
+    expect(result).not.toContain("\\\\${");
+  });
+
+  it("omits consultation output that has no section key", () => {
+    const input: WaveBriefingInput = {
+      consultationOutputs: {
+        "no-section": {
+          // section is intentionally absent
+          summary: "This output has no section heading.",
+        },
+      },
+      summaries: [],
+      wave: 8,
+    };
+
+    const result = assembleWaveBriefing(input);
+
+    // The summary text should not appear as a floating section
+    expect(result).not.toContain("This output has no section heading.");
+  });
+});

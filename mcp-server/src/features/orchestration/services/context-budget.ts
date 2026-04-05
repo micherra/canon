@@ -8,7 +8,7 @@
  * rather than throwing or returning 0.
  */
 
-import type { Session } from "../../../domains/flows/flow-schema.ts";
+import type { Session } from "@domains/flows/flow-schema.ts";
 
 const TIER_CAPS: Record<Session["tier"], number> = {
   large: 30,

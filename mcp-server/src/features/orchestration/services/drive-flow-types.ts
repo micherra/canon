@@ -5,8 +5,8 @@
  * DriveFlowInput: validated input for the drive_flow tool.
  */
 
+import { ResolvedFlowSchema } from "@domains/flows/flow-schema.ts";
 import { z } from "zod";
-import { ResolvedFlowSchema } from "../../../domains/flows/flow-schema.ts";
 
 // SpawnRequest — one agent spawn instruction
 

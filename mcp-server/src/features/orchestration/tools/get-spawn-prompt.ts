@@ -10,15 +10,15 @@
  * Canon: functions-do-one-thing — getSpawnPrompt does one thing: delegate.
  */
 
-import type { SpawnPromptInput } from "../../prompt-pipeline/model/types.ts";
-import { assemblePrompt } from "../../prompt-pipeline/tools/assemble-prompt.ts";
+import type { SpawnPromptInput } from "@features/prompt-pipeline/model/types.ts";
+import { assemblePrompt } from "@features/prompt-pipeline/tools/assemble-prompt.ts";
 
 // Re-export canonical types so existing callers need no import changes.
 export type {
   SpawnPromptEntry,
   SpawnPromptResult,
   TaskItem,
-} from "../../prompt-pipeline/model/types.ts";
+} from "@features/prompt-pipeline/model/types.ts";
 
 export { assemblePrompt };
 

@@ -6,12 +6,12 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import type { Effect, StateDefinition } from "@domains/flows/flow-schema.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { DriftStore } from "@platform/storage/drift/store.ts";
+import { generateId } from "@shared/lib/id.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 import { z } from "zod";
-import type { Effect, StateDefinition } from "../../../domains/flows/flow-schema.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { DriftStore } from "../../../platform/storage/drift/store.ts";
-import { generateId } from "../../../shared/lib/id.ts";
-import type { ReviewEntry } from "../../../shared/schema.ts";
 import { evaluatePostconditions, resolvePostconditions } from "../services/contract-checker.ts";
 
 /** Zod schema for validating REVIEW.meta.json structure before using it. */
@@ -125,7 +125,7 @@ async function checkPostconditions(
   // Read the board to get base_commit and discovered_postconditions
   let baseCommit: string | undefined;
   let discoveredPostconditions:
-    | import("../../../domains/flows/flow-schema.ts").PostconditionAssertion[]
+    | import("@domains/flows/flow-schema.ts").PostconditionAssertion[]
     | undefined;
 
   try {

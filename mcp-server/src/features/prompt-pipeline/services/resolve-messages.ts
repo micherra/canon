@@ -10,8 +10,8 @@
  * channel has no messages.
  */
 
-import { readChannelAsContext } from "../../../domains/messages/messages.ts";
-import { escapeDollarBrace } from "../../../domains/workspaces/wave-variables.ts";
+import { readChannelAsContext } from "@domains/messages/messages.ts";
+import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import type { PromptContext } from "../model/types.ts";
 
 /**

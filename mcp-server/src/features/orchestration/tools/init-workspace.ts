@@ -7,20 +7,20 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { initBoard } from "../../../domains/board/board.ts";
-import { loadAndResolveFlow } from "../../../domains/flows/flow-parser.ts";
-import type { Board, Session } from "../../../domains/flows/flow-schema.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
+import { initBoard } from "@domains/board/board.ts";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
+import type { Board, Session } from "@domains/flows/flow-schema.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
   checkSlugCollision,
   initWorkspace as createWorkspace,
   generateSlug,
   sanitizeBranch,
-} from "../../../domains/workspaces/workspace.ts";
-import { KgQuery } from "../../../graph/kg-query.ts";
-import { initDatabase } from "../../../graph/kg-schema.ts";
-import { gitStatus, gitWorktreeAdd } from "../../../platform/adapters/git-adapter.ts";
-import { CANON_DIR, CANON_FILES } from "../../../shared/constants.ts";
+} from "@domains/workspaces/workspace.ts";
+import { KgQuery } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { gitStatus, gitWorktreeAdd } from "@platform/adapters/git-adapter.ts";
+import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 
 type InitWorkspaceInput = {
   flow_name: string;

@@ -11,8 +11,8 @@ import type {
   StatusHistoryEntry,
   StuckWhen,
   ViolationHistoryEntry,
-} from "../../../domains/flows/flow-schema.ts";
-import { STATUS_ALIASES } from "../../../domains/flows/flow-schema.ts";
+} from "@domains/flows/flow-schema.ts";
+import { STATUS_ALIASES } from "@domains/flows/flow-schema.ts";
 
 /**
  * Lowercase the input and apply alias mapping to produce a normalized

@@ -11,8 +11,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type Database from "better-sqlite3";
-import { CANON_FILES } from "../../shared/constants.ts";
 import type {
   Board,
   BoardStateEntry,
@@ -20,8 +18,10 @@ import type {
   Session,
   StuckWhen,
   WaveEvent,
-} from "../flows/flow-schema.ts";
-import { validateEventPayload } from "../messages/events.ts";
+} from "@domains/flows/flow-schema.ts";
+import { validateEventPayload } from "@domains/messages/events.ts";
+import { CANON_FILES } from "@shared/constants.ts";
+import type Database from "better-sqlite3";
 import { initExecutionDb } from "./execution-schema.ts";
 
 // Row types (internal — not exported; callers receive typed objects)

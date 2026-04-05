@@ -17,16 +17,16 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Board, ResolvedFlow } from "../../domains/flows/flow-schema.ts";
 
 // Module mocks — must be hoisted to top of file
 
-vi.mock("../../platform/adapters/git-adapter.ts", () => ({
+vi.mock("@platform/adapters/git-adapter.ts", () => ({
   gitLog: vi.fn(),
 }));
 
-vi.mock("../../platform/storage/drift/store.ts", () => ({
+vi.mock("@platform/storage/drift/store.ts", () => ({
   DriftStore: vi.fn(function () {
     return {
       getReviewsForFiles: vi.fn().mockResolvedValue([]),
@@ -34,7 +34,7 @@ vi.mock("../../platform/storage/drift/store.ts", () => ({
   }),
 }));
 
-vi.mock("../../features/orchestration/services/scope-resolver.ts", () => ({
+vi.mock("@features/orchestration/services/scope-resolver.ts", () => ({
   resolveTaskScope: vi.fn(),
 }));
 
@@ -43,10 +43,10 @@ vi.mock("../../features/orchestration/services/scope-resolver.ts", () => ({
 import {
   assembleEnrichment,
   type EnrichmentInput,
-} from "../../features/orchestration/services/context-enrichment.ts";
-import { resolveTaskScope } from "../../features/orchestration/services/scope-resolver.ts";
-import { gitLog } from "../../platform/adapters/git-adapter.ts";
-import { DriftStore } from "../../platform/storage/drift/store.ts";
+} from "@features/orchestration/services/context-enrichment.ts";
+import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
+import { gitLog } from "@platform/adapters/git-adapter.ts";
+import { DriftStore } from "@platform/storage/drift/store.ts";
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {

@@ -10,12 +10,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Board } from "@domains/flows/flow-schema.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Board } from "../../domains/flows/flow-schema.ts";
 
 // We test resolveTaskScope via a workspace with temp dirs and board objects
 
-import { resolveTaskScope } from "../../features/orchestration/services/scope-resolver.ts";
+import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 
 function makeBoard(overrides: Partial<Board> = {}): Board {
   return {

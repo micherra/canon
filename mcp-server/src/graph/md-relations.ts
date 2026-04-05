@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { GraphEdge } from "../features/knowledge-graph/tools/codebase-graph.ts";
-import { isNotFound } from "../shared/lib/errors.ts";
-import { toPosix } from "../shared/lib/paths.ts";
-import { parseFrontmatter } from "../shared/parser.ts";
+import type { GraphEdge } from "@features/knowledge-graph/tools/codebase-graph.ts";
+import { isNotFound } from "@shared/lib/errors.ts";
+import { toPosix } from "@shared/lib/paths.ts";
+import { parseFrontmatter } from "@shared/parser.ts";
 
 // ── Types ──
 

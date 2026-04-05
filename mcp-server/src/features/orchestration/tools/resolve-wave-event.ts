@@ -1,6 +1,6 @@
-import { flowEventBus } from "../../../domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { resolveEventAgents } from "../../../domains/workspaces/wave-events.ts";
+import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { resolveEventAgents } from "@domains/workspaces/wave-events.ts";
 
 export type ResolveWaveEventInput = {
   workspace: string;
@@ -63,7 +63,7 @@ export async function resolveWaveEvent(
 
   // Emit wave_event_resolved (best-effort — same pattern as inject-wave-event.ts)
   const onWaveEventResolved = (
-    e: import("../../../domains/messages/events.js").FlowEventMap["wave_event_resolved"],
+    e: import("@domains/messages/events.js").FlowEventMap["wave_event_resolved"],
   ) => {
     try {
       store.appendEvent("wave_event_resolved", e as Record<string, unknown>);

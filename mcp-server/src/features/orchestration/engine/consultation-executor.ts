@@ -13,8 +13,8 @@
  * but this module does not enforce it.
  */
 
-import type { ConsultationResult, ResolvedFlow } from "../../../domains/flows/flow-schema.ts";
-import { substituteVariables } from "../../../domains/messages/variables.ts";
+import type { ConsultationResult, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import { substituteVariables } from "@domains/messages/variables.ts";
 
 export type ConsultationInput = {
   consultationNames: string[];

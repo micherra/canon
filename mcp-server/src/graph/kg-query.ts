@@ -6,8 +6,8 @@
  * performance. All operations are purely SELECT — no mutations here.
  */
 
+import { LAYER_CENTRALITY } from "@shared/constants.ts";
 import type Database from "better-sqlite3";
-import { LAYER_CENTRALITY } from "../shared/constants.ts";
 import type {
   BlastRadiusResult,
   CallerResult,

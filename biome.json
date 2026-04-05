@@ -159,6 +159,16 @@
       }
     },
     {
+      "includes": ["mcp-server/src/**/*.{ts,tsx,js,jsx,mts,cts,cjs,mjs}"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUndeclaredDependencies": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["mcp-server/src/ui/**/*.{ts,tsx,js,jsx}"],
       "linter": {
         "rules": {

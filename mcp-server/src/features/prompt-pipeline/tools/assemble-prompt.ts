@@ -9,9 +9,9 @@
  * 9-stage complexity. Callers see one function, not nine.
  */
 
-import type { Board } from "../../../domains/flows/flow-schema.ts";
-import { evaluateSkipWhen } from "../../../domains/flows/skip-when.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
+import type { Board } from "@domains/flows/flow-schema.ts";
+import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type {
   PromptContext,
   PromptStage,

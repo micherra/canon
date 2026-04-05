@@ -11,7 +11,7 @@
  *   - compose-from-small-to-large: standalone leaf; composed by CodebaseGraph.svelte
  */
 
-import type { GraphNode } from "../lib/types";
+import type { GraphNode } from "../lib/types.ts";
 
 // ── Props ─────────────────────────────────────────────────────────────────
 

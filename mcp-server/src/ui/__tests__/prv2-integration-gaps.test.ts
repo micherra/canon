@@ -37,8 +37,8 @@ const uiDir = join(__dirname, "..");
 // ── Pure function imports ────────────────────────────────────────────────────
 
 // buildFileViolationMap lives in src/ — import via relative path from ui/__tests__
-import { buildFileViolationMap } from "../../features/pr-review/tools/pr-review-data.ts";
-import type { ReviewEntry } from "../../shared/schema.ts";
+import { buildFileViolationMap } from "@features/pr-review/tools/pr-review-data.ts";
+import type { ReviewEntry } from "@shared/schema.ts";
 import {
   type Cluster,
   type ClusterInput,
@@ -547,7 +547,7 @@ describe("SEVERITY_COLORS contract (cross-task: constants → ViolationCard)", (
     const path = join(uiDir, "components/ViolationCard.svelte");
     const content = readFileSync(path, "utf-8");
     expect(content).toContain("getSeverityColor");
-    expect(content).toContain("../lib/utils");
+    expect(content).toContain("../lib/utils.ts");
   });
 
   it("ViolationCard.svelte passes severity to getSeverityColor for the severity pill color", () => {

@@ -8,7 +8,7 @@
  * Warns when CANON_PLUGIN_ROOT is empty but template is declared.
  */
 
-import { buildTemplateInjection } from "../../../domains/messages/variables.ts";
+import { buildTemplateInjection } from "@domains/messages/variables.ts";
 import type { PromptContext } from "../model/types.ts";
 
 /**

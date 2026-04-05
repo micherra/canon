@@ -1,7 +1,7 @@
-import type { WaveEvent, WaveEventType } from "../../../domains/flows/flow-schema.ts";
-import { flowEventBus } from "../../../domains/messages/event-bus-instance.ts";
-import { getExecutionStore } from "../../../domains/workspaces/execution-store.ts";
-import { generateId } from "../../../shared/lib/id.ts";
+import type { WaveEvent, WaveEventType } from "@domains/flows/flow-schema.ts";
+import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { generateId } from "@shared/lib/id.ts";
 
 export type InjectWaveEventInput = {
   workspace: string;
@@ -57,7 +57,7 @@ export async function injectWaveEvent(input: InjectWaveEventInput): Promise<Inje
 
   // Emit wave_event_injected (best-effort — same pattern as update-board.ts)
   const onWaveEventInjected = (
-    e: import("../../../domains/messages/events.js").FlowEventMap["wave_event_injected"],
+    e: import("@domains/messages/events.js").FlowEventMap["wave_event_injected"],
   ) => {
     try {
       store.appendEvent("wave_event_injected", e as Record<string, unknown>);

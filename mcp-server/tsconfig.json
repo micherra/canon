@@ -6,8 +6,21 @@
 
     "outDir": "dist",
     "rootDir": "src",
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"],
+      "@app/*": ["app/*"],
+      "@domains/*": ["domains/*"],
+      "@features/*": ["features/*"],
+      "@graph/*": ["graph/*"],
+      "@platform/*": ["platform/*"],
+      "@shared/*": ["shared/*"],
+      "@tests/*": ["tests/*"],
+      "@ui/*": ["ui/*"]
+    },
 
     "strict": true,
+    "ignoreDeprecations": "6.0",
 
     "esModuleInterop": true,
     "skipLibCheck": true,

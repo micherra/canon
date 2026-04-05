@@ -1,5 +1,4 @@
 import { EventEmitter } from "node:events";
-import { z } from "zod";
 import type {
   ConcernEntry,
   GateResult,
@@ -7,7 +6,8 @@ import type {
   PostconditionResult,
   TestResults,
   ViolationSeverities,
-} from "../flows/flow-schema.ts";
+} from "@domains/flows/flow-schema.ts";
+import { z } from "zod";
 
 export type FlowEventType =
   | "state_entered"

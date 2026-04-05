@@ -121,7 +121,7 @@ npm start
 npm test
 ```
 
-Tests live in `src/__tests__/`. The test suite uses Vitest and runs against the TypeScript source directly via `tsx`.
+Tests are colocated under feature/domain/module `__tests__/` directories in `src/`, with shared helpers in `src/tests/helpers/`. The test suite uses Vitest and runs against the TypeScript source directly via `tsx`.
 
 ## Environment variables
 

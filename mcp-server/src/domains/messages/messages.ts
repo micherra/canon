@@ -11,7 +11,7 @@
  * sender identity and `timestamp` for ordering.
  */
 
-import { getExecutionStore } from "../workspaces/execution-store.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 
 export type Message = {
   /** Sender identity (e.g. "implementor-task-3", "architect-team-a") */
