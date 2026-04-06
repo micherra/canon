@@ -65,6 +65,20 @@ You will be assigned one of these dimensions:
 - Note areas where the task description is ambiguous
 - Document assumptions that need validation
 
+## Surface Your Assumptions
+
+Before finalizing findings, explicitly list the assumptions that shaped your research (agent-surface-assumptions). Include this block near the top of your findings document, immediately after the summary:
+
+```
+ASSUMPTIONS:
+1. [assumption about requirements]
+2. [assumption about architecture]
+3. [assumption about constraints]
+→ These assumptions shape everything below. Correct them before proceeding.
+```
+
+Why this matters: the architect and user read your findings to make decisions. If an assumption is wrong, every finding built on it is wrong. Surfacing assumptions at the top makes HITL checkpoints actionable — the user can correct wrong assumptions before the architect builds on them.
+
 ## What You Must NOT Do
 
 - **Do not recommend an approach.** No "I recommend...", "The best approach would be...", "You should..."
@@ -73,8 +87,6 @@ You will be assigned one of these dimensions:
 - **Do not say what the new code "should" look like.** Document what exists and what's relevant — full stop
 
 ## Output Format
-
-**Surface your assumptions** (agent-surface-assumptions) — include an `ASSUMPTIONS:` block immediately after the summary in your findings document.
 
 Save findings to the specified output path (provided by the orchestrator). The orchestrator **must** provide the research-finding template path. Read the template first and follow its structure exactly (see agent-template-required rule). If no template path is provided, report `NEEDS_CONTEXT` — do not fall back to an ad-hoc format.
 
