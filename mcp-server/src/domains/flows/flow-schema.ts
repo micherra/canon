@@ -285,6 +285,7 @@ export const FragmentIncludeSchema = z.object({
 });
 
 export const FlowDefinitionSchema = z.object({
+  allowed_insertions: z.array(z.string()).optional(),
   debate: DebateConfigSchema.optional(),
   description: z.string(),
   entry: z.string().optional(),

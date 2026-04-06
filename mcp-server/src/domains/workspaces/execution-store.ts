@@ -243,6 +243,7 @@ export class ExecutionStore {
   private stmtAppendMessage!: Database.Statement;
   private stmtGetMessages!: Database.Statement;
   private stmtGetMessagesSince!: Database.Statement;
+  private stmtGetMessagesSinceId!: Database.Statement;
   private stmtHasMessages!: Database.Statement;
 
   // ---- Wave event statements ----
@@ -385,6 +386,9 @@ export class ExecutionStore {
     this.stmtGetMessages = db.prepare(`SELECT * FROM messages WHERE channel = ? ORDER BY id ASC`);
     this.stmtGetMessagesSince = db.prepare(
       `SELECT * FROM messages WHERE channel = ? AND timestamp > ? ORDER BY id ASC`,
+    );
+    this.stmtGetMessagesSinceId = db.prepare(
+      `SELECT * FROM messages WHERE channel = ? AND id > ? ORDER BY id ASC`,
     );
     this.stmtHasMessages = db.prepare(`SELECT 1 FROM messages WHERE channel = ? LIMIT 1`);
   }
@@ -833,6 +837,27 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetMessages.all(channel) as MessageRow[];
     }
+    return rows.map((r) => ({
+      channel: r.channel,
+      content: r.content,
+      id: r.id,
+      sender: r.sender,
+      timestamp: r.timestamp,
+    }));
+  }
+
+  /**
+   * Returns messages in `channel` whose numeric id is strictly greater than `sinceId`.
+   * Results are ordered ascending by id.
+   *
+   * Used by the flow-events drain for watermark-based polling:
+   * the drain stores the last processed id in `board.metadata.flow_events_watermark`
+   * and calls this method with that watermark on each poll cycle.
+   *
+   * Pass `sinceId = 0` to return all messages in the channel.
+   */
+  getMessagesSinceId(channel: string, sinceId: number): MessageOutput[] {
+    const rows = this.stmtGetMessagesSinceId.all(channel, sinceId) as MessageRow[];
     return rows.map((r) => ({
       channel: r.channel,
       content: r.content,
