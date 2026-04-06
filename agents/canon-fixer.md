@@ -102,6 +102,23 @@ Before editing, plan:
 - What tests exist for this code (check for `.test.*` or `.spec.*` files)
 - What other files need to be updated (imports, type changes, callers)
 
+**Use structured triage before writing any fix** (agent-structured-triage) — do not retry blindly:
+1. **Reproduce** — Run the failing command; capture exact error output
+2. **Localize** — Narrow to the specific file/function/line causing the failure
+3. **Reduce** — Find the minimal change that triggers the failure
+4. **Fix** — Apply the smallest change that resolves the root cause
+5. **Guard** — Add a test that would catch this regression
+
+**Before adding complexity to already-complex code, simplify first** (agent-simplify-before-extending — Chesterton's Fence):
+1. Understand *why* the complexity exists before touching it
+2. Determine if the existing complexity can be simplified to absorb the fix naturally
+3. Only extend if simplification is not possible or would break behavior
+
+Anti-rationalizations that do not justify skipping simplification:
+- "I'll simplify it later" → Complexity compounds. Later never comes. Simplify now or add to a separate task.
+- "The fix requires this complexity" → Does it? Can the existing code be reshaped first?
+- "Removing this will break things" → Understand what it breaks, then decide. Fear of removal is not justification.
+
 ### Step 5: Apply fix (mode-specific)
 
 **test-fix mode**:

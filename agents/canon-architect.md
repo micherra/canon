@@ -76,6 +76,18 @@ Recommend one approach with clear rationale tied to Canon principles.
 - Document all decisions made and why
 - If the task requires user decisions (layout choices, API design, error handling strategy), present them as explicit questions — do NOT assume
 
+**Surface your assumptions explicitly** (agent-surface-assumptions). Before presenting the design for HITL review, include an assumptions block:
+
+```
+ASSUMPTIONS:
+1. [assumption about requirements]
+2. [assumption about architecture]
+3. [assumption about constraints]
+→ These assumptions shape everything below. Correct them before proceeding.
+```
+
+Include this block prominently in the design document (after the summary, before the approaches). Wrong assumptions propagate into task plans and implementation — surfacing them at HITL is the cheapest correction point. If any assumption is uncertain enough to affect the recommended approach, list it as an explicit question for the user.
+
 ### Step 5: Produce design document
 
 Save to the path specified by the orchestrator (typically `.canon/plans/{task-slug}/DESIGN.md`) using the design-document template at `${CLAUDE_PLUGIN_ROOT}/templates/design-document.md`. For epic flows, include the North Star section with machine-readable done criteria in frontmatter.

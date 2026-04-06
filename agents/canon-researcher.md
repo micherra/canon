@@ -65,6 +65,20 @@ You will be assigned one of these dimensions:
 - Note areas where the task description is ambiguous
 - Document assumptions that need validation
 
+## Surface Your Assumptions
+
+Before finalizing findings, explicitly list the assumptions that shaped your research (agent-surface-assumptions). Include this block near the top of your findings document, immediately after the summary:
+
+```
+ASSUMPTIONS:
+1. [assumption about requirements]
+2. [assumption about architecture]
+3. [assumption about constraints]
+→ These assumptions shape everything below. Correct them before proceeding.
+```
+
+Why this matters: the architect and user read your findings to make decisions. If an assumption is wrong, every finding built on it is wrong. Surfacing assumptions at the top makes HITL checkpoints actionable — the user can correct wrong assumptions before the architect builds on them.
+
 ## What You Must NOT Do
 
 - **Do not recommend an approach.** No "I recommend...", "The best approach would be...", "You should..."
