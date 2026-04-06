@@ -49,11 +49,11 @@ describe("domain files — existence", () => {
   }
 
   it("no unexpected extra files in domains/", () => {
-    // The five canonical names are the only ones that should exist.
+    // The five canonical domain files plus the authoring template are the only ones that should exist.
     // If someone adds a file without updating the architect guidance, flag it.
     const { readdirSync } = require("node:fs");
     const files: string[] = readdirSync(DOMAINS_DIR).filter((f: string) => f.endsWith(".md"));
-    const knownNames = BUILT_IN_DOMAINS.map((d) => `${d}.md`);
+    const knownNames = [...BUILT_IN_DOMAINS.map((d) => `${d}.md`), "TEMPLATE.md"];
     const unknown = files.filter((f: string) => !knownNames.includes(f));
     expect(unknown).toEqual([]);
   });
@@ -76,25 +76,28 @@ describe("domain files — heading format", () => {
       expect(content.trimStart().startsWith("# ")).toBe(true);
     });
 
-    it(`domains/${domain}.md contains the advisory phrase "Pay attention to"`, () => {
+    it(`domains/${domain}.md contains the required section headings`, () => {
       const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
-      expect(content).toContain("Pay attention to");
+      expect(content).toContain("## Mental Models");
+      expect(content).toContain("## Decision Frameworks");
+      expect(content).toContain("## Failure Modes");
+      expect(content).toContain("## Guardrails");
     });
 
-    it(`domains/${domain}.md contains at least 4 bold checklist items`, () => {
+    it(`domains/${domain}.md contains at least 4 bold terms`, () => {
       const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
-      // Each item is formatted as "- **Topic**: description"
-      const boldItems = (content.match(/- \*\*[^*]+\*\*/g) ?? []).length;
+      // Each entry is formatted as "**Bold Term** — description" or "**Bold Term**:" (em-dash style)
+      const boldItems = (content.match(/\*\*[^*]+\*\*/g) ?? []).length;
       expect(boldItems).toBeGreaterThanOrEqual(4);
     });
   }
 });
 
-describe("domain files — approximate token budget (≤ 300 tokens ≈ 1200 chars)", () => {
+describe("domain files — approximate token budget (≤ 1750 tokens ≈ 7000 chars)", () => {
   for (const domain of BUILT_IN_DOMAINS) {
-    it(`domains/${domain}.md is concise (under 1300 characters)`, () => {
+    it(`domains/${domain}.md is concise (under 7000 characters)`, () => {
       const content = readFile(join(DOMAINS_DIR, `${domain}.md`));
-      expect(content.length).toBeLessThan(1300);
+      expect(content.length).toBeLessThan(7000);
     });
   }
 });
