@@ -23,6 +23,7 @@ import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Board, StateDefinition, WaveResult } from "@domains/flows/flow-schema.ts";
 import { runGates } from "@domains/flows/gate-runner.ts";
+import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { WaveWorktreeResult } from "@domains/workspaces/wave-lifecycle.ts";
 import {
@@ -196,6 +197,71 @@ function handleWaveResult(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Flow event channel drain (ADR-012 / fe-03)
+// ---------------------------------------------------------------------------
+
+/**
+ * Drain the flow-events channel, persist the updated watermark, and return an
+ * override action if the effect demands it (insert, skip, escalate).
+ *
+ * Returns `null` when the effect is `{ type: "none" }` — callers should proceed
+ * normally.  Returns a `ToolResult<DriveFlowAction>` for any non-none effect.
+ *
+ * Called:
+ *   1. After reportResult resolves (resolvePostReportAction / routeReportResult)
+ *   2. At the wave boundary after handlePendingWaveEvents (completeWave)
+ */
+async function applyFlowEventDrain(
+  workspace: string,
+  flow: DriveFlowInput["flow"],
+  currentStateId: string,
+  store: ReturnType<typeof getExecutionStore>,
+): Promise<ToolResult<DriveFlowAction> | null> {
+  const board = store.getBoard();
+  const watermark =
+    typeof board?.metadata?.flow_events_watermark === "number"
+      ? board.metadata.flow_events_watermark
+      : 0;
+
+  const { effect, newWatermark } = drainFlowEvents({
+    currentStateId,
+    flowDef: flow,
+    store,
+    watermark,
+    workspaceId: workspace,
+  });
+
+  // Persist the watermark whenever it advances so subsequent calls don't reprocess messages
+  if (newWatermark > watermark) {
+    const freshBoard = store.getBoard();
+    store.updateExecution({
+      metadata: { ...(freshBoard?.metadata ?? {}), flow_events_watermark: newWatermark },
+    });
+  }
+
+  if (effect.type === "none") return null;
+
+  if (effect.type === "insert") {
+    return enterStateAndBuildSpawn(workspace, flow, effect.state_id, store);
+  }
+
+  if (effect.type === "skip") {
+    return enterStateAndBuildSpawn(workspace, flow, effect.target, store);
+  }
+
+  // effect.type === "escalate"
+  return {
+    action: "hitl",
+    breakpoint: {
+      context: "",
+      ...(effect.suggested_options ? { options: effect.suggested_options } : {}),
+      reason: effect.message,
+    },
+    ok: true as const,
+  };
+}
+
 type ResolvePostReportOpts = {
   state_id: string;
   status: string;
@@ -253,8 +319,12 @@ async function resolvePostReportAction(
     };
   }
 
+  // Flow event drain — check for agent/external directives before advancing
+  const drainAction = await applyFlowEventDrain(workspace, flow, state_id, store);
+  if (drainAction !== null) return drainAction;
+
   return resolveNextStateAction(workspace, flow, {
-    board: freshBoard,
+    board: store.getBoard() ?? freshBoard,
     current_state: state_id,
     next_state,
     store,
@@ -564,6 +634,10 @@ async function routeReportResult(
     };
   }
 
+  // Flow event drain — check for agent/external directives before advancing
+  const drainAction = await applyFlowEventDrain(workspace, flow, state_id, store);
+  if (drainAction !== null) return drainAction;
+
   return resolveNextStateAction(workspace, flow, {
     board: store.getBoard()!,
     current_state: state_id,
@@ -691,6 +765,10 @@ async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveF
 
   const eventResult = handlePendingWaveEvents(store, currentWave);
   if (eventResult !== null) return eventResult;
+
+  // Flow event drain at wave boundary — check for agent/external directives
+  const drainActionWave = await applyFlowEventDrain(workspace, flow, state_id, store);
+  if (drainActionWave !== null) return drainActionWave;
 
   const nextWave = currentWave + 1;
   const nextWaveTaskIds = await resolveNextWaveTaskIds(workspace, store, nextWave);

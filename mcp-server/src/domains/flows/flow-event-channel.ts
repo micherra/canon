@@ -79,6 +79,10 @@ function reachableFrom(startId: string, states: Record<string, StateDefinition>)
       }
     }
 
+    // on_success / on_failure edges used by wave and parallel states
+    if ("on_success" in stateDef && typeof stateDef.on_success === "string") edges.push(stateDef.on_success);
+    if ("on_failure" in stateDef && typeof stateDef.on_failure === "string") edges.push(stateDef.on_failure);
+
     for (const edge of edges) {
       if (!visited.has(edge) && edge !== startId) {
         visited.add(edge);
@@ -137,16 +141,20 @@ export function drainFlowEvents(params: DrainFlowEventsParams): DrainFlowEventsR
     try {
       parsed = JSON.parse(msg.content);
     } catch {
-      console.warn(`[flow-event-channel] Skipping message id=${msg.id}: invalid JSON`);
+      store.appendEvent("flow_event_skipped", {
+        message_id: msg.id,
+        reason: "invalid JSON",
+      });
       continue;
     }
 
     const parseResult = FlowEventSchema.safeParse(parsed);
     if (!parseResult.success) {
-      console.warn(
-        `[flow-event-channel] Skipping message id=${msg.id}: schema validation failed —`,
-        parseResult.error.message,
-      );
+      store.appendEvent("flow_event_skipped", {
+        message_id: msg.id,
+        reason: "schema validation failed",
+        detail: parseResult.error.message,
+      });
       continue;
     }
 
@@ -176,6 +184,13 @@ function resolveEffect(
     case "request_state": {
       const allowed = flowDef.allowed_insertions;
       if (!allowed || !allowed.includes(event.state_id)) {
+        return { type: "none" };
+      }
+      // Guard against whitelisted state IDs that don't exist in the flow definition.
+      // Returning insert for a nonexistent state would hand the orchestrator a state
+      // it cannot enter, so we fall through to none instead.
+      const states = flowDef.states ?? {};
+      if (!(event.state_id in states)) {
         return { type: "none" };
       }
       return { type: "insert", state_id: event.state_id };

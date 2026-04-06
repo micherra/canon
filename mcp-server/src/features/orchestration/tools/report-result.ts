@@ -681,7 +681,7 @@ type ReportResultInput = {
   transcript_path?: string;
 };
 
-type LogEntry = {
+export type LogEntry = {
   state_id: string;
   status_keyword: string;
   normalized_condition: string;
@@ -716,7 +716,7 @@ type LogEntry = {
   discovered_postconditions_count?: number;
 };
 
-type ReportResultResult = {
+export type ReportResultResult = {
   transition_condition: string;
   next_state: string | null;
   board: Board;

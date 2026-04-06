@@ -32,9 +32,12 @@ function makeMsg(id: number, content: string): MessageOutput {
   return { id, channel: "flow-events", sender: "test", content, timestamp: "2026-01-01T00:00:00Z" };
 }
 
-function makeStore(messages: MessageOutput[]): Pick<ExecutionStore, "getMessagesSinceId"> {
+function makeStore(
+  messages: MessageOutput[],
+): Pick<ExecutionStore, "getMessagesSinceId" | "appendEvent"> {
   return {
     getMessagesSinceId: vi.fn((_channel: string, _sinceId: number) => messages),
+    appendEvent: vi.fn(),
   };
 }
 
@@ -76,8 +79,7 @@ describe("drainFlowEvents — no messages", () => {
 // ---------------------------------------------------------------------------
 
 describe("drainFlowEvents — malformed messages", () => {
-  it("skips invalid JSON and returns none effect", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("skips invalid JSON and emits flow_event_skipped via store.appendEvent", () => {
     const store = makeStore([makeMsg(1, "not-json{{{")]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
@@ -88,12 +90,13 @@ describe("drainFlowEvents — malformed messages", () => {
     });
     expect(result.effect.type).toBe("none");
     expect(result.newWatermark).toBe(1);
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(store.appendEvent).toHaveBeenCalledWith(
+      "flow_event_skipped",
+      expect.objectContaining({ message_id: 1, reason: "invalid JSON" }),
+    );
   });
 
-  it("skips valid JSON that fails schema validation and returns none effect", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("skips valid JSON that fails schema validation and emits flow_event_skipped via store.appendEvent", () => {
     const store = makeStore([makeMsg(2, JSON.stringify({ type: "unknown_event" }))]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
@@ -104,8 +107,10 @@ describe("drainFlowEvents — malformed messages", () => {
     });
     expect(result.effect.type).toBe("none");
     expect(result.newWatermark).toBe(2);
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+    expect(store.appendEvent).toHaveBeenCalledWith(
+      "flow_event_skipped",
+      expect.objectContaining({ message_id: 2, reason: "schema validation failed" }),
+    );
   });
 });
 
@@ -114,11 +119,19 @@ describe("drainFlowEvents — malformed messages", () => {
 // ---------------------------------------------------------------------------
 
 describe("drainFlowEvents — request_state", () => {
-  it("produces insert effect when state_id is in allowed_insertions", () => {
+  it("produces insert effect when state_id is in allowed_insertions and exists in flow states", () => {
     const store = makeStore([
       makeMsg(10, JSON.stringify({ type: "request_state", state_id: "hotfix" })),
     ]);
-    const flow = makeLinearFlow(["hotfix", "patch"]);
+    // hotfix must be defined in the flow's states for insert to be returned
+    const flow: FlowDefinition = {
+      ...makeLinearFlow(["hotfix", "patch"]),
+      states: {
+        ...makeLinearFlow(["hotfix", "patch"]).states,
+        hotfix: { type: "single", transitions: { done: "done" } },
+        patch: { type: "single", transitions: { done: "done" } },
+      },
+    };
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
       workspaceId: "ws1",
@@ -166,7 +179,13 @@ describe("drainFlowEvents — request_state", () => {
     const store = makeStore([
       makeMsg(13, JSON.stringify({ type: "request_state", state_id: "hotfix", reason: "urgent" })),
     ]);
-    const flow = makeLinearFlow(["hotfix"]);
+    const flow: FlowDefinition = {
+      ...makeLinearFlow(["hotfix"]),
+      states: {
+        ...makeLinearFlow(["hotfix"]).states,
+        hotfix: { type: "single", transitions: { done: "done" } },
+      },
+    };
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
       workspaceId: "ws1",
@@ -175,6 +194,25 @@ describe("drainFlowEvents — request_state", () => {
       watermark: 0,
     });
     expect(result.effect).toEqual({ type: "insert", state_id: "hotfix" });
+  });
+
+  it("returns none effect when state_id is in allowed_insertions but does not exist in flow states", () => {
+    // "ghost-state" is whitelisted but never defined in the flow's states map.
+    // The system must not crash and must fall through to none (no actionable insert).
+    const store = makeStore([
+      makeMsg(14, JSON.stringify({ type: "request_state", state_id: "ghost-state" })),
+    ]);
+    const flow = makeLinearFlow(["ghost-state"]);
+    // makeLinearFlow only defines start/middle/done — ghost-state is not in states
+    const result = drainFlowEvents({
+      store: store as unknown as ExecutionStore,
+      workspaceId: "ws1",
+      currentStateId: "start",
+      flowDef: flow,
+      watermark: 0,
+    });
+    expect(result.effect.type).toBe("none");
+    expect(result.newWatermark).toBe(14);
   });
 });
 
@@ -270,6 +308,58 @@ describe("drainFlowEvents — skip_ahead", () => {
       watermark: 0,
     });
     expect(result.effect).toEqual({ type: "skip", target: "branch-b", reason: "prefer-b" });
+  });
+
+  it("reaches target reachable only via on_success edge (BFS includes on_success)", () => {
+    // Wave state uses on_success → cleanup; cleanup is not reachable via transitions alone.
+    // on_success/on_failure are runtime-only fields not present in the TS schema type,
+    // so we cast through unknown to attach them for this test.
+    const flow = {
+      name: "wave-with-on-success",
+      description: "flow with on_success edge",
+      states: {
+        start: { type: "single", transitions: { next: "wave-work" } },
+        "wave-work": { type: "wave", on_success: "cleanup" },
+        cleanup: { type: "single", transitions: { done: "done" } },
+        done: { type: "terminal" },
+      },
+    } as unknown as FlowDefinition;
+    const store = makeStore([
+      makeMsg(25, JSON.stringify({ type: "skip_ahead", target: "cleanup", reason: "skip-wave" })),
+    ]);
+    const result = drainFlowEvents({
+      store: store as unknown as ExecutionStore,
+      workspaceId: "ws1",
+      currentStateId: "start",
+      flowDef: flow,
+      watermark: 0,
+    });
+    expect(result.effect).toEqual({ type: "skip", target: "cleanup", reason: "skip-wave" });
+  });
+
+  it("reaches target reachable only via on_failure edge (BFS includes on_failure)", () => {
+    // Parallel state uses on_failure → rollback; rollback is not reachable via transitions alone.
+    const flow = {
+      name: "parallel-with-on-failure",
+      description: "flow with on_failure edge",
+      states: {
+        start: { type: "single", transitions: { next: "parallel-work" } },
+        "parallel-work": { type: "parallel", on_failure: "rollback" },
+        rollback: { type: "single", transitions: { done: "done" } },
+        done: { type: "terminal" },
+      },
+    } as unknown as FlowDefinition;
+    const store = makeStore([
+      makeMsg(26, JSON.stringify({ type: "skip_ahead", target: "rollback", reason: "skip-to-rollback" })),
+    ]);
+    const result = drainFlowEvents({
+      store: store as unknown as ExecutionStore,
+      workspaceId: "ws1",
+      currentStateId: "start",
+      flowDef: flow,
+      watermark: 0,
+    });
+    expect(result.effect).toEqual({ type: "skip", target: "rollback", reason: "skip-to-rollback" });
   });
 });
 
