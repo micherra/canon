@@ -74,16 +74,6 @@ run_test "git branch -D main blocks"                  2 "$(make_input 'git branc
 echo ""
 echo "-- Canon-managed exceptions (should pass, exit 0) --"
 
-# git branch -D for canon-session/* branches
-run_test "git branch -D canon-session/main/slug-abc123 passes" \
-  0 "$(make_input 'git branch -D canon-session/main/slug-abc123')"
-
-run_test "git branch -D canon-session/feat/fix-it-a1b2c3 passes" \
-  0 "$(make_input 'git branch -D canon-session/feat/fix-it-a1b2c3')"
-
-run_test "git branch -D canon-session/any-base/any-slug passes" \
-  0 "$(make_input 'git branch -D canon-session/any-base/any-slug')"
-
 # git reset --hard within .canon/worktrees/ (via -C flag)
 run_test "git -C .canon/worktrees/slug reset --hard passes" \
   0 "$(make_input 'git -C .canon/worktrees/my-slug-abc reset --hard HEAD')"
@@ -108,9 +98,6 @@ run_test "git -C .canon/worktrees/slug checkout -- . passes" \
 echo ""
 echo "-- Precision: non-Canon branch -D still blocked --"
 
-run_test "branch named 'canon-session-fork' still blocked (not matching prefix)" \
-  2 "$(make_input 'git branch -D canon-session-fork')"
-
 run_test "reset --hard with path that is not .canon/worktrees/ still blocked" \
   2 "$(make_input 'git -C /tmp/other-path reset --hard HEAD')"
 
@@ -119,6 +106,18 @@ run_test "clean -f with path that is not .canon/worktrees/ still blocked" \
 
 run_test "checkout -- . with path that is not .canon/worktrees/ still blocked" \
   2 "$(make_input 'git -C /tmp/other-path checkout -- .')"
+
+echo ""
+echo "-- Precision: chained commands not exempted by worktree exception --"
+
+run_test "chained: worktree path then clean -f blocks" \
+  2 "$(make_input 'git -C .canon/worktrees/slug status && git clean -f')"
+
+run_test "chained: worktree path then reset --hard blocks" \
+  2 "$(make_input 'git -C .canon/worktrees/slug log && git reset --hard HEAD')"
+
+run_test "semicolon-chained: worktree path then checkout blocks" \
+  2 "$(make_input 'git -C .canon/worktrees/slug fetch; git checkout -- .')"
 
 # -----------------------------------------------------------------------
 # Summary

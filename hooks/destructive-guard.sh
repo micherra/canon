@@ -30,13 +30,15 @@ fi
 # pointing to a path that includes .canon/worktrees/.
 # ---------------------------------------------------------------------------
 is_canon_worktree_command() {
-  echo "$1" | grep -qE '\bgit\b[[:space:]]+-C[[:space:]]+[^[:space:]]*\.canon/worktrees/'
-}
-
-# Returns true (0) when a branch name in the command matches the Canon
-# session branch pattern: canon-session/<base>/<slug>
-is_canon_session_branch() {
-  echo "$1" | grep -qE '\bgit\b.*\bbranch\b.*-D[[:space:]]+canon-session/'
+  local cmd="$1"
+  # Reject chained commands — the -C .canon/worktrees/ exception applies
+  # only to a single git invocation. A chain like:
+  #   git -C .canon/worktrees/slug status && git clean -f
+  # must not exempt the trailing destructive operation.
+  if echo "$cmd" | grep -qE '(&&|\|\||;)'; then
+    return 1
+  fi
+  echo "$cmd" | grep -qE '\bgit\b[[:space:]]+-C[[:space:]]+[^[:space:]]*\.canon/worktrees/'
 }
 
 # Check for destructive git operations
@@ -78,12 +80,6 @@ EOF
 fi
 
 if echo "$COMMAND" | grep -qE '\bgit\b.*\bbranch\b.*-D\b'; then
-  # Exception: Canon session branches follow the pattern canon-session/<base>/<slug>.
-  # The orchestrator legitimately force-deletes these during workspace cleanup
-  # when the branch has diverged or the safe -d fails.
-  if is_canon_session_branch "$COMMAND"; then
-    exit 0
-  fi
   cat <<EOF >&2
 CANON: Destructive git operation detected — git branch -D. This force-deletes a branch even if it has unmerged changes.
 EOF
