@@ -26,19 +26,31 @@ fi
 # Canon-managed resource helpers
 #
 # Returns true (0) when a command targets a Canon-managed worktree path.
-# A command is Canon-worktree-scoped when it contains the git -C flag
-# pointing to a path that includes .canon/worktrees/.
+# Two cases:
+#   1. The command uses git -C pointing to a .canon/worktrees/ or
+#      .claude/worktrees/ path (agent spawning into a worktree).
+#   2. The current working directory is itself inside a worktree
+#      (orchestrator or user running inside a worktree session).
 # ---------------------------------------------------------------------------
 is_canon_worktree_command() {
   local cmd="$1"
-  # Reject chained commands — the -C .canon/worktrees/ exception applies
-  # only to a single git invocation. A chain like:
+  # Reject chained commands — the worktree exception applies only to a
+  # single git invocation. A chain like:
   #   git -C .canon/worktrees/slug status && git clean -f
   # must not exempt the trailing destructive operation.
   if echo "$cmd" | grep -qE '(&&|\|\||;)'; then
     return 1
   fi
-  echo "$cmd" | grep -qE '\bgit\b[[:space:]]+-C[[:space:]]+[^[:space:]]*\.canon/worktrees/'
+  # Case 1: explicit -C flag pointing to a worktree path
+  if echo "$cmd" | grep -qE '\bgit\b[[:space:]]+-C[[:space:]]+[^[:space:]]*\.(canon|claude)/worktrees/'; then
+    return 0
+  fi
+  # Case 2: current working directory is inside a worktree
+  local cwd="${CANON_GUARD_CWD:-$PWD}"
+  if echo "$cwd" | grep -qE '\.(canon|claude)/worktrees/'; then
+    return 0
+  fi
+  return 1
 }
 
 # Check for destructive git operations
