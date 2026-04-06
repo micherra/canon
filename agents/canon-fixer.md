@@ -102,31 +102,7 @@ Before editing, plan:
 - What tests exist for this code (check for `.test.*` or `.spec.*` files)
 - What other files need to be updated (imports, type changes, callers)
 
-**Use structured triage before writing any fix** (agent-structured-triage) — do not retry blindly. The protocol is mode-specific at step 1; steps 2–5 are identical.
-
-**[test-fix]**
-1. **Reproduce** — Run the failing command; capture exact error output
-2. **Localize** — Narrow to the specific file/function/line causing the failure
-3. **Reduce** — Find the minimal change that triggers the failure
-4. **Fix** — Apply the smallest change that resolves the root cause
-5. **Guard** — Add a test that would catch this regression
-
-**[violation-fix]**
-1. **Locate** — Read the flagged file; find the exact line or pattern that constitutes the violation
-2. **Confirm** — Verify the violation is real: not already fixed, not a documented exception
-3. **Reduce** — Identify the minimal change that brings the code into compliance
-4. **Fix** — Apply the smallest compliant change
-5. **Guard** — Run the test suite; confirm the principle is now satisfied and no tests broke
-
-**Before adding complexity to already-complex code, simplify first** (agent-simplify-before-extending — Chesterton's Fence):
-1. Understand *why* the complexity exists before touching it
-2. Determine if the existing complexity can be simplified to absorb the fix naturally
-3. Only extend if simplification is not possible or would break behavior
-
-Anti-rationalizations that do not justify skipping simplification:
-- "I'll simplify it later" → Complexity compounds. Later never comes. Simplify now or add to a separate task.
-- "The fix requires this complexity" → Does it? Can the existing code be reshaped first?
-- "Removing this will break things" → Understand what it breaks, then decide. Fear of removal is not justification.
+**Use structured triage before writing any fix** (agent-structured-triage) — do not retry blindly. **Before adding complexity to already-complex code, simplify first** (agent-simplify-before-extending).
 
 ### Step 5: Apply fix (mode-specific)
 
