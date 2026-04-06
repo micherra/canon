@@ -22,8 +22,31 @@ if [[ -z "$COMMAND" ]]; then
   exit 0
 fi
 
+# ---------------------------------------------------------------------------
+# Canon-managed resource helpers
+#
+# Returns true (0) when a command targets a Canon-managed worktree path.
+# A command is Canon-worktree-scoped when it contains the git -C flag
+# pointing to a path that includes .canon/worktrees/.
+# ---------------------------------------------------------------------------
+is_canon_worktree_command() {
+  echo "$1" | grep -qE '\bgit\b[[:space:]]+-C[[:space:]]+[^[:space:]]*\.canon/worktrees/'
+}
+
+# Returns true (0) when a branch name in the command matches the Canon
+# session branch pattern: canon-session/<base>/<slug>
+is_canon_session_branch() {
+  echo "$1" | grep -qE '\bgit\b.*\bbranch\b.*-D[[:space:]]+canon-session/'
+}
+
 # Check for destructive git operations
 if echo "$COMMAND" | grep -qE '\bgit\b.*\breset\b.*--hard'; then
+  # Exception: Canon agents use -C .canon/worktrees/<slug> to scope resets
+  # to their isolated worktree. These are Canon-managed paths, not the
+  # user's working tree.
+  if is_canon_worktree_command "$COMMAND"; then
+    exit 0
+  fi
   cat <<EOF >&2
 CANON: Destructive git operation detected — git reset --hard. This discards all uncommitted changes and cannot be undone. Ensure you have committed or stashed any work you want to keep.
 EOF
@@ -31,6 +54,11 @@ EOF
 fi
 
 if echo "$COMMAND" | grep -qE '\bgit\b.*\bclean\b.*-[a-zA-Z]*f'; then
+  # Exception: Canon agents use -C .canon/worktrees/<slug> to scope clean
+  # operations to their isolated worktree.
+  if is_canon_worktree_command "$COMMAND"; then
+    exit 0
+  fi
   cat <<EOF >&2
 CANON: Destructive git operation detected — git clean -f. This permanently deletes untracked files. Ensure no important untracked files will be lost.
 EOF
@@ -38,6 +66,11 @@ EOF
 fi
 
 if echo "$COMMAND" | grep -qE '\bgit\b.*\bcheckout\b.*--\s*\.'; then
+  # Exception: Canon agents use -C .canon/worktrees/<slug> to scope
+  # checkout operations to their isolated worktree.
+  if is_canon_worktree_command "$COMMAND"; then
+    exit 0
+  fi
   cat <<EOF >&2
 CANON: Destructive git operation detected — git checkout -- . This discards all unstaged changes in the working tree and cannot be undone.
 EOF
@@ -45,6 +78,12 @@ EOF
 fi
 
 if echo "$COMMAND" | grep -qE '\bgit\b.*\bbranch\b.*-D\b'; then
+  # Exception: Canon session branches follow the pattern canon-session/<base>/<slug>.
+  # The orchestrator legitimately force-deletes these during workspace cleanup
+  # when the branch has diverged or the safe -d fails.
+  if is_canon_session_branch "$COMMAND"; then
+    exit 0
+  fi
   cat <<EOF >&2
 CANON: Destructive git operation detected — git branch -D. This force-deletes a branch even if it has unmerged changes.
 EOF
