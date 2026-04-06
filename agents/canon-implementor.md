@@ -81,6 +81,8 @@ If the plan has no `### Tests to write` section, write at minimum:
 - One happy-path test per new public function/endpoint
 - One error-case test per error branch (especially if `errors-are-values` applies)
 
+**When a test fails or the build breaks, use structured triage** (agent-structured-triage) — do not retry blindly. **Before adding complexity to already-complex code, simplify first** (agent-simplify-before-extending).
+
 **Commit incrementally.** After each meaningful unit of work passes its tests, commit:
 
 ```

@@ -102,6 +102,8 @@ Before editing, plan:
 - What tests exist for this code (check for `.test.*` or `.spec.*` files)
 - What other files need to be updated (imports, type changes, callers)
 
+**Use structured triage before writing any fix** (agent-structured-triage) — do not retry blindly. **Before adding complexity to already-complex code, simplify first** (agent-simplify-before-extending).
+
 ### Step 5: Apply fix (mode-specific)
 
 **test-fix mode**:
