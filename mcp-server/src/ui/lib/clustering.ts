@@ -8,10 +8,6 @@
  * zero backend coupling, independently testable.
  */
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export type ClusterInput = {
   path: string;
   status: "added" | "modified" | "deleted" | "renamed";
@@ -25,10 +21,6 @@ export type Cluster = {
   description: string;
   files: ClusterInput[];
 };
-
-// ---------------------------------------------------------------------------
-// Helpers — each does one thing
-// ---------------------------------------------------------------------------
 
 /**
  * Extracts the basename from a path (last path segment, minus extension).
@@ -157,10 +149,6 @@ export function clusterIcon(type: Cluster["type"]): string {
       return "⚠";
   }
 }
-
-// ---------------------------------------------------------------------------
-// Clustering steps (each step operates on remaining unclustered files)
-// ---------------------------------------------------------------------------
 
 /**
  * Step 1: New feature clusters.
@@ -422,10 +410,6 @@ function splitLargeClusters(clusters: Cluster[]): Cluster[] {
 
   return result;
 }
-
-// ---------------------------------------------------------------------------
-// Main export
-// ---------------------------------------------------------------------------
 
 /**
  * Groups a flat list of changed files into coherent change story clusters.

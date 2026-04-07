@@ -21,6 +21,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import type { Board, StateDefinition, WaveResult } from "@domains/flows/flow-schema.ts";
 import { runGates } from "@domains/flows/gate-runner.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -163,7 +164,7 @@ type HandleWaveResultOpts = {
   state_id: string;
   task_id: string | undefined;
   status: string;
-  artifacts: unknown;
+  artifacts: string[] | undefined;
   store: ReturnType<typeof getExecutionStore>;
   /** Actual branch used by the agent's worktree (e.g. "worktree-agent-*"). */
   worktree_branch?: string;
@@ -183,7 +184,7 @@ function handleWaveResult(
       flow,
       state_id,
       store,
-      task_artifacts: artifacts as string[] | undefined,
+      task_artifacts: artifacts,
       task_id,
       task_status: status,
       workspace,
@@ -196,13 +197,120 @@ function handleWaveResult(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Flow event channel drain (ADR-012 / fe-03)
+// ---------------------------------------------------------------------------
+
+/**
+ * Drain the flow-events channel, persist the updated watermark, and return an
+ * override action if the effect demands it (insert, skip, escalate).
+ *
+ * Returns `null` when the effect is `{ type: "none" }` — callers should proceed
+ * normally.  Returns a `ToolResult<DriveFlowAction>` for any non-none effect.
+ *
+ * Called:
+ *   1. After reportResult resolves (resolvePostReportAction / routeReportResult)
+ *   2. At the wave boundary after handlePendingWaveEvents (completeWave)
+ *
+ * @param resumeStateId - The state to return to after the inserted state completes ("done").
+ *   Pass `reportOut.next_state` from the calling context, or `null` at the wave boundary.
+ */
+type ApplyFlowEventDrainOpts = {
+  workspace: string;
+  flow: DriveFlowInput["flow"];
+  currentStateId: string;
+  store: ReturnType<typeof getExecutionStore>;
+  resumeStateId: string | null;
+};
+
+async function applyFlowEventDrain(
+  opts: ApplyFlowEventDrainOpts,
+): Promise<ToolResult<DriveFlowAction> | null> {
+  const { workspace, flow, currentStateId, store, resumeStateId } = opts;
+  const board = store.getBoard();
+  const watermark =
+    typeof board?.metadata?.flow_events_watermark === "number"
+      ? board.metadata.flow_events_watermark
+      : 0;
+
+  const { effect, newWatermark } = drainFlowEvents({
+    currentStateId,
+    flowDef: flow,
+    store,
+    watermark,
+  });
+
+  // Persist the watermark whenever it advances so subsequent calls don't reprocess messages
+  if (newWatermark > watermark) {
+    const freshBoard = store.getBoard();
+    store.updateExecution({
+      metadata: { ...(freshBoard?.metadata ?? {}), flow_events_watermark: newWatermark },
+    });
+  }
+
+  if (effect.type === "none") return null;
+
+  if (effect.type === "insert") {
+    const spawnAction = await enterStateAndBuildSpawn(workspace, flow, effect.state_id, store);
+    // Persist the return address so that when the inserted state completes with "done",
+    // the flow resumes at resumeStateId instead of the inserted state's own transition target.
+    if (resumeStateId !== null) {
+      const insertedEntry = store.getState(effect.state_id);
+      store.upsertState(effect.state_id, {
+        entries: insertedEntry?.entries ?? 1,
+        inserted_return_to: resumeStateId,
+        status: insertedEntry?.status ?? "in_progress",
+      });
+    }
+    return spawnAction;
+  }
+
+  if (effect.type === "skip") {
+    return enterStateAndBuildSpawn(workspace, flow, effect.target, store);
+  }
+
+  // effect.type === "escalate"
+  return {
+    action: "hitl",
+    breakpoint: {
+      context: "",
+      ...(effect.suggested_options ? { options: effect.suggested_options } : {}),
+      reason: effect.message,
+    },
+    ok: true as const,
+  };
+}
+
 type ResolvePostReportOpts = {
   state_id: string;
   status: string;
-  artifacts: unknown;
+  artifacts: string[] | undefined;
   reportOut: Awaited<ReturnType<typeof reportResult>> & { ok: true };
   store: ReturnType<typeof getExecutionStore>;
 };
+
+function buildApprovalAction(
+  completedDef: StateDefinition | undefined,
+  artifacts: string[] | undefined,
+  state_id: string,
+  status: string,
+): ToolResult<DriveFlowAction> {
+  return {
+    action: "approval" as const,
+    breakpoint: {
+      agent_type: completedDef?.agent ?? completedDef?.type ?? "unknown",
+      artifacts: artifacts ?? [],
+      options: ["approved", "revise", "reject"] as const,
+      state_id,
+      summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
+    },
+    ok: true as const,
+  };
+}
+
+function isParallelWaitState(def: StateDefinition | undefined): boolean {
+  return def?.type === "parallel" || def?.type === "parallel-per";
+}
 
 /** Check post-report conditions and return the appropriate action. */
 async function resolvePostReportAction(
@@ -229,34 +337,37 @@ async function resolvePostReportAction(
     };
   }
 
-  // Parallel wait guard
   const completedDef = flow.states[state_id];
-  if (
-    next_state === state_id &&
-    (completedDef?.type === "parallel" || completedDef?.type === "parallel-per")
-  ) {
+
+  if (next_state === state_id && isParallelWaitState(completedDef)) {
     return { action: "spawn", ok: true as const, requests: [] };
   }
 
-  // Approval gate
   if (!isApprovalDecisionStatus(status) && shouldApprovalGate(completedDef, flow, freshBoard)) {
-    return {
-      action: "approval" as const,
-      breakpoint: {
-        agent_type: completedDef?.agent ?? completedDef?.type ?? "unknown",
-        artifacts: (artifacts as string[] | undefined) ?? [],
-        options: ["approved", "revise", "reject"] as const,
-        state_id,
-        summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
-      },
-      ok: true as const,
-    };
+    return buildApprovalAction(completedDef, artifacts, state_id, status);
   }
 
+  // Flow event drain — check for agent/external directives before advancing.
+  // Pass next_state as resumeStateId so an inserted state can return here when done.
+  const drainAction = await applyFlowEventDrain({
+    currentStateId: state_id,
+    flow,
+    resumeStateId: next_state ?? null,
+    store,
+    workspace,
+  });
+  if (drainAction !== null) return drainAction;
+
+  // Return-address semantics: if this state was inserted and completed with "done",
+  // resume at the stored return address instead of the state's own transition target.
+  const returnAddress = store.getState(state_id)?.inserted_return_to;
+  const effectiveNextState =
+    returnAddress && reportOut.transition_condition === "done" ? returnAddress : next_state;
+
   return resolveNextStateAction(workspace, flow, {
-    board: freshBoard,
+    board: store.getBoard() ?? freshBoard,
     current_state: state_id,
-    next_state,
+    next_state: effectiveNextState,
     store,
   });
 }
@@ -301,7 +412,6 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
   const { data, store, board } = validated;
   const { workspace, flow } = data;
 
-  // Branch A: result provided
   if (data.result) {
     const {
       state_id,
@@ -327,7 +437,7 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
     if (waveAction) return waveAction;
 
     const reportOut = await reportResult({
-      artifacts: artifacts as string[] | undefined,
+      artifacts,
       flow,
       metrics: metrics as Parameters<typeof reportResult>[0]["metrics"],
       parallel_results: parallel_results as
@@ -456,7 +566,6 @@ async function handleWaveTaskResult(
     };
   }
 
-  // All tasks for this wave are done — proceed to merge + gate + events
   return completeWave({
     currentWave,
     flow,
@@ -564,10 +673,27 @@ async function routeReportResult(
     };
   }
 
+  // Flow event drain — check for agent/external directives before advancing.
+  // Pass next_state as resumeStateId so an inserted state can return here when done.
+  const drainAction = await applyFlowEventDrain({
+    currentStateId: state_id,
+    flow,
+    resumeStateId: next_state ?? null,
+    store,
+    workspace,
+  });
+  if (drainAction !== null) return drainAction;
+
+  // Return-address semantics: if this state was inserted and completed with "done",
+  // resume at the stored return address instead of the state's own transition target.
+  const returnAddress = store.getState(state_id)?.inserted_return_to;
+  const effectiveNextState =
+    returnAddress && reportOut.transition_condition === "done" ? returnAddress : next_state;
+
   return resolveNextStateAction(workspace, flow, {
     board: store.getBoard()!,
     current_state: state_id,
-    next_state,
+    next_state: effectiveNextState,
     store,
   });
 }
@@ -648,6 +774,55 @@ function checkWaveBoundaryApproval(
   };
 }
 
+type AdvanceWaveInput = {
+  currentWave: number;
+  flow: DriveFlowInput["flow"];
+  gateResults: ReturnType<typeof runGates>;
+  projectDir: string;
+  state_id: string;
+  stateDef: StateDefinition;
+  store: ReturnType<typeof getExecutionStore>;
+  workspace: string;
+};
+
+async function advanceWave(input: AdvanceWaveInput): Promise<ToolResult<DriveFlowAction>> {
+  const { currentWave, flow, gateResults, projectDir, state_id, stateDef, store, workspace } =
+    input;
+  const statusKeyword = gateResults.some((g) => !g.passed) ? "gate_failed" : "done";
+
+  const eventResult = handlePendingWaveEvents(store, currentWave);
+  if (eventResult !== null) return eventResult;
+
+  // Flow event drain at wave boundary — check for agent/external directives.
+  // Pass null as resumeStateId: at the wave boundary there is no specific "next state"
+  // to resume at, so inserted states at this boundary have no return address.
+  const drainActionWave = await applyFlowEventDrain({
+    currentStateId: state_id,
+    flow,
+    resumeStateId: null,
+    store,
+    workspace,
+  });
+  if (drainActionWave !== null) return drainActionWave;
+
+  const nextWave = currentWave + 1;
+  const nextWaveTaskIds = await resolveNextWaveTaskIds(workspace, store, nextWave);
+
+  if (nextWaveTaskIds.length === 0) {
+    return handleLastWave(workspace, flow, { gateResults, state_id, statusKeyword, store });
+  }
+
+  const approvalAction = checkWaveBoundaryApproval(stateDef, flow, {
+    currentWave,
+    nextWaveTaskIds,
+    state_id,
+    store,
+  });
+  if (approvalAction) return approvalAction;
+
+  return startNextWave({ flow, nextWave, nextWaveTaskIds, projectDir, state_id, store, workspace });
+}
+
 async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveFlowAction>> {
   const { workspace, flow, state_id, currentWave, store } = input;
 
@@ -687,27 +862,16 @@ async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveF
   }
 
   const gateResults = runGates(stateDef, flow, mergeCwd, stateEntry ?? undefined);
-  const statusKeyword = gateResults.some((g) => !g.passed) ? "gate_failed" : "done";
-
-  const eventResult = handlePendingWaveEvents(store, currentWave);
-  if (eventResult !== null) return eventResult;
-
-  const nextWave = currentWave + 1;
-  const nextWaveTaskIds = await resolveNextWaveTaskIds(workspace, store, nextWave);
-
-  if (nextWaveTaskIds.length === 0) {
-    return handleLastWave(workspace, flow, { gateResults, state_id, statusKeyword, store });
-  }
-
-  const approvalAction = checkWaveBoundaryApproval(stateDef, flow, {
+  return advanceWave({
     currentWave,
-    nextWaveTaskIds,
+    flow,
+    gateResults,
+    projectDir,
     state_id,
+    stateDef,
     store,
+    workspace,
   });
-  if (approvalAction) return approvalAction;
-
-  return startNextWave({ flow, nextWave, nextWaveTaskIds, projectDir, state_id, store, workspace });
 }
 
 type HandleMergeConflictInput = {
@@ -880,7 +1044,6 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
   const waveTaskDefs = nextWaveTaskIds.map((tid) => ({ task_id: tid }));
   const worktreeResults = (await createWaveWorktrees(waveTaskDefs, projectDir, mergeCwd)) ?? [];
 
-  // Build a worktree lookup map
   const worktreeMap = new Map<string, string>(
     worktreeResults.map((r) => [r.task_id, r.worktree_path]),
   );
@@ -897,7 +1060,6 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
     });
   });
 
-  // Get spawn prompts for the next wave state
   const enterOut = await enterAndPrepareState({
     flow,
     items: nextWaveTaskIds.map((tid) => ({ task_id: tid })),
@@ -923,7 +1085,6 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
     };
   }
 
-  // Build spawn requests and inject worktree paths
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
   const requestsWithWorktrees = requests.map((req) => {
     if (req.task_id && worktreeMap.has(req.task_id)) {
@@ -1323,7 +1484,6 @@ async function applySessionContinuation(
     return requests;
   }
 
-  // Fresh session — inject continue_from into the single spawn request
   return [
     {
       ...requests[0],

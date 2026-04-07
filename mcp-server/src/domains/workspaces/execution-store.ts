@@ -77,6 +77,7 @@ type ExecutionStateRow = {
   compete_results: string | null; // JSON array | null
   synthesized: number | null; // 0/1 | null
   transcript_path: string | null; // ADR-015
+  inserted_return_to: string | null; // ADR-012
 };
 
 type IterationRow = {
@@ -243,6 +244,7 @@ export class ExecutionStore {
   private stmtAppendMessage!: Database.Statement;
   private stmtGetMessages!: Database.Statement;
   private stmtGetMessagesSince!: Database.Statement;
+  private stmtGetMessagesSinceId!: Database.Statement;
   private stmtHasMessages!: Database.Statement;
 
   // ---- Wave event statements ----
@@ -317,13 +319,15 @@ export class ExecutionStore {
         result, artifacts, artifact_history, error,
         wave, wave_total, wave_results, metrics,
         gate_results, postcondition_results, discovered_gates,
-        discovered_postconditions, parallel_results, compete_results, synthesized
+        discovered_postconditions, parallel_results, compete_results, synthesized,
+        inserted_return_to
       ) VALUES (
         @state_id, @status, @entries, @entered_at, @completed_at,
         @result, @artifacts, @artifact_history, @error,
         @wave, @wave_total, @wave_results, @metrics,
         @gate_results, @postcondition_results, @discovered_gates,
-        @discovered_postconditions, @parallel_results, @compete_results, @synthesized
+        @discovered_postconditions, @parallel_results, @compete_results, @synthesized,
+        @inserted_return_to
       )
       ON CONFLICT(state_id) DO UPDATE SET
         status                    = excluded.status,
@@ -344,7 +348,8 @@ export class ExecutionStore {
         discovered_postconditions = excluded.discovered_postconditions,
         parallel_results          = excluded.parallel_results,
         compete_results           = excluded.compete_results,
-        synthesized               = excluded.synthesized
+        synthesized               = excluded.synthesized,
+        inserted_return_to        = excluded.inserted_return_to
         -- transcript_path intentionally omitted: preserves existing value on update
     `);
     this.stmtGetState = db.prepare(`SELECT * FROM execution_states WHERE state_id = ?`);
@@ -385,6 +390,9 @@ export class ExecutionStore {
     this.stmtGetMessages = db.prepare(`SELECT * FROM messages WHERE channel = ? ORDER BY id ASC`);
     this.stmtGetMessagesSince = db.prepare(
       `SELECT * FROM messages WHERE channel = ? AND timestamp > ? ORDER BY id ASC`,
+    );
+    this.stmtGetMessagesSinceId = db.prepare(
+      `SELECT * FROM messages WHERE channel = ? AND id > ? ORDER BY id ASC`,
     );
     this.stmtHasMessages = db.prepare(`SELECT 1 FROM messages WHERE channel = ? LIMIT 1`);
   }
@@ -660,6 +668,7 @@ export class ExecutionStore {
       entries: fields.entries,
       error: fields.error ?? null,
       gate_results: jsonOrNull(fields.gate_results),
+      inserted_return_to: fields.inserted_return_to ?? null,
       metrics: jsonOrNull(fields.metrics),
       parallel_results: jsonOrNull(fields.parallel_results),
       postcondition_results: jsonOrNull(fields.postcondition_results),
@@ -833,6 +842,27 @@ export class ExecutionStore {
     } else {
       rows = this.stmtGetMessages.all(channel) as MessageRow[];
     }
+    return rows.map((r) => ({
+      channel: r.channel,
+      content: r.content,
+      id: r.id,
+      sender: r.sender,
+      timestamp: r.timestamp,
+    }));
+  }
+
+  /**
+   * Returns messages in `channel` whose numeric id is strictly greater than `sinceId`.
+   * Results are ordered ascending by id.
+   *
+   * Used by the flow-events drain for watermark-based polling:
+   * the drain stores the last processed id in `board.metadata.flow_events_watermark`
+   * and calls this method with that watermark on each poll cycle.
+   *
+   * Pass `sinceId = 0` to return all messages in the channel.
+   */
+  getMessagesSinceId(channel: string, sinceId: number): MessageOutput[] {
+    const rows = this.stmtGetMessagesSinceId.all(channel, sinceId) as MessageRow[];
     return rows.map((r) => ({
       channel: r.channel,
       content: r.content,
@@ -1059,6 +1089,7 @@ export class ExecutionStore {
       entries: row.entries,
       error: row.error ?? undefined,
       gate_results: parseJson(row.gate_results),
+      inserted_return_to: row.inserted_return_to ?? undefined,
       metrics: parseJson(row.metrics),
       parallel_results: parseJson(row.parallel_results),
       postcondition_results: parseJson(row.postcondition_results),

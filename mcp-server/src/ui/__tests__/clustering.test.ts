@@ -8,10 +8,6 @@
 import { describe, expect, it } from "vitest";
 import { type ClusterInput, clusterFiles, findCommonPrefix } from "../lib/clustering.ts";
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
 function makeFile(path: string, status: ClusterInput["status"], layer: string): ClusterInput {
   return { layer, path, status };
 }
@@ -53,10 +49,6 @@ const REAL_WORLD_FIXTURE: ClusterInput[] = [
   makeFile("mcp-server/ui/pr-review-prep.ts", "added", "ui"),
 ];
 
-// ---------------------------------------------------------------------------
-// clusterFiles — core behavior
-// ---------------------------------------------------------------------------
-
 describe("clusterFiles() — empty input", () => {
   it("returns empty array for empty input", () => {
     expect(clusterFiles([])).toEqual([]);
@@ -77,10 +69,6 @@ describe("clusterFiles() — single file", () => {
     expect(result[0].files[0].path).toBe("src/foo.ts");
   });
 });
-
-// ---------------------------------------------------------------------------
-// New-feature clusters (all-added subtree)
-// ---------------------------------------------------------------------------
 
 describe("clusterFiles() — all-added directory", () => {
   it("creates a new-feature cluster when ALL files in a directory are added", () => {
@@ -117,10 +105,6 @@ describe("clusterFiles() — all-added directory", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Removal clusters (all-deleted subtree)
-// ---------------------------------------------------------------------------
-
 describe("clusterFiles() — all-deleted directory", () => {
   it("creates a removal cluster when ALL files in a directory are deleted", () => {
     const files = [
@@ -154,10 +138,6 @@ describe("clusterFiles() — all-deleted directory", () => {
     expect(removal).toBeUndefined();
   });
 });
-
-// ---------------------------------------------------------------------------
-// Prefix groups
-// ---------------------------------------------------------------------------
 
 describe("clusterFiles() — shared prefix grouping", () => {
   it("groups kg-* files into a single prefix cluster", () => {
@@ -208,10 +188,6 @@ describe("clusterFiles() — shared prefix grouping", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Layer groups (fallthrough)
-// ---------------------------------------------------------------------------
-
 describe("clusterFiles() — layer grouping (fallthrough)", () => {
   it("groups remaining files by layer", () => {
     // Files with no shared prefix and different layers
@@ -239,10 +215,6 @@ describe("clusterFiles() — layer grouping (fallthrough)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Small cluster merge
-// ---------------------------------------------------------------------------
-
 describe("clusterFiles() — small cluster merge", () => {
   it("merges 1-file clusters into 'other' cluster", () => {
     // Different directories, no common prefix, different layers -> many tiny clusters
@@ -264,10 +236,6 @@ describe("clusterFiles() — small cluster merge", () => {
     expect(result[0].type).toBe("other");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Large cluster split
-// ---------------------------------------------------------------------------
 
 describe("clusterFiles() — large cluster split", () => {
   it("splits a cluster with > 30 files into subdirectory sub-clusters", () => {
@@ -296,10 +264,6 @@ describe("clusterFiles() — large cluster split", () => {
     expect(cluster!.files).toHaveLength(30);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Acceptance invariants
-// ---------------------------------------------------------------------------
 
 describe("clusterFiles() — acceptance invariants", () => {
   it("always returns >= 1 cluster for > 0 files", () => {
@@ -360,10 +324,6 @@ describe("clusterFiles() — acceptance invariants", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// findCommonPrefix — unit tests
-// ---------------------------------------------------------------------------
-
 describe("findCommonPrefix()", () => {
   it("finds kg- prefix from kg-store, kg-query, kg-types", () => {
     const result = findCommonPrefix(["kg-store.ts", "kg-query.ts", "kg-types.ts"]);
@@ -400,10 +360,6 @@ describe("findCommonPrefix()", () => {
     expect(result).toBe("bridge.");
   });
 });
-
-// ---------------------------------------------------------------------------
-// synthesizeDescription — structural tests
-// ---------------------------------------------------------------------------
 
 describe("synthesizeDescription (via cluster output)", () => {
   it("new-feature cluster has non-empty description", () => {

@@ -16,6 +16,6 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: ["dist/**", "node_modules/**", "**/*.spec.ts"],
+    exclude: ["dist/**", "node_modules/**", "**/*.spec.ts", ".canon/**"],
   },
 });

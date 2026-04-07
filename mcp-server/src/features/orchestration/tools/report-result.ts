@@ -9,6 +9,7 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { completeState, setBlocked } from "@domains/board/board.ts";
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
 import type {
+  BaselineEvidence,
   Board,
   CannotFixItem,
   DiscoveredGate,
@@ -22,7 +23,11 @@ import type {
   TestResults,
   ViolationSeverities,
 } from "@domains/flows/flow-schema.ts";
-import { STATUS_ALIASES, STATUS_KEYWORDS } from "@domains/flows/flow-schema.ts";
+import {
+  BaselineEvidenceSchema,
+  STATUS_ALIASES,
+  STATUS_KEYWORDS,
+} from "@domains/flows/flow-schema.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
@@ -39,6 +44,23 @@ import {
   isStuck,
   normalizeStatus,
 } from "../engine/transitions.ts";
+
+// Status consistency check (argu-02)
+
+/** Statuses that imply success — blocked when test_results.failed > 0 without baseline evidence. */
+const SUCCESS_STATUSES = new Set([
+  "done",
+  "done_with_concerns", // CRITICAL: agents cannot use concerns to bypass
+  "fixed",
+  "partial_fix",
+  "all_passing",
+  "findings",
+  "clean",
+  "updated",
+  "no_updates",
+  "epic_complete",
+  "approved",
+]);
 
 // Artifact validation (ADR-010)
 
@@ -673,6 +695,8 @@ type ReportResultInput = {
   // Compete results — persisted to board state for synthesizer access
   compete_results?: Array<{ lens?: string; status: string; artifacts?: string[] }>;
   synthesized?: boolean;
+  // Baseline evidence for pre-existing test failures (argu-02)
+  baseline_evidence?: BaselineEvidence;
   // Optional progress line to append to progress.md (saves a separate Write call)
   progress_line?: string;
   // Project directory for drift effect persistence
@@ -681,7 +705,7 @@ type ReportResultInput = {
   transcript_path?: string;
 };
 
-type LogEntry = {
+export type LogEntry = {
   state_id: string;
   status_keyword: string;
   normalized_condition: string;
@@ -716,7 +740,7 @@ type LogEntry = {
   discovered_postconditions_count?: number;
 };
 
-type ReportResultResult = {
+export type ReportResultResult = {
   transition_condition: string;
   next_state: string | null;
   board: Board;
@@ -725,12 +749,58 @@ type ReportResultResult = {
   hitl_required: boolean;
   hitl_reason?: string;
   log_entry: LogEntry;
+  /** Set when pre-existing test failures have been documented with baseline evidence. */
+  escalate_to_hitl?: {
+    reason: string;
+    baseline_evidence: BaselineEvidence;
+  };
 };
 
 export async function reportResult(
   input: ReportResultInput,
 ): Promise<ToolResult<ReportResultResult>> {
   return reportResultLocked(input);
+}
+
+function checkTestResultConsistency(input: ReportResultInput): ToolResult<void> | null {
+  if (!input.test_results || input.test_results.failed <= 0) return null;
+
+  const rawStatusLower = input.status_keyword.toLowerCase();
+  if (!SUCCESS_STATUSES.has(rawStatusLower)) return null;
+
+  // Status implies success but test_results.failed > 0 — require baseline evidence
+  if (!input.baseline_evidence) {
+    return toolError(
+      "INVALID_INPUT",
+      `Status '${input.status_keyword}' reported with ${input.test_results.failed} test failure(s) but no baseline_evidence provided. ` +
+        `Either fix all failures, provide baseline_evidence proving they pre-date your changes, ` +
+        `or report IMPLEMENTATION_ISSUE/BLOCKED.`,
+      true, // recoverable — agent can retry with correct status or provide evidence
+    );
+  }
+
+  // Validate the baseline evidence schema
+  const parseResult = BaselineEvidenceSchema.safeParse(input.baseline_evidence);
+  if (!parseResult.success) {
+    return toolError(
+      "INVALID_INPUT",
+      `baseline_evidence failed validation: ${parseResult.error.message}`,
+      true,
+    );
+  }
+
+  if (parseResult.data.new_failures.length > 0) {
+    const { baseline_commit, new_failures } = parseResult.data;
+    return toolError(
+      "INVALID_INPUT",
+      `Status '${input.status_keyword}' reported but baseline_evidence shows ${new_failures.length} NEW test failure(s) ` +
+        `not present at ${baseline_commit}: ${new_failures.join(", ")}. ` +
+        `Fix new failures or report IMPLEMENTATION_ISSUE.`,
+      true,
+    );
+  }
+
+  return null; // All failures are pre-existing — proceed to success with escalation
 }
 
 async function validatePreTransaction(
@@ -741,6 +811,11 @@ async function validatePreTransaction(
   if (!store.getBoard()) {
     return toolError("WORKSPACE_NOT_FOUND", `No execution found in workspace: ${input.workspace}`);
   }
+
+  // Consistency check: status/test-result alignment (argu-02)
+  const consistencyError = checkTestResultConsistency(input);
+  if (consistencyError) return consistencyError;
+
   if (stateDef?.required_artifacts?.length) {
     const validationError = await validateRequiredArtifacts(
       input.workspace,
@@ -830,6 +905,10 @@ async function reportResultLocked(
   const preError = await validatePreTransaction(store, input, stateDef);
   if (preError) return preError;
 
+  // Determine HITL escalation signal for pre-existing failures (argu-02)
+  // We know baseline_evidence is valid here (consistency check passed above)
+  const escalateToHitl = computeEscalateToHitl(input);
+
   let debateResult: Awaited<ReturnType<typeof inspectDebateProgress>> | undefined;
   if (input.state_id === input.flow.entry && input.flow.debate) {
     debateResult = await inspectDebateProgress(input.workspace, input.flow.debate);
@@ -837,7 +916,27 @@ async function reportResultLocked(
 
   const txResult = executeReportTransaction(store, input, stateDef, debateResult);
 
-  return postTransactionSideEffects(store, input, stateDef, txResult);
+  return postTransactionSideEffects({ escalateToHitl, input, stateDef, store, txResult });
+}
+
+/** Computes the escalate_to_hitl payload when baseline evidence confirms pre-existing failures. */
+function computeEscalateToHitl(
+  input: ReportResultInput,
+): ReportResultResult["escalate_to_hitl"] | undefined {
+  if (!input.test_results || input.test_results.failed <= 0) return undefined;
+  if (!input.baseline_evidence) return undefined;
+
+  const rawStatusLower = input.status_keyword.toLowerCase();
+  if (!SUCCESS_STATUSES.has(rawStatusLower)) return undefined;
+
+  // All failures are pre-existing (new_failures is empty — checked in validatePreTransaction)
+  return {
+    baseline_evidence: input.baseline_evidence,
+    reason:
+      `Status '${input.status_keyword}' reported with ${input.test_results.failed} pre-existing test failure(s) ` +
+      `confirmed against baseline commit '${input.baseline_evidence.baseline_commit}'. ` +
+      `Human review required before advancing.`,
+  };
 }
 
 type TransactionResult = {
@@ -850,12 +949,19 @@ type TransactionResult = {
   hitl_reason: string | undefined;
 };
 
-async function postTransactionSideEffects(
-  store: ReturnType<typeof getExecutionStore>,
-  input: ReportResultInput,
-  stateDef: ResolvedFlow["states"][string] | undefined,
-  txResult: TransactionResult,
-): Promise<ToolResult<ReportResultResult>> {
+async function postTransactionSideEffects({
+  store,
+  input,
+  stateDef,
+  txResult,
+  escalateToHitl,
+}: {
+  store: ReturnType<typeof getExecutionStore>;
+  input: ReportResultInput;
+  stateDef: ResolvedFlow["states"][string] | undefined;
+  txResult: TransactionResult;
+  escalateToHitl?: ReportResultResult["escalate_to_hitl"];
+}): Promise<ToolResult<ReportResultResult>> {
   const { board, condition, nextState, stuck, stuck_reason, hitl_required, hitl_reason } = txResult;
 
   persistTranscriptPath(store, input);
@@ -883,6 +989,7 @@ async function postTransactionSideEffects(
     stuck,
     stuck_reason,
     transition_condition: condition,
+    ...(escalateToHitl ? { escalate_to_hitl: escalateToHitl } : {}),
   };
 }
 

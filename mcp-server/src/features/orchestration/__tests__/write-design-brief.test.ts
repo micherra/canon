@@ -13,10 +13,6 @@ afterEach(async () => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// Happy path
-// ---------------------------------------------------------------------------
-
 describe("writeDesignBrief — valid input", () => {
   it("writes DESIGN-BRIEF.md and DESIGN-BRIEF.meta.json to handoffs directory", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
@@ -178,10 +174,6 @@ describe("writeDesignBrief — valid input", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Optional fields absent — corresponding sections should not appear
-// ---------------------------------------------------------------------------
-
 describe("writeDesignBrief — optional fields absent", () => {
   it("omits Decisions Referenced section when not provided", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
@@ -223,10 +215,6 @@ describe("writeDesignBrief — optional fields absent", () => {
     expect(meta.dependencies).toBeUndefined();
   });
 });
-
-// ---------------------------------------------------------------------------
-// Optional fields present — corresponding sections appear
-// ---------------------------------------------------------------------------
 
 describe("writeDesignBrief — optional fields present", () => {
   it("includes Decisions Referenced section when provided", async () => {
@@ -304,10 +292,6 @@ describe("writeDesignBrief — optional fields present", () => {
     expect(result.constraint_count).toBe(1);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Validation errors
-// ---------------------------------------------------------------------------
 
 describe("writeDesignBrief — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {

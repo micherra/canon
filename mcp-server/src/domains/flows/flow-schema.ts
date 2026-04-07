@@ -175,6 +175,16 @@ export const TestResultsSchema = z.object({
   skipped: z.number(),
 });
 
+/** Evidence that test failures pre-date the agent's changes. */
+export const BaselineEvidenceSchema = z.object({
+  baseline_commit: z.string(),
+  baseline_failures: z.array(z.string()), // test names that failed at baseline
+  current_failures: z.array(z.string()), // test names that fail now
+  new_failures: z.array(z.string()), // failures in current but not in baseline
+});
+
+export type BaselineEvidence = z.infer<typeof BaselineEvidenceSchema>;
+
 // Per-type state schemas (discriminated union members)
 
 /**
@@ -285,6 +295,7 @@ export const FragmentIncludeSchema = z.object({
 });
 
 export const FlowDefinitionSchema = z.object({
+  allowed_insertions: z.array(z.string()).optional(),
   debate: DebateConfigSchema.optional(),
   description: z.string(),
   entry: z.string().optional(),
@@ -528,6 +539,7 @@ export const BoardStateEntrySchema = z.object({
   entries: z.number().default(0),
   error: z.string().optional(),
   gate_results: z.array(GateResultSchema).optional(),
+  inserted_return_to: z.string().optional(),
   metrics: StateMetricsSchema.optional(),
   parallel_results: z
     .array(
