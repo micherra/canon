@@ -2,10 +2,8 @@
   "mcpServers": {
     "canon": {
       "command": "npx",
-      "args": ["tsx", "mcp-server/src/app/index.ts"],
-      "cwd": "${CLAUDE_PLUGIN_ROOT}",
+      "args": ["tsx", "${CLAUDE_PLUGIN_ROOT}/mcp-server/src/app/index.ts"],
       "env": {
-        "NODE_OPTIONS": "--loader tsconfig-paths/esm",
         "CANON_PROJECT_DIR": "${CLAUDE_PLUGIN_ROOT}",
         "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}"
       }
