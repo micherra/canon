@@ -8,6 +8,7 @@
  * - No .lock file created during init
  * - No board.json or session.json created
  * - Progress entry exists in DB after init
+ * - Workspace is scoped to projectDir, not to the plugin directory
  */
 
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -190,6 +191,31 @@ describe("listBranchWorkspaces", () => {
     const projectDir = makeTmpProjectDir();
     const workspaces = await listBranchWorkspaces(projectDir, "feat/some-new-branch");
     expect(workspaces).toEqual([]);
+  });
+});
+
+// initWorkspaceFlow — workspace directory scoping
+
+describe("initWorkspaceFlow — workspace scoped to projectDir", () => {
+  it("creates workspace under projectDir, not under a different directory", async () => {
+    const projectDir = makeTmpProjectDir();
+    const otherDir = makeTmpProjectDir(); // simulates plugin cache directory
+
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    // workspace must be inside projectDir
+    expect(result.workspace.startsWith(projectDir)).toBe(true);
+    // workspace must NOT be inside the other directory (plugin cache)
+    expect(result.workspace.startsWith(otherDir)).toBe(false);
+  });
+
+  it("workspace path contains .canon/workspaces relative to projectDir", async () => {
+    const projectDir = makeTmpProjectDir();
+
+    const result = await initWorkspaceFlow(baseInput, projectDir, "/fake/plugin");
+
+    const expectedBase = join(projectDir, ".canon", "workspaces");
+    expect(result.workspace.startsWith(expectedBase)).toBe(true);
   });
 });
 

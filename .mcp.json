@@ -5,7 +5,7 @@
       "args": ["tsx", "src/app/index.ts"],
       "cwd": "${CLAUDE_PLUGIN_ROOT}/mcp-server",
       "env": {
-        "CANON_PROJECT_DIR": "${CLAUDE_PLUGIN_ROOT}",
+        "CANON_PROJECT_DIR": ".",
         "CANON_PLUGIN_DIR": "${CLAUDE_PLUGIN_ROOT}"
       }
     }
