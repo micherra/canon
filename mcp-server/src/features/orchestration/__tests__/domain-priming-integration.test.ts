@@ -39,6 +39,7 @@ const BUILT_IN_DOMAINS = [
   "backend-data",
   "infrastructure",
   "testing",
+  "deprecation",
 ] as const;
 
 describe("domain files — existence", () => {
