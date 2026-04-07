@@ -2,7 +2,7 @@
  * Tests for tool-profiles.ts — agent tool profile registry and resolver
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model/tool-profiles.ts";
 
 const ALL_AGENTS = [
@@ -107,9 +107,11 @@ describe("resolveToolProfile", () => {
     expect(result.permission_mode).toBe("prompt");
   });
 
-  it("permission mode defaults to prompt when isolation=worktree but no worktreePath", () => {
+  it("permission mode defaults to auto when isolation=worktree even without worktreePath", () => {
+    // worktree_path is not available at pipeline time (injected after assemblePrompt returns),
+    // so isolation alone is the correct signal for auto mode.
     const result = resolveToolProfile("canon-implementor", undefined, "worktree", undefined);
-    expect(result.permission_mode).toBe("prompt");
+    expect(result.permission_mode).toBe("auto");
   });
 
   it("permission_mode override from ToolOverrides takes precedence", () => {
@@ -155,5 +157,46 @@ describe("resolveToolProfile", () => {
     expect(result.disallowed_tools).toContain("Write");
     expect(result.tools).not.toContain("Edit");
     expect(result.tools).not.toContain("Write");
+  });
+
+  it("no warnings when replace does not grant disallowed tools", () => {
+    const result = resolveToolProfile("canon-researcher", { replace: ["Read", "Grep"] });
+    expect(result.warnings).toBeUndefined();
+  });
+
+  it("no warnings when using allow override (not replace)", () => {
+    const result = resolveToolProfile("canon-researcher", { allow: ["ExtraToolA"] });
+    expect(result.warnings).toBeUndefined();
+  });
+
+  it("no warnings when no overrides at all", () => {
+    const result = resolveToolProfile("canon-researcher");
+    expect(result.warnings).toBeUndefined();
+  });
+
+  it("replace override that grants base-disallowed tools produces a structured warning", () => {
+    // canon-researcher has Edit in disallowed; replace with Edit should warn
+    const result = resolveToolProfile("canon-researcher", { replace: ["Read", "Edit"] });
+    expect(result.warnings).toBeDefined();
+    expect(result.warnings).toHaveLength(1);
+    const warning = result.warnings![0];
+    expect(warning.event).toBe("adr014_replace_override_grants_disallowed");
+    expect(warning.agent).toBe("canon-researcher");
+    expect(warning.granted_disallowed).toContain("Edit");
+  });
+
+  it("warnings capture all granted-disallowed tools in a single entry", () => {
+    // canon-researcher has Edit and Write in disallowed; replace grants both
+    const result = resolveToolProfile("canon-researcher", { replace: ["Read", "Edit", "Write"] });
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings![0].granted_disallowed).toContain("Edit");
+    expect(result.warnings![0].granted_disallowed).toContain("Write");
+  });
+
+  it("does not call console.warn — warnings are data, not side effects", () => {
+    const spy = vi.spyOn(console, "warn");
+    resolveToolProfile("canon-researcher", { replace: ["Read", "Edit"] });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

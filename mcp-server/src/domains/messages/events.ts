@@ -20,7 +20,8 @@ export type FlowEventType =
   | "board_updated"
   | "wave_event_injected"
   | "wave_event_resolved"
-  | "stuck_detected";
+  | "stuck_detected"
+  | "tool_scope_audit";
 
 export type FlowEventMap = {
   state_entered: {
@@ -121,6 +122,16 @@ export type FlowEventMap = {
     timestamp: string;
     correlation_id?: string;
   };
+  tool_scope_audit: {
+    /** The ADR-014 sub-event key, e.g. "adr014_replace_override_grants_disallowed". */
+    event: string;
+    agent: string;
+    /** Tools granted by a replace override that appeared in the base disallowed list. */
+    granted_disallowed: string[];
+    stateId: string;
+    timestamp: string;
+    correlation_id?: string;
+  };
 };
 
 // Zod schemas for event payloads — co-located with FlowEventMap interfaces
@@ -208,6 +219,15 @@ export const EventPayloadSchemas = {
     reason: z.string(),
     stateId: z.string(),
     strategy: z.string(),
+    timestamp: z.string(),
+  }),
+
+  tool_scope_audit: z.object({
+    agent: z.string(),
+    correlation_id: correlationId,
+    event: z.string(),
+    granted_disallowed: z.array(z.string()),
+    stateId: z.string(),
     timestamp: z.string(),
   }),
 

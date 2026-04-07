@@ -530,7 +530,7 @@ describe("driveFlow — state_artifacts in done", () => {
     expect(result.state_artifacts?.implement).toBeUndefined();
   });
 
-  it("returns state_artifacts as empty object when no states have artifacts", async () => {
+  it("omits state_artifacts when no states have artifacts (field absent signals no artifacts)", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
     store.updateExecution({ current_state: "terminal" });
@@ -542,8 +542,8 @@ describe("driveFlow — state_artifacts in done", () => {
     if (!result.ok) return;
     expect(result.action).toBe("done");
     if (result.action !== "done") return;
-    // state_artifacts should be present but empty (no states recorded yet)
-    expect(result.state_artifacts).toEqual({});
+    // state_artifacts is only present when at least one state has artifacts
+    expect(result.state_artifacts).toBeUndefined();
   });
 });
 
@@ -858,5 +858,59 @@ describe("driveFlow — error handling", () => {
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;
     expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
+  });
+});
+
+// tool_scope_audit event persistence (ADR-014)
+
+describe("driveFlow — tool_scope_audit event persistence", () => {
+  it("persists tool_scope_audit event when prompt entry carries tool_scope_warnings", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+
+    vi.mocked(enterAndPrepareState).mockResolvedValueOnce({
+      ...makeEnterResult({
+        prompts: [
+          {
+            agent: "canon:canon-researcher",
+            prompt: "Do research",
+            template_paths: [],
+            tool_scope_warnings: [
+              {
+                agent: "canon:canon-researcher",
+                event: "adr014_replace_override_grants_disallowed",
+                granted_disallowed: ["Edit"],
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as never);
+
+    await driveFlow({ flow: makeFlow(), workspace });
+
+    const events = store.getEvents({ type: "tool_scope_audit" });
+    expect(events).toHaveLength(1);
+    const payload = events[0].payload as Record<string, unknown>;
+    expect(payload.event).toBe("adr014_replace_override_grants_disallowed");
+    expect(payload.agent).toBe("canon:canon-researcher");
+    expect(payload.granted_disallowed).toEqual(["Edit"]);
+    expect(payload.stateId).toBe("research");
+  });
+
+  it("does not persist any tool_scope_audit event when no warnings present", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+
+    vi.mocked(enterAndPrepareState).mockResolvedValueOnce({
+      ...makeEnterResult(),
+    });
+    vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as never);
+
+    await driveFlow({ flow: makeFlow(), workspace });
+
+    const events = store.getEvents({ type: "tool_scope_audit" });
+    expect(events).toHaveLength(0);
   });
 });

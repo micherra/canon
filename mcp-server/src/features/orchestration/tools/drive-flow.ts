@@ -1086,6 +1086,7 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
     };
   }
 
+  persistToolScopeWarnings(enterOut.prompts, state_id, store);
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
   const requestsWithWorktrees = requests.map((req) => {
     if (req.task_id && worktreeMap.has(req.task_id)) {
@@ -1211,6 +1212,7 @@ async function tryEnterSingleState(
 
   if (enterOut.skip_reason) return handleSkippedState(workspace, flow, currentStateId);
 
+  persistToolScopeWarnings(enterOut.prompts, currentStateId, store);
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
   const requestsWithSession = await applySessionContinuation(requests, currentStateId, store);
   return { action: "spawn", ok: true as const, requests: requestsWithSession };
@@ -1398,6 +1400,7 @@ async function enterWaveState(
   if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
   if (!enterOut.can_enter) return buildConvergenceHitl(stateId, enterOut);
 
+  persistToolScopeWarnings(enterOut.prompts, stateId, store);
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
   const requestsWithResume = attachWorktreeAndResumeContext(
     requests,
@@ -1456,6 +1459,35 @@ export function buildSpawnRequests(
   }
 
   return requests;
+}
+
+/**
+ * Persist any tool_scope_audit warnings from prompt entries to the SQLite event log.
+ *
+ * resolveToolProfile (pure model layer) cannot call the store directly, so it returns
+ * structured warnings on ResolvedProfile. inject-coordination forwards them onto each
+ * SpawnPromptEntry.tool_scope_warnings. This helper drains those warnings into the
+ * event log once we have store access.
+ *
+ * Called after buildSpawnRequests at every entry point that has store + stateId context.
+ */
+function persistToolScopeWarnings(
+  prompts: SpawnPromptEntry[],
+  stateId: string,
+  store: ReturnType<typeof getExecutionStore>,
+): void {
+  for (const entry of prompts) {
+    if (!entry.tool_scope_warnings) continue;
+    for (const warning of entry.tool_scope_warnings) {
+      store.appendEvent("tool_scope_audit", {
+        agent: warning.agent,
+        event: warning.event,
+        granted_disallowed: warning.granted_disallowed,
+        stateId,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
 }
 
 // ADR-009a: Session continuation
@@ -1551,7 +1583,7 @@ function buildDoneSummary(
     ? NonNullable<T>
     : never,
   terminalState: string,
-): { summary: string; state_artifacts: Record<string, string[]> } {
+): { summary: string; state_artifacts?: Record<string, string[]> } {
   const stateEntries = Object.entries(board.states ?? {});
   const stateCount = stateEntries.length;
   const doneCount = stateEntries.filter(
@@ -1566,8 +1598,11 @@ function buildDoneSummary(
     }
   }
 
-  return {
-    state_artifacts,
+  const result: { summary: string; state_artifacts?: Record<string, string[]> } = {
     summary: `Flow completed at state '${terminalState}'. States completed: ${doneCount}/${stateCount}.`,
   };
+  if (Object.keys(state_artifacts).length > 0) {
+    result.state_artifacts = state_artifacts;
+  }
+  return result;
 }

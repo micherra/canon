@@ -56,12 +56,13 @@ import { reportInputSchema } from "@shared/schema.ts";
 import { z } from "zod";
 import { resolveProjectDir } from "./resolve-project-dir.ts";
 
-// Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
-// Falls back to cwd which is typically set by Claude Code to the user's project root.
-// This is the initial/fallback value — it is updated post-connect by resolveProjectDir().
-let projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
+// Resolve project dir via priority chain (updated post-connect by resolveProjectDir() in main()):
+//   1. CANON_PROJECT_DIR env var (only when set AND is an absolute path) — escape hatch for CI/multi-project
+//   2. roots/list first root from MCP client — standard MCP mechanism for user's working directory
+//   3. process.cwd() fallback — for clients that don't support roots
+let projectDir = process.cwd();
 
-// Promise that resolves once the project directory has been confirmed (or timed out).
+// Promise that resolves once the project directory has been confirmed.
 // All tool handlers must await this before accessing projectDir to avoid the startup
 // race where a client call arrives before roots/list has completed.
 //
@@ -1271,12 +1272,13 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // Gate all tool handlers until projectDir is fully resolved.
-  // resolveProjectDir() attempts roots/list with a 1-second timeout; on
-  // success it updates projectDir, on timeout/failure it keeps the fallback.
-  // resolveReady() unblocks every handler that is awaiting readyPromise.
-  const resolvedDir = await resolveProjectDir(server.server, projectDir);
-  projectDir = resolvedDir;
+  // Resolve project dir via priority chain (must happen after connect so roots/list works).
+  // resolveReady() unblocks every gatedWrapHandler that is awaiting readyPromise.
+  projectDir = await resolveProjectDir(
+    process.env.CANON_PROJECT_DIR,
+    () => server.server.listRoots(undefined, { timeout: 1_000 }),
+    process.cwd(),
+  );
   resolveReady();
 
   // Mark any leftover running jobs from a previous crashed session as failed

@@ -14,11 +14,20 @@ export type AgentToolProfile = {
   disallowed: string[];
 };
 
+/** A structured audit warning produced by resolveToolProfile. */
+export type ToolScopeWarning = {
+  event: "adr014_replace_override_grants_disallowed";
+  agent: string;
+  granted_disallowed: string[];
+};
+
 /** Resolved tool configuration for a single agent spawn. */
 export type ResolvedProfile = {
   tools: string[];
   disallowed_tools: string[];
   permission_mode: "auto" | "prompt" | "deny_unknown";
+  /** Structured audit warnings — present when a replace override grants disallowed tools. */
+  warnings?: ToolScopeWarning[];
 };
 
 /**
@@ -120,21 +129,27 @@ export const resolveToolProfile = (
   agent: string,
   overrides?: ToolOverrides,
   isolation?: string,
-  worktreePath?: string,
+  _worktreePath?: string,
 ): ResolvedProfile => {
   const normalizedAgent = agent.startsWith("canon:") ? agent.slice("canon:".length) : agent;
   const base = AGENT_TOOL_PROFILES[normalizedAgent] ?? EMPTY_PROFILE;
 
   // Resolve effective allowed list
   let effectiveAllowed: string[];
+  let warnings: ToolScopeWarning[] | undefined;
   if (overrides?.replace) {
-    // Audit: warn when replace grants tools that are in the base disallowed list.
-    // This is permitted by the caller but should be visible in logs.
+    // Audit: collect a structured warning when replace grants tools that are in the
+    // base disallowed list. This is permitted by the caller but must be persisted
+    // to the SQLite event log — callers are responsible for forwarding warnings.
     const grantedDisallowed = overrides.replace.filter((t) => base.disallowed.includes(t));
     if (grantedDisallowed.length > 0) {
-      console.warn(
-        `[ADR-014] tool_overrides.replace grants disallowed tools for ${agent}: ${grantedDisallowed.join(", ")}`,
-      );
+      warnings = [
+        {
+          agent,
+          event: "adr014_replace_override_grants_disallowed",
+          granted_disallowed: grantedDisallowed,
+        },
+      ];
     }
     effectiveAllowed = overrides.replace;
   } else if (overrides?.allow) {
@@ -151,13 +166,19 @@ export const resolveToolProfile = (
   // Disallowed wins — filter out any disallowed tools from allowed
   const finalAllowed = effectiveAllowed.filter((t) => !effectiveDisallowed.includes(t));
 
-  // Determine permission mode
+  // Determine permission mode.
+  // isolation === "worktree" is sufficient — worktree_path is not available at pipeline time
+  // (it is injected into SpawnRequests after assemblePrompt returns), so requiring it would
+  // cause all worktree-isolated tasks to fall back to "prompt" mode. The isolation value
+  // alone is the correct signal for whether auto mode applies.
   const permissionMode: "auto" | "prompt" | "deny_unknown" =
-    overrides?.permission_mode ?? (isolation === "worktree" && worktreePath ? "auto" : "prompt");
+    overrides?.permission_mode ?? (isolation === "worktree" ? "auto" : "prompt");
 
-  return {
+  const result: ResolvedProfile = {
     disallowed_tools: effectiveDisallowed,
     permission_mode: permissionMode,
     tools: finalAllowed,
   };
+  if (warnings) result.warnings = warnings;
+  return result;
 };

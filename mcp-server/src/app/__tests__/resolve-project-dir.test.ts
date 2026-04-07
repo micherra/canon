@@ -1,144 +1,81 @@
-import { resolve } from "node:path";
+/**
+ * Tests for resolveProjectDir — MCP roots priority chain for project directory resolution.
+ *
+ * Covers:
+ * - Priority 1: CANON_PROJECT_DIR absolute path wins when set
+ * - CANON_PROJECT_DIR relative path is ignored (falls through)
+ * - CANON_PROJECT_DIR empty string is ignored (falls through)
+ * - Priority 2: MCP roots first root URI used when CANON_PROJECT_DIR absent
+ * - Priority 3: cwd fallback when roots list is empty
+ * - Priority 3: cwd fallback when listRoots throws
+ * - file:// URI is converted to filesystem path
+ */
+
 import { describe, expect, it, vi } from "vitest";
 import { resolveProjectDir } from "../resolve-project-dir.ts";
-import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
-
-type ListRootsResult = { roots: Array<{ uri: string; name?: string }> };
-
-/** Builds a minimal mock `Server` object with a controllable `listRoots`. */
-const makeServer = (
-  listRoots: (params?: unknown, options?: { signal?: AbortSignal }) => Promise<ListRootsResult>,
-): Server => ({ listRoots } as unknown as Server);
 
 describe("resolveProjectDir", () => {
-  it("returns the path of the first file:// root from listRoots", async () => {
-    const server = makeServer(async () => ({
-      roots: [{ uri: "file:///home/user/myproject", name: "My Project" }],
-    }));
+  const cwd = "/fallback/cwd";
 
-    const result = await resolveProjectDir(server, "/fallback");
-    expect(result).toBe(resolve("/home/user/myproject"));
+  it("uses CANON_PROJECT_DIR when it is an absolute path", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [] });
+    const result = await resolveProjectDir("/absolute/project/dir", listRoots, cwd);
+    expect(result).toBe("/absolute/project/dir");
+    expect(listRoots).not.toHaveBeenCalled();
   });
 
-  it("returns fallback when listRoots returns no file:// roots", async () => {
-    const server = makeServer(async () => ({
-      roots: [{ uri: "vscode://settings", name: "Settings" }],
-    }));
-
-    const result = await resolveProjectDir(server, "/fallback");
-    expect(result).toBe("/fallback");
+  it("ignores CANON_PROJECT_DIR when it is a relative path", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [{ uri: "file:///from/roots" }] });
+    const result = await resolveProjectDir("./relative/path", listRoots, cwd);
+    expect(result).toBe("/from/roots");
   });
 
-  it("returns fallback when listRoots returns an empty roots array", async () => {
-    const server = makeServer(async () => ({ roots: [] }));
-    const result = await resolveProjectDir(server, "/fallback");
-    expect(result).toBe("/fallback");
+  it("ignores CANON_PROJECT_DIR when it is empty string", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [{ uri: "file:///from/roots" }] });
+    const result = await resolveProjectDir("", listRoots, cwd);
+    expect(result).toBe("/from/roots");
   });
 
-  it("returns fallback and logs when listRoots times out, and aborts the in-flight request", async () => {
-    vi.useFakeTimers();
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    // listRoots respects the abort signal: rejects when aborted.
-    const server = makeServer(
-      (_params, options) =>
-        new Promise<ListRootsResult>((_res, rej) => {
-          options?.signal?.addEventListener("abort", () => {
-            rej(new DOMException("Aborted", "AbortError"));
-          });
-          // Never resolves on its own
-        }),
-    );
-
-    const resultPromise = resolveProjectDir(server, "/fallback", 500);
-    // Advance past the timeout
-    await vi.advanceTimersByTimeAsync(600);
-
-    const result = await resultPromise;
-    expect(result).toBe("/fallback");
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("roots/list timed out"),
-    );
-
-    consoleErrorSpy.mockRestore();
-    vi.useRealTimers();
+  it("ignores CANON_PROJECT_DIR when undefined", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [{ uri: "file:///from/roots" }] });
+    const result = await resolveProjectDir(undefined, listRoots, cwd);
+    expect(result).toBe("/from/roots");
   });
 
-  it("returns fallback when listRoots never resolves (no abort signal support)", async () => {
-    vi.useFakeTimers();
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    // listRoots never resolves and ignores the abort signal
-    const server = makeServer(() => new Promise<ListRootsResult>(() => {}));
-
-    const resultPromise = resolveProjectDir(server, "/fallback", 500);
-    await vi.advanceTimersByTimeAsync(600);
-
-    const result = await resultPromise;
-    expect(result).toBe("/fallback");
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining("roots/list timed out"),
-    );
-
-    consoleErrorSpy.mockRestore();
-    vi.useRealTimers();
-  });
-
-  it("returns fallback when listRoots throws", async () => {
-    const server = makeServer(async () => {
-      throw new Error("not supported");
+  it("parses file:// URI from MCP roots into a filesystem path", async () => {
+    const listRoots = vi.fn().mockResolvedValue({
+      roots: [{ uri: "file:///Users/alice/my-project", name: "my-project" }],
     });
-
-    const result = await resolveProjectDir(server, "/fallback");
-    expect(result).toBe("/fallback");
+    const result = await resolveProjectDir(undefined, listRoots, cwd);
+    expect(result).toBe("/Users/alice/my-project");
   });
 
-  it("picks the first file:// root when multiple roots exist", async () => {
-    const server = makeServer(async () => ({
+  it("uses cwd fallback when roots list is empty", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [] });
+    const result = await resolveProjectDir(undefined, listRoots, cwd);
+    expect(result).toBe(cwd);
+  });
+
+  it("uses cwd fallback when first root has no uri", async () => {
+    const listRoots = vi.fn().mockResolvedValue({ roots: [{ name: "unnamed" }] });
+    const result = await resolveProjectDir(undefined, listRoots, cwd);
+    expect(result).toBe(cwd);
+  });
+
+  it("uses cwd fallback when listRoots throws", async () => {
+    const listRoots = vi.fn().mockRejectedValue(new Error("roots not supported"));
+    const result = await resolveProjectDir(undefined, listRoots, cwd);
+    expect(result).toBe(cwd);
+  });
+
+  it("uses only the first root when multiple roots are present", async () => {
+    const listRoots = vi.fn().mockResolvedValue({
       roots: [
-        { uri: "file:///home/user/project-a" },
-        { uri: "file:///home/user/project-b" },
+        { uri: "file:///first/project" },
+        { uri: "file:///second/project" },
       ],
-    }));
-
-    const result = await resolveProjectDir(server, "/fallback");
-    expect(result).toBe(resolve("/home/user/project-a"));
-  });
-
-  it("skips non-file roots and uses first file:// root", async () => {
-    const server = makeServer(async () => ({
-      roots: [
-        { uri: "vscode://settings" },
-        { uri: "file:///home/user/real-project" },
-      ],
-    }));
-
-    const result = await resolveProjectDir(server, "/fallback");
-    expect(result).toBe(resolve("/home/user/real-project"));
-  });
-
-  it("applies resolve() to make paths absolute", async () => {
-    // A path that is already absolute should be preserved
-    const server = makeServer(async () => ({
-      roots: [{ uri: "file:///absolute/path" }],
-    }));
-
-    const result = await resolveProjectDir(server, "/fallback");
-    expect(result).toBe("/absolute/path");
-  });
-
-  it("clears timeout when listRoots resolves before deadline", async () => {
-    vi.useFakeTimers();
-    // Returns immediately
-    const server = makeServer(async () => ({
-      roots: [{ uri: "file:///home/user/project" }],
-    }));
-
-    const result = await resolveProjectDir(server, "/fallback", 1000);
-    expect(result).toBe(resolve("/home/user/project"));
-    // Timer should have been cleared — advancing time should not cause any side effects
-    await vi.advanceTimersByTimeAsync(2000);
-
-    vi.useRealTimers();
+    });
+    const result = await resolveProjectDir(undefined, listRoots, cwd);
+    expect(result).toBe("/first/project");
   });
 });

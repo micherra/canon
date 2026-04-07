@@ -1,73 +1,43 @@
-import { resolve } from "node:path";
-import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { fileURLToPath } from "node:url";
+import { isAbsolute } from "node:path";
 
 /**
- * Resolve the project directory by querying the MCP client's workspace roots.
+ * Resolve the project directory using the MCP roots priority chain.
  *
- * After `server.connect(transport)`, the client may expose its open workspace
- * directories via `roots/list`. If a file-URI root is available, we use its
- * path as the project directory (the first root wins). If the request times
- * out, fails, or returns no file roots, we fall back to `fallback` (which is
- * derived from CANON_PROJECT_DIR or process.cwd() at startup time).
+ * Priority:
+ *   1. CANON_PROJECT_DIR env var (only when set AND is an absolute path)
+ *   2. roots/list first root from MCP client
+ *   3. cwdFallback
  *
- * The AbortController is used to cancel the in-flight `listRoots` request when
- * the timeout fires, preventing the pending MCP request from keeping the Node.js
- * event loop alive indefinitely (the MCP SDK's default request timeout is 60s).
- *
- * @param server     - The underlying MCP `Server` instance (McpServer.server)
- * @param fallback   - Path to use when roots cannot be resolved
- * @param timeoutMs  - Maximum wait time for the roots/list round-trip (default 1000ms)
+ * @param canonProjectDir - Value of CANON_PROJECT_DIR env var (may be undefined or relative)
+ * @param listRootsFn     - Injected function to call the MCP roots/list endpoint
+ * @param cwdFallback     - Fallback path when roots cannot be resolved
  */
-export const resolveProjectDir = async (
-  server: Server,
-  fallback: string,
-  timeoutMs = 1000,
-): Promise<string> => {
-  const controller = new AbortController();
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-
-  try {
-    const timeoutPromise = new Promise<null>((res) => {
-      timeoutHandle = setTimeout(() => {
-        controller.abort();
-        res(null);
-      }, timeoutMs);
-    });
-
-    const rootsPromise = server.listRoots(undefined, { signal: controller.signal });
-    const result = await Promise.race([rootsPromise, timeoutPromise]);
-
-    if (result === null) {
-      // Timed out — use fallback
-      console.error(
-        `[canon] roots/list timed out after ${timeoutMs}ms — using fallback project dir: ${fallback}`,
-      );
-      return fallback;
-    }
-
-    // Got a response before timeout — cancel the timeout timer.
-    clearTimeout(timeoutHandle);
-
-    const fileRoot = result.roots.find((r) => r.uri.startsWith("file://"));
-    if (!fileRoot) {
-      // No file roots — use fallback
-      return fallback;
-    }
-
-    // Convert file URI to an absolute path and make it absolute just in case.
-    const fromUri = new URL(fileRoot.uri).pathname;
-    return resolve(fromUri);
-  } catch (err) {
-    clearTimeout(timeoutHandle);
-    // AbortError means the timeout fired and cancelled the in-flight request.
-    // Log the same "timed out" message so callers get consistent diagnostics.
-    const isAbort =
-      err instanceof Error && (err.name === "AbortError" || err.message === "Aborted");
-    if (isAbort) {
-      console.error(
-        `[canon] roots/list timed out after ${timeoutMs}ms — using fallback project dir: ${fallback}`,
-      );
-    }
-    return fallback;
+export async function resolveProjectDir(
+  canonProjectDir: string | undefined,
+  listRootsFn: () => Promise<{ roots: Array<{ uri: string; name?: string }> }>,
+  cwdFallback: string,
+): Promise<string> {
+  // Priority 1: explicit absolute path override.
+  if (canonProjectDir && isAbsolute(canonProjectDir)) {
+    console.error(`[canon] project dir from CANON_PROJECT_DIR: ${canonProjectDir}`);
+    return canonProjectDir;
   }
-};
+
+  // Priority 2: first root from MCP client.
+  try {
+    const result = await listRootsFn();
+    const firstRoot = result.roots[0];
+    if (firstRoot?.uri) {
+      const dir = fileURLToPath(firstRoot.uri);
+      console.error(`[canon] project dir from MCP roots: ${dir}`);
+      return dir;
+    }
+  } catch {
+    // Fall through — client doesn't support roots.
+  }
+
+  // Priority 3: cwd fallback.
+  console.error(`[canon] project dir from cwd (roots unavailable): ${cwdFallback}`);
+  return cwdFallback;
+}
