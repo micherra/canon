@@ -35,6 +35,14 @@ output-path: ${WORKSPACE}/plans/${slug}/PR-DESCRIPTION.md
 - **Security**: {finding count and severities, or "Clean"}
 - **Drift**: {unplanned files or missing work, or "None"}
 
+## Flow Synopsis
+<!-- Populated from board.json state history by canon-shipper Step 2.5. Omit if no board data available. -->
+| State | Status | Artifacts | Notes |
+|-------|--------|-----------|-------|
+| {state} | {done/skipped} | {count or list} | {concern/revision note, or —} |
+
+{Skipped states: {comma-separated list, or "None"}}
+
 ## Notes
 {Any additional concerns from board.json. Any skipped states. Anything a reviewer should watch for.}
 {Omit this section entirely if there are no notes.}
