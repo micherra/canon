@@ -48,3 +48,12 @@ function applyDiscount(cart: Cart, code: string): number {
 ## Exceptions
 
 None. If surrounding code needs improvement, that belongs in a separate task.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|----------------|----------------|
+| "This cleanup is directly related to the bug — it'll prevent future issues." | Relatedness does not equal necessity. The failing test defines the required change; anything beyond that is scope creep regardless of how related it feels. | Fix only what the failing test requires. Log the cleanup observation in a comment or separate issue and move on. |
+| "It's just one more line — the risk is negligible." | Every unrelated line is an independent opportunity for regression. "Just one line" has caused production incidents. The blast-radius rule exists precisely because individual changes feel safe. | Apply the rule uniformly. One extra line today normalizes ten next time. |
+| "The reviewer will want this cleaned up anyway." | You cannot predict what the reviewer will request, and anticipating it introduces unreviewed changes. The reviewer's job is to review the fix, not a fix plus bonus cleanup. | Submit the minimal fix. If the reviewer requests cleanup, that becomes a separate task in the next cycle. |
+| "The surrounding code is so messy I can't make a clean fix without touching it." | This is a scoping problem, not a license to refactor. If the surrounding code truly blocks a minimal fix, escalate to the orchestrator — do not unilaterally expand scope. | Isolate the minimal change even in messy code. If isolation is genuinely impossible, pause and escalate rather than self-authorizing a broader change. |
