@@ -6,10 +6,6 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// ---------------------------------------------------------------------------
-// Mock the ext-apps module before importing bridge
-// ---------------------------------------------------------------------------
-
 const mockCallServerTool = vi.fn();
 const mockConnect = vi.fn().mockResolvedValue(undefined);
 const mockGetHostContext = vi.fn().mockReturnValue(null);
@@ -41,19 +37,11 @@ vi.mock("@modelcontextprotocol/ext-apps", () => ({
 // Import bridge after mocking
 const { bridge } = await import("../stores/bridge.js");
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeToolResult(json: unknown) {
   return {
     content: [{ text: JSON.stringify(json), type: "text" as const }],
   };
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe("bridge.callTool()", () => {
   beforeEach(async () => {

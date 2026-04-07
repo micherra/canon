@@ -7,10 +7,6 @@
 import { describe, expect, it } from "vitest";
 import { getSeverityColor, pluralize, splitFilePath } from "../lib/utils.ts";
 
-// ---------------------------------------------------------------------------
-// splitFilePath
-// ---------------------------------------------------------------------------
-
 describe("splitFilePath()", () => {
   it("returns empty dir and empty name for empty string", () => {
     expect(splitFilePath("")).toEqual({ dir: "", name: "" });
@@ -53,10 +49,6 @@ describe("splitFilePath()", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// pluralize
-// ---------------------------------------------------------------------------
-
 describe("pluralize()", () => {
   it("returns singular form when count is 1", () => {
     expect(pluralize(1, "file")).toBe("file");
@@ -82,10 +74,6 @@ describe("pluralize()", () => {
     expect(pluralize(-1, "file")).toBe("files");
   });
 });
-
-// ---------------------------------------------------------------------------
-// getSeverityColor
-// ---------------------------------------------------------------------------
 
 describe("getSeverityColor()", () => {
   it("returns correct color for 'rule' severity", () => {
