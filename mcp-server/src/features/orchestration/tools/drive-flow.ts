@@ -1412,28 +1412,31 @@ async function enterWaveState(
 /**
  * Convert SpawnPromptEntry[] and consultation prompts into SpawnRequest[].
  */
+function entryToSpawnRequest(entry: SpawnPromptEntry): SpawnRequest {
+  const req: SpawnRequest = {
+    agent_type: entry.agent,
+    isolation: (entry.isolation ?? "worktree") as SpawnRequest["isolation"],
+    prompt: entry.prompt,
+  };
+  if (entry.role !== undefined) req.role = entry.role;
+  if (entry.item !== undefined) {
+    req.task_id =
+      typeof entry.item === "string"
+        ? entry.item
+        : ((entry.item as Record<string, unknown>).task_id as string | undefined);
+  }
+  if (entry.worktree_path !== undefined) req.worktree_path = entry.worktree_path;
+  if (entry.tools !== undefined) req.tools = entry.tools;
+  if (entry.disallowed_tools !== undefined) req.disallowed_tools = entry.disallowed_tools;
+  if (entry.permission_mode !== undefined) req.permission_mode = entry.permission_mode;
+  return req;
+}
+
 export function buildSpawnRequests(
   prompts: SpawnPromptEntry[],
   consultationPrompts?: ConsultationPromptEntry[],
 ): SpawnRequest[] {
-  const requests: SpawnRequest[] = prompts.map((entry) => ({
-    agent_type: entry.agent,
-    isolation: (entry.isolation ?? "worktree") as SpawnRequest["isolation"],
-    prompt: entry.prompt,
-    ...(entry.role !== undefined ? { role: entry.role } : {}),
-    ...(entry.item !== undefined
-      ? {
-          task_id:
-            typeof entry.item === "string"
-              ? entry.item
-              : ((entry.item as Record<string, unknown>).task_id as string | undefined),
-        }
-      : {}),
-    ...(entry.worktree_path !== undefined ? { worktree_path: entry.worktree_path } : {}),
-    ...(entry.tools !== undefined ? { tools: entry.tools } : {}),
-    ...(entry.disallowed_tools !== undefined ? { disallowed_tools: entry.disallowed_tools } : {}),
-    ...(entry.permission_mode !== undefined ? { permission_mode: entry.permission_mode } : {}),
-  }));
+  const requests: SpawnRequest[] = prompts.map(entryToSpawnRequest);
 
   if (consultationPrompts && consultationPrompts.length > 0) {
     for (const cp of consultationPrompts) {
