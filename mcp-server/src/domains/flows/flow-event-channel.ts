@@ -99,7 +99,7 @@ function reachableFrom(startId: string, states: Record<string, StateDefinition>)
 // ---------------------------------------------------------------------------
 
 export type DrainFlowEventsParams = {
-  store: ExecutionStore;
+  store: Pick<ExecutionStore, "getMessagesSinceId" | "appendEvent">;
   currentStateId: string;
   flowDef: FlowDefinition;
   /** Last processed message id (board.metadata.flow_events_watermark ?? 0) */

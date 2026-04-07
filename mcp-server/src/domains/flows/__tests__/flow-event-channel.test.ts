@@ -65,7 +65,7 @@ describe("drainFlowEvents — no messages", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -83,7 +83,7 @@ describe("drainFlowEvents — malformed messages", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -99,7 +99,7 @@ describe("drainFlowEvents — malformed messages", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -132,7 +132,7 @@ describe("drainFlowEvents — request_state", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({ state_id: "hotfix", type: "insert" });
@@ -147,7 +147,7 @@ describe("drainFlowEvents — request_state", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -162,7 +162,7 @@ describe("drainFlowEvents — request_state", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -183,7 +183,7 @@ describe("drainFlowEvents — request_state", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({ state_id: "hotfix", type: "insert" });
@@ -200,7 +200,7 @@ describe("drainFlowEvents — request_state", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -221,7 +221,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({ reason: "fast-path", target: "done", type: "skip" });
@@ -236,7 +236,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     const result = drainFlowEvents({
       currentStateId: "done",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -251,7 +251,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -266,7 +266,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -291,7 +291,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({ reason: "prefer-b", target: "branch-b", type: "skip" });
@@ -317,7 +317,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({ reason: "skip-wave", target: "cleanup", type: "skip" });
@@ -344,7 +344,7 @@ describe("drainFlowEvents — skip_ahead", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({ reason: "skip-to-rollback", target: "rollback", type: "skip" });
@@ -363,7 +363,7 @@ describe("drainFlowEvents — escalate", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({ message: "something is wrong", type: "escalate" });
@@ -384,7 +384,7 @@ describe("drainFlowEvents — escalate", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({
@@ -399,7 +399,7 @@ describe("drainFlowEvents — escalate", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("escalate");
@@ -421,7 +421,7 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     const effect = result.effect as { type: "escalate"; message: string };
@@ -438,7 +438,7 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect.type).toBe("none");
@@ -454,7 +454,7 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.newWatermark).toBe(61);
@@ -469,7 +469,7 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     const result = drainFlowEvents({
       currentStateId: "start",
       flowDef: flow,
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 0,
     });
     expect(result.effect).toEqual({ message: "fallback-win", type: "escalate" });
@@ -482,7 +482,7 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     drainFlowEvents({
       currentStateId: "start",
       flowDef: makeLinearFlow(),
-      store: store as unknown as ExecutionStore,
+      store: store,
       watermark: 99,
     });
     expect(spy).toHaveBeenCalledWith("flow-events", 99);

@@ -164,7 +164,7 @@ type HandleWaveResultOpts = {
   state_id: string;
   task_id: string | undefined;
   status: string;
-  artifacts: unknown;
+  artifacts: string[] | undefined;
   store: ReturnType<typeof getExecutionStore>;
   /** Actual branch used by the agent's worktree (e.g. "worktree-agent-*"). */
   worktree_branch?: string;
@@ -184,7 +184,7 @@ function handleWaveResult(
       flow,
       state_id,
       store,
-      task_artifacts: artifacts as string[] | undefined,
+      task_artifacts: artifacts,
       task_id,
       task_status: status,
       workspace,
@@ -284,14 +284,14 @@ async function applyFlowEventDrain(
 type ResolvePostReportOpts = {
   state_id: string;
   status: string;
-  artifacts: unknown;
+  artifacts: string[] | undefined;
   reportOut: Awaited<ReturnType<typeof reportResult>> & { ok: true };
   store: ReturnType<typeof getExecutionStore>;
 };
 
 function buildApprovalAction(
   completedDef: StateDefinition | undefined,
-  artifacts: unknown,
+  artifacts: string[] | undefined,
   state_id: string,
   status: string,
 ): ToolResult<DriveFlowAction> {
@@ -299,7 +299,7 @@ function buildApprovalAction(
     action: "approval" as const,
     breakpoint: {
       agent_type: completedDef?.agent ?? completedDef?.type ?? "unknown",
-      artifacts: (artifacts as string[] | undefined) ?? [],
+      artifacts: artifacts ?? [],
       options: ["approved", "revise", "reject"] as const,
       state_id,
       summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
@@ -440,7 +440,7 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
     if (waveAction) return waveAction;
 
     const reportOut = await reportResult({
-      artifacts: artifacts as string[] | undefined,
+      artifacts,
       flow,
       metrics: metrics as Parameters<typeof reportResult>[0]["metrics"],
       parallel_results: parallel_results as
