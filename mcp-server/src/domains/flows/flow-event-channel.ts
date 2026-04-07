@@ -9,8 +9,8 @@
  * ADR-012 / fe-02
  */
 
-import { z } from "zod";
 import type { ExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { z } from "zod";
 import type { FlowDefinition, StateDefinition } from "./flow-schema.ts";
 
 // ---------------------------------------------------------------------------
@@ -19,19 +19,19 @@ import type { FlowDefinition, StateDefinition } from "./flow-schema.ts";
 
 const FlowEventSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("request_state"),
-    state_id: z.string(),
     reason: z.string().optional(),
+    state_id: z.string(),
+    type: z.literal("request_state"),
   }),
   z.object({
-    type: z.literal("skip_ahead"),
-    target: z.string(),
     reason: z.string(),
+    target: z.string(),
+    type: z.literal("skip_ahead"),
   }),
   z.object({
-    type: z.literal("escalate"),
     message: z.string(),
     suggested_options: z.array(z.string()).optional(),
+    type: z.literal("escalate"),
   }),
 ]);
 
@@ -60,6 +60,20 @@ export type FlowEventEffect =
  * The start state itself is NOT included in the returned set (we want forward
  * reachability only, so "skip_ahead" to the current state is a no-op).
  */
+function collectEdges(stateDef: StateDefinition): string[] {
+  const edges: string[] = [];
+  if (stateDef.transitions) {
+    for (const target of Object.values(stateDef.transitions)) {
+      edges.push(target);
+    }
+  }
+  if ("on_success" in stateDef && typeof stateDef.on_success === "string")
+    edges.push(stateDef.on_success);
+  if ("on_failure" in stateDef && typeof stateDef.on_failure === "string")
+    edges.push(stateDef.on_failure);
+  return edges;
+}
+
 function reachableFrom(startId: string, states: Record<string, StateDefinition>): Set<string> {
   const visited = new Set<string>();
   const queue: string[] = [startId];
@@ -69,21 +83,7 @@ function reachableFrom(startId: string, states: Record<string, StateDefinition>)
     const stateDef = states[current];
     if (!stateDef) continue;
 
-    // Collect all forward edges from this state
-    const edges: string[] = [];
-
-    // transitions map (most common edge source)
-    if (stateDef.transitions) {
-      for (const target of Object.values(stateDef.transitions)) {
-        edges.push(target);
-      }
-    }
-
-    // on_success / on_failure edges used by wave and parallel states
-    if ("on_success" in stateDef && typeof stateDef.on_success === "string") edges.push(stateDef.on_success);
-    if ("on_failure" in stateDef && typeof stateDef.on_failure === "string") edges.push(stateDef.on_failure);
-
-    for (const edge of edges) {
+    for (const edge of collectEdges(stateDef)) {
       if (!visited.has(edge) && edge !== startId) {
         visited.add(edge);
         queue.push(edge);
@@ -150,9 +150,9 @@ export function drainFlowEvents(params: DrainFlowEventsParams): DrainFlowEventsR
     const parseResult = FlowEventSchema.safeParse(parsed);
     if (!parseResult.success) {
       store.appendEvent("flow_event_skipped", {
+        detail: parseResult.error.message,
         message_id: msg.id,
         reason: "schema validation failed",
-        detail: parseResult.error.message,
       });
       continue;
     }
@@ -182,7 +182,7 @@ function resolveEffect(
   switch (event.type) {
     case "request_state": {
       const allowed = flowDef.allowed_insertions;
-      if (!allowed || !allowed.includes(event.state_id)) {
+      if (!allowed?.includes(event.state_id)) {
         return { type: "none" };
       }
       // Guard against whitelisted state IDs that don't exist in the flow definition.
@@ -192,7 +192,7 @@ function resolveEffect(
       if (!(event.state_id in states)) {
         return { type: "none" };
       }
-      return { type: "insert", state_id: event.state_id };
+      return { state_id: event.state_id, type: "insert" };
     }
 
     case "skip_ahead": {
@@ -201,14 +201,16 @@ function resolveEffect(
       if (!reachable.has(event.target)) {
         return { type: "none" };
       }
-      return { type: "skip", target: event.target, reason: event.reason };
+      return { reason: event.reason, target: event.target, type: "skip" };
     }
 
     case "escalate": {
       return {
-        type: "escalate",
         message: event.message,
-        ...(event.suggested_options !== undefined && { suggested_options: event.suggested_options }),
+        type: "escalate",
+        ...(event.suggested_options !== undefined && {
+          suggested_options: event.suggested_options,
+        }),
       };
     }
   }

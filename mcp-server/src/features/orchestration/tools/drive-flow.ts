@@ -21,9 +21,9 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import type { Board, StateDefinition, WaveResult } from "@domains/flows/flow-schema.ts";
 import { runGates } from "@domains/flows/gate-runner.ts";
-import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { WaveWorktreeResult } from "@domains/workspaces/wave-lifecycle.ts";
 import {
@@ -215,13 +215,18 @@ function handleWaveResult(
  * @param resumeStateId - The state to return to after the inserted state completes ("done").
  *   Pass `reportOut.next_state` from the calling context, or `null` at the wave boundary.
  */
+type ApplyFlowEventDrainOpts = {
+  workspace: string;
+  flow: DriveFlowInput["flow"];
+  currentStateId: string;
+  store: ReturnType<typeof getExecutionStore>;
+  resumeStateId: string | null;
+};
+
 async function applyFlowEventDrain(
-  workspace: string,
-  flow: DriveFlowInput["flow"],
-  currentStateId: string,
-  store: ReturnType<typeof getExecutionStore>,
-  resumeStateId: string | null,
+  opts: ApplyFlowEventDrainOpts,
 ): Promise<ToolResult<DriveFlowAction> | null> {
+  const { workspace, flow, currentStateId, store, resumeStateId } = opts;
   const board = store.getBoard();
   const watermark =
     typeof board?.metadata?.flow_events_watermark === "number"
@@ -284,6 +289,29 @@ type ResolvePostReportOpts = {
   store: ReturnType<typeof getExecutionStore>;
 };
 
+function buildApprovalAction(
+  completedDef: StateDefinition | undefined,
+  artifacts: unknown,
+  state_id: string,
+  status: string,
+): ToolResult<DriveFlowAction> {
+  return {
+    action: "approval" as const,
+    breakpoint: {
+      agent_type: completedDef?.agent ?? completedDef?.type ?? "unknown",
+      artifacts: (artifacts as string[] | undefined) ?? [],
+      options: ["approved", "revise", "reject"] as const,
+      state_id,
+      summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
+    },
+    ok: true as const,
+  };
+}
+
+function isParallelWaitState(def: StateDefinition | undefined): boolean {
+  return def?.type === "parallel" || def?.type === "parallel-per";
+}
+
 /** Check post-report conditions and return the appropriate action. */
 async function resolvePostReportAction(
   workspace: string,
@@ -309,33 +337,27 @@ async function resolvePostReportAction(
     };
   }
 
-  // Parallel wait guard
   const completedDef = flow.states[state_id];
-  if (
-    next_state === state_id &&
-    (completedDef?.type === "parallel" || completedDef?.type === "parallel-per")
-  ) {
+
+  // Parallel wait guard
+  if (next_state === state_id && isParallelWaitState(completedDef)) {
     return { action: "spawn", ok: true as const, requests: [] };
   }
 
   // Approval gate
   if (!isApprovalDecisionStatus(status) && shouldApprovalGate(completedDef, flow, freshBoard)) {
-    return {
-      action: "approval" as const,
-      breakpoint: {
-        agent_type: completedDef?.agent ?? completedDef?.type ?? "unknown",
-        artifacts: (artifacts as string[] | undefined) ?? [],
-        options: ["approved", "revise", "reject"] as const,
-        state_id,
-        summary: `State '${state_id}' completed with status '${status}'. Awaiting approval.`,
-      },
-      ok: true as const,
-    };
+    return buildApprovalAction(completedDef, artifacts, state_id, status);
   }
 
   // Flow event drain — check for agent/external directives before advancing.
   // Pass next_state as resumeStateId so an inserted state can return here when done.
-  const drainAction = await applyFlowEventDrain(workspace, flow, state_id, store, next_state ?? null);
+  const drainAction = await applyFlowEventDrain({
+    currentStateId: state_id,
+    flow,
+    resumeStateId: next_state ?? null,
+    store,
+    workspace,
+  });
   if (drainAction !== null) return drainAction;
 
   // Return-address semantics: if this state was inserted and completed with "done",
@@ -657,7 +679,13 @@ async function routeReportResult(
 
   // Flow event drain — check for agent/external directives before advancing.
   // Pass next_state as resumeStateId so an inserted state can return here when done.
-  const drainAction = await applyFlowEventDrain(workspace, flow, state_id, store, next_state ?? null);
+  const drainAction = await applyFlowEventDrain({
+    currentStateId: state_id,
+    flow,
+    resumeStateId: next_state ?? null,
+    store,
+    workspace,
+  });
   if (drainAction !== null) return drainAction;
 
   // Return-address semantics: if this state was inserted and completed with "done",
@@ -750,6 +778,55 @@ function checkWaveBoundaryApproval(
   };
 }
 
+type AdvanceWaveInput = {
+  currentWave: number;
+  flow: DriveFlowInput["flow"];
+  gateResults: ReturnType<typeof runGates>;
+  projectDir: string;
+  state_id: string;
+  stateDef: StateDefinition;
+  store: ReturnType<typeof getExecutionStore>;
+  workspace: string;
+};
+
+async function advanceWave(input: AdvanceWaveInput): Promise<ToolResult<DriveFlowAction>> {
+  const { currentWave, flow, gateResults, projectDir, state_id, stateDef, store, workspace } =
+    input;
+  const statusKeyword = gateResults.some((g) => !g.passed) ? "gate_failed" : "done";
+
+  const eventResult = handlePendingWaveEvents(store, currentWave);
+  if (eventResult !== null) return eventResult;
+
+  // Flow event drain at wave boundary — check for agent/external directives.
+  // Pass null as resumeStateId: at the wave boundary there is no specific "next state"
+  // to resume at, so inserted states at this boundary have no return address.
+  const drainActionWave = await applyFlowEventDrain({
+    currentStateId: state_id,
+    flow,
+    resumeStateId: null,
+    store,
+    workspace,
+  });
+  if (drainActionWave !== null) return drainActionWave;
+
+  const nextWave = currentWave + 1;
+  const nextWaveTaskIds = await resolveNextWaveTaskIds(workspace, store, nextWave);
+
+  if (nextWaveTaskIds.length === 0) {
+    return handleLastWave(workspace, flow, { gateResults, state_id, statusKeyword, store });
+  }
+
+  const approvalAction = checkWaveBoundaryApproval(stateDef, flow, {
+    currentWave,
+    nextWaveTaskIds,
+    state_id,
+    store,
+  });
+  if (approvalAction) return approvalAction;
+
+  return startNextWave({ flow, nextWave, nextWaveTaskIds, projectDir, state_id, store, workspace });
+}
+
 async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveFlowAction>> {
   const { workspace, flow, state_id, currentWave, store } = input;
 
@@ -789,33 +866,16 @@ async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveF
   }
 
   const gateResults = runGates(stateDef, flow, mergeCwd, stateEntry ?? undefined);
-  const statusKeyword = gateResults.some((g) => !g.passed) ? "gate_failed" : "done";
-
-  const eventResult = handlePendingWaveEvents(store, currentWave);
-  if (eventResult !== null) return eventResult;
-
-  // Flow event drain at wave boundary — check for agent/external directives.
-  // Pass null as resumeStateId: at the wave boundary there is no specific "next state"
-  // to resume at, so inserted states at this boundary have no return address.
-  const drainActionWave = await applyFlowEventDrain(workspace, flow, state_id, store, null);
-  if (drainActionWave !== null) return drainActionWave;
-
-  const nextWave = currentWave + 1;
-  const nextWaveTaskIds = await resolveNextWaveTaskIds(workspace, store, nextWave);
-
-  if (nextWaveTaskIds.length === 0) {
-    return handleLastWave(workspace, flow, { gateResults, state_id, statusKeyword, store });
-  }
-
-  const approvalAction = checkWaveBoundaryApproval(stateDef, flow, {
+  return advanceWave({
     currentWave,
-    nextWaveTaskIds,
+    flow,
+    gateResults,
+    projectDir,
     state_id,
+    stateDef,
     store,
+    workspace,
   });
-  if (approvalAction) return approvalAction;
-
-  return startNextWave({ flow, nextWave, nextWaveTaskIds, projectDir, state_id, store, workspace });
 }
 
 type HandleMergeConflictInput = {
