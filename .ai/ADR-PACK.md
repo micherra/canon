@@ -1484,6 +1484,27 @@ ADR-001 (SQLite foundation — `flow_runs`, `execution_states` tables), ADR-010 
 - Remove archive logic from `post-merge-cleanup.sh`
 - Update `commands/doctor.md` to drop `.canon/history/` check
 
+### Tasks
+
+**Task 1 — Project-level metrics rollup table**
+
+- [ ] Add a `metrics_rollup` table to the project-level `.canon/orchestration.db` (not workspace-level) with columns: `workspace_slug`, `branch`, `flow_name`, `state_id`, `agent_type`, `tool_calls`, `orientation_calls`, `turns`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `duration_ms`, `model`, `completed_at`
+- [ ] Add migration to create the table and index on `(workspace_slug, flow_name, state_id)`
+- [ ] This table is the durable store that survives workspace cleanup; workspace-level `execution_states.metrics` remains the real-time source of truth
+
+**Task 2 — Rollup on complete_flow**
+
+- [ ] In `update-board.ts` (or wherever the `complete_flow` action is handled), after marking the flow complete, query all `execution_states` rows from the workspace `orchestration.db`
+- [ ] For each row, extract the `metrics` JSON blob and INSERT a corresponding row into the project-level `metrics_rollup` table
+- [ ] Skip states with null or empty metrics; use `ON CONFLICT DO NOTHING` so re-running complete_flow is idempotent
+- [ ] This extraction step preserves per-state agent data before the workspace can be pruned by ADR-020's janitor
+
+**Task 3 — Wire get_efficiency_report to project-level store**
+
+- [ ] Update `get_efficiency_report` to query `metrics_rollup` in the project-level `.canon/orchestration.db` when aggregating cross-flow or cross-workspace data
+- [ ] For single-workspace mode (workspace still alive and not yet cleaned up), continue querying the workspace DB directly for real-time data; fall back to `metrics_rollup` if workspace DB is absent
+- [ ] Expose `workspace_slug`, `branch`, and `flow_name` as optional filter parameters in the tool's input schema so callers can scope the report to a specific flow run
+
 ---
 
 ## ADR-020: Background Janitor Agent
