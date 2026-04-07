@@ -229,7 +229,6 @@ async function applyFlowEventDrain(
     flowDef: flow,
     store,
     watermark,
-    workspaceId: workspace,
   });
 
   // Persist the watermark whenever it advances so subsequent calls don't reprocess messages

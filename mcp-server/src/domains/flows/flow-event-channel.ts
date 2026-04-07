@@ -100,7 +100,6 @@ function reachableFrom(startId: string, states: Record<string, StateDefinition>)
 
 export type DrainFlowEventsParams = {
   store: ExecutionStore;
-  workspaceId: string;
   currentStateId: string;
   flowDef: FlowDefinition;
   /** Last processed message id (board.metadata.flow_events_watermark ?? 0) */
@@ -206,12 +205,11 @@ function resolveEffect(
     }
 
     case "escalate": {
-      const eff: FlowEventEffect = { type: "escalate", message: event.message };
-      if (event.suggested_options !== undefined) {
-        (eff as { type: "escalate"; message: string; suggested_options?: string[] }).suggested_options =
-          event.suggested_options;
-      }
-      return eff;
+      return {
+        type: "escalate",
+        message: event.message,
+        ...(event.suggested_options !== undefined && { suggested_options: event.suggested_options }),
+      };
     }
   }
 }

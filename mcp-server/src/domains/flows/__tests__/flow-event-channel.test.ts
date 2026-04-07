@@ -64,7 +64,6 @@ describe("drainFlowEvents — no messages", () => {
     const store = makeStore([]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -83,7 +82,6 @@ describe("drainFlowEvents — malformed messages", () => {
     const store = makeStore([makeMsg(1, "not-json{{{")]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -100,7 +98,6 @@ describe("drainFlowEvents — malformed messages", () => {
     const store = makeStore([makeMsg(2, JSON.stringify({ type: "unknown_event" }))]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -134,7 +131,6 @@ describe("drainFlowEvents — request_state", () => {
     };
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -150,7 +146,6 @@ describe("drainFlowEvents — request_state", () => {
     const flow = makeLinearFlow(["hotfix"]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -166,7 +161,6 @@ describe("drainFlowEvents — request_state", () => {
     const flow = makeLinearFlow(undefined); // no allowed_insertions
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -188,7 +182,6 @@ describe("drainFlowEvents — request_state", () => {
     };
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -206,7 +199,6 @@ describe("drainFlowEvents — request_state", () => {
     // makeLinearFlow only defines start/middle/done — ghost-state is not in states
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -228,7 +220,6 @@ describe("drainFlowEvents — skip_ahead", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -244,7 +235,6 @@ describe("drainFlowEvents — skip_ahead", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "done",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -260,7 +250,6 @@ describe("drainFlowEvents — skip_ahead", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -276,7 +265,6 @@ describe("drainFlowEvents — skip_ahead", () => {
     const flow: FlowDefinition = { name: "empty", description: "empty" };
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -302,7 +290,6 @@ describe("drainFlowEvents — skip_ahead", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -329,7 +316,6 @@ describe("drainFlowEvents — skip_ahead", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -354,7 +340,6 @@ describe("drainFlowEvents — skip_ahead", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -374,7 +359,6 @@ describe("drainFlowEvents — escalate", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -393,7 +377,6 @@ describe("drainFlowEvents — escalate", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -411,7 +394,6 @@ describe("drainFlowEvents — escalate", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -434,7 +416,6 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -452,7 +433,6 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     const flow = makeLinearFlow([]); // empty allowed_insertions
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -469,7 +449,6 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     ]);
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 0,
@@ -485,7 +464,6 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     const flow = makeLinearFlow([]); // empty — request_state is always no-op
     const result = drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: flow,
       watermark: 0,
@@ -499,7 +477,6 @@ describe("drainFlowEvents — first-wins and watermark", () => {
     const spy = store.getMessagesSinceId as ReturnType<typeof vi.fn>;
     drainFlowEvents({
       store: store as unknown as ExecutionStore,
-      workspaceId: "ws1",
       currentStateId: "start",
       flowDef: makeLinearFlow(),
       watermark: 99,
