@@ -19,6 +19,7 @@ import {
   SingleStateSchema,
   StateDefinitionSchema,
   TerminalStateSchema,
+  ToolOverridesSchema,
   WavePolicySchema,
   WaveStateSchema,
 } from "../flow-schema.ts";
@@ -508,6 +509,152 @@ describe("FragmentStateDefinitionSchema", () => {
         type: "bogus",
       }),
     ).toThrow();
+  });
+});
+
+// ToolOverridesSchema
+
+describe("ToolOverridesSchema", () => {
+  it("accepts empty object {}", () => {
+    const result = ToolOverridesSchema.parse({});
+    expect(result).toBeDefined();
+  });
+
+  it("accepts undefined (optional)", () => {
+    const result = ToolOverridesSchema.parse(undefined);
+    expect(result).toBeUndefined();
+  });
+
+  it("accepts allow array", () => {
+    const result = ToolOverridesSchema.parse({ allow: ["Bash", "Read"] });
+    expect(result?.allow).toEqual(["Bash", "Read"]);
+  });
+
+  it("accepts deny array", () => {
+    const result = ToolOverridesSchema.parse({ deny: ["Bash"] });
+    expect(result?.deny).toEqual(["Bash"]);
+  });
+
+  it("accepts replace array", () => {
+    const result = ToolOverridesSchema.parse({ replace: ["Read", "Write"] });
+    expect(result?.replace).toEqual(["Read", "Write"]);
+  });
+
+  it("accepts all valid permission_mode values", () => {
+    for (const mode of ["auto", "prompt", "deny_unknown"] as const) {
+      const result = ToolOverridesSchema.parse({ permission_mode: mode });
+      expect(result?.permission_mode).toBe(mode);
+    }
+  });
+
+  it("rejects invalid permission_mode value", () => {
+    expect(() => ToolOverridesSchema.parse({ permission_mode: "allow_all" })).toThrow();
+  });
+});
+
+// tool_overrides on per-type state schemas
+
+describe("tool_overrides on state schemas (ADR-014)", () => {
+  it("SingleStateSchema accepts tool_overrides with allow array", () => {
+    const result = SingleStateSchema.parse({
+      agent: "canon:canon-implementor",
+      tool_overrides: { allow: ["Read", "Write", "Bash"] },
+      type: "single",
+    });
+    expect(result.tool_overrides?.allow).toEqual(["Read", "Write", "Bash"]);
+  });
+
+  it("WaveStateSchema accepts tool_overrides with deny array", () => {
+    const result = WaveStateSchema.parse({
+      agent: "canon:canon-implementor",
+      tool_overrides: { deny: ["Write"] },
+      type: "wave",
+    });
+    expect(result.tool_overrides?.deny).toEqual(["Write"]);
+  });
+
+  it("ParallelStateSchema accepts tool_overrides with replace array", () => {
+    const result = ParallelStateSchema.parse({
+      agents: ["canon:canon-implementor", "canon:canon-tester"],
+      tool_overrides: { replace: ["Bash", "Read"] },
+      type: "parallel",
+    });
+    expect(result.tool_overrides?.replace).toEqual(["Bash", "Read"]);
+  });
+
+  it("ParallelPerStateSchema accepts tool_overrides with permission_mode", () => {
+    const result = ParallelPerStateSchema.parse({
+      agent: "canon:canon-implementor",
+      iterate_on: "${tasks}",
+      tool_overrides: { permission_mode: "deny_unknown" },
+      type: "parallel-per",
+    });
+    expect(result.tool_overrides?.permission_mode).toBe("deny_unknown");
+  });
+
+  it("TerminalStateSchema accepts tool_overrides", () => {
+    const result = TerminalStateSchema.parse({
+      tool_overrides: { allow: ["Read"] },
+      type: "terminal",
+    });
+    expect(result.tool_overrides?.allow).toEqual(["Read"]);
+  });
+
+  it("SingleStateSchema parses without tool_overrides (backward compat)", () => {
+    const result = SingleStateSchema.parse({
+      agent: "canon:canon-implementor",
+      type: "single",
+    });
+    expect(result.tool_overrides).toBeUndefined();
+  });
+
+  it("WaveStateSchema parses without tool_overrides (backward compat)", () => {
+    const result = WaveStateSchema.parse({
+      agent: "canon:canon-implementor",
+      type: "wave",
+    });
+    expect(result.tool_overrides).toBeUndefined();
+  });
+
+  it("ParallelStateSchema parses without tool_overrides (backward compat)", () => {
+    const result = ParallelStateSchema.parse({
+      type: "parallel",
+    });
+    expect(result.tool_overrides).toBeUndefined();
+  });
+
+  it("ParallelPerStateSchema parses without tool_overrides (backward compat)", () => {
+    const result = ParallelPerStateSchema.parse({
+      agent: "canon:canon-implementor",
+      iterate_on: "${tasks}",
+      type: "parallel-per",
+    });
+    expect(result.tool_overrides).toBeUndefined();
+  });
+
+  it("TerminalStateSchema parses without tool_overrides (backward compat)", () => {
+    const result = TerminalStateSchema.parse({
+      type: "terminal",
+    });
+    expect(result.tool_overrides).toBeUndefined();
+  });
+
+  it("FragmentSingleStateSchema accepts tool_overrides", () => {
+    const result = FragmentStateDefinitionSchema.parse({
+      agent: "canon:canon-implementor",
+      tool_overrides: { allow: ["Read"] },
+      type: "single",
+    });
+    expect((result as Record<string, unknown>).tool_overrides).toBeDefined();
+  });
+
+  it("FragmentWaveStateSchema accepts tool_overrides", () => {
+    const result = FragmentStateDefinitionSchema.parse({
+      agent: "canon:canon-implementor",
+      tool_overrides: { deny: ["Bash"] },
+      type: "wave",
+    });
+    expect((result as Record<string, unknown>).tool_overrides).toBeDefined();
   });
 });
 

@@ -185,6 +185,19 @@ export const BaselineEvidenceSchema = z.object({
 
 export type BaselineEvidence = z.infer<typeof BaselineEvidenceSchema>;
 
+// Tool overrides schema (ADR-014)
+
+export const ToolOverridesSchema = z
+  .object({
+    allow: z.array(z.string()).optional(),
+    deny: z.array(z.string()).optional(),
+    replace: z.array(z.string()).optional(),
+    permission_mode: z.enum(["auto", "prompt", "deny_unknown"]).optional(),
+  })
+  .optional();
+
+export type ToolOverrides = z.infer<typeof ToolOverridesSchema>;
+
 // Per-type state schemas (discriminated union members)
 
 /**
@@ -224,6 +237,7 @@ const BaseStateFields = {
   stuck_when: StuckWhenSchema.optional(),
   template: z.union([z.string(), z.array(z.string())]).optional(),
   timeout: z.string().optional(),
+  tool_overrides: ToolOverridesSchema,
   transitions: z.record(z.string(), z.string()).optional(),
 };
 
@@ -361,6 +375,7 @@ const FragmentBaseStateFields = {
   stuck_when: z.union([StuckWhenSchema, z.string()]).optional(),
   template: z.union([z.string(), z.array(z.string())]).optional(),
   timeout: z.string().optional(),
+  tool_overrides: ToolOverridesSchema,
   transitions: z.record(z.string(), z.string()).optional(),
 };
 

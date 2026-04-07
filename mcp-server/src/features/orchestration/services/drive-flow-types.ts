@@ -23,6 +23,10 @@ export type SpawnRequest = {
   task_id?: string;
   /** Optional worktree path for worktree-isolated agents */
   worktree_path?: string;
+  // ADR-014: tool scoping metadata
+  tools?: string[];
+  disallowed_tools?: string[];
+  permission_mode?: "auto" | "prompt" | "deny_unknown";
   /**
    * Optional session continuation.
    * When present, the orchestrator should use SendMessage({ to: agent_id })
