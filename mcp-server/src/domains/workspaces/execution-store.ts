@@ -77,6 +77,7 @@ type ExecutionStateRow = {
   compete_results: string | null; // JSON array | null
   synthesized: number | null; // 0/1 | null
   transcript_path: string | null; // ADR-015
+  inserted_return_to: string | null; // ADR-012
 };
 
 type IterationRow = {
@@ -318,13 +319,15 @@ export class ExecutionStore {
         result, artifacts, artifact_history, error,
         wave, wave_total, wave_results, metrics,
         gate_results, postcondition_results, discovered_gates,
-        discovered_postconditions, parallel_results, compete_results, synthesized
+        discovered_postconditions, parallel_results, compete_results, synthesized,
+        inserted_return_to
       ) VALUES (
         @state_id, @status, @entries, @entered_at, @completed_at,
         @result, @artifacts, @artifact_history, @error,
         @wave, @wave_total, @wave_results, @metrics,
         @gate_results, @postcondition_results, @discovered_gates,
-        @discovered_postconditions, @parallel_results, @compete_results, @synthesized
+        @discovered_postconditions, @parallel_results, @compete_results, @synthesized,
+        @inserted_return_to
       )
       ON CONFLICT(state_id) DO UPDATE SET
         status                    = excluded.status,
@@ -345,7 +348,8 @@ export class ExecutionStore {
         discovered_postconditions = excluded.discovered_postconditions,
         parallel_results          = excluded.parallel_results,
         compete_results           = excluded.compete_results,
-        synthesized               = excluded.synthesized
+        synthesized               = excluded.synthesized,
+        inserted_return_to        = excluded.inserted_return_to
         -- transcript_path intentionally omitted: preserves existing value on update
     `);
     this.stmtGetState = db.prepare(`SELECT * FROM execution_states WHERE state_id = ?`);
@@ -664,6 +668,7 @@ export class ExecutionStore {
       entries: fields.entries,
       error: fields.error ?? null,
       gate_results: jsonOrNull(fields.gate_results),
+      inserted_return_to: fields.inserted_return_to ?? null,
       metrics: jsonOrNull(fields.metrics),
       parallel_results: jsonOrNull(fields.parallel_results),
       postcondition_results: jsonOrNull(fields.postcondition_results),
@@ -1084,6 +1089,7 @@ export class ExecutionStore {
       entries: row.entries,
       error: row.error ?? undefined,
       gate_results: parseJson(row.gate_results),
+      inserted_return_to: row.inserted_return_to ?? undefined,
       metrics: parseJson(row.metrics),
       parallel_results: parseJson(row.parallel_results),
       postcondition_results: parseJson(row.postcondition_results),

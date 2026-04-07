@@ -20,7 +20,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const SCHEMA_VERSION = "8";
+export const SCHEMA_VERSION = "9";
 
 // DDL statements — v1 base tables (no correlation_id)
 //
@@ -317,6 +317,19 @@ const MIGRATIONS: Migration[] = [
     },
     // jobs and job_cache tables for background job tracking (ADR-007)
     version: "8",
+  },
+  {
+    up: (db) => {
+      const tableRow = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='execution_states'`)
+        .get() as { name: string } | undefined;
+      if (tableRow && !columnExists(db, "execution_states", "inserted_return_to")) {
+        db.exec(`ALTER TABLE execution_states ADD COLUMN inserted_return_to TEXT`);
+      }
+      db.exec(`UPDATE meta SET value = '9' WHERE key = 'schema_version'`);
+    },
+    // inserted_return_to column on execution_states (ADR-012)
+    version: "9",
   },
 ];
 

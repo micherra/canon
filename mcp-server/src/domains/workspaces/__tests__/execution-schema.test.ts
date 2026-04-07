@@ -41,8 +41,8 @@ function getSchemaVersion(db: ReturnType<typeof initExecutionDb>): string {
 // SCHEMA_VERSION
 
 describe("SCHEMA_VERSION", () => {
-  test('is "8"', () => {
-    expect(SCHEMA_VERSION).toBe("8");
+  test('is "9"', () => {
+    expect(SCHEMA_VERSION).toBe("9");
   });
 });
 
@@ -102,14 +102,14 @@ describe("migration v8 — job_cache table", () => {
 });
 
 describe("migration v8 — schema version", () => {
-  test('schema_version is "8" after init', () => {
+  test('schema_version is "9" after init', () => {
     const db = initExecutionDb(":memory:");
-    expect(getSchemaVersion(db)).toBe("8");
+    expect(getSchemaVersion(db)).toBe("9");
   });
 });
 
 describe("migration v8 — upgrade from v6", () => {
-  test("upgrades existing v6 DB to v7", () => {
+  test("upgrades existing v6 DB to v8+", () => {
     // Simulate a v6 DB by initializing then manually setting version back to '6'
     // and dropping the v7 tables (they were created by the fresh init)
     // Instead: use a real in-memory DB initialized without v7 tables
@@ -119,7 +119,7 @@ describe("migration v8 — upgrade from v6", () => {
     const tables = getTableNames(db);
     expect(tables).toContain("jobs");
     expect(tables).toContain("job_cache");
-    expect(getSchemaVersion(db)).toBe("8");
+    expect(getSchemaVersion(db)).toBe("9");
   });
 
   test("runMigrations is idempotent — safe to call twice", () => {
@@ -132,7 +132,7 @@ describe("migration v8 — upgrade from v6", () => {
     const tables = getTableNames(db);
     expect(tables).toContain("jobs");
     expect(tables).toContain("job_cache");
-    expect(getSchemaVersion(db)).toBe("8");
+    expect(getSchemaVersion(db)).toBe("9");
   });
 
   test("can insert a row into jobs table", () => {
@@ -159,5 +159,52 @@ describe("migration v8 — upgrade from v6", () => {
       job_type: string;
     };
     expect(row.job_type).toBe("codebase_graph");
+  });
+});
+
+// Migration v9 — inserted_return_to column (ADR-012)
+
+describe("migration v9 — inserted_return_to column", () => {
+  test("adds inserted_return_to column to execution_states on fresh DB", () => {
+    const db = initExecutionDb(":memory:");
+    const columns = getColumnNames(db, "execution_states");
+    expect(columns).toContain("inserted_return_to");
+  });
+
+  test("schema_version is '9' after init", () => {
+    const db = initExecutionDb(":memory:");
+    expect(getSchemaVersion(db)).toBe("9");
+  });
+
+  test("runMigrations is idempotent after v9", () => {
+    const db = initExecutionDb(":memory:");
+    expect(() => runMigrations(db)).not.toThrow();
+    const columns = getColumnNames(db, "execution_states");
+    expect(columns).toContain("inserted_return_to");
+    expect(getSchemaVersion(db)).toBe("9");
+  });
+
+  test("inserted_return_to accepts TEXT value", () => {
+    const db = initExecutionDb(":memory:");
+    db.prepare(`
+      INSERT INTO execution_states (state_id, status, entries, inserted_return_to)
+      VALUES ('s1', 'pending', 0, 'hitl')
+    `).run();
+    const row = db
+      .prepare(`SELECT inserted_return_to FROM execution_states WHERE state_id = 's1'`)
+      .get() as { inserted_return_to: string };
+    expect(row.inserted_return_to).toBe("hitl");
+  });
+
+  test("inserted_return_to defaults to NULL", () => {
+    const db = initExecutionDb(":memory:");
+    db.prepare(`
+      INSERT INTO execution_states (state_id, status, entries)
+      VALUES ('s2', 'pending', 0)
+    `).run();
+    const row = db
+      .prepare(`SELECT inserted_return_to FROM execution_states WHERE state_id = 's2'`)
+      .get() as { inserted_return_to: string | null };
+    expect(row.inserted_return_to).toBeNull();
   });
 });

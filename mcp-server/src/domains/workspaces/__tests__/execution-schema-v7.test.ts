@@ -19,7 +19,7 @@ import {
 
 describe("SCHEMA_VERSION", () => {
   test("is 8", () => {
-    expect(SCHEMA_VERSION).toBe("8");
+    expect(SCHEMA_VERSION).toBe("9");
   });
 });
 
@@ -41,7 +41,7 @@ describe("Schema v7 migration — worktree columns on execution", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("8");
+    expect(row?.value).toBe("9");
     db.close();
   });
 
@@ -133,7 +133,7 @@ describe("Schema v7 migration — worktree columns on execution", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("8");
+    expect(row?.value).toBe("9");
 
     db.close();
   });
@@ -155,7 +155,7 @@ describe("Schema v7 migration — worktree columns on execution", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("8");
+    expect(row?.value).toBe("9");
 
     db.close();
   });

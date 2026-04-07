@@ -77,7 +77,7 @@ describe("initExecutionDb", () => {
       | { value: string }
       | undefined;
     expect(row?.value).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe("8");
+    expect(SCHEMA_VERSION).toBe("9");
     db.close();
   });
 
@@ -359,6 +359,65 @@ describe("upsertState + getState", () => {
     expect(ids).toContain("research");
     expect(ids).toContain("implement");
     expect(ids).toContain("review");
+  });
+});
+
+// inserted_return_to round-trip (ADR-012)
+
+describe("upsertState + getState — inserted_return_to field", () => {
+  let store: ExecutionStore;
+
+  beforeEach(() => {
+    store = makeStore();
+  });
+  afterEach(() => {
+    store.close();
+  });
+
+  test("persists inserted_return_to when set", () => {
+    store.upsertState("implement", {
+      entries: 0,
+      inserted_return_to: "hitl",
+      status: "in_progress",
+    });
+    const state = store.getState("implement");
+    expect(state).not.toBeNull();
+    expect(state!.inserted_return_to).toBe("hitl");
+  });
+
+  test("returns undefined for inserted_return_to when not set", () => {
+    store.upsertState("implement", {
+      entries: 0,
+      status: "in_progress",
+    });
+    const state = store.getState("implement");
+    expect(state).not.toBeNull();
+    expect(state!.inserted_return_to).toBeUndefined();
+  });
+
+  test("round-trips an arbitrary string value", () => {
+    store.upsertState("research", {
+      entries: 1,
+      inserted_return_to: "some-target-state",
+      status: "done",
+    });
+    const state = store.getState("research");
+    expect(state!.inserted_return_to).toBe("some-target-state");
+  });
+
+  test("update overwrites inserted_return_to", () => {
+    store.upsertState("implement", {
+      entries: 0,
+      inserted_return_to: "first",
+      status: "in_progress",
+    });
+    store.upsertState("implement", {
+      entries: 1,
+      inserted_return_to: "second",
+      status: "done",
+    });
+    const state = store.getState("implement");
+    expect(state!.inserted_return_to).toBe("second");
   });
 });
 

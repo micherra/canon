@@ -529,6 +529,7 @@ export const BoardStateEntrySchema = z.object({
   entries: z.number().default(0),
   error: z.string().optional(),
   gate_results: z.array(GateResultSchema).optional(),
+  inserted_return_to: z.string().optional(),
   metrics: StateMetricsSchema.optional(),
   parallel_results: z
     .array(
