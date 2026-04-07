@@ -46,3 +46,12 @@ The refactor step is where the cycle pays compound interest. Because tests are g
 
 - **Exploratory spikes**: Throwaway code investigating an API or algorithm before committing to an approach. Spikes must be deleted or rewritten with TDD before merging.
 - **Trivial wiring**: Thin glue code with no logic (re-exporting a module, wiring DI) may skip the cycle.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|----------------|----------------|
+| "This logic is too simple to need a test first." | Simple code still has edge cases, and tests written after implementation suffer from confirmation bias — they verify what the code does, not what it should do. | Write the failing test first regardless of perceived simplicity. If the test takes 30 seconds, the cycle cost is negligible. |
+| "I'll add tests after I get it working." | Post-hoc tests don't drive the design. They chase the implementation rather than specify the contract, and routinely miss cases the implementor never thought about. | Stop. Write the failing test now. If code exists without a test, delete or comment it out and start the cycle properly. |
+| "The plan doesn't mention tests, so I can skip them." | The plan describes behavior to implement, not the process to use. TDD is a process rule, not a plan artifact — it applies regardless of whether the plan mentions tests. | Write tests for every behavior the plan specifies. The plan's silence on tests is not permission to skip them. |
+| "I'm just wiring things together — there's no logic to test." | Wiring code that crosses module boundaries has behavior: it connects things, passes arguments, returns results. Bugs in wiring are among the hardest to diagnose. | Apply the trivial-wiring exception only for pure re-exports or DI registration with zero branching. Everything else gets a test. |

@@ -57,3 +57,12 @@ the order in a transaction. Thin API route that validates input and delegates.
 ## Exceptions
 
 Trivial tasks (renaming a variable, fixing a typo, updating config) don't need a design document. The orchestrator can skip the architect for tasks flagged as trivial.
+
+## Anti-Rationalization
+
+| Excuse | Why It's Wrong | Correct Action |
+|--------|----------------|----------------|
+| "This change is too small for a design document." | Small tasks still require decisions about file placement, naming, and principle alignment. Without a design, implementors make those decisions independently and inconsistently. | Produce a minimal design: one paragraph on approach, Canon alignment notes, and any open questions. Small scope means a fast design, not no design. |
+| "I already know the approach — writing it down is busy work." | An undocumented approach exists only in one agent's context. The design document is the handoff artifact — without it, implementors must infer your intent. | Write the design. If it's truly obvious, it takes five minutes. If it's not, you needed to think it through anyway. |
+| "The research findings already describe the solution." | Research documents describe what exists, not what to build. They don't map decisions to principles, resolve tensions, or lock down choices implementors will face. | Synthesize research into a design that explicitly states decisions, principle alignment, and tradeoffs. Research is input; the design is the output. |
+| "I'll clarify details in the plan tasks." | Plan tasks specify scope and files. They cannot substitute for design reasoning — implementors will encounter decisions the tasks don't cover and will guess. | Resolve every meaningful decision in the design document before writing plan tasks. Tasks should implement a locked design, not explore an open one. |
