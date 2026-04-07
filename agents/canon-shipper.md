@@ -67,6 +67,21 @@ If optional checks are missing, note them in the PR description under "Build Not
 
 Run `git log --oneline ${base_commit}..HEAD` to get the list of commits from this build. Use commit messages to understand the sequence of changes.
 
+### Step 2.5: Build Flow Synopsis
+
+Read `board.json` state history and build a per-state summary table. For each completed state in `board.states`:
+
+| Column | Source |
+|--------|--------|
+| State | State key (e.g., `research`, `implement`) |
+| Status | `board.states[state].status` |
+| Artifacts | Count from `board.states[state].artifacts[]`; list up to 3 paths — if more, show the count |
+| Notes | Any concern flags or revision count > 1 |
+
+Only include non-skipped states in the table. Skipped states go in a "Skipped" line below the table.
+
+This synopsis goes into the `## Flow Synopsis` section of the PR description (see template).
+
 ### Step 3: Generate PR description
 
 Produce a structured PR description using the pr-description template at `${CLAUDE_PLUGIN_ROOT}/templates/pr-description.md`. Write for a human reviewer who hasn't seen the build process. Be concrete and specific. No filler.

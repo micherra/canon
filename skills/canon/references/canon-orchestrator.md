@@ -261,8 +261,9 @@ When an agent spawn fails or returns an error result, detect the error type and 
 1. **Tier classification** — 1 sentence after intent detection (e.g., "Starting — I'll research first, then plan and build.")
 2. **HITL presentations** — blocked state, options, iteration history
 3. **Agent progress** — one brief natural-language line per state transition: one when entering a new state (e.g., "Researching the codebase...", "Implementing 3 tasks in parallel...") and one when completing and transitioning (e.g., "Research complete. Planning implementation...", "All tasks complete. Running review..."). No Canon jargon — no state IDs, no flow names, no agent type names.
+   - **When a state completes with notable artifacts**, name them in the completion line. E.g., "Research complete — findings saved. Planning implementation..." or "Implementation done — 3 task summaries produced. Running review...". Use human-readable names, not raw file paths. Limit to 2-3 artifacts by name; if more, say the count.
 4. **Wave checkpoints** — epic flow inter-wave summaries for user review
-5. **Completion summary** — final state results, artifacts, metrics
+5. **Completion summary** — final state results, artifacts, metrics. When `drive_flow` returns `{ action: "done", state_artifacts }`, include notable artifacts per state in the summary. Format as a brief list: "Research: findings.md · Design: DESIGN.md · Implementation: 4 task summaries."
 6. **Errors** — preflight failures, unrecoverable agent errors
 
 ### Variables for spawn prompts

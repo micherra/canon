@@ -21,6 +21,7 @@ export type ToolScopeWarning = {
   granted_disallowed: string[];
 };
 
+
 /** Resolved tool configuration for a single agent spawn. */
 export type ResolvedProfile = {
   tools: string[];
