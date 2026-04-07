@@ -816,7 +816,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
           agent: "canon-researcher",
           tool_overrides: { allow: ["Edit"] },
           type: "single",
-        } as never,
+        },
       },
     });
 

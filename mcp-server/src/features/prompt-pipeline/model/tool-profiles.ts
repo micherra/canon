@@ -133,7 +133,11 @@ export const resolveToolProfile = (
     const grantedDisallowed = overrides.replace.filter((t) => base.disallowed.includes(t));
     if (grantedDisallowed.length > 0) {
       console.warn(
-        `[ADR-014] tool_overrides.replace grants disallowed tools for ${agent}: ${grantedDisallowed.join(", ")}`,
+        JSON.stringify({
+          event: "adr014_replace_override_grants_disallowed",
+          agent,
+          granted_disallowed: grantedDisallowed,
+        }),
       );
     }
     effectiveAllowed = overrides.replace;
