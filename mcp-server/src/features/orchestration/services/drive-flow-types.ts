@@ -68,7 +68,18 @@ export type DriveFlowAction =
   | { action: "spawn"; requests: SpawnRequest[] }
   | { action: "hitl"; breakpoint: HitlBreakpoint }
   | { action: "approval"; breakpoint: ApprovalBreakpoint }
-  | { action: "done"; terminal_state: string; summary: string };
+  | {
+      action: "done";
+      terminal_state: string;
+      summary: string;
+      /**
+       * Per-state artifact paths collected from board state history.
+       * Keys are state IDs; values are the artifact paths reported by that state's agent.
+       * Only states that produced at least one artifact appear in this map.
+       * Optional — absent when the board has no artifact data.
+       */
+      state_artifacts?: Record<string, string[]>;
+    };
 
 // DriveFlowInput — validated input for the drive_flow tool
 

@@ -469,6 +469,84 @@ describe("driveFlow — terminal state", () => {
   });
 });
 
+// 5b. state_artifacts in done action
+
+describe("driveFlow — state_artifacts in done", () => {
+  it("includes state_artifacts map with artifact paths from board states", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    // Simulate board states that have artifacts
+    store.upsertState("research", {
+      artifacts: ["research/findings.md"],
+      entries: 1,
+      status: "done",
+    });
+    store.upsertState("implement", {
+      artifacts: ["plans/task-01/SUMMARY.md", "plans/task-02/SUMMARY.md"],
+      entries: 1,
+      status: "done",
+    });
+    store.updateExecution({ current_state: "terminal" });
+
+    const flow = makeFlow();
+    const result = await driveFlow({ flow, workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).toBe("done");
+    if (result.action !== "done") return;
+    expect(result.state_artifacts).toBeDefined();
+    expect(result.state_artifacts?.research).toEqual(["research/findings.md"]);
+    expect(result.state_artifacts?.implement).toEqual([
+      "plans/task-01/SUMMARY.md",
+      "plans/task-02/SUMMARY.md",
+    ]);
+  });
+
+  it("omits states with no artifacts from state_artifacts map", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    // One state with artifacts, one without
+    store.upsertState("research", {
+      artifacts: ["research/findings.md"],
+      entries: 1,
+      status: "done",
+    });
+    store.upsertState("implement", {
+      entries: 1,
+      status: "done",
+    });
+    store.updateExecution({ current_state: "terminal" });
+
+    const flow = makeFlow();
+    const result = await driveFlow({ flow, workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).toBe("done");
+    if (result.action !== "done") return;
+    expect(result.state_artifacts).toBeDefined();
+    expect(result.state_artifacts?.research).toEqual(["research/findings.md"]);
+    expect(result.state_artifacts?.implement).toBeUndefined();
+  });
+
+  it("returns state_artifacts as empty object when no states have artifacts", async () => {
+    const workspace = makeTmpWorkspace();
+    const store = makeStore(workspace);
+    store.updateExecution({ current_state: "terminal" });
+
+    const flow = makeFlow();
+    const result = await driveFlow({ flow, workspace });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.action).toBe("done");
+    if (result.action !== "done") return;
+    // state_artifacts should be present but empty (no states recorded yet)
+    expect(result.state_artifacts).toEqual({});
+  });
+});
+
 // 6. Consultation prompts
 
 describe("driveFlow — consultation prompts", () => {

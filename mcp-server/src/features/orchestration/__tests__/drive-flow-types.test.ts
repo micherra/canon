@@ -183,6 +183,34 @@ describe("DriveFlowAction discriminated union types", () => {
     expect(action.terminal_state).toBe("complete");
   });
 
+  test("done action accepts optional state_artifacts map", () => {
+    const action: DriveFlowAction = {
+      action: "done",
+      state_artifacts: {
+        implement: ["plans/task-01/SUMMARY.md", "plans/task-02/SUMMARY.md"],
+        research: ["research/findings.md"],
+      },
+      summary: "All tasks completed successfully",
+      terminal_state: "complete",
+    };
+    expect(action.action).toBe("done");
+    if (action.action !== "done") return;
+    expect(action.state_artifacts).toBeDefined();
+    expect(action.state_artifacts?.implement).toHaveLength(2);
+    expect(action.state_artifacts?.research).toHaveLength(1);
+  });
+
+  test("done action state_artifacts is optional (omitting it is valid)", () => {
+    const action: DriveFlowAction = {
+      action: "done",
+      summary: "All tasks completed successfully",
+      terminal_state: "complete",
+    };
+    expect(action.action).toBe("done");
+    if (action.action !== "done") return;
+    expect(action.state_artifacts).toBeUndefined();
+  });
+
   test("SpawnRequest supports continue_from", () => {
     const request: SpawnRequest = {
       agent_type: "canon:canon-fixer",
