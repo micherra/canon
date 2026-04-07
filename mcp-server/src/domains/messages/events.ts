@@ -222,6 +222,15 @@ export const EventPayloadSchemas = {
     timestamp: z.string(),
   }),
 
+  tool_scope_audit: z.object({
+    agent: z.string(),
+    correlation_id: correlationId,
+    event: z.string(),
+    granted_disallowed: z.array(z.string()),
+    stateId: z.string(),
+    timestamp: z.string(),
+  }),
+
   transition_evaluated: z.object({
     correlation_id: correlationId,
     nextState: z.string(),

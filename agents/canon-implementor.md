@@ -123,7 +123,8 @@ Example compliance declaration:
 Run the verification steps from the plan. All must pass:
 1. All new tests written for this task pass
 2. The full project test suite passes (no regressions)
-3. Any additional verification steps from the plan
+3. If the project has a lint command (e.g., `npm run lint` in `package.json`), run it and fix any errors before committing. Lint warnings should also be resolved when feasible.
+4. Any additional verification steps from the plan
 
 ### Step 9: Final commit
 

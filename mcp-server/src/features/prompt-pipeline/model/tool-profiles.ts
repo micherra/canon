@@ -21,7 +21,6 @@ export type ToolScopeWarning = {
   granted_disallowed: string[];
 };
 
-
 /** Resolved tool configuration for a single agent spawn. */
 export type ResolvedProfile = {
   tools: string[];
@@ -130,7 +129,7 @@ export const resolveToolProfile = (
   agent: string,
   overrides?: ToolOverrides,
   isolation?: string,
-  worktreePath?: string,
+  _worktreePath?: string,
 ): ResolvedProfile => {
   const normalizedAgent = agent.startsWith("canon:") ? agent.slice("canon:".length) : agent;
   const base = AGENT_TOOL_PROFILES[normalizedAgent] ?? EMPTY_PROFILE;
