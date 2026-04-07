@@ -916,7 +916,7 @@ async function reportResultLocked(
 
   const txResult = executeReportTransaction(store, input, stateDef, debateResult);
 
-  return postTransactionSideEffects(store, input, stateDef, txResult, escalateToHitl);
+  return postTransactionSideEffects({ escalateToHitl, input, stateDef, store, txResult });
 }
 
 /** Computes the escalate_to_hitl payload when baseline evidence confirms pre-existing failures. */
@@ -949,13 +949,19 @@ type TransactionResult = {
   hitl_reason: string | undefined;
 };
 
-async function postTransactionSideEffects(
-  store: ReturnType<typeof getExecutionStore>,
-  input: ReportResultInput,
-  stateDef: ResolvedFlow["states"][string] | undefined,
-  txResult: TransactionResult,
-  escalateToHitl?: ReportResultResult["escalate_to_hitl"],
-): Promise<ToolResult<ReportResultResult>> {
+async function postTransactionSideEffects({
+  store,
+  input,
+  stateDef,
+  txResult,
+  escalateToHitl,
+}: {
+  store: ReturnType<typeof getExecutionStore>;
+  input: ReportResultInput;
+  stateDef: ResolvedFlow["states"][string] | undefined;
+  txResult: TransactionResult;
+  escalateToHitl?: ReportResultResult["escalate_to_hitl"];
+}): Promise<ToolResult<ReportResultResult>> {
   const { board, condition, nextState, stuck, stuck_reason, hitl_required, hitl_reason } = txResult;
 
   persistTranscriptPath(store, input);
