@@ -1,5 +1,5 @@
-import { fileURLToPath } from "node:url";
 import { isAbsolute } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Resolve the project directory using the MCP roots priority chain.

@@ -1231,7 +1231,9 @@ server.registerTool(
 registerToolWithUi("codebase_graph_materialize", {
   description:
     "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
-  handler: gatedWrapHandler(async (input) => codebaseGraphMaterialize(input, projectDir, pluginDir)),
+  handler: gatedWrapHandler(async (input) =>
+    codebaseGraphMaterialize(input, projectDir, pluginDir),
+  ),
   htmlFile: "codebase-graph.html",
   inputSchema: {
     changed_files: z
