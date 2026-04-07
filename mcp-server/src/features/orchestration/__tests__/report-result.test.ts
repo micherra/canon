@@ -775,13 +775,13 @@ describe("reportResult — quality signals", () => {
       metrics: { duration_ms: 1000, model: "sonnet", spawns: 1 },
       state_id: "build",
       status_keyword: "DONE",
-      test_results: { failed: 2, passed: 50, skipped: 1 },
+      test_results: { failed: 0, passed: 50, skipped: 1 }, // zero failures — no baseline evidence needed
       workspace,
     });
     assertOk(result);
 
     expect(result.board.states.build.metrics?.test_results).toEqual({
-      failed: 2,
+      failed: 0,
       passed: 50,
       skipped: 1,
     });

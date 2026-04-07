@@ -264,7 +264,7 @@ describe("report_result: quality metrics enrichment", () => {
       metrics: { duration_ms: 5000, model: "claude-sonnet", spawns: 1 },
       state_id: "impl",
       status_keyword: "done",
-      test_results: { failed: 1, passed: 10, skipped: 2 },
+      test_results: { failed: 0, passed: 10, skipped: 2 }, // zero failures — no baseline evidence needed
       violation_count: 3,
       violation_severities: { blocking: 1, warning: 2 },
       workspace,
@@ -276,7 +276,7 @@ describe("report_result: quality metrics enrichment", () => {
     expect(m?.duration_ms).toBe(5000);
     expect(m?.violation_count).toBe(3);
     expect(m?.violation_severities).toEqual({ blocking: 1, warning: 2 });
-    expect(m?.test_results).toEqual({ failed: 1, passed: 10, skipped: 2 });
+    expect(m?.test_results).toEqual({ failed: 0, passed: 10, skipped: 2 });
     expect(m?.files_changed).toBe(4);
   });
 
@@ -376,7 +376,7 @@ describe("report_result: quality metrics enrichment", () => {
       ],
       state_id: "impl",
       status_keyword: "done",
-      test_results: { failed: 2, passed: 8, skipped: 0 },
+      test_results: { failed: 0, passed: 8, skipped: 0 }, // zero failures — no baseline evidence needed
       violation_count: 2,
       violation_severities: { blocking: 1, warning: 1 },
       workspace,
@@ -388,7 +388,7 @@ describe("report_result: quality metrics enrichment", () => {
     expect(log_entry.postcondition_results).toHaveLength(1);
     expect(log_entry.violation_count).toBe(2);
     expect(log_entry.violation_severities).toEqual({ blocking: 1, warning: 1 });
-    expect(log_entry.test_results).toEqual({ failed: 2, passed: 8, skipped: 0 });
+    expect(log_entry.test_results).toEqual({ failed: 0, passed: 8, skipped: 0 });
     expect(log_entry.files_changed).toBe(3);
     expect(log_entry.discovered_gates_count).toBe(1);
     expect(log_entry.discovered_postconditions_count).toBe(1);

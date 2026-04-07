@@ -175,6 +175,16 @@ export const TestResultsSchema = z.object({
   skipped: z.number(),
 });
 
+/** Evidence that test failures pre-date the agent's changes. */
+export const BaselineEvidenceSchema = z.object({
+  baseline_commit: z.string(),
+  baseline_failures: z.array(z.string()), // test names that failed at baseline
+  current_failures: z.array(z.string()), // test names that fail now
+  new_failures: z.array(z.string()), // failures in current but not in baseline
+});
+
+export type BaselineEvidence = z.infer<typeof BaselineEvidenceSchema>;
+
 // Per-type state schemas (discriminated union members)
 
 /**
