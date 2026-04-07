@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ResolvedFlowSchema } from "@domains/flows/flow-schema.ts";
 import type { FailureEntry } from "@features/diagnostics/tools/categorize-failures.ts";
@@ -55,9 +55,45 @@ import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { z } from "zod";
 
-// Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
-// Falls back to cwd which is typically set by Claude Code to the user's project root.
-const projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
+// Resolve project dir via priority chain:
+//   1. CANON_PROJECT_DIR env var (only when set AND is an absolute path) — escape hatch for CI/multi-project
+//   2. roots/list first root from MCP client — standard MCP mechanism for user's working directory
+//   3. process.cwd() fallback — for clients that don't support roots
+// Resolution of (2) happens after server.connect(); this variable is updated in main() before any tool call.
+let projectDir = process.cwd();
+
+/**
+ * Resolve the project directory using the MCP roots priority chain.
+ * Exported for unit testing only.
+ */
+export async function resolveProjectDir(
+  canonProjectDir: string | undefined,
+  listRootsFn: () => Promise<{ roots: Array<{ uri: string; name?: string }> }>,
+  cwdFallback: string,
+): Promise<string> {
+  // Priority 1: explicit absolute path override.
+  if (canonProjectDir && isAbsolute(canonProjectDir)) {
+    console.error(`[canon] project dir from CANON_PROJECT_DIR: ${canonProjectDir}`);
+    return canonProjectDir;
+  }
+
+  // Priority 2: first root from MCP client.
+  try {
+    const result = await listRootsFn();
+    const firstRoot = result.roots[0];
+    if (firstRoot?.uri) {
+      const dir = fileURLToPath(firstRoot.uri);
+      console.error(`[canon] project dir from MCP roots: ${dir}`);
+      return dir;
+    }
+  } catch {
+    // Fall through — client doesn't support roots.
+  }
+
+  // Priority 3: cwd fallback.
+  console.error(`[canon] project dir from cwd (roots unavailable): ${cwdFallback}`);
+  return cwdFallback;
+}
 
 // Plugin dir: the repo root that contains the `principles/` directory.
 // __filename → src/index.ts (or dist/index.js), dirname twice → mcp-server/, once more → repo root.
@@ -1242,6 +1278,15 @@ process.on("SIGINT", () => cleanupAndExit("SIGINT"));
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Resolve project dir via priority chain (must happen after connect so roots/list works).
+  // Use a 1-second timeout for roots/list — real MCP clients respond immediately;
+  // clients that don't support roots will time out quickly so we fall back to cwd.
+  projectDir = await resolveProjectDir(
+    process.env.CANON_PROJECT_DIR,
+    () => server.server.listRoots(undefined, { timeout: 1_000 }),
+    process.cwd(),
+  );
 
   // Mark any leftover running jobs from a previous crashed session as failed
   try {
