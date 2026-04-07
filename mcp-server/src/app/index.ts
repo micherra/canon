@@ -54,10 +54,24 @@ import { installFuzzyValidation } from "@shared/lib/fuzzy-field-validation.ts";
 import { wrapHandler } from "@shared/lib/wrap-handler.ts";
 import { reportInputSchema } from "@shared/schema.ts";
 import { z } from "zod";
+import { resolveProjectDir } from "./resolve-project-dir.ts";
 
 // Resolve project dir: CANON_PROJECT_DIR may be "." (relative) — always make absolute.
 // Falls back to cwd which is typically set by Claude Code to the user's project root.
-const projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
+// This is the initial/fallback value — it is updated post-connect by resolveProjectDir().
+let projectDir = resolve(process.env.CANON_PROJECT_DIR || process.cwd());
+
+// Promise that resolves once the project directory has been confirmed (or timed out).
+// All tool handlers must await this before accessing projectDir to avoid the startup
+// race where a client call arrives before roots/list has completed.
+//
+// We create the promise here (at module load) with an external resolve handle so
+// gatedWrapHandler can safely await it before main() runs — in that edge case
+// (which never happens in production) the promise stays pending until main() resolves it.
+let resolveReady!: () => void;
+const readyPromise: Promise<void> = new Promise<void>((res) => {
+  resolveReady = res;
+});
 
 // Plugin dir: the repo root that contains the `principles/` directory.
 // __filename → src/index.ts (or dist/index.js), dirname twice → mcp-server/, once more → repo root.
@@ -73,6 +87,20 @@ const server = new McpServer({
 
 // Patch validation to detect unknown fields with fuzzy "did you mean?" suggestions.
 installFuzzyValidation(server);
+
+/**
+ * Gate all tool handlers until projectDir is resolved.
+ *
+ * wrapHandler delegates to the underlying handler immediately, but this
+ * wrapper first awaits readyPromise so handlers never run against the wrong
+ * directory during the startup race window (between server.connect() and
+ * resolveProjectDir() completing).
+ */
+const gatedWrapHandler = <T>(handler: (input: T) => Promise<unknown>) =>
+  wrapHandler(async (input: T) => {
+    await readyPromise;
+    return handler(input);
+  });
 
 /** Helper to register a tool + resource pair for an MCP App UI. */
 const registeredResources = new Set<string>();
@@ -120,7 +148,7 @@ function registerToolWithUi<Schema extends ZodRawShapeCompat>(
 registerToolWithUi("show_pr_impact", {
   description:
     "Opens the PR Review view — change analysis, impact assessment, and review violations for a pull request or branch.",
-  handler: wrapHandler(async (input) => {
+  handler: gatedWrapHandler(async (input) => {
     return showPrImpact(projectDir, {
       branch: input.branch,
       diff_base: input.diff_base,
@@ -165,7 +193,7 @@ server.registerTool(
       task_description: z.string().optional().describe("Brief description of the task"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return getPrinciples(input, projectDir, pluginDir);
   }),
 );
@@ -188,7 +216,7 @@ server.registerTool(
         .describe("Include archived principles in results (default: false)"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return listPrinciples(input, projectDir, pluginDir);
   }),
 );
@@ -210,7 +238,7 @@ server.registerTool(
         ),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return reviewCode(input, projectDir, pluginDir);
   }),
 );
@@ -224,7 +252,7 @@ server.registerTool(
       principle_id: z.string().describe("ID of the principle to check compliance for"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return getCompliance(input, projectDir, pluginDir);
   }),
 );
@@ -237,7 +265,7 @@ server.registerTool(
       "Log a Canon observation: an intentional deviation (decision), an observed codebase pattern, or a code review result. All feed into drift tracking and the learning loop.",
     inputSchema: reportInputSchema,
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return report(input, projectDir);
   }),
 );
@@ -245,7 +273,7 @@ server.registerTool(
 registerToolWithUi("codebase_graph", {
   description:
     "Generate a dependency graph of the codebase with Canon compliance overlay. Returns a compact summary (layers, violations, insights).",
-  handler: wrapHandler(async (input) => {
+  handler: gatedWrapHandler(async (input) => {
     const result = await codebaseGraph(input, projectDir, pluginDir);
     return compactGraph(result);
   }),
@@ -287,7 +315,7 @@ registerToolWithUi("codebase_graph", {
 registerToolWithUi("get_file_context", {
   description:
     "Get rich context for a source file — contents (up to 200 lines), graph relationships (imports/imported_by), exported names, layer, and compliance data.",
-  handler: wrapHandler(async (input) => {
+  handler: gatedWrapHandler(async (input) => {
     return getFileContext(input, projectDir);
   }),
   htmlFile: "file-context.html",
@@ -314,7 +342,7 @@ server.registerTool(
         .describe("Array of file summaries to store"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return storeSummaries(input, projectDir);
   }),
 );
@@ -330,7 +358,7 @@ server.registerTool(
       principle_id: z.string().optional().describe("Filter to a specific principle"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return getDriftReport(input, projectDir, pluginDir);
   }),
 );
@@ -344,7 +372,7 @@ server.registerTool(
       flow_name: z.string().describe("Name of the flow file (without .md extension)"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return loadFlow(input, pluginDir, projectDir);
   }),
 );
@@ -370,7 +398,7 @@ server.registerTool(
       tier: z.enum(["small", "medium", "large"]),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return initWorkspaceFlow(input, projectDir, pluginDir);
   }),
 );
@@ -524,7 +552,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return reportResult({ ...input, project_dir: projectDir });
   }),
 );
@@ -545,7 +573,7 @@ server.registerTool(
       workspace: z.string().describe("Workspace path"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return recordAgentMetrics(input);
   }),
 );
@@ -566,7 +594,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return getTranscript(input);
   }),
 );
@@ -611,7 +639,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return updateBoard(input);
   }),
 );
@@ -642,7 +670,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return injectWaveEvent(input);
   }),
 );
@@ -666,7 +694,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return resolveWaveEvent(input);
   }),
 );
@@ -683,7 +711,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return resolveAfterConsultations(input);
   }),
 );
@@ -702,7 +730,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return postMessage(input);
   }),
 );
@@ -719,7 +747,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return getMessages(input);
   }),
 );
@@ -789,7 +817,7 @@ server.registerTool(
         .describe("Principle violations found"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return storePrReview(input, projectDir);
   }),
 );
@@ -828,7 +856,7 @@ server.registerTool(
         .describe("Target entity name or file path (not needed for dead_code)"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return graphQuery(input, projectDir);
   }),
 );
@@ -863,7 +891,7 @@ server.registerTool(
         .describe("Maximum distance threshold — lower means more similar (default: no threshold)"),
     },
   },
-  wrapHandler(async (input) => {
+  gatedWrapHandler(async (input) => {
     return semanticSearch(input, projectDir);
   }),
 );
@@ -887,7 +915,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => writePlanIndex(input)),
+  gatedWrapHandler(async (input) => writePlanIndex(input)),
 );
 
 server.registerTool(
@@ -914,7 +942,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => writeTestReport(input)),
+  gatedWrapHandler(async (input) => writeTestReport(input)),
 );
 
 server.registerTool(
@@ -953,7 +981,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => writeReview(input)),
+  gatedWrapHandler(async (input) => writeReview(input)),
 );
 
 server.registerTool(
@@ -983,7 +1011,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => writeImplementationSummary(input)),
+  gatedWrapHandler(async (input) => writeImplementationSummary(input)),
 );
 
 server.registerTool(
@@ -1013,7 +1041,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => writeResearchSynthesis(input)),
+  gatedWrapHandler(async (input) => writeResearchSynthesis(input)),
 );
 
 server.registerTool(
@@ -1043,7 +1071,7 @@ server.registerTool(
       workspace: z.string(),
     },
   },
-  wrapHandler(async (input) => writeDesignBrief(input)),
+  gatedWrapHandler(async (input) => writeDesignBrief(input)),
 );
 
 server.registerTool(
@@ -1092,7 +1120,7 @@ server.registerTool(
       workspace: z.string().describe("Workspace directory path"),
     },
   },
-  wrapHandler(async (input) => driveFlow(input)),
+  gatedWrapHandler(async (input) => driveFlow(input)),
 );
 
 const FailureEntrySchema = z.object({
@@ -1130,7 +1158,7 @@ server.registerTool(
       workspace: z.string().describe("Workspace directory path"),
     },
   },
-  wrapHandler(async (input) =>
+  gatedWrapHandler(async (input) =>
     categorizeFailures(
       input as {
         workspace: string;
@@ -1184,7 +1212,7 @@ server.registerTool(
         ),
     },
   },
-  wrapHandler(async (input) => codebaseGraphSubmit(input, projectDir, pluginDir)),
+  gatedWrapHandler(async (input) => codebaseGraphSubmit(input, projectDir, pluginDir)),
 );
 
 server.registerTool(
@@ -1196,13 +1224,13 @@ server.registerTool(
       job_id: z.string().describe("Job ID returned by codebase_graph_submit"),
     },
   },
-  wrapHandler(async (input) => codebaseGraphPoll(input)),
+  gatedWrapHandler(async (input) => codebaseGraphPoll(input)),
 );
 
 registerToolWithUi("codebase_graph_materialize", {
   description:
     "Materialize the results of a completed codebase graph job into a visual graph. Job must have status 'complete' (check with codebase_graph_poll first).",
-  handler: wrapHandler(async (input) => codebaseGraphMaterialize(input, projectDir, pluginDir)),
+  handler: gatedWrapHandler(async (input) => codebaseGraphMaterialize(input, projectDir, pluginDir)),
   htmlFile: "codebase-graph.html",
   inputSchema: {
     changed_files: z
@@ -1242,6 +1270,14 @@ process.on("SIGINT", () => cleanupAndExit("SIGINT"));
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Gate all tool handlers until projectDir is fully resolved.
+  // resolveProjectDir() attempts roots/list with a 1-second timeout; on
+  // success it updates projectDir, on timeout/failure it keeps the fallback.
+  // resolveReady() unblocks every handler that is awaiting readyPromise.
+  const resolvedDir = await resolveProjectDir(server.server, projectDir);
+  projectDir = resolvedDir;
+  resolveReady();
 
   // Mark any leftover running jobs from a previous crashed session as failed
   try {
