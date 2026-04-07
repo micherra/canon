@@ -391,8 +391,8 @@ function resolveNextStateAction(
     return {
       action: "done",
       ok: true as const,
-      summary: buildDoneSummary(board, current_state),
       terminal_state: current_state,
+      ...buildDoneSummary(board, current_state),
     };
   }
   const nextStateDef = flow.states[next_state];
@@ -400,8 +400,8 @@ function resolveNextStateAction(
     return {
       action: "done",
       ok: true as const,
-      summary: buildDoneSummary(board, next_state),
       terminal_state: next_state,
+      ...buildDoneSummary(board, next_state),
     };
   }
   return enterStateAndBuildSpawn(workspace, flow, next_state, store);
@@ -466,8 +466,8 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
     return {
       action: "done",
       ok: true as const,
-      summary: buildDoneSummary(board, targetState),
       terminal_state: targetState,
+      ...buildDoneSummary(board, targetState),
     };
   }
   return enterStateAndBuildSpawn(workspace, flow, targetState, store);
@@ -1139,16 +1139,16 @@ async function handleSkippedState(
     return {
       action: "done",
       ok: true as const,
-      summary: buildDoneSummary(reportOut.board, currentStateId),
       terminal_state: currentStateId,
+      ...buildDoneSummary(reportOut.board, currentStateId),
     };
   }
   if (flow.states[nextState]?.type === "terminal") {
     return {
       action: "done",
       ok: true as const,
-      summary: buildDoneSummary(reportOut.board, nextState),
       terminal_state: nextState,
+      ...buildDoneSummary(reportOut.board, nextState),
     };
   }
 
@@ -1167,8 +1167,8 @@ function buildTerminalAction(
   return {
     action: "done",
     ok: true as const,
-    summary: buildDoneSummary(board, stateId),
     terminal_state: stateId,
+    ...buildDoneSummary(board, stateId),
   };
 }
 
@@ -1551,10 +1551,23 @@ function buildDoneSummary(
     ? NonNullable<T>
     : never,
   terminalState: string,
-): string {
-  const stateCount = Object.keys(board.states ?? {}).length;
-  const doneCount = Object.values(board.states ?? {}).filter(
-    (s) => s.status === "done" || s.status === "skipped",
+): { summary: string; state_artifacts: Record<string, string[]> } {
+  const stateEntries = Object.entries(board.states ?? {});
+  const stateCount = stateEntries.length;
+  const doneCount = stateEntries.filter(
+    ([, s]) => s.status === "done" || s.status === "skipped",
   ).length;
-  return `Flow completed at state '${terminalState}'. States completed: ${doneCount}/${stateCount}.`;
+
+  // Collect per-state artifact paths — only states with at least one artifact appear
+  const state_artifacts: Record<string, string[]> = {};
+  for (const [stateId, s] of stateEntries) {
+    if (s.artifacts && s.artifacts.length > 0) {
+      state_artifacts[stateId] = s.artifacts;
+    }
+  }
+
+  return {
+    state_artifacts,
+    summary: `Flow completed at state '${terminalState}'. States completed: ${doneCount}/${stateCount}.`,
+  };
 }

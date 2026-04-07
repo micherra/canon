@@ -72,7 +72,7 @@ export type DriveFlowAction =
   | { action: "spawn"; requests: SpawnRequest[] }
   | { action: "hitl"; breakpoint: HitlBreakpoint }
   | { action: "approval"; breakpoint: ApprovalBreakpoint }
-  | { action: "done"; terminal_state: string; summary: string };
+  | { action: "done"; terminal_state: string; summary: string; state_artifacts?: Record<string, string[]> };
 
 // DriveFlowInput — validated input for the drive_flow tool
 
