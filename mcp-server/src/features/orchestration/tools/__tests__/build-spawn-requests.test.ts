@@ -9,6 +9,7 @@
 import type { SpawnPromptEntry } from "@features/prompt-pipeline/model/types.ts";
 import { describe, expect, test } from "vitest";
 import { buildSpawnRequests } from "../drive-flow.ts";
+import type { ConsultationPromptEntry } from "../enter-and-prepare-state.ts";
 
 // Minimal valid SpawnPromptEntry (without tool scoping fields)
 const baseEntry = (): SpawnPromptEntry => ({
@@ -89,5 +90,22 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     expect(Object.hasOwn(req, "tools")).toBe(false);
     expect(Object.hasOwn(req, "disallowed_tools")).toBe(false);
     expect(Object.hasOwn(req, "permission_mode")).toBe(false);
+  });
+
+  test("consultation spawns get tool scope from their agent profile", () => {
+    const consultation: ConsultationPromptEntry = {
+      agent: "canon:canon-researcher",
+      name: "research-consult",
+      prompt: "Consult on the research",
+      role: "consultation",
+    };
+    const reqs = buildSpawnRequests([baseEntry()], [consultation]);
+    const consultReq = reqs.find((r) => r.role === "consultation");
+    expect(consultReq).toBeDefined();
+    expect(consultReq!.tools).toBeDefined();
+    expect(consultReq!.tools!.length).toBeGreaterThan(0);
+    expect(consultReq!.permission_mode).toBe("prompt");
+    // researcher has Edit/Write/NotebookEdit disallowed
+    expect(consultReq!.disallowed_tools).toContain("Edit");
   });
 });

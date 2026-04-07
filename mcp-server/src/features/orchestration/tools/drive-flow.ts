@@ -33,6 +33,7 @@ import {
   mergeWaveResults,
 } from "@domains/workspaces/wave-lifecycle.ts";
 import { parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
+import { resolveToolProfile } from "@features/prompt-pipeline/model/tool-profiles.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
 import type {
@@ -1440,12 +1441,17 @@ export function buildSpawnRequests(
 
   if (consultationPrompts && consultationPrompts.length > 0) {
     for (const cp of consultationPrompts) {
-      requests.push({
+      const profile = resolveToolProfile(cp.agent);
+      const req: SpawnRequest = {
         agent_type: cp.agent,
         isolation: "none",
         prompt: cp.prompt,
         role: "consultation",
-      });
+      };
+      if (profile.tools.length > 0) req.tools = profile.tools;
+      if (profile.disallowed_tools.length > 0) req.disallowed_tools = profile.disallowed_tools;
+      req.permission_mode = profile.permission_mode;
+      requests.push(req);
     }
   }
 
