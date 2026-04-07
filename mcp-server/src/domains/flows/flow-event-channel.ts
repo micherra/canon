@@ -13,9 +13,7 @@ import type { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { z } from "zod";
 import type { FlowDefinition, StateDefinition } from "./flow-schema.ts";
 
-// ---------------------------------------------------------------------------
 // Event schema (discriminated union)
-// ---------------------------------------------------------------------------
 
 const FlowEventSchema = z.discriminatedUnion("type", [
   z.object({
@@ -37,9 +35,7 @@ const FlowEventSchema = z.discriminatedUnion("type", [
 
 type FlowEvent = z.infer<typeof FlowEventSchema>;
 
-// ---------------------------------------------------------------------------
 // Effect types
-// ---------------------------------------------------------------------------
 
 export type FlowEventEffect =
   | { type: "none" }
@@ -47,9 +43,7 @@ export type FlowEventEffect =
   | { type: "skip"; target: string; reason: string }
   | { type: "escalate"; message: string; suggested_options?: string[] };
 
-// ---------------------------------------------------------------------------
 // BFS reachability
-// ---------------------------------------------------------------------------
 
 /**
  * Returns the set of state IDs reachable from `startId` via forward transition
@@ -94,9 +88,7 @@ function reachableFrom(startId: string, states: Record<string, StateDefinition>)
   return visited;
 }
 
-// ---------------------------------------------------------------------------
 // Drain function
-// ---------------------------------------------------------------------------
 
 export type DrainFlowEventsParams = {
   store: Pick<ExecutionStore, "getMessagesSinceId" | "appendEvent">;
@@ -130,12 +122,10 @@ export function drainFlowEvents(params: DrainFlowEventsParams): DrainFlowEventsR
   let newWatermark = watermark;
 
   for (const msg of messages) {
-    // Always advance the watermark to the highest id seen
     if (msg.id > newWatermark) {
       newWatermark = msg.id;
     }
 
-    // Parse the event
     let parsed: unknown;
     try {
       parsed = JSON.parse(msg.content);
@@ -170,9 +160,7 @@ export function drainFlowEvents(params: DrainFlowEventsParams): DrainFlowEventsR
   return { effect, newWatermark };
 }
 
-// ---------------------------------------------------------------------------
 // Per-event effect resolution
-// ---------------------------------------------------------------------------
 
 function resolveEffect(
   event: FlowEvent,

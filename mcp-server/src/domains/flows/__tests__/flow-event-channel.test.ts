@@ -24,10 +24,6 @@ import { describe, expect, it, vi } from "vitest";
 import { drainFlowEvents } from "../flow-event-channel.ts";
 import type { FlowDefinition } from "../flow-schema.ts";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function makeMsg(id: number, content: string): MessageOutput {
   return { channel: "flow-events", content, id, sender: "test", timestamp: "2026-01-01T00:00:00Z" };
 }
@@ -55,10 +51,6 @@ function makeLinearFlow(allowedInsertions?: string[]): FlowDefinition {
   };
 }
 
-// ---------------------------------------------------------------------------
-// No messages
-// ---------------------------------------------------------------------------
-
 describe("drainFlowEvents — no messages", () => {
   it("returns none effect and watermark 0 when channel is empty", () => {
     const store = makeStore([]);
@@ -72,10 +64,6 @@ describe("drainFlowEvents — no messages", () => {
     expect(result.newWatermark).toBe(0);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Malformed messages
-// ---------------------------------------------------------------------------
 
 describe("drainFlowEvents — malformed messages", () => {
   it("skips invalid JSON and emits flow_event_skipped via store.appendEvent", () => {
@@ -110,10 +98,6 @@ describe("drainFlowEvents — malformed messages", () => {
     );
   });
 });
-
-// ---------------------------------------------------------------------------
-// request_state events
-// ---------------------------------------------------------------------------
 
 describe("drainFlowEvents — request_state", () => {
   it("produces insert effect when state_id is in allowed_insertions and exists in flow states", () => {
@@ -207,10 +191,6 @@ describe("drainFlowEvents — request_state", () => {
     expect(result.newWatermark).toBe(14);
   });
 });
-
-// ---------------------------------------------------------------------------
-// skip_ahead events
-// ---------------------------------------------------------------------------
 
 describe("drainFlowEvents — skip_ahead", () => {
   it("produces skip effect when target is reachable from currentStateId", () => {
@@ -351,10 +331,6 @@ describe("drainFlowEvents — skip_ahead", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// escalate events
-// ---------------------------------------------------------------------------
-
 describe("drainFlowEvents — escalate", () => {
   it("always produces escalate effect", () => {
     const store = makeStore([
@@ -407,10 +383,6 @@ describe("drainFlowEvents — escalate", () => {
     expect(effect.suggested_options).toBeUndefined();
   });
 });
-
-// ---------------------------------------------------------------------------
-// First-wins logic & watermark advancement
-// ---------------------------------------------------------------------------
 
 describe("drainFlowEvents — first-wins and watermark", () => {
   it("first non-none effect wins; later events do not override it", () => {

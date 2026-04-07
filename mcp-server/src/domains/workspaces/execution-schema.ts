@@ -355,8 +355,6 @@ export function runMigrations(db: Database.Database): void {
   }
 }
 
-// initExecutionDb
-
 /**
  * Open (or create) a better-sqlite3 database at `dbPath`, configure PRAGMAs,
  * apply the full DDL schema, and run any pending migrations.

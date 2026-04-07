@@ -194,10 +194,6 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-// ---------------------------------------------------------------------------
-// effect: none — normal flow continues
-// ---------------------------------------------------------------------------
-
 describe("driveFlow — flow events: effect none", () => {
   it("proceeds normally when drain returns { type: 'none' }", async () => {
     const workspace = makeTmpWorkspace();
@@ -256,10 +252,6 @@ describe("driveFlow — flow events: effect none", () => {
     expect(drainFlowEvents).not.toHaveBeenCalled();
   });
 });
-
-// ---------------------------------------------------------------------------
-// effect: insert — event-inserted state used as next state
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — flow events: effect insert", () => {
   it("uses the inserted state_id as next state instead of normal transition target", async () => {
@@ -336,10 +328,6 @@ describe("driveFlow — flow events: effect insert", () => {
     expect(board?.metadata?.flow_events_watermark).toBe(7);
   });
 });
-
-// ---------------------------------------------------------------------------
-// effect: skip — target from event used as next state
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — flow events: effect skip", () => {
   it("uses the skip target as next state instead of normal transition", async () => {
@@ -421,10 +409,6 @@ describe("driveFlow — flow events: effect skip", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// effect: escalate — returns HitlBreakpoint
-// ---------------------------------------------------------------------------
-
 describe("driveFlow — flow events: effect escalate", () => {
   it("returns hitl action with message from escalate event", async () => {
     const workspace = makeTmpWorkspace();
@@ -505,10 +489,6 @@ describe("driveFlow — flow events: effect escalate", () => {
     expect(board?.metadata?.flow_events_watermark).toBe(11);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Return-address semantics (ADR-012 / task-02)
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — flow events: insert return-address semantics", () => {
   it("inserted state completes with 'done' → flow resumes at return address, not inserted state's own transition", async () => {
@@ -736,10 +716,6 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
     expect(reviewState?.inserted_return_to).toBeUndefined();
   });
 });
-
-// ---------------------------------------------------------------------------
-// Watermark: reads existing watermark from board.metadata
-// ---------------------------------------------------------------------------
 
 describe("driveFlow — flow events: watermark reading", () => {
   it("passes the existing flow_events_watermark to drainFlowEvents", async () => {

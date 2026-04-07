@@ -339,12 +339,10 @@ async function resolvePostReportAction(
 
   const completedDef = flow.states[state_id];
 
-  // Parallel wait guard
   if (next_state === state_id && isParallelWaitState(completedDef)) {
     return { action: "spawn", ok: true as const, requests: [] };
   }
 
-  // Approval gate
   if (!isApprovalDecisionStatus(status) && shouldApprovalGate(completedDef, flow, freshBoard)) {
     return buildApprovalAction(completedDef, artifacts, state_id, status);
   }
@@ -414,7 +412,6 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
   const { data, store, board } = validated;
   const { workspace, flow } = data;
 
-  // Branch A: result provided
   if (data.result) {
     const {
       state_id,
@@ -569,7 +566,6 @@ async function handleWaveTaskResult(
     };
   }
 
-  // All tasks for this wave are done — proceed to merge + gate + events
   return completeWave({
     currentWave,
     flow,
@@ -1048,7 +1044,6 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
   const waveTaskDefs = nextWaveTaskIds.map((tid) => ({ task_id: tid }));
   const worktreeResults = (await createWaveWorktrees(waveTaskDefs, projectDir, mergeCwd)) ?? [];
 
-  // Build a worktree lookup map
   const worktreeMap = new Map<string, string>(
     worktreeResults.map((r) => [r.task_id, r.worktree_path]),
   );
@@ -1065,7 +1060,6 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
     });
   });
 
-  // Get spawn prompts for the next wave state
   const enterOut = await enterAndPrepareState({
     flow,
     items: nextWaveTaskIds.map((tid) => ({ task_id: tid })),
@@ -1091,7 +1085,6 @@ async function startNextWave(input: StartNextWaveInput): Promise<ToolResult<Driv
     };
   }
 
-  // Build spawn requests and inject worktree paths
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
   const requestsWithWorktrees = requests.map((req) => {
     if (req.task_id && worktreeMap.has(req.task_id)) {
@@ -1491,7 +1484,6 @@ async function applySessionContinuation(
     return requests;
   }
 
-  // Fresh session — inject continue_from into the single spawn request
   return [
     {
       ...requests[0],
