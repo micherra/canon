@@ -21,10 +21,14 @@ export type ResolvedProfile = {
   permission_mode: "auto" | "prompt" | "deny_unknown";
 };
 
-/** Fail-closed profile for unknown agents — no tools allowed. */
+/**
+ * Fail-closed profile for unknown agents — no tools allowed.
+ * Dangerous tools are explicitly disallowed so that tool_overrides.allow
+ * cannot grant them to unknown agents (disallowed wins rule).
+ */
 export const EMPTY_PROFILE: AgentToolProfile = {
   allowed: [],
-  disallowed: [],
+  disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
 } as const;
 
 /** Registry of declared tool profiles for all Canon agent types. */
@@ -123,6 +127,14 @@ export const resolveToolProfile = (
   // Resolve effective allowed list
   let effectiveAllowed: string[];
   if (overrides?.replace) {
+    // Audit: warn when replace grants tools that are in the base disallowed list.
+    // This is permitted by the caller but should be visible in logs.
+    const grantedDisallowed = overrides.replace.filter((t) => base.disallowed.includes(t));
+    if (grantedDisallowed.length > 0) {
+      console.warn(
+        `[ADR-014] tool_overrides.replace grants disallowed tools for ${agent}: ${grantedDisallowed.join(", ")}`,
+      );
+    }
     effectiveAllowed = overrides.replace;
   } else if (overrides?.allow) {
     effectiveAllowed = [...base.allowed, ...overrides.allow];

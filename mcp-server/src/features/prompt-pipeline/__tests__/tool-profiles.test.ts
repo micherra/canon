@@ -41,17 +41,24 @@ describe("AGENT_TOOL_PROFILES", () => {
     }
   });
 
-  it("EMPTY_PROFILE has empty allowed array", () => {
+  it("EMPTY_PROFILE has empty allowed array and denies dangerous tools", () => {
     expect(EMPTY_PROFILE.allowed).toEqual([]);
-    expect(EMPTY_PROFILE.disallowed).toEqual([]);
+    expect(EMPTY_PROFILE.disallowed).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
   });
 });
 
 describe("resolveToolProfile", () => {
-  it("unknown agent types resolve to EMPTY_PROFILE (empty allowed)", () => {
+  it("unknown agent types resolve to EMPTY_PROFILE (empty allowed, dangerous tools disallowed)", () => {
     const result = resolveToolProfile("unknown-agent");
     expect(result.tools).toEqual([]);
-    expect(result.disallowed_tools).toEqual([]);
+    expect(result.disallowed_tools).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
+  });
+
+  it("unknown agent + tool_overrides.allow cannot grant dangerous tools (disallowed wins)", () => {
+    const result = resolveToolProfile("unknown-agent", { allow: ["Edit"] });
+    // Edit is in EMPTY_PROFILE.disallowed — disallowed wins
+    expect(result.tools).not.toContain("Edit");
+    expect(result.disallowed_tools).toContain("Edit");
   });
 
   it("returns base profile tools for known agent without overrides", () => {

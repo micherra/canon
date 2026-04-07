@@ -90,7 +90,9 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
   }));
 
   // 4. Inject tool scope metadata (ADR-014)
-  const toolOverrides = ("tool_overrides" in state ? state.tool_overrides : undefined) as ToolOverrides | undefined;
+  // tool_overrides is present on all StateDefinition variants via BaseStateFields —
+  // no cast or runtime guard needed.
+  const toolOverrides: ToolOverrides | undefined = state.tool_overrides;
   prompts = prompts.map((entry) => {
     const resolved = resolveToolProfile(
       entry.agent,
