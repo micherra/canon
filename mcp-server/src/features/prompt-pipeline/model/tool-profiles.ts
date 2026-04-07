@@ -122,7 +122,8 @@ export const resolveToolProfile = (
   isolation?: string,
   worktreePath?: string,
 ): ResolvedProfile => {
-  const base = AGENT_TOOL_PROFILES[agent] ?? EMPTY_PROFILE;
+  const normalizedAgent = agent.startsWith("canon:") ? agent.slice("canon:".length) : agent;
+  const base = AGENT_TOOL_PROFILES[normalizedAgent] ?? EMPTY_PROFILE;
 
   // Resolve effective allowed list
   let effectiveAllowed: string[];

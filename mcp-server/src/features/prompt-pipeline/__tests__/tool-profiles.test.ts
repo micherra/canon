@@ -137,6 +137,18 @@ describe("resolveToolProfile", () => {
     expect(result.tools).toContain("Write");
   });
 
+  it("namespaced agent ID (canon:canon-researcher) resolves to same profile as unprefixed", () => {
+    const prefixed = resolveToolProfile("canon:canon-researcher");
+    const unprefixed = resolveToolProfile("canon-researcher");
+    expect(prefixed).toEqual(unprefixed);
+  });
+
+  it("namespaced agent ID does not fall back to EMPTY_PROFILE", () => {
+    const result = resolveToolProfile("canon:canon-implementor");
+    expect(result.tools).toContain("Edit");
+    expect(result.tools).toContain("Write");
+  });
+
   it("canon-researcher has Edit and Write in disallowed", () => {
     const result = resolveToolProfile("canon-researcher");
     expect(result.disallowed_tools).toContain("Edit");
