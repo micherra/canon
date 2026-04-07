@@ -22,7 +22,7 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "sqlite-vec": "^0.1.9",
-    "unified": "^11.0.5",
+"unified": "^11.0.5",
     "unist-util-visit": "^5.1.0",
     "web-tree-sitter": "^0.26.8",
     "yaml": "^2.8.3",
