@@ -166,9 +166,13 @@ export const resolveToolProfile = (
   // Disallowed wins — filter out any disallowed tools from allowed
   const finalAllowed = effectiveAllowed.filter((t) => !effectiveDisallowed.includes(t));
 
-  // Determine permission mode
+  // Determine permission mode.
+  // isolation === "worktree" is sufficient — worktree_path is not available at pipeline time
+  // (it is injected into SpawnRequests after assemblePrompt returns), so requiring it would
+  // cause all worktree-isolated tasks to fall back to "prompt" mode. The isolation value
+  // alone is the correct signal for whether auto mode applies.
   const permissionMode: "auto" | "prompt" | "deny_unknown" =
-    overrides?.permission_mode ?? (isolation === "worktree" && worktreePath ? "auto" : "prompt");
+    overrides?.permission_mode ?? (isolation === "worktree" ? "auto" : "prompt");
 
   const result: ResolvedProfile = {
     disallowed_tools: effectiveDisallowed,

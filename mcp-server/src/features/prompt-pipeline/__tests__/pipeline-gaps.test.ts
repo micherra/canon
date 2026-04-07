@@ -848,7 +848,8 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     // Fail-closed: unknown agents get an empty tools list
     expect(entry.tools).toEqual([]);
     expect(entry.disallowed_tools).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
-    expect(entry.permission_mode).toBe("prompt");
+    // fanout sets isolation: "worktree" on all single-state entries, so permission_mode is "auto"
+    expect(entry.permission_mode).toBe("auto");
   });
 
   it("permission_mode is auto for entries that have both isolation:worktree and a worktree_path", async () => {
@@ -876,8 +877,9 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     expect(entry.isolation).toBe("worktree");
     // worktree_path is set by orchestrator post-pipeline; inside the pipeline it is undefined
     expect(entry.worktree_path).toBeUndefined();
-    // Without worktree_path, permission_mode falls back to "prompt"
-    expect(entry.permission_mode).toBe("prompt");
+    // isolation: "worktree" is sufficient for auto mode — worktree_path is not required
+    // (it is injected after assemblePrompt returns, so requiring it would always fall back to "prompt")
+    expect(entry.permission_mode).toBe("auto");
   });
 
   it("full pipeline produces entries with all three tool scope fields present", async () => {
@@ -893,15 +895,15 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     expect(entry.permission_mode).toBeDefined();
   });
 
-  it("canon-implementor single state has permission_mode: prompt (no worktree_path)", async () => {
+  it("canon-implementor single state has permission_mode: auto (isolation:worktree set by fanout)", async () => {
     const workspace = seedWorkspace();
 
     const result = await assemblePrompt(makeInput(workspace));
 
     expect(result.prompts).toHaveLength(1);
     const entry = result.prompts[0];
-    // Single state without worktree_path → prompt mode
-    expect(entry.permission_mode).toBe("prompt");
+    // isolation: "worktree" (set by fanout) is sufficient for auto mode
+    expect(entry.permission_mode).toBe("auto");
     // canon-implementor can write
     expect(entry.tools).toContain("Edit");
     expect(entry.tools).toContain("Write");

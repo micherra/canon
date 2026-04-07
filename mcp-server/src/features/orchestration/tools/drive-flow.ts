@@ -1583,7 +1583,7 @@ function buildDoneSummary(
     ? NonNullable<T>
     : never,
   terminalState: string,
-): { summary: string; state_artifacts: Record<string, string[]> } {
+): { summary: string; state_artifacts?: Record<string, string[]> } {
   const stateEntries = Object.entries(board.states ?? {});
   const stateCount = stateEntries.length;
   const doneCount = stateEntries.filter(
@@ -1598,8 +1598,11 @@ function buildDoneSummary(
     }
   }
 
-  return {
-    state_artifacts,
+  const result: { summary: string; state_artifacts?: Record<string, string[]> } = {
     summary: `Flow completed at state '${terminalState}'. States completed: ${doneCount}/${stateCount}.`,
   };
+  if (Object.keys(state_artifacts).length > 0) {
+    result.state_artifacts = state_artifacts;
+  }
+  return result;
 }

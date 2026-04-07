@@ -107,9 +107,11 @@ describe("resolveToolProfile", () => {
     expect(result.permission_mode).toBe("prompt");
   });
 
-  it("permission mode defaults to prompt when isolation=worktree but no worktreePath", () => {
+  it("permission mode defaults to auto when isolation=worktree even without worktreePath", () => {
+    // worktree_path is not available at pipeline time (injected after assemblePrompt returns),
+    // so isolation alone is the correct signal for auto mode.
     const result = resolveToolProfile("canon-implementor", undefined, "worktree", undefined);
-    expect(result.permission_mode).toBe("prompt");
+    expect(result.permission_mode).toBe("auto");
   });
 
   it("permission_mode override from ToolOverrides takes precedence", () => {

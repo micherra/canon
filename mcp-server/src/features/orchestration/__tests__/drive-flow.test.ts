@@ -530,7 +530,7 @@ describe("driveFlow — state_artifacts in done", () => {
     expect(result.state_artifacts?.implement).toBeUndefined();
   });
 
-  it("returns state_artifacts as empty object when no states have artifacts", async () => {
+  it("omits state_artifacts when no states have artifacts (field absent signals no artifacts)", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
     store.updateExecution({ current_state: "terminal" });
@@ -542,8 +542,8 @@ describe("driveFlow — state_artifacts in done", () => {
     if (!result.ok) return;
     expect(result.action).toBe("done");
     if (result.action !== "done") return;
-    expect(result.state_artifacts).toBeDefined();
-    expect(Object.keys(result.state_artifacts ?? {})).toHaveLength(0);
+    // state_artifacts is only present when at least one state has artifacts
+    expect(result.state_artifacts).toBeUndefined();
   });
 });
 
