@@ -4,11 +4,11 @@
  * Contract tests for the domain priming feature (domain-01, domain-02, domain-03).
  *
  * These tests verify:
- *   - All 5 built-in domain files exist at the correct paths with correct names
+ *   - All 6 built-in domain files exist at the correct paths with correct names
  *   - Domain files contain no YAML frontmatter (implementors load them as raw text)
  *   - Domain files follow the expected heading and checklist format
  *   - templates/task-plan.md exposes the `domains:` field to the architect
- *   - canon-architect.md lists all 5 built-in domain names and includes classification guidance
+ *   - canon-architect.md lists all 6 built-in domain names and includes classification guidance
  *   - canon-implementor.md Step 2 instructs domain loading with correct fallback paths
  *
  * These are structural/content contract tests — if any are broken by a rename,
@@ -50,7 +50,7 @@ describe("domain files — existence", () => {
   }
 
   it("no unexpected extra files in domains/", () => {
-    // The five canonical domain files plus the authoring template are the only ones that should exist.
+    // The six canonical domain files plus the authoring template are the only ones that should exist.
     // If someone adds a file without updating the architect guidance, flag it.
     const { readdirSync } = require("node:fs");
     const files: string[] = readdirSync(DOMAINS_DIR).filter((f: string) => f.endsWith(".md"));
@@ -133,7 +133,7 @@ describe("canon-architect.md — domain classification guidance", () => {
     expect(content).toContain("Domain classification");
   });
 
-  it("lists all 5 built-in domain names", () => {
+  it("lists all 6 built-in domain names", () => {
     const content = readFile(ARCHITECT_MD);
     for (const domain of BUILT_IN_DOMAINS) {
       expect(content).toContain(domain);
@@ -219,7 +219,7 @@ describe("canon-implementor.md — Step 2 domain priming", () => {
 // Architect writes domains: in the plan → implementor reads domains: from plan → loads domain file
 
 describe("domain priming pipeline coherence", () => {
-  it("all 5 domain names in architect guidance match actual domain file names", () => {
+  it("all 6 domain names in architect guidance match actual domain file names", () => {
     const architectContent = readFile(ARCHITECT_MD);
     const fileNames = BUILT_IN_DOMAINS.map((d) => `${d}.md`);
     for (const fileName of fileNames) {
