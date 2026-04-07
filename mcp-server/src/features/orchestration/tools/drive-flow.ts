@@ -211,12 +211,16 @@ function handleWaveResult(
  * Called:
  *   1. After reportResult resolves (resolvePostReportAction / routeReportResult)
  *   2. At the wave boundary after handlePendingWaveEvents (completeWave)
+ *
+ * @param resumeStateId - The state to return to after the inserted state completes ("done").
+ *   Pass `reportOut.next_state` from the calling context, or `null` at the wave boundary.
  */
 async function applyFlowEventDrain(
   workspace: string,
   flow: DriveFlowInput["flow"],
   currentStateId: string,
   store: ReturnType<typeof getExecutionStore>,
+  resumeStateId: string | null,
 ): Promise<ToolResult<DriveFlowAction> | null> {
   const board = store.getBoard();
   const watermark =
@@ -242,7 +246,18 @@ async function applyFlowEventDrain(
   if (effect.type === "none") return null;
 
   if (effect.type === "insert") {
-    return enterStateAndBuildSpawn(workspace, flow, effect.state_id, store);
+    const spawnAction = await enterStateAndBuildSpawn(workspace, flow, effect.state_id, store);
+    // Persist the return address so that when the inserted state completes with "done",
+    // the flow resumes at resumeStateId instead of the inserted state's own transition target.
+    if (resumeStateId !== null) {
+      const insertedEntry = store.getState(effect.state_id);
+      store.upsertState(effect.state_id, {
+        entries: insertedEntry?.entries ?? 1,
+        inserted_return_to: resumeStateId,
+        status: insertedEntry?.status ?? "in_progress",
+      });
+    }
+    return spawnAction;
   }
 
   if (effect.type === "skip") {
@@ -318,14 +333,21 @@ async function resolvePostReportAction(
     };
   }
 
-  // Flow event drain — check for agent/external directives before advancing
-  const drainAction = await applyFlowEventDrain(workspace, flow, state_id, store);
+  // Flow event drain — check for agent/external directives before advancing.
+  // Pass next_state as resumeStateId so an inserted state can return here when done.
+  const drainAction = await applyFlowEventDrain(workspace, flow, state_id, store, next_state ?? null);
   if (drainAction !== null) return drainAction;
+
+  // Return-address semantics: if this state was inserted and completed with "done",
+  // resume at the stored return address instead of the state's own transition target.
+  const returnAddress = store.getState(state_id)?.inserted_return_to;
+  const effectiveNextState =
+    returnAddress && reportOut.transition_condition === "done" ? returnAddress : next_state;
 
   return resolveNextStateAction(workspace, flow, {
     board: store.getBoard() ?? freshBoard,
     current_state: state_id,
-    next_state,
+    next_state: effectiveNextState,
     store,
   });
 }
@@ -633,14 +655,21 @@ async function routeReportResult(
     };
   }
 
-  // Flow event drain — check for agent/external directives before advancing
-  const drainAction = await applyFlowEventDrain(workspace, flow, state_id, store);
+  // Flow event drain — check for agent/external directives before advancing.
+  // Pass next_state as resumeStateId so an inserted state can return here when done.
+  const drainAction = await applyFlowEventDrain(workspace, flow, state_id, store, next_state ?? null);
   if (drainAction !== null) return drainAction;
+
+  // Return-address semantics: if this state was inserted and completed with "done",
+  // resume at the stored return address instead of the state's own transition target.
+  const returnAddress = store.getState(state_id)?.inserted_return_to;
+  const effectiveNextState =
+    returnAddress && reportOut.transition_condition === "done" ? returnAddress : next_state;
 
   return resolveNextStateAction(workspace, flow, {
     board: store.getBoard()!,
     current_state: state_id,
-    next_state,
+    next_state: effectiveNextState,
     store,
   });
 }
@@ -765,8 +794,10 @@ async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveF
   const eventResult = handlePendingWaveEvents(store, currentWave);
   if (eventResult !== null) return eventResult;
 
-  // Flow event drain at wave boundary — check for agent/external directives
-  const drainActionWave = await applyFlowEventDrain(workspace, flow, state_id, store);
+  // Flow event drain at wave boundary — check for agent/external directives.
+  // Pass null as resumeStateId: at the wave boundary there is no specific "next state"
+  // to resume at, so inserted states at this boundary have no return address.
+  const drainActionWave = await applyFlowEventDrain(workspace, flow, state_id, store, null);
   if (drainActionWave !== null) return drainActionWave;
 
   const nextWave = currentWave + 1;
