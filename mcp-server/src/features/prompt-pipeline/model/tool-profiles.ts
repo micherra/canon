@@ -14,11 +14,20 @@ export type AgentToolProfile = {
   disallowed: string[];
 };
 
+/** A structured audit warning produced by resolveToolProfile. */
+export type ToolScopeWarning = {
+  event: "adr014_replace_override_grants_disallowed";
+  agent: string;
+  granted_disallowed: string[];
+};
+
 /** Resolved tool configuration for a single agent spawn. */
 export type ResolvedProfile = {
   tools: string[];
   disallowed_tools: string[];
   permission_mode: "auto" | "prompt" | "deny_unknown";
+  /** Structured audit warnings — present when a replace override grants disallowed tools. */
+  warnings?: ToolScopeWarning[];
 };
 
 /**
@@ -127,18 +136,20 @@ export const resolveToolProfile = (
 
   // Resolve effective allowed list
   let effectiveAllowed: string[];
+  let warnings: ToolScopeWarning[] | undefined;
   if (overrides?.replace) {
-    // Audit: warn when replace grants tools that are in the base disallowed list.
-    // This is permitted by the caller but should be visible in logs.
+    // Audit: collect a structured warning when replace grants tools that are in the
+    // base disallowed list. This is permitted by the caller but must be persisted
+    // to the SQLite event log — callers are responsible for forwarding warnings.
     const grantedDisallowed = overrides.replace.filter((t) => base.disallowed.includes(t));
     if (grantedDisallowed.length > 0) {
-      console.warn(
-        JSON.stringify({
-          event: "adr014_replace_override_grants_disallowed",
+      warnings = [
+        {
           agent,
+          event: "adr014_replace_override_grants_disallowed",
           granted_disallowed: grantedDisallowed,
-        }),
-      );
+        },
+      ];
     }
     effectiveAllowed = overrides.replace;
   } else if (overrides?.allow) {
@@ -159,9 +170,11 @@ export const resolveToolProfile = (
   const permissionMode: "auto" | "prompt" | "deny_unknown" =
     overrides?.permission_mode ?? (isolation === "worktree" && worktreePath ? "auto" : "prompt");
 
-  return {
+  const result: ResolvedProfile = {
     disallowed_tools: effectiveDisallowed,
     permission_mode: permissionMode,
     tools: finalAllowed,
   };
+  if (warnings) result.warnings = warnings;
+  return result;
 };

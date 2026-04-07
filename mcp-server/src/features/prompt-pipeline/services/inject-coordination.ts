@@ -100,12 +100,14 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
       entry.isolation,
       entry.worktree_path,
     );
-    return {
+    const updated: typeof entry = {
       ...entry,
       disallowed_tools: resolved.disallowed_tools,
       permission_mode: resolved.permission_mode,
       tools: resolved.tools,
     };
+    if (resolved.warnings) updated.tool_scope_warnings = resolved.warnings;
+    return updated;
   });
 
   return { ...ctx, prompts };

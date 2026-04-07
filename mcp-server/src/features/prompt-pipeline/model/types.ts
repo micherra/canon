@@ -23,6 +23,8 @@ export type SpawnPromptEntry = {
   tools?: string[];
   disallowed_tools?: string[];
   permission_mode?: "auto" | "prompt" | "deny_unknown";
+  /** ADR-014: structured audit warnings from resolveToolProfile — forwarded to event log by drive-flow. */
+  tool_scope_warnings?: import("./tool-profiles.ts").ToolScopeWarning[];
 };
 
 export type SpawnPromptResult = {
