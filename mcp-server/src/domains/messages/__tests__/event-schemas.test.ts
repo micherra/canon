@@ -342,4 +342,45 @@ describe("validateEventPayload", () => {
     ).not.toThrow();
     expect(() => validateEventPayload("unknown_type", {})).not.toThrow();
   });
+
+  it("returns { valid: true } for a correct tool_scope_audit payload", () => {
+    const result = validateEventPayload("tool_scope_audit", {
+      agent: "canon-researcher",
+      event: "adr014_replace_override_grants_disallowed",
+      granted_disallowed: ["Edit", "Write"],
+      stateId: "research",
+      timestamp: "2026-04-01T00:00:00Z",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("returns { valid: true } for tool_scope_audit with optional correlation_id", () => {
+    const result = validateEventPayload("tool_scope_audit", {
+      agent: "canon-researcher",
+      correlation_id: "corr-xyz",
+      event: "adr014_replace_override_grants_disallowed",
+      granted_disallowed: ["Edit"],
+      stateId: "research",
+      timestamp: "2026-04-01T00:00:00Z",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("returns { valid: false } for tool_scope_audit missing required fields", () => {
+    const result = validateEventPayload("tool_scope_audit", {
+      agent: "canon-researcher",
+      // missing event, granted_disallowed, stateId, timestamp
+    });
+    expect(result.valid).toBe(false);
+    expect(Array.isArray(result.errors)).toBe(true);
+    expect(result.errors!.length).toBeGreaterThan(0);
+  });
+});
+
+// FlowEventType — tool_scope_audit
+
+describe("FlowEventType — tool_scope_audit", () => {
+  it("includes tool_scope_audit in EventPayloadSchemas keys", () => {
+    expect("tool_scope_audit" in EventPayloadSchemas).toBe(true);
+  });
 });

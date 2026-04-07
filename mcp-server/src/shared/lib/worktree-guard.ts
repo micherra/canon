@@ -10,6 +10,9 @@ export const isPathContained = (containerDir: string, targetPath: string): boole
   const resolvedContainer = resolve(containerDir);
   const resolvedTarget = resolve(targetPath);
   const rel = relative(resolvedContainer, resolvedTarget);
+  // When containerDir === targetPath, relative() returns "" (empty string).
+  // An empty string passes both checks (does not start with ".." or "/"),
+  // so same-path is intentionally treated as contained (returns true).
   return !rel.startsWith("..") && !rel.startsWith("/");
 };
 

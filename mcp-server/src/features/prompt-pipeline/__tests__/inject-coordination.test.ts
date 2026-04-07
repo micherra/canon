@@ -565,4 +565,45 @@ describe("injectCoordination — tool scope injection", () => {
     expect(result.prompts[0].prompt).toContain("## Performance Metrics");
     expect(result.prompts[0].tools).toEqual(["Read", "Grep"]);
   });
+
+  it("forwards tool_scope_warnings onto SpawnPromptEntry when resolveToolProfile returns warnings", async () => {
+    const warnings = [
+      {
+        agent: "canon-researcher",
+        event: "adr014_replace_override_grants_disallowed" as const,
+        granted_disallowed: ["Edit"],
+      },
+    ];
+    vi.mocked(resolveToolProfile).mockReturnValue({
+      disallowed_tools: [],
+      permission_mode: "prompt",
+      tools: ["Read", "Edit"],
+      warnings,
+    });
+
+    const ctx = makeCtx({
+      prompts: [makeEntry({ agent: "canon-researcher" })],
+    });
+
+    const result = await injectCoordination(ctx);
+
+    expect(result.prompts[0].tool_scope_warnings).toEqual(warnings);
+  });
+
+  it("does NOT set tool_scope_warnings when resolveToolProfile returns no warnings", async () => {
+    // default mock returns no warnings
+    vi.mocked(resolveToolProfile).mockReturnValue({
+      disallowed_tools: ["Edit", "Write"],
+      permission_mode: "prompt",
+      tools: ["Read", "Grep"],
+    });
+
+    const ctx = makeCtx({
+      prompts: [makeEntry()],
+    });
+
+    const result = await injectCoordination(ctx);
+
+    expect(result.prompts[0].tool_scope_warnings).toBeUndefined();
+  });
 });
