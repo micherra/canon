@@ -6,9 +6,9 @@
  * when absent.
  */
 
+import type { SpawnPromptEntry } from "@features/prompt-pipeline/model/types.ts";
 import { describe, expect, test } from "vitest";
 import { buildSpawnRequests } from "../drive-flow.ts";
-import type { SpawnPromptEntry } from "@features/prompt-pipeline/model/types.ts";
 
 // Minimal valid SpawnPromptEntry (without tool scoping fields)
 const baseEntry = (): SpawnPromptEntry => ({
@@ -48,27 +48,27 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
   test("omits tools key entirely when not present in entry", () => {
     const entry: SpawnPromptEntry = baseEntry();
     const [req] = buildSpawnRequests([entry]);
-    expect(Object.prototype.hasOwnProperty.call(req, "tools")).toBe(false);
+    expect(Object.hasOwn(req, "tools")).toBe(false);
   });
 
   test("omits disallowed_tools key entirely when not present in entry", () => {
     const entry: SpawnPromptEntry = baseEntry();
     const [req] = buildSpawnRequests([entry]);
-    expect(Object.prototype.hasOwnProperty.call(req, "disallowed_tools")).toBe(false);
+    expect(Object.hasOwn(req, "disallowed_tools")).toBe(false);
   });
 
   test("omits permission_mode key entirely when not present in entry", () => {
     const entry: SpawnPromptEntry = baseEntry();
     const [req] = buildSpawnRequests([entry]);
-    expect(Object.prototype.hasOwnProperty.call(req, "permission_mode")).toBe(false);
+    expect(Object.hasOwn(req, "permission_mode")).toBe(false);
   });
 
   test("forwards all three fields together when all are present", () => {
     const entry: SpawnPromptEntry = {
       ...baseEntry(),
-      tools: ["Read", "Write"],
       disallowed_tools: ["Bash"],
       permission_mode: "auto",
+      tools: ["Read", "Write"],
     };
     const [req] = buildSpawnRequests([entry]);
     expect(req.tools).toEqual(["Read", "Write"]);
@@ -80,14 +80,14 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     const entry: SpawnPromptEntry = {
       agent: "canon:canon-researcher",
       prompt: "Research the codebase",
-      template_paths: [],
       role: "researcher",
+      template_paths: [],
     };
     const [req] = buildSpawnRequests([entry]);
     expect(req.agent_type).toBe("canon:canon-researcher");
     expect(req.role).toBe("researcher");
-    expect(Object.prototype.hasOwnProperty.call(req, "tools")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(req, "disallowed_tools")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(req, "permission_mode")).toBe(false);
+    expect(Object.hasOwn(req, "tools")).toBe(false);
+    expect(Object.hasOwn(req, "disallowed_tools")).toBe(false);
+    expect(Object.hasOwn(req, "permission_mode")).toBe(false);
   });
 });

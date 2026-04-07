@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { toolError, toolOk, type ToolResult } from "./tool-result.ts";
+import { type ToolResult, toolError, toolOk } from "./tool-result.ts";
 
 /**
  * Pure helper: returns true when `targetPath` is logically contained within `containerDir`.

@@ -23,9 +23,9 @@ vi.mock("@domains/messages/messages.ts", () => ({
 
 vi.mock("../model/tool-profiles.ts", () => ({
   resolveToolProfile: vi.fn().mockReturnValue({
-    tools: ["Read", "Grep"],
     disallowed_tools: ["Edit", "Write"],
     permission_mode: "prompt",
+    tools: ["Read", "Grep"],
   }),
 }));
 
@@ -343,9 +343,9 @@ describe("injectCoordination — metrics footer", () => {
 describe("injectCoordination — tool scope injection", () => {
   beforeEach(() => {
     vi.mocked(resolveToolProfile).mockReturnValue({
-      tools: ["Read", "Grep"],
       disallowed_tools: ["Edit", "Write"],
       permission_mode: "prompt",
+      tools: ["Read", "Grep"],
     });
   });
 
@@ -366,9 +366,9 @@ describe("injectCoordination — tool scope injection", () => {
 
   it("calls resolveToolProfile for known agent type (canon-researcher)", async () => {
     vi.mocked(resolveToolProfile).mockReturnValue({
-      tools: ["Read", "Grep", "Glob", "Bash", "WebFetch"],
       disallowed_tools: ["Edit", "Write", "NotebookEdit"],
       permission_mode: "prompt",
+      tools: ["Read", "Grep", "Glob", "Bash", "WebFetch"],
     });
 
     const ctx = makeCtx({
@@ -389,9 +389,9 @@ describe("injectCoordination — tool scope injection", () => {
 
   it("unknown agent type gets empty profile (fail-closed)", async () => {
     vi.mocked(resolveToolProfile).mockReturnValue({
-      tools: [],
       disallowed_tools: [],
       permission_mode: "prompt",
+      tools: [],
     });
 
     const ctx = makeCtx({
@@ -409,8 +409,8 @@ describe("injectCoordination — tool scope injection", () => {
       prompts: [makeEntry()],
       state: {
         agent: "canon-implementor",
-        type: "single",
         tool_overrides: { allow: ["ExtraTool"] },
+        type: "single",
       } as StateDefinition,
     });
 
@@ -429,8 +429,8 @@ describe("injectCoordination — tool scope injection", () => {
       prompts: [makeEntry()],
       state: {
         agent: "canon-implementor",
-        type: "single",
         tool_overrides: { deny: ["Bash"] },
+        type: "single",
       } as StateDefinition,
     });
 
@@ -449,8 +449,8 @@ describe("injectCoordination — tool scope injection", () => {
       prompts: [makeEntry()],
       state: {
         agent: "canon-implementor",
-        type: "single",
         tool_overrides: { replace: ["OnlyThisTool"] },
+        type: "single",
       } as StateDefinition,
     });
 
@@ -466,17 +466,17 @@ describe("injectCoordination — tool scope injection", () => {
 
   it("passes tool_overrides.permission_mode to resolveToolProfile", async () => {
     vi.mocked(resolveToolProfile).mockReturnValue({
-      tools: ["Read"],
       disallowed_tools: [],
       permission_mode: "deny_unknown",
+      tools: ["Read"],
     });
 
     const ctx = makeCtx({
       prompts: [makeEntry()],
       state: {
         agent: "canon-implementor",
-        type: "single",
         tool_overrides: { permission_mode: "deny_unknown" },
+        type: "single",
       } as StateDefinition,
     });
 
@@ -493,15 +493,13 @@ describe("injectCoordination — tool scope injection", () => {
 
   it("passes isolation and worktree_path to resolveToolProfile — auto for worktree entries", async () => {
     vi.mocked(resolveToolProfile).mockReturnValue({
-      tools: ["Read", "Grep"],
       disallowed_tools: [],
       permission_mode: "auto",
+      tools: ["Read", "Grep"],
     });
 
     const ctx = makeCtx({
-      prompts: [
-        makeEntry({ isolation: "worktree", worktree_path: "/path/to/worktree" }),
-      ],
+      prompts: [makeEntry({ isolation: "worktree", worktree_path: "/path/to/worktree" })],
     });
 
     await injectCoordination(ctx);

@@ -3,11 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import {
-  AGENT_TOOL_PROFILES,
-  EMPTY_PROFILE,
-  resolveToolProfile,
-} from "../model/tool-profiles.ts";
+import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model/tool-profiles.ts";
 
 const ALL_AGENTS = [
   "canon-researcher",
@@ -64,9 +60,7 @@ describe("resolveToolProfile", () => {
   it("returns base profile tools for known agent without overrides", () => {
     const result = resolveToolProfile("canon-researcher");
     const base = AGENT_TOOL_PROFILES["canon-researcher"];
-    expect(result.tools).toEqual(
-      base.allowed.filter((t) => !base.disallowed.includes(t)),
-    );
+    expect(result.tools).toEqual(base.allowed.filter((t) => !base.disallowed.includes(t)));
     expect(result.disallowed_tools).toEqual(base.disallowed);
   });
 
@@ -82,7 +76,6 @@ describe("resolveToolProfile", () => {
   });
 
   it("with deny override removes tools from allowed", () => {
-    const base = AGENT_TOOL_PROFILES["canon-researcher"];
     // researcher has Read in allowed — deny it
     const result = resolveToolProfile("canon-researcher", { deny: ["Read"] });
     expect(result.tools).not.toContain("Read");
@@ -131,8 +124,8 @@ describe("resolveToolProfile", () => {
 
   it("replace override with deny strips matching tools", () => {
     const result = resolveToolProfile("canon-implementor", {
-      replace: ["ToolA", "ToolB", "ToolC"],
       deny: ["ToolB"],
+      replace: ["ToolA", "ToolB", "ToolC"],
     });
     expect(result.tools).toEqual(["ToolA", "ToolC"]);
     expect(result.disallowed_tools).toContain("ToolB");

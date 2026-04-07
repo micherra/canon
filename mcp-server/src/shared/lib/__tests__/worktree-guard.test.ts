@@ -58,7 +58,7 @@ describe("isPathInWorktree", () => {
   });
 
   afterEach(async () => {
-    await rm(tmpDir, { recursive: true, force: true });
+    await rm(tmpDir, { force: true, recursive: true });
   });
 
   it("returns ok for a real file inside worktree", async () => {
@@ -79,10 +79,7 @@ describe("isPathInWorktree", () => {
 
   it("returns error for traversal attempt", async () => {
     // Logical traversal — path escapes via ..
-    const result = await isPathInWorktree(
-      join(worktree, "..", "outside", "secret.txt"),
-      worktree,
-    );
+    const result = await isPathInWorktree(join(worktree, "..", "outside", "secret.txt"), worktree);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error_code).toBe("INVALID_INPUT");

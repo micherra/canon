@@ -33,19 +33,6 @@ export const EMPTY_PROFILE: AgentToolProfile = {
 
 /** Registry of declared tool profiles for all Canon agent types. */
 export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
-  "canon-researcher": {
-    allowed: [
-      "Read",
-      "Grep",
-      "Glob",
-      "Bash",
-      "WebFetch",
-      "graph_query",
-      "get_file_context",
-      "semantic_search",
-    ],
-    disallowed: ["Edit", "Write", "NotebookEdit"],
-  },
   "canon-architect": {
     allowed: [
       "Read",
@@ -60,49 +47,62 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     ],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
-  "canon-implementor": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "NotebookEdit"],
-    disallowed: [],
-  },
-  "canon-tester": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
-    disallowed: [],
-  },
-  "canon-reviewer": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "review_code"],
-    disallowed: ["Edit", "Write", "NotebookEdit"],
+  "canon-chat": {
+    allowed: ["Read", "Grep", "Glob"],
+    disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
   },
   "canon-fixer": {
     allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
     disallowed: [],
   },
-  "canon-security": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "graph_query", "get_file_context"],
+  "canon-guide": {
+    allowed: ["Read", "Grep", "Glob"],
+    disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
+  },
+  "canon-implementor": {
+    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "NotebookEdit"],
+    disallowed: [],
+  },
+  "canon-learner": {
+    allowed: ["Read", "Grep", "Glob", "Bash"],
+    disallowed: ["Edit", "Write", "NotebookEdit"],
+  },
+  "canon-researcher": {
+    allowed: [
+      "Read",
+      "Grep",
+      "Glob",
+      "Bash",
+      "WebFetch",
+      "graph_query",
+      "get_file_context",
+      "semantic_search",
+    ],
+    disallowed: ["Edit", "Write", "NotebookEdit"],
+  },
+  "canon-reviewer": {
+    allowed: ["Read", "Grep", "Glob", "Bash", "review_code"],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-scribe": {
     allowed: ["Read", "Grep", "Glob", "Edit"],
     disallowed: ["Bash", "Write", "NotebookEdit"],
   },
-  "canon-learner": {
-    allowed: ["Read", "Grep", "Glob", "Bash"],
+  "canon-security": {
+    allowed: ["Read", "Grep", "Glob", "Bash", "graph_query", "get_file_context"],
     disallowed: ["Edit", "Write", "NotebookEdit"],
-  },
-  "canon-guide": {
-    allowed: ["Read", "Grep", "Glob"],
-    disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
-  },
-  "canon-writer": {
-    allowed: ["Read", "Grep", "Glob", "Edit", "Write"],
-    disallowed: ["Bash", "NotebookEdit"],
   },
   "canon-shipper": {
     allowed: ["Read", "Grep", "Glob", "Bash"],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
-  "canon-chat": {
-    allowed: ["Read", "Grep", "Glob"],
-    disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
+  "canon-tester": {
+    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+    disallowed: [],
+  },
+  "canon-writer": {
+    allowed: ["Read", "Grep", "Glob", "Edit", "Write"],
+    disallowed: ["Bash", "NotebookEdit"],
   },
 } as const;
 
@@ -143,20 +143,20 @@ export const resolveToolProfile = (
   }
 
   // Resolve effective disallowed list
-  const effectiveDisallowed: string[] =
-    overrides?.deny ? [...base.disallowed, ...overrides.deny] : base.disallowed;
+  const effectiveDisallowed: string[] = overrides?.deny
+    ? [...base.disallowed, ...overrides.deny]
+    : base.disallowed;
 
   // Disallowed wins — filter out any disallowed tools from allowed
   const finalAllowed = effectiveAllowed.filter((t) => !effectiveDisallowed.includes(t));
 
   // Determine permission mode
   const permissionMode: "auto" | "prompt" | "deny_unknown" =
-    overrides?.permission_mode ??
-    (isolation === "worktree" && worktreePath ? "auto" : "prompt");
+    overrides?.permission_mode ?? (isolation === "worktree" && worktreePath ? "auto" : "prompt");
 
   return {
-    tools: finalAllowed,
     disallowed_tools: effectiveDisallowed,
     permission_mode: permissionMode,
+    tools: finalAllowed,
   };
 };

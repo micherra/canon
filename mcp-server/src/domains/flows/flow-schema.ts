@@ -191,8 +191,8 @@ export const ToolOverridesSchema = z
   .object({
     allow: z.array(z.string()).optional(),
     deny: z.array(z.string()).optional(),
-    replace: z.array(z.string()).optional(),
     permission_mode: z.enum(["auto", "prompt", "deny_unknown"]).optional(),
+    replace: z.array(z.string()).optional(),
   })
   .optional();
 

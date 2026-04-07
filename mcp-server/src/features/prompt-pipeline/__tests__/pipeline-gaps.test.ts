@@ -841,9 +841,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
       },
     });
 
-    const result = await assemblePrompt(
-      makeInput(workspace, { flow, state_id: "custom" }),
-    );
+    const result = await assemblePrompt(makeInput(workspace, { flow, state_id: "custom" }));
 
     expect(result.prompts).toHaveLength(1);
     const entry = result.prompts[0];

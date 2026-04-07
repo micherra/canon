@@ -23,9 +23,9 @@
  * operations, all concerning coordination and observability metadata.
  */
 
+import type { ToolOverrides } from "@domains/flows/flow-schema.ts";
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
-import type { ToolOverrides } from "@domains/flows/flow-schema.ts";
 import { resolveToolProfile } from "../model/tool-profiles.ts";
 import type { PromptContext } from "../model/types.ts";
 
@@ -102,9 +102,9 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
     );
     return {
       ...entry,
-      tools: resolved.tools,
       disallowed_tools: resolved.disallowed_tools,
       permission_mode: resolved.permission_mode,
+      tools: resolved.tools,
     };
   });
 
