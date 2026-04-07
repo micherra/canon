@@ -19,6 +19,10 @@ export type SpawnPromptEntry = {
   template_paths: string[];
   isolation?: "worktree";
   worktree_path?: string;
+  // ADR-014: tool scoping metadata
+  tools?: string[];
+  disallowed_tools?: string[];
+  permission_mode?: "auto" | "prompt" | "deny_unknown";
 };
 
 export type SpawnPromptResult = {

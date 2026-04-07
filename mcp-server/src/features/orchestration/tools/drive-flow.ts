@@ -1412,7 +1412,7 @@ async function enterWaveState(
 /**
  * Convert SpawnPromptEntry[] and consultation prompts into SpawnRequest[].
  */
-function buildSpawnRequests(
+export function buildSpawnRequests(
   prompts: SpawnPromptEntry[],
   consultationPrompts?: ConsultationPromptEntry[],
 ): SpawnRequest[] {
@@ -1430,6 +1430,9 @@ function buildSpawnRequests(
         }
       : {}),
     ...(entry.worktree_path !== undefined ? { worktree_path: entry.worktree_path } : {}),
+    ...(entry.tools !== undefined ? { tools: entry.tools } : {}),
+    ...(entry.disallowed_tools !== undefined ? { disallowed_tools: entry.disallowed_tools } : {}),
+    ...(entry.permission_mode !== undefined ? { permission_mode: entry.permission_mode } : {}),
   }));
 
   if (consultationPrompts && consultationPrompts.length > 0) {
