@@ -849,7 +849,7 @@ describe("tool scope — end-to-end through full pipeline (ADR-014)", () => {
     const entry = result.prompts[0];
     // Fail-closed: unknown agents get an empty tools list
     expect(entry.tools).toEqual([]);
-    expect(entry.disallowed_tools).toEqual([]);
+    expect(entry.disallowed_tools).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
     expect(entry.permission_mode).toBe("prompt");
   });
 
