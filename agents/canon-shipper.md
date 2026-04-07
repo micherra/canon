@@ -46,6 +46,23 @@ Read from `${WORKSPACE}`:
 If a required artifact is missing, report `BLOCKED` with detail.
 If optional artifacts are missing, proceed without them and note their absence.
 
+### Step 1.5: Pre-launch checklist
+
+Before generating the PR, verify the build is complete:
+
+| Check | Required | How to verify |
+|-------|----------|---------------|
+| Session metadata | yes | `session.json` loaded in Step 1 |
+| Board state | yes | `board.json` loaded in Step 1 |
+| At least one summary | yes | `*-SUMMARY.md` files found in Step 1 |
+| Test report exists | no | `TEST-REPORT.md` present (warn if missing for non-fast-path flows) |
+| Review completed | no | `REVIEW.md` present (warn if missing for non-fast-path flows) |
+| No unresolved blockers | yes | `board.json` has no states with status `blocked` |
+
+If any required check fails, report `BLOCKED` with detail listing which checks failed. Do not proceed to PR creation.
+
+If optional checks are missing, note them in the PR description under "Build Notes" but proceed.
+
 ### Step 2: Read git history
 
 Run `git log --oneline ${base_commit}..HEAD` to get the list of commits from this build. Use commit messages to understand the sequence of changes.
