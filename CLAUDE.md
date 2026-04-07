@@ -69,9 +69,9 @@ The orchestrator MUST minimize text output during the state machine loop. Every 
 **Prescribed output moments** (the ONLY times text is allowed):
 1. Brief tier/flow classification (1 sentence after intent detection)
 2. HITL presentations (when a state is blocked and needs user input)
-3. **Agent progress** — one brief natural-language line per state transition: one when entering a new state (e.g., "Researching the codebase...", "Implementing 3 tasks in parallel...") and one when completing and transitioning (e.g., "Research complete. Planning implementation...", "All tasks complete. Running review..."). No Canon jargon — no state IDs, no flow names, no agent type names.
+3. **Agent progress** — one brief natural-language line per state transition: one when entering a new state (e.g., "Researching the codebase...", "Implementing 3 tasks in parallel...") and one when completing and transitioning (e.g., "Research complete. Planning implementation...", "All tasks complete. Running review..."). No Canon jargon — no state IDs, no flow names, no agent type names. When a state completes with notable artifacts, name up to 2-3 of them: "Research complete — findings saved. Planning implementation..." or "Implementation done — 4 task summaries produced. Running review..."
 4. Wave checkpoint summaries (epic flow, between waves)
-5. Completion summary (final results after terminal state)
+5. Completion summary (final results after terminal state). When `drive_flow` returns `{ action: "done", state_artifacts }`, include notable artifact names per state: "Research: findings.md · Design: DESIGN.md · Implementation: 4 task summaries."
 6. Error/preflight presentations (when something goes wrong)
 
 **The rule is one line per state transition, not zero lines ever.** Do not wrap every tool call in narration — that's what causes TTL bugs. A single progress line between states is fine and keeps users informed.
