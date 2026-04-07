@@ -10,6 +10,7 @@
  * - Metrics footer appended to every prompt entry
  * - Metrics footer contains correct workspace and state_id values
  * - Metrics footer appended even when prompts have different content
+ * - Tool scope set on all prompt entries (ADR-014)
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,8 +21,17 @@ vi.mock("@domains/messages/messages.ts", () => ({
   buildMessageInstructions: vi.fn().mockReturnValue("## Wave Coordination\n\nInstructions here"),
 }));
 
+vi.mock("../model/tool-profiles.ts", () => ({
+  resolveToolProfile: vi.fn().mockReturnValue({
+    disallowed_tools: ["Edit", "Write"],
+    permission_mode: "prompt",
+    tools: ["Read", "Grep"],
+  }),
+}));
+
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
+import { resolveToolProfile } from "../model/tool-profiles.ts";
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import { injectCoordination } from "../services/inject-coordination.ts";
 
@@ -325,5 +335,234 @@ describe("injectCoordination — metrics footer", () => {
     expect(result.prompts[0].prompt).toContain("tool_calls");
     expect(result.prompts[0].prompt).toContain("orientation_calls");
     expect(result.prompts[0].prompt).toContain("turns");
+  });
+});
+
+// Tool scope injection (ADR-014)
+
+describe("injectCoordination — tool scope injection", () => {
+  beforeEach(() => {
+    vi.mocked(resolveToolProfile).mockReturnValue({
+      disallowed_tools: ["Edit", "Write"],
+      permission_mode: "prompt",
+      tools: ["Read", "Grep"],
+    });
+  });
+
+  it("sets tools, disallowed_tools, and permission_mode on all prompt entries", async () => {
+    const ctx = makeCtx({
+      prompts: [makeEntry(), makeEntry({ agent: "canon-researcher" })],
+    });
+
+    const result = await injectCoordination(ctx);
+
+    expect(result.prompts[0].tools).toEqual(["Read", "Grep"]);
+    expect(result.prompts[0].disallowed_tools).toEqual(["Edit", "Write"]);
+    expect(result.prompts[0].permission_mode).toBe("prompt");
+    expect(result.prompts[1].tools).toEqual(["Read", "Grep"]);
+    expect(result.prompts[1].disallowed_tools).toEqual(["Edit", "Write"]);
+    expect(result.prompts[1].permission_mode).toBe("prompt");
+  });
+
+  it("calls resolveToolProfile for known agent type (canon-researcher)", async () => {
+    vi.mocked(resolveToolProfile).mockReturnValue({
+      disallowed_tools: ["Edit", "Write", "NotebookEdit"],
+      permission_mode: "prompt",
+      tools: ["Read", "Grep", "Glob", "Bash", "WebFetch"],
+    });
+
+    const ctx = makeCtx({
+      prompts: [makeEntry({ agent: "canon-researcher" })],
+    });
+
+    await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      "canon-researcher",
+      undefined,
+      undefined,
+      undefined,
+    );
+    const result = await injectCoordination(ctx);
+    expect(result.prompts[0].tools).toEqual(["Read", "Grep", "Glob", "Bash", "WebFetch"]);
+  });
+
+  it("unknown agent type gets empty profile (fail-closed)", async () => {
+    vi.mocked(resolveToolProfile).mockReturnValue({
+      disallowed_tools: [],
+      permission_mode: "prompt",
+      tools: [],
+    });
+
+    const ctx = makeCtx({
+      prompts: [makeEntry({ agent: "unknown-agent-type" })],
+    });
+
+    const result = await injectCoordination(ctx);
+
+    expect(result.prompts[0].tools).toEqual([]);
+    expect(result.prompts[0].disallowed_tools).toEqual([]);
+  });
+
+  it("passes tool_overrides.allow to resolveToolProfile when state has tool_overrides", async () => {
+    const ctx = makeCtx({
+      prompts: [makeEntry()],
+      state: {
+        agent: "canon-implementor",
+        tool_overrides: { allow: ["ExtraTool"] },
+        type: "single",
+      } as StateDefinition,
+    });
+
+    await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      "canon-implementor",
+      { allow: ["ExtraTool"] },
+      undefined,
+      undefined,
+    );
+  });
+
+  it("passes tool_overrides.deny to resolveToolProfile when state has deny override", async () => {
+    const ctx = makeCtx({
+      prompts: [makeEntry()],
+      state: {
+        agent: "canon-implementor",
+        tool_overrides: { deny: ["Bash"] },
+        type: "single",
+      } as StateDefinition,
+    });
+
+    await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      "canon-implementor",
+      { deny: ["Bash"] },
+      undefined,
+      undefined,
+    );
+  });
+
+  it("passes tool_overrides.replace to resolveToolProfile when state has replace override", async () => {
+    const ctx = makeCtx({
+      prompts: [makeEntry()],
+      state: {
+        agent: "canon-implementor",
+        tool_overrides: { replace: ["OnlyThisTool"] },
+        type: "single",
+      } as StateDefinition,
+    });
+
+    await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      "canon-implementor",
+      { replace: ["OnlyThisTool"] },
+      undefined,
+      undefined,
+    );
+  });
+
+  it("passes tool_overrides.permission_mode to resolveToolProfile", async () => {
+    vi.mocked(resolveToolProfile).mockReturnValue({
+      disallowed_tools: [],
+      permission_mode: "deny_unknown",
+      tools: ["Read"],
+    });
+
+    const ctx = makeCtx({
+      prompts: [makeEntry()],
+      state: {
+        agent: "canon-implementor",
+        tool_overrides: { permission_mode: "deny_unknown" },
+        type: "single",
+      } as StateDefinition,
+    });
+
+    const result = await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      "canon-implementor",
+      { permission_mode: "deny_unknown" },
+      undefined,
+      undefined,
+    );
+    expect(result.prompts[0].permission_mode).toBe("deny_unknown");
+  });
+
+  it("passes isolation and worktree_path to resolveToolProfile — auto for worktree entries", async () => {
+    vi.mocked(resolveToolProfile).mockReturnValue({
+      disallowed_tools: [],
+      permission_mode: "auto",
+      tools: ["Read", "Grep"],
+    });
+
+    const ctx = makeCtx({
+      prompts: [makeEntry({ isolation: "worktree", worktree_path: "/path/to/worktree" })],
+    });
+
+    await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      "worktree",
+      "/path/to/worktree",
+    );
+    const result = await injectCoordination(ctx);
+    expect(result.prompts[0].permission_mode).toBe("auto");
+  });
+
+  it("passes undefined isolation and worktree_path for non-worktree entries — prompt mode", async () => {
+    const ctx = makeCtx({
+      prompts: [makeEntry({ isolation: undefined, worktree_path: undefined })],
+    });
+
+    await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+    );
+  });
+
+  it("existing behavior preserved: role substitution still works after tool scope injection", async () => {
+    const ctx = makeCtx({
+      prompts: [makeEntry({ prompt: "Do ${role} work" })],
+      role: "frontend",
+      state: { agent: "canon-implementor", type: "single" } as StateDefinition,
+    });
+
+    const result = await injectCoordination(ctx);
+
+    expect(result.prompts[0].prompt).toContain("frontend");
+    expect(result.prompts[0].tools).toEqual(["Read", "Grep"]);
+  });
+
+  it("existing behavior preserved: messaging instructions still injected with tool scope", async () => {
+    const ctx = makeCtx({
+      prompts: [makeEntry()],
+      state: { agent: "canon-implementor", type: "wave" } as StateDefinition,
+      wave: 1,
+    });
+
+    const result = await injectCoordination(ctx);
+
+    expect(result.prompts[0].prompt).toContain("## Wave Coordination");
+    expect(result.prompts[0].tools).toEqual(["Read", "Grep"]);
+  });
+
+  it("existing behavior preserved: metrics footer still appended with tool scope", async () => {
+    const ctx = makeCtx({
+      prompts: [makeEntry()],
+    });
+
+    const result = await injectCoordination(ctx);
+
+    expect(result.prompts[0].prompt).toContain("## Performance Metrics");
+    expect(result.prompts[0].tools).toEqual(["Read", "Grep"]);
   });
 });

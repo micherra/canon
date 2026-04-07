@@ -1,7 +1,7 @@
 /**
  * Stage 8: inject-coordination
  *
- * Applies three types of coordination injection to fanned-out prompts:
+ * Applies four types of coordination injection to fanned-out prompts:
  *
  * 1. **Role substitution** (single states only): when ctx.role is set,
  *    substitutes `${role}` in all prompt entries and sets entry.role.
@@ -14,12 +14,19 @@
  *    record_agent_metrics instruction with concrete workspace and state_id
  *    values. Every prompt entry receives this footer regardless of state type.
  *
- * Canon: functions-do-one-thing — three related but distinct injection
+ * 4. **Tool scope metadata** (ADR-014, all prompts, unconditional): resolves
+ *    and sets `tools`, `disallowed_tools`, and `permission_mode` on every
+ *    prompt entry based on the agent type, optional per-state tool_overrides,
+ *    and whether the entry uses worktree isolation.
+ *
+ * Canon: functions-do-one-thing — four related but distinct injection
  * operations, all concerning coordination and observability metadata.
  */
 
+import type { ToolOverrides } from "@domains/flows/flow-schema.ts";
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
+import { resolveToolProfile } from "../model/tool-profiles.ts";
 import type { PromptContext } from "../model/types.ts";
 
 /**
@@ -81,6 +88,25 @@ export async function injectCoordination(ctx: PromptContext): Promise<PromptCont
     ...entry,
     prompt: `${entry.prompt}\n\n${metricsFooter}`,
   }));
+
+  // 4. Inject tool scope metadata (ADR-014)
+  // tool_overrides is present on all StateDefinition variants via BaseStateFields —
+  // no cast or runtime guard needed.
+  const toolOverrides: ToolOverrides | undefined = state.tool_overrides;
+  prompts = prompts.map((entry) => {
+    const resolved = resolveToolProfile(
+      entry.agent,
+      toolOverrides,
+      entry.isolation,
+      entry.worktree_path,
+    );
+    return {
+      ...entry,
+      disallowed_tools: resolved.disallowed_tools,
+      permission_mode: resolved.permission_mode,
+      tools: resolved.tools,
+    };
+  });
 
   return { ...ctx, prompts };
 }
