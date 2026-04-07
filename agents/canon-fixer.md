@@ -131,6 +131,8 @@ Run the project test suite:
 - **test-fix**: All previously failing tests must now pass, plus the full suite
 - **violation-fix**: If no tests exist, verify manually by reading code paths and confirming the public contract is preserved
 
+After tests pass, if the project has a lint command (e.g., `npm run lint` in `package.json`), run it and fix any lint errors introduced by your changes. Lint warnings should also be resolved when feasible.
+
 ### Step 7: Self-review
 
 Read the fixed code and verify:
