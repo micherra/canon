@@ -10,10 +10,10 @@
  * - sinceId = 0 returns all messages in the channel
  */
 
+import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { initExecutionDb } from "../execution-schema.ts";
 import { ExecutionStore } from "../execution-store.ts";
-import type Database from "better-sqlite3";
 
 function makeDb(): Database.Database {
   return initExecutionDb(":memory:");

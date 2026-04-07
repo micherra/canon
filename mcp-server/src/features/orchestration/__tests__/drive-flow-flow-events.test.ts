@@ -45,16 +45,16 @@ vi.mock("@domains/flows/flow-event-channel.ts", () => ({
   drainFlowEvents: vi.fn(),
 }));
 
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { driveFlow } from "../tools/drive-flow.ts";
 import type { EnterAndPrepareStateResult } from "../tools/enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "../tools/enter-and-prepare-state.ts";
-import { reportResult } from "../tools/report-result.ts";
 import type { LogEntry, ReportResultResult } from "../tools/report-result.ts";
+import { reportResult } from "../tools/report-result.ts";
 
 let tmpDirs: string[] = [];
 
@@ -243,7 +243,9 @@ describe("driveFlow — flow events: effect none", () => {
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] }],
+        prompts: [
+          { agent: "canon:canon-researcher", prompt: "Research", role: "main", template_paths: [] },
+        ],
       }),
     );
 
@@ -317,7 +319,9 @@ describe("driveFlow — flow events: effect insert", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-reviewer", prompt: "Do review", role: "main", template_paths: [] }],
+        prompts: [
+          { agent: "canon:canon-reviewer", prompt: "Do review", role: "main", template_paths: [] },
+        ],
       }),
     );
 
@@ -372,7 +376,9 @@ describe("driveFlow — flow events: effect skip", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-reviewer", prompt: "Review", role: "main", template_paths: [] }],
+        prompts: [
+          { agent: "canon:canon-reviewer", prompt: "Review", role: "main", template_paths: [] },
+        ],
       }),
     );
 
@@ -511,7 +517,11 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
 
     // Set up: "review" was inserted with return address "implement"
     // (as if drainFlowEvents fired an insert while in "research" → next was "implement")
-    store.upsertState("review", { entries: 1, inserted_return_to: "implement", status: "in_progress" });
+    store.upsertState("review", {
+      entries: 1,
+      inserted_return_to: "implement",
+      status: "in_progress",
+    });
 
     // Now "review" completes with "done" — its own transition is review→terminal
     // But the return address says go to "implement"
@@ -568,7 +578,11 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
     const store = makeStore(workspace, { currentState: "review" });
 
     // "review" was inserted with return address "implement", but completes with "needs_revision"
-    store.upsertState("review", { entries: 1, inserted_return_to: "implement", status: "in_progress" });
+    store.upsertState("review", {
+      entries: 1,
+      inserted_return_to: "implement",
+      status: "in_progress",
+    });
 
     // Extend the flow to add a needs_revision transition on review
     const flow: ResolvedFlow = {
@@ -739,7 +753,14 @@ describe("driveFlow — flow events: watermark reading", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-implementor", prompt: "Implement", role: "main", template_paths: [] }],
+        prompts: [
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
+        ],
       }),
     );
 
@@ -762,7 +783,14 @@ describe("driveFlow — flow events: watermark reading", () => {
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement"));
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult({
-        prompts: [{ agent: "canon:canon-implementor", prompt: "Implement", role: "main", template_paths: [] }],
+        prompts: [
+          {
+            agent: "canon:canon-implementor",
+            prompt: "Implement",
+            role: "main",
+            template_paths: [],
+          },
+        ],
       }),
     );
 
