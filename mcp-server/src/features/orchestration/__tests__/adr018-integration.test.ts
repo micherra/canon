@@ -15,7 +15,7 @@ import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection, ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveContextInjections } from "../services/inject-context.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { writeDesignBrief } from "../tools/write-design-brief.ts";
@@ -94,9 +94,7 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
 
 afterEach(async () => {
   clearStoreCache();
-  for (const dir of tmpDirs) {
-    await rm(dir, { force: true, recursive: true });
-  }
+  await Promise.all(tmpDirs.map((dir) => rm(dir, { force: true, recursive: true })));
   tmpDirs = [];
   vi.restoreAllMocks();
 });

@@ -6,7 +6,8 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { canEnterState, filterCannotFix } from "../engine/convergence.ts";
+import { canEnterState } from "@domains/board/board.ts";
+import { filterCannotFix } from "../engine/convergence.ts";
 import { reportResult } from "../tools/report-result.ts";
 
 function makeBoard(iterations: Board["iterations"]): Board {

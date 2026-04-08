@@ -11,7 +11,7 @@
  * 6. Return combined result.
  */
 
-import { type BoardResult, enterState } from "@domains/board/board.ts";
+import { type BoardResult, canEnterState, enterState } from "@domains/board/board.ts";
 import type { Board, CannotFixItem, HistoryEntry } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
@@ -21,7 +21,6 @@ import { gitExec } from "@platform/adapters/git-adapter.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
 import { resolveConsultationPrompt } from "../engine/consultation-executor.ts";
-import { canEnterState } from "../engine/convergence.ts";
 import { assembleEnrichment } from "../services/context-enrichment.ts";
 import type { FileCluster } from "../services/diff-cluster.ts";
 import type { SpawnPromptEntry, TaskItem } from "./get-spawn-prompt.ts";

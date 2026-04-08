@@ -4,10 +4,6 @@
 
 import type { CannotFixItem } from "@domains/flows/board-state-schemas.ts";
 
-// Re-export bridge (ADR ddd-03): canEnterState has moved to the Board aggregate.
-// Remove this re-export once all callers import from @domains/board/board.ts.
-export { canEnterState } from "@domains/board/board.ts";
-
 /**
  * Filter out items that match any entry in the cannotFixList.
  */
