@@ -47,12 +47,12 @@ vi.mock("@domains/workspaces/execution-store.ts", () => ({
 
 // Imports (after mocks)
 
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
   assembleEnrichment,
   type EnrichmentInput,
 } from "@features/orchestration/services/context-enrichment.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
-import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 

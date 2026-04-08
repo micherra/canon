@@ -55,21 +55,15 @@ vi.mock("@graph/kg-store.ts", () => ({
   },
 }));
 
-import {
-  buildKgFileEntries,
-  formatKgFileContext,
-} from "../services/kg-context-formatter.ts";
+import { buildKgFileEntries, formatKgFileContext } from "../services/kg-context-formatter.ts";
 
 // Minimal mock DB (only needs to be passed through; never called directly in the module)
 const mockDb = {} as Parameters<typeof buildKgFileEntries>[1];
 
 // Shared metrics shape matching FileMetrics
-function makeMetrics(overrides: {
-  in_degree?: number;
-  out_degree?: number;
-  is_hub?: boolean;
-  layer?: string;
-} = {}) {
+function makeMetrics(
+  overrides: { in_degree?: number; out_degree?: number; is_hub?: boolean; layer?: string } = {},
+) {
   return {
     cycle_peers: [],
     impact_score: 10,
@@ -94,7 +88,7 @@ describe("buildKgFileEntries", () => {
   });
 
   it("returns entries with correct fields for files found in KG", () => {
-    const metrics = makeMetrics({ in_degree: 5, out_degree: 3, is_hub: true, layer: "api" });
+    const metrics = makeMetrics({ in_degree: 5, is_hub: true, layer: "api", out_degree: 3 });
     mockGetFileMetrics.mockReturnValue(metrics);
     mockGetFile.mockReturnValue({ file_id: 1, path: "src/api/handler.ts" });
     mockGetSummaryByFile.mockReturnValue({ summary: "Handles HTTP requests" });
@@ -114,11 +108,9 @@ describe("buildKgFileEntries", () => {
 
   it("returns entries with correct fields for multiple files", () => {
     mockGetFileMetrics
-      .mockReturnValueOnce(makeMetrics({ in_degree: 2, out_degree: 4, layer: "domain" }))
-      .mockReturnValueOnce(makeMetrics({ in_degree: 0, out_degree: 1, layer: "infra" }));
-    mockGetFile
-      .mockReturnValueOnce({ file_id: 10 })
-      .mockReturnValueOnce({ file_id: 11 });
+      .mockReturnValueOnce(makeMetrics({ in_degree: 2, layer: "domain", out_degree: 4 }))
+      .mockReturnValueOnce(makeMetrics({ in_degree: 0, layer: "infra", out_degree: 1 }));
+    mockGetFile.mockReturnValueOnce({ file_id: 10 }).mockReturnValueOnce({ file_id: 11 });
     mockGetSummaryByFile
       .mockReturnValueOnce({ summary: "Domain logic" })
       .mockReturnValueOnce(undefined);
@@ -175,8 +167,8 @@ describe("formatKgFileContext", () => {
   it("produces markdown with hub label yes for hub files", () => {
     const entries = [
       {
-        indexed: true,
         inDegree: 8,
+        indexed: true,
         isHub: true,
         layer: "shared",
         outDegree: 5,
@@ -197,8 +189,8 @@ describe("formatKgFileContext", () => {
   it("produces markdown with hub label no for non-hub files", () => {
     const entries = [
       {
-        indexed: true,
         inDegree: 1,
+        indexed: true,
         isHub: false,
         layer: "domain",
         outDegree: 2,
@@ -215,8 +207,8 @@ describe("formatKgFileContext", () => {
   it("includes summary line when summary is non-null", () => {
     const entries = [
       {
-        indexed: true,
         inDegree: 2,
+        indexed: true,
         isHub: false,
         layer: "api",
         outDegree: 1,
@@ -233,8 +225,8 @@ describe("formatKgFileContext", () => {
   it("does not include summary line when summary is null", () => {
     const entries = [
       {
-        indexed: true,
         inDegree: 2,
+        indexed: true,
         isHub: false,
         layer: "api",
         outDegree: 1,
@@ -251,8 +243,8 @@ describe("formatKgFileContext", () => {
   it("contains (not indexed) for unindexed files", () => {
     const entries = [
       {
-        indexed: false,
         inDegree: 0,
+        indexed: false,
         isHub: false,
         layer: "unknown",
         outDegree: 0,
@@ -270,8 +262,8 @@ describe("formatKgFileContext", () => {
   it("uses default heading with file count when heading not provided", () => {
     const entries = [
       {
-        indexed: true,
         inDegree: 1,
+        indexed: true,
         isHub: false,
         layer: "domain",
         outDegree: 1,
@@ -279,8 +271,8 @@ describe("formatKgFileContext", () => {
         summary: null,
       },
       {
-        indexed: true,
         inDegree: 2,
+        indexed: true,
         isHub: false,
         layer: "api",
         outDegree: 3,
@@ -297,8 +289,8 @@ describe("formatKgFileContext", () => {
   it("uses custom heading when heading parameter is provided", () => {
     const entries = [
       {
-        indexed: true,
         inDegree: 1,
+        indexed: true,
         isHub: false,
         layer: "domain",
         outDegree: 1,
@@ -316,8 +308,8 @@ describe("formatKgFileContext", () => {
   it("returns raw (unescaped) text — does not escape dollar-brace patterns", () => {
     const entries = [
       {
-        indexed: true,
         inDegree: 1,
+        indexed: true,
         isHub: false,
         layer: "domain",
         outDegree: 1,
@@ -336,8 +328,8 @@ describe("formatKgFileContext", () => {
   it("handles mix of indexed and unindexed files", () => {
     const entries = [
       {
-        indexed: true,
         inDegree: 3,
+        indexed: true,
         isHub: false,
         layer: "api",
         outDegree: 2,
@@ -345,8 +337,8 @@ describe("formatKgFileContext", () => {
         summary: "API handler",
       },
       {
-        indexed: false,
         inDegree: 0,
+        indexed: false,
         isHub: false,
         layer: "unknown",
         outDegree: 0,

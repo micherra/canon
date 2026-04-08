@@ -31,8 +31,8 @@ vi.mock("node:child_process", () => ({
 
 import { spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { resolveWaveVariables } from "@domains/workspaces/wave-variables.ts";

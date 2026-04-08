@@ -44,7 +44,7 @@ describe("resolveProjectDir", () => {
 
   it("parses file:// URI from MCP roots into a filesystem path", async () => {
     const listRoots = vi.fn().mockResolvedValue({
-      roots: [{ uri: "file:///Users/alice/my-project", name: "my-project" }],
+      roots: [{ name: "my-project", uri: "file:///Users/alice/my-project" }],
     });
     const result = await resolveProjectDir(undefined, listRoots, cwd);
     expect(result).toBe("/Users/alice/my-project");
@@ -70,10 +70,7 @@ describe("resolveProjectDir", () => {
 
   it("uses only the first root when multiple roots are present", async () => {
     const listRoots = vi.fn().mockResolvedValue({
-      roots: [
-        { uri: "file:///first/project" },
-        { uri: "file:///second/project" },
-      ],
+      roots: [{ uri: "file:///first/project" }, { uri: "file:///second/project" }],
     });
     const result = await resolveProjectDir(undefined, listRoots, cwd);
     expect(result).toBe("/first/project");

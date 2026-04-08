@@ -7,8 +7,8 @@
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { describe, expect, test } from "vitest";
 import { DriftStore } from "@platform/storage/drift/store.ts";
+import { describe, expect, test } from "vitest";
 import type { IDriftStore } from "../drift-store.interface.ts";
 
 describe("IDriftStore structural compatibility", () => {
@@ -23,7 +23,7 @@ describe("IDriftStore structural compatibility", () => {
 
       expect(store).toBeDefined();
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmSync(dir, { force: true, recursive: true });
     }
   });
 });

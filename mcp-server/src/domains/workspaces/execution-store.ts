@@ -17,8 +17,8 @@ import type {
   IterationEntry,
   Session,
 } from "@domains/flows/board-state-schemas.ts";
-import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import type { WaveEvent } from "@domains/flows/event-schemas.ts";
+import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import { validateEventPayload } from "@domains/messages/events.ts";
 import { CANON_FILES } from "@shared/constants.ts";
 import type Database from "better-sqlite3";
@@ -1153,7 +1153,7 @@ export class ExecutionStore {
    */
   getOrientationRatio(stateId: string): number {
     const row = this.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
-    if (!row || !row.metrics) return 0;
+    if (!row?.metrics) return 0;
 
     const metrics = JSON.parse(row.metrics) as Record<string, unknown>;
     const toolCalls = typeof metrics.tool_calls === "number" ? metrics.tool_calls : 0;

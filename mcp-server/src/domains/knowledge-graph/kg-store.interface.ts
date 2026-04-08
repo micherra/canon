@@ -12,15 +12,15 @@ import type { FileMetrics, FileRow, SummaryRow } from "@graph/kg-types.ts";
 /**
  * Subset of KgStore methods needed by cross-context callers (e.g. inject-context).
  */
-export interface IKgStore {
+export type IKgStore = {
   getFile(path: string): FileRow | undefined;
   getSummaryByFile(fileId: number): SummaryRow | undefined;
-}
+};
 
 /**
  * Subset of KgQuery methods needed by cross-context callers (e.g. inject-context).
  */
-export interface IKgQuery {
+export type IKgQuery = {
   getFileMetrics(filePath: string, insightMaps: FileInsightMaps): FileMetrics | null;
   getKgFreshnessMs(): number | null;
-}
+};

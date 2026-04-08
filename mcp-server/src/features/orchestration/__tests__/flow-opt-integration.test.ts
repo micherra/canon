@@ -67,9 +67,9 @@ vi.mock("node:child_process", () => ({
 }));
 
 import { spawnSync } from "node:child_process";
-import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";

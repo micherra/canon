@@ -13,8 +13,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveFragments } from "@domains/flows/flow-parser.ts";
 import type { FragmentDefinition } from "@domains/flows/flow-definition-schemas.ts";
+import { resolveFragments } from "@domains/flows/flow-parser.ts";
 import { writePlanIndex } from "@features/orchestration/tools/write-plan-index.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";

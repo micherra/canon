@@ -11,12 +11,12 @@
 
 import { z } from "zod";
 import {
-  GateResultSchema,
-  PostconditionResultSchema,
-  ViolationSeveritiesSchema,
-  TestResultsSchema,
   DiscoveredGateSchema,
+  GateResultSchema,
   PostconditionAssertionSchema,
+  PostconditionResultSchema,
+  TestResultsSchema,
+  ViolationSeveritiesSchema,
 } from "./flow-definition-schemas.js";
 
 // Board state schemas

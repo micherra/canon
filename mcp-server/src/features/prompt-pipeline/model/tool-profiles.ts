@@ -175,16 +175,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-tester": {
-    allowed: [
-      "Read",
-      "Grep",
-      "Glob",
-      "Bash",
-      "Edit",
-      "Write",
-      "write_test_report",
-      "graph_query",
-    ],
+    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "write_test_report", "graph_query"],
     disallowed: [],
   },
   "canon-writer": {

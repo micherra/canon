@@ -28,9 +28,9 @@ const pluginDir = resolve(process.cwd(), "..");
 
 // 1 & 2: Flow YAML parsing — feature.md and epic.md
 
-import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
-import { ParallelStateSchema } from "@domains/flows/flow-definition-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
+import { ParallelStateSchema } from "@domains/flows/flow-definition-schemas.ts";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 
 describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow", () => {
   it("feature.md: design state has approval_gate: true and max_revisions: 3", async () => {

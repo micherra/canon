@@ -12,9 +12,10 @@ import type {
   IterationEntry,
   Session,
 } from "@domains/flows/board-state-schemas.ts";
-import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import type { WaveEvent } from "@domains/flows/event-schemas.ts";
+import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import type {
+  EventOutput,
   GetEventsOptions,
   GetMessagesOptions,
   GetWaveEventsOptions,
@@ -22,57 +23,51 @@ import type {
   MessageOutput,
   UpdateExecutionFields,
   UpdateWaveEventFields,
-  EventOutput,
 } from "./execution-store.ts";
 
-export interface IExecutionStore {
-  // Execution (board + session singleton)
-  initExecution(params: InitExecutionParams): void;
-  getExecution(): (Record<string, unknown> & {
-    blocked: Board["blocked"];
-    concerns: Board["concerns"];
-    skipped: string[];
-    metadata: Board["metadata"];
-  }) | null;
-  getSession(): Session | null;
-  updateExecution(fields: UpdateExecutionFields): void;
+export type IExecutionStore = {
+  // Event log
+  appendEvent(type: string, payload: Record<string, unknown>, correlationId?: string): void;
+
+  // Messages
+  appendMessage(channel: string, sender: string, content: string): MessageOutput;
+
+  // Progress
+  appendProgress(line: string): void;
+  close(): void;
+  getAgentSession(
+    stateId: string,
+  ): { agent_session_id: string; last_agent_activity: string } | null;
+  getAllStates(): Array<BoardStateEntry & { state_id: string }>;
 
   // Board reconstruction
   getBoard(): Board | null;
 
-  // States
-  upsertState(
-    stateId: string,
-    fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
-  ): void;
-  getState(stateId: string): BoardStateEntry | null;
-  getAllStates(): Array<BoardStateEntry & { state_id: string }>;
-
-  // Iterations
-  upsertIteration(
-    stateId: string,
-    fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] },
-  ): void;
+  // Cache prefix
+  getCachePrefix(): string;
+  getCorrelationId(): string | null;
+  getEvents(options?: GetEventsOptions): EventOutput[];
+  getEventsByType(type: string): EventOutput[];
+  getExecution():
+    | (Record<string, unknown> & {
+        blocked: Board["blocked"];
+        concerns: Board["concerns"];
+        skipped: string[];
+        metadata: Board["metadata"];
+      })
+    | null;
   getIteration(stateId: string): IterationEntry | null;
-
-  // Iteration results (SQL-based stuck detection)
-  recordIterationResult(
-    stateId: string,
-    iteration: number,
-    status: string,
-    data: Record<string, unknown>,
-  ): void;
-  isStuck(stateId: string, stuckWhen: StuckWhen): boolean;
-
-  // Progress
-  appendProgress(line: string): void;
-  getProgress(maxEntries?: number): string;
-
-  // Messages
-  appendMessage(channel: string, sender: string, content: string): MessageOutput;
   getMessages(channel: string, options?: GetMessagesOptions): MessageOutput[];
   getMessagesSinceId(channel: string, sinceId: number): MessageOutput[];
+  getProgress(maxEntries?: number): string;
+  getSession(): Session | null;
+  getState(stateId: string): BoardStateEntry | null;
+  getTranscriptPath(stateId: string): string | null;
+  getWaveEvents(options?: GetWaveEventsOptions): WaveEvent[];
   hasMessages(channel: string): boolean;
+  // Execution (board + session singleton)
+  initExecution(params: InitExecutionParams): void;
+  isStuck(stateId: string, stuckWhen: StuckWhen): boolean;
 
   // Wave events
   postWaveEvent(event: {
@@ -82,34 +77,40 @@ export interface IExecutionStore {
     timestamp: string;
     status: string;
   }): void;
-  getWaveEvents(options?: GetWaveEventsOptions): WaveEvent[];
-  updateWaveEvent(id: string, fields: UpdateWaveEventFields): void;
 
-  // Event log
-  appendEvent(type: string, payload: Record<string, unknown>, correlationId?: string): void;
-  getEvents(options?: GetEventsOptions): EventOutput[];
-  getEventsByType(type: string): EventOutput[];
-  getCorrelationId(): string | null;
-
-  // Metrics
-  updateStateMetrics(stateId: string, metrics: Record<string, number | string>): boolean;
-
-  // Cache prefix
-  getCachePrefix(): string;
+  // Iteration results (SQL-based stuck detection)
+  recordIterationResult(
+    stateId: string,
+    iteration: number,
+    status: string,
+    data: Record<string, unknown>,
+  ): void;
   setCachePrefix(prefix: string): void;
 
   // Transcript path
   setTranscriptPath(stateId: string, transcriptPath: string): boolean;
-  getTranscriptPath(stateId: string): string | null;
+  transaction<T>(fn: () => T): T;
 
   // Agent session
   updateAgentSession(stateId: string, sessionId: string): void;
-  getAgentSession(
+  updateExecution(fields: UpdateExecutionFields): void;
+
+  // Metrics
+  updateStateMetrics(stateId: string, metrics: Record<string, number | string>): boolean;
+  updateWaveEvent(id: string, fields: UpdateWaveEventFields): void;
+
+  // Iterations
+  upsertIteration(
     stateId: string,
-  ): { agent_session_id: string; last_agent_activity: string } | null;
+    fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] },
+  ): void;
+
+  // States
+  upsertState(
+    stateId: string,
+    fields: Partial<BoardStateEntry> & { status: BoardStateEntry["status"]; entries: number },
+  ): void;
 
   // Transaction / lifecycle
   walCheckpoint(): void;
-  transaction<T>(fn: () => T): T;
-  close(): void;
-}
+};

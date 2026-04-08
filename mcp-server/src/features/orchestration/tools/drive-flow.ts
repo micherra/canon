@@ -21,9 +21,9 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import type { Board, WaveResult } from "@domains/flows/board-state-schemas.ts";
 import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
+import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import { runGates } from "@domains/flows/gate-runner.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { WaveWorktreeResult } from "@domains/workspaces/wave-lifecycle.ts";

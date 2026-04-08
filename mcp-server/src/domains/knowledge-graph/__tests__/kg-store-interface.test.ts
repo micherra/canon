@@ -6,11 +6,11 @@
  * the interfaces, TypeScript will report a type error.
  */
 
-import { describe, expect, test } from "vitest";
 import { KgQuery } from "@graph/kg-query.ts";
-import { KgStore } from "@graph/kg-store.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
-import type { IKgStore, IKgQuery } from "../kg-store.interface.ts";
+import { KgStore } from "@graph/kg-store.ts";
+import { describe, expect, test } from "vitest";
+import type { IKgQuery, IKgStore } from "../kg-store.interface.ts";
 
 describe("IKgStore and IKgQuery structural compatibility", () => {
   test("KgStore satisfies IKgStore at the type level", () => {
