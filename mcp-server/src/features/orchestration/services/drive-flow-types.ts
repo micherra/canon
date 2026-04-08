@@ -95,7 +95,7 @@ export type DriveFlowInput = {
   /** Optional result from the most recently completed agent */
   result?: {
     state_id: string;
-    status: string;
+    status?: string;
     artifacts?: string[];
     parallel_results?: Array<{
       item: string;
@@ -127,7 +127,15 @@ export const DriveFlowResultSchema = z.object({
     )
     .optional(),
   state_id: z.string(),
-  status: z.string(),
+  /**
+   * Agent status keyword (e.g. "done", "DONE", "DONE_WITH_CONCERNS", "BLOCKED").
+   * Optional at the API boundary — defaults to "done" when absent so that
+   * orchestrators resuming after a HITL pause do not need to reconstruct it.
+   *
+   * The underlying report_result normalizeStatus function treats "done" as the
+   * standard successful completion keyword.
+   */
+  status: z.string().optional().default("done"),
   /** Optional task ID for wave implementors — typed here so callers don't need a type assertion. */
   task_id: z.string().optional(),
   /** Optional actual branch name used by the agent's worktree (e.g. "worktree-agent-*"). */
@@ -139,3 +147,6 @@ export const DriveFlowInputSchema = z.object({
   result: DriveFlowResultSchema.optional(),
   workspace: z.string().min(1),
 });
+
+/** Zod-parsed (post-default) shape of DriveFlowInput — status is always string after Zod fills the default. */
+export type DriveFlowParsed = z.infer<typeof DriveFlowInputSchema>;
