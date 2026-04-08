@@ -131,9 +131,11 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
     expect(content).toMatch(/from ["']@domains\/drift\/drift-store\.interface/);
   });
 
-  it("inject-context.ts imports IKgStore/IKgQuery from @domains/knowledge-graph/", () => {
+  it("kg-context-formatter.ts imports IKgStore/IKgQuery from @domains/knowledge-graph/", () => {
+    // Since inject-context.ts now delegates to the shared kg-context-formatter module,
+    // the DDD boundary is enforced in that module instead.
     const content = readFileSync(
-      resolve(SRC, "features/orchestration/services/inject-context.ts"),
+      resolve(SRC, "features/orchestration/services/kg-context-formatter.ts"),
       "utf-8",
     );
     expect(content).toMatch(/from ["']@domains\/knowledge-graph\/kg-store\.interface/);
