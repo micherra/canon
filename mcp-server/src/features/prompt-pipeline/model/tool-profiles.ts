@@ -187,6 +187,23 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
 } as const;
 
 /**
+ * Options for resolveToolProfile. All parameters beyond `agent` are optional
+ * and grouped here for forward extensibility and readability.
+ */
+export type ResolveToolProfileOptions = {
+  overrides?: ToolOverrides;
+  isolation?: string;
+  worktreePath?: string;
+  /**
+   * Trust-derived permission mode from the KG-informed trust resolver.
+   * Only "auto" | "prompt" (not "deny_unknown") because the trust resolver
+   * only produces these two values. Precedence: overrides.permission_mode >
+   * trustPermissionMode > isolation fallback.
+   */
+  trustPermissionMode?: "auto" | "prompt";
+};
+
+/**
  * Resolve the final tool profile for an agent spawn.
  *
  * Resolution algorithm:
@@ -194,14 +211,14 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
  * 2. Apply allowed overrides: replace > allow > base
  * 3. Apply disallowed overrides: deny extends base disallowed
  * 4. Disallowed wins: remove any disallowed tools from allowed
- * 5. Determine permission_mode: overrides.permission_mode > worktree auto > prompt
+ * 5. Determine permission_mode: overrides.permission_mode > trustPermissionMode > worktree auto > prompt
  */
 export const resolveToolProfile = (
   agent: string,
-  overrides?: ToolOverrides,
-  isolation?: string,
-  _worktreePath?: string,
+  options?: ResolveToolProfileOptions,
 ): ResolvedProfile => {
+  const overrides = options?.overrides;
+  const isolation = options?.isolation;
   const normalizedAgent = agent.startsWith("canon:") ? agent.slice("canon:".length) : agent;
   const base = AGENT_TOOL_PROFILES[normalizedAgent] ?? EMPTY_PROFILE;
 
@@ -238,12 +255,19 @@ export const resolveToolProfile = (
   const finalAllowed = effectiveAllowed.filter((t) => !effectiveDisallowed.includes(t));
 
   // Determine permission mode.
-  // isolation === "worktree" is sufficient — worktree_path is not available at pipeline time
-  // (it is injected into SpawnRequests after assemblePrompt returns), so requiring it would
-  // cause all worktree-isolated tasks to fall back to "prompt" mode. The isolation value
-  // alone is the correct signal for whether auto mode applies.
+  // Precedence chain:
+  //   1. overrides.permission_mode — explicit flow override always wins
+  //   2. trustPermissionMode — KG-informed trust resolver result
+  //   3. isolation fallback — isolation === "worktree" ? "auto" : "prompt"
+  //
+  // isolation === "worktree" is sufficient for the fallback — worktree_path is not available at
+  // pipeline time (it is injected into SpawnRequests after assemblePrompt returns), so requiring
+  // it would cause all worktree-isolated tasks to fall back to "prompt" mode. The isolation value
+  // alone is the correct signal for whether auto mode applies when trust is not computed.
   const permissionMode: "auto" | "prompt" | "deny_unknown" =
-    overrides?.permission_mode ?? (isolation === "worktree" ? "auto" : "prompt");
+    overrides?.permission_mode ??
+    options?.trustPermissionMode ??
+    (isolation === "worktree" ? "auto" : "prompt");
 
   const result: ResolvedProfile = {
     disallowed_tools: effectiveDisallowed,

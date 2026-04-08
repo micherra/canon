@@ -11,6 +11,7 @@
  * - Metrics footer contains correct workspace and state_id values
  * - Metrics footer appended even when prompts have different content
  * - Tool scope set on all prompt entries (ADR-014)
+ * - Trust-derived permission_mode from KG when available
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +23,20 @@ vi.mock("@domains/messages/messages.ts", () => ({
 }));
 
 vi.mock("../model/tool-profiles.ts", () => ({
+  AGENT_TOOL_PROFILES: {
+    "canon-implementor": {
+      allowed: ["Read", "Edit", "Write"],
+      disallowed: [],
+    },
+    "canon-researcher": {
+      allowed: ["Read", "Grep", "Glob"],
+      disallowed: ["Edit", "Write"],
+    },
+  },
+  EMPTY_PROFILE: {
+    allowed: [],
+    disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
+  },
   resolveToolProfile: vi.fn().mockReturnValue({
     disallowed_tools: ["Edit", "Write"],
     permission_mode: "prompt",
@@ -29,9 +44,63 @@ vi.mock("../model/tool-profiles.ts", () => ({
   }),
 }));
 
+// Mock node:fs to control whether KG DB "exists"
+vi.mock("node:fs", () => ({
+  existsSync: vi.fn().mockReturnValue(false), // default: no KG DB → skip trust computation
+}));
+
+// Mock KG and related dependencies (no-ops by default; individual tests override as needed)
+vi.mock("@graph/kg-schema.ts", () => ({
+  initDatabase: vi.fn(),
+}));
+
+vi.mock("@graph/kg-query.ts", () => ({
+  KgQuery: vi.fn(),
+  computeFileInsightMaps: vi.fn().mockReturnValue({
+    hubPaths: new Set(),
+    cycleMemberPaths: new Map(),
+    layerViolationsByPath: new Map(),
+  }),
+}));
+
+vi.mock("@domains/workspaces/execution-store.ts", () => ({
+  getExecutionStore: vi.fn().mockReturnValue({
+    getBoard: vi.fn().mockReturnValue(null),
+  }),
+}));
+
+vi.mock("@features/orchestration/services/scope-resolver.ts", () => ({
+  resolveTaskScope: vi.fn().mockReturnValue([]),
+}));
+
+vi.mock("../services/trust-resolver.ts", () => ({
+  buildScopeMetrics: vi.fn().mockReturnValue({
+    hasHubFile: false,
+    hasHighDegreeFile: false,
+    hasCycleFile: false,
+  }),
+  computeTrustLevel: vi.fn().mockReturnValue({ level: "HIGH", reason: "All scope files low-risk" }),
+  trustLevelToPermissionMode: vi.fn().mockReturnValue("auto"),
+}));
+
+vi.mock("@shared/constants.ts", () => ({
+  CANON_DIR: ".canon",
+  CANON_FILES: { KNOWLEDGE_DB: "knowledge-graph.db" },
+}));
+
 import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
+import { existsSync } from "node:fs";
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
+import { KgQuery, computeFileInsightMaps } from "@graph/kg-query.ts";
+import { initDatabase } from "@graph/kg-schema.ts";
+import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
 import { resolveToolProfile } from "../model/tool-profiles.ts";
+import {
+  buildScopeMetrics,
+  computeTrustLevel,
+  trustLevelToPermissionMode,
+} from "../services/trust-resolver.ts"; // import for vi.mocked() access
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import { injectCoordination } from "../services/inject-coordination.ts";
 
@@ -379,9 +448,7 @@ describe("injectCoordination — tool scope injection", () => {
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       "canon-researcher",
-      undefined,
-      undefined,
-      undefined,
+      expect.objectContaining({ overrides: undefined }),
     );
     const result = await injectCoordination(ctx);
     expect(result.prompts[0].tools).toEqual(["Read", "Grep", "Glob", "Bash", "WebFetch"]);
@@ -418,9 +485,7 @@ describe("injectCoordination — tool scope injection", () => {
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       "canon-implementor",
-      { allow: ["ExtraTool"] },
-      undefined,
-      undefined,
+      expect.objectContaining({ overrides: { allow: ["ExtraTool"] } }),
     );
   });
 
@@ -438,9 +503,7 @@ describe("injectCoordination — tool scope injection", () => {
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       "canon-implementor",
-      { deny: ["Bash"] },
-      undefined,
-      undefined,
+      expect.objectContaining({ overrides: { deny: ["Bash"] } }),
     );
   });
 
@@ -458,9 +521,7 @@ describe("injectCoordination — tool scope injection", () => {
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       "canon-implementor",
-      { replace: ["OnlyThisTool"] },
-      undefined,
-      undefined,
+      expect.objectContaining({ overrides: { replace: ["OnlyThisTool"] } }),
     );
   });
 
@@ -484,9 +545,7 @@ describe("injectCoordination — tool scope injection", () => {
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       "canon-implementor",
-      { permission_mode: "deny_unknown" },
-      undefined,
-      undefined,
+      expect.objectContaining({ overrides: { permission_mode: "deny_unknown" } }),
     );
     expect(result.prompts[0].permission_mode).toBe("deny_unknown");
   });
@@ -506,9 +565,7 @@ describe("injectCoordination — tool scope injection", () => {
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       expect.any(String),
-      undefined,
-      "worktree",
-      "/path/to/worktree",
+      expect.objectContaining({ isolation: "worktree", worktreePath: "/path/to/worktree" }),
     );
     const result = await injectCoordination(ctx);
     expect(result.prompts[0].permission_mode).toBe("auto");
@@ -523,9 +580,7 @@ describe("injectCoordination — tool scope injection", () => {
 
     expect(resolveToolProfile).toHaveBeenCalledWith(
       expect.any(String),
-      undefined,
-      undefined,
-      undefined,
+      expect.objectContaining({ isolation: undefined, worktreePath: undefined }),
     );
   });
 
@@ -605,5 +660,215 @@ describe("injectCoordination — tool scope injection", () => {
     const result = await injectCoordination(ctx);
 
     expect(result.prompts[0].tool_scope_warnings).toBeUndefined();
+  });
+});
+
+// Trust integration tests
+
+describe("injectCoordination — trust integration", () => {
+  beforeEach(() => {
+    // Reset all mocks to safe defaults for trust tests
+    vi.mocked(existsSync).mockReturnValue(false); // default: no KG DB
+    vi.mocked(resolveToolProfile).mockReturnValue({
+      disallowed_tools: ["Edit", "Write"],
+      permission_mode: "prompt",
+      tools: ["Read", "Grep"],
+    });
+    vi.mocked(initDatabase).mockReset();
+    vi.mocked(KgQuery).mockReset();
+    vi.mocked(computeFileInsightMaps).mockReturnValue({
+      hubPaths: new Set(),
+      cycleMemberPaths: new Map(),
+      layerViolationsByPath: new Map(),
+    });
+    vi.mocked(computeTrustLevel).mockReturnValue({ level: "HIGH", reason: "All scope files low-risk" });
+    vi.mocked(trustLevelToPermissionMode).mockReturnValue("auto");
+    vi.mocked(resolveTaskScope).mockReturnValue([]);
+    vi.mocked(getExecutionStore).mockReturnValue({
+      getBoard: vi.fn().mockReturnValue(null),
+    } as unknown as ReturnType<typeof getExecutionStore>);
+  });
+
+  it("trust-derived permission_mode is passed to resolveToolProfile when KG is available", async () => {
+    // Simulate KG DB exists
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    // Set up KG mocks for a successful trust computation
+    const mockDb = { close: vi.fn() };
+    vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
+    const mockKgQuery = {
+      getKgFreshnessMs: vi.fn().mockReturnValue(60_000), // 1 min — fresh
+      getFileMetrics: vi.fn().mockReturnValue(null),
+    };
+    vi.mocked(KgQuery).mockImplementation(function () {
+      return mockKgQuery as unknown as KgQuery;
+    });
+    vi.mocked(computeFileInsightMaps).mockReturnValue({
+      hubPaths: new Set(),
+      cycleMemberPaths: new Map(),
+      layerViolationsByPath: new Map(),
+    });
+    vi.mocked(computeTrustLevel).mockReturnValue({ level: "HIGH", reason: "All scope files low-risk" });
+    vi.mocked(trustLevelToPermissionMode).mockReturnValue("auto");
+
+    const ctx = makeCtx({
+      prompts: [makeEntry({ agent: "canon-implementor", isolation: "worktree" })],
+      board: {
+        base_commit: "abc",
+        blocked: null,
+        concerns: [],
+        current_state: "implement",
+        entry: "implement",
+        flow: "test-flow",
+        iterations: {},
+        last_updated: "2026-01-01",
+        skipped: [],
+        started: "2026-01-01",
+        states: { implement: { entries: 1, status: "in_progress" } },
+        task: "test",
+      },
+    });
+
+    await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      "canon-implementor",
+      expect.objectContaining({ trustPermissionMode: "auto" }),
+    );
+  });
+
+  it("graceful degradation: KG DB does not exist → static isolation fallback", async () => {
+    vi.mocked(existsSync).mockReturnValue(false); // No KG DB
+
+    const ctx = makeCtx({
+      prompts: [makeEntry({ isolation: "worktree" })],
+    });
+
+    await injectCoordination(ctx);
+
+    // initDatabase should NOT be called
+    expect(initDatabase).not.toHaveBeenCalled();
+    // resolveToolProfile called without trustPermissionMode (empty map → undefined)
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ trustPermissionMode: undefined }),
+    );
+  });
+
+  it("graceful degradation: KG query throws → falls back to static behavior", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    // Mock initDatabase to return a DB that causes KgQuery construction to throw
+    const mockDb = { close: vi.fn() };
+    vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
+    vi.mocked(KgQuery).mockImplementation(function () {
+      throw new Error("KG query failed");
+    });
+
+    const ctx = makeCtx({
+      prompts: [makeEntry({ isolation: "worktree" })],
+    });
+
+    // Should not throw
+    await expect(injectCoordination(ctx)).resolves.toBeDefined();
+
+    // resolveToolProfile should be called with undefined trustPermissionMode (empty map after error)
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ trustPermissionMode: undefined }),
+    );
+  });
+
+  it("board undefined: lazily loads board from execution store", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    const mockDb = { close: vi.fn() };
+    vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
+    const mockKgQuery = {
+      getKgFreshnessMs: vi.fn().mockReturnValue(60_000),
+      getFileMetrics: vi.fn().mockReturnValue(null),
+    };
+    vi.mocked(KgQuery).mockImplementation(() => mockKgQuery as unknown as KgQuery);
+    vi.mocked(computeFileInsightMaps).mockReturnValue({
+      hubPaths: new Set(),
+      cycleMemberPaths: new Map(),
+      layerViolationsByPath: new Map(),
+    });
+
+    const mockBoard = {
+      base_commit: "abc",
+      blocked: null,
+      concerns: [],
+      current_state: "implement",
+      entry: "implement",
+      flow: "test-flow",
+      iterations: {},
+      last_updated: "2026-01-01",
+      skipped: [],
+      started: "2026-01-01",
+      states: {},
+      task: "test",
+    };
+    vi.mocked(getExecutionStore).mockReturnValue({
+      getBoard: vi.fn().mockReturnValue(mockBoard),
+    } as unknown as ReturnType<typeof getExecutionStore>);
+
+    // ctx.board is undefined — should trigger lazy load
+    const ctx = makeCtx({ prompts: [makeEntry()] });
+    // board is not set in ctx (makeCtx doesn't set it)
+    expect(ctx.board).toBeUndefined();
+
+    await injectCoordination(ctx);
+
+    // getExecutionStore should have been called for lazy load
+    expect(getExecutionStore).toHaveBeenCalledWith("/tmp/test-workspace");
+  });
+
+  it("board undefined AND lazy load fails → empty scope → LOW → prompt (fail-closed)", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    const mockDb = { close: vi.fn() };
+    vi.mocked(initDatabase).mockReturnValue(mockDb as unknown as ReturnType<typeof initDatabase>);
+    const mockKgQuery = {
+      getKgFreshnessMs: vi.fn().mockReturnValue(60_000),
+      getFileMetrics: vi.fn().mockReturnValue(null),
+    };
+    vi.mocked(KgQuery).mockImplementation(() => mockKgQuery as unknown as KgQuery);
+    vi.mocked(computeFileInsightMaps).mockReturnValue({
+      hubPaths: new Set(),
+      cycleMemberPaths: new Map(),
+      layerViolationsByPath: new Map(),
+    });
+
+    // getExecutionStore throws → lazy load fails
+    vi.mocked(getExecutionStore).mockImplementation(() => {
+      throw new Error("store unavailable");
+    });
+
+    vi.mocked(computeTrustLevel).mockReturnValue({ level: "LOW", reason: "Empty task scope" });
+    vi.mocked(trustLevelToPermissionMode).mockReturnValue("prompt");
+
+    const ctx = makeCtx({ prompts: [makeEntry()] });
+
+    // Should not throw — fail-closed
+    await expect(injectCoordination(ctx)).resolves.toBeDefined();
+
+    // resolveToolProfile is still called — with undefined trust (exception path clears map)
+    expect(resolveToolProfile).toHaveBeenCalled();
+  });
+
+  it("backward compat: no KG means resolveToolProfile receives undefined trustPermissionMode", async () => {
+    vi.mocked(existsSync).mockReturnValue(false); // No KG
+
+    const ctx = makeCtx({
+      prompts: [makeEntry({ isolation: "worktree" })],
+    });
+
+    await injectCoordination(ctx);
+
+    expect(resolveToolProfile).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ isolation: "worktree", trustPermissionMode: undefined }),
+    );
   });
 });

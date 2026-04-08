@@ -3,7 +3,11 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { AGENT_TOOL_PROFILES, EMPTY_PROFILE, resolveToolProfile } from "../model/tool-profiles.ts";
+import {
+  AGENT_TOOL_PROFILES,
+  EMPTY_PROFILE,
+  resolveToolProfile,
+} from "../model/tool-profiles.ts";
 
 const ALL_AGENTS = [
   "canon-researcher",
@@ -118,7 +122,7 @@ describe("resolveToolProfile", () => {
   });
 
   it("unknown agent + tool_overrides.allow cannot grant dangerous tools (disallowed wins)", () => {
-    const result = resolveToolProfile("unknown-agent", { allow: ["Edit"] });
+    const result = resolveToolProfile("unknown-agent", { overrides: { allow: ["Edit"] } });
     // Edit is in EMPTY_PROFILE.disallowed — disallowed wins
     expect(result.tools).not.toContain("Edit");
     expect(result.disallowed_tools).toContain("Edit");
@@ -132,7 +136,7 @@ describe("resolveToolProfile", () => {
   });
 
   it("with allow override adds tools to base allowed", () => {
-    const result = resolveToolProfile("canon-researcher", { allow: ["ExtraToolA"] });
+    const result = resolveToolProfile("canon-researcher", { overrides: { allow: ["ExtraToolA"] } });
     const base = AGENT_TOOL_PROFILES["canon-researcher"];
     expect(result.tools).toContain("ExtraToolA");
     for (const t of base.allowed) {
@@ -144,28 +148,32 @@ describe("resolveToolProfile", () => {
 
   it("with deny override removes tools from allowed", () => {
     // researcher has Read in allowed — deny it
-    const result = resolveToolProfile("canon-researcher", { deny: ["Read"] });
+    const result = resolveToolProfile("canon-researcher", { overrides: { deny: ["Read"] } });
     expect(result.tools).not.toContain("Read");
     expect(result.disallowed_tools).toContain("Read");
   });
 
   it("with replace override replaces entire allowed list", () => {
-    const result = resolveToolProfile("canon-researcher", { replace: ["ToolX", "ToolY"] });
+    const result = resolveToolProfile("canon-researcher", {
+      overrides: { replace: ["ToolX", "ToolY"] },
+    });
     expect(result.tools).toEqual(["ToolX", "ToolY"]);
   });
 
   it("disallowed wins: tool in both allowed and disallowed ends up only in disallowed", () => {
     // Use allow to add a tool, and deny to block the same tool
     const result = resolveToolProfile("canon-researcher", {
-      allow: ["ConflictTool"],
-      deny: ["ConflictTool"],
+      overrides: { allow: ["ConflictTool"], deny: ["ConflictTool"] },
     });
     expect(result.tools).not.toContain("ConflictTool");
     expect(result.disallowed_tools).toContain("ConflictTool");
   });
 
   it("permission mode defaults to auto when isolation=worktree and worktreePath provided", () => {
-    const result = resolveToolProfile("canon-implementor", undefined, "worktree", "/some/path");
+    const result = resolveToolProfile("canon-implementor", {
+      isolation: "worktree",
+      worktreePath: "/some/path",
+    });
     expect(result.permission_mode).toBe("auto");
   });
 
@@ -177,24 +185,22 @@ describe("resolveToolProfile", () => {
   it("permission mode defaults to auto when isolation=worktree even without worktreePath", () => {
     // worktree_path is not available at pipeline time (injected after assemblePrompt returns),
     // so isolation alone is the correct signal for auto mode.
-    const result = resolveToolProfile("canon-implementor", undefined, "worktree", undefined);
+    const result = resolveToolProfile("canon-implementor", { isolation: "worktree" });
     expect(result.permission_mode).toBe("auto");
   });
 
   it("permission_mode override from ToolOverrides takes precedence", () => {
-    const result = resolveToolProfile(
-      "canon-implementor",
-      { permission_mode: "deny_unknown" },
-      "worktree",
-      "/some/path",
-    );
+    const result = resolveToolProfile("canon-implementor", {
+      overrides: { permission_mode: "deny_unknown" },
+      isolation: "worktree",
+      worktreePath: "/some/path",
+    });
     expect(result.permission_mode).toBe("deny_unknown");
   });
 
   it("replace override with deny strips matching tools", () => {
     const result = resolveToolProfile("canon-implementor", {
-      deny: ["ToolB"],
-      replace: ["ToolA", "ToolB", "ToolC"],
+      overrides: { deny: ["ToolB"], replace: ["ToolA", "ToolB", "ToolC"] },
     });
     expect(result.tools).toEqual(["ToolA", "ToolC"]);
     expect(result.disallowed_tools).toContain("ToolB");
@@ -227,12 +233,14 @@ describe("resolveToolProfile", () => {
   });
 
   it("no warnings when replace does not grant disallowed tools", () => {
-    const result = resolveToolProfile("canon-researcher", { replace: ["Read", "Grep"] });
+    const result = resolveToolProfile("canon-researcher", {
+      overrides: { replace: ["Read", "Grep"] },
+    });
     expect(result.warnings).toBeUndefined();
   });
 
   it("no warnings when using allow override (not replace)", () => {
-    const result = resolveToolProfile("canon-researcher", { allow: ["ExtraToolA"] });
+    const result = resolveToolProfile("canon-researcher", { overrides: { allow: ["ExtraToolA"] } });
     expect(result.warnings).toBeUndefined();
   });
 
@@ -243,7 +251,9 @@ describe("resolveToolProfile", () => {
 
   it("replace override that grants base-disallowed tools produces a structured warning", () => {
     // canon-researcher has Edit in disallowed; replace with Edit should warn
-    const result = resolveToolProfile("canon-researcher", { replace: ["Read", "Edit"] });
+    const result = resolveToolProfile("canon-researcher", {
+      overrides: { replace: ["Read", "Edit"] },
+    });
     expect(result.warnings).toBeDefined();
     expect(result.warnings).toHaveLength(1);
     const warning = result.warnings![0];
@@ -254,7 +264,9 @@ describe("resolveToolProfile", () => {
 
   it("warnings capture all granted-disallowed tools in a single entry", () => {
     // canon-researcher has Edit and Write in disallowed; replace grants both
-    const result = resolveToolProfile("canon-researcher", { replace: ["Read", "Edit", "Write"] });
+    const result = resolveToolProfile("canon-researcher", {
+      overrides: { replace: ["Read", "Edit", "Write"] },
+    });
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings![0].granted_disallowed).toContain("Edit");
     expect(result.warnings![0].granted_disallowed).toContain("Write");
@@ -262,8 +274,56 @@ describe("resolveToolProfile", () => {
 
   it("does not call console.warn — warnings are data, not side effects", () => {
     const spy = vi.spyOn(console, "warn");
-    resolveToolProfile("canon-researcher", { replace: ["Read", "Edit"] });
+    resolveToolProfile("canon-researcher", { overrides: { replace: ["Read", "Edit"] } });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+
+  // trustPermissionMode tests
+
+  it("trustPermissionMode 'auto' is used when no override is set", () => {
+    const result = resolveToolProfile("canon-implementor", { trustPermissionMode: "auto" });
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("trustPermissionMode 'prompt' is used when no override is set", () => {
+    const result = resolveToolProfile("canon-implementor", { trustPermissionMode: "prompt" });
+    expect(result.permission_mode).toBe("prompt");
+  });
+
+  it("overrides.permission_mode takes precedence over trustPermissionMode", () => {
+    const result = resolveToolProfile("canon-implementor", {
+      overrides: { permission_mode: "deny_unknown" },
+      trustPermissionMode: "auto",
+    });
+    expect(result.permission_mode).toBe("deny_unknown");
+  });
+
+  it("trustPermissionMode takes precedence over isolation fallback", () => {
+    // Without isolation=worktree, the fallback would be "prompt".
+    // trustPermissionMode="auto" should override that.
+    const result = resolveToolProfile("canon-implementor", {
+      isolation: undefined,
+      trustPermissionMode: "auto",
+    });
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("falls back to isolation check when trustPermissionMode is undefined", () => {
+    // No trustPermissionMode, isolation=worktree → static fallback applies
+    const result = resolveToolProfile("canon-implementor", {
+      isolation: "worktree",
+      trustPermissionMode: undefined,
+    });
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("backward compat: calling with only agent (no options) behaves identically — prompt mode", () => {
+    const withNoOptions = resolveToolProfile("canon-implementor");
+    const withEmptyOptions = resolveToolProfile("canon-implementor", {});
+    expect(withNoOptions.permission_mode).toBe("prompt");
+    expect(withEmptyOptions.permission_mode).toBe("prompt");
+    expect(withNoOptions.tools).toEqual(withEmptyOptions.tools);
+    expect(withNoOptions.disallowed_tools).toEqual(withEmptyOptions.disallowed_tools);
   });
 });
