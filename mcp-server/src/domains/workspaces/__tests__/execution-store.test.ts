@@ -1116,6 +1116,155 @@ describe("getOrientationRatio", () => {
   });
 });
 
+// recordStateEntry — domain-language state entry
+
+describe("recordStateEntry", () => {
+  let store: ExecutionStore;
+
+  beforeEach(() => {
+    store = makeStore();
+  });
+  afterEach(() => {
+    store.close();
+  });
+
+  test("sets status to in_progress and entries to 1 on first call", () => {
+    store.recordStateEntry("implement");
+    const state = store.getState("implement");
+    expect(state).not.toBeNull();
+    expect(state!.status).toBe("in_progress");
+    expect(state!.entries).toBe(1);
+    expect(state!.entered_at).toBeDefined();
+  });
+
+  test("increments entries on subsequent calls", () => {
+    store.recordStateEntry("implement");
+    store.recordStateEntry("implement");
+    const state = store.getState("implement");
+    expect(state!.entries).toBe(2);
+    expect(state!.status).toBe("in_progress");
+  });
+
+  test("merges custom fields into the state", () => {
+    store.recordStateEntry("implement", { wave: 2, wave_total: 5 });
+    const state = store.getState("implement");
+    expect(state!.wave).toBe(2);
+    expect(state!.wave_total).toBe(5);
+    expect(state!.status).toBe("in_progress");
+    expect(state!.entries).toBe(1);
+  });
+
+  test("custom fields do not override status (always in_progress)", () => {
+    // Even if caller passes status in fields, the domain method forces in_progress
+    store.recordStateEntry("implement", { wave: 1 });
+    const state = store.getState("implement");
+    expect(state!.status).toBe("in_progress");
+  });
+});
+
+// recordStateCompletion — domain-language state completion
+
+describe("recordStateCompletion", () => {
+  let store: ExecutionStore;
+
+  beforeEach(() => {
+    store = makeStore();
+    // Seed state entry first
+    store.recordStateEntry("implement");
+  });
+  afterEach(() => {
+    store.close();
+  });
+
+  test("sets status to done with result and completed_at", () => {
+    store.recordStateCompletion("implement", "done");
+    const state = store.getState("implement");
+    expect(state!.status).toBe("done");
+    expect(state!.result).toBe("done");
+    expect(state!.completed_at).toBeDefined();
+  });
+
+  test("persists artifacts when provided", () => {
+    store.recordStateCompletion("implement", "done", ["SUMMARY.md", "plan.md"]);
+    const state = store.getState("implement");
+    expect(state!.artifacts).toEqual(["SUMMARY.md", "plan.md"]);
+  });
+
+  test("updates iteration history atomically when iteration exists", () => {
+    store.upsertIteration("implement", { cannot_fix: [], count: 1, history: [], max: 3 });
+    const history = [{ status: "blocked" }, { status: "done" }];
+    store.recordStateCompletion("implement", "done", undefined, history);
+    const iter = store.getIteration("implement");
+    expect(iter!.history).toEqual(history);
+    const state = store.getState("implement");
+    expect(state!.status).toBe("done");
+  });
+
+  test("does not fail when no iteration exists and iterationHistory provided", () => {
+    const history = [{ status: "done" }];
+    expect(() =>
+      store.recordStateCompletion("implement", "done", undefined, history),
+    ).not.toThrow();
+    const state = store.getState("implement");
+    expect(state!.status).toBe("done");
+  });
+});
+
+// recordIterationAttempt — domain-language iteration recording
+
+describe("recordIterationAttempt", () => {
+  let store: ExecutionStore;
+
+  beforeEach(() => {
+    store = makeStore();
+    store.recordStateEntry("implement");
+  });
+  afterEach(() => {
+    store.close();
+  });
+
+  test("records iteration result and returns recorded:true stuck:false when no stuckWhen", () => {
+    const result = store.recordIterationAttempt("implement", 1, "blocked", {
+      failing_files: ["src/foo.ts"],
+    });
+    expect(result.recorded).toBe(true);
+    expect(result.stuck).toBe(false);
+  });
+
+  test("returns stuck:false when fewer than 2 iteration results exist", () => {
+    const result = store.recordIterationAttempt(
+      "implement",
+      1,
+      "blocked",
+      { status: "blocked" },
+      "same_status",
+    );
+    expect(result.recorded).toBe(true);
+    expect(result.stuck).toBe(false);
+  });
+
+  test("returns stuck:true when same_status repeats across two iterations", () => {
+    store.recordIterationAttempt("implement", 1, "blocked", { status: "blocked" }, "same_status");
+    const result = store.recordIterationAttempt(
+      "implement",
+      2,
+      "blocked",
+      { status: "blocked" },
+      "same_status",
+    );
+    expect(result.recorded).toBe(true);
+    expect(result.stuck).toBe(true);
+  });
+
+  test("returns stuck:false when no stuckWhen provided even with repeated statuses", () => {
+    store.recordIterationResult("implement", 1, "blocked", { status: "blocked" });
+    const result = store.recordIterationAttempt("implement", 2, "blocked", {
+      status: "blocked",
+    });
+    expect(result.stuck).toBe(false);
+  });
+});
+
 // Concurrent writes — busy_timeout handles SQLITE_BUSY
 
 describe("concurrent writes", () => {

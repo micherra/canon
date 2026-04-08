@@ -14,6 +14,7 @@ import { join, resolve } from "node:path";
 import type {
   Board,
   BoardStateEntry,
+  HistoryEntry,
   IterationEntry,
   Session,
 } from "@domains/flows/board-state-schemas.ts";
@@ -1052,6 +1053,71 @@ export class ExecutionStore {
   }
 
   // Transaction
+
+  // Domain-language operations (compose infrastructure methods)
+
+  /**
+   * Record a state being entered — sets status to in_progress and increments entries.
+   * Composes upsertState with entry-tracking logic that callers previously duplicated.
+   */
+  recordStateEntry(stateId: string, fields?: Partial<BoardStateEntry>): void {
+    const current = this.getState(stateId);
+    this.upsertState(stateId, {
+      ...fields,
+      entered_at: new Date().toISOString(),
+      entries: (current?.entries ?? 0) + 1,
+      status: "in_progress",
+    });
+  }
+
+  /**
+   * Record a state completing — sets status to done, persists result and artifacts, and
+   * optionally updates iteration history. Wrapped in a transaction so both the state update
+   * and the iteration update succeed or fail together.
+   */
+  recordStateCompletion(
+    stateId: string,
+    result: string,
+    artifacts?: string[],
+    iterationHistory?: HistoryEntry[],
+  ): void {
+    this.transaction(() => {
+      const current = this.getState(stateId);
+      this.upsertState(stateId, {
+        ...current,
+        ...(artifacts ? { artifacts } : {}),
+        completed_at: new Date().toISOString(),
+        entries: current?.entries ?? 1,
+        result,
+        status: "done",
+      });
+      if (iterationHistory !== undefined) {
+        const iteration = this.getIteration(stateId);
+        if (iteration !== null) {
+          this.upsertIteration(stateId, { ...iteration, history: iterationHistory });
+        }
+      }
+    });
+  }
+
+  /**
+   * Record one iteration attempt — persists the iteration result and checks whether the
+   * state is stuck. Returns { recorded: true; stuck: boolean }.
+   */
+  recordIterationAttempt(
+    stateId: string,
+    iteration: number,
+    status: string,
+    data: Record<string, unknown>,
+    stuckWhen?: StuckWhen,
+  ): { recorded: true; stuck: boolean } {
+    this.recordIterationResult(stateId, iteration, status, data);
+    if (stuckWhen !== undefined) {
+      const stuck = this.isStuck(stateId, stuckWhen);
+      return { recorded: true, stuck };
+    }
+    return { recorded: true, stuck: false };
+  }
 
   /**
    * Wrap a function in a SQLite transaction.

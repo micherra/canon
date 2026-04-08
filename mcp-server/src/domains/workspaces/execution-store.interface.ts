@@ -9,6 +9,7 @@
 import type {
   Board,
   BoardStateEntry,
+  HistoryEntry,
   IterationEntry,
   Session,
 } from "@domains/flows/board-state-schemas.ts";
@@ -113,4 +114,20 @@ export type IExecutionStore = {
 
   // Transaction / lifecycle
   walCheckpoint(): void;
+
+  // Domain-language operations (compose infrastructure methods)
+  recordStateEntry(stateId: string, fields?: Partial<BoardStateEntry>): void;
+  recordStateCompletion(
+    stateId: string,
+    result: string,
+    artifacts?: string[],
+    iterationHistory?: HistoryEntry[],
+  ): void;
+  recordIterationAttempt(
+    stateId: string,
+    iteration: number,
+    status: string,
+    data: Record<string, unknown>,
+    stuckWhen?: StuckWhen,
+  ): { recorded: true; stuck: boolean };
 };
