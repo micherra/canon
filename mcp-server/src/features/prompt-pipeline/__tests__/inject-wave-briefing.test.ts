@@ -417,11 +417,11 @@ describe("injectWaveBriefing — KG summary injection", () => {
 
     const result = await injectWaveBriefing(ctx);
 
-    expect(result.basePrompt).toContain("## File Context (from Knowledge Graph)");
+    expect(result.basePrompt).toContain("### File Context");
     expect(result.basePrompt).toContain("src/tools/my-tool.ts");
     expect(result.basePrompt).toContain("layer: domain");
-    expect(result.basePrompt).toContain("in: 5");
-    expect(result.basePrompt).toContain("out: 3");
+    expect(result.basePrompt).toContain("in_degree: 5");
+    expect(result.basePrompt).toContain("out_degree: 3");
     expect(result.basePrompt).toContain("A summary of the file");
   });
 
@@ -552,7 +552,7 @@ describe("injectWaveBriefing — KG summary injection", () => {
 
     const result = await injectWaveBriefing(ctx);
 
-    expect(result.basePrompt).toContain("## File Context (from Knowledge Graph)");
+    expect(result.basePrompt).toContain("### File Context");
   });
 
   it("extracts file paths from object items with 'affected_files' field", async () => {
@@ -565,7 +565,7 @@ describe("injectWaveBriefing — KG summary injection", () => {
 
     const result = await injectWaveBriefing(ctx);
 
-    expect(result.basePrompt).toContain("## File Context (from Knowledge Graph)");
+    expect(result.basePrompt).toContain("### File Context");
   });
 
   it("calls computeFileInsightMaps exactly once (not per file) — prevents N+1", async () => {

@@ -16,6 +16,7 @@ module.exports = {
           "^src/features/orchestration/__tests__/",
           "\\.test\\.ts$",
           "^src/features/orchestration/services/inject-context\\.ts$",
+          "^src/features/orchestration/services/kg-context-formatter\\.ts$",
           "^src/features/orchestration/tools/init-workspace\\.ts$",
         ],
       },

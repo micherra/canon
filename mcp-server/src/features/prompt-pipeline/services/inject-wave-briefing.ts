@@ -29,12 +29,15 @@ import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import { getItemCountCap } from "@features/orchestration/services/context-budget.ts";
 import {
+  buildKgFileEntries,
+  formatKgFileContext,
+} from "@features/orchestration/services/kg-context-formatter.ts";
+import {
   assembleWaveBriefing,
   readWaveGuidance,
 } from "@features/orchestration/services/wave-briefing.ts";
-import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
-import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import type { PromptContext, TaskItem } from "../model/types.ts";
 
@@ -69,36 +72,6 @@ function extractFilePaths(items: TaskItem[]): string[] {
   return items.flatMap(extractFilePathsFromItem);
 }
 
-// KG section formatting
-
-/**
- * Format a compact file context section from KG metrics and summary.
- * Returns raw (unescaped) text — caller is responsible for escaping.
- */
-function formatKgSection(
-  files: Array<{
-    path: string;
-    layer: string;
-    inDegree: number;
-    outDegree: number;
-    summary: string | null;
-  }>,
-): string {
-  if (files.length === 0) return "";
-
-  const lines: string[] = ["## File Context (from Knowledge Graph)", ""];
-  for (const file of files) {
-    lines.push(
-      `**${file.path}** — layer: ${file.layer}, in: ${file.inDegree}, out: ${file.outDegree}`,
-    );
-    if (file.summary) {
-      lines.push(`Summary: ${file.summary}`);
-    }
-    lines.push("");
-  }
-  return lines.join("\n").trimEnd();
-}
-
 // KG injection implementation
 
 /**
@@ -114,38 +87,6 @@ function getTierFromWorkspace(workspace: string): "small" | "medium" | "large" {
   } catch {
     return "medium";
   }
-}
-
-function buildFileEntry(
-  filePath: string,
-  kgQuery: KgQuery,
-  kgStore: KgStore,
-  insightMaps: ReturnType<typeof computeFileInsightMaps>,
-): { path: string; layer: string; inDegree: number; outDegree: number; summary: string | null } {
-  const metrics = kgQuery.getFileMetrics(filePath, {
-    cycleMemberPaths: insightMaps.cycleMemberPaths,
-    hubPaths: insightMaps.hubPaths,
-    layerViolationsByPath: insightMaps.layerViolationsByPath,
-  });
-
-  if (metrics === null) {
-    return { inDegree: 0, layer: "unknown", outDegree: 0, path: filePath, summary: null };
-  }
-
-  let summary: string | null = null;
-  const fileRow = kgStore.getFile(filePath);
-  if (fileRow?.file_id !== undefined) {
-    const summaryRow = kgStore.getSummaryByFile(fileRow.file_id);
-    summary = summaryRow?.summary ?? null;
-  }
-
-  return {
-    inDegree: metrics.in_degree,
-    layer: metrics.layer,
-    outDegree: metrics.out_degree,
-    path: filePath,
-    summary,
-  };
 }
 
 function closeDb(db: ReturnType<typeof initDatabase> | undefined): void {
@@ -180,18 +121,15 @@ function injectKgSection(
   try {
     db = initDatabase(dbPath);
     const kgQuery = new KgQuery(db);
-    const kgStore = new KgStore(db);
 
     const freshnessMs = kgQuery.getKgFreshnessMs();
     if (freshnessMs !== null && freshnessMs > KG_STALENESS_THRESHOLD_MS) {
       warnings.push(`WARNING: KG data is ${freshnessMs}ms old (>1hr) — file context may be stale`);
     }
 
-    const insightMaps = computeFileInsightMaps(db);
-    const fileEntries = cappedPaths.map((fp) => buildFileEntry(fp, kgQuery, kgStore, insightMaps));
-
-    if (fileEntries.length === 0) return { section: "", warnings };
-    return { section: formatKgSection(fileEntries), warnings };
+    const entries = buildKgFileEntries(cappedPaths, db);
+    if (entries.length === 0) return { section: "", warnings };
+    return { section: formatKgFileContext(entries), warnings };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     warnings.push(`KG injection skipped due to error: ${msg}`);

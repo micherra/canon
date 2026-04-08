@@ -1,15 +1,14 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { IKgQuery, IKgStore } from "@domains/knowledge-graph/kg-store.interface.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
-import { KgStore } from "@graph/kg-store.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
 import { getItemCountCap } from "./context-budget.ts";
+import { buildKgFileEntries, formatKgFileContext } from "./kg-context-formatter.ts";
 
 type InjectionResult = {
   variables: Record<string, string>;
@@ -93,39 +92,6 @@ function capFilesByTier(filePaths: string[], workspace: string, warnings: string
   return filePaths.slice(0, getItemCountCap(tier));
 }
 
-/** Build context lines for a single file from KG data. */
-function buildFileContextLines(
-  filePath: string,
-  kgQuery: IKgQuery,
-  kgStore: IKgStore,
-  insightMaps: ReturnType<typeof computeFileInsightMaps>,
-): string[] {
-  const lines: string[] = [];
-  const metrics = kgQuery.getFileMetrics(filePath, {
-    cycleMemberPaths: insightMaps.cycleMemberPaths,
-    hubPaths: insightMaps.hubPaths,
-    layerViolationsByPath: insightMaps.layerViolationsByPath,
-  });
-
-  if (metrics) {
-    const hubLabel = metrics.is_hub ? "yes" : "no";
-    lines.push(
-      `**${filePath}** (layer: ${metrics.layer}, in_degree: ${metrics.in_degree}, out_degree: ${metrics.out_degree}, hub: ${hubLabel})`,
-    );
-  } else {
-    lines.push(`**${filePath}** (not indexed)`);
-  }
-
-  const fileRow = kgStore.getFile(filePath);
-  if (fileRow?.file_id !== undefined) {
-    const summaryRow = kgStore.getSummaryByFile(fileRow.file_id);
-    if (summaryRow?.summary) lines.push(`Summary: ${summaryRow.summary}`);
-  }
-
-  lines.push("");
-  return lines;
-}
-
 async function resolveFileContextInjection(
   _injection: ContextInjection,
   board: Board,
@@ -157,8 +123,7 @@ async function resolveFileContextInjection(
   }
 
   try {
-    const kgQuery: IKgQuery = new KgQuery(db);
-    const kgStore: IKgStore = new KgStore(db);
+    const kgQuery = new KgQuery(db);
 
     const freshnessMs = kgQuery.getKgFreshnessMs();
     if (freshnessMs !== null && freshnessMs > 3_600_000) {
@@ -167,14 +132,10 @@ async function resolveFileContextInjection(
       );
     }
 
-    const insightMaps = computeFileInsightMaps(db);
-    const lines: string[] = [`### File Context (${cappedFiles.length} files)`, ""];
+    const entries = buildKgFileEntries(cappedFiles, db);
+    const value = formatKgFileContext(entries);
 
-    for (const filePath of cappedFiles) {
-      lines.push(...buildFileContextLines(filePath, kgQuery, kgStore, insightMaps));
-    }
-
-    return { value: lines.join("\n").trimEnd(), warnings };
+    return { value, warnings };
   } finally {
     try {
       db.close();
