@@ -12,14 +12,12 @@
  */
 
 import { describe, expect, it } from "vitest";
-
-// Original file — the ground truth
-import * as originalSchema from "../flow-schema.ts";
-
-// Three new schema files
-import * as flowDefSchemas from "../flow-definition-schemas.ts";
 import * as boardStateSchemas from "../board-state-schemas.ts";
 import * as eventSchemas from "../event-schemas.ts";
+// Three new schema files
+import * as flowDefSchemas from "../flow-definition-schemas.ts";
+// Original file — the ground truth
+import * as originalSchema from "../flow-schema.ts";
 
 // Value-level exports from flow-schema.ts (schemas, constants — not type-only exports)
 const ORIGINAL_VALUE_EXPORTS = [
@@ -90,18 +88,15 @@ const NEW_ONLY_EXPORTS = ["BaseStateFields", "FragmentBaseStateFields"] as const
 describe("schema-split-completeness", () => {
   it("every value-level export from flow-schema.ts exists in the original file", () => {
     for (const name of ORIGINAL_VALUE_EXPORTS) {
-      expect(
-        name in originalSchema,
-        `Expected "${name}" to exist in flow-schema.ts`,
-      ).toBe(true);
+      expect(name in originalSchema, `Expected "${name}" to exist in flow-schema.ts`).toBe(true);
     }
   });
 
   it("every value-level export from flow-schema.ts exists in exactly one new schema file", () => {
     const newFiles = {
-      "flow-definition-schemas.ts": flowDefSchemas as Record<string, unknown>,
       "board-state-schemas.ts": boardStateSchemas as Record<string, unknown>,
       "event-schemas.ts": eventSchemas as Record<string, unknown>,
+      "flow-definition-schemas.ts": flowDefSchemas as Record<string, unknown>,
     };
 
     for (const name of ORIGINAL_VALUE_EXPORTS) {
@@ -215,14 +210,14 @@ describe("schema-split-completeness", () => {
 
   it("no export appears in more than one new schema file", () => {
     const newFiles = {
-      "flow-definition-schemas.ts": flowDefSchemas as Record<string, unknown>,
       "board-state-schemas.ts": boardStateSchemas as Record<string, unknown>,
       "event-schemas.ts": eventSchemas as Record<string, unknown>,
+      "flow-definition-schemas.ts": flowDefSchemas as Record<string, unknown>,
     };
 
     // Collect all exported names across all 3 new files
     const allNewExports = Object.entries(newFiles).flatMap(([fileName, exports]) =>
-      Object.keys(exports).map((name) => ({ name, fileName })),
+      Object.keys(exports).map((name) => ({ fileName, name })),
     );
 
     // Group by name
@@ -234,10 +229,9 @@ describe("schema-split-completeness", () => {
 
     // Assert no duplicates
     for (const [name, files] of byName.entries()) {
-      expect(
-        files.length,
-        `Export "${name}" appears in multiple files: ${files.join(", ")}`,
-      ).toBe(1);
+      expect(files.length, `Export "${name}" appears in multiple files: ${files.join(", ")}`).toBe(
+        1,
+      );
     }
   });
 });
