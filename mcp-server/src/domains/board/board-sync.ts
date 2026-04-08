@@ -21,14 +21,14 @@ export function syncBoardToStore(store: ReturnType<typeof getExecutionStore>, bo
     metadata: board.metadata,
     skipped: board.skipped,
   });
-  for (const [stateId, stateEntry] of Object.entries(board.states)) {
+  for (const [stateId, stateEntry] of Object.entries(board.states ?? {})) {
     store.upsertState(stateId, {
       ...stateEntry,
       entries: stateEntry.entries,
       status: stateEntry.status,
     });
   }
-  for (const [stateId, iterEntry] of Object.entries(board.iterations)) {
+  for (const [stateId, iterEntry] of Object.entries(board.iterations ?? {})) {
     store.upsertIteration(stateId, {
       cannot_fix: iterEntry.cannot_fix,
       count: iterEntry.count,
