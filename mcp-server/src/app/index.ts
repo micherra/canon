@@ -1116,7 +1116,11 @@ server.registerTool(
           state_id: z.string().describe("State ID that just completed"),
           status: z
             .string()
-            .describe("Agent status keyword (e.g. DONE, DONE_WITH_CONCERNS, BLOCKED)"),
+            .optional()
+            .default("done")
+            .describe(
+              "Agent status keyword (e.g. DONE, DONE_WITH_CONCERNS, BLOCKED). Defaults to 'done' when absent — omit when resuming after HITL with no other status to report.",
+            ),
           task_id: z
             .string()
             .optional()
