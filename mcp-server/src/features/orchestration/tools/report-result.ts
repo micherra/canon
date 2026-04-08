@@ -31,6 +31,7 @@ import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
+import { isPathContained, isPathInWorktree } from "@shared/lib/worktree-guard.ts";
 import { inspectDebateProgress } from "../engine/debate.ts";
 import { executeEffects } from "../engine/effects.ts";
 import {
@@ -88,18 +89,21 @@ function matchesArtifactName(artifactPath: string, reqName: string, metaName: st
   return false;
 }
 
-function isPathTraversal(workspace: string, fullPath: string): boolean {
-  const rel = relative(resolve(workspace), resolve(fullPath));
-  return isAbsolute(rel) || rel === ".." || rel.startsWith("../") || rel.startsWith("..\\");
-}
-
 async function validateMatchedArtifact(
   workspace: string,
   match: string,
   req: RequiredArtifact,
 ): Promise<ToolResult<void> | null> {
   const fullPath = isAbsolute(match) ? match : join(workspace, match);
-  if (isPathTraversal(workspace, fullPath)) {
+  // Two-layer workspace boundary check (ADR-014a).
+  // Layer 1: logical containment (no .. traversal) — always enforced, no filesystem I/O.
+  if (!isPathContained(workspace, fullPath)) {
+    return toolError("INVALID_INPUT", `Artifact path "${match}" resolves outside workspace`);
+  }
+  // Layer 2: symlink resolution via realpath — catches symlink-based escapes for paths
+  // that exist on disk. When the path does not yet exist (realpath fails), layer 1 suffices.
+  const guard = await isPathInWorktree(fullPath, workspace);
+  if (!guard.ok && guard.message.includes("via symlink")) {
     return toolError("INVALID_INPUT", `Artifact path "${match}" resolves outside workspace`);
   }
   const metaPath = fullPath.endsWith(".meta.json")

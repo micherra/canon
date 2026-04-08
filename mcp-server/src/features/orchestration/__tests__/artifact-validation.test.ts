@@ -399,3 +399,62 @@ describe("reportResult with required_artifacts", () => {
     expect(board?.states.implement?.result).toBeUndefined();
   });
 });
+
+// Path traversal / workspace boundary tests (ADR-014a)
+
+describe("validateRequiredArtifacts — path traversal rejection", () => {
+  it("returns INVALID_INPUT when artifact path uses .. to escape workspace", async () => {
+    const workspace = makeTmpWorkspace();
+
+    // Path that attempts to escape workspace via ..
+    const traversalPath = join(workspace, "..", "outside-file.md");
+
+    const result = await validateRequiredArtifacts(
+      workspace,
+      [traversalPath],
+      [{ name: "outside-file", type: "review" }],
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.ok).toBe(false);
+    expect(result?.error_code).toBe("INVALID_INPUT");
+    expect(result?.message).toContain("outside workspace");
+  });
+
+  it("returns INVALID_INPUT when artifact path is fully outside workspace", async () => {
+    const workspace = makeTmpWorkspace();
+    // /tmp is a real path but outside this workspace
+    const outsidePath = join(tmpdir(), "some-other-file.md");
+
+    const result = await validateRequiredArtifacts(
+      workspace,
+      [outsidePath],
+      [{ name: "some-other-file", type: "review" }],
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.ok).toBe(false);
+    expect(result?.error_code).toBe("INVALID_INPUT");
+    expect(result?.message).toContain("outside workspace");
+  });
+
+  it("accepts artifact path inside workspace — no path traversal", async () => {
+    const workspace = makeTmpWorkspace();
+    // Create a valid meta.json inside workspace
+    await mkdir(join(workspace, "reviews"), { recursive: true });
+    await writeFile(
+      join(workspace, "reviews", "REVIEW.meta.json"),
+      JSON.stringify({ _type: "review", _version: 1 }),
+      "utf-8",
+    );
+
+    const result = await validateRequiredArtifacts(
+      workspace,
+      [join(workspace, "reviews", "REVIEW.md")],
+      [{ name: "REVIEW", type: "review" }],
+    );
+
+    // Path is inside workspace — passes path check; meta.json exists with correct type
+    expect(result).toBeNull();
+  });
+});
