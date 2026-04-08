@@ -83,6 +83,12 @@ export type DriveFlowAction =
        * Optional — absent when the board has no artifact data.
        */
       state_artifacts?: Record<string, string[]>;
+      /**
+       * ADR-016: true when all learn gates passed at flow completion.
+       * Absent (undefined) when the gate was not evaluated or when any gate failed.
+       * Callers that do not read this field are unaffected.
+       */
+      learn_gate_passed?: boolean;
     };
 
 // DriveFlowInput — validated input for the drive_flow tool

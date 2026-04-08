@@ -24,6 +24,10 @@ import { isToolError } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock I/O boundaries
+vi.mock("../services/learn-gate.ts", () => ({
+  evaluateLearnGate: vi.fn().mockResolvedValue({ passed: false, reason: "test mode" }),
+}));
+
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
@@ -252,7 +256,7 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
       flow,
       result: { state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -315,7 +319,7 @@ describe("driveFlow — multi-hop skip loop (3+ consecutive skips)", () => {
       flow,
       result: { state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -349,7 +353,7 @@ describe("driveFlow — workspace exists but no board execution", () => {
       },
     };
 
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;
@@ -396,7 +400,7 @@ describe("driveFlow — buildDoneSummary state counting", () => {
       },
     };
 
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -498,7 +502,7 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
       },
     };
 
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -548,7 +552,7 @@ describe("driveFlow — SpawnRequest item as object with task_id", () => {
       },
     };
 
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -740,7 +744,7 @@ describe("driveFlow — result without agent_session_id", () => {
       flow,
       result: { state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

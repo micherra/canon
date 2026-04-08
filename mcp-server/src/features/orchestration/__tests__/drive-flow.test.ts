@@ -27,6 +27,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // We mock these two functions so we don't need live git/enrichment
+vi.mock("../services/learn-gate.ts", () => ({
+  evaluateLearnGate: vi.fn().mockResolvedValue({ passed: false, reason: "test mode" }),
+}));
+
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
@@ -183,7 +187,7 @@ describe("driveFlow — first call (no result)", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -202,7 +206,7 @@ describe("driveFlow — first call (no result)", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(makeEnterResult());
 
     const flow = makeFlow();
-    await driveFlow({ flow, workspace });
+    await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(enterAndPrepareState).toHaveBeenCalledWith(
       expect.objectContaining({ state_id: "research", workspace }),
@@ -230,7 +234,7 @@ describe("driveFlow — first call (no result)", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     // Should have entered implement, not research
@@ -267,7 +271,7 @@ describe("driveFlow — call with result", () => {
       flow,
       result: { state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(reportResult).toHaveBeenCalledWith(
       expect.objectContaining({ state_id: "research", status_keyword: "done" }),
@@ -291,7 +295,7 @@ describe("driveFlow — call with result", () => {
       flow,
       result: { state_id: "implement", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -311,7 +315,7 @@ describe("driveFlow — call with result", () => {
       flow,
       result: { state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -339,7 +343,7 @@ describe("driveFlow — HITL breakpoints", () => {
     });
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -363,7 +367,7 @@ describe("driveFlow — HITL breakpoints", () => {
       flow,
       result: { state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -432,7 +436,7 @@ describe("driveFlow — skip-state auto-advancement", () => {
       }),
     );
 
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -457,7 +461,7 @@ describe("driveFlow — terminal state", () => {
     store.updateExecution({ current_state: "terminal" });
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -489,7 +493,7 @@ describe("driveFlow — state_artifacts in done", () => {
     store.updateExecution({ current_state: "terminal" });
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -519,7 +523,7 @@ describe("driveFlow — state_artifacts in done", () => {
     store.updateExecution({ current_state: "terminal" });
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -536,7 +540,7 @@ describe("driveFlow — state_artifacts in done", () => {
     store.updateExecution({ current_state: "terminal" });
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -576,7 +580,7 @@ describe("driveFlow — consultation prompts", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -617,7 +621,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -658,7 +662,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
     );
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -695,7 +699,7 @@ describe("driveFlow — ADR-009a agent session continuation", () => {
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     const session = store.getAgentSession("research");
     expect(session?.agent_session_id).toBe("session-xyz-456");
@@ -747,7 +751,7 @@ describe("driveFlow — parallel state", () => {
       state_type: "parallel",
     });
 
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -792,7 +796,7 @@ describe("driveFlow — parallel state", () => {
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -811,7 +815,7 @@ describe("driveFlow — error handling", () => {
     const result = await driveFlow({
       flow,
       workspace: "/nonexistent/path/workspace",
-    });
+    }, "/fake/project");
 
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;
@@ -830,7 +834,7 @@ describe("driveFlow — error handling", () => {
     });
 
     const flow = makeFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;
@@ -853,7 +857,7 @@ describe("driveFlow — error handling", () => {
       flow,
       result: { state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(isToolError(result)).toBe(true);
     if (!isToolError(result)) return;
@@ -888,7 +892,7 @@ describe("driveFlow — tool_scope_audit event persistence", () => {
     });
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as never);
 
-    await driveFlow({ flow: makeFlow(), workspace });
+    await driveFlow({ flow: makeFlow(), workspace }, "/fake/project");
 
     const events = store.getEvents({ type: "tool_scope_audit" });
     expect(events).toHaveLength(1);
@@ -908,7 +912,7 @@ describe("driveFlow — tool_scope_audit event persistence", () => {
     });
     vi.mocked(reportResult).mockResolvedValue(makeReportResult("terminal") as never);
 
-    await driveFlow({ flow: makeFlow(), workspace });
+    await driveFlow({ flow: makeFlow(), workspace }, "/fake/project");
 
     const events = store.getEvents({ type: "tool_scope_audit" });
     expect(events).toHaveLength(0);

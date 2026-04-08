@@ -23,6 +23,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock heavy dependencies
+vi.mock("../services/learn-gate.ts", () => ({
+  evaluateLearnGate: vi.fn().mockResolvedValue({ passed: false, reason: "test mode" }),
+}));
+
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
@@ -237,7 +241,7 @@ describe("driveFlow — wave entry", () => {
     );
 
     const flow = makeWaveFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -274,7 +278,7 @@ describe("driveFlow — wave entry", () => {
     vi.mocked(enterAndPrepareState).mockResolvedValue(makeEnterResult());
 
     const flow = makeWaveFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     expect(createWaveWorktrees).toHaveBeenCalledWith(
@@ -329,7 +333,7 @@ describe("driveFlow — wave entry", () => {
     );
 
     const flow = makeWaveFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -394,7 +398,7 @@ describe("driveFlow — wave entry", () => {
     );
 
     const flow = makeWaveFlow();
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -451,7 +455,7 @@ describe("driveFlow — wave entry", () => {
     );
 
     const flow = makeWaveFlow();
-    await driveFlow({ flow, workspace });
+    await driveFlow({ flow, workspace }, "/fake/project");
 
     const stateEntry = store.getState("implement");
     expect(stateEntry).not.toBeNull();
@@ -493,7 +497,7 @@ describe("driveFlow — wave result accumulation", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -537,7 +541,7 @@ describe("driveFlow — wave result accumulation", () => {
         task_id: "task-02",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -576,7 +580,7 @@ describe("driveFlow — wave result accumulation", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // After processing, wave_results should contain task-01
     const stateEntry = store.getState("implement");
@@ -620,7 +624,7 @@ describe("driveFlow — merge conflict handling", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -674,7 +678,7 @@ describe("driveFlow — merge conflict handling", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -727,7 +731,7 @@ describe("driveFlow — merge conflict handling", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -802,7 +806,7 @@ describe("driveFlow — gate failure after merge", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // Should call reportResult with gate_failed condition or advance to fix state
     expect(reportResult).toHaveBeenCalled();
@@ -861,7 +865,7 @@ describe("driveFlow — gate failure after merge", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -927,7 +931,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -990,7 +994,7 @@ describe("driveFlow — wave-to-wave advancement", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     const stateEntry = store.getState("implement");
     expect(stateEntry?.wave).toBe(2);
@@ -1037,7 +1041,7 @@ describe("driveFlow — wave event handling", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1090,7 +1094,7 @@ describe("driveFlow — wave event handling", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // Should not spawn task-02 — it was skipped
     expect(result.ok).toBe(true);
@@ -1158,7 +1162,7 @@ describe("driveFlow — after-consultation handling", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1242,7 +1246,7 @@ describe("driveFlow — epic checkpoint", () => {
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1284,7 +1288,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
         worktree_branch: "worktree-agent-a4915c84",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     const stateEntry = store.getState("implement");
     const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
@@ -1321,7 +1325,7 @@ describe("driveFlow — worktree_branch tracking (Bug 1+2 fix)", () => {
         // no worktree_branch provided
       },
       workspace,
-    });
+    }, "/fake/project");
 
     const stateEntry = store.getState("implement");
     const waveResults = stateEntry?.wave_results as Record<string, { branch?: string }> | undefined;
@@ -1362,7 +1366,7 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // mergeWaveResults should be called with the build worktree path, not projectDir
     expect(mergeWaveResults).toHaveBeenCalledWith(
@@ -1401,7 +1405,7 @@ describe("driveFlow — merge cwd uses build-branch worktree (Bug 3 fix)", () =>
         task_id: "task-01",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // mergeWaveResults should fall back to projectDir
     expect(mergeWaveResults).toHaveBeenCalledWith(expect.any(Array), "/project", "sequential");

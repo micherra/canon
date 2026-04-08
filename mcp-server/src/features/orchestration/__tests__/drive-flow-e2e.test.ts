@@ -22,6 +22,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock all heavy I/O boundaries
+vi.mock("../services/learn-gate.ts", () => ({
+  evaluateLearnGate: vi.fn().mockResolvedValue({ passed: false, reason: "test mode" }),
+}));
+
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
@@ -280,7 +284,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       }),
     );
 
-    const turn1 = await driveFlow({ flow, workspace });
+    const turn1 = await driveFlow({ flow, workspace }, "/fake/project");
     expect(turn1.ok).toBe(true);
     if (turn1.ok) {
       expect(turn1.action).toBe("spawn");
@@ -318,7 +322,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       flow,
       result: { state_id: "research", status: "DONE" },
       workspace,
-    });
+    }, "/fake/project");
     expect(turn2.ok).toBe(true);
     if (turn2.ok) {
       expect(turn2.action).toBe("spawn");
@@ -333,7 +337,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       flow,
       result: { state_id: "implement", status: "DONE", task_id: "task-01" },
       workspace,
-    });
+    }, "/fake/project");
     expect(turn3.ok).toBe(true);
     if (turn3.ok) {
       expect(turn3.action).toBe("spawn");
@@ -358,7 +362,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       flow,
       result: { state_id: "implement", status: "DONE", task_id: "task-02" },
       workspace,
-    });
+    }, "/fake/project");
     expect(turn4.ok).toBe(true);
     if (turn4.ok) {
       expect(turn4.action).toBe("spawn");
@@ -375,7 +379,7 @@ describe("e2e: full flow (research → wave implement → review → done)", () 
       flow,
       result: { state_id: "review", status: "DONE" },
       workspace,
-    });
+    }, "/fake/project");
     expect(turn5.ok).toBe(true);
     if (turn5.ok) {
       expect(turn5.action).toBe("done");
@@ -412,7 +416,7 @@ describe("e2e: HITL flow (stuck detection → hitl breakpoint)", () => {
       }),
     );
 
-    const turn1 = await driveFlow({ flow, workspace });
+    const turn1 = await driveFlow({ flow, workspace }, "/fake/project");
     expect(turn1.ok).toBe(true);
     expect(turn1.ok && turn1.action).toBe("spawn");
 
@@ -446,7 +450,7 @@ describe("e2e: HITL flow (stuck detection → hitl breakpoint)", () => {
       flow,
       result: { state_id: "research", status: "DONE_WITH_CONCERNS" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(turn2.ok).toBe(true);
     if (turn2.ok) {
@@ -478,7 +482,7 @@ describe("e2e: HITL flow (stuck detection → hitl breakpoint)", () => {
       }),
     );
 
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -507,7 +511,7 @@ describe("e2e: HITL flow (stuck detection → hitl breakpoint)", () => {
       state_type: "single",
     });
 
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -537,7 +541,7 @@ describe("e2e: skip-state flow (research → skip(test-state) → review → don
       }),
     );
 
-    const turn1 = await driveFlow({ flow, workspace });
+    const turn1 = await driveFlow({ flow, workspace }, "/fake/project");
     expect(turn1.ok).toBe(true);
     if (turn1.ok) {
       expect(turn1.action).toBe("spawn");
@@ -571,7 +575,7 @@ describe("e2e: skip-state flow (research → skip(test-state) → review → don
       flow,
       result: { state_id: "research", status: "DONE" },
       workspace,
-    });
+    }, "/fake/project");
 
     // Should land on review (not test-state) — skip happened transparently
     expect(turn2.ok).toBe(true);
@@ -632,7 +636,7 @@ describe("result.status defaults to 'done' when omitted (HITL resume defense)", 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       result: { state_id: "research" } as any, // status intentionally omitted
       workspace,
-    });
+    }, "/fake/project");
 
     // Should not throw; should treat missing status as "done"
     expect(result.ok).toBe(true);
@@ -683,7 +687,7 @@ describe("e2e: wave with gate failure", () => {
       }),
     );
 
-    const turn1 = await driveFlow({ flow, workspace });
+    const turn1 = await driveFlow({ flow, workspace }, "/fake/project");
     expect(turn1.ok).toBe(true);
     if (turn1.ok) {
       expect(turn1.action).toBe("spawn");
@@ -718,7 +722,7 @@ describe("e2e: wave with gate failure", () => {
       flow,
       result: { state_id: "implement", status: "DONE", task_id: "task-01" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(turn2.ok).toBe(true);
     if (turn2.ok) {
@@ -766,7 +770,7 @@ describe("e2e: wave with gate failure", () => {
       }),
     );
 
-    await driveFlow({ flow, workspace });
+    await driveFlow({ flow, workspace }, "/fake/project");
 
     // Wave completes with gate passing → report done → advance to review
     vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("review") as never);
@@ -783,7 +787,7 @@ describe("e2e: wave with gate failure", () => {
       flow,
       result: { state_id: "implement", status: "DONE", task_id: "task-01" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(turn2.ok).toBe(true);
     if (turn2.ok) {
@@ -818,7 +822,7 @@ describe("e2e: partial migration correctness (drive_flow from intermediate state
     );
 
     // driveFlow with no result should enter 'review' (current board state)
-    const result = await driveFlow({ flow, workspace });
+    const result = await driveFlow({ flow, workspace }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (result.ok) {
