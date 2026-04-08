@@ -11,6 +11,7 @@
 
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 import {
   analyzeReachability,
   checkUnresolvedRefs,
@@ -18,7 +19,6 @@ import {
   validateFlow,
   validateSpawnCoverage,
 } from "../flow-parser.ts";
-import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 
 const pluginDir = resolve(process.cwd(), "..");
 

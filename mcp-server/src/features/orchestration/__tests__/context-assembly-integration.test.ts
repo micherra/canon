@@ -184,7 +184,9 @@ vi.mock("@graph/kg-store.ts", () => ({
 import { existsSync } from "node:fs";
 import { computeFileInsightMaps } from "@graph/kg-query.ts";
 
-function makeBoardWithFiles(files: string[]): import("@domains/flows/board-state-schemas.ts").Board {
+function makeBoardWithFiles(
+  files: string[],
+): import("@domains/flows/board-state-schemas.ts").Board {
   return {
     base_commit: "abc123",
     blocked: null,

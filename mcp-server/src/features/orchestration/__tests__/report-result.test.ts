@@ -1186,3 +1186,148 @@ describe("reportResult — workspace not found", () => {
     expect(result.message).toContain(workspace);
   });
 });
+
+// Required handoffs — non-blocking warnings (ADR-018)
+
+describe("reportResult — required_handoffs validation", () => {
+  function makeFlowWithHandoffs(
+    handoffs: Array<{ name: string; type: string }>,
+  ): FlowType {
+    return makeMinimalFlow({
+      states: {
+        build: {
+          required_handoffs: handoffs,
+          transitions: { done: "review", failed: "hitl" },
+          type: "single",
+        },
+        hitl: { type: "terminal" },
+        review: { transitions: { done: "ship" }, type: "single" },
+        ship: { type: "terminal" },
+      },
+    });
+  }
+
+  it("no required_handoffs: behaves identically, no warnings field", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeMinimalFlow();
+    setupWorkspace(workspace, flow);
+
+    const result = await reportResult({
+      flow,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
+    });
+    assertOk(result);
+
+    expect(result.ok).toBe(true);
+    expect((result as Record<string, unknown>).warnings).toBeUndefined();
+    expect(result.transition_condition).toBe("done");
+    expect(result.next_state).toBe("review");
+  });
+
+  it("required_handoffs with matching meta.json: ok true, no warnings", async () => {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithHandoffs([{ name: "research", type: "research-summary" }]);
+    setupWorkspace(workspace, flow);
+
+    // Create handoffs directory and write meta.json
+    const handoffsDir = join(workspace, "handoffs");
+    mkdirSync(handoffsDir, { recursive: true });
+    writeFileSync(
+      join(handoffsDir, "research.meta.json"),
+      JSON.stringify({ _type: "research-summary", _version: 1 }),
+    );
+
+    const result = await reportResult({
+      flow,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
+    });
+    assertOk(result);
+
+    expect(result.ok).toBe(true);
+    expect((result as Record<string, unknown>).warnings).toBeUndefined();
+  });
+
+  it("required_handoffs with missing meta.json: ok true, warnings present", async () => {
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithHandoffs([{ name: "design-doc", type: "handoff-document" }]);
+    setupWorkspace(workspace, flow);
+
+    // Do NOT create handoffs/design-doc.meta.json
+
+    const result = await reportResult({
+      flow,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
+    });
+    assertOk(result);
+
+    expect(result.ok).toBe(true);
+    const warnings = (result as Record<string, unknown>).warnings as string[] | undefined;
+    expect(warnings).toBeDefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings![0]).toContain("design-doc");
+    expect(warnings![0]).toContain("not found");
+  });
+
+  it("required_handoffs with wrong _type in meta.json: ok true, warnings present", async () => {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithHandoffs([{ name: "plan", type: "implementation-plan" }]);
+    setupWorkspace(workspace, flow);
+
+    // Create handoffs directory with WRONG _type
+    const handoffsDir = join(workspace, "handoffs");
+    mkdirSync(handoffsDir, { recursive: true });
+    writeFileSync(
+      join(handoffsDir, "plan.meta.json"),
+      JSON.stringify({ _type: "research-summary", _version: 1 }),
+    );
+
+    const result = await reportResult({
+      flow,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
+    });
+    assertOk(result);
+
+    expect(result.ok).toBe(true);
+    const warnings = (result as Record<string, unknown>).warnings as string[] | undefined;
+    expect(warnings).toBeDefined();
+    expect(warnings!.length).toBeGreaterThan(0);
+    expect(warnings![0]).toContain("plan");
+    expect(warnings![0]).toContain("research-summary");
+    expect(warnings![0]).toContain("implementation-plan");
+  });
+
+  it("warnings field absent from result when no handoff issues", async () => {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const workspace = makeTmpWorkspace();
+    const flow = makeFlowWithHandoffs([{ name: "arch", type: "architecture-decision" }]);
+    setupWorkspace(workspace, flow);
+
+    const handoffsDir = join(workspace, "handoffs");
+    mkdirSync(handoffsDir, { recursive: true });
+    writeFileSync(
+      join(handoffsDir, "arch.meta.json"),
+      JSON.stringify({ _type: "architecture-decision", _version: 1 }),
+    );
+
+    const result = await reportResult({
+      flow,
+      state_id: "build",
+      status_keyword: "DONE",
+      workspace,
+    });
+    assertOk(result);
+
+    // When no issues, warnings must be absent (not empty array)
+    expect(Object.prototype.hasOwnProperty.call(result, "warnings")).toBe(false);
+  });
+});

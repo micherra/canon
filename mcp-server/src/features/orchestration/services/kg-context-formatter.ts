@@ -64,8 +64,8 @@ export function buildKgFileEntries(filePaths: string[], db: Database): KgFileEnt
 
     if (metrics === null) {
       return {
-        indexed: false,
         inDegree: 0,
+        indexed: false,
         isHub: false,
         layer: "unknown",
         outDegree: 0,
@@ -82,8 +82,8 @@ export function buildKgFileEntries(filePaths: string[], db: Database): KgFileEnt
     }
 
     return {
-      indexed: true,
       inDegree: metrics.in_degree,
+      indexed: true,
       isHub: metrics.is_hub,
       layer: metrics.layer,
       outDegree: metrics.out_degree,

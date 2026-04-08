@@ -18,6 +18,15 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type {
+  FragmentDefinition,
+  FragmentInclude,
+  ResolvedFlow,
+} from "@domains/flows/flow-definition-schemas.ts";
+import {
+  FragmentStateDefinitionSchema,
+  StateDefinitionSchema,
+} from "@domains/flows/flow-definition-schemas.ts";
 import {
   checkUnresolvedRefs,
   loadAndResolveFlow,
@@ -27,15 +36,6 @@ import {
   validateSpawnCoverage,
   validateStateIdParams,
 } from "@domains/flows/flow-parser.ts";
-import {
-  FragmentStateDefinitionSchema,
-  StateDefinitionSchema,
-} from "@domains/flows/flow-definition-schemas.ts";
-import type {
-  FragmentDefinition,
-  FragmentInclude,
-  ResolvedFlow,
-} from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb, runMigrations } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type Database from "better-sqlite3";
@@ -536,6 +536,25 @@ describe("ExecutionStore.isStuck — additional edge cases", () => {
     store.recordIterationResult("s", 2, "needs_fix", {});
     // Cast to any to pass an unknown value — should not throw, returns false
     expect(() => store.isStuck("s", "unknown_strategy" as never)).not.toThrow();
+  });
+
+  it("same_file_test: empty pairs on both iterations should NOT be stuck (all_passing result)", () => {
+    // Bug: unorderedEqual([], []) returned true (vacuously), causing false stuck detection
+    // when all tests pass and the failing-file set is empty.
+    const store = makeStore();
+    store.recordIterationResult("fix", 1, "all_passing", { pairs: [] });
+    store.recordIterationResult("fix", 2, "all_passing", { pairs: [] });
+    expect(store.isStuck("fix", "same_file_test")).toBe(false);
+  });
+
+  it("same_file_test: empty current pairs (tests now all passing) should NOT be stuck", () => {
+    // Progress was made: previous iteration had failures, current has none.
+    const store = makeStore();
+    store.recordIterationResult("fix", 1, "failing", {
+      pairs: [{ file: "a.ts", test: "a.test.ts" }],
+    });
+    store.recordIterationResult("fix", 2, "all_passing", { pairs: [] });
+    expect(store.isStuck("fix", "same_file_test")).toBe(false);
   });
 });
 

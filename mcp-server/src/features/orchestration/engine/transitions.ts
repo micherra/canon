@@ -122,6 +122,8 @@ export function isStuck(history: HistoryEntry[], stuckWhen: StuckWhen): boolean 
     case "same_file_test": {
       const p = prev as FileTestHistoryEntry;
       const c = curr as FileTestHistoryEntry;
+      // An empty failing-file set means all tests are passing — never treat as stuck.
+      if (c.pairs.length === 0) return false;
       if (p.pairs.length !== c.pairs.length) return false;
       return c.pairs.every((cp) =>
         p.pairs.some((pp) => pp.file === cp.file && pp.test === cp.test),

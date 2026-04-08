@@ -5,11 +5,11 @@
  * TypeScript will report a type error on the assignment below.
  */
 
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 import { describe, expect, test } from "vitest";
 import { initExecutionDb } from "../execution-schema.ts";
-import { ExecutionStore } from "../execution-store.ts";
 import type { IExecutionStore } from "../execution-store.interface.ts";
+import { ExecutionStore } from "../execution-store.ts";
 
 describe("IExecutionStore structural compatibility", () => {
   test("ExecutionStore satisfies IExecutionStore at the type level", () => {

@@ -1,5 +1,11 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import type {
+  FlowDefinition,
+  FragmentDefinition,
+  FragmentInclude,
+  ResolvedFlow,
+} from "../flow-definition-schemas.ts";
 import {
   loadAndResolveFlow,
   parseFlowContent,
@@ -7,12 +13,6 @@ import {
   validateFlow,
   validateStateIdParams,
 } from "../flow-parser.ts";
-import type {
-  FlowDefinition,
-  FragmentDefinition,
-  FragmentInclude,
-  ResolvedFlow,
-} from "../flow-definition-schemas.ts";
 
 const pluginDir = resolve(process.cwd(), "..");
 

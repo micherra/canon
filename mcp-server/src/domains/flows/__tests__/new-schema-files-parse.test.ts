@@ -13,7 +13,16 @@
  */
 
 import { describe, expect, it } from "vitest";
-
+// --- board-state-schemas.ts imports --------------------------------------------
+import {
+  AgentMetricsSchema,
+  BoardSchema,
+  BoardStateEntrySchema,
+  SessionSchema,
+  WorktreeEntrySchema,
+} from "../board-state-schemas.ts";
+// --- event-schemas.ts imports --------------------------------------------------
+import { TranscriptEntrySchema } from "../event-schemas.ts";
 // --- flow-definition-schemas.ts imports ----------------------------------------
 import {
   BaseStateFields,
@@ -26,18 +35,6 @@ import {
   STATUS_ALIASES,
   STATUS_KEYWORDS,
 } from "../flow-definition-schemas.ts";
-
-// --- board-state-schemas.ts imports --------------------------------------------
-import {
-  AgentMetricsSchema,
-  BoardSchema,
-  BoardStateEntrySchema,
-  SessionSchema,
-  WorktreeEntrySchema,
-} from "../board-state-schemas.ts";
-
-// --- event-schemas.ts imports --------------------------------------------------
-import { TranscriptEntrySchema } from "../event-schemas.ts";
 
 // =============================================================================
 // flow-definition-schemas.ts
@@ -53,10 +50,10 @@ describe("flow-definition-schemas.ts — STATUS_KEYWORDS / STATUS_ALIASES", () =
   });
 
   it("STATUS_ALIASES maps known aliases to canonical statuses", () => {
-    expect(STATUS_ALIASES["approve"]).toBe("approved");
-    expect(STATUS_ALIASES["done_with_concerns"]).toBe("done");
-    expect(STATUS_ALIASES["fixed"]).toBe("done");
-    expect(STATUS_ALIASES["needs_context"]).toBe("hitl");
+    expect(STATUS_ALIASES.approve).toBe("approved");
+    expect(STATUS_ALIASES.done_with_concerns).toBe("done");
+    expect(STATUS_ALIASES.fixed).toBe("done");
+    expect(STATUS_ALIASES.needs_context).toBe("hitl");
   });
 });
 

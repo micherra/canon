@@ -238,6 +238,7 @@ export const BaseStateFields = {
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   rejection_target: z.string().optional(),
   required_artifacts: z.array(RequiredArtifactSchema).optional(),
+  required_handoffs: z.array(RequiredArtifactSchema).optional(),
   roles: z.array(RoleEntrySchema).optional(),
   skip_when: SkipWhenSchema.optional(),
   stuck_when: StuckWhenSchema.optional(),
@@ -376,6 +377,7 @@ export const FragmentBaseStateFields = {
   postconditions: z.array(PostconditionAssertionSchema).optional(),
   rejection_target: z.string().optional(),
   required_artifacts: z.array(RequiredArtifactSchema).optional(),
+  required_handoffs: z.array(RequiredArtifactSchema).optional(),
   roles: z.array(RoleEntrySchema).optional(),
   skip_when: z.string().optional(), // relaxed: accepts enum values OR param placeholders
   stuck_when: z.union([StuckWhenSchema, z.string()]).optional(),

@@ -13,8 +13,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,10 +57,10 @@ describe("schema split — flow-schema.ts deletion (dc-02)", () => {
     // Search for TypeScript import declarations that reference flow-schema.
     // Pattern: lines starting with 'import' that contain flow-schema in a string literal.
     // Exclude this test file itself (it mentions "flow-schema.ts" in descriptions).
-    const result = execSync(
-      `grep -rn "^import.*flow-schema" "${SRC}" --include="*.ts" || true`,
-      { encoding: "utf-8", cwd: MCP_SERVER_ROOT },
-    );
+    const result = execSync(`grep -rn "^import.*flow-schema" "${SRC}" --include="*.ts" || true`, {
+      cwd: MCP_SERVER_ROOT,
+      encoding: "utf-8",
+    });
 
     // Exclude this integration test file from results (it names flow-schema in test descriptions)
     const thisFile = "ddd-alignment-integration.test.ts";
@@ -103,15 +102,12 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
       resolve(SRC, "domains/workspaces/execution-store.interface.ts"),
       "utf-8",
     );
-    expect(content).toMatch(/export interface IExecutionStore/);
+    expect(content).toMatch(/export (?:interface|type) IExecutionStore/);
   });
 
   it("IDriftStore is exported from its interface file", () => {
-    const content = readFileSync(
-      resolve(SRC, "domains/drift/drift-store.interface.ts"),
-      "utf-8",
-    );
-    expect(content).toMatch(/export interface IDriftStore/);
+    const content = readFileSync(resolve(SRC, "domains/drift/drift-store.interface.ts"), "utf-8");
+    expect(content).toMatch(/export (?:interface|type) IDriftStore/);
   });
 
   it("IKgStore and IKgQuery are exported from their interface file", () => {
@@ -119,15 +115,12 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
       resolve(SRC, "domains/knowledge-graph/kg-store.interface.ts"),
       "utf-8",
     );
-    expect(content).toMatch(/export interface IKgStore/);
-    expect(content).toMatch(/export interface IKgQuery/);
+    expect(content).toMatch(/export (?:interface|type) IKgStore/);
+    expect(content).toMatch(/export (?:interface|type) IKgQuery/);
   });
 
   it("effects.ts imports IDriftStore from @domains/drift/ (not directly from @platform/)", () => {
-    const content = readFileSync(
-      resolve(SRC, "features/orchestration/engine/effects.ts"),
-      "utf-8",
-    );
+    const content = readFileSync(resolve(SRC, "features/orchestration/engine/effects.ts"), "utf-8");
     expect(content).toMatch(/from ["']@domains\/drift\/drift-store\.interface/);
   });
 
@@ -234,7 +227,7 @@ describe("IDriftStore injection — effects.ts optional driftStore override (ddd
       const review = appendedReviews[0] as Record<string, unknown>;
       expect(review.verdict).toBe("CLEAN");
     } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
+      rmSync(tmpDir, { force: true, recursive: true });
     }
   });
 
@@ -324,10 +317,7 @@ describe("boundary enforcement — dependency-cruiser (dc-04)", () => {
       exitCode = e.status ?? 1;
       stderr = e.stderr ?? "";
     }
-    expect(
-      exitCode,
-      `dependency-cruiser reported boundary violations:\n${stderr}`,
-    ).toBe(0);
+    expect(exitCode, `dependency-cruiser reported boundary violations:\n${stderr}`).toBe(0);
   });
 
   it(".dependency-cruiser.cjs exists and contains all 5 boundary rules", () => {

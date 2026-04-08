@@ -21,8 +21,8 @@
 
 import type { ExecutionStore, MessageOutput } from "@domains/workspaces/execution-store.ts";
 import { describe, expect, it, vi } from "vitest";
-import { drainFlowEvents } from "../flow-event-channel.ts";
 import type { FlowDefinition } from "../flow-definition-schemas.ts";
+import { drainFlowEvents } from "../flow-event-channel.ts";
 
 function makeMsg(id: number, content: string): MessageOutput {
   return { channel: "flow-events", content, id, sender: "test", timestamp: "2026-01-01T00:00:00Z" };

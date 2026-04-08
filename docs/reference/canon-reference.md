@@ -75,7 +75,7 @@ The Canon MCP server exposes these tools. Orchestrator uses the harness tools to
 | `list_principles` | Browse principle index (metadata only) |
 | `review_code` | Surface principles matched to a specific file for review |
 | `report` | Log a review result (drift tracking) |
-| `store_summaries` | Persist file summaries to `.canon/summaries.json` |
+| `store_summaries` | Persist file summaries to SQLite Knowledge Graph DB |
 | `store_pr_review` | Store a PR review result for drift tracking |
 
 **Orchestration harness tools:**

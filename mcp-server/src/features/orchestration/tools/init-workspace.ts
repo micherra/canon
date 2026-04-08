@@ -8,8 +8,8 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
-import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
   checkSlugCollision,
@@ -523,6 +523,12 @@ export async function initWorkspaceFlow(
     workspace,
   });
 
+  await runLegacyMigration(projectDir);
+
+  return result;
+}
+
+async function runLegacyMigration(projectDir: string): Promise<void> {
   // Best-effort legacy summary migration (ADR-005)
   try {
     const { migrateSummaries } = await import(
@@ -532,6 +538,4 @@ export async function initWorkspaceFlow(
   } catch {
     // Non-blocking — legacy migration failure does not affect workspace init
   }
-
-  return result;
 }

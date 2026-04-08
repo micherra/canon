@@ -9,7 +9,10 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { PostconditionAssertion, PostconditionResult } from "@domains/flows/flow-definition-schemas.ts";
+import type {
+  PostconditionAssertion,
+  PostconditionResult,
+} from "@domains/flows/flow-definition-schemas.ts";
 import { gitExec } from "@platform/adapters/git-adapter.ts";
 import { runShell } from "@platform/adapters/process-adapter.ts";
 

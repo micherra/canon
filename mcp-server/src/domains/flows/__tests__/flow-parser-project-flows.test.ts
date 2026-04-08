@@ -9,8 +9,8 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { loadAndResolveFlow, loadFragment, resolveFragments } from "../flow-parser.ts";
 import type { FragmentDefinition } from "../flow-definition-schemas.ts";
+import { loadAndResolveFlow, loadFragment, resolveFragments } from "../flow-parser.ts";
 
 // pluginDir points to the project root (canon/), which contains flows/ and flows/fragments/
 const pluginDir = resolve(process.cwd(), "..");

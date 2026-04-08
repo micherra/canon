@@ -18,12 +18,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RequiredArtifactSchema } from "@domains/flows/flow-definition-schemas.ts";
 import type {
   RequiredArtifact,
   ResolvedFlow,
   StateDefinition,
 } from "@domains/flows/flow-definition-schemas.ts";
+import { RequiredArtifactSchema } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";

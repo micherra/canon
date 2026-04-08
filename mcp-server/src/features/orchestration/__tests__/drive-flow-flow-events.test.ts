@@ -45,8 +45,8 @@ vi.mock("@domains/flows/flow-event-channel.ts", () => ({
   drainFlowEvents: vi.fn(),
 }));
 
-import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
+import { drainFlowEvents } from "@domains/flows/flow-event-channel.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";

@@ -9,11 +9,15 @@
 import type { WeeklyTrendPoint } from "@platform/storage/drift/drift-db.ts";
 import type { ReviewEntry } from "@shared/schema.ts";
 
-export interface IDriftStore {
-  getReviews(options?: { principleId?: string; branch?: string; prNumber?: number }): Promise<ReviewEntry[]>;
-  getLastReviewForPr(prNumber: number): Promise<ReviewEntry | null>;
-  getLastReviewForBranch(branch: string): Promise<ReviewEntry | null>;
+export type IDriftStore = {
   appendReview(entry: ReviewEntry): Promise<void>;
   getComplianceTrend(principleId: string, weeks?: number): Promise<WeeklyTrendPoint[]>;
+  getLastReviewForBranch(branch: string): Promise<ReviewEntry | null>;
+  getLastReviewForPr(prNumber: number): Promise<ReviewEntry | null>;
+  getReviews(options?: {
+    principleId?: string;
+    branch?: string;
+    prNumber?: number;
+  }): Promise<ReviewEntry[]>;
   getReviewsForFiles(filePaths: string[]): Promise<ReviewEntry[]>;
-}
+};

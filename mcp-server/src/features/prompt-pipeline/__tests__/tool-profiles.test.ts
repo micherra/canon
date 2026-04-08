@@ -103,7 +103,9 @@ describe("AGENT_TOOL_PROFILES", () => {
   });
 
   it("canon-implementor profile includes write_implementation_summary and get_messages MCP tools", () => {
-    expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain("write_implementation_summary");
+    expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain(
+      "write_implementation_summary",
+    );
     expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain("get_messages");
   });
 });

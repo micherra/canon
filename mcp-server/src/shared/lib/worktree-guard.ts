@@ -1,5 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "./tool-result.ts";
 
 /**
@@ -52,6 +52,22 @@ export const isPathInWorktree = async (
       );
     }
   } catch {
+    // Parent-directory fallback: when the file doesn't exist, check if its
+    // parent directory is a symlink escape (ADR-014a tightening).
+    try {
+      const parentDir = dirname(resolvedTarget);
+      const realParent = await realpath(parentDir);
+      const realWorktree = await realpath(resolvedWorktree);
+      if (!isPathContained(realWorktree, realParent)) {
+        return toolError(
+          "INVALID_INPUT",
+          `Path "${filePath}" escapes worktree "${worktreePath}" via symlink`,
+          false,
+        );
+      }
+    } catch {
+      // Parent doesn't exist either — fall through to generic error
+    }
     return toolError(
       "INVALID_INPUT",
       `Path "${filePath}" could not be resolved within worktree "${worktreePath}"`,

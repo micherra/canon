@@ -17,8 +17,8 @@ import type {
   IterationEntry,
   Session,
 } from "@domains/flows/board-state-schemas.ts";
-import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import type { WaveEvent } from "@domains/flows/event-schemas.ts";
+import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
 import { validateEventPayload } from "@domains/messages/events.ts";
 import { CANON_FILES } from "@shared/constants.ts";
 import type Database from "better-sqlite3";
@@ -780,6 +780,8 @@ export class ExecutionStore {
       case "same_file_test": {
         const currPairs = (currData.pairs ?? []) as unknown[];
         const prevPairs = (prevData.pairs ?? []) as unknown[];
+        // An empty failing-file set means all tests are passing — never treat as stuck.
+        if (currPairs.length === 0) return false;
         return unorderedEqual(currPairs, prevPairs);
       }
       case "same_status":
@@ -1153,7 +1155,7 @@ export class ExecutionStore {
    */
   getOrientationRatio(stateId: string): number {
     const row = this.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
-    if (!row || !row.metrics) return 0;
+    if (!row?.metrics) return 0;
 
     const metrics = JSON.parse(row.metrics) as Record<string, unknown>;
     const toolCalls = typeof metrics.tool_calls === "number" ? metrics.tool_calls : 0;

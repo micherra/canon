@@ -1,4 +1,4 @@
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -50,7 +50,6 @@ describe("isPathInWorktree", () => {
     outside = join(tmpDir, "outside");
 
     // Create directories and a file inside the worktree
-    const { mkdir } = await import("node:fs/promises");
     await mkdir(worktree, { recursive: true });
     await mkdir(outside, { recursive: true });
     await writeFile(join(worktree, "file.txt"), "hello");
@@ -125,6 +124,45 @@ describe("isPathInWorktree", () => {
       expect(typeof result.message).toBe("string");
       expect(result.message.length).toBeGreaterThan(0);
       expect(result.recoverable).toBe(false);
+    }
+  });
+
+  it("returns symlink error for non-existent file whose parent dir is a symlink escape", async () => {
+    // Create a symlink directory inside worktree pointing to outside/
+    const symlinkDir = join(worktree, "symlink-dir");
+    await symlink(outside, symlinkDir);
+
+    const result = await isPathInWorktree(join(symlinkDir, "nonexistent.txt"), worktree);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toMatch(/symlink/i);
+    }
+  });
+
+  it("returns generic error for non-existent file with a valid parent directory inside worktree", async () => {
+    // Create a real subdirectory inside the worktree
+    const existingSubdir = join(worktree, "existing-subdir");
+    await mkdir(existingSubdir, { recursive: true });
+
+    const result = await isPathInWorktree(join(existingSubdir, "nonexistent.txt"), worktree);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      // Parent is legitimate — error should NOT mention symlink
+      expect(result.message).toMatch(/could not be resolved/i);
+      expect(result.message).not.toMatch(/symlink/i);
+    }
+  });
+
+  it("returns generic error when both file and parent directory do not exist", async () => {
+    const result = await isPathInWorktree(join(worktree, "no-such-dir", "no-such-file.txt"), worktree);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      // Parent fallback also fails — falls through to generic error
+      expect(result.message).toMatch(/could not be resolved/i);
+      expect(result.message).not.toMatch(/symlink/i);
     }
   });
 });

@@ -60,6 +60,11 @@ states:
       - from: research
         section: risk
         as: risk_findings
+      - from: handoff
+        as: research_handoff
+    required_handoffs:
+      - name: DESIGN-BRIEF
+        type: design_brief
     transitions:
       # done: checkpoint preserved for backward compat (fires when auto_approve is true)
       done: checkpoint
@@ -93,10 +98,14 @@ states:
 ### research
 Research ${role} patterns relevant to: ${task}. Save to ${WORKSPACE}/research/${role}.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/research-finding.md.
 
+After saving your research finding to ${WORKSPACE}/research/${role}.md, call `write_research_synthesis` with your key findings to produce a structured handoff for the architect. Use the key_findings, affected_subsystems, risk_areas, and open_questions fields from your research document.
+
 ### design
 Design the technical approach for: ${task}. Read research from ${WORKSPACE}/research/ (especially risk.md). Save design to ${WORKSPACE}/plans/${slug}/DESIGN.md. Save task plans to ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md and index to INDEX.md. Record decisions to ${WORKSPACE}/decisions/. Templates: design-decision, session-context at ${CLAUDE_PLUGIN_ROOT}/templates/. Initialize ${WORKSPACE}/context.md.
 
 Use the North Star template section in the design document. Include machine-readable done criteria in the DESIGN.md frontmatter.
+
+After saving your design and task plans, call `write_design_brief` to produce a structured handoff for the implementors. Include file_targets (all files from task plans), constraints (key decisions and invariants), and test_expectations (what the tester should verify).
 
 After producing plans, write affected files to board metadata: call `update_board({ workspace: "${WORKSPACE}", action: "set_metadata", metadata: { affected_files: "<JSON array of all files from task plans>" } })`. The value must be a JSON-stringified array of file path strings (e.g., `'["src/foo.ts","src/bar.ts"]'`).
 

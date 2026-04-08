@@ -15,8 +15,8 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
+import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { normalizeStatus } from "../engine/transitions.ts";
@@ -126,7 +126,9 @@ describe("StuckWhenSchema — no_gate_progress", () => {
 
 describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
   it("parses a valid gate progress history entry with hash and passed: true", async () => {
-    const { GateProgressHistoryEntrySchema } = await import("@domains/flows/board-state-schemas.ts");
+    const { GateProgressHistoryEntrySchema } = await import(
+      "@domains/flows/board-state-schemas.ts"
+    );
     const result = GateProgressHistoryEntrySchema.parse({
       gate_output_hash: "abc123",
       passed: true,
@@ -136,7 +138,9 @@ describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
   });
 
   it("parses a valid gate progress history entry with passed: false", async () => {
-    const { GateProgressHistoryEntrySchema } = await import("@domains/flows/board-state-schemas.ts");
+    const { GateProgressHistoryEntrySchema } = await import(
+      "@domains/flows/board-state-schemas.ts"
+    );
     const result = GateProgressHistoryEntrySchema.parse({
       gate_output_hash: "deadbeef",
       passed: false,
@@ -146,12 +150,16 @@ describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
   });
 
   it("rejects entry missing gate_output_hash", async () => {
-    const { GateProgressHistoryEntrySchema } = await import("@domains/flows/board-state-schemas.ts");
+    const { GateProgressHistoryEntrySchema } = await import(
+      "@domains/flows/board-state-schemas.ts"
+    );
     expect(() => GateProgressHistoryEntrySchema.parse({ passed: true })).toThrow();
   });
 
   it("rejects entry missing passed field", async () => {
-    const { GateProgressHistoryEntrySchema } = await import("@domains/flows/board-state-schemas.ts");
+    const { GateProgressHistoryEntrySchema } = await import(
+      "@domains/flows/board-state-schemas.ts"
+    );
     expect(() => GateProgressHistoryEntrySchema.parse({ gate_output_hash: "abc" })).toThrow();
   });
 });
@@ -160,7 +168,9 @@ describe("GateProgressHistoryEntrySchema — direct parse tests", () => {
 
 describe("ConsultationFragmentSchema — skip_when field", () => {
   it("accepts a consultation fragment with skip_when: no_open_questions", async () => {
-    const { ConsultationFragmentSchema } = await import("@domains/flows/flow-definition-schemas.ts");
+    const { ConsultationFragmentSchema } = await import(
+      "@domains/flows/flow-definition-schemas.ts"
+    );
     const result = ConsultationFragmentSchema.parse({
       agent: "canon-researcher",
       fragment: "targeted-research",
@@ -171,7 +181,9 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
   });
 
   it("accepts a consultation fragment without skip_when (backward compat)", async () => {
-    const { ConsultationFragmentSchema } = await import("@domains/flows/flow-definition-schemas.ts");
+    const { ConsultationFragmentSchema } = await import(
+      "@domains/flows/flow-definition-schemas.ts"
+    );
     const result = ConsultationFragmentSchema.parse({
       agent: "canon-reviewer",
       fragment: "plan-review",
@@ -182,7 +194,9 @@ describe("ConsultationFragmentSchema — skip_when field", () => {
 
   it("accepts a consultation fragment with another valid SkipWhenSchema value (no_fix_requested)", async () => {
     // ConsultationFragmentSchema uses SkipWhenSchema.optional() — only known enum values are valid
-    const { ConsultationFragmentSchema } = await import("@domains/flows/flow-definition-schemas.ts");
+    const { ConsultationFragmentSchema } = await import(
+      "@domains/flows/flow-definition-schemas.ts"
+    );
     const result = ConsultationFragmentSchema.parse({
       agent: "some-agent",
       fragment: "some-fragment",

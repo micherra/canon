@@ -9,22 +9,25 @@
 
 import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { migrateSummaries } from "@features/knowledge-graph/services/migrate-summaries.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
-import { migrateSummaries } from "@features/knowledge-graph/services/migrate-summaries.ts";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = join(tmpdir(), `migrate-summaries-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  tmpDir = join(
+    tmpdir(),
+    `migrate-summaries-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
   await mkdir(join(tmpDir, ".canon"), { recursive: true });
 });
 
 afterEach(async () => {
-  await rm(tmpDir, { recursive: true, force: true });
+  await rm(tmpDir, { force: true, recursive: true });
 });
 
 // ---- helpers ----
@@ -51,8 +54,8 @@ describe("migrateSummaries", () => {
 
   test("migrates entries and renames file to .migrated", async () => {
     await writeSummariesJson({
-      "src/foo.ts": { summary: "does the foo thing", updated_at: "2024-01-01T00:00:00.000Z" },
       "src/bar.ts": { summary: "does the bar thing" },
+      "src/foo.ts": { summary: "does the foo thing", updated_at: "2024-01-01T00:00:00.000Z" },
     });
 
     const result = await migrateSummaries(tmpDir);
