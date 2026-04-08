@@ -11,7 +11,7 @@
  * 6. Return combined result.
  */
 
-import { enterState } from "@domains/board/board.ts";
+import { type BoardResult, enterState } from "@domains/board/board.ts";
 import type { Board, CannotFixItem, HistoryEntry } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
@@ -102,10 +102,24 @@ function persistStateEntry(
   board: Board,
   state_id: string,
   now: string,
-): Board {
-  let enteredBoard: Board = board;
+): BoardResult {
+  let enterResult: BoardResult = { ok: false, reason: "transaction did not run" };
   store.transaction(() => {
-    enteredBoard = enterState(board, state_id);
+    let boardForEntry = board;
+    // If the state is "done", reset it to "pending" to allow re-entry (revision/re-review scenario).
+    if (boardForEntry.states[state_id]?.status === "done") {
+      boardForEntry = {
+        ...boardForEntry,
+        states: {
+          ...boardForEntry.states,
+          [state_id]: { ...boardForEntry.states[state_id], status: "pending" as const },
+        },
+      };
+    }
+    enterResult = enterState(boardForEntry, state_id);
+    if (!enterResult.ok) return;
+
+    const enteredBoard = enterResult.board;
     store.updateExecution({ current_state: state_id, last_updated: now });
 
     const enteredStateEntry = enteredBoard.states[state_id];
@@ -128,7 +142,7 @@ function persistStateEntry(
       });
     }
   });
-  return enteredBoard;
+  return enterResult;
 }
 
 type EmitStateEntryEventsOpts = {
@@ -396,7 +410,11 @@ async function enterAndResolveSpawn(
   if (skipEarly) return skipEarly;
 
   const now = new Date().toISOString();
-  const enteredBoard = persistStateEntry(store, board, state_id, now);
+  const enterResult = persistStateEntry(store, board, state_id, now);
+  if (!enterResult.ok) {
+    return toolError("INVALID_INPUT", enterResult.reason, false);
+  }
+  const enteredBoard = enterResult.board;
   emitStateEntryEvents(store, {
     iterationCount: enteredBoard.iterations[state_id]?.count ?? 0,
     now,

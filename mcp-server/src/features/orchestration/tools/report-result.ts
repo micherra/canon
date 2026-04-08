@@ -6,7 +6,12 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
-import { completeState, setBlocked } from "@domains/board/board.ts";
+import {
+  appendConcern,
+  accumulateCannotFix,
+  completeState,
+  setBlocked,
+} from "@domains/board/board.ts";
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
 import type { Board, CannotFixItem } from "@domains/flows/board-state-schemas.ts";
 import type {
@@ -405,40 +410,6 @@ function applyDiscoveries(
   return applyCompeteResults(result, stateId, input.compete_results, input.synthesized);
 }
 
-function accumulateCannotFix(
-  board: Board,
-  stateId: string,
-  principleIds?: string[],
-  filePaths?: string[],
-): Board {
-  if (!board.iterations[stateId]) return board;
-  if (!principleIds || !filePaths) return board;
-
-  const iteration = board.iterations[stateId];
-  const newItems: CannotFixItem[] = [];
-  for (const principleId of principleIds) {
-    for (const filePath of filePaths) {
-      newItems.push({ file_path: filePath, principle_id: principleId });
-    }
-  }
-  if (newItems.length === 0) return board;
-
-  const existing = iteration.cannot_fix ?? [];
-  const deduped = newItems.filter(
-    (item) =>
-      !existing.some((e) => e.principle_id === item.principle_id && e.file_path === item.file_path),
-  );
-  if (deduped.length === 0) return board;
-
-  return {
-    ...board,
-    iterations: {
-      ...board.iterations,
-      [stateId]: { ...iteration, cannot_fix: [...existing, ...deduped] },
-    },
-  };
-}
-
 function collectOptionalRoles(
   roles?: Array<string | { name: string; optional?: boolean }>,
 ): Set<string> {
@@ -595,28 +566,6 @@ function resolveCondition(
   }
 
   return { board, condition };
-}
-
-function appendConcern(
-  board: Board,
-  input: ReportResultInput,
-  stateDef: ResolvedFlow["states"][string] | undefined,
-): Board {
-  if (input.status_keyword.toLowerCase() !== "done_with_concerns" || !input.concern_text)
-    return board;
-  const agent = stateDef?.agent ?? input.state_id;
-  return {
-    ...board,
-    concerns: [
-      ...board.concerns,
-      {
-        agent,
-        message: input.concern_text,
-        state_id: input.state_id,
-        timestamp: new Date().toISOString(),
-      },
-    ],
-  };
 }
 
 type FinalizeTransitionOptions = {
@@ -893,8 +842,32 @@ function executeReportTransaction(
 
     let nextState = stateDef ? evaluateTransition(stateDef, condition) : null;
 
-    board = appendConcern(board, input, stateDef);
-    board = completeState(board, input.state_id, condition, input.artifacts);
+    if (input.status_keyword.toLowerCase() === "done_with_concerns" && input.concern_text) {
+      const agent = stateDef?.agent ?? input.state_id;
+      board = appendConcern(board, input.state_id, agent, input.concern_text);
+    }
+    const completeResult = completeState(board, input.state_id, condition, input.artifacts);
+    if (!completeResult.ok) {
+      // State was not in_progress (e.g. still pending) — apply completion directly.
+      // This preserves backward compat: reportResult may be called without a prior enterState call.
+      // We do NOT call enterState here to avoid incrementing the iteration count as a side-effect.
+      const now = new Date().toISOString();
+      const prev = board.states[input.state_id];
+      const updated = {
+        ...(prev ?? { entries: 0 }),
+        completed_at: now,
+        result: condition,
+        status: "done" as const,
+        ...(input.artifacts ? { artifacts: input.artifacts } : {}),
+      };
+      board = {
+        ...board,
+        last_updated: now,
+        states: { ...board.states, [input.state_id]: updated },
+      };
+    } else {
+      board = completeResult.board;
+    }
     board = enrichBoardMetrics(board, input);
     board = applyDiscoveries(board, input.state_id, input);
 
@@ -902,7 +875,7 @@ function executeReportTransaction(
     board = stuckResult.board;
     if (stuckResult.stuck) nextState = null;
 
-    if (condition === "cannot_fix") {
+    if (condition === "cannot_fix" && input.principle_ids && input.file_paths) {
       board = accumulateCannotFix(board, input.state_id, input.principle_ids, input.file_paths);
     }
 

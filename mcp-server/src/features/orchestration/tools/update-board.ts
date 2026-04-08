@@ -229,7 +229,11 @@ function handleEnterState(
   now: string,
 ): ActionResult {
   if (!input.state_id) return toolError("INVALID_INPUT", "enter_state requires state_id");
-  const updatedBoard = enterState(board, input.state_id);
+  const enterResult = enterState(board, input.state_id);
+  if (!enterResult.ok) {
+    return toolError("INVALID_INPUT", enterResult.reason, false);
+  }
+  const updatedBoard = enterResult.board;
   store.transaction(() => {
     store.updateExecution({ current_state: input.state_id!, last_updated: now });
     const stateEntry = updatedBoard.states[input.state_id!];
