@@ -127,7 +127,15 @@ export const DriveFlowResultSchema = z.object({
     )
     .optional(),
   state_id: z.string(),
-  status: z.string(),
+  /**
+   * Agent status keyword (e.g. "done", "DONE", "DONE_WITH_CONCERNS", "BLOCKED").
+   * Optional at the API boundary — defaults to "done" when absent so that
+   * orchestrators resuming after a HITL pause do not need to reconstruct it.
+   *
+   * The underlying report_result normalizeStatus function treats "done" as the
+   * standard successful completion keyword.
+   */
+  status: z.string().optional().default("done"),
   /** Optional task ID for wave implementors — typed here so callers don't need a type assertion. */
   task_id: z.string().optional(),
   /** Optional actual branch name used by the agent's worktree (e.g. "worktree-agent-*"). */

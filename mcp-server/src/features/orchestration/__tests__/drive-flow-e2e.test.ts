@@ -588,6 +588,57 @@ describe("e2e: skip-state flow (research → skip(test-state) → review → don
   });
 });
 
+// Scenario: HITL resume — result.status defaults to "done" when omitted
+// RCA: Orchestrator may call drive_flow with result: { state_id } but no status after HITL.
+// The schema must default status to "done" rather than fail with a validation error.
+
+describe("result.status defaults to 'done' when omitted (HITL resume defense)", () => {
+  it("accepts result without status and treats it as 'done'", async () => {
+    const workspace = makeTmpWorkspace();
+    const slug = "hitl-resume-slug";
+    const flow = makeFullFlow();
+    makeStore(workspace, { entry: "research", slug });
+
+    // Write INDEX.md for the wave state that follows research
+    writeIndexMd(workspace, slug, [{ task_id: "task-01", wave: 1 }]);
+
+    // Mock wave-lifecycle for the implement wave that will be entered after research
+    vi.mocked(getProjectDir).mockReturnValue(workspace);
+    vi.mocked(createWaveWorktrees).mockResolvedValue([
+      { branch: "canon-wave/task-01", task_id: "task-01", worktree_path: join(workspace, "wt-01") },
+    ]);
+
+    // Mock reportResult to say research completed → next state is implement
+    vi.mocked(reportResult).mockResolvedValueOnce(makeReportResult("implement") as never);
+    vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
+      makeEnterResult({
+        prompts: [
+          {
+            agent: "canon:canon-implementor",
+            item: "task-01",
+            prompt: "Implement",
+            role: "implementor",
+            template_paths: [],
+          },
+        ],
+        state_type: "wave",
+      }),
+    );
+
+    // Simulate the bug: orchestrator calls drive_flow with result.status omitted
+    // This previously caused MCP error -32602 "expected string, received undefined"
+    const result = await driveFlow({
+      flow,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      result: { state_id: "research" } as any, // status intentionally omitted
+      workspace,
+    });
+
+    // Should not throw; should treat missing status as "done"
+    expect(result.ok).toBe(true);
+  });
+});
+
 // Scenario 4: Wave with gate failure
 
 describe("e2e: wave with gate failure", () => {

@@ -204,12 +204,22 @@ Call `drive_flow({ workspace, flow: resolved_flow })` to start. Then loop:
 
 ### 2. HITL action: `{ action: "hitl" }`
 
-Present `breakpoint.context` to the user. If `breakpoint.options` is present, show suggested responses. When the user responds, call `drive_flow(...)` with the appropriate status keyword:
+Present `breakpoint.context` to the user. If `breakpoint.options` is present, show suggested responses. When the user responds, call `drive_flow` with a `result` object:
+
+```
+drive_flow({ workspace, flow: resolved_flow, result: { state_id: <current_state>, status: <keyword> } })
+```
+
+Status keywords:
 
 - `done` — retry succeeded or user approves moving forward
 - `skipped` — skip this state and advance
 - `blocked` — mark state as blocked (user will unblock later)
 - `cannot_fix` — acknowledge failure and let transition logic route to fallback
+
+`state_id` is the state that was in progress when HITL fired (the same state shown in `breakpoint.context`). Read it from `board.current_state` when in doubt.
+
+`status` is optional and defaults to `"done"` when omitted — but always supply it explicitly to make intent clear.
 
 These are the standard status keywords accepted by `report_result` via `normalizeStatus`. Arbitrary strings (like "retry") are not recognized — use the keywords above.
 
