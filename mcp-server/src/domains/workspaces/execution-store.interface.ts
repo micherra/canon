@@ -125,9 +125,11 @@ export type IExecutionStore = {
   ): void;
   recordIterationAttempt(
     stateId: string,
-    iteration: number,
-    status: string,
-    data: Record<string, unknown>,
-    stuckWhen?: StuckWhen,
+    options: {
+      iteration: number;
+      status: string;
+      data: Record<string, unknown>;
+      stuckWhen?: StuckWhen;
+    },
   ): { recorded: true; stuck: boolean };
 };

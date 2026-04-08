@@ -1224,42 +1224,49 @@ describe("recordIterationAttempt", () => {
   });
 
   test("records iteration result and returns recorded:true stuck:false when no stuckWhen", () => {
-    const result = store.recordIterationAttempt("implement", 1, "blocked", {
-      failing_files: ["src/foo.ts"],
+    const result = store.recordIterationAttempt("implement", {
+      iteration: 1,
+      status: "blocked",
+      data: { failing_files: ["src/foo.ts"] },
     });
     expect(result.recorded).toBe(true);
     expect(result.stuck).toBe(false);
   });
 
   test("returns stuck:false when fewer than 2 iteration results exist", () => {
-    const result = store.recordIterationAttempt(
-      "implement",
-      1,
-      "blocked",
-      { status: "blocked" },
-      "same_status",
-    );
+    const result = store.recordIterationAttempt("implement", {
+      iteration: 1,
+      status: "blocked",
+      data: { status: "blocked" },
+      stuckWhen: "same_status",
+    });
     expect(result.recorded).toBe(true);
     expect(result.stuck).toBe(false);
   });
 
   test("returns stuck:true when same_status repeats across two iterations", () => {
-    store.recordIterationAttempt("implement", 1, "blocked", { status: "blocked" }, "same_status");
-    const result = store.recordIterationAttempt(
-      "implement",
-      2,
-      "blocked",
-      { status: "blocked" },
-      "same_status",
-    );
+    store.recordIterationAttempt("implement", {
+      iteration: 1,
+      status: "blocked",
+      data: { status: "blocked" },
+      stuckWhen: "same_status",
+    });
+    const result = store.recordIterationAttempt("implement", {
+      iteration: 2,
+      status: "blocked",
+      data: { status: "blocked" },
+      stuckWhen: "same_status",
+    });
     expect(result.recorded).toBe(true);
     expect(result.stuck).toBe(true);
   });
 
   test("returns stuck:false when no stuckWhen provided even with repeated statuses", () => {
     store.recordIterationResult("implement", 1, "blocked", { status: "blocked" });
-    const result = store.recordIterationAttempt("implement", 2, "blocked", {
+    const result = store.recordIterationAttempt("implement", {
+      iteration: 2,
       status: "blocked",
+      data: { status: "blocked" },
     });
     expect(result.stuck).toBe(false);
   });

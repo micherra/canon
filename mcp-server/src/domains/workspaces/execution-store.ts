@@ -752,6 +752,22 @@ export class ExecutionStore {
    * The comparison logic mirrors the pure `isStuck` in transitions.ts but reads from
    * the `iteration_results` table rather than caller-supplied history arrays.
    */
+  private isSameViolations(
+    currData: Record<string, unknown>,
+    prevData: Record<string, unknown>,
+  ): boolean {
+    return (
+      setsEqual(
+        (currData.principle_ids as string[]) ?? [],
+        (prevData.principle_ids as string[]) ?? [],
+      ) &&
+      setsEqual(
+        (currData.file_paths as string[]) ?? [],
+        (prevData.file_paths as string[]) ?? [],
+      )
+    );
+  }
+
   isStuck(stateId: string, stuckWhen: StuckWhen): boolean {
     const rows = this.stmtGetLastTwoIterationResults.all(stateId) as Array<{
       status: string;
@@ -768,16 +784,7 @@ export class ExecutionStore {
 
     switch (stuckWhen) {
       case "same_violations":
-        return (
-          setsEqual(
-            (currData.principle_ids as string[]) ?? [],
-            (prevData.principle_ids as string[]) ?? [],
-          ) &&
-          setsEqual(
-            (currData.file_paths as string[]) ?? [],
-            (prevData.file_paths as string[]) ?? [],
-          )
-        );
+        return this.isSameViolations(currData, prevData);
       case "same_file_test": {
         const currPairs = (currData.pairs ?? []) as unknown[];
         const prevPairs = (prevData.pairs ?? []) as unknown[];
@@ -1106,11 +1113,14 @@ export class ExecutionStore {
    */
   recordIterationAttempt(
     stateId: string,
-    iteration: number,
-    status: string,
-    data: Record<string, unknown>,
-    stuckWhen?: StuckWhen,
+    options: {
+      iteration: number;
+      status: string;
+      data: Record<string, unknown>;
+      stuckWhen?: StuckWhen;
+    },
   ): { recorded: true; stuck: boolean } {
+    const { iteration, status, data, stuckWhen } = options;
     this.recordIterationResult(stateId, iteration, status, data);
     if (stuckWhen !== undefined) {
       const stuck = this.isStuck(stateId, stuckWhen);
