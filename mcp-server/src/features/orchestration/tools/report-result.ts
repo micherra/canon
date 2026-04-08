@@ -7,13 +7,13 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import {
-  appendConcern,
   accumulateCannotFix,
+  appendConcern,
   completeState,
   setBlocked,
 } from "@domains/board/board.ts";
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
-import type { Board, CannotFixItem } from "@domains/flows/board-state-schemas.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type {
   BaselineEvidence,
   DiscoveredGate,
@@ -234,40 +234,37 @@ export async function validateRequiredArtifacts(
  * array of warning strings (empty when all handoffs are present and correct).
  * Never throws.
  */
+async function validateHandoffEntry(workspace: string, req: RequiredArtifact): Promise<string[]> {
+  const metaPath = join(workspace, "handoffs", `${req.name}.meta.json`);
+  let content: string;
+  try {
+    content = await readFile(metaPath, "utf-8");
+  } catch {
+    return [`Required handoff "${req.name}" not found in handoffs/`];
+  }
+  // Symlink guard (ADR-018 security follow-up): after confirming the file exists,
+  // verify it doesn't escape the workspace via symlink resolution.
+  const symlinkGuard = await isPathInWorktree(metaPath, workspace);
+  if (!symlinkGuard.ok && symlinkGuard.message.includes("via symlink")) {
+    return [`Required handoff "${req.name}" resolves outside workspace via symlink`];
+  }
+  try {
+    const meta: MetaJson = JSON.parse(content);
+    if (meta._type !== req.type) {
+      return [`Required handoff "${req.name}" has type "${meta._type}" but expected "${req.type}"`];
+    }
+    return [];
+  } catch {
+    return [`Required handoff "${req.name}" has malformed JSON in handoffs/`];
+  }
+}
+
 export async function validateRequiredHandoffs(
   workspace: string,
   required: RequiredArtifact[],
 ): Promise<string[]> {
-  const warnings: string[] = [];
-  for (const req of required) {
-    const metaPath = join(workspace, "handoffs", `${req.name}.meta.json`);
-    // biome-ignore lint/performance/noAwaitInLoops: sequential validation — non-blocking
-    try {
-      const content = await readFile(metaPath, "utf-8");
-      // Symlink guard (ADR-018 security follow-up): after confirming the file exists,
-      // verify it doesn't escape the workspace via symlink resolution.
-      const symlinkGuard = await isPathInWorktree(metaPath, workspace);
-      if (!symlinkGuard.ok && symlinkGuard.message.includes("via symlink")) {
-        warnings.push(
-          `Required handoff "${req.name}" resolves outside workspace via symlink`,
-        );
-        continue;
-      }
-      try {
-        const meta: MetaJson = JSON.parse(content);
-        if (meta._type !== req.type) {
-          warnings.push(
-            `Required handoff "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
-          );
-        }
-      } catch {
-        warnings.push(`Required handoff "${req.name}" has malformed JSON in handoffs/`);
-      }
-    } catch {
-      warnings.push(`Required handoff "${req.name}" not found in handoffs/`);
-    }
-  }
-  return warnings;
+  const perEntry = await Promise.all(required.map((req) => validateHandoffEntry(workspace, req)));
+  return perEntry.flat();
 }
 
 // Pure board mutation helpers — extracted to reduce transaction complexity
@@ -825,6 +822,115 @@ async function validatePreTransaction(
   return null;
 }
 
+/**
+ * Applies state completion to board, using completeState when the state is in_progress,
+ * or falling back to a direct board mutation for states not yet in_progress.
+ * Backward compat: reportResult may be called without a prior enterState call.
+ * We do NOT call enterState here to avoid incrementing the iteration count as a side-effect.
+ */
+function applyStateCompletion(
+  board: Board,
+  stateId: string,
+  condition: string,
+  artifacts: string[] | undefined,
+): Board {
+  const completeResult = completeState(board, stateId, condition, artifacts);
+  if (!completeResult.ok) {
+    const now = new Date().toISOString();
+    const prev = board.states[stateId];
+    const updated = {
+      ...(prev ?? { entries: 0 }),
+      completed_at: now,
+      result: condition,
+      status: "done" as const,
+      ...(artifacts ? { artifacts } : {}),
+    };
+    return { ...board, last_updated: now, states: { ...board.states, [stateId]: updated } };
+  }
+  return completeResult.board;
+}
+
+type ApplyStuckOptions = {
+  board: Board;
+  stateId: string;
+  condition: string;
+  nextState: string | null;
+  input: ReportResultInput;
+  stateDef: ResolvedFlow["states"][string] | undefined;
+  store: ReturnType<typeof getExecutionStore>;
+};
+
+/**
+ * Runs stuck detection and, when condition is cannot_fix, accumulates cannot_fix items.
+ * Returns updated board, next state (nulled if stuck), and the stuck result metadata.
+ */
+function applyStuckAndCannotFix(options: ApplyStuckOptions): {
+  board: Board;
+  nextState: string | null;
+  stuckResult: ReturnType<typeof detectStuck>;
+} {
+  const { board, stateId, condition, nextState, input, stateDef, store } = options;
+  const stuckResult = detectStuck(board, stateId, { condition, input, stateDef, store });
+  let result = stuckResult.board;
+  const resolvedNext = stuckResult.stuck ? null : nextState;
+
+  if (condition === "cannot_fix" && input.principle_ids && input.file_paths) {
+    result = accumulateCannotFix(result, stateId, input.principle_ids, input.file_paths);
+  }
+  return { board: result, nextState: resolvedNext, stuckResult };
+}
+
+type DebateHitl = {
+  board: Board;
+  nextState: string | null;
+  hitl_required: boolean;
+  hitl_reason?: string;
+};
+
+type ApplyDebateHitlOptions = {
+  board: Board;
+  debate: ResolvedFlow["debate"];
+  debateResult: Awaited<ReturnType<typeof inspectDebateProgress>> | undefined;
+  nextState: string | null;
+  stateId: string;
+};
+
+function applyDebateHitl(options: ApplyDebateHitlOptions): DebateHitl {
+  const { board, debate, debateResult, nextState, stateId } = options;
+  if (debateResult === undefined) return { board, hitl_required: false, nextState };
+  const dr = applyDebateResult(board, debateResult, stateId, debate!);
+  return {
+    board: dr.board,
+    hitl_reason: dr.hitl_reason,
+    hitl_required: dr.hitl_required,
+    nextState: dr.nextState,
+  };
+}
+
+/**
+ * Applies concern note, state completion, metrics enrichment, and discovery fields to the board.
+ * Pure pipeline over the board — no store I/O.
+ */
+function applyBoardMutations(
+  board: Board,
+  input: ReportResultInput,
+  condition: string,
+  stateDef: ResolvedFlow["states"][string] | undefined,
+): Board {
+  let result = board;
+  if (input.status_keyword.toLowerCase() === "done_with_concerns" && input.concern_text) {
+    result = appendConcern(
+      result,
+      input.state_id,
+      stateDef?.agent ?? input.state_id,
+      input.concern_text,
+    );
+  }
+  result = applyStateCompletion(result, input.state_id, condition, input.artifacts);
+  result = enrichBoardMetrics(result, input);
+  return applyDiscoveries(result, input.state_id, input);
+}
+
 function executeReportTransaction(
   store: ReturnType<typeof getExecutionStore>,
   input: ReportResultInput,
@@ -833,67 +939,40 @@ function executeReportTransaction(
 ): TransactionResult {
   return store.transaction((): TransactionResult => {
     let board = store.getBoard();
-    if (!board) {
-      throw new Error(`No execution found in workspace: ${input.workspace}`);
-    }
+    if (!board) throw new Error(`No execution found in workspace: ${input.workspace}`);
 
     const { board: b1, condition } = resolveCondition(board, input, stateDef);
-    board = b1;
+    let nextState: string | null = stateDef ? evaluateTransition(stateDef, condition) : null;
 
-    let nextState = stateDef ? evaluateTransition(stateDef, condition) : null;
+    board = applyBoardMutations(b1, input, condition, stateDef);
 
-    if (input.status_keyword.toLowerCase() === "done_with_concerns" && input.concern_text) {
-      const agent = stateDef?.agent ?? input.state_id;
-      board = appendConcern(board, input.state_id, agent, input.concern_text);
-    }
-    const completeResult = completeState(board, input.state_id, condition, input.artifacts);
-    if (!completeResult.ok) {
-      // State was not in_progress (e.g. still pending) — apply completion directly.
-      // This preserves backward compat: reportResult may be called without a prior enterState call.
-      // We do NOT call enterState here to avoid incrementing the iteration count as a side-effect.
-      const now = new Date().toISOString();
-      const prev = board.states[input.state_id];
-      const updated = {
-        ...(prev ?? { entries: 0 }),
-        completed_at: now,
-        result: condition,
-        status: "done" as const,
-        ...(input.artifacts ? { artifacts: input.artifacts } : {}),
-      };
-      board = {
-        ...board,
-        last_updated: now,
-        states: { ...board.states, [input.state_id]: updated },
-      };
-    } else {
-      board = completeResult.board;
-    }
-    board = enrichBoardMetrics(board, input);
-    board = applyDiscoveries(board, input.state_id, input);
+    const stuckAndFix = applyStuckAndCannotFix({
+      board,
+      condition,
+      input,
+      nextState,
+      stateDef,
+      stateId: input.state_id,
+      store,
+    });
+    board = stuckAndFix.board;
+    nextState = stuckAndFix.nextState;
+    const { stuckResult } = stuckAndFix;
 
-    const stuckResult = detectStuck(board, input.state_id, { condition, input, stateDef, store });
-    board = stuckResult.board;
-    if (stuckResult.stuck) nextState = null;
-
-    if (condition === "cannot_fix" && input.principle_ids && input.file_paths) {
-      board = accumulateCannotFix(board, input.state_id, input.principle_ids, input.file_paths);
-    }
-
-    let hitl_required = false;
-    let hitl_reason: string | undefined;
-
-    if (debateResult !== undefined) {
-      const dr = applyDebateResult(board, debateResult, input.state_id, input.flow.debate!);
-      board = dr.board;
-      nextState = dr.nextState;
-      hitl_required = dr.hitl_required;
-      hitl_reason = dr.hitl_reason;
-    }
+    const debate = applyDebateHitl({
+      board,
+      debate: input.flow.debate,
+      debateResult,
+      nextState,
+      stateId: input.state_id,
+    });
+    board = debate.board;
+    nextState = debate.nextState;
 
     const finalResult = finalizeTransition(board, {
       condition,
-      hitl_reason,
-      hitl_required,
+      hitl_reason: debate.hitl_reason,
+      hitl_required: debate.hitl_required,
       nextState,
       stateId: input.state_id,
       stateType: stateDef?.type,
@@ -901,16 +980,13 @@ function executeReportTransaction(
       stuckResult,
     });
     board = finalResult.board;
-    hitl_required = finalResult.hitl_required;
-    hitl_reason = finalResult.hitl_reason;
-
     syncBoardToStore(store, board);
 
     return {
       board,
       condition,
-      hitl_reason,
-      hitl_required,
+      hitl_reason: finalResult.hitl_reason,
+      hitl_required: finalResult.hitl_required,
       nextState,
       stuck: stuckResult.stuck,
       stuck_reason: stuckResult.stuck_reason,
