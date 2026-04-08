@@ -34,9 +34,8 @@ import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { checkConvergence } from "@features/diagnostics/tools/check-convergence.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
-import { filterCannotFix } from "../engine/convergence.ts";
+import { canEnterState, filterCannotFix } from "../engine/convergence.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 import { reportResult } from "../tools/report-result.ts";
 import { updateBoard } from "../tools/update-board.ts";
@@ -133,6 +132,23 @@ function setupWorkspace(workspace: string, flow: ResolvedFlow): void {
       });
     }
   }
+}
+
+// Helper: inline replacement for the deleted checkConvergence wrapper.
+// Replicates checkConvergence logic using canEnterState + getExecutionStore directly.
+function readConvergence(workspace: string, stateId: string) {
+  const board = getExecutionStore(workspace).getBoard();
+  if (board === null) throw new Error(`No board found for workspace: ${workspace}`);
+  const { allowed, reason } = canEnterState(board, stateId);
+  const iteration = board.iterations[stateId];
+  return {
+    can_enter: allowed,
+    cannot_fix_items: iteration?.cannot_fix ?? [],
+    history: iteration?.history ?? [],
+    iteration_count: iteration?.count ?? 0,
+    max_iterations: iteration?.max ?? 0,
+    reason,
+  };
 }
 
 // Cross-feature: report-result with parallel_results + cannot_fix + events
@@ -250,10 +266,8 @@ describe("cross-feature: parallel_results with cannot_fix items and event emissi
     const board = getExecutionStore(workspace).getBoard();
     expect(board?.states.implement.parallel_results).toEqual(parallelResults);
 
-    // checkConvergence should still work (doesn't break on new field)
-    const convergenceResult = await checkConvergence({ state_id: "implement", workspace });
-    assertOk(convergenceResult);
-    const convergence = convergenceResult;
+    // convergence check should still work (doesn't break on new field)
+    const convergence = readConvergence(workspace, "implement");
     expect(convergence.can_enter).toBe(true); // iteration count=0, max=3
     expect(convergence.iteration_count).toBe(0);
   });
@@ -288,9 +302,7 @@ describe("cross-feature: cannot_fix pipeline — reportResult → checkConvergen
       workspace,
     });
 
-    const convergenceResult = await checkConvergence({ state_id: "implement", workspace });
-    assertOk(convergenceResult);
-    const convergence = convergenceResult;
+    const convergence = readConvergence(workspace, "implement");
     expect(convergence.cannot_fix_items).toHaveLength(3);
 
     // Orchestrator excludes known cannot_fix from next iteration's principle set

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
-import { checkConvergence } from "@features/diagnostics/tools/check-convergence.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { canEnterState, filterCannotFix } from "../engine/convergence.ts";
@@ -363,16 +362,33 @@ describe("reportResult — cannot_fix accumulation", () => {
   });
 });
 
-// Round-trip: accumulate in report-result, read back via check-convergence
+// Helper: inline replacement for the deleted checkConvergence wrapper.
+// Replicates checkConvergence logic using canEnterState + getExecutionStore directly.
+function readConvergence(workspace: string, stateId: string) {
+  const board = getExecutionStore(workspace).getBoard();
+  if (board === null) throw new Error(`No board found for workspace: ${workspace}`);
+  const { allowed, reason } = canEnterState(board, stateId);
+  const iteration = board.iterations[stateId];
+  return {
+    can_enter: allowed,
+    cannot_fix_items: iteration?.cannot_fix ?? [],
+    history: iteration?.history ?? [],
+    iteration_count: iteration?.count ?? 0,
+    max_iterations: iteration?.max ?? 0,
+    reason,
+  };
+}
 
-describe("cannot_fix round-trip: report-result → check-convergence", () => {
-  it("check-convergence returns accumulated cannot_fix_items after report-result", async () => {
+// Round-trip: accumulate in report-result, read back via convergence logic
+
+describe("cannot_fix round-trip: report-result → convergence", () => {
+  it("convergence returns accumulated cannot_fix_items after report-result", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
     seedWorkspace(workspace, flow);
 
     await reportResult({
-      file_paths: ["src/features/diagnostics/tools/check-convergence.ts"],
+      file_paths: ["src/features/orchestration/engine/convergence.ts"],
       flow,
       principle_ids: ["no-hidden-side-effects"],
       state_id: "review",
@@ -380,19 +396,17 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       workspace,
     });
 
-    const convergenceResult = await checkConvergence({ state_id: "review", workspace });
-    assertOk(convergenceResult);
-    const convergence = convergenceResult;
+    const convergence = readConvergence(workspace, "review");
 
     expect(convergence.cannot_fix_items).toEqual([
       {
-        file_path: "src/features/diagnostics/tools/check-convergence.ts",
+        file_path: "src/features/orchestration/engine/convergence.ts",
         principle_id: "no-hidden-side-effects",
       },
     ]);
   });
 
-  it("round-trip: multiple reports accumulate items, check-convergence returns all", async () => {
+  it("round-trip: multiple reports accumulate items, convergence returns all", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
     seedWorkspace(workspace, flow);
@@ -417,9 +431,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       workspace,
     });
 
-    const convergenceResult = await checkConvergence({ state_id: "review", workspace });
-    assertOk(convergenceResult);
-    const convergence = convergenceResult;
+    const convergence = readConvergence(workspace, "review");
 
     expect(convergence.cannot_fix_items).toHaveLength(2);
     expect(convergence.cannot_fix_items).toEqual(
@@ -430,7 +442,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
     );
   });
 
-  it("filterCannotFix can filter items returned by check-convergence", async () => {
+  it("filterCannotFix can filter items returned by convergence", async () => {
     const workspace = makeTmpWorkspace();
     const flow = makeFlowWithCannotFix();
     seedWorkspace(workspace, flow);
@@ -444,9 +456,7 @@ describe("cannot_fix round-trip: report-result → check-convergence", () => {
       workspace,
     });
 
-    const convergenceResult = await checkConvergence({ state_id: "review", workspace });
-    assertOk(convergenceResult);
-    const convergence = convergenceResult;
+    const convergence = readConvergence(workspace, "review");
 
     // Orchestrator uses filterCannotFix to exclude items from next iteration
     const allItems = [
