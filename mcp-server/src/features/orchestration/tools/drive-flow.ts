@@ -41,7 +41,7 @@ import type {
   DriveFlowInput,
   SpawnRequest,
 } from "../services/drive-flow-types.ts";
-import { DriveFlowInputSchema } from "../services/drive-flow-types.ts";
+import { DriveFlowInputSchema, type DriveFlowParsed } from "../services/drive-flow-types.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";
 import { enterAndPrepareState } from "./enter-and-prepare-state.ts";
 import type { SpawnPromptEntry } from "./get-spawn-prompt.ts";
@@ -128,9 +128,11 @@ export function shouldApprovalGateWaveBoundary(
  * If `input.result` is present: reports the result, advances the loop, returns the next action.
  */
 /** Validate driveFlow input and return parsed data + store + board, or an error. */
-function validateDriveFlowInput(
-  input: DriveFlowInput,
-): ToolResult<{ data: DriveFlowInput; store: ReturnType<typeof getExecutionStore>; board: Board }> {
+function validateDriveFlowInput(input: DriveFlowInput): ToolResult<{
+  data: DriveFlowParsed;
+  store: ReturnType<typeof getExecutionStore>;
+  board: Board;
+}> {
   const parseResult = DriveFlowInputSchema.safeParse(input);
   if (!parseResult.success) {
     return toolError("INVALID_INPUT", parseResult.error.message);

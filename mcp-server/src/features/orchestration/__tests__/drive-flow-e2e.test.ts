@@ -629,8 +629,7 @@ describe("result.status defaults to 'done' when omitted (HITL resume defense)", 
     // This previously caused MCP error -32602 "expected string, received undefined"
     const result = await driveFlow({
       flow,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result: { state_id: "research" } as any, // status intentionally omitted
+      result: { state_id: "research" }, // status intentionally omitted — optional per DriveFlowInput
       workspace,
     });
 
