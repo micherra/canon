@@ -22,6 +22,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
@@ -99,9 +100,15 @@ export async function assembleEnrichment(input: EnrichmentInput): Promise<Enrich
     return { content: "", warnings: ["enrichment: no task scope found"] };
   }
 
-  // Step 3: determine tier cap and slice
-  const tier = (input.flow as { tier?: string }).tier ?? "medium";
-  const fileCap = TIER_FILE_CAPS[tier] ?? DEFAULT_FILE_CAP;
+  // Step 3: determine tier cap and slice (read from execution store, not flow object)
+  let sessionTier = "medium";
+  try {
+    const session = getExecutionStore(input.workspace).getSession();
+    sessionTier = session?.tier ?? "medium";
+  } catch {
+    // Graceful fallback to medium if store unavailable
+  }
+  const fileCap = TIER_FILE_CAPS[sessionTier] ?? DEFAULT_FILE_CAP;
   const filePaths = allFilePaths.slice(0, fileCap);
 
   // Step 4: assemble and concatenate sections

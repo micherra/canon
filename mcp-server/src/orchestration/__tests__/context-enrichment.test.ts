@@ -39,6 +39,12 @@ vi.mock("@features/orchestration/services/scope-resolver.ts", () => ({
   resolveTaskScope: vi.fn(),
 }));
 
+vi.mock("@domains/workspaces/execution-store.ts", () => ({
+  getExecutionStore: vi.fn().mockReturnValue({
+    getSession: vi.fn().mockReturnValue({ tier: "medium" }),
+  }),
+}));
+
 // Imports (after mocks)
 
 import {
@@ -46,6 +52,7 @@ import {
   type EnrichmentInput,
 } from "@features/orchestration/services/context-enrichment.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
+import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 
@@ -209,7 +216,11 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
       return mockStore as any;
     });
 
-    const result = await assembleEnrichment(makeInput({ flow: makeFlow("small") }));
+    vi.mocked(getExecutionStore).mockReturnValue({
+      getSession: vi.fn().mockReturnValue({ tier: "small" }),
+    } as any);
+
+    const result = await assembleEnrichment(makeInput());
 
     // Count how many unique file-N entries appear — should be at most 5
     const fileMatches = result.content.match(/`src\/file-\d+\.ts`/g) ?? [];
@@ -234,7 +245,11 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
       return mockStore as any;
     });
 
-    const result = await assembleEnrichment(makeInput({ flow: makeFlow("large") }));
+    vi.mocked(getExecutionStore).mockReturnValue({
+      getSession: vi.fn().mockReturnValue({ tier: "large" }),
+    } as any);
+
+    const result = await assembleEnrichment(makeInput());
 
     expect(result.content.length).toBeLessThanOrEqual(6000);
   });
@@ -260,13 +275,79 @@ describe("assembleEnrichment — dc-03: tier and char caps", () => {
       return mockStore as any;
     });
 
-    const result = await assembleEnrichment(makeInput({ flow: makeFlow("large") }));
+    vi.mocked(getExecutionStore).mockReturnValue({
+      getSession: vi.fn().mockReturnValue({ tier: "large" }),
+    } as any);
+
+    const result = await assembleEnrichment(makeInput());
 
     // If truncated, should have the marker
     if (result.content.length >= 6000 - 15) {
       expect(result.content).toContain("[truncated]");
     }
     expect(result.content.length).toBeLessThanOrEqual(6000);
+  });
+
+  // New tests: session-store tier resolution
+
+  it("uses small tier cap (5 files) when session tier is small", async () => {
+    const tenFiles = Array.from({ length: 10 }, (_, i) => `src/file-${i}.ts`);
+    vi.mocked(resolveTaskScope).mockReturnValue(tenFiles);
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Add feature"));
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return { getReviewsForFiles: vi.fn().mockResolvedValue([]) } as any;
+    });
+
+    vi.mocked(getExecutionStore).mockReturnValue({
+      getSession: vi.fn().mockReturnValue({ tier: "small" }),
+    } as any);
+
+    const result = await assembleEnrichment(makeInput());
+
+    const fileMatches = result.content.match(/`src\/file-\d+\.ts`/g) ?? [];
+    const uniqueFiles = new Set(fileMatches);
+    expect(uniqueFiles.size).toBeLessThanOrEqual(5);
+  });
+
+  it("uses large tier cap (30 files) when session tier is large", async () => {
+    const thirtyFiveFiles = Array.from({ length: 35 }, (_, i) => `src/file-${i}.ts`);
+    vi.mocked(resolveTaskScope).mockReturnValue(thirtyFiveFiles);
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Add feature"));
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return { getReviewsForFiles: vi.fn().mockResolvedValue([]) } as any;
+    });
+
+    vi.mocked(getExecutionStore).mockReturnValue({
+      getSession: vi.fn().mockReturnValue({ tier: "large" }),
+    } as any);
+
+    const result = await assembleEnrichment(makeInput());
+
+    const fileMatches = result.content.match(/`src\/file-\d+\.ts`/g) ?? [];
+    const uniqueFiles = new Set(fileMatches);
+    // Large cap is 30; 35 files provided so exactly 30 should be processed
+    expect(uniqueFiles.size).toBeLessThanOrEqual(30);
+    expect(uniqueFiles.size).toBeGreaterThan(15); // more than medium cap
+  });
+
+  it("falls back to medium cap when execution store throws", async () => {
+    const twentyFiles = Array.from({ length: 20 }, (_, i) => `src/file-${i}.ts`);
+    vi.mocked(resolveTaskScope).mockReturnValue(twentyFiles);
+    vi.mocked(gitLog).mockReturnValue(makeGitOk("abc1234 Add feature"));
+    vi.mocked(DriftStore).mockImplementation(function () {
+      return { getReviewsForFiles: vi.fn().mockResolvedValue([]) } as any;
+    });
+
+    vi.mocked(getExecutionStore).mockImplementation(() => {
+      throw new Error("store unavailable");
+    });
+
+    const result = await assembleEnrichment(makeInput());
+
+    // Medium cap is 15; 20 files provided so at most 15 should be processed
+    const fileMatches = result.content.match(/`src\/file-\d+\.ts`/g) ?? [];
+    const uniqueFiles = new Set(fileMatches);
+    expect(uniqueFiles.size).toBeLessThanOrEqual(15);
   });
 });
 
