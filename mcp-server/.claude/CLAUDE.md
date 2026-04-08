@@ -33,7 +33,7 @@ src/
 - **Orchestration** (`orchestration/`) — Flow state machine runtime: board persistence, unified messaging, variable resolution, gate execution, consultation preparation, wave briefing assembly, competitive flows, debate protocol
 
 ## Contracts
-<!-- last-updated: 2026-04-01 (ADR-003a: record_agent_metrics tool; widened metrics schema; updateStateMetrics on ExecutionStore; metrics footer in get_spawn_prompt) -->
+<!-- last-updated: 2026-04-07 (post_event tool added; agent_activity FlowEventType added) -->
 
 **Tool error types** (`src/utils/tool-result.ts`) — added 2026-03-31 (ADR-002):
 - `CanonErrorCode` — union of 9 string literals: `WORKSPACE_NOT_FOUND`, `FLOW_NOT_FOUND`, `FLOW_PARSE_ERROR`, `KG_NOT_INDEXED`, `BOARD_LOCKED`, `CONVERGENCE_EXCEEDED`, `INVALID_INPUT`, `PREFLIGHT_FAILED`, `UNEXPECTED`
@@ -225,7 +225,7 @@ src/
 - `resolveEventAgents("guidance")` returns `{ agents: [], descriptions: {} }` — guidance events are mechanical orchestrator operations, no agent spawn needed (changed from `["canon-guide"]` 2026-03-26)
 
 **Event bus** (`src/orchestration/events.ts`):
-- `FlowEventType` union includes `"wave_event_resolved"` (added 2026-03-26, after `"wave_event_injected"`)
+- `FlowEventType` union includes `"wave_event_resolved"` (added 2026-03-26, after `"wave_event_injected"`) and `"agent_activity"` (added 2026-04-07)
 - `FlowEventMap["wave_event_resolved"]` — `{ eventId, eventType, action: "apply"|"reject", workspace, timestamp }`
 
 **Gate runner** (`src/orchestration/gate-runner.ts`):
@@ -290,6 +290,7 @@ src/
 | `resolve_wave_event` | Resolve a pending wave event (apply or reject); wraps `markEventApplied`/`markEventRejected`/`resolveEventAgents`; emits `wave_event_resolved` on event bus |
 | `resolve_after_consultations` | Resolve "after" consultation prompts for a state; call after last wave, before `report_result`; returns `ConsultationPromptEntry[]` for orchestrator to spawn |
 | `record_agent_metrics` | Agent-callable tool to record performance counters (`tool_calls`, `orientation_calls`, `turns`) directly into execution state metrics; merges with existing metrics preserving orchestrator fields; returns `INVALID_INPUT` if no fields provided, `WORKSPACE_NOT_FOUND` if state not found — added 2026-04-01 (ADR-003a) |
+| `post_event` | Agent-callable tool for structured activity logging; input: `{ workspace, agent, action: "start"\|"complete", detail, artifacts?: string[] }`; stores `agent_activity` event in execution store's event log via `appendEvent`; returns `{ ok: true; event_type; agent; action; timestamp }` or `WORKSPACE_NOT_FOUND`/`INVALID_INPUT` on error — added 2026-04-07 |
 
 ## Dependencies
 <!-- last-updated: 2026-03-26 -->
