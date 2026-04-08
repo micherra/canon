@@ -2,19 +2,35 @@
 
 This is the canonical logging protocol for all Canon agents operating within a workspace.
 
-## Format
+## How to Log
 
-Append entries to `${WORKSPACE}/log.jsonl` (one JSON object per line, append-only):
+Call the `post_event` MCP tool with your agent name, action, detail, and workspace path:
 
-```json
-{"timestamp": "ISO-8601", "agent": "{your-agent-name}", "action": "start", "detail": "{what you are beginning}"}
-{"timestamp": "ISO-8601", "agent": "{your-agent-name}", "action": "complete", "detail": "{summary of outcome}", "artifacts": ["{relative/path/to/output}"]}
+**Start entry** (when you begin your primary work):
+```
+post_event({
+  workspace: "${WORKSPACE}",
+  agent: "{your-agent-name}",
+  action: "start",
+  detail: "{what you are beginning}"
+})
+```
+
+**Complete entry** (when you finish):
+```
+post_event({
+  workspace: "${WORKSPACE}",
+  agent: "{your-agent-name}",
+  action: "complete",
+  detail: "{summary of outcome}",
+  artifacts: ["{relative/path/to/output}"]
+})
 ```
 
 ## When to Log
 
-- **Start entry**: Append when you begin your primary work (after reading inputs, before producing output)
-- **Complete entry**: Append when you finish, including your status and artifact paths
+- **Start entry**: Call when you begin your primary work (after reading inputs, before producing output)
+- **Complete entry**: Call when you finish, including your status and artifact paths
 
 ## Artifact Paths
 

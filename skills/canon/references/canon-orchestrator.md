@@ -355,7 +355,7 @@ When `drive_flow` returns `{ action: "done" }`:
 
 ## Workspace Permissions
 
-You own: `board.json`, `session.json`, `progress.md`, `log.jsonl`
+You own: `board.json`, `session.json`, `progress.md`
 You never write to: `research/`, `decisions/`, `plans/`, `reviews/`, or agent artifact files.
 
 ## Context Management

@@ -16,7 +16,6 @@ Agents operate within a **branch-scoped workspace** at `.canon/workspaces/{branc
 ├── board.json                # Flow execution state (states, transitions, iterations)
 ├── board.json.bak            # Board backup — previous valid state for crash recovery
 ├── progress.md               # Append-only learnings across iterations
-├── log.jsonl                 # Chronological agent activity log
 ├── context.md                # Living shared context document
 ├── research/                 # Research findings
 ├── decisions/                # Design decisions with rationale
@@ -50,32 +49,23 @@ Example: `feature/add-auth` becomes `feature--add-auth`
 | Agent | Read | Write |
 |-------|------|-------|
 | **intake** | board.json, session.json (read-only for status) | — (no workspace writes; spawns orchestrator) |
-| **orchestrator** | board.json, session.json, flow templates | board.json, session.json, progress.md, log.jsonl |
-| **researcher** | templates/, session.json | research/, log.jsonl |
-| **architect** | research/, templates/, session.json, context.md | decisions/, plans/, log.jsonl, context.md |
-| **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md, log.jsonl |
-| **tester** | plans/{slug}/*-SUMMARY.md, context.md | plans/{slug}/TEST-REPORT.md, log.jsonl |
-| **security** | plans/{slug}/*-SUMMARY.md | plans/{slug}/SECURITY.md, log.jsonl |
-| **reviewer** | plans/{slug}/*-SUMMARY.md (post-Stage-2 cross-check only) | plans/{slug}/REVIEW.md, reviews/, log.jsonl |
-| **scribe** | plans/{slug}/*-SUMMARY.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md | plans/{slug}/CONTEXT-SYNC.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md, log.jsonl |
-| **refactorer** | reviews/, decisions/, context.md | log.jsonl |
-| **learner** | everything in workspace | notes/, log.jsonl |
+| **orchestrator** | board.json, session.json, flow templates | board.json, session.json, progress.md |
+| **researcher** | templates/, session.json | research/ |
+| **architect** | research/, templates/, session.json, context.md | decisions/, plans/, context.md |
+| **implementor** | plans/{slug}/{task}-PLAN.md, context.md, decisions/ | plans/{slug}/{task}-SUMMARY.md |
+| **tester** | plans/{slug}/*-SUMMARY.md, context.md | plans/{slug}/TEST-REPORT.md |
+| **security** | plans/{slug}/*-SUMMARY.md | plans/{slug}/SECURITY.md |
+| **reviewer** | plans/{slug}/*-SUMMARY.md (post-Stage-2 cross-check only) | plans/{slug}/REVIEW.md, reviews/ |
+| **scribe** | plans/{slug}/*-SUMMARY.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md | plans/{slug}/CONTEXT-SYNC.md, CLAUDE.md, context.md, .canon/CONVENTIONS.md |
+| **refactorer** | reviews/, decisions/, context.md | — |
+| **learner** | everything in workspace | notes/ |
 | **writer** | everything in workspace | notes/ |
 
 Key constraints:
 - **Build lock**: `.lock` prevents concurrent builds. Stale locks (>2 hours) are auto-removed.
 - **Board backup**: `board.json.bak` written before every update for crash recovery.
 - Only the orchestrator reads/writes `board.json`
-- All agents append to `log.jsonl`
-
-## Log Entry Format
-
-Every agent appends a JSON line to `log.jsonl` when starting or completing work:
-
-```json
-{"timestamp": "ISO-8601", "agent": "canon-researcher", "action": "start", "detail": "Codebase research for order-creation"}
-{"timestamp": "ISO-8601", "agent": "canon-researcher", "action": "complete", "detail": "Found 3 relevant patterns", "artifacts": ["research/codebase.md"]}
-```
+- All agents log activity via the `post_event` MCP tool (see workspace-logging.md)
 
 ## When to Write
 
