@@ -6,6 +6,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import type { IDriftStore } from "@domains/drift/drift-store.interface.ts";
 import type { Effect, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
@@ -57,6 +58,7 @@ export type ExecuteEffectsOpts = {
   artifacts: string[];
   projectDir: string;
   stateName?: string;
+  driftStore?: IDriftStore;
 };
 
 export async function executeEffects(
@@ -66,7 +68,7 @@ export async function executeEffects(
   const { workspace, artifacts, projectDir, stateName } = opts;
   if (!stateDef.effects?.length) return [];
 
-  const store = new DriftStore(projectDir);
+  const store: IDriftStore = opts.driftStore ?? new DriftStore(projectDir);
   const results: EffectResult[] = [];
 
   for (const effect of stateDef.effects) {
@@ -102,7 +104,7 @@ type ExecuteOneEffectOpts = {
 
 async function executeOneEffect(
   effect: Effect,
-  store: DriftStore,
+  store: IDriftStore,
   opts: ExecuteOneEffectOpts,
 ): Promise<EffectResult> {
   const { workspace, artifacts, projectDir, stateName, stateDef } = opts;
@@ -157,7 +159,7 @@ async function checkPostconditions(
 
 async function persistReview(
   effect: Effect,
-  store: DriftStore,
+  store: IDriftStore,
   workspace: string,
   artifacts: string[],
 ): Promise<EffectResult> {

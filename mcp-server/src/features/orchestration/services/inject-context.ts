@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import type { IKgQuery, IKgStore } from "@domains/knowledge-graph/kg-store.interface.ts";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
@@ -95,8 +96,8 @@ function capFilesByTier(filePaths: string[], workspace: string, warnings: string
 /** Build context lines for a single file from KG data. */
 function buildFileContextLines(
   filePath: string,
-  kgQuery: KgQuery,
-  kgStore: KgStore,
+  kgQuery: IKgQuery,
+  kgStore: IKgStore,
   insightMaps: ReturnType<typeof computeFileInsightMaps>,
 ): string[] {
   const lines: string[] = [];
@@ -156,8 +157,8 @@ async function resolveFileContextInjection(
   }
 
   try {
-    const kgQuery = new KgQuery(db);
-    const kgStore = new KgStore(db);
+    const kgQuery: IKgQuery = new KgQuery(db);
+    const kgStore: IKgStore = new KgStore(db);
 
     const freshnessMs = kgQuery.getKgFreshnessMs();
     if (freshnessMs !== null && freshnessMs > 3_600_000) {
