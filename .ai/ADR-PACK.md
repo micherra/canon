@@ -2097,6 +2097,246 @@ ADR-004 (flow validation — fragment schema), ADR-013 (`simulate_flow` — exec
 
 ---
 
+## ADR-025: Eval Scenario Library
+
+### Context
+
+ADR-023 captures golden fixtures from successful flows for regression testing — when a flow runs well, you checkpoint it and replay it to detect regressions. But this approach is reactive: you can only build fixtures from flows that have already succeeded, and the fixtures are tied to specific real codebases that may drift over time.
+
+There is no way to proactively test Canon against known tasks with known-correct outcomes before making changes. When you want to evaluate the impact of a flow configuration change, a new principle, or a refactored agent instruction, you need reproducible scenarios with ground truth — not golden output snapshots from past runs.
+
+A/B comparison is also currently impossible in a principled way. If you change `fast-path` to add a review gate, you can't measure whether outcomes improved. Current metrics track process (gate pass rates, iteration counts) but not outcomes (was the generated code actually correct?).
+
+This creates a gap: Canon has strong process observability (ADR-003, ADR-003a, ADR-015) and structural correctness guarantees (ADR-004, ADR-013), but no end-to-end outcome measurement against known-correct targets.
+
+### Decision
+
+Build an Eval Scenario Library: a collection of small, purpose-built seed repositories paired with YAML scenario definitions and oracle test suites. Scenarios define the task prompt Canon receives, the flow tier it should detect, and the ground truth conditions that must hold after Canon runs. A three-tier grader stack evaluates results deterministically (structural), cheaply (behavioral), and deeply (semantic). An A/B comparison protocol makes it possible to measure configuration changes.
+
+**Scenario format:**
+
+Each scenario is a YAML file in `.canon/eval/scenarios/`:
+
+```yaml
+id: add-email-validation
+description: "Add server-side email validation to the user registration endpoint"
+task: |
+  The /api/users/register endpoint accepts any string as an email address.
+  Add proper email validation that rejects malformed addresses with a 400 response.
+  Update the existing tests to cover the validation logic.
+expected_flow: fast-path
+seed_repo: seeds/express-user-api
+oracle_tests:
+  - src/__tests__/validation.test.ts
+principle_checks:
+  - thin-handlers
+  - errors-are-values
+graders:
+  - structural
+  - behavioral
+  - semantic
+timeout: 300000        # ms — abort the Canon run if it exceeds this
+max_cost: 0.50         # USD — abort if estimated token cost exceeds this
+tags:
+  - fast-path
+  - validation
+  - express
+```
+
+TypeScript type:
+
+```typescript
+interface EvalScenario {
+  id: string;
+  description: string;
+  task: string;                     // the prompt given to Canon (as if typed by a user)
+  expected_flow: string;            // flow tier Canon should auto-detect
+  seed_repo: string;                // path relative to .canon/eval/
+  oracle_tests: string[];           // test files in the seed repo, initially failing
+  principle_checks: string[];       // principle IDs to verify compliance against
+  graders: GraderType[];            // which graders to run
+  timeout: number;                  // ms
+  max_cost: number;                 // USD
+  tags: string[];
+}
+
+type GraderType = 'structural' | 'behavioral' | 'semantic';
+```
+
+**Seed repo structure:**
+
+Seed repos live in `.canon/eval/seeds/`. Each is a self-contained project realistic enough to be meaningful but small enough to run quickly. Oracle tests are present in the repo but initially failing — they encode ground truth that Canon's work must satisfy.
+
+```
+.canon/eval/
+  seeds/
+    express-user-api/
+      package.json
+      tsconfig.json
+      src/
+        routes/users.ts          # registration endpoint (deliberately missing validation)
+        __tests__/
+          users.test.ts          # existing tests (pass before Canon runs)
+          validation.test.ts     # oracle tests (fail before, must pass after)
+    pagination-bug/
+      ...
+    di-refactor/
+      ...
+  scenarios/
+    add-email-validation.yaml
+    fix-pagination-off-by-one.yaml
+    refactor-to-dependency-injection.yaml
+  results/                       # eval run outputs (gitignored or SQLite-backed per ADR-001)
+```
+
+Initial scenario set covers common flow tiers and failure modes:
+- `add-email-validation` — fast-path, new behavior in an existing endpoint
+- `fix-pagination-off-by-one` — fast-path, bug fix with regression test
+- `refactor-to-dependency-injection` — refactor tier, structural change without behavior change
+- `add-search-feature` — feature tier, new capability with multiple files
+- `migrate-jest-to-vitest` — migrate tier, toolchain change
+
+**Three-tier grader stack:**
+
+Graders run in sequence. Cheaper graders run first; semantic graders are opt-in.
+
+*Structural grader (no LLM — deterministic):*
+
+```typescript
+interface StructuralGraderResult {
+  oracle_tests_pass: boolean;       // did `npm test` pass in the seed repo post-run?
+  expected_flow_detected: boolean;  // did Canon auto-detect expected_flow?
+  required_artifacts_present: boolean; // SUMMARY.md, PLAN.md (if applicable), etc.
+  files_modified: string[];         // which files Canon touched
+  score: number;                    // 0–1
+}
+```
+
+Checks: oracle test suite passes, correct flow tier was selected, required artifact templates were produced (per ADR-010), no files outside the seed repo were modified.
+
+*Behavioral grader (light LLM — cheap structural checks):*
+
+```typescript
+interface BehavioralGraderResult {
+  spawn_sequence_correct: boolean;  // did agents spawn in expected order?
+  implementation_log_complete: boolean; // does SUMMARY.md have Self-Review section?
+  research_template_used: boolean;  // did researcher use research-finding template?
+  principle_compliance: Record<string, boolean>; // per principle_checks
+  score: number;                    // 0–1
+}
+```
+
+Checks: agent spawn sequence matches flow definition, implementation summary has required sections (Self-Review, Coverage Notes, Compliance Declaration), researcher artifacts use the research-finding template, principle compliance section covers all `principle_checks`. Uses a small LLM to parse free-text artifacts — cheap because it's structural extraction, not evaluation.
+
+*Semantic grader (heavier LLM — judge model):*
+
+```typescript
+interface SemanticGraderResult {
+  solution_correctness: number;     // 0–1: does it actually solve the stated problem?
+  code_quality: number;             // 0–1: beyond tests passing, is it well-structured?
+  over_engineering: number;         // 0–1 (lower is better): did it do more than asked?
+  judge_rationale: string;          // free-text explanation from judge model
+  score: number;                    // 0–1 weighted composite
+}
+```
+
+Uses a capable judge model (separate from the agent under evaluation) to assess whether the implementation genuinely solves the stated problem, not just passes oracle tests. Expensive — run sparingly, gated behind `graders: [semantic]` in the scenario definition and an explicit `--semantic` flag on the CLI.
+
+**A/B comparison protocol:**
+
+```typescript
+interface EvalRun {
+  id: string;
+  scenario_id: string;
+  config: EvalConfig;              // which flow, which principles, which agent instructions
+  started_at: string;
+  completed_at: string;
+  structural: StructuralGraderResult;
+  behavioral: BehavioralGraderResult;
+  semantic?: SemanticGraderResult;
+  canon_run_id: string;            // links back to the flow_run record (ADR-001)
+  cost_usd: number;
+  duration_ms: number;
+}
+
+interface EvalConfig {
+  flow_override?: string;          // force a specific flow tier (bypasses auto-detection)
+  principle_set?: string[];        // which principles are active
+  agent_instruction_hash: string;  // hash of agent instruction files at time of run
+  pipeline_hash: string;           // hash of prompt pipeline config at time of run
+}
+
+interface EvalComparison {
+  scenario_id: string;
+  run_a: EvalRun;
+  run_b: EvalRun;
+  structural_delta: number;        // score_b - score_a
+  behavioral_delta: number;
+  semantic_delta?: number;
+  winner: 'a' | 'b' | 'tie';
+  confidence: 'high' | 'medium' | 'low';  // based on number of repeated runs
+}
+```
+
+LLM non-determinism means a single run per scenario is unreliable for comparison. The comparison protocol runs each configuration N times (default: 3) and uses the median score. `confidence` reflects N: high (≥5 runs), medium (3–4 runs), low (1–2 runs).
+
+**Eval execution:**
+
+`canon eval run` (CLI) and/or a `run_eval` MCP tool:
+
+1. Resolve scenario(s) from `.canon/eval/scenarios/`
+2. Clone the seed repo into a temp worktree (isolated per ADR-014)
+3. Run the Canon flow against it as if the task were typed by a user
+4. Run the grader stack in order: structural → behavioral → semantic (if configured)
+5. Store `EvalRun` result in `.canon/eval/results/` or SQLite (ADR-001)
+6. On `--compare`: run both configs, produce `EvalComparison`
+
+**Eval report:**
+
+```typescript
+interface EvalReport {
+  generated_at: string;
+  scenarios_run: number;
+  scenarios_passed: number;         // structural score = 1.0
+  scenarios_partial: number;        // structural score > 0, < 1.0
+  scenarios_failed: number;         // structural score = 0
+  per_scenario: EvalRun[];
+  per_tag: Record<string, { passed: number; failed: number; avg_score: number }>;
+  per_flow: Record<string, { passed: number; failed: number; avg_score: number }>;
+  cost_total_usd: number;
+  duration_total_ms: number;
+}
+```
+
+`canon eval report` aggregates results from the last N runs, with per-scenario, per-tag, and per-flow breakdowns.
+
+### Consequences
+
+Positive: reproducible end-to-end testing against known-correct outcomes; A/B comparison with statistical backing enables principled configuration changes; regression detection independent of golden fixtures (ADR-023 covers existing flows, scenarios cover known problem classes); seed repos are version-controlled and reusable across teams; structural grader is cheap and fast for CI; oracle tests make ground truth explicit and auditable.
+
+Negative: scenario authoring is labor-intensive — each scenario requires a seed repo with realistic-but-small code and carefully designed oracle tests; seed repos need maintenance as Canon's capabilities grow (a scenario too easy to pass stops being discriminating); running full eval suites costs API tokens even without semantic grader (mitigated by `max_cost` limits and tag-based filtering); LLM non-determinism in agent behavior requires multiple runs per scenario for reliable A/B comparison, multiplying cost; semantic grader requires a capable judge model which adds latency and cost.
+
+### Dependencies
+
+ADR-023 (complementary — golden fixtures for post-hoc regression, scenarios for proactive outcome measurement). ADR-001 (SQLite store for eval results — soft dependency, JSON files acceptable initially). ADR-015 (transcripts for debugging failed evals — soft dependency, aids root cause analysis when a scenario fails). ADR-004 (flow validation ensures scenarios target valid flows). ADR-014 (worktree isolation for seed repo clones during eval runs).
+
+### Implementation
+
+- Define `EvalScenario`, `EvalRun`, `EvalConfig`, `EvalComparison`, `EvalReport` types
+- Create `.canon/eval/seeds/` directory with 3–5 initial seed repos
+- Create `.canon/eval/scenarios/` with corresponding YAML scenario definitions
+- Implement structural grader: oracle test runner, artifact presence checks, flow detection verification
+- Implement behavioral grader: agent spawn sequence check, artifact template compliance, principle compliance section parsing
+- Implement semantic grader: judge model prompt, score extraction, rationale capture
+- Implement `canon eval run` CLI command with `--scenario`, `--tag`, `--compare`, `--semantic`, `--runs N` flags
+- Implement `run_eval` MCP tool for orchestrator-triggered evaluation
+- Implement A/B comparison mode with median scoring across N runs
+- Implement `canon eval report` with per-scenario, per-tag, per-flow breakdowns
+- Store results in `.canon/eval/results/` (JSON initially, SQLite migration via ADR-001)
+- Document scenario authoring guide: seed repo requirements, oracle test design, grader configuration
+
+---
+
 ## Adoption Order
 
 | Order | ADR | Rationale |
@@ -2126,6 +2366,7 @@ ADR-004 (flow validation — fragment schema), ADR-013 (`simulate_flow` — exec
 | 23 | 022 Cost Budgets | After 003a (agent metrics), 009 (drive_flow), 004 (flow validation for budget schema) |
 | 24 | 023 Agent Evaluation | After 010 (structured output), 013 (simulation), 015 (transcripts) |
 | 25 | 024 Fragment Testing | After 004 (fragment schema), 013 (simulate_flow), 011 (typed ports) |
+| 26 | 025 Eval Scenario Library | After 023 (evaluation baseline), 004 (flow validation for scenario targets), 014 (worktree isolation for seed repo runs); soft dep on 001 (SQLite for results), 015 (transcripts for debugging) |
 
 **First cohort (foundation):** ADRs 001, 002, 003, 004, 005, 015 — can progress in parallel once 001 schema is defined. ADR 015 (transcripts) slots in early because it's low-effort and unblocks the learning pipeline.
 
@@ -2135,7 +2376,7 @@ ADR-004 (flow validation — fragment schema), ADR-013 (`simulate_flow` — exec
 
 **Fourth cohort (automation + history + maintenance):** ADRs 016 (auto-learn), 012 (conditional states), 019 (execution history), 020 (background janitor) — these depend on the full stack being stable. Auto-learn needs transcripts (015), background jobs (007), and tool restrictions (014). Conditional states need the server-side driver (009). Execution history needs structured output (010), transcripts (015), and learner provenance (016). The janitor consolidates inline housekeeping from 016 and 019 into an asynchronous background process, keeping `complete_flow` fast.
 
-**Fifth cohort (intelligence):** ADRs 021 (agent memory), 023 (agent evaluation) — these require the full pipeline to be stable and instrumented. Agent memory needs the KG, prompt pipeline, structured output, and context assembly layers. Agent evaluation needs structured output, simulation, and transcripts. Both represent the shift from "agents that work" to "agents that learn and improve."
+**Fifth cohort (intelligence):** ADRs 021 (agent memory), 023 (agent evaluation), 025 (eval scenario library) — these require the full pipeline to be stable and instrumented. Agent memory needs the KG, prompt pipeline, structured output, and context assembly layers. Agent evaluation needs structured output, simulation, and transcripts. Eval scenarios extend the evaluation layer from post-hoc golden fixtures to proactive outcome measurement and A/B comparison. All three represent the shift from "agents that work" to "agents that learn and improve."
 
 ## Decision Summary
 
@@ -2165,3 +2406,4 @@ ADR-004 (flow validation — fragment schema), ADR-013 (`simulate_flow` — exec
 - Flow-level cost budgets: optional `budget` block in flow definitions with per-flow and per-state token limits, evaluated by `drive_flow` at state boundaries, warning injection at threshold, HITL breakpoint at limit
 - Deterministic agent evaluation: golden fixture capture from successful flows, schema-level diffing of structured outputs, regression detection for agent instruction and pipeline changes
 - Fragment testing: `fragment_test` blocks in fragment frontmatter with scenario-based harnesses, executed via `simulate_flow`, unit test layer for flow composition complementing full-flow integration simulation
+- Eval Scenario Library: purpose-built seed repos with oracle tests as ground truth; three-tier grader stack (structural/deterministic, behavioral/light-LLM, semantic/judge-model); A/B comparison protocol with median scoring across N runs for statistically grounded configuration evaluation; proactive outcome measurement complementing ADR-023's post-hoc regression fixtures
