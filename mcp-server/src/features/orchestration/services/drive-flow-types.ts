@@ -95,7 +95,7 @@ export type DriveFlowInput = {
   /** Optional result from the most recently completed agent */
   result?: {
     state_id: string;
-    status: string;
+    status?: string;
     artifacts?: string[];
     parallel_results?: Array<{
       item: string;
@@ -147,3 +147,6 @@ export const DriveFlowInputSchema = z.object({
   result: DriveFlowResultSchema.optional(),
   workspace: z.string().min(1),
 });
+
+/** Zod-parsed (post-default) shape of DriveFlowInput — status is always string after Zod fills the default. */
+export type DriveFlowParsed = z.infer<typeof DriveFlowInputSchema>;

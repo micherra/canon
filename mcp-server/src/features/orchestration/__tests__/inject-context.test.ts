@@ -38,6 +38,7 @@ const {
   };
 });
 
+
 vi.mock("@domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));
@@ -624,5 +625,129 @@ describe("resolveContextInjections — file_context source", () => {
     // But still returns a value
     expect(result.variables.FILE_CONTEXT).toBeDefined();
     expect(result.variables.FILE_CONTEXT).toContain("src/api/handler.ts");
+  });
+});
+
+// handoff injection source
+
+describe("resolveContextInjections — handoff source", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "inject-handoff-test-"));
+    // Restore the real existsSync — the file_context tests override the mock's implementation
+    // in their beforeEach, and vi.clearAllMocks() does not restore implementations.
+    // We use vi.importActual to get the real function and reset the mock here.
+    const { existsSync: realExistsSync } =
+      await vi.importActual<typeof import("node:fs")>("node:fs");
+    vi.mocked(existsSync).mockImplementation(realExistsSync);
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { force: true, recursive: true });
+  });
+
+  it("reads and concatenates .md files from handoffs/ directory", async () => {
+    const handoffsDir = join(tmpDir, "handoffs");
+    await mkdir(handoffsDir);
+    await writeFile(join(handoffsDir, "alpha.md"), "Alpha content.");
+    await writeFile(join(handoffsDir, "beta.md"), "Beta content.");
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "HANDOFF", from: "handoff" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings).toHaveLength(0);
+    expect(result.variables.HANDOFF).toContain("Alpha content.");
+    expect(result.variables.HANDOFF).toContain("Beta content.");
+    // Files should be presented with ## headers
+    expect(result.variables.HANDOFF).toContain("## alpha");
+    expect(result.variables.HANDOFF).toContain("## beta");
+  });
+
+  it("filters by section (filename match, case-insensitive) when section is specified", async () => {
+    const handoffsDir = join(tmpDir, "handoffs");
+    await mkdir(handoffsDir);
+    await writeFile(join(handoffsDir, "research.md"), "Research content.");
+    await writeFile(join(handoffsDir, "plan.md"), "Plan content.");
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [
+      { as: "HANDOFF", from: "handoff", section: "Research" },
+    ];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings).toHaveLength(0);
+    expect(result.variables.HANDOFF).toContain("Research content.");
+    expect(result.variables.HANDOFF).not.toContain("Plan content.");
+  });
+
+  it("returns warning when handoffs/ directory is empty (no .md files)", async () => {
+    const handoffsDir = join(tmpDir, "handoffs");
+    await mkdir(handoffsDir);
+    // No files in dir
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "HANDOFF", from: "handoff" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings.some((w) => w.includes("handoff"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("HANDOFF");
+  });
+
+  it("returns warning when handoffs/ directory does not exist", async () => {
+    // No handoffs/ dir created
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "HANDOFF", from: "handoff" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings.some((w) => w.includes("handoff"))).toBe(true);
+    expect(result.variables).not.toHaveProperty("HANDOFF");
+  });
+
+  it("ignores non-.md files in handoffs/ directory", async () => {
+    const handoffsDir = join(tmpDir, "handoffs");
+    await mkdir(handoffsDir);
+    await writeFile(join(handoffsDir, "notes.txt"), "Text file content.");
+    await writeFile(join(handoffsDir, "data.json"), '{"key": "value"}');
+    await writeFile(join(handoffsDir, "summary.md"), "Markdown content.");
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "HANDOFF", from: "handoff" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    expect(result.warnings).toHaveLength(0);
+    expect(result.variables.HANDOFF).toContain("Markdown content.");
+    expect(result.variables.HANDOFF).not.toContain("Text file content.");
+    expect(result.variables.HANDOFF).not.toContain('"key"');
+  });
+
+  it("skips whole files that would push total over 50KB and adds a warning", async () => {
+    const handoffsDir = join(tmpDir, "handoffs");
+    await mkdir(handoffsDir);
+    // Write a file that fills ~49KB
+    const bigContent = "x".repeat(49 * 1024);
+    await writeFile(join(handoffsDir, "big.md"), bigContent);
+    // Write a second file that would push it over 50KB
+    const smallContent = "y".repeat(2 * 1024);
+    await writeFile(join(handoffsDir, "overflow.md"), smallContent);
+
+    const board = makeBoard({});
+    const injections: ContextInjection[] = [{ as: "HANDOFF", from: "handoff" }];
+
+    const result = await resolveContextInjections(injections, board, tmpDir);
+
+    // Should include the big file (fits under 50KB)
+    expect(result.variables.HANDOFF).toContain(bigContent.slice(0, 10));
+    // The overflow file should be skipped
+    expect(result.variables.HANDOFF).not.toContain("y".repeat(10));
+    // A warning should be emitted for the skipped file
+    expect(result.warnings.some((w) => w.includes("overflow") && w.includes("50KB"))).toBe(true);
   });
 });

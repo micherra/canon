@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ContextInjection } from "@domains/flows/flow-definition-schemas.ts";
@@ -7,6 +7,7 @@ import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { CANON_DIR, CANON_FILES } from "@shared/constants.ts";
+import { isPathContained } from "@shared/lib/worktree-guard.ts";
 import { getItemCountCap } from "./context-budget.ts";
 import { buildKgFileEntries, formatKgFileContext } from "./kg-context-formatter.ts";
 
@@ -34,6 +35,16 @@ export async function resolveContextInjections(
     if (injection.from === "file_context") {
       // biome-ignore lint/performance/noAwaitInLoops: each injection resolves independently; refactoring to Promise.all requires restructuring hitl detection
       const resolved = await resolveFileContextInjection(injection, board, workspace);
+      warnings.push(...resolved.warnings);
+      if (resolved.value !== undefined) {
+        variables[injection.as] = resolved.value;
+      }
+      continue;
+    }
+
+    if (injection.from === "handoff") {
+      // biome-ignore lint/performance/noAwaitInLoops: each injection resolves independently; refactoring to Promise.all requires restructuring hitl detection
+      const resolved = await resolveHandoffInjection(injection, workspace);
       warnings.push(...resolved.warnings);
       if (resolved.value !== undefined) {
         variables[injection.as] = resolved.value;
@@ -143,6 +154,100 @@ async function resolveFileContextInjection(
       // ignore close errors
     }
   }
+}
+
+const HANDOFF_CAP_BYTES = 50 * 1024; // 50KB
+
+/**
+ * Resolve a handoff injection by reading .md files from {workspace}/handoffs/.
+ *
+ * The `injection.section` field, when present, is used as a FILENAME filter:
+ * it matches files whose basename (without .md extension) equals the section name
+ * (case-insensitive). This is intentionally different from resolveStateInjection,
+ * which uses extractSection() to filter by markdown heading within file content.
+ * Do NOT use extractSection() here — section = filename, not heading.
+ *
+ * Files are concatenated with "## {basename}\n\n{content}" headers.
+ * A 50KB cap is applied with whole-file granularity: if adding a file would
+ * exceed 50KB, that file is skipped (not truncated) and a warning is emitted.
+ * Remaining files continue to be checked after a skip (a smaller file may still fit).
+ *
+ * All fs errors produce warnings; never throws.
+ */
+async function resolveHandoffInjection(
+  injection: ContextInjection,
+  workspace: string,
+): Promise<{ value?: string; warnings: string[] }> {
+  const warnings: string[] = [];
+  const handoffsDir = path.resolve(workspace, "handoffs");
+
+  // Validate path is inside workspace
+  if (!isPathContained(workspace, handoffsDir)) {
+    warnings.push("handoff: handoffs/ path escapes workspace — skipping injection");
+    return { warnings };
+  }
+
+  // Check directory exists
+  if (!existsSync(handoffsDir)) {
+    warnings.push("handoff: handoffs/ directory not found — skipping injection");
+    return { warnings };
+  }
+
+  // Read directory entries, filtering to .md files only
+  let entries: string[];
+  try {
+    const all = await readdir(handoffsDir);
+    entries = all.filter((f) => f.endsWith(".md")).sort();
+  } catch {
+    warnings.push("handoff: failed to read handoffs/ directory — skipping injection");
+    return { warnings };
+  }
+
+  // Apply section filter (filename match, NOT markdown heading extraction).
+  // injection.section matches basename without extension, case-insensitive.
+  if (injection.section) {
+    const sectionLower = injection.section.toLowerCase();
+    entries = entries.filter((f) => path.basename(f, ".md").toLowerCase() === sectionLower);
+  }
+
+  if (entries.length === 0) {
+    warnings.push("handoff: no matching .md files in handoffs/ — skipping injection");
+    return { warnings };
+  }
+
+  // Read each file and concatenate with 50KB whole-file cap.
+  // Skip files that would push total over cap; continue checking remaining files.
+  const parts: string[] = [];
+  let totalBytes = 0;
+
+  for (const filename of entries) {
+    const filePath = path.join(handoffsDir, filename);
+    let content: string;
+    try {
+      content = await readFile(filePath, "utf-8");
+    } catch {
+      warnings.push(`handoff: failed to read "${filename}" — skipping`);
+      continue;
+    }
+
+    const basename = path.basename(filename, ".md");
+    const chunk = `## ${basename}\n\n${content}`;
+    const chunkBytes = Buffer.byteLength(chunk, "utf-8");
+
+    if (totalBytes + chunkBytes > HANDOFF_CAP_BYTES) {
+      warnings.push(`handoff: ${filename} skipped — 50KB injection cap reached`);
+      continue;
+    }
+
+    parts.push(chunk);
+    totalBytes += chunkBytes;
+  }
+
+  if (parts.length === 0) {
+    return { warnings };
+  }
+
+  return { value: parts.join("\n\n"), warnings };
 }
 
 async function resolveStateInjection(

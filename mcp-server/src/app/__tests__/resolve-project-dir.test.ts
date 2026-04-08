@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { resolveProjectDir } from "../index.ts";
+import { resolveProjectDir } from "../resolve-project-dir.ts";
 
 describe("resolveProjectDir", () => {
   const cwd = "/fallback/cwd";
