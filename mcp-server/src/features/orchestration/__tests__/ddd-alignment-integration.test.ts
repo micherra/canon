@@ -102,12 +102,12 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
       resolve(SRC, "domains/workspaces/execution-store.interface.ts"),
       "utf-8",
     );
-    expect(content).toMatch(/export interface IExecutionStore/);
+    expect(content).toMatch(/export (?:interface|type) IExecutionStore/);
   });
 
   it("IDriftStore is exported from its interface file", () => {
     const content = readFileSync(resolve(SRC, "domains/drift/drift-store.interface.ts"), "utf-8");
-    expect(content).toMatch(/export interface IDriftStore/);
+    expect(content).toMatch(/export (?:interface|type) IDriftStore/);
   });
 
   it("IKgStore and IKgQuery are exported from their interface file", () => {
@@ -115,8 +115,8 @@ describe("repository interfaces — correct layer placement (dc-03)", () => {
       resolve(SRC, "domains/knowledge-graph/kg-store.interface.ts"),
       "utf-8",
     );
-    expect(content).toMatch(/export interface IKgStore/);
-    expect(content).toMatch(/export interface IKgQuery/);
+    expect(content).toMatch(/export (?:interface|type) IKgStore/);
+    expect(content).toMatch(/export (?:interface|type) IKgQuery/);
   });
 
   it("effects.ts imports IDriftStore from @domains/drift/ (not directly from @platform/)", () => {
