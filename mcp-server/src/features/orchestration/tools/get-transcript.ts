@@ -11,11 +11,12 @@
  */
 
 import { readFile, realpath } from "node:fs/promises";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
 import { type TranscriptEntry, TranscriptEntrySchema } from "@domains/flows/event-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { isPathContained } from "@shared/lib/worktree-guard.ts";
 
 export type GetTranscriptInput = {
   workspace: string;
@@ -39,11 +40,6 @@ export type GetTranscriptResult = {
  * Returns a typed error when no path is recorded or the file does not exist.
  * Corrupt JSONL lines are skipped silently (best-effort — large transcripts should not fail entirely).
  */
-/** Validate that a resolved path is contained within the transcripts directory. */
-function isPathContained(containerDir: string, targetPath: string): boolean {
-  const rel = relative(containerDir, targetPath);
-  return !rel.startsWith("..") && resolve(containerDir, rel) === targetPath;
-}
 
 /** Resolve the real filesystem path for the transcript, guarding against traversal and symlink escapes. */
 async function resolveTranscriptRealPath(
