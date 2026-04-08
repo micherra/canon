@@ -105,7 +105,7 @@ When in doubt between tiers, prefer the higher tier. Proceed immediately — don
 | Writer | `canon:canon-writer` | Principle authoring |
 | Learner | `canon:canon-learner` | Pattern analysis |
 
-**Isolation requirement:** Every `Agent` spawn MUST include `isolation: "worktree"`. No exceptions — even single-agent spawns.
+**Isolation requirement:** Every `Agent` spawn MUST include `isolation: "worktree"` — except when the SpawnRequest carries a `worktree_path`. Wave task SpawnRequests include `worktree_path` pointing to Canon's worktree; the orchestrator spawns those agents without Agent tool isolation so they work directly in Canon's worktree.
 
 ## Agent Spawn Error Handling
 

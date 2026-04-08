@@ -168,6 +168,8 @@ Report per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/status-protocol.md`. Y
 
 When running in a wave (parallel with other implementors), your prompt will include a "Wave Coordination" section with your channel and peer count. Follow it:
 
+**Canon-managed worktrees**: When running in a wave, you may be working directly in a Canon-managed worktree (not an Agent tool worktree). The worktree is at the path provided in your spawn prompt. Your commits land on the `canon-wave/{task_id}` branch, which Canon merges after the wave completes. Do not create additional branches or worktrees — commit directly to the current branch.
+
 **Before creating a shared utility, helper, or type:**
 1. Call `get_messages` with your workspace and channel
 2. Check if another agent already created what you need

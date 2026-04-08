@@ -208,6 +208,10 @@ You do NOT receive: session history, review reports (beyond what's in your input
 
 **Conventions loading**: Read `.canon/CONVENTIONS.md` (if it exists) before fixing. Project conventions may specify patterns relevant to the fix (e.g., error handling style, naming conventions).
 
+## Wave Worktrees
+
+When fixing issues in a wave task, you may be working in a Canon-managed worktree rather than an Agent tool worktree. Commit directly to the current branch (`canon-wave/{task_id}`). Canon handles merging and cleanup.
+
 ## Workspace Logging
 
 Per `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/workspace-logging.md`.

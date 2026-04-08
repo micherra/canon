@@ -90,7 +90,7 @@ drive_flow({ workspace, flow: resolved_flow })
 
 **`{ action: "spawn" }`**
 
-- **Every `Agent` spawn MUST include `isolation: "worktree"`.** No exceptions.
+- **Agent isolation**: When a SpawnRequest has `worktree_path`, the agent works directly in that directory — spawn **without** `isolation: "worktree"`. For all other spawns, include `isolation: "worktree"`. Wave tasks always have `worktree_path` (Canon creates the worktree); non-wave tasks rely on the Agent tool's own worktree isolation.
 - Spawn each agent in `requests[]` using the Agent tool. For wave tasks (requests with `worktree_path`), spawn all concurrently.
 - After each agent completes, capture its result to a transcript file at `{workspace}/transcripts/{state_id}--{agent_type}--{ISO-timestamp}.jsonl` (JSONL entry: `role: "assistant"`, `content`, `timestamp`, `turn_number: 1`). This is best-effort — a write failure must be logged but must not abort the flow.
 - Call `drive_flow({ workspace, flow: resolved_flow, result: { state_id, status, artifacts, metrics } })`.
