@@ -98,10 +98,7 @@ export async function writeDesignBrief(
   const arrayCheck = WriteDesignBriefArraySchema.safeParse(input);
   if (!arrayCheck.success) {
     const field = arrayCheck.error.issues[0]?.path[0] ?? "array field";
-    return toolError(
-      "INVALID_INPUT",
-      `${String(field)} exceeds maximum allowed length`,
-    );
+    return toolError("INVALID_INPUT", `${String(field)} exceeds maximum allowed length`);
   }
 
   if (!SLUG_PATTERN.test(input.slug)) {

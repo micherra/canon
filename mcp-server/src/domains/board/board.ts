@@ -105,7 +105,6 @@ export function enterState(board: Board, stateId: string): BoardResult {
   }
 
   return {
-    ok: true,
     board: {
       ...board,
       current_state: stateId,
@@ -113,6 +112,7 @@ export function enterState(board: Board, stateId: string): BoardResult {
       last_updated: now,
       states: newStates,
     },
+    ok: true,
   };
 }
 
@@ -150,7 +150,6 @@ export function completeState(
   }
 
   return {
-    ok: true,
     board: {
       ...board,
       last_updated: now,
@@ -159,6 +158,7 @@ export function completeState(
         [stateId]: updated,
       },
     },
+    ok: true,
   };
 }
 

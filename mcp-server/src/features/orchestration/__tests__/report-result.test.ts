@@ -1237,9 +1237,7 @@ describe("validateRequiredHandoffs — symlink guard", () => {
 // Required handoffs — non-blocking warnings (ADR-018)
 
 describe("reportResult — required_handoffs validation", () => {
-  function makeFlowWithHandoffs(
-    handoffs: Array<{ name: string; type: string }>,
-  ): FlowType {
+  function makeFlowWithHandoffs(handoffs: Array<{ name: string; type: string }>): FlowType {
     return makeMinimalFlow({
       states: {
         build: {
@@ -1375,6 +1373,6 @@ describe("reportResult — required_handoffs validation", () => {
     assertOk(result);
 
     // When no issues, warnings must be absent (not empty array)
-    expect(Object.prototype.hasOwnProperty.call(result, "warnings")).toBe(false);
+    expect(Object.hasOwn(result, "warnings")).toBe(false);
   });
 });

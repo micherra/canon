@@ -297,7 +297,8 @@ describe("ctx-09 integration — flow YAML inject_context declarations", () => {
     // fast-path has a single-agent execute or implement state
     // Find a state with the implementor agent
     const implementorState = Object.values(flow.states).find(
-      (state) => state.type !== "terminal" && "agent" in state && state.agent === "canon-implementor",
+      (state) =>
+        state.type !== "terminal" && "agent" in state && state.agent === "canon-implementor",
     );
 
     expect(implementorState).toBeDefined();
@@ -381,7 +382,9 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
       return String(p).endsWith("knowledge-graph.db");
     });
     mockExecutionStore.getSession.mockReturnValue({ tier: "medium" });
-    vi.mocked(getExecutionStore).mockReturnValue(mockExecutionStore as unknown as ReturnType<typeof getExecutionStore>);
+    vi.mocked(getExecutionStore).mockReturnValue(
+      mockExecutionStore as unknown as ReturnType<typeof getExecutionStore>,
+    );
   });
 
   afterEach(() => {
@@ -711,9 +714,7 @@ describe("ctx-09 backward compatibility — existing inject_context not disturbe
     // explore has no implement state with file_context
     const implementorStates = Object.entries(flow.states).filter(
       ([, state]) =>
-        state.type !== "terminal" &&
-        "agent" in state &&
-        state.agent === "canon-implementor",
+        state.type !== "terminal" && "agent" in state && state.agent === "canon-implementor",
     );
     // explore has no implementor states — or if it does, they don't have file_context
     for (const [, state] of implementorStates) {

@@ -156,7 +156,10 @@ describe("isPathInWorktree", () => {
   });
 
   it("returns generic error when both file and parent directory do not exist", async () => {
-    const result = await isPathInWorktree(join(worktree, "no-such-dir", "no-such-file.txt"), worktree);
+    const result = await isPathInWorktree(
+      join(worktree, "no-such-dir", "no-such-file.txt"),
+      worktree,
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error_code).toBe("INVALID_INPUT");

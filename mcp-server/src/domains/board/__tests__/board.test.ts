@@ -509,10 +509,10 @@ describe("accumulateCannotFix", () => {
 
     const items = result.iterations.review.cannot_fix ?? [];
     expect(items).toHaveLength(4); // 2 principles x 2 files
-    expect(items).toContainEqual({ principle_id: "p-001", file_path: "/file-a.ts" });
-    expect(items).toContainEqual({ principle_id: "p-001", file_path: "/file-b.ts" });
-    expect(items).toContainEqual({ principle_id: "p-002", file_path: "/file-a.ts" });
-    expect(items).toContainEqual({ principle_id: "p-002", file_path: "/file-b.ts" });
+    expect(items).toContainEqual({ file_path: "/file-a.ts", principle_id: "p-001" });
+    expect(items).toContainEqual({ file_path: "/file-b.ts", principle_id: "p-001" });
+    expect(items).toContainEqual({ file_path: "/file-a.ts", principle_id: "p-002" });
+    expect(items).toContainEqual({ file_path: "/file-b.ts", principle_id: "p-002" });
   });
 
   it("deduplicates against existing items", () => {

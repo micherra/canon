@@ -8,7 +8,7 @@
  *     smaller-file-fits-after-large-skip, malformed meta JSON, multiple mixed handoffs
  */
 
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Board } from "@domains/flows/board-state-schemas.ts";
@@ -111,9 +111,7 @@ describe("ADR-018 integration: writeResearchSynthesis → handoff injection", ()
     // Task adr018-write: researcher writes synthesis
     const writeResult = await writeResearchSynthesis({
       affected_subsystems: ["orchestration"],
-      key_findings: [
-        { confidence: "high", finding: "Handoffs are stored in handoffs/ directory" },
-      ],
+      key_findings: [{ confidence: "high", finding: "Handoffs are stored in handoffs/ directory" }],
       open_questions: ["Does section filtering work cross-tool?"],
       risk_areas: [{ area: "Backward compat", severity: "low" }],
       slug: "adr-018",
@@ -167,9 +165,7 @@ describe("ADR-018 integration: writeResearchSynthesis → handoff injection", ()
     await writeFile(join(workspace, "handoffs", "alpha.md"), "## Beta\nBeta heading content.");
 
     // section: "Beta" should NOT match — the filename is "alpha", not "beta"
-    const injections: ContextInjection[] = [
-      { as: "OUTPUT", from: "handoff", section: "Beta" },
-    ];
+    const injections: ContextInjection[] = [{ as: "OUTPUT", from: "handoff", section: "Beta" }];
     const result = await resolveContextInjections(injections, board, workspace);
 
     // Should warn (no matching filename) and not inject
@@ -189,10 +185,14 @@ describe("ADR-018 integration: writeDesignBrief → required_handoffs validation
     // Architect writes design brief
     const writeResult = await writeDesignBrief({
       constraints: ["Must not break existing flows"],
-      file_targets: [{ action: "modify", path: "src/features/orchestration/tools/report-result.ts" }],
+      file_targets: [
+        { action: "modify", path: "src/features/orchestration/tools/report-result.ts" },
+      ],
       slug: "adr-018",
       task_id: "adr018-02",
-      test_expectations: [{ description: "validateRequiredHandoffs returns [] for valid handoffs" }],
+      test_expectations: [
+        { description: "validateRequiredHandoffs returns [] for valid handoffs" },
+      ],
       workspace,
     });
     assertOk(writeResult);

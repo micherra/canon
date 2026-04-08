@@ -38,7 +38,6 @@ const {
   };
 });
 
-
 vi.mock("@domains/workspaces/execution-store.ts", () => ({
   getExecutionStore: vi.fn(() => mockStore),
 }));

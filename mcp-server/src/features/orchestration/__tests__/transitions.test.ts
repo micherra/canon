@@ -194,10 +194,7 @@ describe("isStuck", () => {
     });
 
     it("returns false when current pairs become empty (tests now passing — progress was made)", () => {
-      const history = [
-        { pairs: [{ file: "a.ts", test: "a.test.ts" }] },
-        { pairs: [] },
-      ];
+      const history = [{ pairs: [{ file: "a.ts", test: "a.test.ts" }] }, { pairs: [] }];
       expect(isStuck(history, "same_file_test")).toBe(false);
     });
   });
