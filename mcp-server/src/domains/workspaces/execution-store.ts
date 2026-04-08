@@ -780,6 +780,8 @@ export class ExecutionStore {
       case "same_file_test": {
         const currPairs = (currData.pairs ?? []) as unknown[];
         const prevPairs = (prevData.pairs ?? []) as unknown[];
+        // An empty failing-file set means all tests are passing — never treat as stuck.
+        if (currPairs.length === 0) return false;
         return unorderedEqual(currPairs, prevPairs);
       }
       case "same_status":

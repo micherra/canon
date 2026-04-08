@@ -185,6 +185,21 @@ describe("isStuck", () => {
       ];
       expect(isStuck(history, "same_file_test")).toBe(false);
     });
+
+    it("returns false when both iterations have empty pairs (all_passing result should not be stuck)", () => {
+      // Bug: empty sets were incorrectly treated as stuck because Array.every()
+      // returns true vacuously for empty arrays.
+      const history = [{ pairs: [] }, { pairs: [] }];
+      expect(isStuck(history, "same_file_test")).toBe(false);
+    });
+
+    it("returns false when current pairs become empty (tests now passing — progress was made)", () => {
+      const history = [
+        { pairs: [{ file: "a.ts", test: "a.test.ts" }] },
+        { pairs: [] },
+      ];
+      expect(isStuck(history, "same_file_test")).toBe(false);
+    });
   });
 
   describe("same_status", () => {
