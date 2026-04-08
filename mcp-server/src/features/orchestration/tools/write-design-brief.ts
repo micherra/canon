@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { z } from "zod";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 function escapeMdCell(value: string): string {
@@ -33,6 +34,14 @@ export type WriteDesignBriefResult = {
 };
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+const WriteDesignBriefArraySchema = z.object({
+  constraints: z.array(z.unknown()).max(100),
+  decisions_referenced: z.array(z.unknown()).max(100).optional(),
+  dependencies: z.array(z.unknown()).max(100).optional(),
+  file_targets: z.array(z.unknown()).max(200),
+  test_expectations: z.array(z.unknown()).max(100),
+});
 
 function appendOptionalList(lines: string[], heading: string, items?: string[]): void {
   if (items && items.length > 0) {
@@ -86,6 +95,15 @@ function generateMarkdown(input: WriteDesignBriefInput): string {
 export async function writeDesignBrief(
   input: WriteDesignBriefInput,
 ): Promise<ToolResult<WriteDesignBriefResult>> {
+  const arrayCheck = WriteDesignBriefArraySchema.safeParse(input);
+  if (!arrayCheck.success) {
+    const field = arrayCheck.error.issues[0]?.path[0] ?? "array field";
+    return toolError(
+      "INVALID_INPUT",
+      `${String(field)} exceeds maximum allowed length`,
+    );
+  }
+
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
       "INVALID_INPUT",

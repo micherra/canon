@@ -142,6 +142,115 @@ describe("writeResearchSynthesis — happy path", () => {
   });
 });
 
+describe("writeResearchSynthesis — array .max() constraints", () => {
+  it("returns INVALID_INPUT when key_findings exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
+
+    const result = await writeResearchSynthesis(
+      makeInput({
+        key_findings: Array.from({ length: 101 }, (_, i) => ({
+          confidence: "low" as const,
+          finding: `Finding ${i}`,
+        })),
+        workspace: tmpDir,
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("key_findings");
+    }
+  });
+
+  it("returns INVALID_INPUT when risk_areas exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
+
+    const result = await writeResearchSynthesis(
+      makeInput({
+        risk_areas: Array.from({ length: 101 }, (_, i) => ({
+          area: `Area ${i}`,
+          severity: "low" as const,
+        })),
+        workspace: tmpDir,
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("risk_areas");
+    }
+  });
+
+  it("returns INVALID_INPUT when open_questions exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
+
+    const result = await writeResearchSynthesis(
+      makeInput({
+        open_questions: Array.from({ length: 101 }, (_, i) => `Question ${i}`),
+        workspace: tmpDir,
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("open_questions");
+    }
+  });
+
+  it("returns INVALID_INPUT when affected_subsystems exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
+
+    const result = await writeResearchSynthesis(
+      makeInput({
+        affected_subsystems: Array.from({ length: 101 }, (_, i) => `Subsystem ${i}`),
+        workspace: tmpDir,
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("affected_subsystems");
+    }
+  });
+
+  it("returns INVALID_INPUT when sources exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
+
+    const result = await writeResearchSynthesis(
+      makeInput({
+        sources: Array.from({ length: 101 }, (_, i) => `https://source-${i}.example.com`),
+        workspace: tmpDir,
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("sources");
+    }
+  });
+
+  it("accepts exactly 100 items (boundary — must pass)", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));
+
+    const result = await writeResearchSynthesis(
+      makeInput({
+        key_findings: Array.from({ length: 100 }, (_, i) => ({
+          confidence: "low" as const,
+          finding: `Finding ${i}`,
+        })),
+        workspace: tmpDir,
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe("writeResearchSynthesis — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-research-synthesis-test-"));

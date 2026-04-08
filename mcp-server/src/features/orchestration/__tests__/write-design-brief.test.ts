@@ -293,6 +293,128 @@ describe("writeDesignBrief — optional fields present", () => {
   });
 });
 
+describe("writeDesignBrief — array .max() constraints", () => {
+  it("returns INVALID_INPUT when file_targets exceeds 200 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
+
+    const result = await writeDesignBrief({
+      constraints: [],
+      file_targets: Array.from({ length: 201 }, (_, i) => ({
+        action: "create" as const,
+        path: `src/file-${i}.ts`,
+      })),
+      slug: "my-epic",
+      task_id: "task-01",
+      test_expectations: [],
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("file_targets");
+    }
+  });
+
+  it("accepts exactly 200 file_targets (boundary — must pass)", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
+
+    const result = await writeDesignBrief({
+      constraints: [],
+      file_targets: Array.from({ length: 200 }, (_, i) => ({
+        action: "create" as const,
+        path: `src/file-${i}.ts`,
+      })),
+      slug: "my-epic",
+      task_id: "task-01",
+      test_expectations: [],
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("returns INVALID_INPUT when constraints exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
+
+    const result = await writeDesignBrief({
+      constraints: Array.from({ length: 101 }, (_, i) => `Constraint ${i}`),
+      file_targets: [],
+      slug: "my-epic",
+      task_id: "task-01",
+      test_expectations: [],
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("constraints");
+    }
+  });
+
+  it("returns INVALID_INPUT when test_expectations exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
+
+    const result = await writeDesignBrief({
+      constraints: [],
+      file_targets: [],
+      slug: "my-epic",
+      task_id: "task-01",
+      test_expectations: Array.from({ length: 101 }, (_, i) => ({
+        description: `Test ${i}`,
+      })),
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("test_expectations");
+    }
+  });
+
+  it("returns INVALID_INPUT when dependencies exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
+
+    const result = await writeDesignBrief({
+      constraints: [],
+      dependencies: Array.from({ length: 101 }, (_, i) => `dep-${i}`),
+      file_targets: [],
+      slug: "my-epic",
+      task_id: "task-01",
+      test_expectations: [],
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("dependencies");
+    }
+  });
+
+  it("returns INVALID_INPUT when decisions_referenced exceeds 100 items", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));
+
+    const result = await writeDesignBrief({
+      constraints: [],
+      decisions_referenced: Array.from({ length: 101 }, (_, i) => `dec-${i}`),
+      file_targets: [],
+      slug: "my-epic",
+      task_id: "task-01",
+      test_expectations: [],
+      workspace: tmpDir,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error_code).toBe("INVALID_INPUT");
+      expect(result.message).toContain("decisions_referenced");
+    }
+  });
+});
+
 describe("writeDesignBrief — validation errors", () => {
   it("returns INVALID_INPUT for invalid slug (spaces)", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "write-design-brief-test-"));

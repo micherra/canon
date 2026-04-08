@@ -239,6 +239,15 @@ export async function validateRequiredHandoffs(
     // biome-ignore lint/performance/noAwaitInLoops: sequential validation — non-blocking
     try {
       const content = await readFile(metaPath, "utf-8");
+      // Symlink guard (ADR-018 security follow-up): after confirming the file exists,
+      // verify it doesn't escape the workspace via symlink resolution.
+      const symlinkGuard = await isPathInWorktree(metaPath, workspace);
+      if (!symlinkGuard.ok && symlinkGuard.message.includes("via symlink")) {
+        warnings.push(
+          `Required handoff "${req.name}" resolves outside workspace via symlink`,
+        );
+        continue;
+      }
       try {
         const meta: MetaJson = JSON.parse(content);
         if (meta._type !== req.type) {

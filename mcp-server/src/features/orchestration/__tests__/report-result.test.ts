@@ -18,7 +18,7 @@ import { writeMessage } from "@domains/messages/messages.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { reportResult } from "../tools/report-result.ts";
+import { reportResult, validateRequiredHandoffs } from "../tools/report-result.ts";
 
 function makeMinimalFlow(overrides?: Partial<FlowType>): FlowType {
   return {
@@ -1184,6 +1184,53 @@ describe("reportResult — workspace not found", () => {
     if (result.ok) return;
     expect(result.error_code).toBe("WORKSPACE_NOT_FOUND");
     expect(result.message).toContain(workspace);
+  });
+});
+
+// Required handoffs — symlink guard (ADR-018 security follow-up)
+// Tests validateRequiredHandoffs directly to avoid the pre-existing syncBoardToStore issue.
+
+describe("validateRequiredHandoffs — symlink guard", () => {
+  it("symlink in handoffs/ pointing outside workspace produces a warning (non-blocking)", async () => {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const { symlink } = await import("node:fs/promises");
+    const workspace = makeTmpWorkspace();
+    const outsideDir = mkdtempSync(join(tmpdir(), "outside-workspace-"));
+    tmpDirs.push(outsideDir);
+
+    // Create handoffs dir and write target meta.json outside workspace
+    mkdirSync(join(workspace, "handoffs"), { recursive: true });
+    const targetMeta = join(outsideDir, "evil-link.meta.json");
+    writeFileSync(targetMeta, JSON.stringify({ _type: "some-type", _version: 1 }));
+
+    // Create a symlink inside handoffs/ pointing to the file outside workspace
+    await symlink(targetMeta, join(workspace, "handoffs", "evil-link.meta.json"));
+
+    // Call validateRequiredHandoffs directly — no reportResult overhead
+    const warnings = await validateRequiredHandoffs(workspace, [
+      { name: "evil-link", type: "some-type" },
+    ]);
+
+    // Symlink escape should be caught and produce a warning (non-blocking)
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(warnings.some((w) => w.includes("evil-link"))).toBe(true);
+  });
+
+  it("normal file inside workspace produces no warning", async () => {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const workspace = makeTmpWorkspace();
+
+    mkdirSync(join(workspace, "handoffs"), { recursive: true });
+    writeFileSync(
+      join(workspace, "handoffs", "legit.meta.json"),
+      JSON.stringify({ _type: "some-type", _version: 1 }),
+    );
+
+    const warnings = await validateRequiredHandoffs(workspace, [
+      { name: "legit", type: "some-type" },
+    ]);
+
+    expect(warnings).toHaveLength(0);
   });
 });
 

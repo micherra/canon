@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { type ToolResult, toolError, toolOk } from "@shared/lib/tool-result.ts";
+import { z } from "zod";
 
 /** Escape a value for safe inclusion in a markdown table cell. */
 const escapeMdCell = (value: string): string =>
@@ -33,7 +34,24 @@ export type WriteResearchSynthesisResult = {
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
+const WriteResearchSynthesisArraySchema = z.object({
+  affected_subsystems: z.array(z.unknown()).max(100),
+  key_findings: z.array(z.unknown()).max(100),
+  open_questions: z.array(z.unknown()).max(100),
+  risk_areas: z.array(z.unknown()).max(100),
+  sources: z.array(z.unknown()).max(100).optional(),
+});
+
 function validateInput(input: WriteResearchSynthesisInput): ToolResult<{ handoffsDir: string }> {
+  const arrayCheck = WriteResearchSynthesisArraySchema.safeParse(input);
+  if (!arrayCheck.success) {
+    const field = arrayCheck.error.issues[0]?.path[0] ?? "array field";
+    return toolError(
+      "INVALID_INPUT",
+      `${String(field)} exceeds maximum allowed length`,
+    );
+  }
+
   if (!SLUG_PATTERN.test(input.slug)) {
     return toolError(
       "INVALID_INPUT",
