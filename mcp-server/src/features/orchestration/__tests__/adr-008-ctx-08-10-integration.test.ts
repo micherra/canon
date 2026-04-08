@@ -133,7 +133,7 @@ const pluginDir = resolve(process.cwd(), "..");
 
 function makeBoard(
   metadata?: Record<string, string | number | boolean>,
-): import("@domains/flows/flow-schema.ts").Board {
+): import("@domains/flows/board-state-schemas.ts").Board {
   return {
     base_commit: "abc123",
     blocked: null,
@@ -164,7 +164,7 @@ describe("ctx-08 integration — enrichment tier reads from execution store, not
     // Given: session tier = "large" (cap = 30)
     vi.mocked(getExecutionStore).mockReturnValue({
       getSession: vi.fn().mockReturnValue({ tier: "large" }),
-    } as ReturnType<typeof getExecutionStore>);
+    } as unknown as ReturnType<typeof getExecutionStore>);
 
     // Given: 35 files in scope
     const thirtyFiveFiles = Array.from({ length: 35 }, (_, i) => `src/file-${i}.ts`);
@@ -183,7 +183,7 @@ describe("ctx-08 integration — enrichment tier reads from execution store, not
         // Deliberately omit tier from flow object to confirm the fix:
         // the old code would read flow.tier (undefined → "medium" cap of 15)
         // the new code reads from execution store session (tier "large" → cap of 30)
-      } as unknown as import("@domains/flows/flow-schema.ts").ResolvedFlow,
+      } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
       projectDir: undefined,
       stateId: "implement",
       workspace: "/tmp/workspace",
@@ -203,7 +203,7 @@ describe("ctx-08 integration — enrichment tier reads from execution store, not
   it("small session tier processes max 5 files even with many in scope", async () => {
     vi.mocked(getExecutionStore).mockReturnValue({
       getSession: vi.fn().mockReturnValue({ tier: "small" }),
-    } as ReturnType<typeof getExecutionStore>);
+    } as unknown as ReturnType<typeof getExecutionStore>);
 
     const twentyFiles = Array.from({ length: 20 }, (_, i) => `src/file-${i}.ts`);
     vi.mocked(resolveTaskScope).mockReturnValue(twentyFiles);
@@ -220,7 +220,7 @@ describe("ctx-08 integration — enrichment tier reads from execution store, not
         states: { implement: { type: "terminal" } },
         // No tier on flow object — old code would default to "medium" (15 files)
         // New code reads "small" from session (5 files)
-      } as unknown as import("@domains/flows/flow-schema.ts").ResolvedFlow,
+      } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
       projectDir: undefined,
       stateId: "implement",
       workspace: "/tmp/workspace",
@@ -252,7 +252,7 @@ describe("ctx-08 integration — enrichment tier reads from execution store, not
         name: "feature",
         params: {},
         states: { implement: { type: "terminal" } },
-      } as unknown as import("@domains/flows/flow-schema.ts").ResolvedFlow,
+      } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
       projectDir: undefined,
       stateId: "implement",
       workspace: "/tmp/workspace",
@@ -381,7 +381,7 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
       return String(p).endsWith("knowledge-graph.db");
     });
     mockExecutionStore.getSession.mockReturnValue({ tier: "medium" });
-    vi.mocked(getExecutionStore).mockReturnValue(mockExecutionStore as ReturnType<typeof getExecutionStore>);
+    vi.mocked(getExecutionStore).mockReturnValue(mockExecutionStore as unknown as ReturnType<typeof getExecutionStore>);
   });
 
   afterEach(() => {
@@ -410,17 +410,20 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
           params: {},
           spawn_instructions: { implement: "Execute ${file_context}" },
           states: { implement: { type: "terminal" } },
-        } as unknown as import("@domains/flows/flow-schema.ts").ResolvedFlow,
+        } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
         state_id: "implement",
+        variables: {},
         workspace: tmpDir,
       },
       mergedVariables: {},
+      prompts: [],
+      rawInstruction: "",
       state: {
         agent: "canon-implementor",
         inject_context: [{ as: "file_context", from: "file_context" }],
         transitions: {},
         type: "single",
-      } as unknown as import("@domains/flows/flow-schema.ts").StateDefinition,
+      } as unknown as import("@domains/flows/flow-definition-schemas.ts").StateDefinition,
       warnings: [],
     };
 
@@ -459,17 +462,20 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
           params: {},
           spawn_instructions: {},
           states: {},
-        } as unknown as import("@domains/flows/flow-schema.ts").ResolvedFlow,
+        } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
         state_id: "implement",
+        variables: {},
         workspace: tmpDir,
       },
       mergedVariables: {},
+      prompts: [],
+      rawInstruction: "",
       state: {
         agent: "canon-implementor",
         // No inject_context
         transitions: {},
         type: "single",
-      } as unknown as import("@domains/flows/flow-schema.ts").StateDefinition,
+      } as unknown as import("@domains/flows/flow-definition-schemas.ts").StateDefinition,
       warnings: [],
     };
 
@@ -501,17 +507,20 @@ describe("ctx-09 integration — pipeline stage 1 invokes file_context handler",
           params: {},
           spawn_instructions: {},
           states: {},
-        } as unknown as import("@domains/flows/flow-schema.ts").ResolvedFlow,
+        } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
         state_id: "implement",
+        variables: {},
         workspace: tmpDir,
       },
       mergedVariables: {},
+      prompts: [],
+      rawInstruction: "",
       state: {
         agent: "canon-implementor",
         inject_context: [{ as: "file_context", from: "file_context" }],
         transitions: {},
         type: "single",
-      } as unknown as import("@domains/flows/flow-schema.ts").StateDefinition,
+      } as unknown as import("@domains/flows/flow-definition-schemas.ts").StateDefinition,
       warnings: [],
     };
 
@@ -630,7 +639,7 @@ describe("tier consistency — same execution store drives both enrichment and f
     // Session tier = "small" (cap = 5)
     vi.mocked(getExecutionStore).mockReturnValue({
       getSession: vi.fn().mockReturnValue({ tier: "small" }),
-    } as ReturnType<typeof getExecutionStore>);
+    } as unknown as ReturnType<typeof getExecutionStore>);
   });
 
   afterEach(() => {
@@ -677,7 +686,7 @@ describe("tier consistency — same execution store drives both enrichment and f
         name: "fast-path",
         params: {},
         states: { implement: { type: "terminal" } },
-      } as unknown as import("@domains/flows/flow-schema.ts").ResolvedFlow,
+      } as unknown as import("@domains/flows/flow-definition-schemas.ts").ResolvedFlow,
       projectDir: undefined,
       stateId: "implement",
       workspace: tmpDir,
