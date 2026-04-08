@@ -21,5 +21,6 @@ jobs:
           cache-dependency-path: mcp-server/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm run lint:deps
       - run: npm run build
       - run: npm test --if-present
