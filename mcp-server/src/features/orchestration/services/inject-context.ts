@@ -17,6 +17,18 @@ type InjectionResult = {
   warnings: string[];
 };
 
+function applyInjectionResult(
+  resolved: { value?: string; warnings: string[] },
+  as: string,
+  variables: Record<string, string>,
+  warnings: string[],
+): void {
+  warnings.push(...resolved.warnings);
+  if (resolved.value !== undefined) {
+    variables[as] = resolved.value;
+  }
+}
+
 export async function resolveContextInjections(
   injections: ContextInjection[],
   board: Board,
@@ -26,6 +38,7 @@ export async function resolveContextInjections(
   const warnings: string[] = [];
   let hitl: { prompt: string; as: string } | undefined;
 
+  // The outer loop must remain sequential: the "user" branch sets hitl as a side effect.
   for (const injection of injections) {
     if (injection.from === "user") {
       hitl = { as: injection.as, prompt: injection.prompt ?? "Please provide input" };
@@ -35,28 +48,18 @@ export async function resolveContextInjections(
     if (injection.from === "file_context") {
       // biome-ignore lint/performance/noAwaitInLoops: each injection resolves independently; refactoring to Promise.all requires restructuring hitl detection
       const resolved = await resolveFileContextInjection(injection, board, workspace);
-      warnings.push(...resolved.warnings);
-      if (resolved.value !== undefined) {
-        variables[injection.as] = resolved.value;
-      }
+      applyInjectionResult(resolved, injection.as, variables, warnings);
       continue;
     }
 
     if (injection.from === "handoff") {
-      // biome-ignore lint/performance/noAwaitInLoops: each injection resolves independently; refactoring to Promise.all requires restructuring hitl detection
       const resolved = await resolveHandoffInjection(injection, workspace);
-      warnings.push(...resolved.warnings);
-      if (resolved.value !== undefined) {
-        variables[injection.as] = resolved.value;
-      }
+      applyInjectionResult(resolved, injection.as, variables, warnings);
       continue;
     }
 
     const resolved = await resolveStateInjection(injection, board, workspace);
-    warnings.push(...resolved.warnings);
-    if (resolved.value !== undefined) {
-      variables[injection.as] = resolved.value;
-    }
+    applyInjectionResult(resolved, injection.as, variables, warnings);
   }
 
   return { hitl, variables, warnings };
@@ -215,31 +218,41 @@ async function resolveHandoffInjection(
     return { warnings };
   }
 
-  // Read each file and concatenate with 50KB whole-file cap.
-  // Skip files that would push total over cap; continue checking remaining files.
+  // Read all files in parallel, then apply the 50KB whole-file cap sequentially
+  // in sorted order. Reads are independent; the cap accumulation is not.
+  type ReadResult = { filename: string; chunk: string } | { filename: string; error: true };
+
+  const readResults = await Promise.all(
+    entries.map(async (filename): Promise<ReadResult> => {
+      const filePath = path.join(handoffsDir, filename);
+      try {
+        const content = await readFile(filePath, "utf-8");
+        const basename = path.basename(filename, ".md");
+        return { chunk: `## ${basename}\n\n${content}`, filename };
+      } catch {
+        return { error: true, filename };
+      }
+    }),
+  );
+
+  // Apply the 50KB cap in the original sorted order (entries is already sorted).
   const parts: string[] = [];
   let totalBytes = 0;
 
-  for (const filename of entries) {
-    const filePath = path.join(handoffsDir, filename);
-    let content: string;
-    try {
-      content = await readFile(filePath, "utf-8");
-    } catch {
-      warnings.push(`handoff: failed to read "${filename}" — skipping`);
+  for (const result of readResults) {
+    if ("error" in result) {
+      warnings.push(`handoff: failed to read "${result.filename}" — skipping`);
       continue;
     }
 
-    const basename = path.basename(filename, ".md");
-    const chunk = `## ${basename}\n\n${content}`;
-    const chunkBytes = Buffer.byteLength(chunk, "utf-8");
+    const chunkBytes = Buffer.byteLength(result.chunk, "utf-8");
 
     if (totalBytes + chunkBytes > HANDOFF_CAP_BYTES) {
-      warnings.push(`handoff: ${filename} skipped — 50KB injection cap reached`);
+      warnings.push(`handoff: ${result.filename} skipped — 50KB injection cap reached`);
       continue;
     }
 
-    parts.push(chunk);
+    parts.push(result.chunk);
     totalBytes += chunkBytes;
   }
 
