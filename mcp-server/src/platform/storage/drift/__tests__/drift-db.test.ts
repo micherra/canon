@@ -680,6 +680,105 @@ describe("getReviewsByFiles", () => {
   });
 });
 
+// countFlowRunsSince
+
+describe("countFlowRunsSince", () => {
+  let store: DriftDb;
+
+  beforeEach(() => {
+    ({ store } = makeDb());
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns 0 for empty DB", () => {
+    const count = store.countFlowRunsSince("2020-01-01T00:00:00.000Z");
+    expect(count).toBe(0);
+  });
+
+  test("returns correct count after inserting flow runs", () => {
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-01-10T12:00:00.000Z", run_id: "r1" }),
+    );
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-01-11T12:00:00.000Z", run_id: "r2" }),
+    );
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-01-12T12:00:00.000Z", run_id: "r3" }),
+    );
+
+    const count = store.countFlowRunsSince("2026-01-10T00:00:00.000Z");
+    expect(count).toBe(3);
+  });
+
+  test("excludes runs completed before the timestamp", () => {
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-01-05T12:00:00.000Z", run_id: "r_before" }),
+    );
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-01-10T12:00:00.000Z", run_id: "r_after" }),
+    );
+
+    // Only the run after 2026-01-07 should count
+    const count = store.countFlowRunsSince("2026-01-07T00:00:00.000Z");
+    expect(count).toBe(1);
+  });
+
+  test("returns 0 when all runs are before the timestamp", () => {
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2025-01-01T00:00:00.000Z", run_id: "r_old" }),
+    );
+
+    const count = store.countFlowRunsSince("2026-01-01T00:00:00.000Z");
+    expect(count).toBe(0);
+  });
+});
+
+// getLastFlowRunCompletedAt
+
+describe("getLastFlowRunCompletedAt", () => {
+  let store: DriftDb;
+
+  beforeEach(() => {
+    ({ store } = makeDb());
+  });
+
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns null for empty DB", () => {
+    const result = store.getLastFlowRunCompletedAt();
+    expect(result).toBeNull();
+  });
+
+  test("returns most recent completed timestamp", () => {
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-01-05T10:00:00.000Z", run_id: "r_early" }),
+    );
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-01-20T10:00:00.000Z", run_id: "r_late" }),
+    );
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-01-10T10:00:00.000Z", run_id: "r_mid" }),
+    );
+
+    const result = store.getLastFlowRunCompletedAt();
+    expect(result).toBe("2026-01-20T10:00:00.000Z");
+  });
+
+  test("returns the only timestamp when single run exists", () => {
+    store.appendFlowRun(
+      makeFlowRunEntry({ completed: "2026-03-15T08:30:00.000Z", run_id: "r_only" }),
+    );
+
+    const result = store.getLastFlowRunCompletedAt();
+    expect(result).toBe("2026-03-15T08:30:00.000Z");
+  });
+});
+
 // getDriftDb factory
 
 describe("getDriftDb factory", () => {

@@ -184,6 +184,8 @@ export class DriftDb {
   // ---- Flow run statements ----
   private readonly stmtInsertFlowRun: Database.Statement;
   private readonly stmtGetAllFlowRuns: Database.Statement;
+  private readonly stmtCountFlowRunsSince: Database.Statement;
+  private readonly stmtGetLastFlowRunCompletedAt: Database.Statement;
 
   constructor(db: Database.Database) {
     this.db = db;
@@ -256,6 +258,14 @@ export class DriftDb {
 
     this.stmtGetAllFlowRuns = db.prepare(`
       SELECT * FROM flow_runs ORDER BY started ASC
+    `);
+
+    this.stmtCountFlowRunsSince = db.prepare(`
+      SELECT COUNT(*) as count FROM flow_runs WHERE completed > ?
+    `);
+
+    this.stmtGetLastFlowRunCompletedAt = db.prepare(`
+      SELECT completed FROM flow_runs ORDER BY completed DESC LIMIT 1
     `);
   }
 
@@ -540,6 +550,23 @@ export class DriftDb {
       result.avg_postcondition_pass_rate = postconditionSum / postconditionCount;
 
     return result;
+  }
+
+  /**
+   * Count flow runs completed after the given ISO timestamp.
+   * Returns 0 for empty DB (define-errors-out-of-existence).
+   */
+  countFlowRunsSince(sinceIso: string): number {
+    const row = this.stmtCountFlowRunsSince.get(sinceIso) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Return the ISO timestamp of the most recently completed flow run, or null if none.
+   */
+  getLastFlowRunCompletedAt(): string | null {
+    const row = this.stmtGetLastFlowRunCompletedAt.get() as { completed: string } | undefined;
+    return row?.completed ?? null;
   }
 
   // Lifecycle
