@@ -221,6 +221,41 @@ export async function validateRequiredArtifacts(
   return null;
 }
 
+/**
+ * Validates required handoff files declared on a state definition (ADR-018).
+ *
+ * Unlike validateRequiredArtifacts, this is non-blocking: missing or mistyped
+ * handoffs produce warning strings rather than ToolResult errors. Returns an
+ * array of warning strings (empty when all handoffs are present and correct).
+ * Never throws.
+ */
+export async function validateRequiredHandoffs(
+  workspace: string,
+  required: RequiredArtifact[],
+): Promise<string[]> {
+  const warnings: string[] = [];
+  for (const req of required) {
+    const metaPath = join(workspace, "handoffs", `${req.name}.meta.json`);
+    // biome-ignore lint/performance/noAwaitInLoops: sequential validation — non-blocking
+    try {
+      const content = await readFile(metaPath, "utf-8");
+      try {
+        const meta: MetaJson = JSON.parse(content);
+        if (meta._type !== req.type) {
+          warnings.push(
+            `Required handoff "${req.name}" has type "${meta._type}" but expected "${req.type}"`,
+          );
+        }
+      } catch {
+        warnings.push(`Required handoff "${req.name}" has malformed JSON in handoffs/`);
+      }
+    } catch {
+      warnings.push(`Required handoff "${req.name}" not found in handoffs/`);
+    }
+  }
+  return warnings;
+}
+
 // Pure board mutation helpers — extracted to reduce transaction complexity
 
 function updateBoardStateField(
@@ -757,6 +792,8 @@ export type ReportResultResult = {
     reason: string;
     baseline_evidence: BaselineEvidence;
   };
+  /** Non-blocking warnings for missing or mistyped handoff files (ADR-018). */
+  warnings?: string[];
 };
 
 export async function reportResult(
@@ -973,6 +1010,10 @@ async function postTransactionSideEffects({
   emitStuckEvent(store, { board, input, stateDef, stuck, stuck_reason });
   emitReportEvents(store, { condition, hitl_reason, hitl_required, input, nextState });
 
+  const handoffWarnings = stateDef?.required_handoffs
+    ? await validateRequiredHandoffs(input.workspace, stateDef.required_handoffs)
+    : [];
+
   const log_entry = buildLogEntry(input, {
     condition,
     hitl_reason,
@@ -993,6 +1034,7 @@ async function postTransactionSideEffects({
     stuck_reason,
     transition_condition: condition,
     ...(escalateToHitl ? { escalate_to_hitl: escalateToHitl } : {}),
+    ...(handoffWarnings.length > 0 ? { warnings: handoffWarnings } : {}),
   };
 }
 
