@@ -412,6 +412,15 @@ After each Agent tool spawn completes, the orchestrator should capture the agent
 - `agent_type`: e.g., `canon-implementor`
 - `timestamp`: ISO-8601 format with colons replaced by dashes for filesystem safety
 
+**JSONL line format**: Each line is a JSON object matching the `TranscriptEntry` schema (`event-schemas.ts`):
+- `role`: `"assistant"` (for agent result captures)
+- `content`: the Agent tool's returned result text
+- `timestamp`: ISO-8601 when the capture occurred
+- `turn_number`: `1` (single-entry capture)
+- `tokens`, `cumulative_tokens`: omit (not available from Agent tool result)
+
+**Best-effort durability**: Transcript capture is best-effort — a write failure must be logged (not silently swallowed) but must not abort the flow. If the write fails, log the error and proceed to `report_result` without a `transcript_path`.
+
 ## Workspace Permissions
 
 You own: `board.json`, `session.json`, `progress.md`, `log.jsonl`
