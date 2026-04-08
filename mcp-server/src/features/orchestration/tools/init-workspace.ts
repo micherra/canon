@@ -513,7 +513,7 @@ export async function initWorkspaceFlow(
     tier: input.tier,
   };
 
-  return finalizeNewWorkspace(store, input, {
+  const result = await finalizeNewWorkspace(store, input, {
     board,
     flow,
     pluginDir,
@@ -522,4 +522,16 @@ export async function initWorkspaceFlow(
     slug,
     workspace,
   });
+
+  // Best-effort legacy summary migration (ADR-005)
+  try {
+    const { migrateSummaries } = await import(
+      "@features/knowledge-graph/services/migrate-summaries.ts"
+    );
+    await migrateSummaries(projectDir);
+  } catch {
+    // Non-blocking — legacy migration failure does not affect workspace init
+  }
+
+  return result;
 }
