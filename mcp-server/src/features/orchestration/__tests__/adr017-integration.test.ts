@@ -296,6 +296,10 @@ describe("initBoard with approval gate fields — wave state", () => {
 
 // 6 & 7 & 8: driveFlow integration — reject path, Branch B no gate, re-entry
 
+vi.mock("../services/learn-gate.ts", () => ({
+  evaluateLearnGate: vi.fn().mockResolvedValue({ passed: false, reason: "test mode" }),
+}));
+
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
@@ -453,7 +457,7 @@ describe("driveFlow — reject status routes to HITL, not approval gate", () => 
         status: "reject",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -482,7 +486,7 @@ describe("driveFlow — reject status routes to HITL, not approval gate", () => 
         status: "reject",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -501,7 +505,7 @@ describe("driveFlow Branch B — no result, approval gate does NOT fire on initi
       flow: makeApprovalFlow(),
       workspace,
       // No result — Branch B
-    });
+    }, "/fake/project");
 
     // Should spawn (enter state), not produce approval breakpoint
     expect(result.ok).toBe(true);
@@ -521,7 +525,7 @@ describe("driveFlow Branch B — no result, approval gate does NOT fire on initi
     await driveFlow({
       flow: makeApprovalFlow(),
       workspace,
-    });
+    }, "/fake/project");
 
     expect(vi.mocked(reportResult)).not.toHaveBeenCalled();
   });
@@ -573,7 +577,7 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -616,7 +620,7 @@ describe("driveFlow — approval gate fires on 'done' but not on terminal state"
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;

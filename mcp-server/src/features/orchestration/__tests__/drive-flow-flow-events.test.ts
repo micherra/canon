@@ -21,6 +21,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock heavy dependencies — same pattern as other drive-flow tests
+vi.mock("../services/learn-gate.ts", () => ({
+  evaluateLearnGate: vi.fn().mockResolvedValue({ passed: false, reason: "test mode" }),
+}));
+
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
@@ -223,7 +227,7 @@ describe("driveFlow — flow events: effect none", () => {
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -246,7 +250,7 @@ describe("driveFlow — flow events: effect none", () => {
     );
 
     const flow = makeFlow();
-    await driveFlow({ flow, workspace });
+    await driveFlow({ flow, workspace }, "/fake/project");
 
     // drainFlowEvents should NOT be called on the initial entry (no result submitted)
     expect(drainFlowEvents).not.toHaveBeenCalled();
@@ -286,7 +290,7 @@ describe("driveFlow — flow events: effect insert", () => {
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -322,7 +326,7 @@ describe("driveFlow — flow events: effect insert", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     const board = store.getBoard();
     expect(board?.metadata?.flow_events_watermark).toBe(7);
@@ -345,7 +349,7 @@ describe("driveFlow — flow events: effect skip", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -375,7 +379,7 @@ describe("driveFlow — flow events: effect skip", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -402,7 +406,7 @@ describe("driveFlow — flow events: effect skip", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     const board = store.getBoard();
     expect(board?.metadata?.flow_events_watermark).toBe(9);
@@ -428,7 +432,7 @@ describe("driveFlow — flow events: effect escalate", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -456,7 +460,7 @@ describe("driveFlow — flow events: effect escalate", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -483,7 +487,7 @@ describe("driveFlow — flow events: effect escalate", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     const board = store.getBoard();
     expect(board?.metadata?.flow_events_watermark).toBe(11);
@@ -542,7 +546,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -613,7 +617,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
         status: "needs_revision",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -653,7 +657,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     // The inserted state "review" should have inserted_return_to = "implement" (the normal next state)
     const reviewState = store.getState("review");
@@ -709,7 +713,7 @@ describe("driveFlow — flow events: insert return-address semantics", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     // inserted_return_to should be null/undefined since next_state was null
     const reviewState = store.getState("review");
@@ -745,7 +749,7 @@ describe("driveFlow — flow events: watermark reading", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     const drainCall = vi.mocked(drainFlowEvents).mock.calls[0][0];
     expect(drainCall.watermark).toBe(42);
@@ -775,7 +779,7 @@ describe("driveFlow — flow events: watermark reading", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     const drainCall = vi.mocked(drainFlowEvents).mock.calls[0][0];
     expect(drainCall.watermark).toBe(0);
@@ -794,7 +798,7 @@ describe("driveFlow — flow events: watermark reading", () => {
       flow,
       result: { artifacts: [], state_id: "research", status: "done" },
       workspace,
-    });
+    }, "/fake/project");
 
     const drainCall = vi.mocked(drainFlowEvents).mock.calls[0][0];
     expect(drainCall.currentStateId).toBe("research");

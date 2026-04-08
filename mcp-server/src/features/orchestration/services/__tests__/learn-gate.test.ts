@@ -43,8 +43,10 @@ import { loadLearnGateConfig } from "@shared/lib/config.ts";
 import { acquireLearnLock, getLastLearnTimestamp } from "@shared/lib/learn-lock.ts";
 import { evaluateLearnGate } from "../learn-gate.ts";
 
+import type { LearnGateConfig } from "@shared/lib/config.ts";
+
 // Helper: build a minimal LearnGateConfig
-const makeConfig = (overrides: Partial<Parameters<typeof loadLearnGateConfig>[0]> = {}) => ({
+const makeConfig = (overrides: Partial<LearnGateConfig> = {}): LearnGateConfig => ({
   enabled: true,
   min_flows_since_last: 5,
   min_hours_since_last: 48,
@@ -77,7 +79,7 @@ afterEach(() => {
 
 describe("evaluateLearnGate — gate 1: config enabled flag", () => {
   test("returns passed: false when enabled is false", async () => {
-    vi.mocked(loadLearnGateConfig).mockResolvedValue(makeConfig({ enabled: false } as any));
+    vi.mocked(loadLearnGateConfig).mockResolvedValue(makeConfig({ enabled: false }));
 
     const result = await evaluateLearnGate(PROJECT_DIR);
 
@@ -194,7 +196,7 @@ describe("evaluateLearnGate — gate 4: flow gate", () => {
     const ts = new Date("2026-01-01T00:00:00.000Z").getTime();
     vi.mocked(getLastLearnTimestamp).mockResolvedValue(ts);
     // Time gate: make it 100h ago so time gate passes
-    vi.mocked(loadLearnGateConfig).mockResolvedValue(makeConfig({ min_hours_since_last: 0 } as any));
+    vi.mocked(loadLearnGateConfig).mockResolvedValue(makeConfig({ min_hours_since_last: 0 }));
     mockDriftDb.countFlowRunsSince.mockReturnValue(10);
 
     await evaluateLearnGate(PROJECT_DIR);
@@ -229,7 +231,7 @@ describe("evaluateLearnGate — gate 5: lock gate", () => {
   });
 
   test("passes correct staleAfterMs to acquireLearnLock", async () => {
-    vi.mocked(loadLearnGateConfig).mockResolvedValue(makeConfig({ lock_stale_after_hours: 2 } as any));
+    vi.mocked(loadLearnGateConfig).mockResolvedValue(makeConfig({ lock_stale_after_hours: 2 }));
 
     await evaluateLearnGate(PROJECT_DIR);
 

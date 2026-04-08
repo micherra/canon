@@ -371,6 +371,10 @@ describe("initBoard with approval gate fields", () => {
 
 // driveFlow — Branch A approval gate intercept
 
+vi.mock("../services/learn-gate.ts", () => ({
+  evaluateLearnGate: vi.fn().mockResolvedValue({ passed: false, reason: "test mode" }),
+}));
+
 vi.mock("../tools/enter-and-prepare-state.ts", () => ({
   enterAndPrepareState: vi.fn(),
 }));
@@ -523,7 +527,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -566,7 +570,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // parallel wait — should return empty spawn, not approval
     expect(result.ok).toBe(true);
@@ -624,7 +628,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
         status: "approved",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // Should advance to implement state
     expect(result.ok).toBe(true);
@@ -680,7 +684,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
         status: "revise",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // No approval gate on design (not architect, no explicit gate) — should advance to implement
     expect(result.ok).toBe(true);
@@ -736,7 +740,7 @@ describe("driveFlow Branch A — approval gate intercept", () => {
         status: "done",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // No approval gate on small tier — should advance to implement
     expect(result.ok).toBe(true);
@@ -780,7 +784,7 @@ describe("driveFlow — approval decision statuses do NOT re-trigger the gate", 
         status: "approved",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // Must advance to implement — NOT produce another "approval" breakpoint
     expect(result.ok).toBe(true);
@@ -809,7 +813,7 @@ describe("driveFlow — approval decision statuses do NOT re-trigger the gate", 
         status: "revise",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // "revise" is an approval decision — gate must not re-fire
     expect(result.ok).toBe(true);
@@ -838,7 +842,7 @@ describe("driveFlow — approval decision statuses do NOT re-trigger the gate", 
         status: "reject",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // "reject" is an approval decision — gate must not re-fire (hitl comes from report_result)
     expect(result.ok).toBe(true);
@@ -889,7 +893,7 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
         status: "revise",
       },
       workspace,
-    });
+    }, "/fake/project");
 
     // Self-transition on a single state should re-enter and spawn (not return empty [])
     expect(result.ok).toBe(true);

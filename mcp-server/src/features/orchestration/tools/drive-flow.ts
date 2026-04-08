@@ -37,6 +37,7 @@ import { parseTaskIdsForWave } from "@domains/workspaces/wave-variables.ts";
 import { resolveToolProfile } from "@features/prompt-pipeline/model/tool-profiles.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError } from "@shared/lib/tool-result.ts";
+import { evaluateLearnGate } from "../services/learn-gate.ts";
 import type {
   DriveFlowAction,
   DriveFlowInput,
@@ -225,12 +226,13 @@ type ApplyFlowEventDrainOpts = {
   currentStateId: string;
   store: ReturnType<typeof getExecutionStore>;
   resumeStateId: string | null;
+  projectDir: string;
 };
 
 async function applyFlowEventDrain(
   opts: ApplyFlowEventDrainOpts,
 ): Promise<ToolResult<DriveFlowAction> | null> {
-  const { workspace, flow, currentStateId, store, resumeStateId } = opts;
+  const { workspace, flow, currentStateId, store, resumeStateId, projectDir } = opts;
   const board = store.getBoard();
   const watermark =
     typeof board?.metadata?.flow_events_watermark === "number"
@@ -255,7 +257,7 @@ async function applyFlowEventDrain(
   if (effect.type === "none") return null;
 
   if (effect.type === "insert") {
-    const spawnAction = await enterStateAndBuildSpawn(workspace, flow, effect.state_id, store);
+    const spawnAction = await enterStateAndBuildSpawn(workspace, flow, effect.state_id, store, projectDir);
     // Persist the return address so that when the inserted state completes with "done",
     // the flow resumes at resumeStateId instead of the inserted state's own transition target.
     if (resumeStateId !== null) {
@@ -270,7 +272,7 @@ async function applyFlowEventDrain(
   }
 
   if (effect.type === "skip") {
-    return enterStateAndBuildSpawn(workspace, flow, effect.target, store);
+    return enterStateAndBuildSpawn(workspace, flow, effect.target, store, projectDir);
   }
 
   // effect.type === "escalate"
@@ -291,6 +293,7 @@ type ResolvePostReportOpts = {
   artifacts: string[] | undefined;
   reportOut: Awaited<ReturnType<typeof reportResult>> & { ok: true };
   store: ReturnType<typeof getExecutionStore>;
+  projectDir: string;
 };
 
 function buildApprovalAction(
@@ -322,7 +325,7 @@ async function resolvePostReportAction(
   flow: DriveFlowInput["flow"],
   opts: ResolvePostReportOpts,
 ): Promise<ToolResult<DriveFlowAction>> {
-  const { state_id, status, artifacts, reportOut, store } = opts;
+  const { state_id, status, artifacts, reportOut, store, projectDir } = opts;
   const freshBoard = store.getBoard();
   if (!freshBoard) {
     return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
@@ -356,6 +359,7 @@ async function resolvePostReportAction(
   const drainAction = await applyFlowEventDrain({
     currentStateId: state_id,
     flow,
+    projectDir,
     resumeStateId: next_state ?? null,
     store,
     workspace,
@@ -372,6 +376,7 @@ async function resolvePostReportAction(
     board: store.getBoard() ?? freshBoard,
     current_state: state_id,
     next_state: effectiveNextState,
+    projectDir,
     store,
   });
 }
@@ -381,36 +386,41 @@ type ResolveNextStateOpts = {
   current_state: string;
   board: Board;
   store: ReturnType<typeof getExecutionStore>;
+  projectDir: string;
 };
 
 /** Determine the action for the next state (done or spawn). */
-function resolveNextStateAction(
+async function resolveNextStateAction(
   workspace: string,
   flow: DriveFlowInput["flow"],
   opts: ResolveNextStateOpts,
-): Promise<ToolResult<DriveFlowAction>> | ToolResult<DriveFlowAction> {
-  const { next_state, current_state, board, store } = opts;
+): Promise<ToolResult<DriveFlowAction>> {
+  const { next_state, current_state, board, store, projectDir } = opts;
   if (!next_state) {
+    // Site 1: no next state — current state is terminal
+    const doneSummary = await buildDoneSummary(board, current_state, projectDir);
     return {
       action: "done",
       ok: true as const,
       terminal_state: current_state,
-      ...buildDoneSummary(board, current_state),
+      ...doneSummary,
     };
   }
   const nextStateDef = flow.states[next_state];
   if (nextStateDef?.type === "terminal") {
+    // Site 2: next state is a terminal state
+    const doneSummary = await buildDoneSummary(board, next_state, projectDir);
     return {
       action: "done",
       ok: true as const,
       terminal_state: next_state,
-      ...buildDoneSummary(board, next_state),
+      ...doneSummary,
     };
   }
-  return enterStateAndBuildSpawn(workspace, flow, next_state, store);
+  return enterStateAndBuildSpawn(workspace, flow, next_state, store, projectDir);
 }
 
-export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<DriveFlowAction>> {
+export async function driveFlow(input: DriveFlowInput, projectDir: string): Promise<ToolResult<DriveFlowAction>> {
   const validated = validateDriveFlowInput(input);
   if (!validated.ok) return validated;
   const { data, store, board } = validated;
@@ -455,6 +465,7 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
 
     return resolvePostReportAction(workspace, flow, {
       artifacts,
+      projectDir,
       reportOut,
       state_id,
       status,
@@ -466,14 +477,15 @@ export async function driveFlow(input: DriveFlowInput): Promise<ToolResult<Drive
   const targetState = board.current_state ?? flow.entry;
   const targetStateDef = flow.states[targetState];
   if (targetStateDef?.type === "terminal") {
+    const doneSummary = await buildDoneSummary(board, targetState, projectDir);
     return {
       action: "done",
       ok: true as const,
       terminal_state: targetState,
-      ...buildDoneSummary(board, targetState),
+      ...doneSummary,
     };
   }
-  return enterStateAndBuildSpawn(workspace, flow, targetState, store);
+  return enterStateAndBuildSpawn(workspace, flow, targetState, store, projectDir);
 }
 
 // Wave state handling
@@ -652,6 +664,7 @@ type RouteReportResultOpts = {
   state_id: string;
   reportOut: Awaited<ReturnType<typeof reportResult>> & { ok: true };
   store: ReturnType<typeof getExecutionStore>;
+  projectDir: string;
 };
 
 /** Route a report result to HITL, done, or next-state spawn. */
@@ -660,7 +673,7 @@ async function routeReportResult(
   flow: DriveFlowInput["flow"],
   opts: RouteReportResultOpts,
 ): Promise<ToolResult<DriveFlowAction>> {
-  const { state_id, reportOut, store } = opts;
+  const { state_id, reportOut, store, projectDir } = opts;
   const { next_state, hitl_required, hitl_reason, stuck_reason } = reportOut;
 
   if (hitl_required) {
@@ -682,6 +695,7 @@ async function routeReportResult(
   const drainAction = await applyFlowEventDrain({
     currentStateId: state_id,
     flow,
+    projectDir,
     resumeStateId: next_state ?? null,
     store,
     workspace,
@@ -698,6 +712,7 @@ async function routeReportResult(
     board: store.getBoard()!,
     current_state: state_id,
     next_state: effectiveNextState,
+    projectDir,
     store,
   });
 }
@@ -707,6 +722,7 @@ type HandleLastWaveOpts = {
   statusKeyword: string;
   gateResults: ReturnType<typeof runGates>;
   store: ReturnType<typeof getExecutionStore>;
+  projectDir: string;
 };
 
 /** Handle the last wave: after-consultations, report result, and advance. */
@@ -715,7 +731,7 @@ async function handleLastWave(
   flow: DriveFlowInput["flow"],
   opts: HandleLastWaveOpts,
 ): Promise<ToolResult<DriveFlowAction>> {
-  const { state_id, statusKeyword, gateResults, store } = opts;
+  const { state_id, statusKeyword, gateResults, store, projectDir } = opts;
   const afterConsultationsResult = resolveAfterConsultations({
     flow,
     state_id,
@@ -746,7 +762,7 @@ async function handleLastWave(
   });
   if (!reportOut.ok) return reportOut as ToolResult<DriveFlowAction>;
 
-  return routeReportResult(workspace, flow, { reportOut, state_id, store });
+  return routeReportResult(workspace, flow, { projectDir, reportOut, state_id, store });
 }
 
 type CheckWaveBoundaryApprovalOpts = {
@@ -803,6 +819,7 @@ async function advanceWave(input: AdvanceWaveInput): Promise<ToolResult<DriveFlo
   const drainActionWave = await applyFlowEventDrain({
     currentStateId: state_id,
     flow,
+    projectDir,
     resumeStateId: null,
     store,
     workspace,
@@ -813,7 +830,7 @@ async function advanceWave(input: AdvanceWaveInput): Promise<ToolResult<DriveFlo
   const nextWaveTaskIds = await resolveNextWaveTaskIds(workspace, store, nextWave);
 
   if (nextWaveTaskIds.length === 0) {
-    return handleLastWave(workspace, flow, { gateResults, state_id, statusKeyword, store });
+    return handleLastWave(workspace, flow, { gateResults, projectDir, state_id, statusKeyword, store });
   }
 
   const approvalAction = checkWaveBoundaryApproval(stateDef, flow, {
@@ -1121,6 +1138,7 @@ async function handleSkippedState(
   workspace: string,
   flow: DriveFlowInput["flow"],
   currentStateId: string,
+  projectDir: string,
 ): Promise<{ nextStateId: string } | ToolResult<DriveFlowAction>> {
   const reportOut = await reportResult({
     flow,
@@ -1140,19 +1158,23 @@ async function handleSkippedState(
 
   const nextState = reportOut.next_state;
   if (!nextState) {
+    // Site 4: no next state after skip
+    const doneSummary = await buildDoneSummary(reportOut.board, currentStateId, projectDir);
     return {
       action: "done",
       ok: true as const,
       terminal_state: currentStateId,
-      ...buildDoneSummary(reportOut.board, currentStateId),
+      ...doneSummary,
     };
   }
   if (flow.states[nextState]?.type === "terminal") {
+    // Site 5: next state after skip is terminal
+    const doneSummary = await buildDoneSummary(reportOut.board, nextState, projectDir);
     return {
       action: "done",
       ok: true as const,
       terminal_state: nextState,
-      ...buildDoneSummary(reportOut.board, nextState),
+      ...doneSummary,
     };
   }
 
@@ -1160,19 +1182,22 @@ async function handleSkippedState(
 }
 
 /** Build a terminal "done" action for a state. */
-function buildTerminalAction(
+async function buildTerminalAction(
   workspace: string,
   stateId: string,
   store: ReturnType<typeof getExecutionStore>,
-): ToolResult<DriveFlowAction> {
+  projectDir: string,
+): Promise<ToolResult<DriveFlowAction>> {
   const board = store.getBoard();
   if (!board)
     return toolError("WORKSPACE_NOT_FOUND", `Board not found for workspace: ${workspace}`);
+  // Site 6: terminal state entered directly
+  const doneSummary = await buildDoneSummary(board, stateId, projectDir);
   return {
     action: "done",
     ok: true as const,
     terminal_state: stateId,
-    ...buildDoneSummary(board, stateId),
+    ...doneSummary,
   };
 }
 
@@ -1199,9 +1224,10 @@ async function tryEnterSingleState(
   flow: DriveFlowInput["flow"],
   currentStateId: string,
   store: ReturnType<typeof getExecutionStore>,
+  projectDir: string,
 ): Promise<ToolResult<DriveFlowAction> | { nextStateId: string }> {
   const stateDef = flow.states[currentStateId];
-  if (stateDef?.type === "terminal") return buildTerminalAction(workspace, currentStateId, store);
+  if (stateDef?.type === "terminal") return buildTerminalAction(workspace, currentStateId, store, projectDir);
   if (stateDef?.type === "wave") return enterWaveState(workspace, flow, currentStateId, store);
 
   const enterOut = await enterAndPrepareState({
@@ -1213,7 +1239,7 @@ async function tryEnterSingleState(
   if (!enterOut.ok) return enterOut as ToolResult<DriveFlowAction>;
   if (!enterOut.can_enter) return buildConvergenceHitl(currentStateId, enterOut);
 
-  if (enterOut.skip_reason) return handleSkippedState(workspace, flow, currentStateId);
+  if (enterOut.skip_reason) return handleSkippedState(workspace, flow, currentStateId, projectDir);
 
   persistToolScopeWarnings(enterOut.prompts, currentStateId, store);
   const requests = buildSpawnRequests(enterOut.prompts, enterOut.consultation_prompts);
@@ -1226,13 +1252,14 @@ async function enterStateAndBuildSpawn(
   flow: DriveFlowInput["flow"],
   stateId: string,
   store: ReturnType<typeof getExecutionStore>,
+  projectDir: string,
 ): Promise<ToolResult<DriveFlowAction>> {
   const MAX_SKIP_ITERATIONS = 50;
   let currentStateId = stateId;
 
   for (let i = 0; i < MAX_SKIP_ITERATIONS; i++) {
     // biome-ignore lint/performance/noAwaitInLoops: state machine loop — each iteration depends on the previous state's result
-    const result = await tryEnterSingleState(workspace, flow, currentStateId, store);
+    const result = await tryEnterSingleState(workspace, flow, currentStateId, store, projectDir);
     if ("nextStateId" in result) {
       currentStateId = result.nextStateId;
       continue;
@@ -1581,12 +1608,13 @@ function buildConvergenceContext(enterOut: {
   ].join("\n");
 }
 
-function buildDoneSummary(
+async function buildDoneSummary(
   board: ReturnType<typeof getExecutionStore>["getBoard"] extends () => infer T
     ? NonNullable<T>
     : never,
   terminalState: string,
-): { summary: string; state_artifacts?: Record<string, string[]> } {
+  projectDir: string,
+): Promise<{ summary: string; state_artifacts?: Record<string, string[]>; learn_gate_passed?: boolean }> {
   const stateEntries = Object.entries(board.states ?? {});
   const stateCount = stateEntries.length;
   const doneCount = stateEntries.filter(
@@ -1601,11 +1629,24 @@ function buildDoneSummary(
     }
   }
 
-  const result: { summary: string; state_artifacts?: Record<string, string[]> } = {
+  const result: { summary: string; state_artifacts?: Record<string, string[]>; learn_gate_passed?: boolean } = {
     summary: `Flow completed at state '${terminalState}'. States completed: ${doneCount}/${stateCount}.`,
   };
   if (Object.keys(state_artifacts).length > 0) {
     result.state_artifacts = state_artifacts;
   }
+
+  // ADR-016: Evaluate learn gate — best-effort, must never block flow completion
+  let learn_gate_passed: boolean | undefined;
+  try {
+    const gateResult = await evaluateLearnGate(projectDir);
+    if (gateResult.passed) learn_gate_passed = true;
+  } catch {
+    // Best-effort — gate evaluation should never block flow completion
+  }
+  if (learn_gate_passed !== undefined) {
+    result.learn_gate_passed = learn_gate_passed;
+  }
+
   return result;
 }

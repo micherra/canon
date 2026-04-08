@@ -1125,7 +1125,7 @@ server.registerTool(
       workspace: z.string().describe("Workspace directory path"),
     },
   },
-  gatedWrapHandler(async (input) => driveFlow(input)),
+  gatedWrapHandler(async (input) => driveFlow(input, projectDir)),
 );
 
 const FailureEntrySchema = z.object({
