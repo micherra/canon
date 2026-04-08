@@ -42,6 +42,9 @@ states:
     agent: canon-implementor
     gate: test-suite
     template: implementation-log
+    inject_context:
+      - from: file_context
+        as: file_context
     transitions:
       done: verify
       blocked: hitl

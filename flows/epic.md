@@ -79,6 +79,9 @@ states:
       before: [plan-review]
       between: [pattern-check, early-scan, targeted-research]
       after: [impl-handoff]
+    inject_context:
+      - from: file_context
+        as: file_context
     transitions:
       done: context-sync
       epic_complete: ship

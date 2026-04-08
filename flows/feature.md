@@ -48,6 +48,9 @@ states:
     template: implementation-log
     effects:
       - type: check_postconditions
+    inject_context:
+      - from: file_context
+        as: file_context
     transitions:
       done: context-sync
       blocked: hitl

@@ -15,6 +15,9 @@ states:
     template: implementation-log
     max_iterations: 1
     stuck_when: same_status
+    inject_context:
+      - from: file_context
+        as: file_context
     transitions:
       done: ship
       done_with_concerns: ship
