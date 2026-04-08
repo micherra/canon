@@ -2,27 +2,11 @@
  * Pure functions for convergence checking.
  */
 
-import type { Board, CannotFixItem } from "@domains/flows/board-state-schemas.ts";
+import type { CannotFixItem } from "@domains/flows/board-state-schemas.ts";
 
-/**
- * Check if a state can be entered based on iteration limits.
- */
-export function canEnterState(
-  board: Board,
-  stateId: string,
-): { allowed: boolean; reason?: string } {
-  const iteration = board.iterations[stateId];
-  if (!iteration) {
-    return { allowed: true };
-  }
-  if (iteration.count >= iteration.max) {
-    return {
-      allowed: false,
-      reason: `Max iterations (${iteration.max}) reached for state '${stateId}'`,
-    };
-  }
-  return { allowed: true };
-}
+// Re-export bridge (ADR ddd-03): canEnterState has moved to the Board aggregate.
+// Remove this re-export once all callers import from @domains/board/board.ts.
+export { canEnterState } from "@domains/board/board.ts";
 
 /**
  * Filter out items that match any entry in the cannotFixList.

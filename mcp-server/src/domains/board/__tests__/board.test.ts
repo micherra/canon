@@ -2,6 +2,9 @@ import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import {
+  accumulateCannotFix,
+  appendConcern,
+  canEnterState,
   completeState,
   enterState,
   initBoard,
@@ -77,32 +80,74 @@ describe("enterState", () => {
     const board = makeBoard();
     const result = enterState(board, "start");
 
-    expect(result.current_state).toBe("start");
-    expect(result.states.start.status).toBe("in_progress");
-    expect(result.states.start.entries).toBe(1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.board.current_state).toBe("start");
+    expect(result.board.states.start.status).toBe("in_progress");
+    expect(result.board.states.start.entries).toBe(1);
   });
 
   it("sets entered_at timestamp", () => {
     const board = makeBoard();
     const result = enterState(board, "start");
-    expect(result.states.start.entered_at).toBeTruthy();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.board.states.start.entered_at).toBeTruthy();
   });
 
   it("increments iteration count for iterable states", () => {
     const board = makeBoard();
     const r1 = enterState(board, "review");
-    expect(r1.iterations.review.count).toBe(1);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
 
-    const r2 = enterState(r1, "review");
-    expect(r2.iterations.review.count).toBe(2);
-    expect(r2.states.review.entries).toBe(2);
+    expect(r1.board.iterations.review.count).toBe(1);
+
+    const r2 = enterState(r1.board, "review");
+    expect(r2.ok).toBe(true);
+    if (!r2.ok) return;
+    expect(r2.board.iterations.review.count).toBe(2);
+    expect(r2.board.states.review.entries).toBe(2);
   });
 
   it("does not mutate the original board", () => {
     const board = makeBoard();
     const result = enterState(board, "start");
     expect(board.states.start.status).toBe("pending");
-    expect(result.states.start.status).toBe("in_progress");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.board.states.start.status).toBe("in_progress");
+  });
+
+  it("returns ok: false when state is already done", () => {
+    const board = makeBoard();
+    // Manually set the state to done
+    const doneBoard: Board = {
+      ...board,
+      states: {
+        ...board.states,
+        start: { ...board.states.start, status: "done" },
+      },
+    };
+    const result = enterState(doneBoard, "start");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/already done/i);
+  });
+
+  it("returns ok: true for pending state", () => {
+    const board = makeBoard();
+    const result = enterState(board, "start");
+    expect(result.ok).toBe(true);
+  });
+
+  it("returns ok: true for in_progress state (re-enter)", () => {
+    const board = makeBoard();
+    const r1 = enterState(board, "start");
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    const r2 = enterState(r1.board, "start");
+    expect(r2.ok).toBe(true);
   });
 });
 
@@ -110,25 +155,73 @@ describe("enterState", () => {
 
 describe("completeState", () => {
   it("sets status to done and records result", () => {
-    const board = enterState(makeBoard(), "start");
-    const result = completeState(board, "start", "all checks passed");
+    const entered = enterState(makeBoard(), "start");
+    expect(entered.ok).toBe(true);
+    if (!entered.ok) return;
 
-    expect(result.states.start.status).toBe("done");
-    expect(result.states.start.result).toBe("all checks passed");
-    expect(result.states.start.completed_at).toBeTruthy();
+    const result = completeState(entered.board, "start", "all checks passed");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.board.states.start.status).toBe("done");
+    expect(result.board.states.start.result).toBe("all checks passed");
+    expect(result.board.states.start.completed_at).toBeTruthy();
   });
 
   it("records artifacts when provided", () => {
-    const board = enterState(makeBoard(), "start");
-    const result = completeState(board, "start", "ok", ["report.md", "diff.patch"]);
+    const entered = enterState(makeBoard(), "start");
+    expect(entered.ok).toBe(true);
+    if (!entered.ok) return;
 
-    expect(result.states.start.artifacts).toEqual(["report.md", "diff.patch"]);
+    const result = completeState(entered.board, "start", "ok", ["report.md", "diff.patch"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.board.states.start.artifacts).toEqual(["report.md", "diff.patch"]);
   });
 
   it("does not include artifacts key when not provided", () => {
-    const board = enterState(makeBoard(), "start");
-    const result = completeState(board, "start", "ok");
-    expect(result.states.start.artifacts).toBeUndefined();
+    const entered = enterState(makeBoard(), "start");
+    expect(entered.ok).toBe(true);
+    if (!entered.ok) return;
+
+    const result = completeState(entered.board, "start", "ok");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.board.states.start.artifacts).toBeUndefined();
+  });
+
+  it("returns ok: false when state is not in_progress", () => {
+    const board = makeBoard(); // start is "pending"
+    const result = completeState(board, "start", "done");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/not in_progress/i);
+  });
+
+  it("returns ok: false for done state", () => {
+    const entered = enterState(makeBoard(), "start");
+    expect(entered.ok).toBe(true);
+    if (!entered.ok) return;
+
+    const completed = completeState(entered.board, "start", "done");
+    expect(completed.ok).toBe(true);
+    if (!completed.ok) return;
+
+    // Try to complete again — state is now "done", not "in_progress"
+    const result = completeState(completed.board, "start", "done again");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toMatch(/not in_progress/i);
+  });
+
+  it("returns ok: true when state is in_progress", () => {
+    const entered = enterState(makeBoard(), "start");
+    expect(entered.ok).toBe(true);
+    if (!entered.ok) return;
+
+    const result = completeState(entered.board, "start", "ok");
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -136,8 +229,11 @@ describe("completeState", () => {
 
 describe("setBlocked", () => {
   it("sets blocked info and state status to blocked", () => {
-    const board = enterState(makeBoard(), "start");
-    const result = setBlocked(board, "start", "missing credentials");
+    const entered = enterState(makeBoard(), "start");
+    expect(entered.ok).toBe(true);
+    if (!entered.ok) return;
+
+    const result = setBlocked(entered.board, "start", "missing credentials");
 
     expect(result.blocked).not.toBeNull();
     expect(result.blocked!.state).toBe("start");
@@ -312,5 +408,133 @@ describe("recordGateResult", () => {
     expect(result.states.start.wave_results).toBeDefined();
     expect(result.states.start.wave_results?.wave_2.gate).toBe("final-gate");
     expect(result.states.start.wave_results?.wave_2.gate_output).toBe("PASS");
+  });
+});
+
+// canEnterState
+
+describe("canEnterState", () => {
+  it("returns allowed: true when no iteration tracking for the state", () => {
+    const board = makeBoard(); // "start" has no max_iterations
+    const result = canEnterState(board, "start");
+    expect(result.allowed).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+
+  it("returns allowed: true when iteration count is below max", () => {
+    const board = makeBoard(); // "review" has max: 3, count: 0
+    const result = canEnterState(board, "review");
+    expect(result.allowed).toBe(true);
+  });
+
+  it("returns allowed: false when iteration count equals max", () => {
+    const board = makeBoard();
+    // Manually set count to max
+    const atMax: Board = {
+      ...board,
+      iterations: {
+        ...board.iterations,
+        review: { ...board.iterations.review, count: 3 },
+      },
+    };
+    const result = canEnterState(atMax, "review");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/max iterations/i);
+  });
+
+  it("returns allowed: false when iteration count exceeds max", () => {
+    const board = makeBoard();
+    const overMax: Board = {
+      ...board,
+      iterations: {
+        ...board.iterations,
+        review: { ...board.iterations.review, count: 5 },
+      },
+    };
+    const result = canEnterState(overMax, "review");
+    expect(result.allowed).toBe(false);
+  });
+});
+
+// appendConcern
+
+describe("appendConcern", () => {
+  it("appends a concern entry to board.concerns", () => {
+    const board = makeBoard();
+    const result = appendConcern(board, "start", "canon-implementor", "something to watch");
+
+    expect(result.concerns).toHaveLength(1);
+    expect(result.concerns[0].state_id).toBe("start");
+    expect(result.concerns[0].agent).toBe("canon-implementor");
+    expect(result.concerns[0].message).toBe("something to watch");
+    expect(result.concerns[0].timestamp).toBeTruthy();
+  });
+
+  it("preserves existing concerns when appending", () => {
+    const board = makeBoard();
+    const r1 = appendConcern(board, "start", "agent-1", "first concern");
+    const r2 = appendConcern(r1, "review", "agent-2", "second concern");
+
+    expect(r2.concerns).toHaveLength(2);
+    expect(r2.concerns[0].message).toBe("first concern");
+    expect(r2.concerns[1].message).toBe("second concern");
+  });
+
+  it("does not mutate the original board", () => {
+    const board = makeBoard();
+    const originalConcerns = board.concerns;
+    appendConcern(board, "start", "agent", "some concern");
+    expect(board.concerns).toBe(originalConcerns);
+    expect(board.concerns).toHaveLength(0);
+  });
+});
+
+// accumulateCannotFix
+
+describe("accumulateCannotFix", () => {
+  it("returns board unchanged when stateId has no iteration tracking", () => {
+    const board = makeBoard(); // "start" has no iterations
+    const result = accumulateCannotFix(board, "start", ["p-001"], ["/path/to/file.ts"]);
+    expect(result).toBe(board); // same reference — no changes
+  });
+
+  it("adds cannot_fix items to the iteration (cross-product)", () => {
+    const board = makeBoard(); // "review" has iterations
+    const result = accumulateCannotFix(
+      board,
+      "review",
+      ["p-001", "p-002"],
+      ["/file-a.ts", "/file-b.ts"],
+    );
+
+    const items = result.iterations.review.cannot_fix ?? [];
+    expect(items).toHaveLength(4); // 2 principles x 2 files
+    expect(items).toContainEqual({ principle_id: "p-001", file_path: "/file-a.ts" });
+    expect(items).toContainEqual({ principle_id: "p-001", file_path: "/file-b.ts" });
+    expect(items).toContainEqual({ principle_id: "p-002", file_path: "/file-a.ts" });
+    expect(items).toContainEqual({ principle_id: "p-002", file_path: "/file-b.ts" });
+  });
+
+  it("deduplicates against existing items", () => {
+    const board = makeBoard();
+    // Add initial items
+    const r1 = accumulateCannotFix(board, "review", ["p-001"], ["/file-a.ts"]);
+    // Add again — same item should not be duplicated
+    const r2 = accumulateCannotFix(r1, "review", ["p-001"], ["/file-a.ts"]);
+
+    const items = r2.iterations.review.cannot_fix ?? [];
+    expect(items).toHaveLength(1);
+  });
+
+  it("returns board unchanged when principleIds is empty", () => {
+    const board = makeBoard();
+    const result = accumulateCannotFix(board, "review", [], ["/file-a.ts"]);
+    expect(result).toBe(board);
+  });
+
+  it("returns board unchanged when filePaths is empty", () => {
+    const board = makeBoard();
+    const result = accumulateCannotFix(board, "review", ["p-001"], []);
+    expect(result).toBe(board);
   });
 });
