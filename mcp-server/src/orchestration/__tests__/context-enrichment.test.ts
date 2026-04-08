@@ -17,7 +17,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Module mocks — must be hoisted to top of file

@@ -6,7 +6,7 @@
  * computes the final tool list passed to the Agent spawn request.
  */
 
-import type { ToolOverrides } from "@domains/flows/flow-schema.ts";
+import type { ToolOverrides } from "@domains/flows/flow-definition-schemas.ts";
 
 /** Base tool profile for an agent type. */
 export type AgentToolProfile = {

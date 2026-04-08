@@ -49,7 +49,7 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 import { existsSync } from "node:fs";
-import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
   assembleWaveBriefing,

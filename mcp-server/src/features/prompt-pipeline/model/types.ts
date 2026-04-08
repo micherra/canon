@@ -5,7 +5,8 @@
  * Stages communicate via PromptContext — immutable input fields, accumulated mutable fields.
  */
 
-import type { Board, ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";
 
 /** A task item passed to wave/parallel-per states — either a name or a structured plan. */

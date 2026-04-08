@@ -24,7 +24,7 @@
  * into N prompt entries based on state type.
  */
 
-import type { CompeteConfig } from "@domains/flows/flow-schema.ts";
+import type { CompeteConfig } from "@domains/flows/flow-definition-schemas.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
 import {
   type CompeteConfig as ExpandedCompeteConfig,

@@ -5,7 +5,8 @@
  * One behavior per test.
  */
 
-import type { Board, ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PromptContext } from "../model/types.ts";
 

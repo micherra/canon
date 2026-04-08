@@ -37,7 +37,7 @@ vi.mock("@features/orchestration/engine/debate.ts", () => ({
   inspectDebateProgress: vi.fn(),
 }));
 
-import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { expandCompetitorPrompts } from "@features/orchestration/engine/compete.ts";
 import { buildDebatePrompt, inspectDebateProgress } from "@features/orchestration/engine/debate.ts";
 import type { FileCluster } from "@features/orchestration/services/diff-cluster.ts";

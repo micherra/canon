@@ -23,7 +23,7 @@
  * operations, all concerning coordination and observability metadata.
  */
 
-import type { ToolOverrides } from "@domains/flows/flow-schema.ts";
+import type { ToolOverrides } from "@domains/flows/flow-definition-schemas.ts";
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
 import { resolveToolProfile } from "../model/tool-profiles.ts";

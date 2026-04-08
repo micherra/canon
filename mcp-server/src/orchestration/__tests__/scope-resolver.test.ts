@@ -10,7 +10,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Board } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 // We test resolveTaskScope via a workspace with temp dirs and board objects

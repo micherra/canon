@@ -29,7 +29,7 @@ vi.mock("../model/tool-profiles.ts", () => ({
   }),
 }));
 
-import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
 import { resolveToolProfile } from "../model/tool-profiles.ts";
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";

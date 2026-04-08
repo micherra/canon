@@ -1,12 +1,11 @@
 import { EventEmitter } from "node:events";
+import type { ConcernEntry, HistoryEntry } from "@domains/flows/board-state-schemas.ts";
 import type {
-  ConcernEntry,
   GateResult,
-  HistoryEntry,
   PostconditionResult,
   TestResults,
   ViolationSeverities,
-} from "@domains/flows/flow-schema.ts";
+} from "@domains/flows/flow-definition-schemas.ts";
 import { z } from "zod";
 
 export type FlowEventType =
@@ -255,15 +254,6 @@ export const EventPayloadSchemas = {
     eventType: z.string(),
     timestamp: z.string(),
     workspace: z.string(),
-  }),
-
-  tool_scope_audit: z.object({
-    agent: z.string(),
-    correlation_id: correlationId,
-    event: z.string(),
-    granted_disallowed: z.array(z.string()),
-    stateId: z.string(),
-    timestamp: z.string(),
   }),
 } satisfies Record<FlowEventType, z.ZodTypeAny>;
 

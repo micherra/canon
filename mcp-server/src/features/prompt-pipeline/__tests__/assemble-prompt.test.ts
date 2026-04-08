@@ -67,7 +67,8 @@ vi.mock("@features/orchestration/engine/compete.ts", () => ({
   expandCompetitorPrompts: vi.fn().mockReturnValue([]),
 }));
 
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { readChannelAsContext } from "@domains/messages/messages.ts";
 import { assembleWaveBriefing } from "@features/orchestration/services/wave-briefing.ts";

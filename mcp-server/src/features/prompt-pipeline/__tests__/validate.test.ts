@@ -5,7 +5,8 @@
  * One behavior per test.
  */
 
-import type { Board, ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";
 import { validatePrompts } from "../tools/validate.ts";

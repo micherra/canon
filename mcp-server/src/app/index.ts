@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ResolvedFlowSchema } from "@domains/flows/flow-schema.ts";
+import { ResolvedFlowSchema } from "@domains/flows/flow-definition-schemas.ts";
 import type { FailureEntry } from "@features/diagnostics/tools/categorize-failures.ts";
 import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
