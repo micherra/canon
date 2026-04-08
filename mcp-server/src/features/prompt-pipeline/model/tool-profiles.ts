@@ -118,12 +118,13 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
       "Grep",
       "Glob",
       "Bash",
+      "Write", // ADR-016: scoped to .canon/proposed-learnings/ via agent prompt
       "graph_query",
       "semantic_search",
       "get_file_context",
       "codebase_graph",
     ],
-    disallowed: ["Edit", "Write", "NotebookEdit"],
+    disallowed: ["Edit", "NotebookEdit"],
   },
   "canon-researcher": {
     allowed: [

@@ -11,6 +11,7 @@ tools:
   - Bash
   - Glob
   - Grep
+  - Write
   - mcp__canon__semantic_search
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
@@ -41,6 +42,8 @@ You receive from the orchestrator:
 - Data availability summary
 - Paths to principles directory, conventions file, project root
 - Previous learning history (`.canon/learning.jsonl`) if it exists — check for suppressed suggestions
+- **[Auto-trigger mode]** Recent flow transcript paths (ADR-015) when spawned after flow completion
+- **[Auto-trigger mode]** Flow execution summary from the completed flow
 
 ## Process
 
@@ -86,6 +89,57 @@ If a dimension was not requested (flags), omit its section entirely.
 
 After writing the report, append a structured entry to `.canon/learning.jsonl` using the schema in `${CLAUDE_PLUGIN_ROOT}/skills/canon/references/learner-dimensions.md`.
 
+### Step 5: Write structured proposals (auto-trigger mode only)
+
+When spawned in auto-trigger mode (you receive transcript paths rather than dimension flags), write structured proposals instead of the learning report.
+
+Create the directory `.canon/proposed-learnings/{timestamp}/` where `{timestamp}` is the current ISO timestamp with colons replaced by hyphens (e.g., `2026-04-08T15-30-00Z`).
+
+For each suggestion, write a separate markdown file: `{nn}-{slug}.md` (e.g., `01-add-error-boundary-convention.md`).
+
+Each proposal file follows this format:
+
+```markdown
+---
+proposal_id: "{timestamp}-{nn}"
+type: "new-convention" | "severity-change" | "principle-revision" | "convention-graduation" | "stale-removal"
+confidence: 0.0-1.0
+target: "{principle-id or convention text}"
+---
+
+## Observation
+
+{What pattern was observed, with quantified evidence}
+
+## Proposed Change
+
+{Exact text to add, modify, or remove}
+
+## Evidence
+
+{Transcript excerpts, file counts, review data that support this}
+- Source: {transcript path or data source}
+- Metric: {specific number}
+
+## Impact
+
+{What improves if this change is adopted}
+```
+
+**Write constraint**: Only write files to `.canon/proposed-learnings/`. Do not write to any other directory. Do not modify `.canon/LEARNING-REPORT.md` or `.canon/learning.jsonl` in auto-trigger mode.
+
+### Step 6: Output notification summary (auto-trigger mode only)
+
+After writing all proposals, output a final summary line in this exact format as the LAST line of your response:
+
+CANON_LEARN_NOTIFICATION: Canon learned {N} patterns from recent flows. Run `/canon:review-learnings` to review.
+
+Where {N} is the number of proposal files written. If no proposals were generated (no actionable patterns found), output:
+
+CANON_LEARN_NOTIFICATION: Canon analyzed recent flows but found no new patterns to propose.
+
+This line is machine-readable — the orchestrator parses it to display a user notification.
+
 ## Important constraints
 
 - **Read-only** (almost): Never modify principles, conventions, or project code. Only write `.canon/LEARNING-REPORT.md` and append to `.canon/learning.jsonl`.
@@ -96,3 +150,5 @@ After writing the report, append a structured entry to `.canon/learning.jsonl` u
 - **Minimum thresholds**: Enforce them strictly. No suggestions based on fewer reviews, builds, or flow runs than the dimension requires.
 - **Demotion safety**: Never suggest demoting security-tagged rules. Flag low compliance for investigation instead.
 - **No removed tools**: Do not call `get_patterns` or `get_decisions` — these tools no longer exist. Use `get_drift_report` for review data and live Grep/Glob for codebase scanning.
+- **Write scope** (ADR-016): In auto-trigger mode, Write ONLY to `.canon/proposed-learnings/{timestamp}/`. Never write to any other location.
+- **Auto-trigger vs manual**: When spawned with transcript paths, use the structured proposal format (Steps 5–6). When spawned via `/canon:learn`, use the existing report format (Steps 3–4).
