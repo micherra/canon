@@ -5,7 +5,7 @@
  * syncs Board object fields to the ExecutionStore.
  */
 
-import type { Board } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { beforeEach, describe, expect, test } from "vitest";

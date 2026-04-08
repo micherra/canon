@@ -8,7 +8,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BoardSchema } from "@domains/flows/flow-schema.ts";
+import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
 import type Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { initExecutionDb, SCHEMA_VERSION } from "../execution-schema.ts";
@@ -1065,6 +1065,54 @@ describe("getExecutionStore", () => {
     // Get a second reference (cached), verify same data
     const sameStore = getExecutionStore(dir);
     expect(sameStore.getProgress()).toContain("persistent entry");
+  });
+});
+
+// getOrientationRatio — ADR-003a
+
+describe("getOrientationRatio", () => {
+  let store: ExecutionStore;
+
+  beforeEach(() => {
+    store = makeStore();
+    store.initExecution(BASE_INIT_PARAMS);
+    store.upsertState("research", { entries: 0, status: "in_progress" });
+  });
+  afterEach(() => {
+    store.close();
+  });
+
+  test("returns correct ratio when tool_calls and orientation_calls are set", () => {
+    store.updateStateMetrics("research", { orientation_calls: 4, tool_calls: 10 });
+    expect(store.getOrientationRatio("research")).toBeCloseTo(0.4);
+  });
+
+  test("returns 1.0 when all calls are orientation calls", () => {
+    store.updateStateMetrics("research", { orientation_calls: 5, tool_calls: 5 });
+    expect(store.getOrientationRatio("research")).toBeCloseTo(1.0);
+  });
+
+  test("returns 0 when orientation_calls is 0", () => {
+    store.updateStateMetrics("research", { orientation_calls: 0, tool_calls: 8 });
+    expect(store.getOrientationRatio("research")).toBe(0);
+  });
+
+  test("returns 0 when tool_calls is 0 (avoid divide-by-zero)", () => {
+    store.updateStateMetrics("research", { orientation_calls: 0, tool_calls: 0 });
+    expect(store.getOrientationRatio("research")).toBe(0);
+  });
+
+  test("returns 0 when state has no metrics at all", () => {
+    expect(store.getOrientationRatio("research")).toBe(0);
+  });
+
+  test("returns 0 for unknown state_id", () => {
+    expect(store.getOrientationRatio("nonexistent")).toBe(0);
+  });
+
+  test("returns 0 when only tool_calls is set but not orientation_calls", () => {
+    store.updateStateMetrics("research", { tool_calls: 10 });
+    expect(store.getOrientationRatio("research")).toBe(0);
   });
 });
 

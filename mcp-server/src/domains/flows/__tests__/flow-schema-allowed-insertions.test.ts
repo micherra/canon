@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { FlowDefinitionSchema } from "../flow-schema.ts";
+import { FlowDefinitionSchema } from "../flow-definition-schemas.ts";
 
 const MINIMAL_FLOW = {
   description: "test flow",

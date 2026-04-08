@@ -5,7 +5,7 @@
  * duplicating logic. See ADR-009a (composition over inline).
  */
 
-import type { Board } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
 import type { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 
 /**

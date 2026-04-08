@@ -14,14 +14,14 @@
  */
 
 // Re-export types consumed by callers that import from this module.
-export type { WaveEvent, WaveEventResolution, WaveEventType } from "@domains/flows/flow-schema.ts";
+export type { WaveEvent, WaveEventResolution, WaveEventType } from "@domains/flows/event-schemas.ts";
 
 /**
  * Pure lookup: returns which agents (if any) need to be spawned to handle
  * a given wave event type, along with per-agent spawn descriptions.
  */
 export function resolveEventAgents(
-  eventType: import("@domains/flows/flow-schema.ts").WaveEventType,
+  eventType: import("@domains/flows/event-schemas.ts").WaveEventType,
 ): {
   agents: string[];
   descriptions: Record<string, string>;

@@ -16,9 +16,9 @@ import type {
   BoardStateEntry,
   IterationEntry,
   Session,
-  StuckWhen,
-  WaveEvent,
-} from "@domains/flows/flow-schema.ts";
+} from "@domains/flows/board-state-schemas.ts";
+import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
+import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import { validateEventPayload } from "@domains/messages/events.ts";
 import { CANON_FILES } from "@shared/constants.ts";
 import type Database from "better-sqlite3";
@@ -1136,6 +1136,32 @@ export class ExecutionStore {
     this.stmtUpdateStateMetrics.run(JSON.stringify(merged), stateId);
 
     return true;
+  }
+
+  // Orientation ratio (ADR-003a)
+
+  /**
+   * Compute the ratio of orientation calls to total tool calls for a given state.
+   * Orientation calls are Read/Glob/Grep calls made before the first write — a
+   * higher ratio indicates the agent spent more time understanding before acting.
+   *
+   * Returns 0 when:
+   * - The state does not exist
+   * - No metrics have been recorded for the state
+   * - `tool_calls` is 0 (avoids divide-by-zero)
+   * - `orientation_calls` is missing from the metrics
+   */
+  getOrientationRatio(stateId: string): number {
+    const row = this.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
+    if (!row || !row.metrics) return 0;
+
+    const metrics = JSON.parse(row.metrics) as Record<string, unknown>;
+    const toolCalls = typeof metrics.tool_calls === "number" ? metrics.tool_calls : 0;
+    const orientationCalls =
+      typeof metrics.orientation_calls === "number" ? metrics.orientation_calls : 0;
+
+    if (toolCalls === 0) return 0;
+    return orientationCalls / toolCalls;
   }
 
   // Cache prefix (ADR-006a)

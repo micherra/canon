@@ -5,7 +5,8 @@
  * File I/O (readBoard, writeBoard) has been removed — use ExecutionStore (SQLite).
  */
 
-import type { Board, ConsultationResult, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board, ConsultationResult } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 
 /**
  * Create a new Board from a resolved flow.

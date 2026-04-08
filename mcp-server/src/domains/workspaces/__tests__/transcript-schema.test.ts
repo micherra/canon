@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TranscriptEntrySchema } from "@domains/flows/flow-schema.ts";
+import { TranscriptEntrySchema } from "@domains/flows/event-schemas.ts";
 import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import {

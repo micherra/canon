@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { WaveResultSchema, WorktreeEntrySchema } from "../flow-schema.ts";
+import { WaveResultSchema, WorktreeEntrySchema } from "../board-state-schemas.ts";
 
 describe("WorktreeEntrySchema", () => {
   it("parses a valid worktree entry with all fields", () => {

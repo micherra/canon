@@ -11,7 +11,7 @@
 
 import type { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { z } from "zod";
-import type { FlowDefinition, StateDefinition } from "./flow-schema.ts";
+import type { FlowDefinition, StateDefinition } from "./flow-definition-schemas.ts";
 
 // Event schema (discriminated union)
 

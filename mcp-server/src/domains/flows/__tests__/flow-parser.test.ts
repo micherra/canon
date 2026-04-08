@@ -12,7 +12,7 @@ import type {
   FragmentDefinition,
   FragmentInclude,
   ResolvedFlow,
-} from "../flow-schema.ts";
+} from "../flow-definition-schemas.ts";
 
 const pluginDir = resolve(process.cwd(), "..");
 

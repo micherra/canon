@@ -19,7 +19,7 @@ import {
   SingleStateSchema,
   STATUS_KEYWORDS,
   WaveStateSchema,
-} from "../flow-schema.ts";
+} from "../flow-definition-schemas.ts";
 
 // BaseStateFields — approval_gate / max_revisions / rejection_target
 

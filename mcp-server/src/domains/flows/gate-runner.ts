@@ -9,9 +9,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runShell } from "@platform/adapters/process-adapter.ts";
-import type { BoardStateEntry, GateResult, ResolvedFlow, StateDefinition } from "./flow-schema.ts";
+import type { BoardStateEntry } from "./board-state-schemas.ts";
+import type { GateResult, ResolvedFlow, StateDefinition } from "./flow-definition-schemas.ts";
 
-// GateResult is the source of truth from flow-schema.ts — no local interface needed.
+// GateResult is the source of truth from flow-definition-schemas.ts — no local interface needed.
 export type { GateResult };
 
 /**

@@ -18,7 +18,7 @@ import {
   type StateDefinition,
   StateDefinitionSchema,
   type TypedParam,
-} from "./flow-schema.ts";
+} from "./flow-definition-schemas.ts";
 
 // parseFlowContent
 

@@ -22,7 +22,7 @@ import {
   ToolOverridesSchema,
   WavePolicySchema,
   WaveStateSchema,
-} from "../flow-schema.ts";
+} from "../flow-definition-schemas.ts";
 
 // SingleStateSchema
 

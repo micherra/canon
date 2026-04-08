@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BoardStateEntry, ResolvedFlow } from "../flow-schema.ts";
+import type { BoardStateEntry } from "../board-state-schemas.ts";
+import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 
 // Hoist mocks before module imports
 

@@ -18,7 +18,7 @@ import {
   validateFlow,
   validateSpawnCoverage,
 } from "../flow-parser.ts";
-import type { ResolvedFlow } from "../flow-schema.ts";
+import type { ResolvedFlow } from "../flow-definition-schemas.ts";
 
 const pluginDir = resolve(process.cwd(), "..");
 
