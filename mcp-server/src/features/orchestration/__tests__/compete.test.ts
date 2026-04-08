@@ -138,7 +138,7 @@ describe("compete", () => {
 
 // resolveCompeteConfig("auto") and compete path through get-spawn-prompt
 
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 

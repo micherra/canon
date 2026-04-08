@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PostconditionAssertion } from "@domains/flows/flow-schema.ts";
+import type { PostconditionAssertion } from "@domains/flows/flow-definition-schemas.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { evaluatePostconditions, resolvePostconditions } from "../services/contract-checker.ts";
 

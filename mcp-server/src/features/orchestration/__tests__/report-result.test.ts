@@ -11,7 +11,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ResolvedFlow as FlowType } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow as FlowType } from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";
 import { writeMessage } from "@domains/messages/messages.ts";

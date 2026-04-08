@@ -11,7 +11,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { WaveEvent } from "@domains/flows/flow-schema.ts";
+import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getMessages } from "../tools/get-messages.ts";

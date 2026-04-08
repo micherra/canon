@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

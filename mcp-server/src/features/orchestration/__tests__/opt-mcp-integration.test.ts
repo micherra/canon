@@ -39,7 +39,8 @@ vi.mock("@domains/messages/event-bus-instance.ts", () => ({
   },
 }));
 
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";

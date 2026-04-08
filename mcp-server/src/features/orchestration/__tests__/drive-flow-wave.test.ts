@@ -42,7 +42,7 @@ vi.mock("../tools/resolve-after-consultations.ts", () => ({
   resolveAfterConsultations: vi.fn(),
 }));
 
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { runGates } from "@domains/flows/gate-runner.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";

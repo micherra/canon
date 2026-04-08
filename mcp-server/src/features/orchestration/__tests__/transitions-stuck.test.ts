@@ -1,4 +1,4 @@
-import type { HistoryEntry } from "@domains/flows/flow-schema.ts";
+import type { HistoryEntry } from "@domains/flows/board-state-schemas.ts";
 import { describe, expect, it } from "vitest";
 import { buildHistoryEntry, isStuck } from "../engine/transitions.ts";
 

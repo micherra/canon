@@ -1,4 +1,4 @@
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import { resolveAfterConsultations } from "../tools/resolve-after-consultations.ts";
 

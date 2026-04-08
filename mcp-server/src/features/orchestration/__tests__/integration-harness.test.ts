@@ -29,8 +29,8 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
-import { BoardSchema } from "@domains/flows/flow-schema.ts";
+import { BoardSchema } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import type { FlowEventMap } from "@domains/messages/events.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";

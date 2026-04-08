@@ -10,7 +10,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
-import type { RoleEntry } from "@domains/flows/flow-schema.ts";
+import type { RoleEntry } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import { isRoleOptional } from "../engine/transitions.ts";
 

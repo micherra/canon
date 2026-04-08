@@ -1,4 +1,4 @@
-import type { StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import { describe, expect, it } from "vitest";
 import {
   aggregateParallelPerResults,

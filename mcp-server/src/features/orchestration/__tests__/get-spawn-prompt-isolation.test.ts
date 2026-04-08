@@ -32,7 +32,7 @@ vi.mock("../services/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";
 
 let tmpDirs: string[] = [];

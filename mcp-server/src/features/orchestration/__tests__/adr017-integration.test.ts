@@ -29,8 +29,8 @@ const pluginDir = resolve(process.cwd(), "..");
 // 1 & 2: Flow YAML parsing — feature.md and epic.md
 
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
-import { ParallelStateSchema } from "@domains/flows/flow-schema.ts";
+import { ParallelStateSchema } from "@domains/flows/flow-definition-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 
 describe("flow YAML parsing — approval gate fields survive loadAndResolveFlow", () => {
   it("feature.md: design state has approval_gate: true and max_revisions: 3", async () => {
@@ -113,7 +113,8 @@ describe("ParallelStateSchema approval gate fields", () => {
 
 // 3 & 4: shouldApprovalGate edge cases
 
-import type { Board, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import type { DriveFlowInput } from "../services/drive-flow-types.ts";
 import { shouldApprovalGate, shouldApprovalGateWaveBoundary } from "../tools/drive-flow.ts";
 

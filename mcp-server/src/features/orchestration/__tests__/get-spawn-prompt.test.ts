@@ -33,7 +33,8 @@ vi.mock("../services/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assembleWaveBriefing } from "../services/wave-briefing.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";

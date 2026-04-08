@@ -44,7 +44,8 @@ vi.mock("node:fs", () => ({
 // Imports after mocks
 
 import { initBoard, recordConsultationResult, recordGateResult } from "@domains/board/board.ts";
-import type { Board, ConsultationResult, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board, ConsultationResult } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { resolveGateCommand, runGate } from "@domains/flows/gate-runner.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import {

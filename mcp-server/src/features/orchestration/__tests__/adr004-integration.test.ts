@@ -27,15 +27,15 @@ import {
   validateSpawnCoverage,
   validateStateIdParams,
 } from "@domains/flows/flow-parser.ts";
+import {
+  FragmentStateDefinitionSchema,
+  StateDefinitionSchema,
+} from "@domains/flows/flow-definition-schemas.ts";
 import type {
   FragmentDefinition,
   FragmentInclude,
   ResolvedFlow,
-} from "@domains/flows/flow-schema.ts";
-import {
-  FragmentStateDefinitionSchema,
-  StateDefinitionSchema,
-} from "@domains/flows/flow-schema.ts";
+} from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb, runMigrations } from "@domains/workspaces/execution-schema.ts";
 import { ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type Database from "better-sqlite3";

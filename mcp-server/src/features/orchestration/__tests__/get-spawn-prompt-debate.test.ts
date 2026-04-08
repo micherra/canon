@@ -12,7 +12,7 @@ vi.mock("../services/diff-cluster.ts", () => ({
   clusterDiff: vi.fn(),
 }));
 
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { writeMessage } from "@domains/messages/messages.ts";
 import { clusterDiff } from "../services/diff-cluster.ts";
 import { getSpawnPrompt } from "../tools/get-spawn-prompt.ts";

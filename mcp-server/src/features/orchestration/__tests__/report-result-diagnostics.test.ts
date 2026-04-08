@@ -12,7 +12,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { clearStoreCache, getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";

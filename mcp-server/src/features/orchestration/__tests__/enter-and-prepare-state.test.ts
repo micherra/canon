@@ -42,7 +42,8 @@ vi.mock("@domains/workspaces/wave-variables.ts", () => ({
   substituteVariables: vi.fn((s: string) => s),
 }));
 
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { evaluateSkipWhen } from "@domains/flows/skip-when.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";

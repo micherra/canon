@@ -44,7 +44,8 @@ vi.mock("../tools/resolve-after-consultations.ts", () => ({
 }));
 
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { initExecutionDb } from "@domains/workspaces/execution-schema.ts";
 import { clearStoreCache, ExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";

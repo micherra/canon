@@ -19,7 +19,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // shouldApprovalGate and shouldApprovalGateWaveBoundary (pure functions)
 
 import { initBoard } from "@domains/board/board.ts";
-import type { Board, ResolvedFlow, StateDefinition } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definition-schemas.ts";
 import type { DriveFlowInput } from "../services/drive-flow-types.ts";
 import { shouldApprovalGate, shouldApprovalGateWaveBoundary } from "../tools/drive-flow.ts";
 
@@ -903,7 +904,7 @@ describe("driveFlow — self-transition on single state (revise: design)", () =>
 
 // Fix 4: STATUS_ALIASES — "approve" maps to "approved"
 
-import { STATUS_ALIASES } from "@domains/flows/flow-schema.ts";
+import { STATUS_ALIASES } from "@domains/flows/flow-definition-schemas.ts";
 
 describe("STATUS_ALIASES — approve alias", () => {
   it("'approve' maps to 'approved'", () => {

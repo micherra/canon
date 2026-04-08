@@ -22,7 +22,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { DriftDb } from "@platform/storage/drift/drift-db.ts";
 import { initDriftDb } from "@platform/storage/drift/drift-schema.ts";
 import type { ReviewEntry } from "@shared/schema.ts";

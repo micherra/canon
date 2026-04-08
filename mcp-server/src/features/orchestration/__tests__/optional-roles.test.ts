@@ -29,7 +29,7 @@ vi.mock("../engine/effects.ts", () => ({
   executeEffects: vi.fn().mockResolvedValue(undefined),
 }));
 
-import type { ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { assertOk } from "@shared/lib/tool-result.ts";
 import { reportResult } from "../tools/report-result.ts";
