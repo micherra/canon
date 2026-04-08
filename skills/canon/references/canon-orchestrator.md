@@ -353,6 +353,65 @@ When `drive_flow` returns `{ action: "done" }`:
    - Safe rollback point: `base_commit`
    - Build metrics from board state entries
 
+## Tool Scope
+
+### Orchestrator-only tools (call directly)
+
+The orchestrator calls these MCP tools directly — they are part of the flow state machine harness and must NOT be delegated to specialist agents:
+
+| Tool | Purpose |
+|------|---------|
+| `load_flow` | Load and resolve a flow definition |
+| `init_workspace` | Create or resume a workspace with preflight checks |
+| `drive_flow` | Drive the flow state machine for a single state; returns SpawnRequest, HitlBreakpoint, or done |
+| `update_board` | Mutate board state (skip, block, complete_flow, set_metadata, set_wave_progress) |
+| `categorize_failures` | Classify test failures into categories for fan-out fixer spawning |
+| `resolve_wave_event` | Apply or reject a pending wave event (add_task, reprioritize, guidance, etc.) |
+| `resolve_after_consultations` | Resolve "after" consultation prompts for a state after the last wave |
+
+### Agent-only tools (delegate via Agent spawn)
+
+These tools are used exclusively by specialist agents inside their worktrees. The orchestrator never calls them directly:
+
+| Tool | Used by |
+|------|---------|
+| `write_plan_index` | canon-architect |
+| `write_implementation_summary` | canon-implementor |
+| `write_review` | canon-reviewer |
+| `write_test_report` | canon-tester |
+| `get_principles` / `list_principles` | canon-architect, canon-implementor, canon-reviewer |
+| `graph_query` | canon-researcher, canon-architect, canon-implementor, canon-reviewer, canon-security, canon-fixer, canon-tester, canon-learner, canon-guide, canon-chat |
+| `codebase_graph` | canon-researcher, canon-architect, canon-reviewer, canon-security, canon-learner, canon-guide, canon-chat |
+| `get_file_context` | canon-researcher, canon-architect, canon-reviewer, canon-security, canon-fixer, canon-learner, canon-guide, canon-chat |
+| `semantic_search` | canon-researcher, canon-architect, canon-reviewer, canon-security, canon-fixer, canon-learner, canon-guide, canon-chat |
+| `store_summaries` / `store_pr_review` | canon-scribe, canon-reviewer |
+| `record_agent_metrics` | canon-implementor, canon-tester |
+| `get_transcript` | canon-reviewer, canon-fixer |
+| `post_message` / `get_messages` | canon-implementor (and all wave agents) |
+| `show_pr_impact` / `review_code` / `get_drift_report` | canon-reviewer, canon-security |
+| `inject_wave_event` | canon-architect (event resolution mode only) |
+| `update_board` | canon-architect (set_metadata for affected_files) |
+
+**Rule:** If a tool is not in the orchestrator-only list, do not call it directly — spawn the appropriate specialist agent instead.
+
+**Transcript durability**: Agent transcripts persist in `{workspace}/transcripts/` past flow completion. Cleanup is handled by the workspace janitor (ADR-020). Transcripts are referenced from the execution store via `transcript_path` and can be retrieved using `get_transcript`.
+
+### Transcript Capture
+
+After each Agent tool spawn completes, the orchestrator should capture the agent's result for transcript persistence:
+
+1. The Agent tool returns the final result text (full conversation is not available to the orchestrator)
+2. Write the result to a JSONL file at `{workspace}/transcripts/{state_id}--{agent_type}--{timestamp}.jsonl`
+3. Pass the path to `report_result` via the `transcript_path` parameter (which already accepts it)
+4. The execution store records the path for later retrieval via `get_transcript`
+
+**Limitations**: The Agent tool only returns final result text, not the full agent conversation. Full conversation capture would require Agent tool API changes. The current approach captures the orchestrator's view of what the agent produced.
+
+**File naming convention**: `{state_id}--{agent_type}--{ISO-timestamp}.jsonl` where:
+- `state_id`: the flow state being executed
+- `agent_type`: e.g., `canon-implementor`
+- `timestamp`: ISO-8601 format with colons replaced by dashes for filesystem safety
+
 ## Workspace Permissions
 
 You own: `board.json`, `session.json`, `progress.md`, `log.jsonl`
