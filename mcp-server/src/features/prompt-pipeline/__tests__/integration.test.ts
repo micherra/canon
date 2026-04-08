@@ -25,6 +25,14 @@
  * - Progress not in cache prefix (ADR-006a risk)
  */
 
+/**
+ * ADR-006a: Cache prefix intentionally excludes progress.md content.
+ * Progress is appended per-state by report_result and changes every iteration,
+ * so including it in the cache prefix would invalidate the prefix cache on every
+ * state transition. The test "Progress not in cache prefix" below verifies this.
+ * This is a documented intentional gap, not a bug.
+ */
+
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
