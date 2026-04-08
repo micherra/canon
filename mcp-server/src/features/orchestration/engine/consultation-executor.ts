@@ -13,7 +13,8 @@
  * but this module does not enforce it.
  */
 
-import type { ConsultationResult, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { ConsultationResult } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { substituteVariables } from "@domains/messages/variables.ts";
 
 export type ConsultationInput = {

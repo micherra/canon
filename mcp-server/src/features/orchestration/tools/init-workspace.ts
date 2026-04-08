@@ -9,7 +9,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { initBoard } from "@domains/board/board.ts";
 import { loadAndResolveFlow } from "@domains/flows/flow-parser.ts";
-import type { Board, Session } from "@domains/flows/flow-schema.ts";
+import type { Board, Session } from "@domains/flows/board-state-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import {
   checkSlugCollision,

@@ -1,4 +1,4 @@
-import type { WaveEvent } from "@domains/flows/flow-schema.ts";
+import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import type { Message } from "@domains/messages/messages.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 

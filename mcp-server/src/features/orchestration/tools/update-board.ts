@@ -1,5 +1,5 @@
 import { enterState, setBlocked } from "@domains/board/board.ts";
-import type { Board } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { appendFlowRun, type FlowRunEntry } from "@platform/storage/drift/analytics.ts";

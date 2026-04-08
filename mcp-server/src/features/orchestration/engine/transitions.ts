@@ -7,12 +7,11 @@ import type {
   GateProgressHistoryEntry,
   HistoryEntry,
   ProgressHistoryEntry,
-  StateDefinition,
   StatusHistoryEntry,
-  StuckWhen,
   ViolationHistoryEntry,
-} from "@domains/flows/flow-schema.ts";
-import { STATUS_ALIASES } from "@domains/flows/flow-schema.ts";
+} from "@domains/flows/board-state-schemas.ts";
+import type { StateDefinition, StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
+import { STATUS_ALIASES } from "@domains/flows/flow-definition-schemas.ts";
 
 /**
  * Lowercase the input and apply alias mapping to produce a normalized

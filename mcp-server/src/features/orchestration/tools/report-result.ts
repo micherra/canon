@@ -8,10 +8,9 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { completeState, setBlocked } from "@domains/board/board.ts";
 import { syncBoardToStore } from "@domains/board/board-sync.ts";
+import type { Board, CannotFixItem } from "@domains/flows/board-state-schemas.ts";
 import type {
   BaselineEvidence,
-  Board,
-  CannotFixItem,
   DiscoveredGate,
   GateResult,
   PostconditionAssertion,
@@ -22,12 +21,12 @@ import type {
   StuckWhen,
   TestResults,
   ViolationSeverities,
-} from "@domains/flows/flow-schema.ts";
+} from "@domains/flows/flow-definition-schemas.ts";
 import {
   BaselineEvidenceSchema,
   STATUS_ALIASES,
   STATUS_KEYWORDS,
-} from "@domains/flows/flow-schema.ts";
+} from "@domains/flows/flow-definition-schemas.ts";
 import { flowEventBus } from "@domains/messages/event-bus-instance.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";

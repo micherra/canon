@@ -10,18 +10,16 @@
  * 5. Return combined result.
  */
 
+import type { Board, CannotFixItem, HistoryEntry } from "@domains/flows/board-state-schemas.ts";
 import type {
-  Board,
-  CannotFixItem,
   DiscoveredGate,
   GateResult,
-  HistoryEntry,
   PostconditionAssertion,
   PostconditionResult,
   ResolvedFlow,
   TestResults,
   ViolationSeverities,
-} from "@domains/flows/flow-schema.ts";
+} from "@domains/flows/flow-definition-schemas.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import type { FileCluster } from "../services/diff-cluster.ts";
 import type { ConsultationPromptEntry } from "./enter-and-prepare-state.ts";

@@ -20,7 +20,8 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import type { Board, ResolvedFlow } from "@domains/flows/flow-schema.ts";
+import type { Board } from "@domains/flows/board-state-schemas.ts";
+import type { ResolvedFlow } from "@domains/flows/flow-definition-schemas.ts";
 import { escapeDollarBrace } from "@domains/workspaces/wave-variables.ts";
 import { gitLog } from "@platform/adapters/git-adapter.ts";
 import { DriftStore } from "@platform/storage/drift/store.ts";

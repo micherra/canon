@@ -12,7 +12,7 @@
 
 import { readFile, realpath } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { type TranscriptEntry, TranscriptEntrySchema } from "@domains/flows/flow-schema.ts";
+import { type TranscriptEntry, TranscriptEntrySchema } from "@domains/flows/event-schemas.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import type { ToolResult } from "@shared/lib/tool-result.ts";
 import { toolError, toolOk } from "@shared/lib/tool-result.ts";
