@@ -179,13 +179,13 @@ describe("Knowledge Graph Store", () => {
       }).not.toThrow();
     });
 
-    test("schema_version is set to 3", () => {
+    test("schema_version is set to 4", () => {
       const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
         | { value: string }
         | undefined;
       expect(row).toBeDefined();
       expect(row!.value).toBe(SCHEMA_VERSION);
-      expect(row!.value).toBe("3");
+      expect(row!.value).toBe("4");
     });
 
     test("WAL mode pragma is applied (in-memory uses memory mode)", () => {
@@ -237,11 +237,11 @@ describe("Knowledge Graph Store", () => {
       expect(colNames).toContain("updated_at");
     });
 
-    test('SCHEMA_VERSION is "3" after initDatabase', () => {
+    test('SCHEMA_VERSION is "4" after initDatabase', () => {
       const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
         | { value: string }
         | undefined;
-      expect(row?.value).toBe("3");
+      expect(row?.value).toBe("4");
     });
 
     test("inserting a summary row with valid file_id succeeds", () => {
@@ -978,12 +978,12 @@ describe("Knowledge Graph Store", () => {
       expect(colNames).toContain("updated_at");
     });
 
-    test("schema_version is '3' for new databases", () => {
+    test("schema_version is '4' for new databases", () => {
       const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
         | { value: string }
         | undefined;
-      expect(row?.value).toBe("3");
-      expect(SCHEMA_VERSION).toBe("3");
+      expect(row?.value).toBe("4");
+      expect(SCHEMA_VERSION).toBe("4");
     });
 
     test("entity_vectors accepts insert with valid embedding", () => {
@@ -1013,11 +1013,11 @@ describe("Knowledge Graph Store", () => {
       // then calling runMigrations() to migrate forward.
       const db = initDatabase(":memory:");
 
-      // Confirm the migration already ran (new DB starts at v3)
+      // Confirm the migration already ran (new DB starts at v4)
       const before = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
         value: string;
       };
-      expect(before.value).toBe("3");
+      expect(before.value).toBe("4");
 
       // Simulate a v2 DB: downgrade schema_version to '2' and drop v3 tables
       db.exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version'`);
@@ -1029,11 +1029,11 @@ describe("Knowledge Graph Store", () => {
       // Re-run migrations — should upgrade from 2 to 3
       runMigrations(db);
 
-      // schema_version should now be '3'
+      // schema_version should now be '4' (v3→v4 migration also runs)
       const after = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
         value: string;
       };
-      expect(after.value).toBe("3");
+      expect(after.value).toBe("4");
 
       // entity_vector_meta should exist
       const metaTable = db
@@ -1044,14 +1044,14 @@ describe("Knowledge Graph Store", () => {
       db.close();
     });
 
-    test("runMigrations is idempotent when already at v3", () => {
+    test("runMigrations is idempotent when already at v4", () => {
       const db = initDatabase(":memory:");
       // Should not throw on double-call
       expect(() => runMigrations(db)).not.toThrow();
       const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as {
         value: string;
       };
-      expect(row.value).toBe("3");
+      expect(row.value).toBe("4");
       db.close();
     });
   });

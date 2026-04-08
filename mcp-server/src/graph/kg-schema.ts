@@ -10,7 +10,7 @@ import * as sqliteVec from "sqlite-vec";
 
 // Schema version — increment when DDL changes require a migration
 
-export const SCHEMA_VERSION = "3";
+export const SCHEMA_VERSION = "4";
 
 // DDL statements (v1+v2 base schema)
 
@@ -21,8 +21,8 @@ const DDL_STATEMENTS = [
     value TEXT NOT NULL
   )`,
 
-  // Note: schema_version is set to '3' for new databases.
-  // runMigrations() will upgrade existing v1/v2 databases.
+  // Note: schema_version is set to '4' for new databases.
+  // runMigrations() will upgrade existing v1/v2/v3 databases.
   `INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '${SCHEMA_VERSION}')`,
 
   // Files table
@@ -157,6 +157,33 @@ const DDL_STATEMENTS = [
     model_id    TEXT NOT NULL,
     updated_at  TEXT NOT NULL
   )`,
+
+  // Hotspot scores — churn × complexity composite scores per file
+  `CREATE TABLE IF NOT EXISTS hotspot_scores (
+    file_path TEXT PRIMARY KEY,
+    churn_raw REAL NOT NULL,
+    churn_percentile REAL NOT NULL,
+    complexity_raw REAL NOT NULL,
+    complexity_pctile REAL NOT NULL,
+    score REAL NOT NULL,
+    is_hotspot INTEGER NOT NULL DEFAULT 0,
+    computed_at_commit TEXT NOT NULL,
+    computed_at TEXT NOT NULL
+  )`,
+
+  // Co-change edges — statistical co-change correlations between file pairs
+  `CREATE TABLE IF NOT EXISTS co_change_edges (
+    file_a TEXT NOT NULL,
+    file_b TEXT NOT NULL,
+    co_commit_count INTEGER NOT NULL,
+    jaccard REAL NOT NULL,
+    computed_at_commit TEXT NOT NULL,
+    computed_at TEXT NOT NULL,
+    PRIMARY KEY (file_a, file_b)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_co_change_a ON co_change_edges(file_a)`,
+  `CREATE INDEX IF NOT EXISTS idx_co_change_b ON co_change_edges(file_b)`,
 ];
 
 // Migration definitions
@@ -205,6 +232,34 @@ const MIGRATIONS: Migration[] = [
       db.exec(`UPDATE meta SET value = '3' WHERE key = 'schema_version'`);
     },
     version: "3",
+  },
+  {
+    version: "4",
+    up: (db) => {
+      db.exec(`CREATE TABLE IF NOT EXISTS hotspot_scores (
+        file_path TEXT PRIMARY KEY,
+        churn_raw REAL NOT NULL,
+        churn_percentile REAL NOT NULL,
+        complexity_raw REAL NOT NULL,
+        complexity_pctile REAL NOT NULL,
+        score REAL NOT NULL,
+        is_hotspot INTEGER NOT NULL DEFAULT 0,
+        computed_at_commit TEXT NOT NULL,
+        computed_at TEXT NOT NULL
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS co_change_edges (
+        file_a TEXT NOT NULL,
+        file_b TEXT NOT NULL,
+        co_commit_count INTEGER NOT NULL,
+        jaccard REAL NOT NULL,
+        computed_at_commit TEXT NOT NULL,
+        computed_at TEXT NOT NULL,
+        PRIMARY KEY (file_a, file_b)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_co_change_a ON co_change_edges(file_a)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_co_change_b ON co_change_edges(file_b)`);
+      db.exec(`UPDATE meta SET value = '4' WHERE key = 'schema_version'`);
+    },
   },
 ];
 
