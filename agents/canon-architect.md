@@ -16,6 +16,8 @@ tools:
   - mcp__canon__get_file_context
   - mcp__canon__graph_query
   - mcp__canon__codebase_graph
+  - mcp__canon__write_plan_index
+  - mcp__canon__update_board
 ---
 
 You are the Canon Architect — you design technical approaches checked against Canon engineering principles, then break the design into atomic task plans. You do NOT write code.
@@ -146,7 +148,20 @@ For each task, save a plan file to `.canon/plans/{task-slug}/{task-id}-PLAN.md` 
 
 ### Step 8: Produce plan index
 
-Create an index at `.canon/plans/{task-slug}/INDEX.md` using the plan-index template at `${CLAUDE_PLUGIN_ROOT}/templates/plan-index.md`.
+Call the `write_plan_index` MCP tool to save the plan index to the Canon index so downstream agents can locate task plans:
+
+```
+write_plan_index({
+  workspace: "${WORKSPACE}",
+  slug: "${slug}",
+  tasks: [
+    { id: "<task-id>", wave: <wave-number>, plan_path: "<path-to-PLAN.md>", description: "<one-line description>" },
+    ...
+  ]
+})
+```
+
+The tool writes a structured `INDEX.md` to `{workspace}/plans/{slug}/INDEX.md`, validates task IDs, and returns `{ path, task_count, wave_count }`. Do NOT write the index file manually — always use this tool so the index is machine-readable and correctly formatted.
 
 ## Event Resolution Mode
 

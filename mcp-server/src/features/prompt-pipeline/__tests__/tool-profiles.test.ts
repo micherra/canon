@@ -41,6 +41,71 @@ describe("AGENT_TOOL_PROFILES", () => {
     expect(EMPTY_PROFILE.allowed).toEqual([]);
     expect(EMPTY_PROFILE.disallowed).toEqual(["Edit", "Write", "Bash", "NotebookEdit"]);
   });
+
+  it("canon-researcher profile includes codebase_graph MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES["canon-researcher"].allowed).toContain("codebase_graph");
+  });
+
+  it("canon-implementor profile includes post_message MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain("post_message");
+  });
+
+  it("canon-reviewer profile includes write_review MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES["canon-reviewer"].allowed).toContain("write_review");
+  });
+
+  it("canon-tester profile includes write_test_report MCP tool", () => {
+    expect(AGENT_TOOL_PROFILES["canon-tester"].allowed).toContain("write_test_report");
+  });
+
+  it("canon-chat profile does not include Write or Bash (read-only agent)", () => {
+    expect(AGENT_TOOL_PROFILES["canon-chat"].disallowed).toContain("Write");
+    expect(AGENT_TOOL_PROFILES["canon-chat"].disallowed).toContain("Bash");
+    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).not.toContain("Write");
+    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).not.toContain("Bash");
+  });
+
+  it("canon-architect profile includes write_plan_index and update_board MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES["canon-architect"].allowed).toContain("write_plan_index");
+    expect(AGENT_TOOL_PROFILES["canon-architect"].allowed).toContain("update_board");
+  });
+
+  it("canon-fixer profile includes graph_query, semantic_search, get_file_context MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES["canon-fixer"].allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES["canon-fixer"].allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES["canon-fixer"].allowed).toContain("get_file_context");
+  });
+
+  it("canon-security profile includes semantic_search and codebase_graph MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES["canon-security"].allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES["canon-security"].allowed).toContain("codebase_graph");
+  });
+
+  it("canon-learner profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES["canon-learner"].allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES["canon-learner"].allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES["canon-learner"].allowed).toContain("get_file_context");
+    expect(AGENT_TOOL_PROFILES["canon-learner"].allowed).toContain("codebase_graph");
+  });
+
+  it("canon-guide profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES["canon-guide"].allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES["canon-guide"].allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES["canon-guide"].allowed).toContain("get_file_context");
+    expect(AGENT_TOOL_PROFILES["canon-guide"].allowed).toContain("codebase_graph");
+  });
+
+  it("canon-chat profile includes graph_query, semantic_search, get_file_context, codebase_graph MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).toContain("graph_query");
+    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).toContain("semantic_search");
+    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).toContain("get_file_context");
+    expect(AGENT_TOOL_PROFILES["canon-chat"].allowed).toContain("codebase_graph");
+  });
+
+  it("canon-implementor profile includes write_implementation_summary and get_messages MCP tools", () => {
+    expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain("write_implementation_summary");
+    expect(AGENT_TOOL_PROFILES["canon-implementor"].allowed).toContain("get_messages");
+  });
 });
 
 describe("resolveToolProfile", () => {

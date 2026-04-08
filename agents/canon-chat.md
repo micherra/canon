@@ -9,8 +9,6 @@ model: sonnet
 color: green
 tools:
   - Read
-  - Write
-  - Bash
   - Glob
   - Grep
   - mcp__canon__semantic_search
