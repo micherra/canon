@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildLayerInferrer, deriveSourceDirsFromLayers, loadConfigNumber } from "../config.ts";
+import {
+  buildLayerInferrer,
+  deriveSourceDirsFromLayers,
+  loadConfigNumber,
+  loadLearnGateConfig,
+} from "../config.ts";
 
 let tmpDir: string;
 
@@ -214,5 +219,86 @@ describe("loadConfigNumber", () => {
   it("floors floating point values", async () => {
     await writeConfig({ count: 3.7 });
     expect(await loadConfigNumber(tmpDir, "count", 1)).toBe(3);
+  });
+});
+
+describe("loadLearnGateConfig", () => {
+  it("returns defaults when config file is missing", async () => {
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.min_flows_since_last).toBe(5);
+    expect(cfg.min_hours_since_last).toBe(48);
+    expect(cfg.lock_stale_after_hours).toBe(1);
+  });
+
+  it("returns defaults when learn_gate section is missing", async () => {
+    await writeConfig({ review: { max_principles_per_review: 10 } });
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.min_flows_since_last).toBe(5);
+    expect(cfg.min_hours_since_last).toBe(48);
+    expect(cfg.lock_stale_after_hours).toBe(1);
+  });
+
+  it("reads valid values from learn_gate section", async () => {
+    await writeConfig({
+      learn_gate: {
+        enabled: false,
+        lock_stale_after_hours: 2,
+        min_flows_since_last: 10,
+        min_hours_since_last: 24,
+      },
+    });
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.enabled).toBe(false);
+    expect(cfg.min_flows_since_last).toBe(10);
+    expect(cfg.min_hours_since_last).toBe(24);
+    expect(cfg.lock_stale_after_hours).toBe(2);
+  });
+
+  it("allows min_hours_since_last = 0 (zero is valid)", async () => {
+    await writeConfig({ learn_gate: { min_hours_since_last: 0 } });
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.min_hours_since_last).toBe(0);
+  });
+
+  it("falls back to defaults for invalid min_flows_since_last (< 1)", async () => {
+    await writeConfig({ learn_gate: { min_flows_since_last: 0 } });
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.min_flows_since_last).toBe(5);
+  });
+
+  it("falls back to defaults for negative min_hours_since_last", async () => {
+    await writeConfig({ learn_gate: { min_hours_since_last: -1 } });
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.min_hours_since_last).toBe(48);
+  });
+
+  it("falls back to defaults for non-positive lock_stale_after_hours", async () => {
+    await writeConfig({ learn_gate: { lock_stale_after_hours: 0 } });
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.lock_stale_after_hours).toBe(1);
+  });
+
+  it("falls back to defaults for wrong types", async () => {
+    await writeConfig({
+      learn_gate: {
+        enabled: "yes",
+        lock_stale_after_hours: "2h",
+        min_flows_since_last: "ten",
+        min_hours_since_last: null,
+      },
+    });
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.min_flows_since_last).toBe(5);
+    expect(cfg.min_hours_since_last).toBe(48);
+    expect(cfg.lock_stale_after_hours).toBe(1);
+  });
+
+  it("floors floating point min_flows_since_last", async () => {
+    await writeConfig({ learn_gate: { min_flows_since_last: 3.9 } });
+    const cfg = await loadLearnGateConfig(tmpDir);
+    expect(cfg.min_flows_since_last).toBe(3);
   });
 });
