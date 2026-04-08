@@ -53,6 +53,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
       "semantic_search",
       "write_plan_index",
       "update_board",
+      "post_event",
     ],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
@@ -61,7 +62,7 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
   },
   "canon-fixer": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "post_event"],
     disallowed: [],
   },
   "canon-guide": {
@@ -69,11 +70,11 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     disallowed: ["Edit", "Write", "Bash", "NotebookEdit"],
   },
   "canon-implementor": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "NotebookEdit"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "NotebookEdit", "post_event"],
     disallowed: [],
   },
   "canon-learner": {
-    allowed: ["Read", "Grep", "Glob", "Bash"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "post_event"],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-researcher": {
@@ -86,11 +87,12 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
       "graph_query",
       "get_file_context",
       "semantic_search",
+      "post_event",
     ],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-reviewer": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "review_code"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "review_code", "post_event"],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-scribe": {
@@ -98,15 +100,15 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     disallowed: ["Bash", "Write", "NotebookEdit"],
   },
   "canon-security": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "graph_query", "get_file_context"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "graph_query", "get_file_context", "post_event"],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-shipper": {
-    allowed: ["Read", "Grep", "Glob", "Bash"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "post_event"],
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-tester": {
-    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "post_event"],
     disallowed: [],
   },
   "canon-writer": {
