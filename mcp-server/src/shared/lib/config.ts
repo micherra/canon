@@ -219,6 +219,43 @@ export async function loadGraphCompositionConfig(
   };
 }
 
+export type LearnGateConfig = {
+  enabled: boolean;
+  min_flows_since_last: number;
+  min_hours_since_last: number;
+  lock_stale_after_hours: number;
+};
+
+const DEFAULT_LEARN_GATE_CONFIG: LearnGateConfig = {
+  enabled: true,
+  lock_stale_after_hours: 1,
+  min_flows_since_last: 5,
+  min_hours_since_last: 48,
+};
+
+/** Load learn gate config from .canon/config.json, falling back to defaults. */
+export async function loadLearnGateConfig(projectDir: string): Promise<LearnGateConfig> {
+  const config = await loadCanonConfig(projectDir);
+  const raw = config?.learn_gate as Record<string, unknown> | undefined;
+  if (!raw) return DEFAULT_LEARN_GATE_CONFIG;
+  return {
+    enabled:
+      typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_LEARN_GATE_CONFIG.enabled,
+    lock_stale_after_hours:
+      typeof raw.lock_stale_after_hours === "number" && raw.lock_stale_after_hours > 0
+        ? raw.lock_stale_after_hours
+        : DEFAULT_LEARN_GATE_CONFIG.lock_stale_after_hours,
+    min_flows_since_last:
+      typeof raw.min_flows_since_last === "number" && raw.min_flows_since_last >= 1
+        ? Math.floor(raw.min_flows_since_last)
+        : DEFAULT_LEARN_GATE_CONFIG.min_flows_since_last,
+    min_hours_since_last:
+      typeof raw.min_hours_since_last === "number" && raw.min_hours_since_last >= 0
+        ? raw.min_hours_since_last
+        : DEFAULT_LEARN_GATE_CONFIG.min_hours_since_last,
+  };
+}
+
 /** Read a numeric config value at a dotted path (e.g. "review.max_principles_per_review"). */
 export async function loadConfigNumber(
   projectDir: string,
