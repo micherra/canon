@@ -9,6 +9,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type {
   Board,
   BoardStateEntry,
@@ -18,13 +20,25 @@ import type {
 } from "@domains/flows/board-state-schemas.ts";
 import type { WaveEvent } from "@domains/flows/event-schemas.ts";
 import type { StuckWhen } from "@domains/flows/flow-definition-schemas.ts";
+import { CANON_FILES } from "@shared/constants.ts";
 import type Database from "better-sqlite3";
+import { initExecutionDb } from "./execution-schema.ts";
 import {
   buildUpsertStateParams,
   deserializeExecutionRow,
   deserializeStateRow,
   getBoard,
 } from "./execution-store-board.ts";
+import {
+  getIteration,
+  getOrientationRatio,
+  isStuck,
+  recordIterationAttempt,
+  recordIterationResult,
+  recordStateCompletion,
+  recordStateEntry,
+  upsertIteration,
+} from "./execution-store-iterations.ts";
 import {
   appendEvent,
   appendMessage,
@@ -46,25 +60,13 @@ import type {
   GetMessagesOptions,
   GetWaveEventsOptions,
   InitExecutionParams,
-  IterationRow,
   MessageOutput,
   ProgressRow,
   UpdateExecutionFields,
   UpdateWaveEventFields,
 } from "./execution-store-types.ts";
-import {
-  ALLOWED_UPDATE_EXECUTION_COLUMNS,
-  setsEqual,
-  unorderedEqual,
-} from "./execution-store-types.ts";
+import { ALLOWED_UPDATE_EXECUTION_COLUMNS } from "./execution-store-types.ts";
 
-// Re-export cache functions so existing importers of execution-store.ts continue to work
-// biome-ignore lint/performance/noBarrelFile: execution-store.ts is the public API for this domain; re-exporting cache helpers preserves the 25+ importers' import paths
-export {
-  assertWorkspacePath,
-  clearStoreCache,
-  getExecutionStore,
-} from "./execution-store-cache.ts";
 // Re-export types so all existing importers continue to work unchanged
 export type {
   EventOutput,
@@ -252,100 +254,30 @@ export class ExecutionStore {
     }));
   }
 
-  // Iterations
+  // Iterations — delegate to execution-store-iterations.ts
 
   upsertIteration(
     stateId: string,
     fields: { count: number; max: number; history: unknown[]; cannot_fix?: unknown[] },
   ): void {
-    this.s.stmtUpsertIteration.run({
-      cannot_fix: JSON.stringify(fields.cannot_fix ?? []),
-      count: fields.count,
-      history: JSON.stringify(fields.history),
-      max: fields.max,
-      state_id: stateId,
-    });
+    upsertIteration(this.s.stmtUpsertIteration, stateId, fields);
   }
 
   getIteration(stateId: string): IterationEntry | null {
-    const row = this.s.stmtGetIteration.get(stateId) as IterationRow | undefined;
-    if (!row) return null;
-    return {
-      cannot_fix: JSON.parse(row.cannot_fix),
-      count: row.count,
-      history: JSON.parse(row.history),
-      max: row.max,
-    };
+    return getIteration(this.s.stmtGetIteration, stateId);
   }
 
-  // Iteration results (SQL-based stuck detection — ADR-004)
-
-  /**
-   * Record a raw iteration result for a state.
-   * Uses INSERT OR REPLACE — re-recording the same iteration number overwrites the previous entry.
-   */
   recordIterationResult(
     stateId: string,
     iteration: number,
     status: string,
     data: Record<string, unknown>,
   ): void {
-    this.s.stmtRecordIterationResult.run({
-      data: JSON.stringify(data),
-      iteration,
-      state_id: stateId,
-      status,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  private isSameViolations(
-    currData: Record<string, unknown>,
-    prevData: Record<string, unknown>,
-  ): boolean {
-    return (
-      setsEqual(
-        (currData.principle_ids as string[]) ?? [],
-        (prevData.principle_ids as string[]) ?? [],
-      ) &&
-      setsEqual((currData.file_paths as string[]) ?? [], (prevData.file_paths as string[]) ?? [])
-    );
+    recordIterationResult(this.s.stmtRecordIterationResult, { data, iteration, stateId, status });
   }
 
   isStuck(stateId: string, stuckWhen: StuckWhen): boolean {
-    const rows = this.s.stmtGetLastTwoIterationResults.all(stateId) as Array<{
-      status: string;
-      data: string;
-    }>;
-
-    if (rows.length < 2) return false;
-
-    const curr = rows[0];
-    const prev = rows[1];
-    const currData = JSON.parse(curr.data) as Record<string, unknown>;
-    const prevData = JSON.parse(prev.data) as Record<string, unknown>;
-
-    switch (stuckWhen) {
-      case "same_violations":
-        return this.isSameViolations(currData, prevData);
-      case "same_file_test": {
-        const currPairs = (currData.pairs ?? []) as unknown[];
-        const prevPairs = (prevData.pairs ?? []) as unknown[];
-        if (currPairs.length === 0) return false;
-        return unorderedEqual(currPairs, prevPairs);
-      }
-      case "same_status":
-        return curr.status === prev.status;
-      case "no_progress":
-        return (
-          currData.commit_sha === prevData.commit_sha &&
-          currData.artifact_count === prevData.artifact_count
-        );
-      case "no_gate_progress":
-        return currData.gate_output_hash === prevData.gate_output_hash && !currData.passed;
-      default:
-        return false;
-    }
+    return isStuck(this.s.stmtGetLastTwoIterationResults, stateId, stuckWhen);
   }
 
   // Progress
@@ -449,17 +381,19 @@ export class ExecutionStore {
     return this.db.transaction(fn)();
   }
 
-  // Domain-language operations (compose infrastructure methods)
+  // Domain-language operations — delegate to execution-store-iterations.ts
 
   /** Record a state being entered — sets status to in_progress and increments entries. */
   recordStateEntry(stateId: string, fields?: Partial<BoardStateEntry>): void {
-    const current = this.getState(stateId);
-    this.upsertState(stateId, {
-      ...fields,
-      entered_at: new Date().toISOString(),
-      entries: (current?.entries ?? 0) + 1,
-      status: "in_progress",
-    });
+    recordStateEntry(
+      {
+        getStateFn: (sid) => this.getState(sid),
+        upsertStateFn: (sid, f) =>
+          this.upsertState(sid, f as Parameters<typeof this.upsertState>[1]),
+      },
+      stateId,
+      fields as Record<string, unknown> | undefined,
+    );
   }
 
   /**
@@ -472,23 +406,17 @@ export class ExecutionStore {
     artifacts?: string[],
     iterationHistory?: HistoryEntry[],
   ): void {
-    this.transaction(() => {
-      const current = this.getState(stateId);
-      this.upsertState(stateId, {
-        ...current,
-        ...(artifacts ? { artifacts } : {}),
-        completed_at: new Date().toISOString(),
-        entries: current?.entries ?? 1,
-        result,
-        status: "done",
-      });
-      if (iterationHistory !== undefined) {
-        const iteration = this.getIteration(stateId);
-        if (iteration !== null) {
-          this.upsertIteration(stateId, { ...iteration, history: iterationHistory });
-        }
-      }
-    });
+    recordStateCompletion(
+      {
+        getIterationFn: (sid) => this.getIteration(sid),
+        getStateFn: (sid) => this.getState(sid) as Record<string, unknown> | null,
+        transactionFn: (fn) => this.transaction(fn),
+        upsertIterationFn: (sid, f) => this.upsertIteration(sid, f),
+        upsertStateFn: (sid, f) =>
+          this.upsertState(sid, f as Parameters<typeof this.upsertState>[1]),
+      },
+      { artifacts, iterationHistory, result, stateId },
+    );
   }
 
   /** Record one iteration attempt; check stuck if stuckWhen provided. */
@@ -501,12 +429,15 @@ export class ExecutionStore {
       stuckWhen?: StuckWhen;
     },
   ): { recorded: true; stuck: boolean } {
-    const { iteration, status, data, stuckWhen } = options;
-    this.recordIterationResult(stateId, iteration, status, data);
-    if (stuckWhen !== undefined) {
-      return { recorded: true, stuck: this.isStuck(stateId, stuckWhen) };
-    }
-    return { recorded: true, stuck: false };
+    return recordIterationAttempt(
+      {
+        isStuckFn: (sid, sw) => this.isStuck(sid, sw),
+        recordIterationResultFn: (sid, iter, stat, data) =>
+          this.recordIterationResult(sid, iter, stat, data),
+      },
+      stateId,
+      options,
+    );
   }
 
   // Lifecycle
@@ -533,20 +464,11 @@ export class ExecutionStore {
     return true;
   }
 
-  // Orientation ratio (ADR-003a)
+  // Orientation ratio — delegate to execution-store-iterations.ts
 
   /** Compute orientation_calls / tool_calls for a state. Returns 0 when data absent. */
   getOrientationRatio(stateId: string): number {
-    const row = this.s.stmtGetState.get(stateId) as ExecutionStateRow | undefined;
-    if (!row?.metrics) return 0;
-
-    const metrics = JSON.parse(row.metrics) as Record<string, unknown>;
-    const toolCalls = typeof metrics.tool_calls === "number" ? metrics.tool_calls : 0;
-    const orientationCalls =
-      typeof metrics.orientation_calls === "number" ? metrics.orientation_calls : 0;
-
-    if (toolCalls === 0) return 0;
-    return orientationCalls / toolCalls;
+    return getOrientationRatio(this.s.stmtGetState, stateId);
   }
 
   // Cache prefix (ADR-006a)
@@ -597,4 +519,66 @@ export class ExecutionStore {
       last_agent_activity: row.last_agent_activity,
     };
   }
+}
+
+// ---- Factory and cache (absorbed from execution-store-cache.ts) ----
+
+/** Cache keyed by absolute workspace path. */
+const storeCache = new Map<string, ExecutionStore>();
+
+/**
+ * Guards that a workspace path follows the canonical `.canon/workspaces/` convention.
+ * Throws when the path does not contain the expected segment, preventing accidental
+ * misuse (e.g. passing a project root instead of a workspace subdirectory).
+ *
+ * Skipped when `CANON_SKIP_WORKSPACE_VALIDATION=true` or when running under Vitest
+ * (`VITEST` env var set). Tests that operate on temp dirs typically do not include
+ * the `.canon/workspaces/` segment in their paths.
+ */
+export function assertWorkspacePath(workspace: string): void {
+  if (process.env.CANON_SKIP_WORKSPACE_VALIDATION !== "true" && !process.env.VITEST) {
+    // Use the raw string for the segment check so Windows-style paths work
+    // cross-platform (resolve() would rewrite them on macOS).
+    const hasValidSegment =
+      workspace.includes(".canon/workspaces/") || workspace.includes(".canon\\workspaces\\");
+    if (!hasValidSegment) {
+      throw new Error(
+        `Invalid workspace path: "${workspace}". Expected a path containing ".canon/workspaces/".`,
+      );
+    }
+  }
+}
+
+export function getExecutionStore(workspace: string): ExecutionStore {
+  assertWorkspacePath(workspace);
+
+  const key = resolve(workspace);
+  const existing = storeCache.get(key);
+  if (existing) return existing;
+
+  if (!existsSync(key)) {
+    throw new Error(`Workspace directory does not exist: ${key}`);
+  }
+
+  const dbPath = join(key, CANON_FILES.ORCHESTRATION_DB);
+  const db = initExecutionDb(dbPath);
+  const store = new ExecutionStore(db);
+  storeCache.set(key, store);
+  return store;
+}
+
+/**
+ * Close and evict all cached ExecutionStore instances.
+ * Call this in test afterEach/afterAll to release SQLite file handles
+ * before deleting temp workspace directories.
+ */
+export function clearStoreCache(): void {
+  for (const store of storeCache.values()) {
+    try {
+      store.close();
+    } catch {
+      /* ignore close errors */
+    }
+  }
+  storeCache.clear();
 }
