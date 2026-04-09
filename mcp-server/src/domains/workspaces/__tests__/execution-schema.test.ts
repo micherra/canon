@@ -8,6 +8,7 @@
  * - Worktree columns migration (pre-v7 → current)
  * - Migration v8 creates jobs and job_cache tables
  * - Migration v9 adds inserted_return_to column
+ * - Migration v10 adds commits column (ADR-019)
  * - Migrations are idempotent (safe to re-run)
  * - ExecutionStore.updateAgentSession / getAgentSession
  */
@@ -165,8 +166,8 @@ function getSchemaVersion(db: ReturnType<typeof initExecutionDb>): string {
 // ---------------------------------------------------------------------------
 
 describe("SCHEMA_VERSION", () => {
-  test('is "9"', () => {
-    expect(SCHEMA_VERSION).toBe("9");
+  test('is "10"', () => {
+    expect(SCHEMA_VERSION).toBe("10");
   });
 });
 
@@ -219,7 +220,7 @@ describe("agent session columns migration", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("9");
+    expect(row?.value).toBe("10");
 
     db.close();
   });
@@ -277,7 +278,7 @@ describe("worktree columns migration", () => {
     const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
       | { value: string }
       | undefined;
-    expect(row?.value).toBe("9");
+    expect(row?.value).toBe("10");
 
     db.close();
   });
@@ -458,9 +459,9 @@ describe("migration v8 — job_cache table", () => {
 });
 
 describe("migration v8 — schema version", () => {
-  test('schema_version is "9" after init', () => {
+  test('schema_version is "10" after init', () => {
     const db = initExecutionDb(":memory:");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 });
 
@@ -475,7 +476,7 @@ describe("migration v8 — upgrade from v6", () => {
     const tables = getTableNames(db);
     expect(tables).toContain("jobs");
     expect(tables).toContain("job_cache");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 
   test("runMigrations is idempotent — safe to call twice", () => {
@@ -488,7 +489,7 @@ describe("migration v8 — upgrade from v6", () => {
     const tables = getTableNames(db);
     expect(tables).toContain("jobs");
     expect(tables).toContain("job_cache");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 
   test("can insert a row into jobs table", () => {
@@ -527,9 +528,9 @@ describe("migration v9 — inserted_return_to column", () => {
     expect(columns).toContain("inserted_return_to");
   });
 
-  test("schema_version is '9' after init", () => {
+  test("schema_version is '10' after init", () => {
     const db = initExecutionDb(":memory:");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 
   test("runMigrations is idempotent after v9", () => {
@@ -537,7 +538,7 @@ describe("migration v9 — inserted_return_to column", () => {
     expect(() => runMigrations(db)).not.toThrow();
     const columns = getColumnNames(db, "execution_states");
     expect(columns).toContain("inserted_return_to");
-    expect(getSchemaVersion(db)).toBe("9");
+    expect(getSchemaVersion(db)).toBe("10");
   });
 
   test("inserted_return_to accepts TEXT value", () => {
@@ -562,5 +563,129 @@ describe("migration v9 — inserted_return_to column", () => {
       .prepare(`SELECT inserted_return_to FROM execution_states WHERE state_id = 's2'`)
       .get() as { inserted_return_to: string | null };
     expect(row.inserted_return_to).toBeNull();
+  });
+});
+
+// Migration v10 — commits column (ADR-019)
+
+/**
+ * Builds a v9 DB: base tables + migrations v2–v9 applied manually.
+ * Does NOT have commits column.
+ */
+function buildV9Db(): Database.Database {
+  const db = buildV5Db();
+  db.exec(`ALTER TABLE execution_states ADD COLUMN agent_session_id TEXT`);
+  db.exec(`ALTER TABLE execution_states ADD COLUMN last_agent_activity TEXT`);
+  db.exec(`ALTER TABLE execution ADD COLUMN worktree_path TEXT`);
+  db.exec(`ALTER TABLE execution ADD COLUMN worktree_branch TEXT`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      job_id        TEXT PRIMARY KEY,
+      job_type      TEXT NOT NULL,
+      fingerprint   TEXT NOT NULL,
+      status        TEXT NOT NULL DEFAULT 'pending',
+      pid           INTEGER,
+      progress      TEXT,
+      error         TEXT,
+      started_at    TEXT NOT NULL,
+      completed_at  TEXT,
+      timeout_ms    INTEGER NOT NULL DEFAULT 300000
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS job_cache (
+      fingerprint    TEXT PRIMARY KEY,
+      job_type       TEXT NOT NULL,
+      result_summary TEXT NOT NULL,
+      cached_at      TEXT NOT NULL,
+      expires_at     TEXT
+    )
+  `);
+  db.exec(`ALTER TABLE execution_states ADD COLUMN inserted_return_to TEXT`);
+  db.exec(`UPDATE meta SET value = '9' WHERE key = 'schema_version'`);
+  return db;
+}
+
+describe("migration v10 — commits column (ADR-019)", () => {
+  test("adds commits column to execution_states on fresh DB", () => {
+    const db = initExecutionDb(":memory:");
+    const columns = getColumnNames(db, "execution_states");
+    expect(columns).toContain("commits");
+  });
+
+  test("schema_version is '10' after fresh init", () => {
+    const db = initExecutionDb(":memory:");
+    expect(getSchemaVersion(db)).toBe("10");
+  });
+
+  test("v9 DB upgrades to v10 with commits column added", () => {
+    const db = buildV9Db();
+
+    expect(columnExists(db, "execution_states", "commits")).toBe(false);
+    expect(getSchemaVersion(db)).toBe("9");
+
+    runMigrations(db);
+
+    expect(columnExists(db, "execution_states", "commits")).toBe(true);
+    expect(getSchemaVersion(db)).toBe("10");
+
+    db.close();
+  });
+
+  test("migration v10 is idempotent — safe to call twice", () => {
+    const db = initExecutionDb(":memory:");
+
+    expect(columnExists(db, "execution_states", "commits")).toBe(true);
+    expect(() => runMigrations(db)).not.toThrow();
+    expect(columnExists(db, "execution_states", "commits")).toBe(true);
+    expect(getSchemaVersion(db)).toBe("10");
+
+    db.close();
+  });
+
+  test("commits column defaults to NULL for new rows", () => {
+    const db = initExecutionDb(":memory:");
+    db.prepare(`
+      INSERT INTO execution_states (state_id, status, entries)
+      VALUES ('s10', 'pending', 0)
+    `).run();
+    const row = db
+      .prepare(`SELECT commits FROM execution_states WHERE state_id = 's10'`)
+      .get() as { commits: string | null };
+    expect(row.commits).toBeNull();
+  });
+
+  test("commits column accepts JSON blob matching StateCommits interface", () => {
+    const db = initExecutionDb(":memory:");
+    const commits = { files_changed: ["src/foo.ts", "src/bar.ts"], shas: ["abc123", "def456"] };
+    db.prepare(`
+      INSERT INTO execution_states (state_id, status, entries, commits)
+      VALUES ('s11', 'done', 1, ?)
+    `).run(JSON.stringify(commits));
+    const row = db
+      .prepare(`SELECT commits FROM execution_states WHERE state_id = 's11'`)
+      .get() as { commits: string };
+    const parsed = JSON.parse(row.commits) as typeof commits;
+    expect(parsed.shas).toEqual(["abc123", "def456"]);
+    expect(parsed.files_changed).toEqual(["src/foo.ts", "src/bar.ts"]);
+  });
+
+  test("existing rows are unaffected after v10 migration", () => {
+    const db = buildV9Db();
+    db.exec(
+      `INSERT INTO execution_states (state_id, status, entries) VALUES ('pre-existing', 'done', 2)`,
+    );
+
+    runMigrations(db);
+
+    const row = db
+      .prepare(`SELECT state_id, status, entries, commits FROM execution_states WHERE state_id = 'pre-existing'`)
+      .get() as { state_id: string; status: string; entries: number; commits: string | null };
+    expect(row.state_id).toBe("pre-existing");
+    expect(row.status).toBe("done");
+    expect(row.entries).toBe(2);
+    expect(row.commits).toBeNull();
+
+    db.close();
   });
 });

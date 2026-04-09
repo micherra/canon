@@ -20,7 +20,7 @@ import Database from "better-sqlite3";
 
 // Schema version — increment when DDL changes require a migration
 
-export const SCHEMA_VERSION = "9";
+export const SCHEMA_VERSION = "10";
 
 // DDL statements — v1 base tables (no correlation_id)
 //
@@ -330,6 +330,19 @@ const MIGRATIONS: Migration[] = [
     },
     // inserted_return_to column on execution_states (ADR-012)
     version: "9",
+  },
+  {
+    up: (db) => {
+      const tableRow = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='execution_states'`)
+        .get() as { name: string } | undefined;
+      if (tableRow && !columnExists(db, "execution_states", "commits")) {
+        db.exec(`ALTER TABLE execution_states ADD COLUMN commits TEXT`);
+      }
+      db.exec(`UPDATE meta SET value = '10' WHERE key = 'schema_version'`);
+    },
+    // commits column on execution_states (ADR-019) — JSON: { shas: string[], files_changed: string[] }
+    version: "10",
   },
 ];
 

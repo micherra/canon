@@ -79,6 +79,7 @@ type ExecutionStateRow = {
   synthesized: number | null; // 0/1 | null
   transcript_path: string | null; // ADR-015
   inserted_return_to: string | null; // ADR-012
+  commits: string | null; // ADR-019 — JSON: { shas: string[], files_changed: string[] }
 };
 
 type IterationRow = {
@@ -321,14 +322,14 @@ export class ExecutionStore {
         wave, wave_total, wave_results, metrics,
         gate_results, postcondition_results, discovered_gates,
         discovered_postconditions, parallel_results, compete_results, synthesized,
-        inserted_return_to
+        inserted_return_to, commits
       ) VALUES (
         @state_id, @status, @entries, @entered_at, @completed_at,
         @result, @artifacts, @artifact_history, @error,
         @wave, @wave_total, @wave_results, @metrics,
         @gate_results, @postcondition_results, @discovered_gates,
         @discovered_postconditions, @parallel_results, @compete_results, @synthesized,
-        @inserted_return_to
+        @inserted_return_to, @commits
       )
       ON CONFLICT(state_id) DO UPDATE SET
         status                    = excluded.status,
@@ -350,7 +351,8 @@ export class ExecutionStore {
         parallel_results          = excluded.parallel_results,
         compete_results           = excluded.compete_results,
         synthesized               = excluded.synthesized,
-        inserted_return_to        = excluded.inserted_return_to
+        inserted_return_to        = excluded.inserted_return_to,
+        commits                   = excluded.commits
         -- transcript_path intentionally omitted: preserves existing value on update
     `);
     this.stmtGetState = db.prepare(`SELECT * FROM execution_states WHERE state_id = ?`);
@@ -662,6 +664,7 @@ export class ExecutionStore {
       artifact_history: jsonOrNull(fields.artifact_history),
       artifacts: jsonOrNull(fields.artifacts),
       compete_results: jsonOrNull(fields.compete_results),
+      commits: jsonOrNull(fields.commits),
       completed_at: fields.completed_at ?? null,
       discovered_gates: jsonOrNull(fields.discovered_gates),
       discovered_postconditions: jsonOrNull(fields.discovered_postconditions),
@@ -1159,6 +1162,7 @@ export class ExecutionStore {
     return {
       artifact_history: parseJson(row.artifact_history),
       artifacts: parseJson<string[]>(row.artifacts),
+      commits: parseJson(row.commits),
       compete_results: parseJson(row.compete_results),
       completed_at: row.completed_at ?? undefined,
       discovered_gates: parseJson(row.discovered_gates),

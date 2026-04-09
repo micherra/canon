@@ -114,6 +114,12 @@ export const BoardStateEntrySchema = z.object({
   entered_at: z.string().optional(),
   entries: z.number().default(0),
   error: z.string().optional(),
+  commits: z
+    .object({
+      files_changed: z.array(z.string()),
+      shas: z.array(z.string()),
+    })
+    .optional(),
   gate_results: z.array(GateResultSchema).optional(),
   inserted_return_to: z.string().optional(),
   metrics: StateMetricsSchema.optional(),

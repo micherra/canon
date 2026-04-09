@@ -77,7 +77,7 @@ describe("initExecutionDb", () => {
       | { value: string }
       | undefined;
     expect(row?.value).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe("9");
+    expect(SCHEMA_VERSION).toBe("10");
     db.close();
   });
 
