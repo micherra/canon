@@ -230,7 +230,7 @@ src/
 
 **Gate runner** (`src/orchestration/gate-runner.ts`):
 - `normalizeGates(stateDef, flow, cwd, boardState?)` — resolves gate commands via 3-tier priority: `stateDef.gates[]` (direct shell commands) > `stateDef.gate` (named reference via `resolveGateCommand()`) > `boardState.discovered_gates[]` (agent-reported); returns `{ commands, source }` where source ∈ `"gates"|"gate"|"discovered"|"none"`
-- `runGates(stateDef, flow, cwd, boardState?)` — executes all normalized gates via `runShell` (process-adapter); returns `GateResult[]`; empty array when no gates declared
+- `runGates(stateDef, flow, cwd, boardState?)` — executes all normalized gates via `runShell` (process-adapter); returns `GateResult[]`; empty array when no gates declared; also called by `drive-flow.ts` for gate-only single states (states with `gates` and no `agent`) — all gates pass → auto-transition to done; any failure → HITL
 - `runGate(gateName, flow, cwd)` — run a single named gate; **fail-closed**: unresolved gate name returns `{ passed: false, exitCode: 1 }` (changed from `passed: true` 2026-03-26)
 - `GateResult` type — re-exported from `flow-schema.ts`; `{ passed, gate, command, output, exitCode }`
 

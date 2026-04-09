@@ -355,6 +355,44 @@ describe("loadFlow() plugin-level resolution (cross-task integration)", () => {
   });
 });
 
+// pre-launch-check fragment integration — plc-03
+
+describe("loadAndResolveFlow() plugin-level resolution — pre-launch-check", () => {
+  it("feature flow pre-launch-check state is present (from pre-launch-check fragment)", async () => {
+    const flow = await loadAndResolveFlow(pluginCacheDir, "feature");
+    expect(flow.states["pre-launch-check"]).toBeDefined();
+    expect(flow.states["pre-launch-check"].type).toBe("single");
+    expect(flow.states["pre-launch-check"].gates).toEqual(["npm run build", "npm test"]);
+    expect(flow.states["pre-launch-check"].agent).toBeUndefined();
+  });
+
+  it("feature flow review-fix-loop exits to pre-launch-check not ship", async () => {
+    const flow = await loadAndResolveFlow(pluginCacheDir, "feature");
+    // review-fix-loop fragment: after_clean param → clean transition, after_warning param → warning transition
+    expect(flow.states.review.transitions?.clean).toBe("pre-launch-check");
+    expect(flow.states.review.transitions?.warning).toBe("pre-launch-check");
+  });
+
+  it("fast-path flow execute state transitions to pre-launch-check", async () => {
+    const flow = await loadAndResolveFlow(pluginCacheDir, "fast-path");
+    expect(flow.states.execute.transitions?.done).toBe("pre-launch-check");
+    expect(flow.states["pre-launch-check"]).toBeDefined();
+  });
+
+  it("epic flow pre-launch-check state is present and wired before ship", async () => {
+    const flow = await loadAndResolveFlow(pluginCacheDir, "epic");
+    expect(flow.states["pre-launch-check"]).toBeDefined();
+    expect(flow.states["pre-launch-check"].transitions?.done).toBe("ship");
+  });
+
+  it("all shipping flows include pre-launch-check", async () => {
+    for (const flowName of ["feature", "fast-path", "refactor", "epic", "migrate"]) {
+      const flow = await loadAndResolveFlow(pluginCacheDir, flowName);
+      expect(flow.states["pre-launch-check"]).toBeDefined();
+    }
+  });
+});
+
 // Error message listing flows from both tiers (declared gap from epic-04)
 
 describe("loadAndResolveFlow error message — lists flows from both project and plugin dirs", () => {

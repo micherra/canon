@@ -712,6 +712,7 @@ The orchestrator resolves fragments during flow template loading (Phase 1, Step 
 | `user-checkpoint` | checkpoint | `after_approved`, `on_revise` (required) | Present summary for user approval; stores revision notes on revise |
 | `review-fix-loop` | review, fix-violations | `after_clean`, `after_warning` (required), `max_iterations` (default: 3) | Review code, fix violations, loop until clean |
 | `context-sync` | context-sync | `next` (required) | Sync documentation after changes |
+| `pre-launch-check` | pre-launch-check | `after_passing` (required) | Deterministic gate — runs build/test as shell commands before shipping |
 | `ship-done` | ship, done | (none) | PR description + terminal state |
 
 **Consultation fragments:**
