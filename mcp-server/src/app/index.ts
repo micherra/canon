@@ -7,6 +7,7 @@ import { ResolvedFlowSchema } from "@domains/flows/flow-definition-schemas.ts";
 import type { FailureEntry } from "@features/diagnostics/tools/categorize-failures.ts";
 import { categorizeFailures } from "@features/diagnostics/tools/categorize-failures.ts";
 import { getDriftReport } from "@features/diagnostics/tools/get-drift-report.ts";
+import { getHistory } from "@features/diagnostics/tools/get-history.ts";
 import { recordAgentMetrics } from "@features/diagnostics/tools/record-agent-metrics.ts";
 import { storeSummaries } from "@features/diagnostics/tools/store-summaries.ts";
 import { getFileContext } from "@features/file-context/tools/get-file-context.ts";
@@ -362,6 +363,31 @@ server.registerTool(
   },
   gatedWrapHandler(async (input) => {
     return getDriftReport(input, projectDir, pluginDir);
+  }),
+);
+
+server.registerTool(
+  "get_history",
+  {
+    description:
+      "Query flow execution history with associated decisions and commit data. Returns recent flow runs enriched with decision records from the project's drift store.",
+    inputSchema: {
+      flow: z
+        .string()
+        .optional()
+        .describe("Filter by flow name (e.g., 'feature', 'fast-path')"),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .default(20)
+        .describe("Maximum number of flow runs to return (default: 20)"),
+      project_dir: z.string().describe("Project root directory path"),
+    },
+  },
+  gatedWrapHandler(async (input) => {
+    return getHistory(input);
   }),
 );
 

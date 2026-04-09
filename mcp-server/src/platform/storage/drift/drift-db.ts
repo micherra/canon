@@ -663,6 +663,16 @@ export class DriftDb {
     return rows.map(_rowToDecisionEntry);
   }
 
+  /**
+   * Return all flow runs (no filter, ascending start order from SQL).
+   * Used by get_history for full-table queries before in-memory sort/filter.
+   * Returns empty array when DB is empty (define-errors-out-of-existence).
+   */
+  getAllFlowRuns(): FlowRunEntry[] {
+    const rows = this.stmtGetAllFlowRuns.all() as FlowRunRow[];
+    return rows.map(_rowToFlowRunEntry);
+  }
+
   // Lifecycle
 
   close(): void {
