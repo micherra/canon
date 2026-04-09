@@ -177,8 +177,8 @@ export const AGENT_TOOL_PROFILES: Record<string, AgentToolProfile> = {
     disallowed: ["Edit", "Write", "NotebookEdit"],
   },
   "canon-scribe": {
-    allowed: ["Read", "Grep", "Glob", "Edit"],
-    disallowed: ["Bash", "Write", "NotebookEdit"],
+    allowed: ["Read", "Grep", "Glob", "Bash", "Edit"],
+    disallowed: ["Write", "NotebookEdit"],
   },
   "canon-security": {
     allowed: [
@@ -291,10 +291,14 @@ export const resolveToolProfile = (
   //   2. trustPermissionMode — KG-informed trust resolver result
   //   3. worktreePath fallback — worktree_path signals agent works in a sandboxed directory
   //      (Canon worktree or Agent tool worktree). When present, auto permission mode is safe.
+  //   4. isReadOnly fallback — agents with Write and Edit in their BASE disallowed list cannot
+  //      modify files regardless of isolation; auto-approve is safe for them everywhere.
+  //      Uses base.disallowed (not effectiveDisallowed) so flow overrides cannot widen the auto grant.
+  const isReadOnly = base.disallowed.includes("Write") && base.disallowed.includes("Edit");
   const permissionMode: "auto" | "prompt" | "deny_unknown" =
     overrides?.permission_mode ??
     options?.trustPermissionMode ??
-    (worktreePath ? "auto" : "prompt");
+    (worktreePath ? "auto" : isReadOnly ? "auto" : "prompt");
 
   const result: ResolvedProfile = {
     disallowed_tools: effectiveDisallowed,

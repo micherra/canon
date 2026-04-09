@@ -325,4 +325,73 @@ describe("resolveToolProfile", () => {
     expect(result.tools).toContain("Edit");
     expect(result.disallowed_tools).not.toContain("Edit");
   });
+
+  // isReadOnly auto-approve tests
+
+  it("read-only agent (canon-researcher) with no worktreePath gets permission_mode 'auto'", () => {
+    // canon-researcher has Write and Edit in disallowed — it's read-only → auto
+    const result = resolveToolProfile("canon-researcher");
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("read-only agent (canon-architect) with no worktreePath gets permission_mode 'auto'", () => {
+    // canon-architect has Write, Edit, NotebookEdit in disallowed — it's read-only → auto
+    const result = resolveToolProfile("canon-architect");
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("read-only agent (canon-reviewer) with no worktreePath gets permission_mode 'auto'", () => {
+    const result = resolveToolProfile("canon-reviewer");
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("read-only agent (canon-guide) with no worktreePath gets permission_mode 'auto'", () => {
+    const result = resolveToolProfile("canon-guide");
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("read-only agent (canon-chat) with no worktreePath gets permission_mode 'auto'", () => {
+    const result = resolveToolProfile("canon-chat");
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("read-only agent (canon-security) with no worktreePath gets permission_mode 'auto'", () => {
+    const result = resolveToolProfile("canon-security");
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("write agent (canon-implementor) with no worktreePath still gets permission_mode 'prompt'", () => {
+    // canon-implementor has Write and Edit in allowed — NOT read-only → prompt
+    const result = resolveToolProfile("canon-implementor");
+    expect(result.permission_mode).toBe("prompt");
+  });
+
+  it("write agent (canon-fixer) with no worktreePath still gets permission_mode 'prompt'", () => {
+    // canon-fixer has Write and Edit in allowed, nothing in disallowed — NOT read-only → prompt
+    const result = resolveToolProfile("canon-fixer");
+    expect(result.permission_mode).toBe("prompt");
+  });
+
+  it("read-only agent with replace override that grants Write does NOT get auto (base.disallowed unchanged)", () => {
+    // Even if the flow override grants Write via replace, the base profile still has Write in disallowed.
+    // isReadOnly uses base.disallowed as source of truth.
+    const result = resolveToolProfile("canon-researcher", {
+      overrides: { replace: ["Read", "Write"] },
+    });
+    expect(result.permission_mode).toBe("auto");
+  });
+
+  it("trustPermissionMode takes precedence over isReadOnly fallback", () => {
+    // canon-researcher is read-only, but trustPermissionMode forces 'prompt'
+    const result = resolveToolProfile("canon-researcher", { trustPermissionMode: "prompt" });
+    expect(result.permission_mode).toBe("prompt");
+  });
+
+  it("overrides.permission_mode takes precedence over isReadOnly fallback", () => {
+    // canon-researcher is read-only, but explicit override forces 'deny_unknown'
+    const result = resolveToolProfile("canon-researcher", {
+      overrides: { permission_mode: "deny_unknown" },
+    });
+    expect(result.permission_mode).toBe("deny_unknown");
+  });
 });

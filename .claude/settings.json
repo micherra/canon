@@ -5,8 +5,24 @@
       "Write(.canon/)",
       "Edit(.canon/)",
       "Bash(.canon/)",
+      "Read(**/CLAUDE.md)",
+      "Write(**/CLAUDE.md)",
+      "Edit(**/CLAUDE.md)",
+      "Read(**/context.md)",
+      "Write(**/context.md)",
+      "Edit(**/context.md)",
+      "Read(**/CONVENTIONS.md)",
+      "Write(**/CONVENTIONS.md)",
+      "Edit(**/CONVENTIONS.md)",
+      "Read(**/README.md)",
+      "Edit(**/README.md)",
       "mcp__canon__*",
-      "mcp__canon-marketplace__*"
+      "mcp__canon-marketplace__*",
+      "Read",
+      "Grep",
+      "Glob",
+      "WebFetch",
+      "WebSearch"
     ]
   },
   "enabledPlugins": {

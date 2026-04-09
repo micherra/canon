@@ -127,7 +127,8 @@ describe("buildSpawnRequests — ADR-014 tool scoping fields", () => {
     expect(consultReq).toBeDefined();
     expect(consultReq!.tools).toBeDefined();
     expect(consultReq!.tools!.length).toBeGreaterThan(0);
-    expect(consultReq!.permission_mode).toBe("prompt");
+    // researcher has Write/Edit in base disallowed → isReadOnly → auto even without worktreePath
+    expect(consultReq!.permission_mode).toBe("auto");
     // researcher has Edit/Write/NotebookEdit disallowed
     expect(consultReq!.disallowed_tools).toContain("Edit");
   });
