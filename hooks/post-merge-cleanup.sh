@@ -17,10 +17,8 @@
 # WHAT IT DOES:
 #   1. After a merge into main/master, finds local branches that are now
 #      fully merged (git branch --merged).
-#   2. For each merged branch, archives decisions/ and notes/ from every
-#      task workspace under .canon/workspaces/{sanitized-branch}/ into
-#      .canon/history/{sanitized-branch}/, generates archive-meta.json and
-#      summary.md, then deletes the workspace directory.
+#   2. For each merged branch, deletes the workspace directory under
+#      .canon/workspaces/{sanitized-branch}/.
 #   3. Deletes the local branch with `git branch -d` (safe — git refuses if
 #      not fully merged).
 #   4. Prints a summary of everything that was cleaned.
@@ -71,7 +69,6 @@ fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKSPACES_DIR="${REPO_ROOT}/.canon/workspaces"
-HISTORY_DIR="${REPO_ROOT}/.canon/history"
 
 if [[ ! -d "$WORKSPACES_DIR" ]]; then
   # Canon not set up or no workspaces yet — exit silently.
@@ -118,113 +115,6 @@ for BRANCH in "${MERGED_BRANCHES[@]}"; do
   WORKSPACE_PATH="${WORKSPACES_DIR}/${SANITIZED}"
 
   echo "Canon: processing merged branch '${BRANCH}' (workspace: ${SANITIZED})"
-
-  # ------------------------------------------------------------------
-  # Archive (if workspace exists)
-  # ------------------------------------------------------------------
-
-  if [[ -d "$WORKSPACE_PATH" ]]; then
-    ARCHIVE_DIR="${HISTORY_DIR}/${SANITIZED}"
-    mkdir -p "${ARCHIVE_DIR}/decisions" "${ARCHIVE_DIR}/notes"
-
-    ARCHIVED_AT="$(now_iso)"
-    TASK_SLUGS=()
-
-    # Walk every task-slug sub-directory inside the branch workspace
-    for TASK_DIR in "${WORKSPACE_PATH}"/*/; do
-      [[ -d "$TASK_DIR" ]] || continue
-      TASK_SLUG="$(basename "$TASK_DIR")"
-      TASK_SLUGS+=("$TASK_SLUG")
-
-      # Copy decisions (merge all task slugs into shared history dir)
-      if [[ -d "${TASK_DIR}decisions" ]]; then
-        cp -r "${TASK_DIR}decisions/." "${ARCHIVE_DIR}/decisions/" 2>/dev/null || true
-      fi
-
-      # Copy notes
-      if [[ -d "${TASK_DIR}notes" ]]; then
-        cp -r "${TASK_DIR}notes/." "${ARCHIVE_DIR}/notes/" 2>/dev/null || true
-      fi
-    done
-
-    # Build tasks JSON array for archive-meta.json
-    TASKS_JSON="["
-    FIRST=true
-    for SLUG in "${TASK_SLUGS[@]}"; do
-      # Read task description from session.json if available
-      SESSION_FILE="${WORKSPACE_PATH}/${SLUG}/session.json"
-      TASK_DESC=""
-      STATUS_VAL=""
-      CREATED_VAL=""
-      if [[ -f "$SESSION_FILE" ]]; then
-        # Portable extraction without jq dependency
-        TASK_DESC="$(grep -o '"task"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"task"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-        STATUS_VAL="$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"status"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-        CREATED_VAL="$(grep -o '"created"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"created"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-      fi
-      TASK_DESC="${TASK_DESC:-unknown}"
-      STATUS_VAL="${STATUS_VAL:-unknown}"
-      CREATED_VAL="${CREATED_VAL:-unknown}"
-
-      if [[ "$FIRST" == "true" ]]; then
-        FIRST=false
-      else
-        TASKS_JSON+=","
-      fi
-      # Minimal JSON — avoid jq dependency
-      TASKS_JSON+="$(printf '{"slug":"%s","task":"%s","status":"%s","created":"%s"}' \
-        "$SLUG" \
-        "$(echo "$TASK_DESC" | sed 's/"/\\"/g')" \
-        "$STATUS_VAL" \
-        "$CREATED_VAL")"
-    done
-    TASKS_JSON+="]"
-
-    # Write archive-meta.json
-    cat > "${ARCHIVE_DIR}/archive-meta.json" <<EOF
-{
-  "archived_at": "${ARCHIVED_AT}",
-  "original_branch": "${BRANCH}",
-  "sanitized": "${SANITIZED}",
-  "tasks": ${TASKS_JSON}
-}
-EOF
-
-    # Generate summary.md
-    {
-      echo "## Workspace Archive: ${BRANCH}"
-      echo ""
-      echo "**Branch**: \`${BRANCH}\`"
-      echo "**Sanitized**: \`${SANITIZED}\`"
-      echo "**Archived**: ${ARCHIVED_AT}"
-      echo ""
-      if [[ ${#TASK_SLUGS[@]} -gt 0 ]]; then
-        echo "### Tasks (${#TASK_SLUGS[@]})"
-        for SLUG in "${TASK_SLUGS[@]}"; do
-          SESSION_FILE="${WORKSPACE_PATH}/${SLUG}/session.json"
-          if [[ -f "$SESSION_FILE" ]]; then
-            TASK_DESC="$(grep -o '"task"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"task"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-            STATUS_VAL="$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$SESSION_FILE" | head -1 | sed 's/.*"status"[[:space:]]*:[[:space:]]*"//;s/"$//' || true)"
-            echo "- **${SLUG}**: ${TASK_DESC:-unknown} (${STATUS_VAL:-unknown})"
-          else
-            echo "- **${SLUG}**"
-          fi
-        done
-        echo ""
-      fi
-
-      # Count decisions and notes
-      DECISION_COUNT="$(find "${ARCHIVE_DIR}/decisions" -type f 2>/dev/null | wc -l | tr -d ' ')"
-      NOTES_COUNT="$(find "${ARCHIVE_DIR}/notes" -type f 2>/dev/null | wc -l | tr -d ' ')"
-      echo "### Preserved Artifacts"
-      echo "- Decisions: ${DECISION_COUNT} file(s) → \`.canon/history/${SANITIZED}/decisions/\`"
-      echo "- Notes: ${NOTES_COUNT} file(s) → \`.canon/history/${SANITIZED}/notes/\`"
-    } > "${ARCHIVE_DIR}/summary.md"
-
-    echo "Canon:   archived to .canon/history/${SANITIZED}/"
-  else
-    echo "Canon:   no workspace found at ${SANITIZED}/ (already clean)"
-  fi
 
   # ------------------------------------------------------------------
   # Delete workspace

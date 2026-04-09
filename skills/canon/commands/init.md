@@ -13,7 +13,7 @@ Initialize Canon engineering principles in the current project. This sets up the
 
 ```bash
 mkdir -p .canon/principles/rules .canon/principles/strong-opinions .canon/principles/conventions
-mkdir -p .canon/workspaces .canon/history
+mkdir -p .canon/workspaces
 ```
 
 ### Step 2: Copy starter principles

@@ -1,6 +1,6 @@
 ---
-description: Clean up workspace artifacts and optionally archive to project history
-argument-hint: [--branch <name>] [--all] [--archive] [--force]
+description: Clean up workspace artifacts
+argument-hint: [--branch <name>] [--all] [--force]
 allowed-tools: [Bash, Read, Write, Glob, Edit]
 model: haiku
 ---
@@ -12,8 +12,7 @@ Clean up Canon workspace artifacts. By default, prompts the user to review works
 From ${ARGUMENTS}, extract:
 - `--branch <name>`: Clean a specific branch workspace (default: current branch)
 - `--all`: Clean all workspaces
-- `--archive`: Archive to `.canon/history/` before cleaning (preserves decisions and notes)
-- `--force`: Skip confirmation prompts — **caution: permanently deletes workspace data without review. Consider `--archive` first.**
+- `--force`: Skip confirmation prompts — **caution: permanently deletes workspace data without review.**
 
 ## Process
 
@@ -38,64 +37,18 @@ For each workspace to clean, show the user:
 
 Unless `--force` is set, ask the user:
 
-1. **Archive and clean** — Move decisions, notes, and a summary to `.canon/history/{sanitized-branch}/`, then delete the workspace
-2. **Clean without archiving** — Delete the workspace entirely
-3. **Cancel** — Do nothing
+1. **Clean** — Delete the workspace entirely
+2. **Cancel** — Do nothing
 
-If `--archive` flag is set, default to option 1 without asking.
-
-### Step 4: Archive (if chosen)
-
-Create `.canon/history/{sanitized-branch}/` and preserve:
-
-```
-.canon/history/{sanitized-branch}/
-├── archive-meta.json         # When archived, original branch, task description
-├── decisions/                # All design decision docs (valuable long-term)
-├── notes/                    # User and agent notes
-└── summary.md                # Auto-generated summary of what happened
-```
-
-Note: Transcript files (`transcripts/`) are not archived — they contain ephemeral agent conversation data.
-
-Generate `summary.md` by reading:
-- `session.json` for task description and dates
-- `log.jsonl` for agent activity timeline
-- Any review verdicts from `reviews/`
-- Decision titles from `decisions/`
-
-Format:
-
-```markdown
-## Workspace Archive: {branch}
-
-**Task**: {description}
-**Period**: {created} to {archived}
-**Status**: {status from session.json}
-
-### Activity
-- {N} research docs produced
-- {N} design decisions made
-- {N} implementation tasks completed
-- Review verdict: {verdict}
-
-### Key Decisions
-- {decision-id}: {title}
-
-### Notes
-- {any notes content}
-```
-
-### Step 5: Clean
+### Step 4: Clean
 
 Delete the workspace directory:
 ```bash
 rm -rf .canon/workspaces/{sanitized-branch}
 ```
 
-### Step 6: Report
+### Step 5: Report
 
 Tell the user:
 - What was cleaned
-- What was archived (if applicable) and where to find it
 - Suggest: "Ask Canon for status to verify project health"

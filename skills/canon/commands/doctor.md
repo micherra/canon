@@ -30,14 +30,12 @@ Verify these directories exist:
 - `.canon/principles/strong-opinions/`
 - `.canon/principles/conventions/`
 - `.canon/workspaces/` — build workspace storage
-- `.canon/history/` — archived workspace history
 
 If `--fix` and directories are missing, create them.
 
 **ERROR** if `.canon/` doesn't exist: "Canon is not initialized. Run `/canon:init`."
 **WARN** if severity subdirectories are missing: "Missing severity subdirectory: {dir}"
 **WARN** if `.canon/workspaces/` is missing: "No workspaces directory. Will be created on first build."
-**INFO** if `.canon/history/` is missing: optional, only exists after `clean --archive`.
 
 #### Check 2: Config file
 
