@@ -21,6 +21,9 @@ export type FlowRunEntry = {
   total_violations?: number;
   total_test_results?: { passed: number; failed: number; skipped: number };
   total_files_changed?: number;
+  // ADR-019 additions: git metadata
+  commits?: string[];
+  diff_stat?: string;
 };
 
 export type FlowAnalytics = {
@@ -28,4 +31,15 @@ export type FlowAnalytics = {
   avg_duration_ms: number;
   avg_gate_pass_rate?: number;
   avg_postcondition_pass_rate?: number;
+};
+
+export type DecisionEntry = {
+  decision_id: string;
+  run_id?: string;
+  flow?: string;
+  task?: string;
+  title: string;
+  content: string;
+  file_path?: string;
+  timestamp: string;
 };
