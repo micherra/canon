@@ -176,7 +176,7 @@ function tryResumeWorkspace(
         slug: session.slug,
         workspace: candidateWorkspace,
         worktree_branch: worktreeExists
-          ? (session.worktree_branch ?? `canon-build/${session.slug}`)
+          ? (session.worktree_branch ?? `canon/${session.slug}`)
           : undefined,
         worktree_path: worktreeExists ? worktreePath : undefined,
       };
@@ -320,9 +320,7 @@ type CreateWorktreeOptions = {
 
 /** Build a unique session branch name for the build worktree. */
 function buildSessionBranchName(session: Session): string {
-  const createdMs = Date.parse(session.created);
-  const stamp = Number.isNaN(createdMs) ? Date.now().toString(36) : createdMs.toString(36);
-  return `canon-session/${session.sanitized}/${session.slug}-${stamp}`;
+  return `canon/${session.slug}`;
 }
 
 /** Create worktree and persist info. Returns path and branch if successful. */

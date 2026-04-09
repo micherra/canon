@@ -49,6 +49,8 @@ states:
     inject_context:
       - from: file_context
         as: file_context
+      - from: handoff
+        as: design_handoff
       - from: wave_summaries
         as: wave_summaries
     transitions:
@@ -65,6 +67,8 @@ Key outputs: file list, test coverage map, behavioral contracts, risk areas, rec
 
 ### implement
 Refactoring task from ${WORKSPACE}/plans/${slug}/${task_id}-PLAN.md. CRITICAL: preserve all existing behavior. Run existing tests after each change to verify nothing breaks. Save summary to ${WORKSPACE}/plans/${slug}/${task_id}-SUMMARY.md. Template: ${CLAUDE_PLUGIN_ROOT}/templates/implementation-log.md.
+
+${design_handoff}
 
 ${wave_briefing}
 

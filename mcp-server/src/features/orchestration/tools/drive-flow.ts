@@ -864,7 +864,7 @@ async function completeWave(input: CompleteWaveInput): Promise<ToolResult<DriveF
 
   // Use the build-branch worktree as the merge target when available.
   // init_workspace creates a worktree at store.getExecution().worktree_path
-  // on branch canon-build/{slug}. Wave task branches must be merged into
+  // on branch canon/{slug}. Wave task branches must be merged into
   // that worktree, not into the main repo (projectDir) which is on main.
   const execution = store.getExecution();
   const mergeCwd = execution?.worktree_path ?? projectDir;
