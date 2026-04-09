@@ -54,12 +54,15 @@ vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(),
 }));
 
-vi.mock("@graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query-insights.ts", () => ({
   computeFileInsightMaps: vi.fn().mockReturnValue({
     cycleMemberPaths: new Map(),
     hubPaths: new Set(),
     layerViolationsByPath: new Map(),
   }),
+}));
+
+vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: vi.fn(),
 }));
 
@@ -93,7 +96,8 @@ import type { ResolvedFlow, StateDefinition } from "@domains/flows/flow-definiti
 import { buildMessageInstructions } from "@domains/messages/messages.ts";
 import { getExecutionStore } from "@domains/workspaces/execution-store.ts";
 import { resolveTaskScope } from "@features/orchestration/services/scope-resolver.ts";
-import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
+import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { resolveToolProfile } from "../model/tool-profiles.ts";
 import type { PromptContext, SpawnPromptEntry } from "../model/types.ts";

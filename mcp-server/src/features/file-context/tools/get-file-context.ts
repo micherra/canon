@@ -16,7 +16,8 @@ import {
   computeUnifiedBlastRadius,
   type UnifiedBlastRadiusReport,
 } from "@graph/kg-blast-radius.ts";
-import { computeFileInsightMaps, computeImpactScore, KgQuery } from "@graph/kg-query.ts";
+import { computeFileInsightMaps, computeImpactScore } from "@graph/kg-query-insights.ts";
+import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { EntityKind, FileMetrics } from "@graph/kg-types.ts";

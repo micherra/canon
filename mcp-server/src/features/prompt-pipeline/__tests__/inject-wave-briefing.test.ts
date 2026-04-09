@@ -23,8 +23,11 @@ vi.mock("@features/orchestration/services/wave-briefing.ts", () => ({
   readWaveGuidance: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("@graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query-insights.ts", () => ({
   computeFileInsightMaps: vi.fn(),
+}));
+
+vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: vi.fn(),
 }));
 
@@ -55,7 +58,8 @@ import {
   assembleWaveBriefing,
   readWaveGuidance,
 } from "@features/orchestration/services/wave-briefing.ts";
-import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
+import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { PromptContext } from "../model/types.ts";

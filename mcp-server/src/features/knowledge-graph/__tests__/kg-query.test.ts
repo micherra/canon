@@ -5,7 +5,8 @@
  * Uses in-memory SQLite for speed and isolation.
  */
 
-import { computeFileInsightMaps, KgQuery } from "@graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
+import { KgQuery } from "@graph/kg-query.ts";
 import { initDatabase } from "@graph/kg-schema.ts";
 import { KgStore } from "@graph/kg-store.ts";
 import type { EntityRow, FileRow } from "@graph/kg-types.ts";

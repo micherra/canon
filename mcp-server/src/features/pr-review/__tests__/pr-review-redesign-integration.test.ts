@@ -29,7 +29,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrFileInfo } from "../tools/pr-review-data.ts";
-import { classifyFile, generateNarrative } from "../tools/pr-review-data.ts";
+import { classifyFile, generateNarrative } from "../tools/pr-review-data-helpers.ts";
 
 /** Build a mock gitExecAsync that returns an ok ProcessResult with the given stdout. */
 function mockGitExecAsyncOk(stdout: string) {

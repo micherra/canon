@@ -40,8 +40,11 @@ const {
   };
 });
 
-vi.mock("@graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query-insights.ts", () => ({
   computeFileInsightMaps: mockComputeFileInsightMaps,
+}));
+
+vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: class MockKgQuery {
     getFileMetrics = mockGetFileMetrics;
     getKgFreshnessMs = mockGetKgFreshnessMs;

@@ -162,12 +162,15 @@ vi.mock("@graph/kg-schema.ts", () => ({
   initDatabase: vi.fn(() => mockDb2),
 }));
 
-vi.mock("@graph/kg-query.ts", () => ({
+vi.mock("@graph/kg-query-insights.ts", () => ({
   computeFileInsightMaps: vi.fn().mockReturnValue({
     cycleMemberPaths: new Map<string, string[]>(),
     hubPaths: new Set<string>(),
     layerViolationsByPath: new Map<string, unknown[]>(),
   }),
+}));
+
+vi.mock("@graph/kg-query.ts", () => ({
   KgQuery: class MockKgQuery2 {
     getFileMetrics = mockGetFileMetrics2;
     getKgFreshnessMs = mockGetKgFreshnessMs2;
@@ -182,7 +185,7 @@ vi.mock("@graph/kg-store.ts", () => ({
 }));
 
 import { existsSync } from "node:fs";
-import { computeFileInsightMaps } from "@graph/kg-query.ts";
+import { computeFileInsightMaps } from "@graph/kg-query-insights.ts";
 
 function makeBoardWithFiles(
   files: string[],
