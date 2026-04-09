@@ -143,6 +143,7 @@ async function handleCompleteFlow(
   board: Board,
   now: string,
   projectDir: string,
+  workspacePath: string,
 ): Promise<Board> {
   const currentEntry = board.states[board.current_state];
   const updatedBoard: Board = {
@@ -181,6 +182,21 @@ async function handleCompleteFlow(
 
   const session = store.getSession();
   const sessionTier = session?.tier ?? "unknown";
+
+  // Record flow lineage — best-effort, never blocks flow completion
+  try {
+    store.recordFlowLineage({
+      branch: session?.branch ?? "unknown",
+      completed_at: now,
+      flow_name: updatedBoard.flow,
+      slug: session?.slug,
+      status: "completed",
+      task: updatedBoard.task,
+      workspace_path: workspacePath,
+    });
+  } catch {
+    console.warn("[canon] handleCompleteFlow: failed to record flow lineage");
+  }
 
   try {
     const agg = aggregateFlowRunMetrics(updatedBoard);
@@ -424,6 +440,7 @@ export async function updateBoard(input: UpdateBoardInput): Promise<ToolResult<U
         board,
         now,
         input.project_dir || process.env.CANON_PROJECT_DIR || process.cwd(),
+        input.workspace,
       );
       result = { board };
       break;

@@ -225,7 +225,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
   it("fixer agent gets worktree_path and isolation:none", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "fix", entry: "fix" });
+    store.updateExecution({ current_state: "fix" });
 
     vi.mocked(getProjectDir).mockReturnValue("/fake/project");
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -263,7 +263,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
   it("tester agent gets worktree_path and isolation:none", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "test", entry: "test" });
+    store.updateExecution({ current_state: "test" });
 
     vi.mocked(getProjectDir).mockReturnValue("/fake/project");
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -301,7 +301,7 @@ describe("driveFlow — write agents in single states get Canon-managed worktree
   it("scribe agent gets worktree_path and isolation:none", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "sync", entry: "sync" });
+    store.updateExecution({ current_state: "sync" });
 
     vi.mocked(getProjectDir).mockReturnValue("/fake/project");
     vi.mocked(createWaveWorktrees).mockResolvedValue([
@@ -345,7 +345,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
   it("researcher does not get worktree_path; isolation remains worktree", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "research", entry: "research" });
+    store.updateExecution({ current_state: "research" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult("canon:canon-researcher"),
@@ -367,7 +367,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
   it("reviewer does not get worktree_path", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "review", entry: "review" });
+    store.updateExecution({ current_state: "review" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult("canon:canon-reviewer"),
@@ -400,7 +400,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
   it("architect does not get worktree_path", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "design", entry: "design" });
+    store.updateExecution({ current_state: "design" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult("canon:canon-architect"),
@@ -433,7 +433,7 @@ describe("driveFlow — read-only agents in single states keep isolation:worktre
   it("security agent does not get worktree_path", async () => {
     const workspace = makeTmpWorkspace();
     const store = makeStore(workspace);
-    store.updateExecution({ current_state: "security", entry: "security" });
+    store.updateExecution({ current_state: "security" });
 
     vi.mocked(enterAndPrepareState).mockResolvedValueOnce(
       makeEnterResult("canon:canon-security"),
