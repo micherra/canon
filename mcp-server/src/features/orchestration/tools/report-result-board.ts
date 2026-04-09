@@ -32,7 +32,7 @@ import {
   isStuck,
   normalizeStatus,
 } from "../engine/transitions.ts";
-import type { ReportResultInput } from "./report-result-types.ts";
+import type { ReportResultInput } from "./report-result.ts";
 
 // Pure board mutation helpers — extracted to reduce transaction complexity
 

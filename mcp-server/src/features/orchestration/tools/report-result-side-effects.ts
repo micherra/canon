@@ -19,7 +19,7 @@ import type {
   ReportResultInput,
   ReportResultResult,
   TransactionResult,
-} from "./report-result-types.ts";
+} from "./report-result.ts";
 import { validateRequiredHandoffs } from "./report-result-validation.ts";
 
 export async function postTransactionSideEffects({
